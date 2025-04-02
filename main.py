@@ -1,8 +1,9 @@
 from quadsim.ptr import PTR_main
-from quadsim.params.dr_vp import params
+from quadsim.params.drone_racing import params
 from quadsim.plotting import plot_camera_polytope_animation, plot_rocket_animation, plot_camera_view_ral, plot_conic_view_ral, plot_main_ral_dr, plot_main_ral_cine, plot_camera_animation, plot_animation, plot_scp_animation, plot_constraint_violation, plot_control, plot_state, plot_losses, plot_conic_view_animation, plot_camera_view
 from quadsim.config import Config
 import os
+import jax
 
 import pickle
 import warnings
@@ -12,6 +13,8 @@ warnings.filterwarnings("ignore")
 # Author: Chris Hayner  
 # Autonomous Controls Laboratory
 ################################
+
+jax.config.update('jax_default_device', jax.devices('cpu')[0])
 
 params = Config.from_config(params, savedir="results/")
 results = PTR_main(params) 
@@ -28,4 +31,4 @@ with open('results/results.pickle', 'wb') as f:
 with open('results/results.pickle', 'rb') as f:
     results = pickle.load(f) 
 
-plot_animation(results, params)
+plot_scp_animation(results, None, params)
