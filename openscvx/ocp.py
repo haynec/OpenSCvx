@@ -3,7 +3,7 @@ import numpy.linalg as la
 import scipy.linalg as sla
 import cvxpy as cp
 from cvxpygen import cpg
-from quadsim.config import Config
+from openscvx.config import Config
 from cvxpygen import cpg
 
 def OCP(params):

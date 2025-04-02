@@ -1,26 +1,25 @@
 import numpy as np
 import numpy.linalg as la
+import cvxpy as cp
 from jax import vmap, jit, jacfwd
 import jax.numpy as jnp
-import cvxpy as cp
-from quadsim.config import (
+from openscvx.config import (
     SimConfig,
     ScpConfig,
-    VehConfig,
     Config,
 )
 
 n = 33 # Number of Nodes
-total_time = 30.0  # Total time for the simulation
+total_time = 40.0  # Total time for the simulation
 
 class Dynamics:
     def __init__(self):
         self.t_inds = -2          # Time Index in State
         self.y_inds = -1          # Constraint Violation Index in State
-        
+
         self.max_state=np.array([200, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1e-4])  # Upper Bound on the states
         self.min_state=np.array([-200, -100, 15, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0])  # Lower Bound on the states
-        
+
         self.initial_state= {'value' : [10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
                              'type'  : ['Fix', 'Fix', 'Fix', 'Fix', 'Fix', 'Fix', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Fix']}  # Initial State
         
@@ -28,13 +27,12 @@ class Dynamics:
                             'type' : ['Fix', 'Fix', 'Fix', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Minimize']}
 
         self.initial_control = np.array([0, 0, 10, 0, 0, 0, 1])
-    
 
         self.m = 1.0  # Mass of the drone
         self.g_const = -9.18
         self.J_b = jnp.array([1.0, 1.0, 1.0])  # Moment of Inertia of the drone
         
-               ### View Planning Params ###
+        ### Sensor Params ###
         self.alpha_x = 6.0  # Angle for the x-axis of Sensor Cone
         self.alpha_y = 6.0  # Angle for the y-axis of Sensor Cone
         self.A_cone = np.diag(
@@ -50,33 +48,7 @@ class Dynamics:
                              [0, 0, 1], 
                              [1, 0, 0]]
                              )
-
-        self.n_subs = 10
-        polytope_point = np.array([[ 95.38, -54.62,  15.38], 
-                                   [ 95.38, -54.62,  24.62], 
-                                   [ 95.38, -45.38,  15.38], 
-                                   [ 95.38, -45.38,  24.62], 
-                                   [104.62, -54.62,  15.38], 
-                                   [104.62, -54.62,  24.62], 
-                                   [104.62, -45.38,  15.38], 
-                                   [104.62, -45.38,  24.62], 
-                                   [100.00, -52.85,  12.53], 
-                                   [100.00, -52.85,  27.47], 
-                                   [100.00, -47.15,  12.53], 
-                                   [100.00, -47.15,  27.47], 
-                                   [ 97.15, -57.47,  20.00], 
-                                   [ 97.15, -42.53,  20.00], 
-                                   [102.85, -57.47,  20.00], 
-                                   [102.85, -42.53,  20.00], 
-                                   [ 92.53, -50.00,  17.15], 
-                                   [ 92.53, -50.00,  22.85], 
-                                   [107.47, -50.00,  17.15], 
-                                   [107.47, -50.00,  22.85]])
-        init_poses = []
-        for point in polytope_point:
-            init_poses.append(point)
-        
-        self.init_poses = init_poses
+        ### End Sensor Params ###
 
         ### Gate Parameters ###
         self.n_gates = 10
@@ -110,6 +82,17 @@ class Dynamics:
         for center in self.gate_centers:
             self.vertices.append(self.gen_vertices(center))
         ### End Gate Parameters ### 
+
+        n_subs = 10
+        init_poses = []
+        np.random.seed(0)
+        for i in range(n_subs):
+            init_pose = np.array([100.0, -60.0, 20.0])
+            init_pose[:2] = init_pose[:2] + np.random.random(2) * 20.0
+            init_poses.append(init_pose)
+        
+        self.init_poses = init_poses
+
         
         self.g = jit(self.g)
         self.g_vec = jit(vmap(self.g, in_axes=(0)))
@@ -129,21 +112,28 @@ class Dynamics:
                 [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x**2 + y**2)],
             ]
         )
-    
+
     def SSMP(self, w: jnp.ndarray):
         # Convert an angular rate to a 4 x 4 skew symetric matrix
         x, y, z = w
         return jnp.array([[0, -x, -y, -z], [x, 0, z, -y], [y, -z, 0, x], [z, y, -x, 0]])
-  
+
     def SSM(self, w: jnp.ndarray):
         # Convert an angular rate to a 3 x 3 skew symetric matrix
         x, y, z = w
         return jnp.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
-    
+
     def g_vp(self, p_s_I, x):
         p_s_s = self.R_sb @ self.qdcm(x[6:10]).T @ (p_s_I - x[0:3])
         return jnp.linalg.norm(self.A_cone @ p_s_s, ord=self.norm_type) - (self.c.T @ p_s_s)
     
+
+    def huber_loss(self, x, delta=1.0):
+        abs_x = jnp.abs(x)
+        quadratic = jnp.minimum(abs_x, delta)
+        linear = abs_x - quadratic
+        return 0.5 * quadratic ** 2 + delta * linear
+
     def g(self, x):
         g = 0
         for pose in self.init_poses:
@@ -190,7 +180,7 @@ class Dynamics:
         t_dot = 1
         y_dot = self.g(x)
         return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot, y_dot])
-    
+
 class Initial_Guess():
     def __init__(self, dy):
         self.dy = dy
@@ -238,8 +228,8 @@ dy = Dynamics()
 initial_guess = Initial_Guess(dy)
 
 sim = SimConfig(
-    x_bar = initial_guess.x_bar,
-    u_bar = initial_guess.u_bar,
+    x_bar=initial_guess.x_bar,  # Initial Guess for the States
+    u_bar=initial_guess.u_bar,  # Initial Guess for the Controls
     initial_state=dy.initial_state,  # Initial State
     final_state=dy.final_state,  # Final State
     initial_control=dy.initial_control,  # Initial Control
@@ -255,21 +245,22 @@ sim = SimConfig(
     min_dt=1e-2,  # Minimum Time Step
     total_time=total_time,
     n_states=len(dy.max_state),  # Number of States
-    dt=0.01
+    dt=0.1
 )
 scp = ScpConfig(
-    k_max=50,
+    k_max=200,
     n=n,
-    w_tr=2E0, #2e0,  # Weight on the Trust Reigon
-    lam_cost=2E-1, #0e-1,  # Weight on the Minimal Time Objective
+    w_tr=2E0,  # Weight on the Trust Reigon
+    lam_cost=1E-1, #0e-1,  # Weight on the Minimal Time Objective
     lam_vc=1E1, #1e1,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
-    ep_tr=1e-5,  # Trust Region Tolerance
+    ep_tr=1e-3,  # Trust Region Tolerance
     ep_vb=1e-4,  # Virtual Control Tolerance
-    ep_vc=1e-8,  # Virtual Control Tolerance for CTCS
+    ep_vc=1e-8,  # Virtual Control Tolerance
     cost_drop=10,  # SCP iteration to relax minimal final time objective
     cost_relax=0.8,  # Minimal Time Relaxation Factor
-    w_tr_adapt=1.2,  # Trust Region Adaptation Factor
+    w_tr_adapt=1.4,  # Trust Region Adaptation Factor
     w_tr_max_scaling_factor=1e2,  # Maximum Trust Region Weight
+    dis_type='FOH',  # Discretization Type
     gen_code=False,
 )
 params = Config(sim=sim, scp=scp,veh=dy)

@@ -105,13 +105,32 @@ These can be installed via conda or pip.
    Python >= 3.9
 1. Clone the repo
    ```sh
-   git clone https://github.com/haynec/quadsim.git
+   git clone https://github.com/haynec/openscvx.git
    ```
 2. Install environment packages:
    ```sh
    pip install -r requirements.txt
    ```
 </details>
+
+### Running Trajectory Optimization
+
+See `examples/` folder for several example trajectory optimization problems.
+To run a problem simply run `examples/main.py` with:
+
+```bash
+python3 -m examples.main
+```
+
+To change which example is run by `main` simply replace the `params` import line:
+
+```python
+# other imports
+from examples.params.dr_vp import params
+# rest of code
+```
+
+Check out the problem definitions inside `examples/params` to see how to define your own problems.
 
 
 ## ToDos
