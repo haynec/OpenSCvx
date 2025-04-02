@@ -116,6 +116,7 @@ class SimConfig:
     inter_sample: int = 30
     dt: float = 0.1
     profiling: bool = False
+    solver: str = "QOCO"
     S_x: np.ndarray = None
     c_x: np.ndarray = None
     S_u: np.ndarray = None

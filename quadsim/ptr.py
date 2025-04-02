@@ -238,7 +238,7 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params):
         subprop_time = time.time() - t0
     else:
         t0 = time.time()
-        prob.solve(solver = cp.QOCO, enforce_dpp = True, abstol = 1E-6, reltol = 1E-9)
+        prob.solve(solver = params.sim.solver, enforce_dpp = True, abstol = 1E-6, reltol = 1E-9)
         subprop_time = time.time() - t0
 
     x = (params.sim.S_x @ prob.var_dict['x'].value.T + np.expand_dims(params.sim.c_x, axis = 1)).T
