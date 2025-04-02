@@ -105,7 +105,7 @@ These can be installed via conda or pip.
    Python >= 3.9
 1. Clone the repo
    ```sh
-   git clone https://github.com/haynec/quadsim.git
+   git clone https://github.com/haynec/openscvx.git
    ```
 2. Install environment packages:
    ```sh

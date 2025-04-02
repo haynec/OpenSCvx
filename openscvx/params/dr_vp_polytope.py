@@ -3,7 +3,7 @@ import numpy.linalg as la
 from jax import vmap, jit, jacfwd
 import jax.numpy as jnp
 import cvxpy as cp
-from quadsim.config import (
+from openscvx.config import (
     SimConfig,
     ScpConfig,
     VehConfig,

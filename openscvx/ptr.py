@@ -8,10 +8,10 @@ import time
 import sys
 from termcolor import colored
 
-from quadsim.discretization import AugmentedDynamics
-from quadsim.propagation import nonlinear_constraint, full_subject_traj_time, subject_traj, u_lambda, simulate_nonlinear_time
-from quadsim.ocp import OCP
-from quadsim.plotting import plot_initial_guess
+from openscvx.discretization import AugmentedDynamics
+from openscvx.propagation import nonlinear_constraint, full_subject_traj_time, subject_traj, u_lambda, simulate_nonlinear_time
+from openscvx.ocp import OCP
+from openscvx.plotting import plot_initial_guess
 
 import warnings
 warnings.filterwarnings("ignore")

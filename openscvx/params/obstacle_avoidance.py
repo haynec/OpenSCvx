@@ -2,7 +2,7 @@ import numpy as np
 from jax import vmap, jit, jacfwd
 import jax.numpy as jnp
 import jax
-from quadsim.config import (
+from openscvx.config import (
     SimConfig,
     ScpConfig,
     Config,
