@@ -54,16 +54,6 @@
 <!--   </div> -->
 </div>
 
-
-## Video
-[![Watch the video](figures/video_preview.png)](https://youtu.be/miYeYnfvZYs?si=aYggTma7bdm_umCP)
-
-<p align="left">
-Perception algorithms are ubiquitous in modern autonomy stacks, providing necessary environmental information to operate in the real world. Many of these algorithms depend on the visibility of keypoints, which must remain within the robot’s line-of-sight (LoS), for reliable operation. This paper tackles the challenge of maintaining LoS on such keypoints during robot movement. We propose a novel method that addresses these issues by ensuring applicability to various sensor footprints, adaptability to arbitrary nonlinear dynamics and constantly enforces LoS throughout the robot's path. We show through our experiments that the proposed approach achieves significantly reduced LoS violation and runtime when compared to existing state-of-the-art methods in several representative and challenging scenarios.
-<br />
-</p>
-</div>
-
 <!-- GETTING STARTED -->
 ## Getting Started
 
