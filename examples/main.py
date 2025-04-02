@@ -1,5 +1,5 @@
 from openscvx.ptr import PTR_main
-from openscvx.params.dr_vp import params
+from examples.params.dr_vp import params
 from openscvx.plotting import plot_camera_polytope_animation, plot_camera_animation, plot_animation, plot_scp_animation, plot_constraint_violation, plot_control, plot_state, plot_losses, plot_conic_view_animation, plot_camera_view
 from openscvx.config import Config
 import os
