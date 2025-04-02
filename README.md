@@ -113,6 +113,25 @@ These can be installed via conda or pip.
    ```
 </details>
 
+### Running Trajectory Optimization
+
+See `examples/` folder for several example trajectory optimization problems.
+To run a problem simply run `examples/main.py` with:
+
+```bash
+python3 -m examples.main
+```
+
+To change which example is run by `main` simply replace the `params` import line:
+
+```python
+# other imports
+from examples.params.dr_vp import params
+# rest of code
+```
+
+Check out the problem definitions inside `examples/params` to see how to define your own problems.
+
 
 ## ToDos
 - [X] Standardized Vehicle and Constraint classes
