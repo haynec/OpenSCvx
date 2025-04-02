@@ -28,7 +28,7 @@
 <!-- PROJECT LOGO -->
 <br />
 <div align="center">
-<h1 align="center">CT-SCvx Sim</h1>
+<h1 align="center">OpenSCvx Sim</h1>
 
 <div style="display: flex; flex-wrap: wrap; justify-content: center;">
 <!--   <div style="text-align: center;"> -->
