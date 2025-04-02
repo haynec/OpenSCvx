@@ -1,5 +1,5 @@
 from quadsim.ptr import PTR_main
-from quadsim.params.drone_racing import params
+from quadsim.params.dr_vp import params
 from quadsim.plotting import plot_camera_polytope_animation, plot_rocket_animation, plot_camera_view_ral, plot_conic_view_ral, plot_main_ral_dr, plot_main_ral_cine, plot_camera_animation, plot_animation, plot_scp_animation, plot_constraint_violation, plot_control, plot_state, plot_losses, plot_conic_view_animation, plot_camera_view
 from quadsim.config import Config
 import os
@@ -31,4 +31,4 @@ with open('results/results.pickle', 'wb') as f:
 with open('results/results.pickle', 'rb') as f:
     results = pickle.load(f) 
 
-plot_scp_animation(results, None, params)
+plot_animation(results, params)

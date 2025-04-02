@@ -245,7 +245,7 @@ sim = SimConfig(
     min_dt=1e-2,  # Minimum Time Step
     total_time=total_time,
     n_states=len(dy.max_state),  # Number of States
-    dt=0.01
+    dt=0.1
 )
 scp = ScpConfig(
     k_max=200,
