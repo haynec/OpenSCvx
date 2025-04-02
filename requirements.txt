@@ -1,0 +1,9 @@
+cvxpy
+cvxpygen
+qoco
+scipy
+numpy
+jax
+plotly
+pyaml
+termcolor
