@@ -1361,10 +1361,14 @@ def plot_animation(result: dict,
     frames = []
     i = 0
     # Generate a color for each keypoint
-    if hasattr(params.veh, 'n_subs'):
+    if hasattr(params.veh, 'init_poses') or hasattr(params.veh, 'get_kp_pose'):
         color_kp = []
-        for j in range(params.veh.n_subs):
-            color_kp.append(f'rgb({random.randint(0,255)}, {random.randint(0,255)}, {random.randint(0,255)})')
+        if hasattr(params.veh, 'init_poses'):
+            for j in range(len(params.veh.init_poses)):
+                color_kp.append(f'rgb({random.randint(0,255)}, {random.randint(0,255)}, {random.randint(0,255)})')
+        else:
+            for j in range(1):
+                color_kp.append(f'rgb({random.randint(0,255)}, {random.randint(0,255)}, {random.randint(0,255)})')
 
     # Draw drone attitudes as axes
     for i in range(0, len(indices)-1, step):
