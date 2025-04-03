@@ -115,6 +115,4 @@ def OCP(params):
     # PROBLEM
     #########
     prob = cp.Problem(cp.Minimize(cost), constr)
-    # if params.scp.gen_code:
-    #     cpg.generate_code(prob, solver = 'QOCO', code_dir='solver', wrapper = True)
     return prob
