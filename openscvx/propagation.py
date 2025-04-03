@@ -3,6 +3,8 @@ import jax.numpy as jnp
 import scipy.integrate as itg
 from scipy.interpolate import interp1d
 
+from openscvx.utils import qdcm
+
 
 def nonlinear_constraint(x_ctcs, x_node, t, t_node, params):
     obs_vio = []
@@ -107,7 +109,7 @@ def full_subject_traj(x_full, params, init):
             sub_traj_sen = []
             for i in range(x_full.shape[0]):
                 sub_pose = sub_traj[i]
-                sub_traj_sen.append(R_sb @ params.veh.qdcm(x_full[i, 6:10]).T @ (sub_pose - x_full[i, 0:3]))
+                sub_traj_sen.append(R_sb @ qdcm(x_full[i, 6:10]).T @ (sub_pose - x_full[i, 0:3]))
             subs_traj_sen.append(sub_traj_sen)
     else:
         subs_traj_sen = None
@@ -134,7 +136,7 @@ def full_subject_traj_time(x_full, params, init):
             sub_traj_sen = []
             for i in range(x_full.shape[0]):
                 sub_pose = sub_traj[i]
-                sub_traj_sen.append(R_sb @ params.veh.qdcm(x_full[i, 6:10]).T @ (sub_pose - x_full[i, 0:3]))
+                sub_traj_sen.append(R_sb @ qdcm(x_full[i, 6:10]).T @ (sub_pose - x_full[i, 0:3]))
             subs_traj_sen.append(sub_traj_sen)
     else:
         subs_traj_sen = None
@@ -157,6 +159,6 @@ def subject_traj(x, params):
         sub_traj_sen = []
         for i in range(x.shape[0]):
             sub_pose = sub_traj[i]
-            sub_traj_sen.append(R_sb @ params.veh.qdcm(x[i, 6:10]).T @ (sub_pose - x[i, 0:3]))
+            sub_traj_sen.append(R_sb @ qdcm(x[i, 6:10]).T @ (sub_pose - x[i, 0:3]))
         subs_traj_sen.append(sub_traj_sen)
     return subs_traj_sen

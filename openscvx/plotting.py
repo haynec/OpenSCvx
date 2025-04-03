@@ -4,6 +4,8 @@ import plotly.graph_objects as go
 import numpy as np
 import pickle
 
+from openscvx.utils import qdcm
+
 def save_gate_parameters(gates, params):
     gate_centers = []
     gate_vertices = []
@@ -85,7 +87,7 @@ def plot_initial_guess(result, params):
         att = x_attitude[:, indices[i]]
 
         # Convert quaternion to rotation matrix
-        rotation_matrix = params.veh.qdcm(att)
+        rotation_matrix = qdcm(att)
 
         # Extract axes from rotation matrix
         axes = 2 * np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
@@ -1174,7 +1176,7 @@ def plot_animation(result: dict,
             subs_pose.append(sub_positions[indices[i]])
         
         # Convert quaternion to rotation matrix
-        rotation_matrix = params.veh.qdcm(att)
+        rotation_matrix = qdcm(att)
 
         force = 0.5 * rotation_matrix @ drone_forces[indices[i]]
 
@@ -1218,7 +1220,7 @@ def plot_animation(result: dict,
             R_sb = params.veh.R_sb
             X, Y, Z = R_sb.T @ np.array([X.flatten(), Y.flatten(), Z.flatten()])
             # Transform X,Y, and Z from the Body frame to the Inertial frame
-            R_bi = params.veh.qdcm(drone_attitudes[indices[i]])
+            R_bi = qdcm(drone_attitudes[indices[i]])
             X, Y, Z = R_bi @ np.array([X, Y, Z])
             # Shift the meshgrid to the drone position
             X += drone_positions[indices[i], 0]
@@ -1568,7 +1570,7 @@ def plot_scp_animation(result_ctcs: dict,
             att = drone_attitudes[i]
 
             # Convert quaternion to rotation matrix
-            rotation_matrix = params.veh.qdcm(att)
+            rotation_matrix = qdcm(att)
 
             # Extract axes from rotation matrix
             axes = 2 * np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
