@@ -176,7 +176,8 @@ class AugmentedDynamics:
                     x: np.ndarray,
                     u_current: np.ndarray,
                     u_next: np.ndarray,
-                    tau_init: float) -> np.ndarray:
+                    tau_init: float,
+                    idx_s: int) -> np.ndarray:
         x = x[None, :]
         
         if self.params.scp.dis_type == "ZOH":
@@ -185,4 +186,4 @@ class AugmentedDynamics:
             beta = (tau - tau_init) * self.params.scp.n
         u = u_current + beta * (u_next - u_current)
         
-        return  u[:, 6] * self.params.veh.state_dot(x, u[:,:-1]).squeeze()
+        return  u[:, idx_s] * self.params.veh.state_dot(x, u[:,:-1]).squeeze()

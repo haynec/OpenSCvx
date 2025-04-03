@@ -15,6 +15,7 @@ class Dynamics:
     def __init__(self):
         self.t_inds = -2          # Time Index in State
         self.y_inds = -1          # Constraint Violation Index in State
+        self.s_inds = -1          # Time dilation index in Control
 
         self.max_state = np.array([200, 10, 20, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1E-4])
         self.min_state = np.array([-200, -100, 0, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0])

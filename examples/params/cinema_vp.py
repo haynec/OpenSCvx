@@ -16,6 +16,7 @@ class Dynamics:
         self.t_inds = -3          # Time Index in State
         self.fuel_inds = -2       # Fuel Index in State
         self.y_inds = -1          # Constraint Violation Index in State
+        self.s_inds = -1          # Time dilation index in Control
 
         self.max_state = np.array([ 200,  100,  50,  100,  100,  100,  1,  1,  1,  1,  10,  10,  10,  40, 2000, 1E-8])  # Upper Bound on the states
         self.min_state = np.array([-100, -100, -10, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10,   0,   0,     0])  # Lower Bound on the states
