@@ -5,7 +5,7 @@ import jax.numpy as jnp
 
 
 class Dynamics(ABC):
-    def __init__(self):
+    def __post_init__(self):
 
         # CTCS Functions
         self.g_jit = jax.jit(self.g_func)

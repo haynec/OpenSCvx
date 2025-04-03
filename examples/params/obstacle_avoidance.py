@@ -54,7 +54,7 @@ class ObstacleAvoidanceDynamics(Dynamics):
             self.radius.append(rad)
             self.A_obs.append(ax @ np.diag(rad**2) @ ax.T)
 
-        super().__init__()
+        super().__post_init__()
     
     
     def dynamics(self, x, u):
