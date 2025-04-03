@@ -16,14 +16,13 @@ total_time = 4.0  # Total time for the simulation
 
 class ObstacleAvoidanceDynamics(Dynamics):
     def __init__(self):
+        self.t_inds = -2          # Time Index in State
+        self.y_inds = -1          # Constraint Violation Index in State
+        self.s_inds = -1          # Time dilation index in Control
 
         self.m = 1.0  # Mass of the drone
         self.g_const = -9.18
         self.J_b = jnp.array([1.0, 1.0, 1.0])  # Moment of Inertia of the drone
-
-        self.t_inds = -2          # Time Index in State
-        self.y_inds = -1          # Constraint Violation Index in State
-        self.s_inds = -1          # Time dilation index in Control
 
         self.max_state = np.array([200, 10, 20, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1E-4])
         self.min_state = np.array([-200, -100, 0, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0])
