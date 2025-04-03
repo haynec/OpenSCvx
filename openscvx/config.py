@@ -5,6 +5,8 @@ from copy import deepcopy
 from typing import Union
 import jaxlib, jax
 
+from openscvx.dynamics import Dynamics
+
 
 # Define a custom representer for NumPy arrays to convert them to lists
 def numpy_representer(dumper, data):
@@ -193,20 +195,13 @@ class ScpConfig:
 # Make a new class call VehConfig which takes in a functionhandle
 # The function handle will be passed the config object
 
-@dataclass
-class VehConfig:
-    # Make x_dot a function handle
-    x_dot: callable
-    A: callable
-    B: callable
-
 
 
 @dataclass
 class Config:
     sim: SimConfig
     scp: ScpConfig
-    veh: VehConfig
+    veh: Dynamics
 
     def __post_init__(self):
         pass

@@ -8,11 +8,18 @@ from openscvx.config import (
     Config,
 )
 
+from openscvx.dynamics import Dynamics
+
 n = 6 # Discretization Nodes
 total_time = 4.0  # Total time for the simulation
 
-class Dynamics:
+class ObstacleAvoidanceDynamics(Dynamics):
     def __init__(self):
+
+        self.m = 1.0  # Mass of the drone
+        self.g_const = -9.18
+        self.J_b = jnp.array([1.0, 1.0, 1.0])  # Moment of Inertia of the drone
+
         self.t_inds = -2          # Time Index in State
         self.y_inds = -1          # Constraint Violation Index in State
         self.s_inds = -1          # Time dilation index in Control
@@ -28,12 +35,6 @@ class Dynamics:
 
         self.initial_control = np.array([0, 0, 50, 0, 0, 0, 1])
 
-        self.m = 1.0  # Mass of the drone
-        self.g_const = -9.18
-        self.J_b = jnp.array([1.0, 1.0, 1.0])  # Moment of Inertia of the drone
-        
-        self.g = jit(self.g)
-        self.g_vec = jit(vmap(self.g, in_axes=(0)))
 
         ### Ellipsoidal Obstacle Params ###
         self.obstacle_centers=[
@@ -52,9 +53,7 @@ class Dynamics:
             self.radius.append(rad)
             self.A_obs.append(ax @ np.diag(rad**2) @ ax.T)
 
-        self.state_dot = vmap(self.state_dot_func)
-        self.A = jit(vmap(jacfwd(self.state_dot_func, argnums=0), in_axes=(0, 0)))
-        self.B = jit(vmap(jacfwd(self.state_dot_func, argnums=1), in_axes=(0, 0)))
+        super().__init__()
     
     
     def qdcm(self, q: jnp.ndarray) -> jnp.ndarray:
@@ -79,8 +78,8 @@ class Dynamics:
         # Convert an angular rate to a 3 x 3 skew symetric matrix
         x, y, z = w
         return jnp.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
-
-    def state_dot_func(self, x, u):
+    
+    def dynamics(self, x, u):
         # Unpack the state and control vectors
         v = x[3:6]
         q = x[6:10]
@@ -100,7 +99,7 @@ class Dynamics:
             tau - self.SSM(w) @ jnp.diag(self.J_b) @ w
         )
         t_dot = 1
-        y_dot = self.g(x)
+        y_dot = self.g_jit(x)
         return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot, y_dot])
 
     def generate_orthogonal_unit_vectors(self, vectors=None):
@@ -126,7 +125,7 @@ class Dynamics:
     def g_obs(self, center, A, x):
         return 1 - (x[:3] - center).T @ A @ (x[:3] - center)
 
-    def g(self, x):
+    def g_func(self, x):
         g = 0
         for center, A in zip(self.obstacle_centers, self.A_obs):
             g += jnp.maximum(0, self.g_obs(center, A, x))**2
@@ -146,7 +145,7 @@ class Initial_Guess():
         x_bar[:,:dy.y_inds] = np.linspace(dy.initial_state['value'], dy.final_state['value'], n)
         return x_bar, u_bar
 
-dy = Dynamics()
+dy = ObstacleAvoidanceDynamics()
 initial_guess = Initial_Guess(dy)
 
 sim = SimConfig(
