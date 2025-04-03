@@ -9,6 +9,7 @@ from openscvx.config import (
 )
 
 from openscvx.dynamics import Dynamics
+from openscvx.utils import qdcm, SSMP, SSM
 
 n = 6 # Discretization Nodes
 total_time = 4.0  # Total time for the simulation
@@ -56,29 +57,6 @@ class ObstacleAvoidanceDynamics(Dynamics):
         super().__init__()
     
     
-    def qdcm(self, q: jnp.ndarray) -> jnp.ndarray:
-        # Convert a quaternion to a direction cosine matrix
-        q_norm = (q[0] ** 2 + q[1] ** 2 + q[2] ** 2 + q[3] ** 2) ** 0.5
-        w, x, y, z = q / q_norm
-        return jnp.array(
-            [
-                [1 - 2 * (y**2 + z**2), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-                [2 * (x * y + z * w), 1 - 2 * (x**2 + z**2), 2 * (y * z - x * w)],
-                [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x**2 + y**2)],
-            ]
-        )
-
-    
-    def SSMP(self, w: jnp.ndarray):
-        # Convert an angular rate to a 4 x 4 skew symetric matrix
-        x, y, z = w
-        return jnp.array([[0, -x, -y, -z], [x, 0, z, -y], [y, -z, 0, x], [z, y, -x, 0]])
-
-    def SSM(self, w: jnp.ndarray):
-        # Convert an angular rate to a 3 x 3 skew symetric matrix
-        x, y, z = w
-        return jnp.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
-    
     def dynamics(self, x, u):
         # Unpack the state and control vectors
         v = x[3:6]
@@ -93,10 +71,10 @@ class ObstacleAvoidanceDynamics(Dynamics):
 
         # Compute the time derivatives of the state variables
         r_dot = v
-        v_dot = (1 / self.m) * self.qdcm(q) @ f + jnp.array([0, 0, self.g_const])
-        q_dot = 0.5 * self.SSMP(w) @ q
+        v_dot = (1 / self.m) * qdcm(q) @ f + jnp.array([0, 0, self.g_const])
+        q_dot = 0.5 * SSMP(w) @ q
         w_dot = jnp.diag(1/self.J_b) @ (
-            tau - self.SSM(w) @ jnp.diag(self.J_b) @ w
+            tau - SSM(w) @ jnp.diag(self.J_b) @ w
         )
         t_dot = 1
         y_dot = self.g_jit(x)
