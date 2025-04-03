@@ -84,8 +84,7 @@ class CinemaVPDynamics(Dynamics):
         )
         t_dot = 1
         fuel_dot = jnp.linalg.norm(u)[None]
-        y_dot = self.g_jit(x)
-        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot, fuel_dot, y_dot])
+        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot, fuel_dot])
 
     def get_kp_pose(self, t):
         loop_time = 40.0

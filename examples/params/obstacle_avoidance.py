@@ -76,8 +76,7 @@ class ObstacleAvoidanceDynamics(Dynamics):
             tau - SSM(w) @ jnp.diag(self.J_b) @ w
         )
         t_dot = 1
-        y_dot = self.g_jit(x)
-        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot, y_dot])
+        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot])
 
     def g_obs(self, center, A, x):
         return 1 - (x[:3] - center).T @ A @ (x[:3] - center)
