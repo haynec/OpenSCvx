@@ -106,9 +106,6 @@ class SimConfig:
     max_control: np.ndarray
     min_control: np.ndarray
     total_time: float
-    g: float = -9.81
-    m: float = 1.0
-    J_b: np.ndarray = field(default_factory=lambda: np.array([1.0, 1.0, 1.0]))
     n_states: int = None
     n_controls: int = None
     max_dt: float = 1e2
