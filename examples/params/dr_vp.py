@@ -16,6 +16,7 @@ class Dynamics:
     def __init__(self):
         self.t_inds = -2          # Time Index in State
         self.y_inds = -1          # Constraint Violation Index in State
+        self.s_inds = -1          # Time dilation index in Control
 
         self.max_state=np.array([200, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1e-4])  # Upper Bound on the states
         self.min_state=np.array([-200, -100, 15, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0])  # Lower Bound on the states
