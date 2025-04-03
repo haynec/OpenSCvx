@@ -9,7 +9,7 @@ from openscvx.config import (
 )
 
 from openscvx.dynamics import Dynamics
-from openscvx.utils import qdcm, SSMP, SSM
+from openscvx.utils import qdcm, SSMP, SSM, generate_orthogonal_unit_vectors
 
 n = 6 # Discretization Nodes
 total_time = 4.0  # Total time for the simulation
@@ -48,8 +48,8 @@ class ObstacleAvoidanceDynamics(Dynamics):
         self.axes = []
         np.random.seed(0)
         for _ in self.obstacle_centers:
-            ax = self.generate_orthogonal_unit_vectors()
-            self.axes.append(self.generate_orthogonal_unit_vectors())
+            ax = generate_orthogonal_unit_vectors()
+            self.axes.append(generate_orthogonal_unit_vectors())
             rad = np.random.rand(3) + 0.1 * np.ones(3)
             self.radius.append(rad)
             self.A_obs.append(ax @ np.diag(rad**2) @ ax.T)
@@ -79,26 +79,6 @@ class ObstacleAvoidanceDynamics(Dynamics):
         t_dot = 1
         y_dot = self.g_jit(x)
         return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot, y_dot])
-
-    def generate_orthogonal_unit_vectors(self, vectors=None):
-        """
-        Generates 3 orthogonal unit vectors to model the axis of the ellipsoid via QR decomposition
-
-        Parameters:
-        vectors (np.ndarray): Optional, axes of the ellipsoid to be orthonormalized.
-                              If none specified generates randomly.
-
-        Returns:
-        np.ndarray: A 3x3 matrix where each column is a unit vector.
-        """
-        if vectors is None:
-            # Create a random key
-            key = jax.random.PRNGKey(0)
-
-            # Generate a 3x3 array of random numbers uniformly distributed between 0 and 1
-            vectors = jax.random.uniform(key, (3, 3))
-        Q, _ = jnp.linalg.qr(vectors)
-        return Q
 
     def g_obs(self, center, A, x):
         return 1 - (x[:3] - center).T @ A @ (x[:3] - center)

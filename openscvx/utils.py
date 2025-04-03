@@ -1,3 +1,4 @@
+import jax
 import jax.numpy as jnp
 
 def qdcm(q: jnp.ndarray) -> jnp.ndarray:
@@ -22,3 +23,23 @@ def SSM(w: jnp.ndarray):
     # Convert an angular rate to a 3 x 3 skew symetric matrix
     x, y, z = w
     return jnp.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
+
+def generate_orthogonal_unit_vectors(vectors=None):
+    """
+    Generates 3 orthogonal unit vectors to model the axis of the ellipsoid via QR decomposition
+
+    Parameters:
+    vectors (np.ndarray): Optional, axes of the ellipsoid to be orthonormalized.
+                            If none specified generates randomly.
+
+    Returns:
+    np.ndarray: A 3x3 matrix where each column is a unit vector.
+    """
+    if vectors is None:
+        # Create a random key
+        key = jax.random.PRNGKey(0)
+
+        # Generate a 3x3 array of random numbers uniformly distributed between 0 and 1
+        vectors = jax.random.uniform(key, (3, 3))
+    Q, _ = jnp.linalg.qr(vectors)
+    return Q
