@@ -9,10 +9,10 @@ class Dynamics(ABC):
 
         # CTCS Functions
         self.g_jit = jax.jit(self.g_func)
-        self.g_vec = jax.jit(self.g_jit, in_axes=(0))
+        self.g_vec = jax.vmap(self.g_jit, in_axes=(0))
 
         # Dynamics Functions
-        self.x_dot = jax.vmap(self.dynamics)
+        self.state_dot = jax.vmap(self.dynamics)
         self.A = jax.jit(jax.vmap(jax.jacfwd(self.dynamics, argnums=0), in_axes=(0, 0)))
         self.B = jax.jit(jax.vmap(jax.jacfwd(self.dynamics, argnums=1), in_axes=(0, 0)))
 
@@ -22,9 +22,4 @@ class Dynamics(ABC):
 
     @abstractmethod
     def g_func(self, x: jnp.array) -> jnp.array:
-        pass
-
-    @abstractmethod
-    def initial_trajectory(self):
-        # returns x_bar, u_bar
         pass
