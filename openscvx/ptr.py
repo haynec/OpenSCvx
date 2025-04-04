@@ -9,7 +9,7 @@ import sys
 from termcolor import colored
 
 from openscvx.discretization import AugmentedDynamics
-from openscvx.propagation import nonlinear_constraint, full_subject_traj_time, subject_traj, u_lambda, simulate_nonlinear_time
+from openscvx.propagation import full_subject_traj_time, subject_traj, u_lambda, simulate_nonlinear_time
 from openscvx.ocp import OCP
 from openscvx.plotting import plot_initial_guess
 
@@ -173,6 +173,7 @@ def PTR_main(params):
     result = dict(
         tof = t[-1],
         drone_state = x_full,
+        drone_controls_full = u_full.T,
         drone_positions = x_full[:,:3],
         drone_velocities = x_full[:,3:6],
         drone_attitudes = x_full[:,6:10],
