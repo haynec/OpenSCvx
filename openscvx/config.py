@@ -115,6 +115,7 @@ class SimConfig:
     inter_sample: int = 30
     dt: float = 0.1
     profiling: bool = False
+    debug: bool = False
     solver: str = "QOCO"
     cvxpygen: bool = False
     S_x: np.ndarray = None

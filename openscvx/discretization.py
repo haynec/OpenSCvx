@@ -21,9 +21,11 @@ class AugmentedDynamics:
 
         self.tau_grid = jnp.linspace(0, 1, self.params.scp.n)
 
-        dVdt_lower = jit(self.dVdt_fun).lower(0.0, np.ones(int(self.i5*(self.params.scp.n-1))), np.ones((self.params.scp.n-1, self.params.sim.n_controls)), np.ones((self.params.scp.n-1, self.params.sim.n_controls)))
-        self.dVdt = dVdt_lower.compile()
-        # self.dVdt = self.dVdt_fun
+        if params.sim.debug:
+            self.dVdt = self.dVdt_fun
+        else:
+            dVdt_lower = jit(self.dVdt_fun).lower(0.0, np.ones(int(self.i5*(self.params.scp.n-1))), np.ones((self.params.scp.n-1, self.params.sim.n_controls)), np.ones((self.params.scp.n-1, self.params.sim.n_controls)))
+            self.dVdt = dVdt_lower.compile()
     
     def s_to_t(self, u, params):
         t = [0]
