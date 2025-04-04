@@ -42,7 +42,7 @@ def PTR_main(params):
 
     k = 1
 
-    if params.scp.gen_code:
+    if params.sim.cvxpygen:
         from solver.cpg_solver import cpg_solve
         with open('solver/problem.pickle', 'rb') as f:
             prob = pickle.load(f)
@@ -231,7 +231,7 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params):
     prob.param_dict['w_tr'].value = params.scp.w_tr
     prob.param_dict['lam_cost'].value = params.scp.lam_cost
 
-    if params.scp.gen_code:
+    if params.sim.cvxpygen:
         t0 = time.time()
         prob.register_solve('CPG', cpg_solve)
         prob.solve(method = 'CPG', abstol = 1E-6, reltol = 1E-9)

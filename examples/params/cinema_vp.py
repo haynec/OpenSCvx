@@ -28,9 +28,11 @@ class CinemaVPDynamics(Dynamics):
                              'type' :  ['Fix', 'Fix', 'Fix', 'Fix', 'Fix', 'Fix', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free',    'Fix',   'Fix']}  # Initial State
         
         self.final_state= {'value' : [   -10,      0,      2,      0,      0,      0,      1,      0,      0,      0,      0,      0,      0,    40,          0],
-                           'type'  : ['Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Fix', 'Minimize']}
+                           'type'  : ['Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Fix', 'Minimize']} # Terminal State
 
-
+        self.max_control=np.array([0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time])  # Upper Bound on the controls
+        self.min_control=np.array([0, 0, 0, -18.665, -18.665, -0.55562, 0.3 * total_time])  # Lower Bound on the controls
+        
         self.initial_control=np.array([0, 0, 10, 0, 0, 0, 1])
 
         self.m = 1.0  # Mass of the drone
@@ -150,15 +152,12 @@ sim = SimConfig(
     initial_control=dy.initial_control,  # Initial Control
     max_state=dy.max_state,  # Upper Bound on the states
     min_state=dy.min_state,  # Lower Bound on the states
-    max_control=np.array(
-        [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time]
-    ),  # Upper Bound on the controls
-    min_control=np.array(
-        [0, 0, 0, -18.665, -18.665, -0.55562, 0.3 * total_time]
-    ),  # Lower Bound on the controls
+    max_control=dy.max_control,  # Upper Bound on the controls
+    min_control=dy.min_control,  # Lower Bound on the controls
     total_time=total_time,  # Total time for the simulation
     n_states = len(dy.max_state),  # Number of States
-    dt=0.1
+    dt=0.1,
+    cvxpygen = True
 )
 scp = ScpConfig(
     n=n, # Number of Nodes
@@ -170,6 +169,5 @@ scp = ScpConfig(
     ep_vc=1e-8,  # Virtual Control Tolerance for CTCS
     w_tr_adapt=1.3,  # Trust Region Adaptation Factor
     w_tr_max_scaling_factor=1e3,  # Maximum Trust Region Weight
-    gen_code=False,
 )
 params = Config(sim=sim, scp=scp, veh=dy)
