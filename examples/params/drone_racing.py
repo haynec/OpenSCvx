@@ -73,7 +73,7 @@ class DroneRacingDynamics(Dynamics):
 
         super().__post_init__()
 
-    def g_func(self, x): # CTCS Inequality Constraints
+    def g_func(self, x, u): # CTCS Inequality Constraints
         return jnp.sum(jnp.maximum(0, (x[:-1] - self.max_state[:-1])) ** 2) + jnp.sum(jnp.maximum(0, (self.min_state[:-1] - x[:-1])) ** 2)
 
     def g_cvx_nodal(self, x): # Nodal Convex Inequality Constraints

@@ -83,7 +83,7 @@ class ObstacleAvoidanceDynamics(Dynamics):
     def g_obs(self, center, A, x):
         return 1 - (x[:3] - center).T @ A @ (x[:3] - center)
 
-    def g_func(self, x):
+    def g_func(self, x, u):
         g = 0
         for center, A in zip(self.obstacle_centers, self.A_obs):
             g += jnp.maximum(0, self.g_obs(center, A, x))**2

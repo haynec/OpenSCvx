@@ -122,7 +122,7 @@ class DrVpPolytopeDynamics(Dynamics):
         p_s_s = self.R_sb @ qdcm(x[6:10]).T @ (p_s_I - x[0:3])
         return jnp.linalg.norm(self.A_cone @ p_s_s, ord=self.norm_type) - (self.c.T @ p_s_s)
     
-    def g_func(self, x):
+    def g_func(self, x, u):
         g = 0
         for pose in self.init_poses:
             g += jnp.maximum(0, self.g_vp(pose, x)) ** 2

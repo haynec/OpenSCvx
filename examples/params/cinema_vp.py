@@ -111,7 +111,7 @@ class CinemaVPDynamics(Dynamics):
         p_s_I = self.get_kp_pose(x[self.t_inds])
         return jnp.linalg.norm(p_s_I - x[:3]) - self.max_range
 
-    def g_func(self, x):
+    def g_func(self, x, u):
         return 2E1 * jnp.maximum(0, self.g_vp(x)) ** 2 + jnp.sum(jnp.maximum(0, (x[:-1] - self.max_state[:-1])) ** 2) + jnp.sum(jnp.maximum(0, (self.min_state[:-1] - x[:-1])) ** 2) + jnp.maximum(0, self.g_min(x)) ** 2 + jnp.maximum(0, self.g_max(x)) ** 2
 
 class Initial_Guess():

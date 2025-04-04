@@ -141,14 +141,8 @@ def PTR_main(params):
     else:
         x_sub_sen = []
         x_sub_sen_node = []
-
-    obs_vio, sub_vp_vio, sub_min_vio, sub_max_vio, sub_direc_vio, state_bound_vio = nonlinear_constraint(x_full, x, t_full, t, params)
-    if hasattr(params.veh, 'n_subs') > 0:
-        LoS_vio = sub_vp_vio.sum()/sub_vp_vio.shape[0]
-    else:
-        LoS_vio = 0
     
-    print("Total CTCS Constraint Violation:", LoS_vio)
+    print("Total CTCS Constraint Violation:", x_full[-1, params.veh.y_inds])
     i = 0
     cost = np.zeros_like(x[-1, i])
     for type in params.veh.initial_state['type']:

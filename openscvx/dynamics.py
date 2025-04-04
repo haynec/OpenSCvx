@@ -9,7 +9,7 @@ class Dynamics(ABC):
 
         # CTCS Functions
         self.g_jit = jax.jit(self.g_func)
-        self.g_vec = jax.vmap(self.g_jit, in_axes=(0))
+        self.g_vec = jax.vmap(self.g_jit, in_axes=(0, 0))
 
         # Dynamics Functions
         self.state_dot = jax.vmap(self.dynamics_augmented)
@@ -21,11 +21,11 @@ class Dynamics(ABC):
         pass
 
     @abstractmethod
-    def g_func(self, x: jnp.array) -> jnp.array:
+    def g_func(self, x: jnp.array, u: jnp.array) -> jnp.array:
         pass
     
     def dynamics_augmented(self, x: jnp.array, u: jnp.array) -> jnp.array:
         # TODO: (norrisg) handle varying lengths of x and u due to augmentation more elegantly
         x_dot = self.dynamics(x[:-1], u)
-        y_dot = self.g_jit(x)
+        y_dot = self.g_jit(x, u)
         return jnp.hstack([x_dot, y_dot])
