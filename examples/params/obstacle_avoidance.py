@@ -118,8 +118,7 @@ sim = SimConfig(
     min_control=dy.min_control,  # Lower Bound on the controls
     total_time=total_time,
     n_states=len(dy.max_state),  # Number of States
-    dt = 0.01,
-    cvxpygen=True
+    dt = 0.01
 )
 scp = ScpConfig(
     n=n,
