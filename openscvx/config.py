@@ -116,6 +116,7 @@ class SimConfig:
     dt: float = 0.1
     profiling: bool = False
     solver: str = "QOCO"
+    cvxpygen: bool = False
     S_x: np.ndarray = None
     c_x: np.ndarray = None
     S_u: np.ndarray = None
@@ -166,7 +167,6 @@ class ScpConfig:
     lam_cost: float = 0.0
     k_max: int = 200
     n: int = None
-    gen_code: bool = False
     dis_type: str = "FOH"
     uniform_time_grid: bool = False
     fixed_final_time: bool = False
@@ -225,12 +225,10 @@ class Config:
         # Converting params_in to class instances
         sim_config = SimConfig(**params_in["sim"])
         scp_config = ScpConfig(**params_in["scp"])
-        veh_config = VehConfig(**params_in["veh"])
 
         config_instance = cls(
             sim=sim_config,
             scp=scp_config,
-            veh=veh_config,
         )
 
         config_instance = cls.from_config(

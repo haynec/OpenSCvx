@@ -14,8 +14,7 @@ __pycache__/
 *.so
 
 # CVXPYGen 
-ctcs/*
-ctcs_dr/*
+solver/*
 
 # Images
 

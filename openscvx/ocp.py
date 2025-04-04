@@ -1,10 +1,11 @@
-import numpy as np
+import os
 import numpy.linalg as la
 import scipy.linalg as sla
 import cvxpy as cp
 from cvxpygen import cpg
 from openscvx.config import Config
 from cvxpygen import cpg
+
 
 def OCP(params):
     ########################
@@ -48,7 +49,7 @@ def OCP(params):
         u_nonscaled.append(S_u @ u[k] + c_u)
 
     constr = []
-    cost = 0
+    cost = lam_cost * 0
 
     #############
     # CONSTRAINTS
@@ -60,10 +61,10 @@ def OCP(params):
         constr += params.veh.h_cvx_nodal(x_nonscaled) # Nodal Convex Equality Constraints
     
     if hasattr(params.veh, 'g_ncvx_nodal'):
-        constr += params.veh.g_ncvx_nodal(x_nonscaled) # Nodal Convex Inequality Constraints
+        constr += params.veh.g_ncvx_nodal(x_nonscaled) # Nodal Nonconvex Inequality Constraints
     
     if hasattr(params.veh, 'h_ncvx_nodal'):
-        constr += params.veh.h_ncvx_nodal(x_nonscaled) # Nodal Convex Equality Constraints
+        constr += params.veh.h_ncvx_nodal(x_nonscaled) # Nodal Nonconvex Equality Constraints
     
 
     for i in range(params.sim.n_states-1):
@@ -82,9 +83,6 @@ def OCP(params):
     constr += [0 == la.inv(S_x) @ (x_nonscaled[i] - x_bar[i] - dx[i]) for i in range(params.scp.n)] # State Error
     constr += [0 == la.inv(S_u) @ (u_nonscaled[i] - u_bar[i] - du[i]) for i in range(params.scp.n)] # Control Error
 
-    constr += [x_nonscaled[i][params.veh.t_inds] - x_nonscaled[i-1][params.veh.t_inds] <= params.sim.max_dt for i in range(1, params.scp.n)] # Maximum Time Step
-    constr += [x_nonscaled[i][params.veh.t_inds] - x_nonscaled[i-1][params.veh.t_inds] >= params.sim.min_dt for i in range(1, params.scp.n)] # Minimum Time Step
-
     constr += [x_nonscaled[i] == \
                       cp.reshape(A_d[i-1], (params.sim.n_states, params.sim.n_states)) @ x_nonscaled[i-1] \
                     + cp.reshape(B_d[i-1], (params.sim.n_states, params.sim.n_controls)) @ u_nonscaled[i-1] \
@@ -101,10 +99,7 @@ def OCP(params):
     ########
     # COSTS
     ########
-    cost = 0
     
-    cost += lam_cost * x_nonscaled[-1][params.veh.t_inds] # Minimal Time Cost
-
     cost += sum(w_tr * cp.sum_squares(sla.block_diag(la.inv(S_x), la.inv(S_u)) @ cp.hstack((dx[i], du[i]))) for i in range(params.scp.n)) # Trust Region Cost
     cost += sum(params.scp.lam_vc * cp.sum(cp.abs(nu[i-1])) for i in range(1, params.scp.n)) # Virtual Control Slack
     
@@ -115,4 +110,15 @@ def OCP(params):
     # PROBLEM
     #########
     prob = cp.Problem(cp.Minimize(cost), constr)
+    if params.sim.cvxpygen:
+        # Check to see if solver directory exists
+        if not os.path.exists('solver'):
+            cpg.generate_code(prob, solver = params.sim.solver, code_dir='solver', wrapper = True)
+        else:
+            # Prompt the use to indicate if they wish to overwrite the solver directory or use the existing compiled solver
+            overwrite = input("Solver directory already exists. Overwrite? (y/n): ")
+            if overwrite.lower() == 'y':
+                cpg.generate_code(prob, solver = params.sim.solver, code_dir='solver', wrapper = True)
+            else:
+                pass
     return prob

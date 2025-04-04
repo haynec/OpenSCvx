@@ -34,6 +34,8 @@ class ObstacleAvoidanceDynamics(Dynamics):
                            'type' :  ['Fix', 'Fix', 'Fix', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free',   'Free',  'Minimize']}
 
         self.initial_control = np.array([0, 0, 50, 0, 0, 0, 1])
+        self.max_control = np.array([0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time])  # Upper Bound on the controls
+        self.min_control = np.array([0, 0, 0, -18.665, -18.665, -0.55562, 0.3 * total_time])  # Lower Bound on the controls
 
 
         ### Ellipsoidal Obstacle Params ###
@@ -112,17 +114,12 @@ sim = SimConfig(
     initial_control=dy.initial_control,  # Initial Control
     max_state=dy.max_state,  # Upper Bound on the states
     min_state=dy.min_state,  # Lower Bound on the states
-    max_control=np.array(
-        [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time]
-    ),  # Upper Bound on the controls
-    min_control=np.array(
-        [0, 0, 0, -18.665, -18.665, -0.55562, 0.3 * total_time]
-    ),  # Lower Bound on the controls
-    max_dt=1e1,  # Maximum Time Step
-    min_dt=1e-2,  # Minimum Time Step
+    max_control=dy.max_control,  # Upper Bound on the controls
+    min_control=dy.min_control,  # Lower Bound on the controls
     total_time=total_time,
     n_states=len(dy.max_state),  # Number of States
     dt = 0.01,
+    cvxpygen=True
 )
 scp = ScpConfig(
     n=n,
@@ -136,7 +133,6 @@ scp = ScpConfig(
     cost_relax=0.5,               # Minimal Time Relaxation Factor
     w_tr_adapt=1.2,               # Trust Region Adaptation Factor
     w_tr_max_scaling_factor=1E2,  # Maximum Trust Region Weight
-    gen_code=False,               # Generate the code
 )
 
 params = Config(sim=sim, scp=scp, veh=dy)
