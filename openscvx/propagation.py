@@ -5,25 +5,6 @@ from scipy.interpolate import interp1d
 
 from openscvx.utils import qdcm
 
-
-def nonlinear_constraint(x_ctcs, x_node, t, t_node, params):
-    obs_vio = []
-    
-    sub_vp_vio = []
-    sub_min_vio = []
-    sub_max_vio = []
-    sub_direc_vio = []
-
-    state_bound_vio = []
-    sub_vp_vio = params.veh.g_vec(x_ctcs)
-    for i_state in range(params.sim.n_states-1):
-        state_bound_vio.append(np.maximum(0, params.sim.min_state[i_state]-x_ctcs[:, i_state]) + np.maximum(0, x_ctcs[:, i_state]-params.sim.max_state[i_state]))
-    state_bound_vio = np.array(state_bound_vio)
-    obs_vio = np.array(obs_vio)
-    sub_max_vio = np.array(sub_max_vio)
-    sub_min_vio = np.array(sub_min_vio)
-    return obs_vio, sub_vp_vio, sub_min_vio, sub_max_vio, sub_direc_vio, state_bound_vio
-
 def simulate_nonlinear_time(x_0, u_lam, tau_vals, t, aug_dy, params):
     states = []
     tau = np.linspace(0, 1, params.scp.n)
