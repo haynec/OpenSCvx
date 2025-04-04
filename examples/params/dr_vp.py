@@ -9,10 +9,13 @@ from openscvx.config import (
     Config,
 )
 
+from openscvx.dynamics import Dynamics
+from openscvx.utils import qdcm, SSMP, SSM
+
 n = 33 # Number of Nodes
 total_time = 40.0  # Total time for the simulation
 
-class Dynamics:
+class DrVpDynamics(Dynamics):
     def __init__(self):
         self.t_inds = -2          # Time Index in State
         self.y_inds = -1          # Constraint Violation Index in State
@@ -94,38 +97,10 @@ class Dynamics:
         
         self.init_poses = init_poses
 
-        
-        self.g = jit(self.g)
-        self.g_vec = jit(vmap(self.g, in_axes=(0)))
-  
-        self.state_dot = vmap(self.state_dot_func)
-        self.A = jit(vmap(jacfwd(self.state_dot_func, argnums=0), in_axes=(0, 0)))
-        self.B = jit(vmap(jacfwd(self.state_dot_func, argnums=1), in_axes=(0, 0)))
-    
-    def qdcm(self, q: jnp.ndarray) -> jnp.ndarray:
-        # Convert a quaternion to a direction cosine matrix
-        q_norm = (q[0] ** 2 + q[1] ** 2 + q[2] ** 2 + q[3] ** 2) ** 0.5
-        w, x, y, z = q / q_norm
-        return jnp.array(
-            [
-                [1 - 2 * (y**2 + z**2), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-                [2 * (x * y + z * w), 1 - 2 * (x**2 + z**2), 2 * (y * z - x * w)],
-                [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x**2 + y**2)],
-            ]
-        )
-
-    def SSMP(self, w: jnp.ndarray):
-        # Convert an angular rate to a 4 x 4 skew symetric matrix
-        x, y, z = w
-        return jnp.array([[0, -x, -y, -z], [x, 0, z, -y], [y, -z, 0, x], [z, y, -x, 0]])
-
-    def SSM(self, w: jnp.ndarray):
-        # Convert an angular rate to a 3 x 3 skew symetric matrix
-        x, y, z = w
-        return jnp.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
+        super().__post_init__()
 
     def g_vp(self, p_s_I, x):
-        p_s_s = self.R_sb @ self.qdcm(x[6:10]).T @ (p_s_I - x[0:3])
+        p_s_s = self.R_sb @ qdcm(x[6:10]).T @ (p_s_I - x[0:3])
         return jnp.linalg.norm(self.A_cone @ p_s_s, ord=self.norm_type) - (self.c.T @ p_s_s)
     
 
@@ -135,7 +110,7 @@ class Dynamics:
         linear = abs_x - quadratic
         return 0.5 * quadratic ** 2 + delta * linear
 
-    def g(self, x):
+    def g_func(self, x):
         g = 0
         for pose in self.init_poses:
             g += jnp.maximum(0, self.g_vp(pose, x)) ** 2
@@ -159,7 +134,7 @@ class Dynamics:
         vertices.append(center + self.rot @ [self.radii[0], 0, -self.radii[2]])
         return vertices
  
-    def state_dot_func(self, x, u):
+    def dynamics(self, x, u):
         # Unpack the state and control vectors
         v = x[3:6]
         q = x[6:10]
@@ -173,14 +148,13 @@ class Dynamics:
 
         # Compute the time derivatives of the state variables
         r_dot = v
-        v_dot = (1 / self.m) * self.qdcm(q) @ f + jnp.array([0, 0, self.g_const])
-        q_dot = 0.5 * self.SSMP(w) @ q
+        v_dot = (1 / self.m) * qdcm(q) @ f + jnp.array([0, 0, self.g_const])
+        q_dot = 0.5 * SSMP(w) @ q
         w_dot = jnp.diag(1/self.J_b) @ (
-            tau - self.SSM(w) @ jnp.diag(self.J_b) @ w
+            tau - SSM(w) @ jnp.diag(self.J_b) @ w
         )
         t_dot = 1
-        y_dot = self.g(x)
-        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot, y_dot])
+        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot])
 
 class Initial_Guess():
     def __init__(self, dy):
@@ -225,7 +199,7 @@ class Initial_Guess():
             x_bar[k,6:10] = q
         return x_bar, u_bar
 
-dy = Dynamics()
+dy = DrVpDynamics()
 initial_guess = Initial_Guess(dy)
 
 sim = SimConfig(

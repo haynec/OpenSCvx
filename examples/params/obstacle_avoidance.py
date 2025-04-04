@@ -8,14 +8,21 @@ from openscvx.config import (
     Config,
 )
 
+from openscvx.dynamics import Dynamics
+from openscvx.utils import qdcm, SSMP, SSM, generate_orthogonal_unit_vectors
+
 n = 6 # Discretization Nodes
 total_time = 4.0  # Total time for the simulation
 
-class Dynamics:
+class ObstacleAvoidanceDynamics(Dynamics):
     def __init__(self):
         self.t_inds = -2          # Time Index in State
         self.y_inds = -1          # Constraint Violation Index in State
         self.s_inds = -1          # Time dilation index in Control
+
+        self.m = 1.0  # Mass of the drone
+        self.g_const = -9.18
+        self.J_b = jnp.array([1.0, 1.0, 1.0])  # Moment of Inertia of the drone
 
         self.max_state = np.array([200, 10, 20, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1E-4])
         self.min_state = np.array([-200, -100, 0, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0])
@@ -28,12 +35,6 @@ class Dynamics:
 
         self.initial_control = np.array([0, 0, 50, 0, 0, 0, 1])
 
-        self.m = 1.0  # Mass of the drone
-        self.g_const = -9.18
-        self.J_b = jnp.array([1.0, 1.0, 1.0])  # Moment of Inertia of the drone
-        
-        self.g = jit(self.g)
-        self.g_vec = jit(vmap(self.g, in_axes=(0)))
 
         ### Ellipsoidal Obstacle Params ###
         self.obstacle_centers=[
@@ -46,41 +47,16 @@ class Dynamics:
         self.axes = []
         np.random.seed(0)
         for _ in self.obstacle_centers:
-            ax = self.generate_orthogonal_unit_vectors()
-            self.axes.append(self.generate_orthogonal_unit_vectors())
+            ax = generate_orthogonal_unit_vectors()
+            self.axes.append(generate_orthogonal_unit_vectors())
             rad = np.random.rand(3) + 0.1 * np.ones(3)
             self.radius.append(rad)
             self.A_obs.append(ax @ np.diag(rad**2) @ ax.T)
 
-        self.state_dot = vmap(self.state_dot_func)
-        self.A = jit(vmap(jacfwd(self.state_dot_func, argnums=0), in_axes=(0, 0)))
-        self.B = jit(vmap(jacfwd(self.state_dot_func, argnums=1), in_axes=(0, 0)))
+        super().__post_init__()
     
     
-    def qdcm(self, q: jnp.ndarray) -> jnp.ndarray:
-        # Convert a quaternion to a direction cosine matrix
-        q_norm = (q[0] ** 2 + q[1] ** 2 + q[2] ** 2 + q[3] ** 2) ** 0.5
-        w, x, y, z = q / q_norm
-        return jnp.array(
-            [
-                [1 - 2 * (y**2 + z**2), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-                [2 * (x * y + z * w), 1 - 2 * (x**2 + z**2), 2 * (y * z - x * w)],
-                [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x**2 + y**2)],
-            ]
-        )
-
-    
-    def SSMP(self, w: jnp.ndarray):
-        # Convert an angular rate to a 4 x 4 skew symetric matrix
-        x, y, z = w
-        return jnp.array([[0, -x, -y, -z], [x, 0, z, -y], [y, -z, 0, x], [z, y, -x, 0]])
-
-    def SSM(self, w: jnp.ndarray):
-        # Convert an angular rate to a 3 x 3 skew symetric matrix
-        x, y, z = w
-        return jnp.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
-
-    def state_dot_func(self, x, u):
+    def dynamics(self, x, u):
         # Unpack the state and control vectors
         v = x[3:6]
         q = x[6:10]
@@ -94,39 +70,18 @@ class Dynamics:
 
         # Compute the time derivatives of the state variables
         r_dot = v
-        v_dot = (1 / self.m) * self.qdcm(q) @ f + jnp.array([0, 0, self.g_const])
-        q_dot = 0.5 * self.SSMP(w) @ q
+        v_dot = (1 / self.m) * qdcm(q) @ f + jnp.array([0, 0, self.g_const])
+        q_dot = 0.5 * SSMP(w) @ q
         w_dot = jnp.diag(1/self.J_b) @ (
-            tau - self.SSM(w) @ jnp.diag(self.J_b) @ w
+            tau - SSM(w) @ jnp.diag(self.J_b) @ w
         )
         t_dot = 1
-        y_dot = self.g(x)
-        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot, y_dot])
-
-    def generate_orthogonal_unit_vectors(self, vectors=None):
-        """
-        Generates 3 orthogonal unit vectors to model the axis of the ellipsoid via QR decomposition
-
-        Parameters:
-        vectors (np.ndarray): Optional, axes of the ellipsoid to be orthonormalized.
-                              If none specified generates randomly.
-
-        Returns:
-        np.ndarray: A 3x3 matrix where each column is a unit vector.
-        """
-        if vectors is None:
-            # Create a random key
-            key = jax.random.PRNGKey(0)
-
-            # Generate a 3x3 array of random numbers uniformly distributed between 0 and 1
-            vectors = jax.random.uniform(key, (3, 3))
-        Q, _ = jnp.linalg.qr(vectors)
-        return Q
+        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot])
 
     def g_obs(self, center, A, x):
         return 1 - (x[:3] - center).T @ A @ (x[:3] - center)
 
-    def g(self, x):
+    def g_func(self, x):
         g = 0
         for center, A in zip(self.obstacle_centers, self.A_obs):
             g += jnp.maximum(0, self.g_obs(center, A, x))**2
@@ -146,7 +101,7 @@ class Initial_Guess():
         x_bar[:,:dy.y_inds] = np.linspace(dy.initial_state['value'], dy.final_state['value'], n)
         return x_bar, u_bar
 
-dy = Dynamics()
+dy = ObstacleAvoidanceDynamics()
 initial_guess = Initial_Guess(dy)
 
 sim = SimConfig(

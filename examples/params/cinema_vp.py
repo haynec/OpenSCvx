@@ -8,10 +8,13 @@ from openscvx.config import (
     Config,
 )
 
+from openscvx.dynamics import Dynamics
+from openscvx.utils import qdcm, SSMP, SSM
+
 n = 12 # Number of Nodes
 total_time = 40.0  # Total time for the simulation
 
-class Dynamics:
+class CinemaVPDynamics(Dynamics):
     def __init__(self):
         self.t_inds = -3          # Time Index in State
         self.fuel_inds = -2       # Fuel Index in State
@@ -35,7 +38,6 @@ class Dynamics:
         self.J_b = jnp.array([1.0, 1.0, 1.0])  # Moment of Inertia of the drone
         
     
-        self.g_vec = vmap(self.g, in_axes=(0))
         self.get_kp_pose = self.get_kp_pose
 
         self.init_pose = np.array([13.0, 0.0, 2.0])
@@ -59,12 +61,9 @@ class Dynamics:
                              [0, 0, 1], 
                              [1, 0, 0]]
                              )
-        
-        self.state_dot = vmap(self.state_dot_func, in_axes=(0))
-        self.A = vmap(jacfwd(self.state_dot_func, argnums=0), in_axes=(0, 0))
-        self.B = vmap(jacfwd(self.state_dot_func, argnums=1), in_axes=(0, 0))
+        super().__post_init__()
 
-    def state_dot_func(self, x, u):
+    def dynamics(self, x, u):
         # Unpack the state and control vectors
         v = x[3:6]
         q = x[6:10]
@@ -78,37 +77,14 @@ class Dynamics:
 
         # Compute the time derivatives of the state variables
         r_dot = v
-        v_dot = (1 / self.m) * self.qdcm(q) @ f + jnp.array([0, 0, self.g_const])
-        q_dot = 0.5 * self.SSMP(w) @ q
+        v_dot = (1 / self.m) * qdcm(q) @ f + jnp.array([0, 0, self.g_const])
+        q_dot = 0.5 * SSMP(w) @ q
         w_dot = jnp.diag(1/self.J_b) @ (
-            tau - self.SSM(w) @ jnp.diag(self.J_b) @ w
+            tau - SSM(w) @ jnp.diag(self.J_b) @ w
         )
         t_dot = 1
         fuel_dot = jnp.linalg.norm(u)[None]
-        y_dot = self.g(x)
-        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot, fuel_dot, y_dot])
-    
-    def qdcm(self, q: jnp.ndarray) -> jnp.ndarray:
-        # Convert a quaternion to a direction cosine matrix
-        q_norm = (q[0] ** 2 + q[1] ** 2 + q[2] ** 2 + q[3] ** 2) ** 0.5
-        w, x, y, z = q / q_norm
-        return jnp.array(
-            [
-                [1 - 2 * (y**2 + z**2), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-                [2 * (x * y + z * w), 1 - 2 * (x**2 + z**2), 2 * (y * z - x * w)],
-                [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x**2 + y**2)],
-            ]
-        )
-
-    def SSMP(self, w: jnp.ndarray):
-        # Convert an angular rate to a 4 x 4 skew symetric matrix
-        x, y, z = w
-        return jnp.array([[0, -x, -y, -z], [x, 0, z, -y], [y, -z, 0, x], [z, y, -x, 0]])
-
-    def SSM(self, w: jnp.ndarray):
-        # Convert an angular rate to a 3 x 3 skew symetric matrix
-        x, y, z = w
-        return jnp.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
+        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot, fuel_dot])
 
     def get_kp_pose(self, t):
         loop_time = 40.0
@@ -122,7 +98,7 @@ class Dynamics:
 
     def g_vp(self, x):
         p_s_I = self.get_kp_pose(x[self.t_inds])
-        p_s_s = self.R_sb @ self.qdcm(x[6:10]).T @ (p_s_I - x[:3])
+        p_s_s = self.R_sb @ qdcm(x[6:10]).T @ (p_s_I - x[:3])
         return jnp.linalg.norm(self.A_cone @ p_s_s, ord=self.norm_type) - (self.c.T @ p_s_s)
     
     def g_min(self, x):
@@ -133,7 +109,7 @@ class Dynamics:
         p_s_I = self.get_kp_pose(x[self.t_inds])
         return jnp.linalg.norm(p_s_I - x[:3]) - self.max_range
 
-    def g(self, x):
+    def g_func(self, x):
         return 2E1 * jnp.maximum(0, self.g_vp(x)) ** 2 + jnp.sum(jnp.maximum(0, (x[:-1] - self.max_state[:-1])) ** 2) + jnp.sum(jnp.maximum(0, (self.min_state[:-1] - x[:-1])) ** 2) + jnp.maximum(0, self.g_min(x)) ** 2 + jnp.maximum(0, self.g_max(x)) ** 2
 
 class Initial_Guess():
@@ -164,7 +140,7 @@ class Initial_Guess():
             x_bar[k,6:10] = q
         return x_bar, u_bar
 
-dy = Dynamics()
+dy = CinemaVPDynamics()
 initial_guess = Initial_Guess(dy)
 sim = SimConfig(
     x_bar=initial_guess.x_bar,  # Initial Guess State Trajectory
