@@ -24,38 +24,14 @@
 [![Issues][issues-shield]][issues-url]
 [![MIT License][license-shield]][license-url]
 [![LinkedIn][linkedin-shield]][linkedin-url] -->
-[![CI](https://github.com/haynec/OpenSCvx/actions/workflows/main.yml/badge.svg)](https://github.com/haynec/OpenSCvx/actions/workflows/main.yml)
 
+<img src="figures/openscvx_logo.svg" width="1200"/>
+<p align="center">
+    <a href="https://github.com//haynec/OpenSCvx/actions/workflows/main.yml/badge.svg"><img src="https://github.com//haynec/OpenSCvx/actions/workflows/main.yml/badge.svg"/></a>
+</p>
 
 <!-- PROJECT LOGO -->
 <br />
-<div align="center">
-<h1 align="center">OpenSCvx</h1>
-
-<!--   <div style="text-align: center;"> -->
-<div style="display: flex; flex-wrap: wrap; justify-content: center;">
-<img src="figures/ctlos_dr.gif" width="400" height="225"/>
-<!-- <div style="width 45%">
-<p width="10"><em>Proposed Rel Nav</em></p>
-</div> -->
-<!--   <div style="text-align: center;"> -->
-<img src="figures/dtlos_dr.gif" width="400" height="225"/>
-<!-- <div style="width 45%">
-<p><em>Baseline Rel Nav</em></p>
-</div> -->
-</div>
-
-<div style="display: flex; flex-wrap: wrap; justify-content: center;">
-<!--   <div style="text-align: center;"> -->
-<img src="figures/ctlos_cine.gif" width="400" height="225"/>
-<!-- <p><em>Proposed Cinematography</em></p> -->
-<!--   </div> -->
-<!--   <div style="text-align: center;"> -->
-<img src="figures/dtlos_cine.gif" width="400" height="225"/>
-<!-- <p><em>Baseline Cinematography</em></p> -->
-<!--   </div> -->
-</div>
-</div>
 
 <!-- GETTING STARTED -->
 ## Getting Started
