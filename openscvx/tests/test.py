@@ -45,6 +45,6 @@ def test_main():
         # Clean up jax memory usage
         jax.clear_caches()
 
-        assert output_dict['converged'], f"Process failed with output: {output_dict}"
+        assert output_dict['converged'], f"Process failed with output"
 
 test_main()
