@@ -24,6 +24,8 @@
 [![Issues][issues-shield]][issues-url]
 [![MIT License][license-shield]][license-url]
 [![LinkedIn][linkedin-shield]][linkedin-url] -->
+[![CI](https://github.com/haynec/OpenSCvx/actions/workflows/python-app.yml/badge.svg)](https://github.com/haynec/OpenSCvx/actions/workflows/python-app.yml)
+
 
 <!-- PROJECT LOGO -->
 <br />
