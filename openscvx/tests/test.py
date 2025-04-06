@@ -42,8 +42,8 @@ def test_main():
         else:
             print("Results did not converge.")
         
-        # Clean up jax cache
-        jax.clear_backends()
+        # Clean up jax memory usage
+        jax.clear_caches()
 
         assert output_dict['converged'], f"Process failed with output: {output_dict}"
 
