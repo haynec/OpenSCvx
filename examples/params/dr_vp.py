@@ -17,8 +17,6 @@ total_time = 40.0  # Total time for the simulation
 
 class DrVpDynamics(Dynamics):
     def __init__(self):
-        self.t_inds = -2          # Time Index in State
-        self.y_inds = -1          # Constraint Violation Index in State
         self.s_inds = -1          # Time dilation index in Control
 
         self.max_state=np.array([200, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1e-4])  # Upper Bound on the states
@@ -105,14 +103,7 @@ class DrVpDynamics(Dynamics):
         p_s_s = self.R_sb @ qdcm(x[6:10]).T @ (p_s_I - x[0:3])
         return jnp.linalg.norm(self.A_cone @ p_s_s, ord=self.norm_type) - (self.c.T @ p_s_s)
     
-
-    def huber_loss(self, x, delta=1.0):
-        abs_x = jnp.abs(x)
-        quadratic = jnp.minimum(abs_x, delta)
-        linear = abs_x - quadratic
-        return 0.5 * quadratic ** 2 + delta * linear
-
-    def g_func(self, x):
+    def g_func(self, x, u):
         g = 0
         for pose in self.init_poses:
             g += jnp.maximum(0, self.g_vp(pose, x)) ** 2
@@ -156,7 +147,7 @@ class DrVpDynamics(Dynamics):
             tau - SSM(w) @ jnp.diag(self.J_b) @ w
         )
         t_dot = 1
-        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot])
+        return jnp.hstack([r_dot, v_dot, q_dot, w_dot])
 
 class Initial_Guess():
     def __init__(self, dy):
@@ -169,7 +160,7 @@ class Initial_Guess():
         u_bar[:,-1] = np.repeat(s, n)
 
         x_bar = np.repeat(np.expand_dims(np.zeros_like(dy.max_state), axis=0), n, axis = 0)
-        x_bar[:,:dy.y_inds] = np.linspace(dy.initial_state['value'], dy.final_state['value'], n)
+        x_bar[:,:-1] = np.linspace(dy.initial_state['value'], dy.final_state['value'], n)
 
         i = 0
         origins = [dy.initial_state['value'][:3]]

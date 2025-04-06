@@ -17,8 +17,6 @@ total_time = 30.0  # Total time for the simulation
 
 class DrVpPolytopeDynamics(Dynamics):
     def __init__(self):
-        self.t_inds = -2          # Time Index in State
-        self.y_inds = -1          # Constraint Violation Index in State
         self.s_inds = -1          # Time dilation index in Control
         
         self.max_state=np.array([200, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1e-4])  # Upper Bound on the states
@@ -166,7 +164,7 @@ class DrVpPolytopeDynamics(Dynamics):
             tau - SSM(w) @ jnp.diag(self.J_b) @ w
         )
         t_dot = 1
-        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot])
+        return jnp.hstack([r_dot, v_dot, q_dot, w_dot])
     
 class Initial_Guess():
     def __init__(self, dy):
@@ -179,7 +177,7 @@ class Initial_Guess():
         u_bar[:,-1] = np.repeat(s, n)
 
         x_bar = np.repeat(np.expand_dims(np.zeros_like(dy.max_state), axis=0), n, axis = 0)
-        x_bar[:,:dy.y_inds] = np.linspace(dy.initial_state['value'], dy.final_state['value'], n)
+        x_bar[:,:-1] = np.linspace(dy.initial_state['value'], dy.final_state['value'], n)
 
         i = 0
         origins = [dy.initial_state['value'][:3]]
