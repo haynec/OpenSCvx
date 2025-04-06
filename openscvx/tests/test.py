@@ -28,8 +28,9 @@ def test_main():
         params_list.append(params)
 
     for params in params_list:
+        # Force jax to use cpu
         jax.config.update('jax_default_device', jax.devices('cpu')[0])
-        
+
         config_params = Config.from_config(params, savedir="results/")
         result = PTR_main(config_params)
         
@@ -40,7 +41,10 @@ def test_main():
             print("Results converged successfully.")
         else:
             print("Results did not converge.")
+        
+        # Clean up jax cache
+        jax.clear_backends()
 
         assert output_dict['converged'], f"Process failed with output: {output_dict}"
-        
+
 test_main()
