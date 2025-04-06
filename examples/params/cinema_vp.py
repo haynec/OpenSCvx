@@ -16,19 +16,20 @@ total_time = 40.0  # Total time for the simulation
 
 class CinemaVPDynamics(Dynamics):
     def __init__(self):
-        self.t_inds = -3          # Time Index in State
-        self.fuel_inds = -2       # Fuel Index in State
+        self.fuel_inds = -3       # Fuel Index in State
+        self.t_inds = -2          # Time Index in State
         self.y_inds = -1          # Constraint Violation Index in State
+        
         self.s_inds = -1          # Time dilation index in Control
 
-        self.max_state = np.array([ 200,  100,  50,  100,  100,  100,  1,  1,  1,  1,  10,  10,  10,  40, 2000, 1E-8])  # Upper Bound on the states
-        self.min_state = np.array([-100, -100, -10, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10,   0,   0,     0])  # Lower Bound on the states
+        self.max_state = np.array([ 200,  100,  50,  100,  100,  100,  1,  1,  1,  1,  10,  10,  10,  2000,  40, 1E-8])  # Upper Bound on the states
+        self.min_state = np.array([-100, -100, -10, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10,     0,   0,     0])  # Lower Bound on the states
 
         self.initial_state= {'value' : [    8,  -0.2,   2.2,     0,     0,     0,      1,      0,      0,      0,      0,      0,      0,        0,       0],
                              'type' :  ['Fix', 'Fix', 'Fix', 'Fix', 'Fix', 'Fix', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free',    'Fix',   'Fix']}  # Initial State
         
-        self.final_state= {'value' : [   -10,      0,      2,      0,      0,      0,      1,      0,      0,      0,      0,      0,      0,    40,          0],
-                           'type'  : ['Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Fix', 'Minimize']} # Terminal State
+        self.final_state= {'value' : [   -10,      0,      2,      0,      0,      0,      1,      0,      0,      0,      0,      0,      0,          0,    40],
+                           'type'  : ['Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Minimize', 'Fix']} # Terminal State
 
         self.max_control=np.array([0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time])  # Upper Bound on the controls
         self.min_control=np.array([0, 0, 0, -18.665, -18.665, -0.55562, 0.3 * total_time])  # Lower Bound on the controls
@@ -84,9 +85,8 @@ class CinemaVPDynamics(Dynamics):
         w_dot = jnp.diag(1/self.J_b) @ (
             tau - SSM(w) @ jnp.diag(self.J_b) @ w
         )
-        t_dot = 1
         fuel_dot = jnp.linalg.norm(u)[None]
-        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot, fuel_dot])
+        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, fuel_dot])
 
     def get_kp_pose(self, t):
         loop_time = 40.0

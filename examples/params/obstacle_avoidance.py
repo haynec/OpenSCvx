@@ -16,8 +16,6 @@ total_time = 4.0  # Total time for the simulation
 
 class ObstacleAvoidanceDynamics(Dynamics):
     def __init__(self):
-        self.t_inds = -2          # Time Index in State
-        self.y_inds = -1          # Constraint Violation Index in State
         self.s_inds = -1          # Time dilation index in Control
 
         self.m = 1.0  # Mass of the drone
@@ -77,8 +75,7 @@ class ObstacleAvoidanceDynamics(Dynamics):
         w_dot = jnp.diag(1/self.J_b) @ (
             tau - SSM(w) @ jnp.diag(self.J_b) @ w
         )
-        t_dot = 1
-        return jnp.hstack([r_dot, v_dot, q_dot, w_dot, t_dot])
+        return jnp.hstack([r_dot, v_dot, q_dot, w_dot])
 
     def g_obs(self, center, A, x):
         return 1 - (x[:3] - center).T @ A @ (x[:3] - center)
@@ -100,7 +97,7 @@ class Initial_Guess():
         u_bar[:,-1] = np.repeat(s, n)
 
         x_bar = np.repeat(np.expand_dims(np.zeros_like(dy.max_state), axis=0), n, axis = 0)
-        x_bar[:,:dy.y_inds] = np.linspace(dy.initial_state['value'], dy.final_state['value'], n)
+        x_bar[:,:-1] = np.linspace(dy.initial_state['value'], dy.final_state['value'], n)
         return x_bar, u_bar
 
 dy = ObstacleAvoidanceDynamics()

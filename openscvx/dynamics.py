@@ -26,6 +26,10 @@ class Dynamics(ABC):
     
     def dynamics_augmented(self, x: jnp.array, u: jnp.array) -> jnp.array:
         # TODO: (norrisg) handle varying lengths of x and u due to augmentation more elegantly
+        self.t_inds = -2
+        self.y_inds = -1
+        
         x_dot = self.dynamics(x[:-1], u)
+        t_dot = 1
         y_dot = self.g_jit(x, u)
-        return jnp.hstack([x_dot, y_dot])
+        return jnp.hstack([x_dot, t_dot, y_dot])
