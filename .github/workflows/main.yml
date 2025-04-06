@@ -33,4 +33,4 @@ jobs:
         pip install pytest
     - name: Run tests
       run: |
-        pytest test_main.py
+        pytest openscvx/tests/test.py
