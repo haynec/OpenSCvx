@@ -111,8 +111,6 @@ Check out the problem definitions inside `examples/params` to see how to define 
 - [ ] Auto-SCvx Weight Tuning
 - [ ] Compiled at the subproblem level with JAX
 ## What is implemented
-
-### Capabilities
 This repo has the following features:
 1. Free Final Time
 2. Fully adaptive time dilation (s is appended to the control vector)
