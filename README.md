@@ -1,34 +1,10 @@
-<!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
 <a id="readme-top"></a>
-<!--
-*** Thanks for checking out the Best-README-Template. If you have a suggestion
-*** that would make this better, please fork the repo and create a pull request
-*** or simply open an issue with the tag "enhancement".
-*** Don't forget to give the project a star!
-*** Thanks again! Now go create something AMAZING! :D
--->
-
-
-
-<!-- PROJECT SHIELDS -->
-<!--
-*** I'm using markdown "reference style" links for readability.
-*** Reference links are enclosed in brackets [ ] instead of parentheses ( ).
-*** See the bottom of this document for the declaration of the reference variables
-*** for contributors-url, forks-url, etc. This is an optional, concise syntax you may use.
-*** https://www.markdownguide.org/basic-syntax/#reference-style-links
--->
-<!-- [![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![MIT License][license-shield]][license-url]
-[![LinkedIn][linkedin-shield]][linkedin-url] -->
 
 <img src="figures/openscvx_logo.svg" width="1200"/>
 <p align="center">
     <a href="https://github.com//haynec/OpenSCvx/actions/workflows/main.yml/badge.svg"><img src="https://github.com//haynec/OpenSCvx/actions/workflows/main.yml/badge.svg"/></a>
     <a href="https://arxiv.org/abs/2410.22596"><img src="http://img.shields.io/badge/arXiv-2410.22596-B31B1B.svg"/></a>
+    <a href="https://www.apache.org/licenses/LICENSE-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"/></a>
 </p>
 
 <!-- PROJECT LOGO -->
@@ -55,7 +31,7 @@ These can be installed via conda or pip.
 
 1. Clone the repo
    ```sh
-   git clone https://github.com/haynec/quad_sim.git
+   git clone https://github.com/haynec/OpenSCvx.git
    ```
 2. Install environment packages (this will take about a minute or two):
    ```sh
@@ -75,7 +51,7 @@ These can be installed via conda or pip.
    Python >= 3.9
 1. Clone the repo
    ```sh
-   git clone https://github.com/haynec/openscvx.git
+   git clone https://github.com/haynec/OpenSCvx.git
    ```
 2. Install environment packages:
    ```sh
@@ -123,12 +99,12 @@ This repo has the following features:
 
 
 ## Acknowledgements
-This work was supported by a NASA Space Technology Graduate Research Opportunity and the Office of Naval Research under grant N00014-17-1-2433. The authors would like to acknowledge Natalia Pavlasek, Griffin Norris, Samuel Buckner, Abhi Kamath, Govind Chari, and Purnanand Elango for their many helpful discussions and support throughout this work.
+This work was supported by a NASA Space Technology Graduate Research Opportunity and the Office of Naval Research under grant N00014-17-1-2433. The authors would like to acknowledge Natalia Pavlasek, Griffin Norris, Samuel Buckner, Abhi Kamath, Govind Chari, and Purnanand Elango as well as the other Autonomous Controls Laboratory members, for their many helpful discussions and support throughout this work.
 
 ## Citation
-Please cite as 
+Please cite the following works if you use the repository,
 ```
-@ARTICLE{10902120,
+@ARTICLE{hayner2025los,
         author={Hayner, Christopher R. and Carson III, John M. and Açıkmeşe, Behçet and Leung, Karen},
         journal={IEEE Robotics and Automation Letters}, 
         title={Continuous-Time Line-of-Sight Constrained Trajectory Planning for 6-Degree of Freedom Systems}, 
@@ -138,6 +114,18 @@ Please cite as
         pages={1-8},
         keywords={Robot sensing systems;Vectors;Vehicle dynamics;Line-of-sight propagation;Trajectory planning;Trajectory optimization;Quadrotors;Nonlinear dynamical systems;Heuristic algorithms;Convergence;Constrained Motion Planning;Optimization and Optimal Control;Aerial Systems: Perception and Autonomy},
         doi={10.1109/LRA.2025.3545299}}
+```
+
+```
+@misc{elango2024ctscvx,
+      title={Successive Convexification for Trajectory Optimization with Continuous-Time Constraint Satisfaction}, 
+      author={Purnanand Elango and Dayou Luo and Abhinav G. Kamath and Samet Uzun and Taewan Kim and Behçet Açıkmeşe},
+      year={2024},
+      eprint={2404.16826},
+      archivePrefix={arXiv},
+      primaryClass={math.OC},
+      url={https://arxiv.org/abs/2404.16826}, 
+}
 ```
 
 
