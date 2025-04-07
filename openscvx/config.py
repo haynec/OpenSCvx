@@ -14,12 +14,15 @@ def numpy_representer(dumper, data):
         "tag:yaml.org,2002:seq", data.tolist(), flow_style=False
     )
 
+
 # Define a custom representer for PyJit types to convert them to strings
 def pjitfunction_representer(dumper, data):
     return dumper.represent_str(str(data))
 
+
 def compiled_representer(dumper, data):
     return dumper.represent_str(str(data))
+
 
 def dataclass_to_dict(instance):
     if not is_dataclass(instance):
@@ -128,10 +131,10 @@ class SimConfig:
         self.n_controls = len(self.max_control)
 
         assert (
-            len(self.initial_state['value']) == self.n_states - 1
+            len(self.initial_state["value"]) == self.n_states - 1
         ), f"Initial state must have {self.n_states - 1} elements"
         assert (
-            len(self.final_state['value']) == self.n_states - 1
+            len(self.final_state["value"]) == self.n_states - 1
         ), f"Final state must have {self.n_states - 1} elements"
         assert (
             self.max_state.shape[0] == self.n_states
@@ -158,13 +161,14 @@ class SimConfig:
                 self.n_controls, self.min_control, self.max_control
             )
 
+
 @dataclass
 class ScpConfig:
     w_tr: float
     lam_vc: float
-    ep_tr: float = 1E-4
-    ep_vb: float = 1E-4
-    ep_vc: float = 1E-8
+    ep_tr: float = 1e-4
+    ep_vb: float = 1e-4
+    ep_vc: float = 1e-8
     lam_cost: float = 0.0
     k_max: int = 200
     n: int = None
@@ -181,11 +185,7 @@ class ScpConfig:
     fixed_final_att: bool = False
 
     def __post_init__(self):
-        keys_to_scale = [
-            "w_tr",
-            "lam_vc",
-            "lam_cost"
-        ]
+        keys_to_scale = ["w_tr", "lam_vc", "lam_cost"]
         scale = max(getattr(self, key) for key in keys_to_scale)
         for key in keys_to_scale:
             setattr(self, key, getattr(self, key) / scale)
@@ -193,9 +193,9 @@ class ScpConfig:
         if self.w_tr_max_scaling_factor is not None and self.w_tr_max is None:
             self.w_tr_max = self.w_tr_max_scaling_factor * self.w_tr
 
+
 # Make a new class call VehConfig which takes in a functionhandle
 # The function handle will be passed the config object
-
 
 
 @dataclass
