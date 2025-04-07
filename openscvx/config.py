@@ -268,13 +268,6 @@ class TrajOptProblem:
         x_min,
         u_max,
         u_min,
-        get_kp_pose: callable = None,
-        init_poses=None,
-        R_sb: jnp.ndarray = None,
-        obstacle_centers=None,
-        centers=None,
-        axes=None,
-        radii=None,
         dt_sim: float = 0.1,
         w_tr=1e1,  # Weight on the Trust Reigon
         lam_cost=1e1,  # Weight on the Nonlinear Cost
@@ -338,13 +331,6 @@ class TrajOptProblem:
             ctcs_constraints,
             initial_state=initial_state,
             final_state=final_state,
-            get_kp_pose=get_kp_pose,
-            init_poses=init_poses,
-            R_sb=R_sb,
-            obstacle_centers=obstacle_centers,
-            centers=centers,
-            axes=axes,
-            radii=radii,
         )
 
     def solve(self):

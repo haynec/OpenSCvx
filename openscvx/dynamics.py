@@ -14,13 +14,6 @@ class Dynamics:
         ctcs_constraints: List[callable],
         initial_state,
         final_state,
-        get_kp_pose: callable = None,
-        init_poses=None,
-        R_sb: jnp.ndarray = None,
-        obstacle_centers=None,
-        centers=None,
-        axes=None,
-        radii=None,
     ):
 
         self.dynamics = dynamics
@@ -38,16 +31,6 @@ class Dynamics:
         self.initial_state = initial_state
         self.final_state = final_state
 
-        # TODO: (norrisg) make it more elegant and generic to define this
-        self.s_inds = -1
-        # self.get_kp_pose = get_kp_pose
-        # self.init_poses = init_poses
-        self.R_sb = R_sb
-        self.obstacle_centers = obstacle_centers
-        self.centers = centers
-        self.axes = axes
-        self.radii = radii
-
     def g_func(self, x: jnp.array, u: jnp.array) -> jnp.array:
         g_sum = 0
         for g in self.ctcs_constraints:
@@ -58,6 +41,7 @@ class Dynamics:
         # TODO: (norrisg) handle varying lengths of x and u due to augmentation more elegantly
         self.t_inds = -2
         self.y_inds = -1
+        self.s_inds = -1
 
         x_dot = self.dynamics(x[:-1], u)
         t_dot = 1
