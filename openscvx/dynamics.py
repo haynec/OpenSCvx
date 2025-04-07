@@ -34,6 +34,7 @@ class Dynamics:
     def g_func(self, x: jnp.array, u: jnp.array) -> jnp.array:
         g_sum = 0
         for g in self.ctcs_constraints:
+            # TODO: (norrisg) move the max(0, g(x, u))^2 into this function
             g_sum += g(x, u)
         return g_sum
 

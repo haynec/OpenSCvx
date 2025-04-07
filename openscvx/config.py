@@ -252,6 +252,7 @@ class Config:
         dict_to_yaml(params, path)
 
 
+# TODO: (norrisg) Decide whether to have `TrajOptProblem` be a _replacement_ for `Config` or whether it should have a `params` member variable along side `dynamics`, `constraints`, `cost`, etc.
 class TrajOptProblem:
     def __init__(
         self,
@@ -301,6 +302,8 @@ class TrajOptProblem:
             dt=dt_sim,
         )
 
+        # TODO: (norrisg) Should all of these fields be directly passed to the `TrajOptProblem` constructor or, should they be simply modifiable by accessing problem.sim?
+        # Could be a good way to avoid passing so many arguments
         self.scp = ScpConfig(
             n=N,
             k_max=k_max,
