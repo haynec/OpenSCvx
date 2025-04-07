@@ -3,9 +3,8 @@ import numpy.linalg as la
 import cvxpy as cp
 from jax import vmap, jit, jacfwd
 import jax.numpy as jnp
-from openscvx.config import TrajOptProblem
 
-from openscvx.dynamics import Dynamics
+from openscvx.config import TrajOptProblem
 from openscvx.utils import qdcm, SSMP, SSM
 
 n = 33  # Number of Nodes
