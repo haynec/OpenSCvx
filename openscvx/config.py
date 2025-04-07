@@ -281,22 +281,10 @@ class TrajOptProblem:
         w_tr_adapt=1.2,  # Trust Region Adaptation Factor
         w_tr_max_scaling_factor=1e2,  # Maximum Trust Region Weight
     ):
-        self.N = N
-        self.time_init = time_init
-        self.x_guess = x_guess
-        self.u_guess = u_guess
-        self.x_max = x_max
-        self.x_min = x_min
-        self.u_max = u_max
-        self.u_min = u_min
-
-        self.initial_state = initial_state
-        self.final_state = final_state
 
         # #######
         # Setup Problem
         # #######
-        # TODO: (norrisg) remove dependecy on old config class
 
         self.sim = SimConfig(
             x_bar=x_guess,
