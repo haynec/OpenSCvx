@@ -3,9 +3,13 @@ import yaml
 from dataclasses import asdict, dataclass, field, is_dataclass, fields
 from copy import deepcopy
 from typing import Union
-import jaxlib, jax
+import jax, jaxlib
+import jax.numpy as jnp
+
+from typing import Dict, List
 
 from openscvx.dynamics import Dynamics
+from openscvx.ptr import PTR_main
 
 
 # Define a custom representer for NumPy arrays to convert them to lists
@@ -246,3 +250,102 @@ class Config:
     def to_yaml(self, path):
         params = asdict(self)
         dict_to_yaml(params, path)
+
+
+class TrajOptProblem:
+    def __init__(
+        self,
+        dynamics: callable,
+        ctcs_constraints: List[callable],
+        N: int,
+        time_init: float,
+        x_guess: jnp.ndarray,
+        u_guess: jnp.ndarray,
+        initial_state: Dict[str, List[any]],
+        final_state: Dict[str, List[any]],
+        initial_control: jnp.ndarray,
+        x_max,
+        x_min,
+        u_max,
+        u_min,
+        get_kp_pose: callable = None,
+        init_poses=None,
+        R_sb: jnp.ndarray = None,
+        obstacle_centers=None,
+        centers=None,
+        axes=None,
+        radii=None,
+        dt_sim: float = 0.1,
+        w_tr=1e1,  # Weight on the Trust Reigon
+        lam_cost=1e1,  # Weight on the Nonlinear Cost
+        lam_vc=1e2,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
+        ep_tr=1e-4,  # Trust Region Tolerance
+        ep_vb=1e-4,  # Virtual Control Tolerance
+        ep_vc=1e-8,  # Virtual Control Tolerance for CTCS
+        cost_drop=4,  # SCP iteration to relax minimal final time objective
+        cost_relax=0.5,  # Minimal Time Relaxation Factor
+        w_tr_adapt=1.2,  # Trust Region Adaptation Factor
+        w_tr_max_scaling_factor=1e2,  # Maximum Trust Region Weight
+    ):
+        self.N = N
+        self.time_init = time_init
+        self.x_guess = x_guess
+        self.u_guess = u_guess
+        self.x_max = x_max
+        self.x_min = x_min
+        self.u_max = u_max
+        self.u_min = u_min
+
+        self.initial_state = initial_state
+        self.final_state = final_state
+
+        # #######
+        # Setup Problem
+        # #######
+        # TODO: (norrisg) remove dependecy on old config class
+
+        self.sim = SimConfig(
+            x_bar=x_guess,
+            u_bar=u_guess,
+            initial_state=initial_state,
+            final_state=final_state,
+            max_state=x_max,
+            min_state=x_min,
+            initial_control=initial_control,
+            max_control=u_max,
+            min_control=u_min,
+            total_time=time_init,
+            n_states=len(x_max),
+            dt=dt_sim,
+        )
+
+        self.scp = ScpConfig(
+            n=N,
+            w_tr=w_tr,
+            lam_cost=lam_cost,
+            lam_vc=lam_vc,
+            ep_tr=ep_tr,
+            ep_vb=ep_vb,
+            ep_vc=ep_vc,
+            cost_drop=cost_drop,
+            cost_relax=cost_relax,
+            w_tr_adapt=w_tr_adapt,
+            w_tr_max_scaling_factor=w_tr_max_scaling_factor,
+        )
+
+        self.veh = Dynamics(
+            dynamics,
+            ctcs_constraints,
+            initial_state=initial_state,
+            final_state=final_state,
+            get_kp_pose=get_kp_pose,
+            init_poses=init_poses,
+            R_sb=R_sb,
+            obstacle_centers=obstacle_centers,
+            centers=centers,
+            axes=axes,
+            radii=radii,
+        )
+
+    def solve(self):
+        return PTR_main(self)
