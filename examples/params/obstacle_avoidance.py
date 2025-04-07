@@ -119,17 +119,17 @@ ctcs_constraints.append(
 )
 
 
-u_bar = np.repeat(np.expand_dims(initial_control, axis=0), N, axis=0)
+u_bar = np.repeat(np.expand_dims(initial_control, axis=0), n, axis=0)
 s = total_time
-u_bar[:, -1] = np.repeat(s, N)
+u_bar[:, -1] = np.repeat(s, n)
 
-x_bar = np.repeat(np.expand_dims(np.zeros_like(max_state), axis=0), N, axis=0)
-x_bar[:, :-1] = np.linspace(initial_state["value"], final_state["value"], N)
+x_bar = np.repeat(np.expand_dims(np.zeros_like(max_state), axis=0), n, axis=0)
+x_bar[:, :-1] = np.linspace(initial_state["value"], final_state["value"], n)
 
 params = TrajOptProblem(
     dynamics=dynamics,
     ctcs_constraints=ctcs_constraints,
-    N=N,
+    N=n,
     time_init=total_time,
     x_guess=x_bar,
     u_guess=u_bar,
