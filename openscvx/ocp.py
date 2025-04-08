@@ -68,13 +68,13 @@ def OCP(params):
     
 
     for i in range(params.sim.n_states-1):
-        if params.sim.initial_state['type'][i] == 'Fix':
-            constr += [x_nonscaled[0][i] == params.sim.initial_state['value'][i]]  # Initial Boundary Conditions
-        if params.sim.final_state['type'][i] == 'Fix':
-            constr += [x_nonscaled[-1][i] == params.sim.final_state['value'][i]]   # Final Boundary Conditions
-        if params.sim.initial_state['type'][i] == 'Minimize':
+        if params.sim.initial_state.type[i] == 'Fix':
+            constr += [x_nonscaled[0][i] == params.sim.initial_state.value[i]]  # Initial Boundary Conditions
+        if params.sim.final_state.type[i] == 'Fix':
+            constr += [x_nonscaled[-1][i] == params.sim.final_state.value[i]]   # Final Boundary Conditions
+        if params.sim.initial_state.type[i] == 'Minimize':
             cost += lam_cost * x_nonscaled[0][i]
-        if params.sim.final_state['type'][i] == 'Minimize':
+        if params.sim.final_state.type[i] == 'Minimize':
             cost += lam_cost * x_nonscaled[-1][i]
 
     if params.scp.uniform_time_grid:

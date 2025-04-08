@@ -135,10 +135,10 @@ class SimConfig:
         self.n_controls = len(self.max_control)
 
         assert (
-            len(self.initial_state["value"]) == self.n_states - 1
+            len(self.initial_state.value) == self.n_states - 1
         ), f"Initial state must have {self.n_states - 1} elements"
         assert (
-            len(self.final_state["value"]) == self.n_states - 1
+            len(self.final_state.value) == self.n_states - 1
         ), f"Final state must have {self.n_states - 1} elements"
         assert (
             self.max_state.shape[0] == self.n_states
