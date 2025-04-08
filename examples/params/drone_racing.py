@@ -148,7 +148,7 @@ for _ in range(n_gates + 1):
         i += 1
     gate_idx += 1
 
-params = TrajOptProblem(
+problem = TrajOptProblem(
     dynamics=dynamics,
     ctcs_constraints=ctcs_constraints,
     N=n,
@@ -164,22 +164,22 @@ params = TrajOptProblem(
     u_min=min_control,  # Lower Bound on the controls
 )
 
-params.sim.dt = 0.01
+problem.params.sim.dt = 0.01
 
-params.scp.w_tr = 2e0  # Weight on the Trust Reigon
-params.scp.lam_cost = 1e-1  # 0e-1,  # Weight on the Minimal Time Objective
-params.scp.lam_vc = 1e1  # 1e1,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
-params.scp.ep_tr = 1e-3  # Trust Region Tolerance
-params.scp.ep_vb = 1e-4  # Virtual Control Tolerance
-params.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS
-params.scp.cost_drop = 10  # SCP iteration to relax minimal final time objective
-params.scp.cost_relax = 0.8  # Minimal Time Relaxation Factor
-params.scp.w_tr_adapt = 1.4  # Trust Region Adaptation Factor
-params.scp.w_tr_max_scaling_factor = 1e2  # Maximum Trust Region Weight
+problem.params.scp.w_tr = 2e0  # Weight on the Trust Reigon
+problem.params.scp.lam_cost = 1e-1  # 0e-1,  # Weight on the Minimal Time Objective
+problem.params.scp.lam_vc = 1e1  # 1e1,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
+problem.params.scp.ep_tr = 1e-3  # Trust Region Tolerance
+problem.params.scp.ep_vb = 1e-4  # Virtual Control Tolerance
+problem.params.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS
+problem.params.scp.cost_drop = 10  # SCP iteration to relax minimal final time objective
+problem.params.scp.cost_relax = 0.8  # Minimal Time Relaxation Factor
+problem.params.scp.w_tr_adapt = 1.4  # Trust Region Adaptation Factor
+problem.params.scp.w_tr_max_scaling_factor = 1e2  # Maximum Trust Region Weight
 
 # TODO: (norrisg) Make it so you don't have to do this
-params.scp.__post_init__()
-params.sim.__post_init__()
+problem.params.scp.__post_init__()
+problem.params.sim.__post_init__()
 
-params.veh.g_cvx_nodal = g_cvx_nodal
-params.veh.vertices = vertices
+problem.params.veh.g_cvx_nodal = g_cvx_nodal
+problem.params.veh.vertices = vertices

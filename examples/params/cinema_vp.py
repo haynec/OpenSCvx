@@ -143,7 +143,7 @@ for k in range(n):
     q = q_no_norm / la.norm(q_no_norm)
     x_bar[k, 6:10] = q
 
-params = TrajOptProblem(
+problem = TrajOptProblem(
     dynamics=dynamics,
     ctcs_constraints=ctcs_constraints,
     N=n,
@@ -159,30 +159,30 @@ params = TrajOptProblem(
     u_min=min_control,  # Lower Bound on the controls
 )
 
-params.sim.dt = 0.1
+problem.params.sim.dt = 0.1
 
-params.scp.w_tr = 4e0  # Weight on the Trust Reigon
-params.scp.lam_cost = 1e-2  # Weight on the Minimal Fuel Objective
-params.scp.lam_vc = (
+problem.params.scp.w_tr = 4e0  # Weight on the Trust Reigon
+problem.params.scp.lam_cost = 1e-2  # Weight on the Minimal Fuel Objective
+problem.params.scp.lam_vc = (
     1e1  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
 )
-params.scp.ep_tr = 5e-6  # Trust Region Tolerance
-params.scp.ep_vb = 1e-4  # Virtual Control Tolerance
-params.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS
-params.scp.w_tr_adapt = 1.3  # Trust Region Adaptation Factor
-params.scp.w_tr_max_scaling_factor = 1e3  # Maximum Trust Region Weight
+problem.params.scp.ep_tr = 5e-6  # Trust Region Tolerance
+problem.params.scp.ep_vb = 1e-4  # Virtual Control Tolerance
+problem.params.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS
+problem.params.scp.w_tr_adapt = 1.3  # Trust Region Adaptation Factor
+problem.params.scp.w_tr_max_scaling_factor = 1e3  # Maximum Trust Region Weight
 
 # TODO: (norrisg) Make it so you don't have to do this
-params.scp.__post_init__()
-params.sim.__post_init__()
+problem.params.scp.__post_init__()
+problem.params.sim.__post_init__()
 
-params.veh.n_subs = n_subs
-params.veh.alpha_x = alpha_x
-params.veh.alpha_y = alpha_y
-params.veh.R_sb = R_sb
-params.veh.init_pose = init_pose
-params.veh.min_range = min_range
-params.veh.max_range = max_range
-params.veh.A_cone = A_cone
-params.veh.norm_type = norm_type
-params.veh.get_kp_pose = get_kp_pose
+problem.params.veh.n_subs = n_subs
+problem.params.veh.alpha_x = alpha_x
+problem.params.veh.alpha_y = alpha_y
+problem.params.veh.R_sb = R_sb
+problem.params.veh.init_pose = init_pose
+problem.params.veh.min_range = min_range
+problem.params.veh.max_range = max_range
+problem.params.veh.A_cone = A_cone
+problem.params.veh.norm_type = norm_type
+problem.params.veh.get_kp_pose = get_kp_pose

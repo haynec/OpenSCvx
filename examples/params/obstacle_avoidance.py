@@ -98,7 +98,7 @@ u_bar[:, -1] = np.repeat(s, n)
 x_bar = np.repeat(np.expand_dims(np.zeros_like(max_state), axis=0), n, axis=0)
 x_bar[:, :-1] = np.linspace(initial_state.value, final_state.value, n)
 
-params = TrajOptProblem(
+problem = TrajOptProblem(
     dynamics=dynamics,
     ctcs_constraints=ctcs_constraints,
     N=n,
@@ -118,9 +118,9 @@ params = TrajOptProblem(
     ),  # Lower Bound on the controls
 )
 
-params.sim.dt = 0.01
+problem.params.sim.dt = 0.01
 
 # Manually set the parameters for the obstacles
-params.veh.radius = radius
-params.veh.obstacle_centers = obstacle_centers
-params.veh.axes = axes
+problem.params.veh.radius = radius
+problem.params.veh.obstacle_centers = obstacle_centers
+problem.params.veh.axes = axes

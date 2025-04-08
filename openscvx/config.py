@@ -280,7 +280,7 @@ class TrajOptProblem:
         # #######
 
         if sim is None:
-            self.sim = SimConfig(
+            sim = SimConfig(
                 x_bar=x_guess,
                 u_bar=u_guess,
                 initial_state=initial_state,
@@ -294,11 +294,9 @@ class TrajOptProblem:
                 n_states=len(x_max),
                 dt=0.1,
             )
-        else: 
-            self.sim = sim
 
         if scp is None:
-            self.scp = ScpConfig(
+            scp = ScpConfig(
                 n=N,
                 k_max = 200,
                 w_tr=1e1,  # Weight on the Trust Reigon
@@ -314,14 +312,19 @@ class TrajOptProblem:
             )
         else:
             assert self.scp.n == N, "Number of segments must be the same as in the config"
-            self.scp = scp
 
-        self.veh = Dynamics(
+        veh = Dynamics(
             dynamics,
             ctcs_constraints,
             initial_state=initial_state,
             final_state=final_state,
         )
 
+        self.params = Config(
+            sim=sim,
+            scp=scp,
+            veh=veh,
+        )
+
     def solve(self):
-        return PTR_main(self)
+        return PTR_main(self.params)
