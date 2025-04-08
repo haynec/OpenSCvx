@@ -1,0 +1,18 @@
+name: los_guidance
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python
+  - pip
+  - scipy
+  - numpy
+  - pyaml
+  - termcolor
+  - plotly
+  - pip:
+      - jax
+      - cvxpy
+      - cvxpygen
+      - qoco
+      - qocogen

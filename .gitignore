@@ -30,7 +30,6 @@ solver/*
 *.pickle
 
 # YAML
-*.yml
 *.yaml
 
 # HTML
