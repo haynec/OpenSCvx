@@ -1,8 +1,7 @@
 import numpy as np
 import jax.numpy as jnp
-import jax
 
-from openscvx.config import TrajOptProblem
+from openscvx.trajoptproblem import TrajOptProblem
 from openscvx.constraints.boundary import BoundaryConstraint
 from openscvx.utils import qdcm, SSMP, SSM, generate_orthogonal_unit_vectors
 

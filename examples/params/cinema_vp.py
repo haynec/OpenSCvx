@@ -1,10 +1,8 @@
 import numpy as np
 import numpy.linalg as la
-from jax import vmap, jit, jacfwd
 import jax.numpy as jnp
-from openscvx.config import TrajOptProblem
 
-from openscvx.dynamics import Dynamics
+from openscvx.trajoptproblem import TrajOptProblem
 from openscvx.utils import qdcm, SSMP, SSM
 from openscvx.constraints.boundary import BoundaryConstraint
 
