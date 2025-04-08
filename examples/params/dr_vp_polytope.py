@@ -6,7 +6,7 @@ import cvxpy as cp
 from openscvx.config import TrajOptProblem
 
 from openscvx.dynamics import Dynamics
-from openscvx.utils import qdcm, SSMP, SSM
+from openscvx.utils import qdcm, SSMP, SSM, rot, gen_vertices
 from openscvx.constraints.boundary import BoundaryConstraint
 
 n = 33  # Number of Nodes
@@ -88,19 +88,6 @@ init_poses = init_poses
 
 ### Gate Parameters ###
 
-
-def gen_vertices(center):
-    """
-    Obtains the vertices of the gate.
-    """
-    vertices = []
-    vertices.append(center + rot @ [radii[0], 0, radii[2]])
-    vertices.append(center + rot @ [-radii[0], 0, radii[2]])
-    vertices.append(center + rot @ [-radii[0], 0, -radii[2]])
-    vertices.append(center + rot @ [radii[0], 0, -radii[2]])
-    return vertices
-
-
 n_gates = 10
 gate_centers = [
     np.array([59.436, 0.0000, 20.0000]),
@@ -114,13 +101,6 @@ gate_centers = [
     np.array([59.436, -81.358, 20.0000]),
     np.array([22.250, -42.672, 20.0000]),
 ]
-rot = np.array(
-    [
-        [np.cos(np.pi / 2), np.sin(np.pi / 2), 0],
-        [-np.sin(np.pi / 2), np.cos(np.pi / 2), 0],
-        [0, 0, 1],
-    ]
-)
 
 radii = np.array([2.5, 1e-4, 2.5])
 A_gate = rot @ np.diag(1 / radii) @ rot.T

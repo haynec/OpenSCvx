@@ -5,7 +5,7 @@ import cvxpy as cp
 
 from openscvx.config import TrajOptProblem
 from openscvx.constraints.boundary import BoundaryConstraint
-from openscvx.utils import qdcm, SSMP, SSM
+from openscvx.utils import qdcm, SSMP, SSM, rot, gen_vertices
 
 n = 22  # Number of Nodes
 total_time = 24.0  # Total time for the simulation
@@ -45,18 +45,6 @@ J_b = jnp.array([1.0, 1.0, 1.0])  # Moment of Inertia of the drone
 
 
 ### Gate Parameters ###
-def gen_vertices(center):
-    """
-    Obtains the vertices of the gate.
-    """
-    vertices = []
-    vertices.append(center + rot @ [radii[0], 0, radii[2]])
-    vertices.append(center + rot @ [-radii[0], 0, radii[2]])
-    vertices.append(center + rot @ [-radii[0], 0, -radii[2]])
-    vertices.append(center + rot @ [radii[0], 0, -radii[2]])
-    return vertices
-
-
 n_gates = 10
 gate_centers = [
     np.array([59.436, 0.000, 20.0000]),
@@ -70,13 +58,6 @@ gate_centers = [
     np.array([59.436, -81.358, 20.0000]),
     np.array([22.250, -42.672, 20.0000]),
 ]
-rot = np.array(
-    [
-        [np.cos(np.pi / 2), np.sin(np.pi / 2), 0],
-        [-np.sin(np.pi / 2), np.cos(np.pi / 2), 0],
-        [0, 0, 1],
-    ]
-)
 
 radii = np.array([2.5, 1e-4, 2.5])
 A_gate = rot @ np.diag(1 / radii) @ rot.T
@@ -89,7 +70,7 @@ nodes_per_gate = 2
 gate_nodes = np.arange(nodes_per_gate, n, nodes_per_gate)
 vertices = []
 for center in gate_centers:
-    vertices.append(gen_vertices(center))
+    vertices.append(gen_vertices(center, radii))
 ### End Gate Parameters ###
 
 ctcs_constraints = [
