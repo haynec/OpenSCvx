@@ -1,4 +1,4 @@
-name: los_guidance
+name: openscvx
 channels:
   - conda-forge
   - defaults
