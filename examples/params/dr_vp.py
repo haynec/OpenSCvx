@@ -211,19 +211,24 @@ params = TrajOptProblem(
     x_min=min_state,
     u_max=max_control,  # Upper Bound on the controls
     u_min=min_control,  # Lower Bound on the controls
-    dt_sim=0.1,
-    w_tr=2e0,  # Weight on the Trust Reigon
-    lam_cost=1e-1,  # 0e-1,  # Weight on the Minimal Time Objective
-    lam_vc=1e1,  # 1e1,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
-    ep_tr=1e-3,  # Trust Region Tolerance
-    ep_vb=1e-4,  # Virtual Control Tolerance
-    ep_vc=1e-8,  # Virtual Control Tolerance
-    cost_drop=10,  # SCP iteration to relax minimal final time objective
-    cost_relax=0.8,  # Minimal Time Relaxation Factor
-    w_tr_adapt=1.4,  # Trust Region Adaptation Factor
-    w_tr_max_scaling_factor=1e2,  # Maximum Trust Region Weight
-    # dis_type="FOH",  # Discretization Type
 )
+
+params.sim.dt = 0.1
+
+params.scp.w_tr = 2e0  # Weight on the Trust Reigon
+params.scp.lam_cost = 1e-1  # 0e-1,  # Weight on the Minimal Time Objective
+params.scp.lam_vc = 1e1  # 1e1,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
+params.scp.ep_tr = 1e-3  # Trust Region Tolerance
+params.scp.ep_vb = 1e-4  # Virtual Control Tolerance
+params.scp.ep_vc = 1e-8  # Virtual Control Tolerance
+params.scp.cost_drop = 10  # SCP iteration to relax minimal final time objective
+params.scp.cost_relax = 0.8  # Minimal Time Relaxation Factor
+params.scp.w_tr_adapt = 1.4  # Trust Region Adaptation Factor
+params.scp.w_tr_max_scaling_factor = 1e2  # Maximum Trust Region Weight
+
+# TODO: (norrisg) Make it so you don't have to do this
+params.scp.__post_init__()
+params.sim.__post_init__()
 
 params.veh.n_subs = n_subs
 params.veh.alpha_x = alpha_x

@@ -157,16 +157,24 @@ params = TrajOptProblem(
     x_min=min_state,
     u_max=max_control,  # Upper Bound on the controls
     u_min=min_control,  # Lower Bound on the controls
-    dt_sim=0.1,
-    w_tr=4e0,  # Weight on the Trust Reigon
-    lam_cost=1e-2,  # Weight on the Minimal Fuel Objective
-    lam_vc=1e1,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
-    ep_tr=5e-6,  # Trust Region Tolerance
-    ep_vb=1e-4,  # Virtual Control Tolerance
-    ep_vc=1e-8,  # Virtual Control Tolerance for CTCS
-    w_tr_adapt=1.3,  # Trust Region Adaptation Factor
-    w_tr_max_scaling_factor=1e3,  # Maximum Trust Region Weight
 )
+
+params.sim.dt = 0.1
+
+params.scp.w_tr = 4e0  # Weight on the Trust Reigon
+params.scp.lam_cost = 1e-2  # Weight on the Minimal Fuel Objective
+params.scp.lam_vc = (
+    1e1  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
+)
+params.scp.ep_tr = 5e-6  # Trust Region Tolerance
+params.scp.ep_vb = 1e-4  # Virtual Control Tolerance
+params.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS
+params.scp.w_tr_adapt = 1.3  # Trust Region Adaptation Factor
+params.scp.w_tr_max_scaling_factor = 1e3  # Maximum Trust Region Weight
+
+# TODO: (norrisg) Make it so you don't have to do this
+params.scp.__post_init__()
+params.sim.__post_init__()
 
 params.veh.n_subs = n_subs
 params.veh.alpha_x = alpha_x

@@ -117,8 +117,9 @@ params = TrajOptProblem(
     u_min=np.array(
         [0, 0, 0, -18.665, -18.665, -0.55562, 0.3 * total_time]
     ),  # Lower Bound on the controls
-    dt_sim=0.01,
 )
+
+params.sim.dt = 0.01
 
 # Manually set the parameters for the obstacles
 params.veh.radius = radius
