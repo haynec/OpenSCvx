@@ -325,4 +325,8 @@ class TrajOptProblem:
         )
 
     def solve(self):
+        # Ensure parameter sizes and normalization are correct
+        self.params.scp.__post_init__()
+        self.params.sim.__post_init__()
+
         return PTR_main(self.params)

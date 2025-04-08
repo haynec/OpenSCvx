@@ -172,10 +172,6 @@ problem.params.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS
 problem.params.scp.w_tr_adapt = 1.3  # Trust Region Adaptation Factor
 problem.params.scp.w_tr_max_scaling_factor = 1e3  # Maximum Trust Region Weight
 
-# TODO: (norrisg) Make it so you don't have to do this
-problem.params.scp.__post_init__()
-problem.params.sim.__post_init__()
-
 problem.params.veh.n_subs = n_subs
 problem.params.veh.alpha_x = alpha_x
 problem.params.veh.alpha_y = alpha_y
