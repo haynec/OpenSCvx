@@ -275,10 +275,6 @@ class TrajOptProblem:
         sim: SimConfig = None,
     ):
 
-        # #######
-        # Setup Problem
-        # #######
-
         if sim is None:
             sim = SimConfig(
                 x_bar=x_guess,
@@ -298,7 +294,7 @@ class TrajOptProblem:
         if scp is None:
             scp = ScpConfig(
                 n=N,
-                k_max = 200,
+                k_max=200,
                 w_tr=1e1,  # Weight on the Trust Reigon
                 lam_cost=1e1,  # Weight on the Nonlinear Cost
                 lam_vc=1e2,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
@@ -311,7 +307,9 @@ class TrajOptProblem:
                 w_tr_max_scaling_factor=1e2,  # Maximum Trust Region Weight
             )
         else:
-            assert self.scp.n == N, "Number of segments must be the same as in the config"
+            assert (
+                self.scp.n == N
+            ), "Number of segments must be the same as in the config"
 
         veh = Dynamics(
             dynamics,
