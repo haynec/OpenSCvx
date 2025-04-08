@@ -6,7 +6,7 @@ import sys
 import importlib
 
 # Add the parent directory two levels up to the Python path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from openscvx.ptr import PTR_main
 from openscvx.config import Config
