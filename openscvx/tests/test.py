@@ -12,7 +12,7 @@ from openscvx.ptr import PTR_main
 from openscvx.config import Config
 
 def test_main():
-    params_files = [
+    problem_files = [
         'examples.params.cinema_vp',
         'examples.params.dr_vp_polytope',
         'examples.params.dr_vp',
@@ -20,19 +20,18 @@ def test_main():
         'examples.params.obstacle_avoidance',
     ]
 
-    params_list = []
+    problems_list = []
 
-    for params_file in params_files:
-        module = importlib.import_module(params_file)
-        params = getattr(module, 'params')
-        params_list.append(params)
+    for problem_file in problem_files:
+        module = importlib.import_module(problem_file)
+        problem = getattr(module, 'problem')
+        problems_list.append(problem)
 
-    for params in params_list:
+    for problem in problems_list:
         # Force jax to use cpu
         # jax.config.update('jax_default_device', jax.devices('cpu')[0])
 
-        config_params = Config.from_config(params, savedir="results/")
-        result = PTR_main(config_params)
+        result = problem.solve()
         
         # Assuming PTR_main returns a dictionary
         output_dict = result
