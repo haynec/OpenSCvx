@@ -2,26 +2,21 @@ import numpy as np
 import jax.numpy as jnp
 
 from openscvx.trajoptproblem import TrajOptProblem
-from openscvx.constraints.boundary import BoundaryConstraint
+from openscvx.constraints.boundary import BoundaryConstraint as bc
 from openscvx.utils import qdcm, SSMP, SSM, generate_orthogonal_unit_vectors
 
 n = 6
 total_time = 4.0  # Total time for the simulation
-
 
 max_state = np.array([200, 10, 20, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1e-4])
 min_state = np.array(
     [-200, -100, 0, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0]
 )
 
-initial_state = BoundaryConstraint(
-    jnp.array([10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0])
-)
+initial_state = bc(jnp.array([10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]))
 initial_state.type[6:13] = "Free"
 
-final_state = BoundaryConstraint(
-    jnp.array([-10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time])
-)
+final_state = bc(jnp.array([-10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time]))
 final_state.type[3:13] = "Free"
 final_state.type[13] = "Minimize"
 

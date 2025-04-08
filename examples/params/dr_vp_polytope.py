@@ -5,7 +5,7 @@ import cvxpy as cp
 
 from openscvx.trajoptproblem import TrajOptProblem
 from openscvx.utils import qdcm, SSMP, SSM, rot, gen_vertices
-from openscvx.constraints.boundary import BoundaryConstraint
+from openscvx.constraints.boundary import BoundaryConstraint as bc
 
 n = 33  # Number of Nodes
 total_time = 30.0  # Total time for the simulation
@@ -19,14 +19,10 @@ min_state = np.array(
     [-200, -100, 15, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0]
 )  # Lower Bound on the states
 
-initial_state = BoundaryConstraint(
-    jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0])
-)
-initial_state.type[6:13] = "Free"  # Initial State
+initial_state = bc(jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]))
+initial_state.type[6:13] = "Free"
 
-final_state = BoundaryConstraint(
-    jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time])
-)
+final_state = bc(jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time]))
 final_state.type[3:13] = "Free"
 final_state.type[13] = "Minimize"
 
