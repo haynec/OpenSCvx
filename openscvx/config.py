@@ -9,6 +9,7 @@ import jax.numpy as jnp
 from typing import Dict, List
 
 from openscvx.dynamics import Dynamics
+from openscvx.constraints.boundary import BoundaryConstraint
 from openscvx.ptr import PTR_main
 
 
@@ -253,6 +254,7 @@ class Config:
 
 
 # TODO: (norrisg) Decide whether to have `TrajOptProblem` be a _replacement_ for `Config` or whether it should have a `params` member variable along side `dynamics`, `constraints`, `cost`, etc.
+# NOTE: (norrisg) If we define the `.scp` parameters after initialization we need to handle the re-normalization of the params -> would potentially make sense to put this as a step before solving the problem
 class TrajOptProblem:
     def __init__(
         self,
@@ -262,62 +264,57 @@ class TrajOptProblem:
         time_init: float,
         x_guess: jnp.ndarray,
         u_guess: jnp.ndarray,
-        initial_state: Dict[str, List[any]],
-        final_state: Dict[str, List[any]],
+        initial_state: BoundaryConstraint,
+        final_state: BoundaryConstraint,
         initial_control: jnp.ndarray,
-        x_max,
-        x_min,
-        u_max,
-        u_min,
-        dt_sim: float = 0.1,
-        k_max: int = 200,
-        w_tr=1e1,  # Weight on the Trust Reigon
-        lam_cost=1e1,  # Weight on the Nonlinear Cost
-        lam_vc=1e2,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
-        ep_tr=1e-4,  # Trust Region Tolerance
-        ep_vb=1e-4,  # Virtual Control Tolerance
-        ep_vc=1e-8,  # Virtual Control Tolerance for CTCS
-        cost_drop=4,  # SCP iteration to relax minimal final time objective
-        cost_relax=0.5,  # Minimal Time Relaxation Factor
-        w_tr_adapt=1.2,  # Trust Region Adaptation Factor
-        w_tr_max_scaling_factor=1e2,  # Maximum Trust Region Weight
+        x_max: jnp.ndarray,
+        x_min: jnp.ndarray,
+        u_max: jnp.ndarray,
+        u_min: jnp.ndarray,
+        scp: ScpConfig = None,
+        sim: SimConfig = None,
     ):
 
         # #######
         # Setup Problem
         # #######
 
-        self.sim = SimConfig(
-            x_bar=x_guess,
-            u_bar=u_guess,
-            initial_state=initial_state,
-            final_state=final_state,
-            max_state=x_max,
-            min_state=x_min,
-            initial_control=initial_control,
-            max_control=u_max,
-            min_control=u_min,
-            total_time=time_init,
-            n_states=len(x_max),
-            dt=dt_sim,
-        )
+        if sim is None:
+            self.sim = SimConfig(
+                x_bar=x_guess,
+                u_bar=u_guess,
+                initial_state=initial_state,
+                final_state=final_state,
+                max_state=x_max,
+                min_state=x_min,
+                initial_control=initial_control,
+                max_control=u_max,
+                min_control=u_min,
+                total_time=time_init,
+                n_states=len(x_max),
+                dt=0.1,
+            )
+        else: 
+            self.sim = sim
 
-        # TODO: (norrisg) Should all of these fields be directly passed to the `TrajOptProblem` constructor or, should they be simply modifiable by accessing problem.sim?
-        # Could be a good way to avoid passing so many arguments
-        self.scp = ScpConfig(
-            n=N,
-            k_max=k_max,
-            w_tr=w_tr,
-            lam_cost=lam_cost,
-            lam_vc=lam_vc,
-            ep_tr=ep_tr,
-            ep_vb=ep_vb,
-            ep_vc=ep_vc,
-            cost_drop=cost_drop,
-            cost_relax=cost_relax,
-            w_tr_adapt=w_tr_adapt,
-            w_tr_max_scaling_factor=w_tr_max_scaling_factor,
-        )
+        if scp is None:
+            self.scp = ScpConfig(
+                n=N,
+                k_max = 200,
+                w_tr=1e1,  # Weight on the Trust Reigon
+                lam_cost=1e1,  # Weight on the Nonlinear Cost
+                lam_vc=1e2,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
+                ep_tr=1e-4,  # Trust Region Tolerance
+                ep_vb=1e-4,  # Virtual Control Tolerance
+                ep_vc=1e-8,  # Virtual Control Tolerance for CTCS
+                cost_drop=4,  # SCP iteration to relax minimal final time objective
+                cost_relax=0.5,  # Minimal Time Relaxation Factor
+                w_tr_adapt=1.2,  # Trust Region Adaptation Factor
+                w_tr_max_scaling_factor=1e2,  # Maximum Trust Region Weight
+            )
+        else:
+            assert self.scp.n == N, "Number of segments must be the same as in the config"
+            self.scp = scp
 
         self.veh = Dynamics(
             dynamics,
