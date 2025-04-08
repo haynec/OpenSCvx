@@ -6,6 +6,7 @@ from openscvx.config import TrajOptProblem
 
 from openscvx.dynamics import Dynamics
 from openscvx.utils import qdcm, SSMP, SSM
+from openscvx.constraints.boundary import BoundaryConstraint
 
 n = 12  # Number of Nodes
 total_time = 40.0  # Total time for the simulation
@@ -24,47 +25,16 @@ min_state = np.array(
     [-100, -100, -10, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0, 0]
 )  # Lower Bound on the states
 
-initial_state = {
-    "value": [8, -0.2, 2.2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-    "type": [
-        "Fix",
-        "Fix",
-        "Fix",
-        "Fix",
-        "Fix",
-        "Fix",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Fix",
-        "Fix",
-    ],
-}  # Initial State
+initial_state = BoundaryConstraint(
+    jnp.array([8, -0.2, 2.2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0])
+)
+initial_state.type[6:13] = "Free"  # Initial State
 
-final_state = {
-    "value": [-10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 40],
-    "type": [
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Minimize",
-        "Fix",
-    ],
-}  # Terminal State
+final_state = BoundaryConstraint(
+    jnp.array([-10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 40])
+)
+final_state.type[0:13] = "Free"
+final_state.type[13] = "Minimize"
 
 max_control = np.array(
     [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time]
@@ -157,7 +127,7 @@ s = total_time
 u_bar[:, -1] = np.repeat(s, n)
 
 x_bar = np.repeat(np.expand_dims(np.zeros_like(max_state), axis=0), n, axis=0)
-x_bar[:, :y_inds] = np.linspace(initial_state["value"], final_state["value"], n)
+x_bar[:, :y_inds] = np.linspace(initial_state.value, final_state.value, n)
 
 x_bar[:, :3] = get_kp_pose(x_bar[:, t_inds]) + jnp.array([-5, 0.2, 0.2])[None, :]
 

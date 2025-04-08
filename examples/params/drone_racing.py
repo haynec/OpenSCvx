@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import cvxpy as cp
 
 from openscvx.config import TrajOptProblem
+from openscvx.constraints.boundary import BoundaryConstraint
 from openscvx.utils import qdcm, SSMP, SSM
 
 n = 22  # Number of Nodes
@@ -19,61 +20,16 @@ min_state = np.array(
     [-200, -100, 15, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0]
 )  # Lower Bound on the states
 
-initial_state = {
-    "value": [10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-    "type": [
-        "Fix",
-        "Fix",
-        "Fix",
-        "Fix",
-        "Fix",
-        "Fix",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Fix",
-    ],
-    "symbol": [
-        "x",
-        "y",
-        "z",
-        "vx",
-        "vy",
-        "vz",
-        "qw",
-        "qx",
-        "qy",
-        "qz",
-        "wx",
-        "wy",
-        "qz",
-        "t",
-    ],
-}  # Initial State
+initial_state = BoundaryConstraint(
+    jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0])
+)
+initial_state.type[6:13] = "Free"
 
-final_state = {
-    "value": [10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time],
-    "type": [
-        "Fix",
-        "Fix",
-        "Fix",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Minimize",
-    ],
-}
+final_state = BoundaryConstraint(
+    jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time])
+)
+final_state.type[3:13] = "Free"
+final_state.type[13] = "Minimize"
 
 initial_control = np.array([0, 0, 10, 0, 0, 0, 1])
 max_control = np.array(
@@ -174,15 +130,15 @@ s = total_time
 u_bar[:, -1] = np.repeat(s, n)
 
 x_bar = np.repeat(np.expand_dims(np.zeros_like(max_state), axis=0), n, axis=0)
-x_bar[:, :-1] = np.linspace(initial_state["value"], final_state["value"], n)
+x_bar[:, :-1] = np.linspace(initial_state.value, final_state.value, n)
 
 i = 0
-origins = [initial_state["value"][:3]]
+origins = [initial_state.value[:3]]
 ends = []
 for center in gate_centers:
     origins.append(center)
     ends.append(center)
-ends.append(final_state["value"][:3])
+ends.append(final_state.value[:3])
 gate_idx = 0
 for _ in range(n_gates + 1):
     for k in range(n // (n_gates + 1)):

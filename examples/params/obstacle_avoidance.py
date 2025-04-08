@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import jax
 
 from openscvx.config import TrajOptProblem
+from openscvx.constraints.boundary import BoundaryConstraint
 from openscvx.utils import qdcm, SSMP, SSM, generate_orthogonal_unit_vectors
 
 n = 6
@@ -14,44 +15,16 @@ min_state = np.array(
     [-200, -100, 0, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0]
 )
 
-initial_state = {
-    "value": [10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-    "type": [
-        "Fix",
-        "Fix",
-        "Fix",
-        "Fix",
-        "Fix",
-        "Fix",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Fix",
-    ],
-}
-final_state = {
-    "value": [-10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time],
-    "type": [
-        "Fix",
-        "Fix",
-        "Fix",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Free",
-        "Minimize",
-    ],
-}
+initial_state = BoundaryConstraint(
+    jnp.array([10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0])
+)
+initial_state.type[6:13] = "Free"
+
+final_state = BoundaryConstraint(
+    jnp.array([-10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time])
+)
+final_state.type[3:13] = "Free"
+final_state.type[13] = "Minimize"
 
 initial_control = np.array([0, 0, 50, 0, 0, 0, 1])
 
@@ -124,7 +97,7 @@ s = total_time
 u_bar[:, -1] = np.repeat(s, n)
 
 x_bar = np.repeat(np.expand_dims(np.zeros_like(max_state), axis=0), n, axis=0)
-x_bar[:, :-1] = np.linspace(initial_state["value"], final_state["value"], n)
+x_bar[:, :-1] = np.linspace(initial_state.value, final_state.value, n)
 
 params = TrajOptProblem(
     dynamics=dynamics,
