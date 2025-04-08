@@ -111,7 +111,7 @@ nodes_per_gate = 3
 gate_nodes = np.arange(nodes_per_gate, n, nodes_per_gate)
 vertices = []
 for center in gate_centers:
-    vertices.append(gen_vertices(center))
+    vertices.append(gen_vertices(center, radii))
 ### End Gate Parameters ###
 
 
