@@ -54,7 +54,6 @@ def dynamics(x, u):
 
 def g_obs(center, A, x):
     value = 1 - (x[:3] - center).T @ A @ (x[:3] - center)
-    # jax.debug.print("the value is {}", value)
     return value
 
 
