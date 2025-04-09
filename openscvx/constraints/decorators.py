@@ -7,7 +7,7 @@ def ctcs(func: callable, penalty="squared_relu"):
     if penalty == "squared_relu":
         func.penalty = lambda x: jnp.maximum(0, x) ** 2
     elif penalty == "huber":
-        delta = 1.0
+        delta = 0.25
         func.penalty = lambda x: jnp.where(jnp.maximum(0, x) < delta, 0.5 * jnp.maximum(0, x)**2, jnp.maximum(0, x) - 0.5 * delta)
     else:
         func.penalty = penalty
