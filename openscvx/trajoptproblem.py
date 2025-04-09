@@ -4,8 +4,6 @@ from typing import List
 from openscvx.config import ScpConfig, SimConfig, Config
 from openscvx.dynamics import Dynamics
 from openscvx.constraints.boundary import BoundaryConstraint
-
-# from openscvx.constraints.custom import CustomConstraint
 from openscvx.ptr import PTR_init, PTR_main, PTR_post
 
 
