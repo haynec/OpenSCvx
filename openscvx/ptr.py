@@ -17,16 +17,32 @@ from openscvx.plotting import plot_initial_guess
 import warnings
 warnings.filterwarnings("ignore")
 
-def PTR_main(params: Config):
+def PTR_init(params: Config) -> tuple[cp.Problem, AugmentedDynamics]:
     intro()
+
+    ocp = OCP(params) # Initialize the problem
+
+    if params.sim.cvxpygen:
+        from solver.cpg_solver import cpg_solve
+        with open('solver/problem.pickle', 'rb') as f:
+            prob = pickle.load(f)
+    else:
+        cpg_solve = None
+
+    aug_dy = AugmentedDynamics(params)
+
+    # Solve a dumb problem to intilize DPP and JAX jacobians
+    _ = PTR_subproblem(cpg_solve, params.sim.x_bar, params.sim.u_bar, aug_dy, ocp, params)
+
+    return ocp, aug_dy, cpg_solve
+
+def PTR_main(params: Config, prob: cp.Problem, aug_dy: AugmentedDynamics, cpg_solve) -> dict:
     J_vb = 1E2
     J_vc = 1E2
     J_tr = 1E2
 
     x_bar = params.sim.x_bar
     u_bar = params.sim.u_bar
-
-    prob = OCP(params) # Initialize the problem
 
     scp_trajs = [x_bar]
     scp_controls = [u_bar]
@@ -42,18 +58,6 @@ def PTR_main(params: Config):
     print(colored("---------------------------------------------------------------------------------------------------------"))
 
     k = 1
-
-    if params.sim.cvxpygen:
-        from solver.cpg_solver import cpg_solve
-        with open('solver/problem.pickle', 'rb') as f:
-            prob = pickle.load(f)
-    else:
-        cpg_solve = None
-
-    aug_dy = AugmentedDynamics(params)
-
-    # Solve a dumb problem to intilize DPP and JAX jacobians
-    _ = PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params)
 
     if params.sim.profiling:
         import cProfile
