@@ -86,7 +86,7 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: AugmentedDynamics, cpg_so
             params.scp.lam_cost = params.scp.lam_cost * params.scp.cost_relax
         
         # remove bottom labels and line
-        if not k == 0:
+        if not k == 1:
             sys.stdout.write('\x1b[1A\x1b[2K\x1b[1A\x1b[2K')
         
         if prob_stat[3] == 'f':
