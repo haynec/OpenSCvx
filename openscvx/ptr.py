@@ -165,16 +165,6 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: AugmentedDynamics, cpg_so
 
     scp_trajs_interp = scp_traj_interp(scp_trajs, params)
 
-    if hasattr(params.veh, 'obstacle_centers'):
-        centers = params.veh.obstacle_centers
-        axes = params.veh.axes
-        radii = params.veh.radius
-    else:
-        centers = []
-        axes = []
-        radii = []
-
-
     result = dict(
         converged = k <= params.scp.k_max,
         tof = t[-1],
@@ -189,9 +179,6 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: AugmentedDynamics, cpg_so
         scp_trajs = scp_trajs,
         scp_controls = scp_controls,
         scp_multi_shoot = V_multi_shoot_traj,
-        obstacles_centers = centers,
-        obstacles_axes = axes,
-        obstacles_radii = radii,
         scp_interp = scp_trajs_interp,
         J_tr_vec = J_tr_vec,
         J_vb_vec = J_vb_vec,
