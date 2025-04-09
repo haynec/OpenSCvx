@@ -1139,10 +1139,10 @@ def plot_animation(result: dict,
     tof = result["tof"]
     # Make title say quadrotor simulation and insert the variable tof into the title
     # title = 'Quadrotor Simulation: Time of Flight = ' + str(tof) + 's'
-    drone_positions = result["drone_state"][:, :3]
-    drone_velocities = result["drone_state"][:, 3:6]
-    drone_attitudes = result["drone_state"][:, 6:10]
-    drone_forces = result["drone_controls_full"][:, :3]
+    drone_positions = result["state"][:, :3]
+    drone_velocities = result["state"][:, 3:6]
+    drone_attitudes = result["state"][:, 6:10]
+    drone_forces = result["control"][:, :3]
     subs_positions = result["sub_positions"]
 
     np.save(f'{path}results/drone_positions.npy', drone_positions)
@@ -1278,9 +1278,9 @@ def plot_animation(result: dict,
             y = p[:, 1]
             z = p[:, 2]
             
-            cov = result['drone_state'][i, 13:params.veh.mass_inds]
+            cov = result['state'][i, 13:params.veh.mass_inds]
             # Get the z values
-            data.append(go.Scatter3d(x=x, y=y, z=z, mode='markers', marker=dict(size=10, color=cov, colorscale='Viridis',  cmin=0, cmax=np.max(result['drone_state'][:, 13:params.veh.mass_inds]))))
+            data.append(go.Scatter3d(x=x, y=y, z=z, mode='markers', marker=dict(size=10, color=cov, colorscale='Viridis',  cmin=0, cmax=np.max(result['state'][:, 13:params.veh.mass_inds]))))
             
         data.append(go.Scatter3d(
             x=drone_positions[:indices[i]+1,0], 
@@ -1510,9 +1510,9 @@ def plot_scp_animation(result_ctcs: dict,
                        path=""):
     tof = result_ctcs["tof"]
     title = f'SCP Simulation: {tof} seconds'
-    drone_positions = result_ctcs["drone_state"][:, :3]
-    drone_attitudes = result_ctcs["drone_state"][:, 6:10]
-    drone_forces = result_ctcs["drone_controls_full"][:, :3]
+    drone_positions = result_ctcs["state"][:, :3]
+    drone_attitudes = result_ctcs["state"][:, 6:10]
+    drone_forces = result_ctcs["control"][:, :3]
     scp_interp_trajs = result_ctcs["scp_interp"]
     scp_ctcs_trajs = result_ctcs["scp_trajs"]
     scp_multi_shoot = result_ctcs["scp_multi_shoot"]
@@ -1764,7 +1764,7 @@ def plot_scp_animation(result_ctcs: dict,
 
 def plot_state(result, params: Config):
     scp_trajs = result["scp_interp"]
-    x_full = result["drone_state"]
+    x_full = result["state"]
 
     fig = make_subplots(rows=2, cols=7, subplot_titles=('X Position', 'Y Position', 'Z Position', 'X Velocity', 'Y Velocity', 'Z Velocity', 'CTCS Augmentation', 'Q1', 'Q2', 'Q3', 'Q4', 'X Angular Rate', 'Y Angular Rate', 'Z Angular Rate'))
     fig.update_layout(title_text="State Trajectories", template='plotly_dark')
@@ -1891,7 +1891,7 @@ def plot_state(result, params: Config):
 
 def plot_control(result, params: Config):
     scp_controls = result["scp_controls"]
-    u = result["drone_controls"]
+    u = result["control_scp"]
 
     fx_min = params.sim.min_control[0]
     fx_max = params.sim.max_control[0]
