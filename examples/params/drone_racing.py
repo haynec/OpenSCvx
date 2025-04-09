@@ -67,18 +67,16 @@ for center in gate_centers:
 ### End Gate Parameters ###
 
 
-def g_cvx_nodal(x):  # Nodal Convex Inequality Constraints
-    constr = []
-    for node, cen in zip(gate_nodes, A_gate_cen):
-        constr += [cp.norm(A_gate @ x[node][:3] - cen, "inf") <= 1]
-    return constr
+def g_cvx_nodal(x, A_gate, cen):  # Nodal Convex Inequality Constraints
+    return cp.norm(A_gate @ x[:3] - cen, "inf") <= 1
 
 
 constraints = [
     ctcs(lambda x, u: (x[:-1] - max_state[:-1])),
     ctcs(lambda x, u: (min_state[:-1] - x[:-1])),
-    nodal(lambda x, u: g_cvx_nodal(x)),
 ]
+for node, cen in zip(gate_nodes, A_gate_cen):
+    constraints.append(nodal(lambda x, u: g_cvx_nodal(x, A_gate, cen), nodes=[node]))
 
 
 def dynamics(x, u):
@@ -153,6 +151,4 @@ problem.params.scp.cost_relax = 0.8  # Minimal Time Relaxation Factor
 problem.params.scp.w_tr_adapt = 1.4  # Trust Region Adaptation Factor
 problem.params.scp.w_tr_max_scaling_factor = 1e2  # Maximum Trust Region Weight
 
-plotting_dict = dict(
-    vertices = vertices
-)
+plotting_dict = dict(vertices=vertices)
