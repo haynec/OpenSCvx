@@ -9,8 +9,8 @@ def ctcs(func: callable, penalty = 'Default'):
         func.penalty = penalty
     return func
 
-def nodal(func: callable):
+def nodal(func: callable, nodes: list = None):
     """Decorator to mark a function as a 'nodal' constraint."""
-    # TODO: (norrisg) add ability to specify which nodes to apply the constraint to
     func.constraint_type = "nodal"
+    func.nodes = nodes
     return func
