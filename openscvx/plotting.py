@@ -1372,8 +1372,8 @@ def plot_animation(result: dict,
 
                 fig.add_trace(go.Surface(x=points[:, 0].reshape(n,n), y=points[:, 1].reshape(n,n), z=points[:, 2].reshape(n,n), opacity = 0.5, showscale=False))
 
-    if hasattr(params.veh, 'vertices'):
-        for vertices in params.veh.vertices:
+    if "vertices" in result:
+        for vertices in result["vertices"]:
             # Plot a line through the vertices of the gate
             fig.add_trace(go.Scatter3d(x=[vertices[0][0], vertices[1][0], vertices[2][0], vertices[3][0], vertices[0][0]], y=[vertices[0][1], vertices[1][1], vertices[2][1], vertices[3][1], vertices[0][1]], z=[vertices[0][2], vertices[1][2], vertices[2][2], vertices[3][2], vertices[0][2]], mode='lines', showlegend=False, line=dict(color='blue', width=10)))
 
@@ -1630,8 +1630,8 @@ def plot_scp_animation(result: dict,
 
             fig.add_trace(go.Surface(x=points[:, 0].reshape(n,n), y=points[:, 1].reshape(n,n), z=points[:, 2].reshape(n,n), opacity = 0.5, showscale=False))
 
-    if hasattr(params.veh, 'vertices'):
-        for vertices in params.veh.vertices:
+    if "vertices" in result:
+        for vertices in result["vertices"]:
             # Plot a line through the vertices of the gate
             fig.add_trace(go.Scatter3d(x=[vertices[0][0], vertices[1][0], vertices[2][0], vertices[3][0], vertices[0][0]], y=[vertices[0][1], vertices[1][1], vertices[2][1], vertices[3][1], vertices[0][1]], z=[vertices[0][2], vertices[1][2], vertices[2][2], vertices[3][2], vertices[0][2]], mode='lines', showlegend=False, line=dict(color='blue', width=10)))
             

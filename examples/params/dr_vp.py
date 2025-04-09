@@ -205,6 +205,7 @@ problem.params.veh.R_sb = R_sb
 problem.params.veh.init_poses = init_poses
 problem.params.veh.A_cone = A_cone
 problem.params.veh.norm_type = norm_type
-problem.params.veh.vertices = vertices
 
-plotting_dict = dict()
+plotting_dict = dict(
+    vertices = vertices
+)

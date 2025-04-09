@@ -153,6 +153,6 @@ problem.params.scp.cost_relax = 0.8  # Minimal Time Relaxation Factor
 problem.params.scp.w_tr_adapt = 1.4  # Trust Region Adaptation Factor
 problem.params.scp.w_tr_max_scaling_factor = 1e2  # Maximum Trust Region Weight
 
-problem.params.veh.vertices = vertices
-
-plotting_dict = dict()
+plotting_dict = dict(
+    vertices = vertices
+)
