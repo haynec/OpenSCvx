@@ -1340,27 +1340,28 @@ def plot_animation(result: dict,
 
     fig.frames = frames
 
-    for center, axes, radius in zip(result['obstacles_centers'], result['obstacles_axes'], result['obstacles_radii']):
-            n = 20
-            # Generate points on the unit sphere
-            u = np.linspace(0, 2 * np.pi, n)
-            v = np.linspace(0, np.pi, n)
+    if "obstacles_centers" in result:
+        for center, axes, radius in zip(result['obstacles_centers'], result['obstacles_axes'], result['obstacles_radii']):
+                n = 20
+                # Generate points on the unit sphere
+                u = np.linspace(0, 2 * np.pi, n)
+                v = np.linspace(0, np.pi, n)
 
-            x = np.outer(np.cos(u), np.sin(v))
-            y = np.outer(np.sin(u), np.sin(v))
-            z = np.outer(np.ones(np.size(u)), np.cos(v))
+                x = np.outer(np.cos(u), np.sin(v))
+                y = np.outer(np.sin(u), np.sin(v))
+                z = np.outer(np.ones(np.size(u)), np.cos(v))
 
-            # Scale points by radii
-            x = 1/radius[0] * x
-            y = 1/radius[1] * y
-            z = 1/radius[2] * z
+                # Scale points by radii
+                x = 1/radius[0] * x
+                y = 1/radius[1] * y
+                z = 1/radius[2] * z
 
-            # Rotate and translate points
-            points = np.array([x.flatten(), y.flatten(), z.flatten()])
-            points = axes @ points
-            points = points.T + center
+                # Rotate and translate points
+                points = np.array([x.flatten(), y.flatten(), z.flatten()])
+                points = axes @ points
+                points = points.T + center
 
-            fig.add_trace(go.Surface(x=points[:, 0].reshape(n,n), y=points[:, 1].reshape(n,n), z=points[:, 2].reshape(n,n), opacity = 0.5, showscale=False))
+                fig.add_trace(go.Surface(x=points[:, 0].reshape(n,n), y=points[:, 1].reshape(n,n), z=points[:, 2].reshape(n,n), opacity = 0.5, showscale=False))
 
     if hasattr(params.veh, 'vertices'):
         for vertices in params.veh.vertices:
@@ -1597,27 +1598,28 @@ def plot_scp_animation(result: dict,
     fig.frames = frames 
 
     i = 1
-    for center, axes, radius in zip(result['obstacles_centers'], result['obstacles_axes'], result['obstacles_radii']):
-        n = 20
-        # Generate points on the unit sphere
-        u = np.linspace(0, 2 * np.pi, n)
-        v = np.linspace(0, np.pi, n)
+    if "obstacles_centers" in result:
+        for center, axes, radius in zip(result['obstacles_centers'], result['obstacles_axes'], result['obstacles_radii']):
+            n = 20
+            # Generate points on the unit sphere
+            u = np.linspace(0, 2 * np.pi, n)
+            v = np.linspace(0, np.pi, n)
 
-        x = np.outer(np.cos(u), np.sin(v))
-        y = np.outer(np.sin(u), np.sin(v))
-        z = np.outer(np.ones(np.size(u)), np.cos(v))
+            x = np.outer(np.cos(u), np.sin(v))
+            y = np.outer(np.sin(u), np.sin(v))
+            z = np.outer(np.ones(np.size(u)), np.cos(v))
 
-        # Scale points by radii
-        x = 1/radius[0] * x
-        y = 1/radius[1] * y
-        z = 1/radius[2] * z
+            # Scale points by radii
+            x = 1/radius[0] * x
+            y = 1/radius[1] * y
+            z = 1/radius[2] * z
 
-        # Rotate and translate points
-        points = np.array([x.flatten(), y.flatten(), z.flatten()])
-        points = axes @ points
-        points = points.T + center
+            # Rotate and translate points
+            points = np.array([x.flatten(), y.flatten(), z.flatten()])
+            points = axes @ points
+            points = points.T + center
 
-        fig.add_trace(go.Surface(x=points[:, 0].reshape(n,n), y=points[:, 1].reshape(n,n), z=points[:, 2].reshape(n,n), opacity = 0.5, showscale=False))
+            fig.add_trace(go.Surface(x=points[:, 0].reshape(n,n), y=points[:, 1].reshape(n,n), z=points[:, 2].reshape(n,n), opacity = 0.5, showscale=False))
 
     if hasattr(params.veh, 'vertices'):
         for vertices in params.veh.vertices:
