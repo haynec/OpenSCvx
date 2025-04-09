@@ -5,8 +5,9 @@ import numpy as np
 import pickle
 
 from openscvx.utils import qdcm
+from openscvx.config import Config
 
-def save_gate_parameters(gates, params):
+def save_gate_parameters(gates, params: Config):
     gate_centers = []
     gate_vertices = []
     for gate in gates:
@@ -29,7 +30,7 @@ def frame_args(duration):
             "transition": {"duration": duration, "easing": "linear"},
             }
 
-def plot_constraint_violation(result, params):
+def plot_constraint_violation(result, params: Config):
     obs_vio = result["obs_vio"]
 
     sub_vp_vio = result["sub_vp_vio"]
@@ -69,7 +70,7 @@ def plot_constraint_violation(result, params):
 
     fig.show()
 
-def plot_initial_guess(result, params):
+def plot_initial_guess(result, params: Config):
     x_positions = result["x"][0:3]
     x_attitude = result["x"][6:10]
     subs_positions = result["sub_positions"]
@@ -117,7 +118,7 @@ def plot_initial_guess(result, params):
         fig.add_trace(go.Scatter3d(x=sub_positions[:,0], y=sub_positions[:,1], z=sub_positions[:,2], mode='lines+markers', line=dict(color='red', width = 5), name='Subject'))
     fig.show()
 
-def plot_camera_view(result: dict, params) -> None:
+def plot_camera_view(result: dict, params: Config) -> None:
     title = r'$\text{Camera View}$'
     sub_positions_sen = result['sub_positions_sen']
     sub_positions_sen_node = result['sub_positions_sen_node']
@@ -1761,7 +1762,7 @@ def plot_scp_animation(result_ctcs: dict,
 
     fig.show()
 
-def plot_state(result, params):
+def plot_state(result, params: Config):
     scp_trajs = result["scp_interp"]
     x_full = result["drone_state"]
 
@@ -1888,7 +1889,7 @@ def plot_state(result, params):
     fig.add_hline(y=wz_max, line=dict(color='red', width=2), row = 2, col = 7)
     fig.show()
 
-def plot_control(result, params):
+def plot_control(result, params: Config):
     scp_controls = result["scp_controls"]
     u = result["drone_controls"]
 
@@ -1951,7 +1952,7 @@ def plot_control(result, params):
 
     fig.show()
 
-def plot_losses(result, params):
+def plot_losses(result, params: Config):
     # Plot J_tr, J_vb, J_vc, J_vc_ctcs
     J_tr = result["J_tr_vec"]
     J_vb = result["J_vb_vec"]

@@ -9,8 +9,6 @@ import jax.numpy as jnp
 from typing import Dict, List
 
 from openscvx.dynamics import Dynamics
-from openscvx.constraints.boundary import BoundaryConstraint
-from openscvx.ptr import PTR_main
 
 
 # Define a custom representer for NumPy arrays to convert them to lists

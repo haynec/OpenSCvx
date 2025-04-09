@@ -4,6 +4,7 @@ from typing import List
 from openscvx.config import ScpConfig, SimConfig, Config
 from openscvx.dynamics import Dynamics
 from openscvx.constraints.boundary import BoundaryConstraint
+
 # from openscvx.constraints.custom import CustomConstraint
 from openscvx.ptr import PTR_main
 
@@ -71,7 +72,11 @@ class TrajOptProblem:
         for constraint in constraints:
             if constraint.constraint_type == "ctcs":
                 # Bind the current 'constraint' function to 'func' to prevent late binding issue for lambda functions
-                self.constraints_ctcs.append(lambda x, u, func=constraint: jnp.sum(jnp.maximum(0, func(x, u)) ** 2))
+                self.constraints_ctcs.append(
+                    lambda x, u, func=constraint: jnp.sum(
+                        jnp.maximum(0, func(x, u)) ** 2
+                    )
+                )
             elif constraint.constraint_type == "nodal":
                 self.constraints_nodal.append(constraint)
             else:
@@ -79,14 +84,10 @@ class TrajOptProblem:
                     f"Unknown constraint type: {constraint.constraint_type}, All constraints must be decorated with @ctcs or @nodal"
                 )
 
-            
-        print(len(self.constraints_ctcs))
-        print(len(self.constraints_nodal))
-
         veh = Dynamics(
             dynamics,
             self.constraints_ctcs,
-            self.constraints_nodal, # TODO (norrisg) Maybe move this outside of the dynamics?
+            self.constraints_nodal,  # TODO (norrisg) Maybe move this outside of the dynamics?
             initial_state=initial_state,
             final_state=final_state,
         )
