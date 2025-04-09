@@ -1139,10 +1139,10 @@ def plot_animation(result: dict,
     tof = result["tof"]
     # Make title say quadrotor simulation and insert the variable tof into the title
     # title = 'Quadrotor Simulation: Time of Flight = ' + str(tof) + 's'
-    drone_positions = result["drone_positions"]
-    drone_velocities = result["drone_velocities"]
-    drone_attitudes = result["drone_attitudes"]
-    drone_forces = result["drone_forces"]
+    drone_positions = result["drone_state"][:, :3]
+    drone_velocities = result["drone_state"][:, 3:6]
+    drone_attitudes = result["drone_state"][:, 6:10]
+    drone_forces = result["drone_controls_full"][:, :3]
     subs_positions = result["sub_positions"]
 
     np.save(f'{path}results/drone_positions.npy', drone_positions)
@@ -1510,9 +1510,9 @@ def plot_scp_animation(result_ctcs: dict,
                        path=""):
     tof = result_ctcs["tof"]
     title = f'SCP Simulation: {tof} seconds'
-    drone_positions = result_ctcs["drone_positions"]
-    drone_attitudes = result_ctcs["drone_attitudes"]
-    drone_forces = result_ctcs["drone_forces"]
+    drone_positions = result_ctcs["drone_state"][:, :3]
+    drone_attitudes = result_ctcs["drone_state"][:, 6:10]
+    drone_forces = result_ctcs["drone_controls_full"][:, :3]
     scp_interp_trajs = result_ctcs["scp_interp"]
     scp_ctcs_trajs = result_ctcs["scp_trajs"]
     scp_multi_shoot = result_ctcs["scp_multi_shoot"]
