@@ -9,6 +9,7 @@ import sys
 from termcolor import colored
 
 from openscvx.discretization import AugmentedDynamics
+from openscvx.config import Config
 from openscvx.propagation import full_subject_traj_time, subject_traj, u_lambda, simulate_nonlinear_time
 from openscvx.ocp import OCP
 from openscvx.plotting import plot_initial_guess
@@ -16,7 +17,7 @@ from openscvx.plotting import plot_initial_guess
 import warnings
 warnings.filterwarnings("ignore")
 
-def PTR_main(params):
+def PTR_main(params: Config):
     intro()
     J_vb = 1E2
     J_vc = 1E2
@@ -208,7 +209,7 @@ def PTR_main(params):
     )
     return result
 
-def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params):
+def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     J_vb_vec = []
     J_vc_vec = []
     J_tr_vec = []

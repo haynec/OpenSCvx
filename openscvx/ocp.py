@@ -7,7 +7,7 @@ from openscvx.config import Config
 from cvxpygen import cpg
 
 
-def OCP(params):
+def OCP(params: Config):
     ########################
     # VARIABLES & PARAMETERS
     ########################

@@ -4,8 +4,9 @@ import scipy.integrate as itg
 from scipy.interpolate import interp1d
 
 from openscvx.utils import qdcm
+from openscvx.config import Config
 
-def simulate_nonlinear_time(x_0, u_lam, tau_vals, t, aug_dy, params):
+def simulate_nonlinear_time(x_0, u_lam, tau_vals, t, aug_dy, params: Config):
     states = []
     tau = np.linspace(0, 1, params.scp.n)
     
@@ -31,7 +32,7 @@ def simulate_nonlinear_time(x_0, u_lam, tau_vals, t, aug_dy, params):
     
     return np.array(states)
 
-def u_lambda(u, t, params):
+def u_lambda(u, t, params: Config):
     """
     Generate a lambda function that linearly interpolates between the control input given a time.
 
@@ -123,7 +124,7 @@ def full_subject_traj_time(x_full, params, init):
         subs_traj_sen = None
     return subs_traj, np.array(t_full).flatten(), subs_traj_sen
 
-def subject_traj(x, params):
+def subject_traj(x, params: Config):
     subs_traj = []
     subs_traj_sen = []
     t = x[:,params.veh.t_inds]

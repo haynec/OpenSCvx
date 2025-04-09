@@ -3,8 +3,10 @@ from jax import jit
 import numpy as np
 import scipy.integrate as itg
 
+from openscvx.config import Config
+
 class AugmentedDynamics:
-    def __init__(self, params) -> None:
+    def __init__(self, params: Config) -> None:
         self.params = params
 
         # Extract the number of states and controls from the parameters
@@ -27,7 +29,7 @@ class AugmentedDynamics:
             dVdt_lower = jit(self.dVdt_fun).lower(0.0, np.ones(int(self.i5*(self.params.scp.n-1))), np.ones((self.params.scp.n-1, self.params.sim.n_controls)), np.ones((self.params.scp.n-1, self.params.sim.n_controls)))
             self.dVdt = dVdt_lower.compile()
     
-    def s_to_t(self, u, params):
+    def s_to_t(self, u, params: Config):
         t = [0]
         tau = np.linspace(0, 1, params.scp.n)
         for k in range(1, params.scp.n):
@@ -39,7 +41,7 @@ class AugmentedDynamics:
                 t.append(t[k-1] + 0.5 * (s_k + s_kp) * (tau[k] - tau[k-1]))
         return t
     
-    def t_to_tau(self, u_lam, t, u_nodal, t_nodal, params):
+    def t_to_tau(self, u_lam, t, u_nodal, t_nodal, params: Config):
         u = np.array([u_lam(t_i) for t_i in t])
 
         tau = np.zeros(len(t))
