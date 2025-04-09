@@ -196,12 +196,6 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: AugmentedDynamics, cpg_so
         J_tr_vec = J_tr_vec,
         J_vb_vec = J_vb_vec,
         J_vc_vec = J_vc_vec,
-        obs_vio = None, #obs_vio,
-        sub_vp_vio = None, #sub_vp_vio,
-        sub_min_vio = None, #sub_min_vio,
-        sub_max_vio = None, #sub_max_vio,
-        sub_direc_vio = None, #sub_direc_vio,
-        state_bound_vio = None, #state_bound_vio,
     )
     return result
 

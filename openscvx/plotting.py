@@ -31,42 +31,51 @@ def frame_args(duration):
             }
 
 def plot_constraint_violation(result, params: Config):
-    obs_vio = result["obs_vio"]
-
-    sub_vp_vio = result["sub_vp_vio"]
-    sub_min_vio = result["sub_min_vio"]
-    sub_max_vio = result["sub_max_vio"]
-    sub_direc_vio = result["sub_direc_vio"]
-
-    state_bound_vio = result["state_bound_vio"]
-
     fig = make_subplots(rows=2, cols=3, subplot_titles=(r'$\text{Obstacle Violation}$', r'$\text{Sub VP Violation}$', r'$\text{Sub Min Violation}$', r'$\text{Sub Max Violation}$', r'$\text{Sub Direc Violation}$', r'$\text{State Bound Violation}$', r'$\text{Total Violation}$'))
-
     fig.update_layout(template='plotly_dark', title=r'$\text{Constraint Violation}$')
 
-    for i in range(obs_vio.shape[0]):
-        color = f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})'
-        fig.add_trace(go.Scatter(y=obs_vio[i], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=1, col=1)
-    i = 0
+    if "obs_vio" in result:
+        obs_vio = result["obs_vio"]
+        for i in range(obs_vio.shape[0]):
+            color = f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})'
+            fig.add_trace(go.Scatter(y=obs_vio[i], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=1, col=1)
+        i = 0
+    else:
+        print("'obs_vio' not found in result dictionary.")
 
     # Make names of each state in the state vector
     state_names = ['x', 'y', 'z', 'vx', 'vy', 'vz', 'q0', 'q1', 'q2', 'q3', 'wx', 'wy', 'wz', 'ctcs']
 
-    for i in range(sub_vp_vio.shape[0]):
-        color = f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})'
-        fig.add_trace(go.Scatter(y=sub_vp_vio[i], mode='lines', showlegend=True, name = 'LoS ' + str(i) + ' Error', line=dict(color=color, width = 2)), row=1, col=2)
-        if params.vp.tracking:
-            fig.add_trace(go.Scatter(y=sub_min_vio[i], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=1, col=3)
-            fig.add_trace(go.Scatter(y=sub_max_vio[i], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=2, col=1)
-        else:
-            fig.add_trace(go.Scatter(y=[], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=1, col=3)
-            fig.add_trace(go.Scatter(y=[], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=2, col=1)
-    i = 0
+    if "sub_vp_vio" in result and "sub_min_vio" in result and "sub_max_vio" in result:
+        sub_vp_vio = result["sub_vp_vio"]
+        sub_min_vio = result["sub_min_vio"]
+        sub_max_vio = result["sub_max_vio"]
+        for i in range(sub_vp_vio.shape[0]):
+            color = f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})'
+            fig.add_trace(go.Scatter(y=sub_vp_vio[i], mode='lines', showlegend=True, name = 'LoS ' + str(i) + ' Error', line=dict(color=color, width = 2)), row=1, col=2)
+            if params.vp.tracking:
+                fig.add_trace(go.Scatter(y=sub_min_vio[i], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=1, col=3)
+                fig.add_trace(go.Scatter(y=sub_max_vio[i], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=2, col=1)
+            else:
+                fig.add_trace(go.Scatter(y=[], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=1, col=3)
+                fig.add_trace(go.Scatter(y=[], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=2, col=1)
+        i = 0
+    else:
+        print("'sub_vp_vio', 'sub_min_vio', or 'sub_max_vio' not found in result dictionary.")
     
-    # fig.add_trace(go.Scatter(y=sub_direc_vio, mode='lines', showlegend=False, line=dict(color='red', width = 2)), row=2, col=2)
-    for i in range(state_bound_vio.shape[0]):
-        color = f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})'
-        fig.add_trace(go.Scatter(y=state_bound_vio[:,i], mode='lines', showlegend=True, name = state_names[i] + ' Error', line=dict(color=color, width = 2)), row=2, col=3)
+    if "sub_direc_vio" in result:
+        sub_direc_vio = result["sub_direc_vio"]
+        # fig.add_trace(go.Scatter(y=sub_direc_vio, mode='lines', showlegend=False, line=dict(color='red', width = 2)), row=2, col=2)
+    else:
+        print("'sub_direc_vio' not found in result dictionary.")
+
+    if "state_bound_vio" in result:
+        state_bound_vio = result["state_bound_vio"]
+        for i in range(state_bound_vio.shape[0]):
+            color = f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})'
+            fig.add_trace(go.Scatter(y=state_bound_vio[:,i], mode='lines', showlegend=True, name = state_names[i] + ' Error', line=dict(color=color, width = 2)), row=2, col=3)
+    else:
+        print("'state_bound_vio' not found in result dictionary.")
 
     fig.show()
 
