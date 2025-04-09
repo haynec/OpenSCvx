@@ -93,17 +93,15 @@ def g_vp(p_s_I, x):
     return jnp.linalg.norm(A_cone @ p_s_s, ord=norm_type) - (c.T @ p_s_s)
 
 
-def g_cvx_nodal(x, A_gate, cen):  # Nodal Convex Inequality Constraints
-    return cp.norm(A_gate @ x[:3] - cen, "inf") <= 1
-
-
 constraints = []
 constraints.append(ctcs(lambda x, u: x[:-1] - max_state[:-1]))
 constraints.append(ctcs(lambda x, u: min_state[:-1] - x[:-1]))
 for pose in init_poses:
     constraints.append(ctcs(lambda x, u: g_vp(pose, x)))
 for node, cen in zip(gate_nodes, A_gate_cen):
-    constraints.append(nodal(lambda x, u: g_cvx_nodal(x, A_gate, cen), nodes=[node]))
+    constraints.append(
+        nodal(lambda x, u: cp.norm(A_gate @ x[:3] - cen, "inf") <= 1, nodes=[node])
+    )
 
 
 def dynamics(x, u):

@@ -67,16 +67,14 @@ for center in gate_centers:
 ### End Gate Parameters ###
 
 
-def g_cvx_nodal(x, A_gate, cen):  # Nodal Convex Inequality Constraints
-    return cp.norm(A_gate @ x[:3] - cen, "inf") <= 1
-
-
 constraints = [
     ctcs(lambda x, u: (x[:-1] - max_state[:-1])),
     ctcs(lambda x, u: (min_state[:-1] - x[:-1])),
 ]
 for node, cen in zip(gate_nodes, A_gate_cen):
-    constraints.append(nodal(lambda x, u: g_cvx_nodal(x, A_gate, cen), nodes=[node]))
+    constraints.append(
+        nodal(lambda x, u: cp.norm(A_gate @ x[:3] - cen, "inf") <= 1, nodes=[node])
+    )
 
 
 def dynamics(x, u):
