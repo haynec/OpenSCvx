@@ -132,6 +132,43 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: AugmentedDynamics, cpg_so
     
     t = np.array(aug_dy.s_to_t(u, params))
 
+    params.sim.total_time = t[-1]
+
+    result = dict(
+        converged = k <= params.scp.k_max,
+        tof = t[-1],
+        control_scp = u,
+        state_scp = x,
+        scp_trajs = scp_trajs,
+        scp_controls = scp_controls,
+        scp_multi_shoot = V_multi_shoot_traj,
+        J_tr_vec = J_tr_vec,
+        J_vb_vec = J_vb_vec,
+        J_vc_vec = J_vc_vec,
+    )
+    return result
+
+def PTR_post(params: Config, result: dict, aug_dy: AugmentedDynamics) -> dict:
+    x = result['state_scp']
+    u = result['control_scp']
+    scp_trajs = result['scp_trajs']
+
+    t = np.array(aug_dy.s_to_t(u, params))
+
+    print("Total CTCS Constraint Violation:", x_full[-1, params.veh.y_inds])
+    i = 0
+    cost = np.zeros_like(x[-1, i])
+    for type in params.veh.initial_state.type:
+        if type == 'Minimize':
+            cost += x[0, i]
+        i +=1
+    i = 0
+    for type in params.veh.final_state.type:
+        if type == 'Minimize':
+            cost += x[-1, i]
+        i +=1
+    print("Cost: ", cost)
+
     u_lam = u_lambda(u, t, params)
     t_full = np.arange(0, t[-1], params.sim.dt)
 
@@ -147,44 +184,19 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: AugmentedDynamics, cpg_so
         x_sub_sen = []
         x_sub_sen_node = []
     
-    print("Total CTCS Constraint Violation:", x_full[-1, params.veh.y_inds])
-    i = 0
-    cost = np.zeros_like(x[-1, i])
-    for type in params.veh.initial_state.type:
-        if type == 'Minimize':
-            cost += x[0, i]
-        i +=1
-    i = 0
-    for type in params.veh.final_state.type:
-        if type == 'Minimize':
-            cost += x[-1, i]
-        i +=1
-    print("Cost: ", cost)
+    scp_trajs_interp = scp_traj_interp(scp_trajs, params)\
 
-    params.sim.total_time = t[-1]
-
-    scp_trajs_interp = scp_traj_interp(scp_trajs, params)
-
-    result = dict(
-        converged = k <= params.scp.k_max,
-        tof = t[-1],
+    more_result = dict(
         t_full = t_full,
         state = x_full,
         control = u_full,
-        control_scp = u,
-        state_scp = x,
         sub_positions = x_sub_full,
         sub_positions_sen = x_sub_sen,
         sub_positions_sen_node = x_sub_sen_node,
-        scp_trajs = scp_trajs,
-        scp_controls = scp_controls,
-        scp_multi_shoot = V_multi_shoot_traj,
         scp_interp = scp_trajs_interp,
-        J_tr_vec = J_tr_vec,
-        J_vb_vec = J_vb_vec,
-        J_vc_vec = J_vc_vec,
     )
-    return result
+    return result.update(more_result)
+
 
 def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     J_vb_vec = []
