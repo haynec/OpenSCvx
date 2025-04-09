@@ -72,11 +72,12 @@ class TrajOptProblem:
         for constraint in constraints:
             if constraint.constraint_type == "ctcs":
                 # Bind the current 'constraint' function to 'func' to prevent late binding issue for lambda functions
-                self.constraints_ctcs.append(
-                    lambda x, u, func=constraint: jnp.sum(
-                        jnp.maximum(0, func(x, u)) ** 2
+                if constraint.penalty == 'Default':
+                    self.constraints_ctcs.append(
+                        lambda x, u, func=constraint: jnp.sum(
+                            constraint.penalty(func(x,u))
+                        )
                     )
-                )
             elif constraint.constraint_type == "nodal":
                 self.constraints_nodal.append(constraint)
             else:
