@@ -3,6 +3,7 @@ import jax.numpy as jnp
 
 from openscvx.trajoptproblem import TrajOptProblem
 from openscvx.constraints.boundary import BoundaryConstraint as bc
+from openscvx.constraints.decorators import ctcs
 from openscvx.utils import qdcm, SSMP, SSM, generate_orthogonal_unit_vectors
 
 n = 6
@@ -51,8 +52,6 @@ def g_obs(center, A, x):
     return value
 
 
-ctcs_constraints = []
-
 A_obs = []
 radius = []
 axes = []
@@ -63,7 +62,6 @@ obstacle_centers = [
     np.array([5.1, 0.1, 2]),
 ]
 
-
 np.random.seed(0)
 for _ in obstacle_centers:
     ax = generate_orthogonal_unit_vectors()
@@ -73,16 +71,11 @@ for _ in obstacle_centers:
     A_obs.append(ax @ np.diag(rad**2) @ ax.T)
 
 
+constraints = []
 for center, A in zip(obstacle_centers, A_obs):
-    ctcs_constraints.append(lambda x, u: jnp.maximum(0, g_obs(center, A, x)) ** 2)
-
-
-ctcs_constraints.append(
-    lambda x, u: jnp.sum(jnp.maximum(0, (x[:-1] - max_state[:-1])) ** 2)
-)
-ctcs_constraints.append(
-    lambda x, u: jnp.sum(jnp.maximum(0, (min_state[:-1] - x[:-1])) ** 2)
-)
+    constraints.append(ctcs(lambda x, u: g_obs(center, A, x)))
+constraints.append(ctcs(lambda x, u: x[:-1] - max_state[:-1]))
+constraints.append(ctcs(lambda x, u: min_state[:-1] - x[:-1]))
 
 
 u_bar = np.repeat(np.expand_dims(initial_control, axis=0), n, axis=0)
@@ -94,7 +87,7 @@ x_bar[:, :-1] = np.linspace(initial_state.value, final_state.value, n)
 
 problem = TrajOptProblem(
     dynamics=dynamics,
-    ctcs_constraints=ctcs_constraints,
+    constraints=constraints,
     N=n,
     time_init=total_time,
     x_guess=x_bar,

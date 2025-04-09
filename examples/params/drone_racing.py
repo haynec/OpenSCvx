@@ -4,6 +4,7 @@ import cvxpy as cp
 
 from openscvx.trajoptproblem import TrajOptProblem
 from openscvx.constraints.boundary import BoundaryConstraint as bc
+from openscvx.constraints.decorators import ctcs
 from openscvx.utils import qdcm, SSMP, SSM, rot, gen_vertices
 
 n = 22  # Number of Nodes
@@ -65,9 +66,9 @@ for center in gate_centers:
     vertices.append(gen_vertices(center, radii))
 ### End Gate Parameters ###
 
-ctcs_constraints = [
-    lambda x, u: jnp.sum(jnp.maximum(0, (x[:-1] - max_state[:-1])) ** 2),
-    lambda x, u: jnp.sum(jnp.maximum(0, (min_state[:-1] - x[:-1])) ** 2),
+constraints = [
+    ctcs(lambda x, u: (x[:-1] - max_state[:-1])),
+    ctcs(lambda x, u: (min_state[:-1] - x[:-1])),
 ]
 
 
@@ -123,7 +124,7 @@ for _ in range(n_gates + 1):
 
 problem = TrajOptProblem(
     dynamics=dynamics,
-    ctcs_constraints=ctcs_constraints,
+    constraints=constraints,
     N=n,
     time_init=total_time,
     x_guess=x_bar,

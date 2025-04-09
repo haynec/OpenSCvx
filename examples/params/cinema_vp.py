@@ -5,6 +5,7 @@ import jax.numpy as jnp
 from openscvx.trajoptproblem import TrajOptProblem
 from openscvx.utils import qdcm, SSMP, SSM
 from openscvx.constraints.boundary import BoundaryConstraint as bc
+from openscvx.constraints.decorators import ctcs
 
 n = 12  # Number of Nodes
 total_time = 40.0  # Total time for the simulation
@@ -107,12 +108,12 @@ def g_max(x):
     return jnp.linalg.norm(p_s_I - x[:3]) - max_range
 
 
-ctcs_constraints = [
-    lambda x, u: 2e1 * jnp.maximum(0, g_vp(x)) ** 2,
-    lambda x, u: jnp.sum(jnp.maximum(0, (x[:-1] - max_state[:-1])) ** 2),
-    lambda x, u: jnp.sum(jnp.maximum(0, (min_state[:-1] - x[:-1])) ** 2),
-    lambda x, u: jnp.maximum(0, g_min(x)) ** 2,
-    lambda x, u: jnp.maximum(0, g_max(x)) ** 2,
+constraints = [
+    ctcs(lambda x, u: np.sqrt(2e1) * g_vp(x)),
+    ctcs(lambda x, u: x[:-1] - max_state[:-1]),
+    ctcs(lambda x, u: min_state[:-1] - x[:-1]),
+    ctcs(lambda x, u: g_min(x)),
+    ctcs(lambda x, u: g_max(x)),
 ]
 
 
@@ -139,7 +140,7 @@ for k in range(n):
 
 problem = TrajOptProblem(
     dynamics=dynamics,
-    ctcs_constraints=ctcs_constraints,
+    constraints=constraints,
     N=n,
     time_init=total_time,
     x_guess=x_bar,
