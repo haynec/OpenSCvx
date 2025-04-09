@@ -56,7 +56,11 @@ def OCP(params: Config):
     #############
     if params.veh.constraints_nodal:
         for constraint in params.veh.constraints_nodal:
-            constr += constraint(x_nonscaled, u_nonscaled)
+            if constraint.nodes is not None:
+                for node in constraint.nodes:
+                    constr += [constraint(x_nonscaled[node], u_nonscaled[node])]
+            else:
+                constr += [constraint(x_nonscaled[i], u_nonscaled[i]) for i in range(params.scp.n)]
 
     # TODO: (norrisg) remove this
     if hasattr(params.veh, 'g_cvx_nodal'):
