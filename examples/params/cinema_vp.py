@@ -177,3 +177,5 @@ problem.params.veh.max_range = max_range
 problem.params.veh.A_cone = A_cone
 problem.params.veh.norm_type = norm_type
 problem.params.veh.get_kp_pose = get_kp_pose
+
+plotting_dict = dict()
