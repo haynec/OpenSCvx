@@ -54,6 +54,11 @@ def OCP(params):
     #############
     # CONSTRAINTS
     #############
+    if params.veh.constraints_nodal:
+        for constraint in params.veh.constraints_nodal:
+            constr += constraint(x_nonscaled, u_nonscaled)
+
+    # TODO: (norrisg) remove this
     if hasattr(params.veh, 'g_cvx_nodal'):
         constr += params.veh.g_cvx_nodal(x_nonscaled) # Nodal Convex Inequality Constraints
     

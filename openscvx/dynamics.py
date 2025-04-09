@@ -11,13 +11,15 @@ class Dynamics:
     def __init__(
         self,
         dynamics: callable,
-        ctcs_constraints: List[callable],
+        constraints_ctcs: List[callable],
+        constraints_nodal: List[callable],
         initial_state,
         final_state,
     ):
 
         self.dynamics = dynamics
-        self.ctcs_constraints = ctcs_constraints
+        self.constraints_ctcs = constraints_ctcs
+        self.constraints_nodal = constraints_nodal
 
         # CTCS Functions
         self.g_jit = jax.jit(self.g_func)
@@ -33,7 +35,7 @@ class Dynamics:
 
     def g_func(self, x: jnp.array, u: jnp.array) -> jnp.array:
         g_sum = 0
-        for g in self.ctcs_constraints:
+        for g in self.constraints_ctcs:
             # TODO: (norrisg) move the max(0, g(x, u))^2 into this function
             g_sum += g(x, u)
         return g_sum

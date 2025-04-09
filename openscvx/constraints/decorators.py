@@ -7,5 +7,6 @@ def ctcs(func: callable):
 
 def nodal(func: callable):
     """Decorator to mark a function as a 'nodal' constraint."""
+    # TODO: (norrisg) add ability to specify which nodes to apply the constraint to
     func.constraint_type = "nodal"
     return func
