@@ -1,5 +1,7 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
+
 
 def qdcm(q: jnp.ndarray) -> jnp.ndarray:
     # Convert a quaternion to a direction cosine matrix
@@ -19,10 +21,12 @@ def SSMP(w: jnp.ndarray):
     x, y, z = w
     return jnp.array([[0, -x, -y, -z], [x, 0, z, -y], [y, -z, 0, x], [z, y, -x, 0]])
 
+
 def SSM(w: jnp.ndarray):
     # Convert an angular rate to a 3 x 3 skew symetric matrix
     x, y, z = w
     return jnp.array([[0, -z, y], [z, 0, -x], [-y, x, 0]])
+
 
 def generate_orthogonal_unit_vectors(vectors=None):
     """
@@ -43,3 +47,22 @@ def generate_orthogonal_unit_vectors(vectors=None):
         vectors = jax.random.uniform(key, (3, 3))
     Q, _ = jnp.linalg.qr(vectors)
     return Q
+
+
+rot = np.array(
+    [
+        [np.cos(np.pi / 2), np.sin(np.pi / 2), 0],
+        [-np.sin(np.pi / 2), np.cos(np.pi / 2), 0],
+        [0, 0, 1],
+    ]
+)
+def gen_vertices(center, radii):
+    """
+    Obtains the vertices of the gate.
+    """
+    vertices = []
+    vertices.append(center + rot @ [radii[0], 0, radii[2]])
+    vertices.append(center + rot @ [-radii[0], 0, radii[2]])
+    vertices.append(center + rot @ [-radii[0], 0, -radii[2]])
+    vertices.append(center + rot @ [radii[0], 0, -radii[2]])
+    return vertices

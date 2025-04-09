@@ -1,243 +1,234 @@
 import numpy as np
 import numpy.linalg as la
-from jax import vmap, jit, jacfwd
 import jax.numpy as jnp
 import cvxpy as cp
-from openscvx.config import (
-    SimConfig,
-    ScpConfig,
-    Config,
-)
 
-from openscvx.dynamics import Dynamics
-from openscvx.utils import qdcm, SSMP, SSM
+from openscvx.trajoptproblem import TrajOptProblem
+from openscvx.utils import qdcm, SSMP, SSM, rot, gen_vertices
+from openscvx.constraints.boundary import BoundaryConstraint as bc
+from openscvx.constraints.decorators import ctcs, nodal
 
-n = 33 # Number of Nodes
+n = 33  # Number of Nodes
 total_time = 30.0  # Total time for the simulation
 
-class DrVpPolytopeDynamics(Dynamics):
-    def __init__(self):
-        self.s_inds = -1          # Time dilation index in Control
-        
-        self.max_state=np.array([200, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1e-4])  # Upper Bound on the states
-        self.min_state=np.array([-200, -100, 15, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0])  # Lower Bound on the states
-        
-        self.initial_state= {'value' : [10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-                             'type'  : ['Fix', 'Fix', 'Fix', 'Fix', 'Fix', 'Fix', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Fix']}  # Initial State
-        
-        self.final_state= {'value' : [10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time],
-                            'type' : ['Fix', 'Fix', 'Fix', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Free', 'Minimize']}
+s_inds = -1  # Time dilation index in Control
 
-        self.initial_control = np.array([0, 0, 10, 0, 0, 0, 1])
-        self.max_control=np.array([0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time])  # Upper Bound on the controls
-        self.min_control=np.array([0, 0, 0, -18.665, -18.665, -0.55562, 0.3 * total_time])  # Lower Bound on the controls
-    
+max_state = np.array(
+    [200, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1e-4]
+)  # Upper Bound on the states
+min_state = np.array(
+    [-200, -100, 15, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0]
+)  # Lower Bound on the states
 
-        self.m = 1.0  # Mass of the drone
-        self.g_const = -9.18
-        self.J_b = jnp.array([1.0, 1.0, 1.0])  # Moment of Inertia of the drone
-        
-               ### View Planning Params ###
-        self.alpha_x = 6.0  # Angle for the x-axis of Sensor Cone
-        self.alpha_y = 6.0  # Angle for the y-axis of Sensor Cone
-        self.A_cone = np.diag(
-            [
-                1 / np.tan(np.pi / self.alpha_x),
-                1 / np.tan(np.pi / self.alpha_y),
-                0,
-            ]
-        )  # Conic Matrix in Sensor Frame
-        self.c = jnp.array([0, 0, 1]) # Boresight Vector in Sensor Frame
-        self.norm_type = 2  # Norm Type
-        self.R_sb=jnp.array([[0, 1, 0], 
-                             [0, 0, 1], 
-                             [1, 0, 0]]
-                             )
+initial_state = bc(jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]))
+initial_state.type[6:13] = "Free"
 
-        self.n_subs = 10
-        polytope_point = np.array([[ 95.38, -54.62,  15.38], 
-                                   [ 95.38, -54.62,  24.62], 
-                                   [ 95.38, -45.38,  15.38], 
-                                   [ 95.38, -45.38,  24.62], 
-                                   [104.62, -54.62,  15.38], 
-                                   [104.62, -54.62,  24.62], 
-                                   [104.62, -45.38,  15.38], 
-                                   [104.62, -45.38,  24.62], 
-                                   [100.00, -52.85,  12.53], 
-                                   [100.00, -52.85,  27.47], 
-                                   [100.00, -47.15,  12.53], 
-                                   [100.00, -47.15,  27.47], 
-                                   [ 97.15, -57.47,  20.00], 
-                                   [ 97.15, -42.53,  20.00], 
-                                   [102.85, -57.47,  20.00], 
-                                   [102.85, -42.53,  20.00], 
-                                   [ 92.53, -50.00,  17.15], 
-                                   [ 92.53, -50.00,  22.85], 
-                                   [107.47, -50.00,  17.15], 
-                                   [107.47, -50.00,  22.85]])
-        init_poses = []
-        for point in polytope_point:
-            init_poses.append(point)
-        
-        self.init_poses = init_poses
+final_state = bc(jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time]))
+final_state.type[3:13] = "Free"
+final_state.type[13] = "Minimize"
 
-        ### Gate Parameters ###
-        self.n_gates = 10
-        self.gate_centers =[np.array([59.436, 0.0000, 20.0000]),
-                            np.array([92.964, -23.750, 25.5240]),
-                            np.array([92.964, -29.274, 20.0000]),
-                            np.array([92.964, -23.750, 20.0000]),
-                            np.array([130.150, -23.750, 20.0000]),
-                            np.array([152.400, -73.152, 20.0000]),
-                            np.array([92.964, -75.080, 20.0000]),
-                            np.array([92.964, -68.556, 20.0000]),
-                            np.array([59.436, -81.358, 20.0000]),
-                            np.array([22.250, -42.672, 20.0000]),
-                        ]
-        self.rot = np.array([
-                            [np.cos(np.pi / 2), np.sin(np.pi / 2), 0],
-                            [-np.sin(np.pi / 2), np.cos(np.pi / 2), 0],
-                            [0, 0, 1],
-                            ])
-        
-        self.radii = np.array([2.5, 1E-4, 2.5])
-        self.A_gate = self.rot @ np.diag(1/self.radii) @ self.rot.T
-        self.A_gate_cen = []
-        for center in self.gate_centers:
-            center[0] = center[0] + 2.5
-            center[2] = center[2] + 2.5
-            self.A_gate_cen.append(self.A_gate @ center)
-        self.nodes_per_gate = 3
-        self.gate_nodes = np.arange(self.nodes_per_gate,n,self.nodes_per_gate)
-        self.vertices = []
-        for center in self.gate_centers:
-            self.vertices.append(self.gen_vertices(center))
-        ### End Gate Parameters ### 
+initial_control = np.array([0, 0, 10, 0, 0, 0, 1])
+max_control = np.array(
+    [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time]
+)  # Upper Bound on the controls
+min_control = np.array(
+    [0, 0, 0, -18.665, -18.665, -0.55562, 0.3 * total_time]
+)  # Lower Bound on the controls
 
-        super().__post_init__()
-    
-    def g_vp(self, p_s_I, x):
-        p_s_s = self.R_sb @ qdcm(x[6:10]).T @ (p_s_I - x[0:3])
-        return jnp.linalg.norm(self.A_cone @ p_s_s, ord=self.norm_type) - (self.c.T @ p_s_s)
-    
-    def g_func(self, x, u):
-        g = 0
-        for pose in self.init_poses:
-            g += jnp.maximum(0, self.g_vp(pose, x)) ** 2
-        g += jnp.sum(jnp.maximum(0, (x[:-1] - self.max_state[:-1])) ** 2) + jnp.sum(jnp.maximum(0, (self.min_state[:-1] - x[:-1])) ** 2)
-        return g
-    
-    def g_cvx_nodal(self, x): # Nodal Convex Inequality Constraints
-        constr = []
-        for node, cen in zip(self.gate_nodes, self.A_gate_cen):
-            constr += [cp.norm(self.A_gate @ x[node][:3] - cen, "inf") <= 1]
-        return constr
-    
-    def gen_vertices(self, center):
-        """
-        Obtains the vertices of the gate.
-        """
-        vertices = []
-        vertices.append(center + self.rot @ [self.radii[0], 0, self.radii[2]])
-        vertices.append(center + self.rot @ [-self.radii[0], 0, self.radii[2]])
-        vertices.append(center + self.rot @ [-self.radii[0], 0, -self.radii[2]])
-        vertices.append(center + self.rot @ [self.radii[0], 0, -self.radii[2]])
-        return vertices
- 
-    def dynamics(self, x, u):
-        # Unpack the state and control vectors
-        v = x[3:6]
-        q = x[6:10]
-        w = x[10:13]
 
-        f = u[:3]
-        tau = u[3:]
+### View Planning Params ###
+alpha_x = 6.0  # Angle for the x-axis of Sensor Cone
+alpha_y = 6.0  # Angle for the y-axis of Sensor Cone
+A_cone = np.diag(
+    [
+        1 / np.tan(np.pi / alpha_x),
+        1 / np.tan(np.pi / alpha_y),
+        0,
+    ]
+)  # Conic Matrix in Sensor Frame
+c = jnp.array([0, 0, 1])  # Boresight Vector in Sensor Frame
+norm_type = 2  # Norm Type
+R_sb = jnp.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]])
 
-        q_norm = jnp.linalg.norm(q)
-        q = q / q_norm
+n_subs = 10
+polytope_point = np.array(
+    [
+        [95.38, -54.62, 15.38],
+        [95.38, -54.62, 24.62],
+        [95.38, -45.38, 15.38],
+        [95.38, -45.38, 24.62],
+        [104.62, -54.62, 15.38],
+        [104.62, -54.62, 24.62],
+        [104.62, -45.38, 15.38],
+        [104.62, -45.38, 24.62],
+        [100.00, -52.85, 12.53],
+        [100.00, -52.85, 27.47],
+        [100.00, -47.15, 12.53],
+        [100.00, -47.15, 27.47],
+        [97.15, -57.47, 20.00],
+        [97.15, -42.53, 20.00],
+        [102.85, -57.47, 20.00],
+        [102.85, -42.53, 20.00],
+        [92.53, -50.00, 17.15],
+        [92.53, -50.00, 22.85],
+        [107.47, -50.00, 17.15],
+        [107.47, -50.00, 22.85],
+    ]
+)
+init_poses = []
+for point in polytope_point:
+    init_poses.append(point)
 
-        # Compute the time derivatives of the state variables
-        r_dot = v
-        v_dot = (1 / self.m) * qdcm(q) @ f + jnp.array([0, 0, self.g_const])
-        q_dot = 0.5 * SSMP(w) @ q
-        w_dot = jnp.diag(1/self.J_b) @ (
-            tau - SSM(w) @ jnp.diag(self.J_b) @ w
+init_poses = init_poses
+
+### Gate Parameters ###
+
+n_gates = 10
+gate_centers = [
+    np.array([59.436, 0.0000, 20.0000]),
+    np.array([92.964, -23.750, 25.5240]),
+    np.array([92.964, -29.274, 20.0000]),
+    np.array([92.964, -23.750, 20.0000]),
+    np.array([130.150, -23.750, 20.0000]),
+    np.array([152.400, -73.152, 20.0000]),
+    np.array([92.964, -75.080, 20.0000]),
+    np.array([92.964, -68.556, 20.0000]),
+    np.array([59.436, -81.358, 20.0000]),
+    np.array([22.250, -42.672, 20.0000]),
+]
+
+radii = np.array([2.5, 1e-4, 2.5])
+A_gate = rot @ np.diag(1 / radii) @ rot.T
+A_gate_cen = []
+for center in gate_centers:
+    center[0] = center[0] + 2.5
+    center[2] = center[2] + 2.5
+    A_gate_cen.append(A_gate @ center)
+nodes_per_gate = 3
+gate_nodes = np.arange(nodes_per_gate, n, nodes_per_gate)
+vertices = []
+for center in gate_centers:
+    vertices.append(gen_vertices(center, radii))
+### End Gate Parameters ###
+
+
+def g_vp(p_s_I, x):
+    p_s_s = R_sb @ qdcm(x[6:10]).T @ (p_s_I - x[0:3])
+    return jnp.linalg.norm(A_cone @ p_s_s, ord=norm_type) - (c.T @ p_s_s)
+
+
+def g_cvx_nodal(x):  # Nodal Convex Inequality Constraints
+    constr = []
+    for node, cen in zip(gate_nodes, A_gate_cen):
+        constr += [cp.norm(A_gate @ x[node][:3] - cen, "inf") <= 1]
+    return constr
+
+
+constraints = []
+constraints.append(ctcs(lambda x, u: x[:-1] - max_state[:-1]))
+constraints.append(ctcs(lambda x, u: min_state[:-1] - x[:-1]))
+for pose in init_poses:
+    constraints.append(ctcs(lambda x, u: g_vp(pose, x)))
+constraints.append(nodal(lambda x, u: g_cvx_nodal(x)))
+
+
+def dynamics(x, u):
+    m = 1.0  # Mass of the drone
+    g_const = -9.18
+    J_b = jnp.array([1.0, 1.0, 1.0])  # Moment of Inertia of the drone
+
+    # Unpack the state and control vectors
+    v = x[3:6]
+    q = x[6:10]
+    w = x[10:13]
+
+    f = u[:3]
+    tau = u[3:]
+
+    q_norm = jnp.linalg.norm(q)
+    q = q / q_norm
+
+    # Compute the time derivatives of the state variables
+    r_dot = v
+    v_dot = (1 / m) * qdcm(q) @ f + jnp.array([0, 0, g_const])
+    q_dot = 0.5 * SSMP(w) @ q
+    w_dot = jnp.diag(1 / J_b) @ (tau - SSM(w) @ jnp.diag(J_b) @ w)
+    return jnp.hstack([r_dot, v_dot, q_dot, w_dot])
+
+
+u_bar = np.repeat(np.expand_dims(initial_control, axis=0), n, axis=0)
+s = total_time
+u_bar[:, -1] = np.repeat(s, n)
+
+x_bar = np.repeat(np.expand_dims(np.zeros_like(max_state), axis=0), n, axis=0)
+x_bar[:, :-1] = np.linspace(initial_state.value, final_state.value, n)
+
+i = 0
+origins = [initial_state.value[:3]]
+ends = []
+for center in gate_centers:
+    origins.append(center)
+    ends.append(center)
+ends.append(final_state.value[:3])
+gate_idx = 0
+for _ in range(n_gates + 1):
+    for k in range(n // (n_gates + 1)):
+        x_bar[i, :3] = origins[gate_idx] + (k / (n // (n_gates + 1))) * (
+            ends[gate_idx] - origins[gate_idx]
         )
-        t_dot = 1
-        return jnp.hstack([r_dot, v_dot, q_dot, w_dot])
-    
-class Initial_Guess():
-    def __init__(self, dy):
-        self.dy = dy
-        self.x_bar, self.u_bar = self.initial_guess(dy)
-    
-    def initial_guess(self, dy):
-        u_bar = np.repeat(np.expand_dims(dy.initial_control, axis = 0), n, axis = 0)
-        s = total_time
-        u_bar[:,-1] = np.repeat(s, n)
+        i += 1
+    gate_idx += 1
 
-        x_bar = np.repeat(np.expand_dims(np.zeros_like(dy.max_state), axis=0), n, axis = 0)
-        x_bar[:,:-1] = np.linspace(dy.initial_state['value'], dy.final_state['value'], n)
+R_sb = R_sb  # Sensor to body frame
+b = R_sb @ np.array([0, 1, 0])
+for k in range(n):
+    kp = []
+    for pose in init_poses:
+        kp.append(pose)
+    kp = np.mean(kp, axis=0)
+    a = kp - x_bar[k, :3]
+    # Determine the direction cosine matrix that aligns the z-axis of the sensor frame with the relative position vector
+    q_xyz = np.cross(b, a)
+    q_w = np.sqrt(la.norm(a) ** 2 + la.norm(b) ** 2) + np.dot(a, b)
+    q_no_norm = np.hstack((q_w, q_xyz))
+    q = q_no_norm / la.norm(q_no_norm)
+    x_bar[k, 6:10] = q
 
-        i = 0
-        origins = [dy.initial_state['value'][:3]]
-        ends = []
-        for center in  dy.gate_centers:
-            origins.append(center)
-            ends.append(center)
-        ends.append(dy.final_state['value'][:3])
-        gate_idx = 0
-        for _ in range(dy.n_gates + 1):
-            for k in range(n//(dy.n_gates + 1)):
-                x_bar[i,:3] = origins[gate_idx] + (k/(n//(dy.n_gates + 1))) * (ends[gate_idx] - origins[gate_idx])
-                i += 1
-            gate_idx += 1
-        
-        R_sb = dy.R_sb # Sensor to body frame
-        b = R_sb @ np.array([0, 1, 0])
-        for k in range(n):
-            kp = []
-            for pose in dy.init_poses:
-                kp.append(pose)
-            kp = np.mean(kp, axis = 0)
-            a = kp - x_bar[k,:3]
-            # Determine the direction cosine matrix that aligns the z-axis of the sensor frame with the relative position vector
-            q_xyz = np.cross(b, a)
-            q_w = np.sqrt(la.norm(a) ** 2 + la.norm(b) ** 2) + np.dot(a,b)
-            q_no_norm = np.hstack((q_w, q_xyz))
-            q = q_no_norm / la.norm(q_no_norm)
-            x_bar[k,6:10] = q
-        return x_bar, u_bar
-
-dy = DrVpPolytopeDynamics()
-initial_guess = Initial_Guess(dy)
-
-sim = SimConfig(
-    x_bar = initial_guess.x_bar,
-    u_bar = initial_guess.u_bar,
-    initial_state=dy.initial_state,  # Initial State
-    final_state=dy.final_state,  # Final State
-    initial_control=dy.initial_control,  # Initial Control
-    max_state=dy.max_state,  # Upper Bound on the states
-    min_state=dy.min_state,  # Lower Bound on the states
-    max_control=dy.max_control,  # Upper Bound on the controls
-    min_control=dy.min_control,  # Lower Bound on the controls
-    total_time=total_time,
-    n_states=len(dy.max_state),  # Number of States
-    dt=0.01
+problem = TrajOptProblem(
+    dynamics=dynamics,
+    constraints=constraints,
+    N=n,
+    time_init=total_time,
+    x_guess=x_bar,
+    u_guess=u_bar,
+    initial_state=initial_state,  # Initial State
+    final_state=final_state,
+    initial_control=initial_control,
+    x_max=max_state,
+    x_min=min_state,
+    u_max=max_control,  # Upper Bound on the controls
+    u_min=min_control,  # Lower Bound on the controls
 )
-scp = ScpConfig(
-    k_max=50,
-    n=n,
-    w_tr=2E0, #2e0,  # Weight on the Trust Reigon
-    lam_cost=2E-1, #0e-1,  # Weight on the Minimal Time Objective
-    lam_vc=1E1, #1e1,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
-    ep_tr=1e-5,  # Trust Region Tolerance
-    ep_vb=1e-4,  # Virtual Control Tolerance
-    ep_vc=1e-8,  # Virtual Control Tolerance for CTCS
-    cost_drop=10,  # SCP iteration to relax minimal final time objective
-    cost_relax=0.8,  # Minimal Time Relaxation Factor
-    w_tr_adapt=1.2,  # Trust Region Adaptation Factor
-    w_tr_max_scaling_factor=1e2,  # Maximum Trust Region Weight
-)
-params = Config(sim=sim, scp=scp,veh=dy)
+
+problem.params.sim.dt = 0.01
+
+problem.params.scp.k_max = 50
+problem.params.scp.w_tr = 2e0  # 2e0,  # Weight on the Trust Reigon
+problem.params.scp.lam_cost = 2e-1  # 0e-1,  # Weight on the Minimal Time Objective
+problem.params.scp.lam_vc = 1e1  # 1e1,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
+problem.params.scp.ep_tr = 1e-5  # Trust Region Tolerance
+problem.params.scp.ep_vb = 1e-4  # Virtual Control Tolerance
+problem.params.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS
+problem.params.scp.cost_drop = 10  # SCP iteration to relax minimal final time objective
+problem.params.scp.cost_relax = 0.8  # Minimal Time Relaxation Factor
+problem.params.scp.w_tr_adapt = 1.2  # Trust Region Adaptation Factor
+problem.params.scp.w_tr_max_scaling_factor = 1e2  # Maximum Trust Region Weight
+
+problem.params.veh.n_subs = n_subs
+problem.params.veh.alpha_x = alpha_x
+problem.params.veh.alpha_y = alpha_y
+problem.params.veh.R_sb = R_sb
+problem.params.veh.init_poses = init_poses
+problem.params.veh.A_cone = A_cone
+problem.params.veh.norm_type = norm_type
+problem.params.veh.vertices = vertices

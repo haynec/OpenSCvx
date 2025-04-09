@@ -3,7 +3,7 @@ import numpy.linalg as la
 import scipy.linalg as sla
 import cvxpy as cp
 from cvxpygen import cpg
-from openscvx.config import Config
+# from openscvx.config import Config
 from cvxpygen import cpg
 
 
@@ -54,6 +54,11 @@ def OCP(params):
     #############
     # CONSTRAINTS
     #############
+    if params.veh.constraints_nodal:
+        for constraint in params.veh.constraints_nodal:
+            constr += constraint(x_nonscaled, u_nonscaled)
+
+    # TODO: (norrisg) remove this
     if hasattr(params.veh, 'g_cvx_nodal'):
         constr += params.veh.g_cvx_nodal(x_nonscaled) # Nodal Convex Inequality Constraints
     
@@ -68,13 +73,13 @@ def OCP(params):
     
 
     for i in range(params.sim.n_states-1):
-        if params.sim.initial_state['type'][i] == 'Fix':
-            constr += [x_nonscaled[0][i] == params.sim.initial_state['value'][i]]  # Initial Boundary Conditions
-        if params.sim.final_state['type'][i] == 'Fix':
-            constr += [x_nonscaled[-1][i] == params.sim.final_state['value'][i]]   # Final Boundary Conditions
-        if params.sim.initial_state['type'][i] == 'Minimize':
+        if params.sim.initial_state.type[i] == 'Fix':
+            constr += [x_nonscaled[0][i] == params.sim.initial_state.value[i]]  # Initial Boundary Conditions
+        if params.sim.final_state.type[i] == 'Fix':
+            constr += [x_nonscaled[-1][i] == params.sim.final_state.value[i]]   # Final Boundary Conditions
+        if params.sim.initial_state.type[i] == 'Minimize':
             cost += lam_cost * x_nonscaled[0][i]
-        if params.sim.final_state['type'][i] == 'Minimize':
+        if params.sim.final_state.type[i] == 'Minimize':
             cost += lam_cost * x_nonscaled[-1][i]
 
     if params.scp.uniform_time_grid:
