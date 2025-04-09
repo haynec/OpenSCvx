@@ -34,4 +34,4 @@ with open('results/results.pickle', 'wb') as f:
 with open('results/results.pickle', 'rb') as f:
     results = pickle.load(f) 
 
-# plot_animation(results, params)
+# plot_animation(results, problem.params)
