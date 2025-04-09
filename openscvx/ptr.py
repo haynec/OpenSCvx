@@ -173,6 +173,7 @@ def PTR_main(params):
     result = dict(
         converged = k <= params.scp.k_max,
         tof = t[-1],
+        t_full = t_full,
         drone_state = x_full,
         drone_controls_full = u_full.T,
         drone_positions = x_full[:,:3],
