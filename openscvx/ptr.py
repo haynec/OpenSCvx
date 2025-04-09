@@ -20,6 +20,8 @@ warnings.filterwarnings("ignore")
 def PTR_init(params: Config) -> tuple[cp.Problem, AugmentedDynamics]:
     intro()
 
+    t_0_while = time.time()
+
     ocp = OCP(params) # Initialize the problem
 
     if params.sim.cvxpygen:
@@ -34,6 +36,8 @@ def PTR_init(params: Config) -> tuple[cp.Problem, AugmentedDynamics]:
     # Solve a dumb problem to intilize DPP and JAX jacobians
     _ = PTR_subproblem(cpg_solve, params.sim.x_bar, params.sim.u_bar, aug_dy, ocp, params)
 
+    t_f_while = time.time()
+    print("Total Initialization Time: ", t_f_while - t_0_while)
     return ocp, aug_dy, cpg_solve
 
 def PTR_main(params: Config, prob: cp.Problem, aug_dy: AugmentedDynamics, cpg_solve) -> dict:
@@ -149,25 +153,12 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: AugmentedDynamics, cpg_so
     return result
 
 def PTR_post(params: Config, result: dict, aug_dy: AugmentedDynamics) -> dict:
+    t_0_while = time.time()
     x = result['state_scp']
     u = result['control_scp']
     scp_trajs = result['scp_trajs']
 
     t = np.array(aug_dy.s_to_t(u, params))
-
-    print("Total CTCS Constraint Violation:", x_full[-1, params.veh.y_inds])
-    i = 0
-    cost = np.zeros_like(x[-1, i])
-    for type in params.veh.initial_state.type:
-        if type == 'Minimize':
-            cost += x[0, i]
-        i +=1
-    i = 0
-    for type in params.veh.final_state.type:
-        if type == 'Minimize':
-            cost += x[-1, i]
-        i +=1
-    print("Cost: ", cost)
 
     u_lam = u_lambda(u, t, params)
     t_full = np.arange(0, t[-1], params.sim.dt)
@@ -183,6 +174,20 @@ def PTR_post(params: Config, result: dict, aug_dy: AugmentedDynamics) -> dict:
     else:
         x_sub_sen = []
         x_sub_sen_node = []
+
+    print("Total CTCS Constraint Violation:", x_full[-1, params.veh.y_inds])
+    i = 0
+    cost = np.zeros_like(x[-1, i])
+    for type in params.veh.initial_state.type:
+        if type == 'Minimize':
+            cost += x[0, i]
+        i +=1
+    i = 0
+    for type in params.veh.final_state.type:
+        if type == 'Minimize':
+            cost += x[-1, i]
+        i +=1
+    print("Cost: ", cost)
     
     scp_trajs_interp = scp_traj_interp(scp_trajs, params)\
 
@@ -195,7 +200,11 @@ def PTR_post(params: Config, result: dict, aug_dy: AugmentedDynamics) -> dict:
         sub_positions_sen_node = x_sub_sen_node,
         scp_interp = scp_trajs_interp,
     )
-    return result.update(more_result)
+
+    t_f_while = time.time()
+    print("Total Post Processing Time: ", t_f_while - t_0_while)
+    result.update(more_result)
+    return result
 
 
 def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
