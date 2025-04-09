@@ -281,9 +281,9 @@ def intro():
                                     | |                                       
                                     |_|                                       
 ---------------------------------------------------------------------------------------------------------
-                                        Author: Chris Hayner
-                                        Autonomous Controls Laboratory
-                                        University of Washington
+                                Author: Chris Hayner and Griffin Norris
+                                    Autonomous Controls Laboratory
+                                       University of Washington
 ---------------------------------------------------------------------------------------------------------
 '''
     print(ascii_art)

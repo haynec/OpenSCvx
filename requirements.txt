@@ -1,6 +1,7 @@
 cvxpy
 cvxpygen
 qoco
+qocogen
 scipy
 numpy
 jax
