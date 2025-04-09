@@ -167,15 +167,17 @@ problem.params.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS
 problem.params.scp.w_tr_adapt = 1.3  # Trust Region Adaptation Factor
 problem.params.scp.w_tr_max_scaling_factor = 1e3  # Maximum Trust Region Weight
 
-problem.params.veh.n_subs = n_subs
-problem.params.veh.alpha_x = alpha_x
-problem.params.veh.alpha_y = alpha_y
 problem.params.veh.R_sb = R_sb
 problem.params.veh.init_pose = init_pose
-problem.params.veh.min_range = min_range
-problem.params.veh.max_range = max_range
-problem.params.veh.A_cone = A_cone
-problem.params.veh.norm_type = norm_type
 problem.params.veh.get_kp_pose = get_kp_pose
 
-plotting_dict = dict()
+plotting_dict = dict(
+    n_subs=n_subs,
+    alpha_x=alpha_x,
+    alpha_y=alpha_y,
+    R_sb=R_sb,
+    init_poses=init_pose,
+    norm_type=norm_type,
+    min_range=min_range,
+    max_range=max_range,
+)
