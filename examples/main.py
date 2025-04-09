@@ -34,5 +34,6 @@ with open('results/results.pickle', 'wb') as f:
 with open('results/results.pickle', 'rb') as f:
     results = pickle.load(f) 
 
+# results = problem.post_process(results)
 # results.update(plotting_dict)
 # plot_animation(results, problem.params)
