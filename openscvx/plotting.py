@@ -1505,20 +1505,20 @@ def plot_animation(result: dict,
 
     fig.show()
 
-def plot_scp_animation(result_ctcs: dict,
+def plot_scp_animation(result: dict,
                        params = None,
                        path=""):
-    tof = result_ctcs["tof"]
+    tof = result["tof"]
     title = f'SCP Simulation: {tof} seconds'
-    drone_positions = result_ctcs["state"][:, :3]
-    drone_attitudes = result_ctcs["state"][:, 6:10]
-    drone_forces = result_ctcs["control"][:, :3]
-    scp_interp_trajs = result_ctcs["scp_interp"]
-    scp_ctcs_trajs = result_ctcs["scp_trajs"]
-    scp_multi_shoot = result_ctcs["scp_multi_shoot"]
+    drone_positions = result["state"][:, :3]
+    drone_attitudes = result["state"][:, 6:10]
+    drone_forces = result["control"][:, :3]
+    scp_interp_trajs = result["scp_interp"]
+    scp_ctcs_trajs = result["scp_trajs"]
+    scp_multi_shoot = result["scp_multi_shoot"]
     # obstacles = result_ctcs["obstacles"]
     # gates = result_ctcs["gates"]
-    subs_positions = result_ctcs["sub_positions"]
+    subs_positions = result["sub_positions"]
     fig = go.Figure(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='gray', width = 2), name='SCP Iterations'))
     for j in range(200):
         fig.add_trace(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='gray', width = 2)))
@@ -1597,7 +1597,7 @@ def plot_scp_animation(result_ctcs: dict,
     fig.frames = frames 
 
     i = 1
-    for center, axes, radius in zip(result_ctcs['obstacles_centers'], result_ctcs['obstacles_axes'], result_ctcs['obstacles_radii']):
+    for center, axes, radius in zip(result['obstacles_centers'], result['obstacles_axes'], result['obstacles_radii']):
         n = 20
         # Generate points on the unit sphere
         u = np.linspace(0, 2 * np.pi, n)
