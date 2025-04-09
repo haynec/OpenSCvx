@@ -4,7 +4,7 @@ import cvxpy as cp
 
 from openscvx.trajoptproblem import TrajOptProblem
 from openscvx.constraints.boundary import BoundaryConstraint as bc
-from openscvx.constraints.decorators import ctcs
+from openscvx.constraints.decorators import ctcs, nodal
 from openscvx.utils import qdcm, SSMP, SSM, rot, gen_vertices
 
 n = 22  # Number of Nodes
@@ -66,17 +66,19 @@ for center in gate_centers:
     vertices.append(gen_vertices(center, radii))
 ### End Gate Parameters ###
 
-constraints = [
-    ctcs(lambda x, u: (x[:-1] - max_state[:-1])),
-    ctcs(lambda x, u: (min_state[:-1] - x[:-1])),
-]
-
 
 def g_cvx_nodal(x):  # Nodal Convex Inequality Constraints
     constr = []
     for node, cen in zip(gate_nodes, A_gate_cen):
         constr += [cp.norm(A_gate @ x[node][:3] - cen, "inf") <= 1]
     return constr
+
+
+constraints = [
+    ctcs(lambda x, u: (x[:-1] - max_state[:-1])),
+    ctcs(lambda x, u: (min_state[:-1] - x[:-1])),
+    nodal(lambda x, u: g_cvx_nodal(x)),
+]
 
 
 def dynamics(x, u):
@@ -151,5 +153,4 @@ problem.params.scp.cost_relax = 0.8  # Minimal Time Relaxation Factor
 problem.params.scp.w_tr_adapt = 1.4  # Trust Region Adaptation Factor
 problem.params.scp.w_tr_max_scaling_factor = 1e2  # Maximum Trust Region Weight
 
-problem.params.veh.g_cvx_nodal = g_cvx_nodal
 problem.params.veh.vertices = vertices

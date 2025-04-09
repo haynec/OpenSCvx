@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from openscvx.trajoptproblem import TrajOptProblem
 from openscvx.utils import qdcm, SSMP, SSM, rot, gen_vertices
 from openscvx.constraints.boundary import BoundaryConstraint as bc
-from openscvx.constraints.decorators import ctcs
+from openscvx.constraints.decorators import ctcs, nodal
 
 n = 33  # Number of Nodes
 total_time = 40.0  # Total time for the simulation
@@ -93,18 +93,19 @@ def g_vp(p_s_I, x):
     return jnp.linalg.norm(A_cone @ p_s_s, ord=norm_type) - (c.T @ p_s_s)
 
 
-constraints = []
-constraints.append(ctcs(lambda x, u: x[:-1] - max_state[:-1]))
-constraints.append(ctcs(lambda x, u: min_state[:-1] - x[:-1]))
-for pose in init_poses:
-    constraints.append(ctcs(lambda x, u: g_vp(pose, x)))
-
-
 def g_cvx_nodal(x):  # Nodal Convex Inequality Constraints
     constr = []
     for node, cen in zip(gate_nodes, A_gate_cen):
         constr += [cp.norm(A_gate @ x[node][:3] - cen, "inf") <= 1]
     return constr
+
+
+constraints = []
+constraints.append(ctcs(lambda x, u: x[:-1] - max_state[:-1]))
+constraints.append(ctcs(lambda x, u: min_state[:-1] - x[:-1]))
+for pose in init_poses:
+    constraints.append(ctcs(lambda x, u: g_vp(pose, x)))
+constraints.append(nodal(lambda x, u: g_cvx_nodal(x)))
 
 
 def dynamics(x, u):
@@ -204,5 +205,4 @@ problem.params.veh.R_sb = R_sb
 problem.params.veh.init_poses = init_poses
 problem.params.veh.A_cone = A_cone
 problem.params.veh.norm_type = norm_type
-problem.params.veh.g_cvx_nodal = g_cvx_nodal
 problem.params.veh.vertices = vertices
