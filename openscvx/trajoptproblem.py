@@ -4,6 +4,7 @@ from typing import List
 from openscvx.config import ScpConfig, SimConfig, Config
 from openscvx.dynamics import Dynamics
 from openscvx.constraints.boundary import BoundaryConstraint
+# from openscvx.constraints.custom import CustomConstraint
 from openscvx.ptr import PTR_main
 
 
@@ -12,7 +13,7 @@ class TrajOptProblem:
     def __init__(
         self,
         dynamics: callable,
-        ctcs_constraints: List[callable],
+        constraints: List[callable],
         N: int,
         time_init: float,
         x_guess: jnp.ndarray,
@@ -64,9 +65,16 @@ class TrajOptProblem:
                 self.scp.n == N
             ), "Number of segments must be the same as in the config"
 
+        self.constraints_ctcs = []
+        self.constraints_nodal = []
+
+        for constraint in constraints:
+            if constraint.constraint_type == "ctcs":
+                self.constraints_ctcs.append(lambda x,u: jnp.sum(jnp.maximum(0, constraint(x, u)) ** 2))
+
         veh = Dynamics(
             dynamics,
-            ctcs_constraints,
+            self.constraints_ctcs,
             initial_state=initial_state,
             final_state=final_state,
         )
