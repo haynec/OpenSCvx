@@ -202,10 +202,6 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: AugmentedDynamics, cpg_so
         sub_max_vio = None, #sub_max_vio,
         sub_direc_vio = None, #sub_direc_vio,
         state_bound_vio = None, #state_bound_vio,
-        max_iteration_reached = k >= params.scp.k_max,
-        trust_region_converged = J_tr < params.scp.ep_tr,
-        virtual_buffer_converged = J_vb < params.scp.ep_vb,
-        virtual_control_converged = J_vc < params.scp.ep_vc
     )
     return result
 
