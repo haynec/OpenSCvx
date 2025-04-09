@@ -6,7 +6,7 @@ from openscvx.dynamics import Dynamics
 from openscvx.constraints.boundary import BoundaryConstraint
 
 # from openscvx.constraints.custom import CustomConstraint
-from openscvx.ptr import PTR_main
+from openscvx.ptr import PTR_init, PTR_main, PTR_post
 
 
 # TODO: (norrisg) Decide whether to have constraints`, `cost`, alongside `dynamics`, ` etc.
@@ -99,9 +99,14 @@ class TrajOptProblem:
             veh=veh,
         )
 
+        self.ocp, self.aug_dy, self.cpg_solve = PTR_init(self.params)
+
     def solve(self):
         # Ensure parameter sizes and normalization are correct
         self.params.scp.__post_init__()
         self.params.sim.__post_init__()
 
-        return PTR_main(self.params)
+        return PTR_main(self.params, self.ocp, self.aug_dy, self.cpg_solve)
+
+    def post_process(self, result):
+        return PTR_post(self.params, result, self.aug_dy)

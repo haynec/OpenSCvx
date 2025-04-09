@@ -107,7 +107,8 @@ problem = TrajOptProblem(
 
 problem.params.sim.dt = 0.01
 
-# Manually set the parameters for the obstacles
-problem.params.veh.radius = radius
-problem.params.veh.obstacle_centers = obstacle_centers
-problem.params.veh.axes = axes
+plotting_dict = dict(
+    obstacles_centers=obstacle_centers,
+    obstacles_axes=axes,
+    obstacles_radii=radius,
+)

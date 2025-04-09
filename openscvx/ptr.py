@@ -17,16 +17,36 @@ from openscvx.plotting import plot_initial_guess
 import warnings
 warnings.filterwarnings("ignore")
 
-def PTR_main(params: Config):
+def PTR_init(params: Config) -> tuple[cp.Problem, AugmentedDynamics]:
     intro()
+
+    t_0_while = time.time()
+
+    ocp = OCP(params) # Initialize the problem
+
+    if params.sim.cvxpygen:
+        from solver.cpg_solver import cpg_solve
+        with open('solver/problem.pickle', 'rb') as f:
+            prob = pickle.load(f)
+    else:
+        cpg_solve = None
+
+    aug_dy = AugmentedDynamics(params)
+
+    # Solve a dumb problem to intilize DPP and JAX jacobians
+    _ = PTR_subproblem(cpg_solve, params.sim.x_bar, params.sim.u_bar, aug_dy, ocp, params)
+
+    t_f_while = time.time()
+    print("Total Initialization Time: ", t_f_while - t_0_while)
+    return ocp, aug_dy, cpg_solve
+
+def PTR_main(params: Config, prob: cp.Problem, aug_dy: AugmentedDynamics, cpg_solve) -> dict:
     J_vb = 1E2
     J_vc = 1E2
     J_tr = 1E2
 
     x_bar = params.sim.x_bar
     u_bar = params.sim.u_bar
-
-    prob = OCP(params) # Initialize the problem
 
     scp_trajs = [x_bar]
     scp_controls = [u_bar]
@@ -42,18 +62,6 @@ def PTR_main(params: Config):
     print(colored("---------------------------------------------------------------------------------------------------------"))
 
     k = 1
-
-    if params.sim.cvxpygen:
-        from solver.cpg_solver import cpg_solve
-        with open('solver/problem.pickle', 'rb') as f:
-            prob = pickle.load(f)
-    else:
-        cpg_solve = None
-
-    aug_dy = AugmentedDynamics(params)
-
-    # Solve a dumb problem to intilize DPP and JAX jacobians
-    _ = PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params)
 
     if params.sim.profiling:
         import cProfile
@@ -82,7 +90,7 @@ def PTR_main(params: Config):
             params.scp.lam_cost = params.scp.lam_cost * params.scp.cost_relax
         
         # remove bottom labels and line
-        if not k == 0:
+        if not k == 1:
             sys.stdout.write('\x1b[1A\x1b[2K\x1b[1A\x1b[2K')
         
         if prob_stat[3] == 'f':
@@ -128,6 +136,30 @@ def PTR_main(params: Config):
     
     t = np.array(aug_dy.s_to_t(u, params))
 
+    params.sim.total_time = t[-1]
+
+    result = dict(
+        converged = k <= params.scp.k_max,
+        tof = t[-1],
+        control_scp = u,
+        state_scp = x,
+        scp_trajs = scp_trajs,
+        scp_controls = scp_controls,
+        scp_multi_shoot = V_multi_shoot_traj,
+        J_tr_vec = J_tr_vec,
+        J_vb_vec = J_vb_vec,
+        J_vc_vec = J_vc_vec,
+    )
+    return result
+
+def PTR_post(params: Config, result: dict, aug_dy: AugmentedDynamics) -> dict:
+    t_0_while = time.time()
+    x = result['state_scp']
+    u = result['control_scp']
+    scp_trajs = result['scp_trajs']
+
+    t = np.array(aug_dy.s_to_t(u, params))
+
     u_lam = u_lambda(u, t, params)
     t_full = np.arange(0, t[-1], params.sim.dt)
 
@@ -142,7 +174,7 @@ def PTR_main(params: Config):
     else:
         x_sub_sen = []
         x_sub_sen_node = []
-    
+
     print("Total CTCS Constraint Violation:", x_full[-1, params.veh.y_inds])
     i = 0
     cost = np.zeros_like(x[-1, i])
@@ -156,58 +188,24 @@ def PTR_main(params: Config):
             cost += x[-1, i]
         i +=1
     print("Cost: ", cost)
+    
+    scp_trajs_interp = scp_traj_interp(scp_trajs, params)\
 
-    params.sim.total_time = t[-1]
-
-    scp_trajs_interp = scp_traj_interp(scp_trajs, params)
-
-    if hasattr(params.veh, 'obstacle_centers'):
-        centers = params.veh.obstacle_centers
-        axes = params.veh.axes
-        radii = params.veh.radius
-    else:
-        centers = []
-        axes = []
-        radii = []
-
-
-    result = dict(
-        converged = k <= params.scp.k_max,
-        tof = t[-1],
+    more_result = dict(
         t_full = t_full,
-        drone_state = x_full,
-        drone_controls_full = u_full.T,
-        drone_positions = x_full[:,:3],
-        drone_velocities = x_full[:,3:6],
-        drone_attitudes = x_full[:,6:10],
-        drone_forces = u_full[:,:3],
-        drone_controls = u,
-        drone_state_scp = x,
+        state = x_full,
+        control = u_full,
         sub_positions = x_sub_full,
         sub_positions_sen = x_sub_sen,
         sub_positions_sen_node = x_sub_sen_node,
-        scp_trajs = scp_trajs,
-        scp_controls = scp_controls,
-        scp_multi_shoot = V_multi_shoot_traj,
-        obstacles_centers = centers,
-        obstacles_axes = axes,
-        obstacles_radii = radii,
         scp_interp = scp_trajs_interp,
-        J_tr_vec = J_tr_vec,
-        J_vb_vec = J_vb_vec,
-        J_vc_vec = J_vc_vec,
-        obs_vio = None, #obs_vio,
-        sub_vp_vio = None, #sub_vp_vio,
-        sub_min_vio = None, #sub_min_vio,
-        sub_max_vio = None, #sub_max_vio,
-        sub_direc_vio = None, #sub_direc_vio,
-        state_bound_vio = None, #state_bound_vio,
-        max_iteration_reached = k >= params.scp.k_max,
-        trust_region_converged = J_tr < params.scp.ep_tr,
-        virtual_buffer_converged = J_vb < params.scp.ep_vb,
-        virtual_control_converged = J_vc < params.scp.ep_vc
     )
+
+    t_f_while = time.time()
+    print("Total Post Processing Time: ", t_f_while - t_0_while)
+    result.update(more_result)
     return result
+
 
 def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     J_vb_vec = []

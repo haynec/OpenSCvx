@@ -31,42 +31,51 @@ def frame_args(duration):
             }
 
 def plot_constraint_violation(result, params: Config):
-    obs_vio = result["obs_vio"]
-
-    sub_vp_vio = result["sub_vp_vio"]
-    sub_min_vio = result["sub_min_vio"]
-    sub_max_vio = result["sub_max_vio"]
-    sub_direc_vio = result["sub_direc_vio"]
-
-    state_bound_vio = result["state_bound_vio"]
-
     fig = make_subplots(rows=2, cols=3, subplot_titles=(r'$\text{Obstacle Violation}$', r'$\text{Sub VP Violation}$', r'$\text{Sub Min Violation}$', r'$\text{Sub Max Violation}$', r'$\text{Sub Direc Violation}$', r'$\text{State Bound Violation}$', r'$\text{Total Violation}$'))
-
     fig.update_layout(template='plotly_dark', title=r'$\text{Constraint Violation}$')
 
-    for i in range(obs_vio.shape[0]):
-        color = f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})'
-        fig.add_trace(go.Scatter(y=obs_vio[i], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=1, col=1)
-    i = 0
+    if "obs_vio" in result:
+        obs_vio = result["obs_vio"]
+        for i in range(obs_vio.shape[0]):
+            color = f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})'
+            fig.add_trace(go.Scatter(y=obs_vio[i], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=1, col=1)
+        i = 0
+    else:
+        print("'obs_vio' not found in result dictionary.")
 
     # Make names of each state in the state vector
     state_names = ['x', 'y', 'z', 'vx', 'vy', 'vz', 'q0', 'q1', 'q2', 'q3', 'wx', 'wy', 'wz', 'ctcs']
 
-    for i in range(sub_vp_vio.shape[0]):
-        color = f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})'
-        fig.add_trace(go.Scatter(y=sub_vp_vio[i], mode='lines', showlegend=True, name = 'LoS ' + str(i) + ' Error', line=dict(color=color, width = 2)), row=1, col=2)
-        if params.vp.tracking:
-            fig.add_trace(go.Scatter(y=sub_min_vio[i], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=1, col=3)
-            fig.add_trace(go.Scatter(y=sub_max_vio[i], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=2, col=1)
-        else:
-            fig.add_trace(go.Scatter(y=[], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=1, col=3)
-            fig.add_trace(go.Scatter(y=[], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=2, col=1)
-    i = 0
+    if "sub_vp_vio" in result and "sub_min_vio" in result and "sub_max_vio" in result:
+        sub_vp_vio = result["sub_vp_vio"]
+        sub_min_vio = result["sub_min_vio"]
+        sub_max_vio = result["sub_max_vio"]
+        for i in range(sub_vp_vio.shape[0]):
+            color = f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})'
+            fig.add_trace(go.Scatter(y=sub_vp_vio[i], mode='lines', showlegend=True, name = 'LoS ' + str(i) + ' Error', line=dict(color=color, width = 2)), row=1, col=2)
+            if params.vp.tracking:
+                fig.add_trace(go.Scatter(y=sub_min_vio[i], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=1, col=3)
+                fig.add_trace(go.Scatter(y=sub_max_vio[i], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=2, col=1)
+            else:
+                fig.add_trace(go.Scatter(y=[], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=1, col=3)
+                fig.add_trace(go.Scatter(y=[], mode='lines', showlegend=False, line=dict(color=color, width = 2)), row=2, col=1)
+        i = 0
+    else:
+        print("'sub_vp_vio', 'sub_min_vio', or 'sub_max_vio' not found in result dictionary.")
     
-    # fig.add_trace(go.Scatter(y=sub_direc_vio, mode='lines', showlegend=False, line=dict(color='red', width = 2)), row=2, col=2)
-    for i in range(state_bound_vio.shape[0]):
-        color = f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})'
-        fig.add_trace(go.Scatter(y=state_bound_vio[:,i], mode='lines', showlegend=True, name = state_names[i] + ' Error', line=dict(color=color, width = 2)), row=2, col=3)
+    if "sub_direc_vio" in result:
+        sub_direc_vio = result["sub_direc_vio"]
+        # fig.add_trace(go.Scatter(y=sub_direc_vio, mode='lines', showlegend=False, line=dict(color='red', width = 2)), row=2, col=2)
+    else:
+        print("'sub_direc_vio' not found in result dictionary.")
+
+    if "state_bound_vio" in result:
+        state_bound_vio = result["state_bound_vio"]
+        for i in range(state_bound_vio.shape[0]):
+            color = f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})'
+            fig.add_trace(go.Scatter(y=state_bound_vio[:,i], mode='lines', showlegend=True, name = state_names[i] + ' Error', line=dict(color=color, width = 2)), row=2, col=3)
+    else:
+        print("'state_bound_vio' not found in result dictionary.")
 
     fig.show()
 
@@ -219,7 +228,10 @@ def plot_camera_animation(result: dict, params, path="") -> None:
         fig.add_trace(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='blue', width=2)))
 
     # Create a cone plot
-    A = np.diag([1 / np.tan(np.pi / params.veh.alpha_y), 1 / np.tan(np.pi / params.veh.alpha_x)])  # Conic Matrix
+    if "alpha_x" in result and "alpha_y" in result:
+        A = np.diag([1 / np.tan(np.pi / result["alpha_y"]), 1 / np.tan(np.pi / result["alpha_x"])])  # Conic Matrix
+    else:
+        raise ValueError("`alpha_x` and `alpha_y` not found in result dictionary.")
 
     # Meshgrid
     range_limit = 10 if hasattr(params.veh, 'get_kp_pose') else 80
@@ -228,7 +240,10 @@ def plot_camera_animation(result: dict, params, path="") -> None:
     X, Y = np.meshgrid(x, y)
 
     # Define the condition for the second order cone
-    z = np.array([np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord=(np.inf if params.veh.norm_type == 'inf' else params.veh.norm_type)) for x_val in x for y_val in y])
+    if "norm_type" in result:
+        z = np.array([np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord=(np.inf if result["norm_type"] == 'inf' else result["norm_type"])) for x_val in x for y_val in y])
+    else:
+        raise ValueError("`norm_type` not found in result dictionary.")
 
     # Extract the points from the meshgrid
     X, Y, Z = X.flatten(), Y.flatten(), z.flatten()
@@ -651,7 +666,10 @@ def plot_conic_view_animation(result: dict, params, path="") -> None:
 
 
     # Create a cone plot
-    A = np.diag([1 / np.tan(np.pi / params.veh.alpha_y), 1 / np.tan(np.pi / params.veh.alpha_x)])  # Conic Matrix
+    if "alpha_x" in result and "alpha_y" in result:
+        A = np.diag([1 / np.tan(np.pi / result["alpha_y"]), 1 / np.tan(np.pi / result["alpha_x"])])  # Conic Matrix
+    else:
+        raise ValueError("`alpha_x` and `alpha_y` not found in result dictionary.")
 
     # Meshgrid
     if hasattr(params.veh, 'get_kp_pose'):
@@ -665,45 +683,48 @@ def plot_conic_view_animation(result: dict, params, path="") -> None:
  
     X, Y = np.meshgrid(x, y)
 
-    # Define the condition for the second order cone
-    z = []
-    for x_val in x:
-        for y_val in y:
-            if params.veh.norm_type == 'inf':
-                z.append(np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord = np.inf))
-            else:
-                z.append(np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord = params.veh.norm_type))
-    z = np.array(z)
+    if "norm_type" in result:
+        # Define the condition for the second order cone
+        z = []
+        for x_val in x:
+            for y_val in y:
+                if result["norm_type"] == 'inf':
+                    z.append(np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord = np.inf))
+                else:
+                    z.append(np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord = result["norm_type"]))
+        z = np.array(z)
     
-    fig.add_trace(go.Surface(x=X, y=Y, z=z.reshape(20,20), opacity = 0.25, showscale=False))
-    frames = []
+        fig.add_trace(go.Surface(x=X, y=Y, z=z.reshape(20,20), opacity = 0.25, showscale=False))
+        frames = []
 
-    if hasattr(params.veh, 'get_kp_pose'):
-        x_vals = 12 * np.ones_like(np.array(sub_positions_sen[0])[:,0])
-        y_vals = 12 * np.ones_like(np.array(sub_positions_sen[0])[:,0])
+        if hasattr(params.veh, 'get_kp_pose'):
+            x_vals = 12 * np.ones_like(np.array(sub_positions_sen[0])[:,0])
+            y_vals = 12 * np.ones_like(np.array(sub_positions_sen[0])[:,0])
+        else:
+            x_vals = 110 * np.ones_like(np.array(sub_positions_sen[0])[:,0])
+            y_vals = 110 * np.ones_like(np.array(sub_positions_sen[0])[:,0])
+
+        # Add the projection of the second order cone onto the x-z plane
+        z = []
+        for x_val in x:
+            if result["norm_type"] == 'inf':
+                z.append(np.linalg.norm(A @ np.array([x_val, 0]), axis=0, ord = np.inf))
+            else:
+                z.append(np.linalg.norm(A @ np.array([x_val, 0]), axis=0, ord = result["norm_type"]))
+        z = np.array(z)
+        fig.add_trace(go.Scatter3d(y=x, x=y_vals, z=z, mode='lines', showlegend=False, line=dict(color='grey', width=3)))
+
+        # Add the projection of the second order cone onto the y-z plane
+        z = []
+        for y_val in y:
+            if result["norm_type"] == 'inf':
+                z.append(np.linalg.norm(A @ np.array([0, y_val]), axis=0, ord = np.inf))
+            else:
+                z.append(np.linalg.norm(A @ np.array([0, y_val]), axis=0, ord = result["norm_type"]))
+        z = np.array(z)
+        fig.add_trace(go.Scatter3d(y=x_vals, x=y, z=z, mode='lines', showlegend=False, line=dict(color='grey', width=3)))
     else:
-        x_vals = 110 * np.ones_like(np.array(sub_positions_sen[0])[:,0])
-        y_vals = 110 * np.ones_like(np.array(sub_positions_sen[0])[:,0])
-
-    # Add the projection of the second order cone onto the x-z plane
-    z = []
-    for x_val in x:
-        if params.veh.norm_type == 'inf':
-            z.append(np.linalg.norm(A @ np.array([x_val, 0]), axis=0, ord = np.inf))
-        else:
-            z.append(np.linalg.norm(A @ np.array([x_val, 0]), axis=0, ord = params.veh.norm_type))
-    z = np.array(z)
-    fig.add_trace(go.Scatter3d(y=x, x=y_vals, z=z, mode='lines', showlegend=False, line=dict(color='grey', width=3)))
-
-    # Add the projection of the second order cone onto the y-z plane
-    z = []
-    for y_val in y:
-        if params.veh.norm_type == 'inf':
-            z.append(np.linalg.norm(A @ np.array([0, y_val]), axis=0, ord = np.inf))
-        else:
-            z.append(np.linalg.norm(A @ np.array([0, y_val]), axis=0, ord = params.veh.norm_type))
-    z = np.array(z)
-    fig.add_trace(go.Scatter3d(y=x_vals, x=y, z=z, mode='lines', showlegend=False, line=dict(color='grey', width=3)))
+        raise ValueError("`norm_type` not found in result dictionary.")
 
     # Choose a random color for each subject
     colors = []
@@ -1139,10 +1160,10 @@ def plot_animation(result: dict,
     tof = result["tof"]
     # Make title say quadrotor simulation and insert the variable tof into the title
     # title = 'Quadrotor Simulation: Time of Flight = ' + str(tof) + 's'
-    drone_positions = result["drone_positions"]
-    drone_velocities = result["drone_velocities"]
-    drone_attitudes = result["drone_attitudes"]
-    drone_forces = result["drone_forces"]
+    drone_positions = result["state"][:, :3]
+    drone_velocities = result["state"][:, 3:6]
+    drone_attitudes = result["state"][:, 6:10]
+    drone_forces = result["control"][:, :3]
     subs_positions = result["sub_positions"]
 
     np.save(f'{path}results/drone_positions.npy', drone_positions)
@@ -1157,10 +1178,10 @@ def plot_animation(result: dict,
     frames = []
     i = 0
     # Generate a color for each keypoint
-    if hasattr(params.veh, 'init_poses') or hasattr(params.veh, 'get_kp_pose'):
+    if "init_poses" in result or hasattr(params.veh, 'get_kp_pose'):
         color_kp = []
-        if hasattr(params.veh, 'init_poses'):
-            for j in range(len(params.veh.init_poses)):
+        if "init_poses" in result:
+            for j in range(len(result["init_poses"])):
                 color_kp.append(f'rgb({random.randint(0,255)}, {random.randint(0,255)}, {random.randint(0,255)})')
         else:
             for j in range(1):
@@ -1207,18 +1228,27 @@ def plot_animation(result: dict,
 
         # Define the condition for the second order cone
         if (hasattr(params.veh, 'init_poses') or hasattr(params.veh, 'get_kp_pose')):
-            A = np.diag([1 / np.tan(np.pi / params.veh.alpha_y), 1 / np.tan(np.pi / params.veh.alpha_x)])  # Conic Matrix
-            z = []
-            for x_val in x:
-                for y_val in y:
-                    if params.veh.norm_type == 'inf':
-                        z.append(np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord = np.inf))
-                    else:
-                        z.append(np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord = params.veh.norm_type))
-            Z = np.array(z).reshape(20,20)
+            if "alpha_x" in result and "alpha_y" in result:
+                A = np.diag([1 / np.tan(np.pi / result["alpha_y"]), 1 / np.tan(np.pi / result["alpha_x"])])  # Conic Matrix
+            else:
+                raise ValueError("`alpha_x` and `alpha_y` not found in result dictionary.")
+            if "norm_type" in result:
+                z = []
+                for x_val in x:
+                    for y_val in y:
+                        if result["norm_type"] == 'inf':
+                            z.append(np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord = np.inf))
+                        else:
+                            z.append(np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord = result["norm_type"]))
+                Z = np.array(z).reshape(20,20)
+            else:
+                raise ValueError("`norm_type` not found in result dictionary.")
 
             # Transform X,Y, and Z from the Sensor frame to the Body frame using R_sb
-            R_sb = params.veh.R_sb
+            if "R_sb" in result:
+                R_sb = result["R_sb"]
+            else:
+                raise ValueError("`R_sb` not found in result dictionary.")
             X, Y, Z = R_sb.T @ np.array([X.flatten(), Y.flatten(), Z.flatten()])
             # Transform X,Y, and Z from the Body frame to the Inertial frame
             R_bi = qdcm(drone_attitudes[indices[i]])
@@ -1278,9 +1308,9 @@ def plot_animation(result: dict,
             y = p[:, 1]
             z = p[:, 2]
             
-            cov = result['drone_state'][i, 13:params.veh.mass_inds]
+            cov = result['state'][i, 13:params.veh.mass_inds]
             # Get the z values
-            data.append(go.Scatter3d(x=x, y=y, z=z, mode='markers', marker=dict(size=10, color=cov, colorscale='Viridis',  cmin=0, cmax=np.max(result['drone_state'][:, 13:params.veh.mass_inds]))))
+            data.append(go.Scatter3d(x=x, y=y, z=z, mode='markers', marker=dict(size=10, color=cov, colorscale='Viridis',  cmin=0, cmax=np.max(result['state'][:, 13:params.veh.mass_inds]))))
             
         data.append(go.Scatter3d(
             x=drone_positions[:indices[i]+1,0], 
@@ -1314,15 +1344,18 @@ def plot_animation(result: dict,
                 y = np.outer(np.sin(u), np.sin(v))
                 z = np.outer(np.ones(np.size(u)), np.cos(v))
 
-                # Scale points by minimum range
-                x_min = params.veh.min_range * x
-                y_min = params.veh.min_range * y
-                z_min = params.veh.min_range * z
+                if "min_range" in result and "max_range" in result:
+                    # Scale points by minimum range
+                    x_min = result["min_range"] * x
+                    y_min = result["min_range"] * y
+                    z_min = result["min_range"] * z
 
-                # Scale points by maximum range
-                x_max = params.veh.max_range * x
-                y_max = params.veh.max_range * y
-                z_max = params.veh.max_range * z
+                    # Scale points by maximum range
+                    x_max = result["max_range"] * x
+                    y_max = result["max_range"] * y
+                    z_max = result["max_range"] * z
+                else:
+                    raise ValueError("`min_range` and `max_range` not found in result dictionary.")
 
                 # Rotate and translate points
                 points_min = np.array([x_min.flatten(), y_min.flatten(), z_min.flatten()])
@@ -1340,30 +1373,31 @@ def plot_animation(result: dict,
 
     fig.frames = frames
 
-    for center, axes, radius in zip(result['obstacles_centers'], result['obstacles_axes'], result['obstacles_radii']):
-            n = 20
-            # Generate points on the unit sphere
-            u = np.linspace(0, 2 * np.pi, n)
-            v = np.linspace(0, np.pi, n)
+    if "obstacles_centers" in result:
+        for center, axes, radius in zip(result['obstacles_centers'], result['obstacles_axes'], result['obstacles_radii']):
+                n = 20
+                # Generate points on the unit sphere
+                u = np.linspace(0, 2 * np.pi, n)
+                v = np.linspace(0, np.pi, n)
 
-            x = np.outer(np.cos(u), np.sin(v))
-            y = np.outer(np.sin(u), np.sin(v))
-            z = np.outer(np.ones(np.size(u)), np.cos(v))
+                x = np.outer(np.cos(u), np.sin(v))
+                y = np.outer(np.sin(u), np.sin(v))
+                z = np.outer(np.ones(np.size(u)), np.cos(v))
 
-            # Scale points by radii
-            x = 1/radius[0] * x
-            y = 1/radius[1] * y
-            z = 1/radius[2] * z
+                # Scale points by radii
+                x = 1/radius[0] * x
+                y = 1/radius[1] * y
+                z = 1/radius[2] * z
 
-            # Rotate and translate points
-            points = np.array([x.flatten(), y.flatten(), z.flatten()])
-            points = axes @ points
-            points = points.T + center
+                # Rotate and translate points
+                points = np.array([x.flatten(), y.flatten(), z.flatten()])
+                points = axes @ points
+                points = points.T + center
 
-            fig.add_trace(go.Surface(x=points[:, 0].reshape(n,n), y=points[:, 1].reshape(n,n), z=points[:, 2].reshape(n,n), opacity = 0.5, showscale=False))
+                fig.add_trace(go.Surface(x=points[:, 0].reshape(n,n), y=points[:, 1].reshape(n,n), z=points[:, 2].reshape(n,n), opacity = 0.5, showscale=False))
 
-    if hasattr(params.veh, 'vertices'):
-        for vertices in params.veh.vertices:
+    if "vertices" in result:
+        for vertices in result["vertices"]:
             # Plot a line through the vertices of the gate
             fig.add_trace(go.Scatter3d(x=[vertices[0][0], vertices[1][0], vertices[2][0], vertices[3][0], vertices[0][0]], y=[vertices[0][1], vertices[1][1], vertices[2][1], vertices[3][1], vertices[0][1]], z=[vertices[0][2], vertices[1][2], vertices[2][2], vertices[3][2], vertices[0][2]], mode='lines', showlegend=False, line=dict(color='blue', width=10)))
 
@@ -1505,20 +1539,20 @@ def plot_animation(result: dict,
 
     fig.show()
 
-def plot_scp_animation(result_ctcs: dict,
+def plot_scp_animation(result: dict,
                        params = None,
                        path=""):
-    tof = result_ctcs["tof"]
+    tof = result["tof"]
     title = f'SCP Simulation: {tof} seconds'
-    drone_positions = result_ctcs["drone_positions"]
-    drone_attitudes = result_ctcs["drone_attitudes"]
-    drone_forces = result_ctcs["drone_forces"]
-    scp_interp_trajs = result_ctcs["scp_interp"]
-    scp_ctcs_trajs = result_ctcs["scp_trajs"]
-    scp_multi_shoot = result_ctcs["scp_multi_shoot"]
+    drone_positions = result["state"][:, :3]
+    drone_attitudes = result["state"][:, 6:10]
+    drone_forces = result["control"][:, :3]
+    scp_interp_trajs = result["scp_interp"]
+    scp_ctcs_trajs = result["scp_trajs"]
+    scp_multi_shoot = result["scp_multi_shoot"]
     # obstacles = result_ctcs["obstacles"]
     # gates = result_ctcs["gates"]
-    subs_positions = result_ctcs["sub_positions"]
+    subs_positions = result["sub_positions"]
     fig = go.Figure(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='gray', width = 2), name='SCP Iterations'))
     for j in range(200):
         fig.add_trace(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='gray', width = 2)))
@@ -1597,35 +1631,36 @@ def plot_scp_animation(result_ctcs: dict,
     fig.frames = frames 
 
     i = 1
-    for center, axes, radius in zip(result_ctcs['obstacles_centers'], result_ctcs['obstacles_axes'], result_ctcs['obstacles_radii']):
-        n = 20
-        # Generate points on the unit sphere
-        u = np.linspace(0, 2 * np.pi, n)
-        v = np.linspace(0, np.pi, n)
+    if "obstacles_centers" in result:
+        for center, axes, radius in zip(result['obstacles_centers'], result['obstacles_axes'], result['obstacles_radii']):
+            n = 20
+            # Generate points on the unit sphere
+            u = np.linspace(0, 2 * np.pi, n)
+            v = np.linspace(0, np.pi, n)
 
-        x = np.outer(np.cos(u), np.sin(v))
-        y = np.outer(np.sin(u), np.sin(v))
-        z = np.outer(np.ones(np.size(u)), np.cos(v))
+            x = np.outer(np.cos(u), np.sin(v))
+            y = np.outer(np.sin(u), np.sin(v))
+            z = np.outer(np.ones(np.size(u)), np.cos(v))
 
-        # Scale points by radii
-        x = 1/radius[0] * x
-        y = 1/radius[1] * y
-        z = 1/radius[2] * z
+            # Scale points by radii
+            x = 1/radius[0] * x
+            y = 1/radius[1] * y
+            z = 1/radius[2] * z
 
-        # Rotate and translate points
-        points = np.array([x.flatten(), y.flatten(), z.flatten()])
-        points = axes @ points
-        points = points.T + center
+            # Rotate and translate points
+            points = np.array([x.flatten(), y.flatten(), z.flatten()])
+            points = axes @ points
+            points = points.T + center
 
-        fig.add_trace(go.Surface(x=points[:, 0].reshape(n,n), y=points[:, 1].reshape(n,n), z=points[:, 2].reshape(n,n), opacity = 0.5, showscale=False))
+            fig.add_trace(go.Surface(x=points[:, 0].reshape(n,n), y=points[:, 1].reshape(n,n), z=points[:, 2].reshape(n,n), opacity = 0.5, showscale=False))
 
-    if hasattr(params.veh, 'vertices'):
-        for vertices in params.veh.vertices:
+    if "vertices" in result:
+        for vertices in result["vertices"]:
             # Plot a line through the vertices of the gate
             fig.add_trace(go.Scatter3d(x=[vertices[0][0], vertices[1][0], vertices[2][0], vertices[3][0], vertices[0][0]], y=[vertices[0][1], vertices[1][1], vertices[2][1], vertices[3][1], vertices[0][1]], z=[vertices[0][2], vertices[1][2], vertices[2][2], vertices[3][2], vertices[0][2]], mode='lines', showlegend=False, line=dict(color='blue', width=10)))
             
     # Add the subject positions
-    if hasattr(params.veh, 'n_subs') and params.veh.n_subs != 0:     
+    if "n_subs" in result and result["n_subs"] != 0:     
         if hasattr(params.veh, 'get_kp_pose'):
             for sub_positions in subs_positions:
                 fig.add_trace(go.Scatter3d(x=sub_positions[:,0], y=sub_positions[:,1], z=sub_positions[:,2], mode='lines', line=dict(color='red', width = 5), showlegend=False))
@@ -1764,7 +1799,7 @@ def plot_scp_animation(result_ctcs: dict,
 
 def plot_state(result, params: Config):
     scp_trajs = result["scp_interp"]
-    x_full = result["drone_state"]
+    x_full = result["state"]
 
     fig = make_subplots(rows=2, cols=7, subplot_titles=('X Position', 'Y Position', 'Z Position', 'X Velocity', 'Y Velocity', 'Z Velocity', 'CTCS Augmentation', 'Q1', 'Q2', 'Q3', 'Q4', 'X Angular Rate', 'Y Angular Rate', 'Z Angular Rate'))
     fig.update_layout(title_text="State Trajectories", template='plotly_dark')
@@ -1891,7 +1926,7 @@ def plot_state(result, params: Config):
 
 def plot_control(result, params: Config):
     scp_controls = result["scp_controls"]
-    u = result["drone_controls"]
+    u = result["control_scp"]
 
     fx_min = params.sim.min_control[0]
     fx_max = params.sim.max_control[0]
