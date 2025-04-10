@@ -8,7 +8,7 @@ from openscvx.utils import qdcm, SSMP, SSM, rot, gen_vertices
 from openscvx.constraints.boundary import BoundaryConstraint as bc
 from openscvx.constraints.decorators import ctcs, nodal, ncvx_nodal
 
-n = 22  # Number of Nodes
+n = 33  # Number of Nodes
 total_time = 30.0  # Total time for the simulation
 
 max_state = np.array(
@@ -25,7 +25,7 @@ final_state = bc(jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time]
 final_state.type[3:13] = "Free"
 final_state.type[13] = "Minimize"
 
-initial_control = np.array([0, 0, 10, 0, 0, 0, 1])
+initial_control = np.array([0., 0., 10., 0., 0., 0., 1.])
 max_control = np.array(
     [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time]
 )  # Upper Bound on the controls
@@ -70,7 +70,7 @@ for center in gate_centers:
     center[0] = center[0] + 2.5
     center[2] = center[2] + 2.5
     A_gate_cen.append(A_gate @ center)
-nodes_per_gate = 2
+nodes_per_gate = 3
 gate_nodes = np.arange(nodes_per_gate, n, nodes_per_gate)
 vertices = []
 for center in gate_centers:
@@ -102,7 +102,7 @@ def g_cvx_nodal(x):  # Nodal Convex Inequality Constraints
 
 constraints = []
 for pose in init_poses:
-    constraints.append(ncvx_nodal(lambda x, u, p=pose: g_vp(x, u, p)))
+    constraints.append(ncvx_nodal(lambda x, u, p = pose: g_vp(x, u, p)))
 for node, cen in zip(gate_nodes, A_gate_cen):
     constraints.append(
         nodal(

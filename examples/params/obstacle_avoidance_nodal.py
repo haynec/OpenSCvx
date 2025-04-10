@@ -21,7 +21,7 @@ final_state = bc(jnp.array([-10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time]
 final_state.type[3:13] = "Free"
 final_state.type[13] = "Minimize"
 
-initial_control = np.array([0, 0, 50, 0, 0, 0, 1])
+initial_control = np.array([0., 0., 50., 0., 0., 0., 1.])
 
 
 def dynamics(x, u):
@@ -70,9 +70,9 @@ for _ in obstacle_centers:
 
 
 constraints = []
-for center, A in zip(obstacle_centers, A_obs):
+for center, A_obs_s in zip(obstacle_centers, A_obs):
     # constraints.append(ctcs(lambda x, u: g_obs(center, A, x)))
-    constraints.append(ncvx_nodal(lambda x, u: g_obs(x, u, center, A)))
+    constraints.append(ncvx_nodal(lambda x, u, c=center, A=A_obs_s: g_obs(x, u, c, A)))
 constraints.append(ctcs(lambda x, u: x[:-1] - max_state[:-1]))
 constraints.append(ctcs(lambda x, u: min_state[:-1] - x[:-1]))
 
@@ -105,6 +105,8 @@ problem = TrajOptProblem(
 )
 
 problem.params.sim.dt = 0.01
+problem.params.sim.custom_integrator = False
+
 problem.params.scp.lam_vb = 1E0
 
 plotting_dict = dict(

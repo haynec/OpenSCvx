@@ -46,11 +46,12 @@ def OCP(params: Config):
         g = []
         grad_g_x = []
         grad_g_u = []
+        nu_vb = []
         for g_id, constraint in enumerate(params.veh.constraints_ncvx_nodal):
             g.append(cp.Parameter(params.scp.n, name = 'g_' + str(g_id)))
             grad_g_x.append(cp.Parameter((params.scp.n, params.sim.n_states), name='grad_g_x_' + str(g_id)))
             grad_g_u.append(cp.Parameter((params.scp.n, params.sim.n_controls), name='grad_g_u_' + str(g_id)))
-        nu_vb = cp.Variable(params.scp.n, name='nu_vb') # Virtual Control for VB
+            nu_vb.append(cp.Variable(params.scp.n, name='nu_vb_' + str(g_id))) # Virtual Control for VB
 
     # Applying the affine scaling to state and control
     x_nonscaled = []
@@ -75,7 +76,7 @@ def OCP(params: Config):
 
     if params.veh.constraints_ncvx_nodal:
         for g_id, constraint in enumerate(params.veh.constraints_ncvx_nodal):
-            constr += [((g[g_id][node] + grad_g_x[g_id][node] @ dx[node] + grad_g_u[g_id][node] @ du[node])) == nu_vb[node] for node in constraint.nodes]
+            constr += [((g[g_id][node] + grad_g_x[g_id][node] @ dx[node] + grad_g_u[g_id][node] @ du[node])) == nu_vb[g_id][node] for node in constraint.nodes]
             
     # TODO: (norrisg) remove this
     if hasattr(params.veh, 'g_cvx_nodal'):
@@ -127,7 +128,8 @@ def OCP(params: Config):
     cost += sum(w_tr * cp.sum_squares(sla.block_diag(la.inv(S_x), la.inv(S_u)) @ cp.hstack((dx[i], du[i]))) for i in range(params.scp.n)) # Trust Region Cost
     cost += sum(params.scp.lam_vc * cp.sum(cp.abs(nu[i-1])) for i in range(1, params.scp.n)) # Virtual Control Slack
     if params.veh.constraints_ncvx_nodal:
-        cost += params.scp.lam_vb * cp.sum(cp.pos(nu_vb)) # Virtual Buffer Slack
+        for g_id, _ in enumerate(params.veh.constraints_ncvx_nodal):
+            cost += params.scp.lam_vb * cp.sum(cp.pos(nu_vb[g_id]))
 
     constr += [cp.abs(x_nonscaled[i][-1] - x_nonscaled[i-1][-1]) <= params.sim.max_state[-1] for i in range(1, params.scp.n)] # LICQ Constraint
     constr += [x_nonscaled[0][-1] == 0]
