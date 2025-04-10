@@ -28,6 +28,7 @@ class TrajOptProblem:
         u_min: jnp.ndarray,
         scp: ScpConfig = None,
         sim: SimConfig = None,
+        init_params: dict = None,
     ):
 
         if sim is None:
@@ -65,6 +66,11 @@ class TrajOptProblem:
             assert (
                 self.scp.n == N
             ), "Number of segments must be the same as in the config"
+
+        if init_params is not None:
+            sim.debug = init_params["debug"]
+            sim.profiling = init_params["profiling"]
+            sim.cvxpygen = init_params["cvxpygen"]
 
         self.constraints_ctcs = []
         self.constraints_nodal = []
