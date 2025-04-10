@@ -106,7 +106,6 @@ problem = TrajOptProblem(
 )
 
 problem.params.sim.dt = 0.01
-problem.params.sim.cvxpygen = True
 
 plotting_dict = dict(
     obstacles_centers=obstacle_centers,
