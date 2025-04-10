@@ -42,16 +42,17 @@ def OCP(params: Config):
     nu  = cp.Variable((params.scp.n - 1, params.sim.n_states), name='nu') # Virtual Control
 
     # Linearized Nonconvex Nodal Constraints
-    if params.veh.constraints_ncvx_nodal:
+    if params.veh.constraints_nodal:
         g = []
         grad_g_x = []
         grad_g_u = []
         nu_vb = []
-        for g_id, constraint in enumerate(params.veh.constraints_ncvx_nodal):
-            g.append(cp.Parameter(params.scp.n, name = 'g_' + str(g_id)))
-            grad_g_x.append(cp.Parameter((params.scp.n, params.sim.n_states), name='grad_g_x_' + str(g_id)))
-            grad_g_u.append(cp.Parameter((params.scp.n, params.sim.n_controls), name='grad_g_u_' + str(g_id)))
-            nu_vb.append(cp.Variable(params.scp.n, name='nu_vb_' + str(g_id))) # Virtual Control for VB
+        for g_id, constraint in enumerate(params.veh.constraints_nodal):
+            if not constraint.convex:
+                g.append(cp.Parameter(params.scp.n, name = 'g_' + str(g_id)))
+                grad_g_x.append(cp.Parameter((params.scp.n, params.sim.n_states), name='grad_g_x_' + str(g_id)))
+                grad_g_u.append(cp.Parameter((params.scp.n, params.sim.n_controls), name='grad_g_u_' + str(g_id)))
+                nu_vb.append(cp.Variable(params.scp.n, name='nu_vb_' + str(g_id))) # Virtual Control for VB
 
     # Applying the affine scaling to state and control
     x_nonscaled = []
@@ -67,16 +68,20 @@ def OCP(params: Config):
     # CONSTRAINTS
     #############
     if params.veh.constraints_nodal:
-        for constraint in params.veh.constraints_nodal:
-            if constraint.nodes is not None:
-                for node in constraint.nodes:
-                    constr += [constraint(x_nonscaled[node], u_nonscaled[node])]
+        for g_id, constraint in enumerate(params.veh.constraints_nodal):
+            if constraint.nodes is None:
+                nodes = range(params.scp.n)
             else:
-                constr += [constraint(x_nonscaled[i], u_nonscaled[i]) for i in range(params.scp.n)]
+                nodes = constraint.nodes
 
-    if params.veh.constraints_ncvx_nodal:
-        for g_id, constraint in enumerate(params.veh.constraints_ncvx_nodal):
-            constr += [((g[g_id][node] + grad_g_x[g_id][node] @ dx[node] + grad_g_u[g_id][node] @ du[node])) == nu_vb[g_id][node] for node in constraint.nodes]
+            if constraint.convex:
+                constr += [constraint(x_nonscaled[node], u_nonscaled[node]) for node in nodes]
+            elif not constraint.convex:
+                constr += [((g[g_id][node] + grad_g_x[g_id][node] @ dx[node] + grad_g_u[g_id][node] @ du[node])) == nu_vb[g_id][node] for node in nodes]
+
+    # if params.veh.constraints_ncvx_nodal:
+    #     for g_id, constraint in enumerate(params.veh.constraints_ncvx_nodal):
+    #         constr += [((g[g_id][node] + grad_g_x[g_id][node] @ dx[node] + grad_g_u[g_id][node] @ du[node])) == nu_vb[g_id][node] for node in constraint.nodes]
             
     # TODO: (norrisg) remove this
     if hasattr(params.veh, 'g_cvx_nodal'):
