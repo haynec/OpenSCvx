@@ -20,6 +20,7 @@ from openscvx.config import Config
 
 jax.config.update('jax_default_device', jax.devices('cpu')[0])
 
+problem.initialize()
 results = problem.solve()
 
 # Check if results folder exists

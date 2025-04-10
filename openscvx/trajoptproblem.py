@@ -1,8 +1,11 @@
 import jax.numpy as jnp
 from typing import List
 
+import cvxpy as cp
+
 from openscvx.config import ScpConfig, SimConfig, Config
 from openscvx.dynamics import Dynamics
+from openscvx.discretization import AugmentedDynamics
 from openscvx.constraints.boundary import BoundaryConstraint
 from openscvx.ptr import PTR_init, PTR_main, PTR_post
 
@@ -93,12 +96,26 @@ class TrajOptProblem:
             veh=veh,
         )
 
+        self.ocp: cp.Problem = None
+        self.aug_dy: AugmentedDynamics = None
+        self.cpg_solve = None
+
+    def initialize(self):
+        # Ensure parameter sizes and normalization are correct
+        self.params.scp.__post_init__()
+        self.params.sim.__post_init__()
+
         self.ocp, self.aug_dy, self.cpg_solve = PTR_init(self.params)
 
     def solve(self):
         # Ensure parameter sizes and normalization are correct
         self.params.scp.__post_init__()
         self.params.sim.__post_init__()
+
+        if self.ocp is None or self.aug_dy is None:
+            raise ValueError(
+                "Problem has not been initialized. Call initialize() before solve()"
+            )
 
         return PTR_main(self.params, self.ocp, self.aug_dy, self.cpg_solve)
 
