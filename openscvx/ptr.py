@@ -31,14 +31,14 @@ def PTR_init(params: Config) -> tuple[cp.Problem, ExactDis]:
     else:
         cpg_solve = None
 
-    aug_dy = ExactDis(params)
+    dynamics_discretized = ExactDis(params)
 
     # Solve a dumb problem to intilize DPP and JAX jacobians
-    _ = PTR_subproblem(cpg_solve, params.sim.x_bar, params.sim.u_bar, aug_dy, ocp, params)
+    _ = PTR_subproblem(cpg_solve, params.sim.x_bar, params.sim.u_bar, dynamics_discretized, ocp, params)
 
     t_f_while = time.time()
     print("Total Initialization Time: ", t_f_while - t_0_while)
-    return ocp, aug_dy, cpg_solve
+    return ocp, dynamics_discretized, cpg_solve
 
 def PTR_main(params: Config, prob: cp.Problem, aug_dy: ExactDis, cpg_solve) -> dict:
     J_vb = 1E2
