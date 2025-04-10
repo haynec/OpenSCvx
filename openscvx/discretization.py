@@ -55,7 +55,7 @@ class ExactDis:
         self.i4 = self.i3 + n_x * n_u
         self.i5 = self.i4 + n_x
 
-        # self.integrator = RK45()
+        self.integrator = RK45()
 
         self.tau_grid = jnp.linspace(0, 1, self.params.scp.n)
 
