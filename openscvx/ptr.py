@@ -217,7 +217,6 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     
     t0 = time.time()
     A_bar, B_bar, C_bar, z_bar, V_multi_shoot = aug_dy.calculate_discretization(x_bar, u_bar.astype(float))
-    dis_time = time.time() - t0
     
     prob.param_dict['A_d'].value = np.asarray(A_bar)
     prob.param_dict['B_d'].value = np.asarray(B_bar)
