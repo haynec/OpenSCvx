@@ -5,7 +5,41 @@ import scipy.integrate as itg
 
 from openscvx.config import Config
 
-class AugmentedDynamics:
+class RK45:
+    def __init__(self):
+        pass
+
+    def rk45_step(self, f, t, y, h, *args):
+        k1 = f(t, y, *args)
+        k2 = f(t + h/4, y + h*k1/4, *args)
+        k3 = f(t + 3*h/8, y + 3*h*k1/32 + 9*h*k2/32, *args)
+        k4 = f(t + 12*h/13, y + 1932*h*k1/2197 - 7200*h*k2/2197 + 7296*h*k3/2197, *args)
+        k5 = f(t + h, y + 439*h*k1/216 - 8*h*k2 + 3680*h*k3/513 - 845*h*k4/4104, *args)
+
+        y_next = y + h * (25*k1/216 + 1408*k3/2565 + 2197*k4/4104 - k5/5)
+        return y_next
+
+    def solve_ivp(self, dVdt, tau_grid, V0, args, method='RK45', t_eval=None):
+        if method != 'RK45':
+            raise ValueError("Currently, only 'RK45' method is supported.")
+        
+        if t_eval is None:
+            t_eval = jnp.linspace(tau_grid[0], tau_grid[1], 50)
+        
+        h = (tau_grid[1] - tau_grid[0]) / (len(t_eval) - 1)
+        V_result = jnp.zeros((len(t_eval), len(V0)))
+        V_result = V_result.at[0].set(V0)
+        
+        t = tau_grid[0]
+        y = V0
+        for i in range(1, len(t_eval)):
+            V_result = V_result.at[i].set(self.rk45_step(dVdt, t, y, h, *args))
+            t += h
+            y = V_result[i]
+        
+        return V_result
+
+class ExactDis:
     def __init__(self, params: Config) -> None:
         self.params = params
 
@@ -21,13 +55,13 @@ class AugmentedDynamics:
         self.i4 = self.i3 + n_x * n_u
         self.i5 = self.i4 + n_x
 
+        self.integrator = RK45()
+
         self.tau_grid = jnp.linspace(0, 1, self.params.scp.n)
 
-        if params.sim.debug:
-            self.dVdt = self.dVdt_fun
-        else:
-            dVdt_lower = jit(self.dVdt_fun).lower(0.0, np.ones(int(self.i5*(self.params.scp.n-1))), np.ones((self.params.scp.n-1, self.params.sim.n_controls)), np.ones((self.params.scp.n-1, self.params.sim.n_controls)))
-            self.dVdt = dVdt_lower.compile()
+        if not params.sim.debug:
+            calculate_discretization_lower = jit(self.calculate_discretization).lower(np.ones((self.params.scp.n, self.params.sim.n_states)), np.ones((self.params.scp.n, self.params.sim.n_controls)))
+            self.calculate_discretization = calculate_discretization_lower.compile()
     
     def s_to_t(self, u, params: Config):
         t = [0]
@@ -60,8 +94,8 @@ class AugmentedDynamics:
         return tau, u
     
     def calculate_discretization(self,
-                                 x: np.ndarray,
-                                 u: np.ndarray):
+                                 x: jnp.ndarray,
+                                 u: jnp.ndarray):
         """
         Calculate discretization for given states, inputs and total time.
         x: Matrix of states for all time points
@@ -74,21 +108,16 @@ class AugmentedDynamics:
         n_u = self.params.sim.n_controls
 
         # Initialize the augmented state vector
-        V0 = np.zeros((x.shape[0]-1, self.i5))
-        V0[:, self.i1:self.i2] = np.tile(np.eye(n_x).reshape(-1), (x.shape[0]-1, 1))
-        
-        # Initialize the augmented Jacobians
-        A_bar = np.zeros((n_x * n_x, self.params.scp.n - 1))
-        B_bar = np.zeros((n_x * n_u, self.params.scp.n - 1))
-        C_bar = np.zeros((n_x * n_u, self.params.scp.n - 1))
-        z_bar = np.zeros((n_x, self.params.scp.n - 1))
+        V0 = jnp.zeros((x.shape[0]-1, self.i5))
 
         # Vectorized integration
-        V0[:, self.i0:self.i1] = x[:-1]
-        int_result = itg.solve_ivp(self.dVdt, (self.tau_grid[0], self.tau_grid[1]), V0.flatten(), args=(u[:-1, :].astype(float), u[1:, :].astype(float)), method='RK45', t_eval=np.linspace(self.tau_grid[0], self.tau_grid[1], 50))
-        V = int_result.y[:,-1].reshape(-1, self.i5)
-
-        V_multi_shoot = int_result.y
+        V0 = V0.at[:, self.i0:self.i1].set(x[:-1, :].astype(float))
+        V0 = V0.at[:, self.i1:self.i2].set(np.eye(n_x).reshape(1, n_x * n_x).repeat(self.params.scp.n - 1, axis=0))
+        # int_result = itg.solve_ivp(self.dVdt, (self.tau_grid[0], self.tau_grid[1]), V0.flatten(), args=(u[:-1, :].astype(float), u[1:, :].astype(float)), method='RK45', t_eval=jnp.linspace(self.tau_grid[0], self.tau_grid[1], 50))
+        
+        int_result = self.integrator.solve_ivp(self.dVdt, (self.tau_grid[0], self.tau_grid[1]), V0.flatten(), args=(u[:-1, :].astype(float), u[1:, :].astype(float)), method='RK45', t_eval=self.tau_grid)
+        V = int_result[-1].T.reshape(-1, self.i5)
+        V_multi_shoot = int_result.T
 
         # Flatten matrices in column-major (Fortran) order for cvxpy
         A_bar = V[:, self.i1:self.i2].reshape((self.params.scp.n - 1, n_x, n_x)).transpose(1, 2, 0).reshape(n_x * n_x, -1, order='F').T
@@ -97,7 +126,7 @@ class AugmentedDynamics:
         z_bar = V[:, self.i4:self.i5]
         return A_bar, B_bar, C_bar, z_bar, V_multi_shoot
 
-    def dVdt_fun(self,
+    def dVdt(self,
              tau: float,
              V: jnp.ndarray,
              u_cur: np.ndarray,
