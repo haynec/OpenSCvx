@@ -153,7 +153,7 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: ExactDis, cpg_solve) -> d
     return result
 
 def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
-    t_0_while = time.time()
+    t_0_post = time.time()
     x = result['state_scp']
     u = result['control_scp']
     scp_trajs = result['scp_trajs']
@@ -201,8 +201,8 @@ def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
         scp_interp = scp_trajs_interp,
     )
 
-    t_f_while = time.time()
-    print("Total Post Processing Time: ", t_f_while - t_0_while)
+    t_f_post = time.time()
+    print("Total Post Processing Time: ", t_f_post - t_0_post)
     result.update(more_result)
     return result
 
