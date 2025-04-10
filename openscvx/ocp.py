@@ -71,7 +71,7 @@ def OCP(params: Config):
 
     if params.veh.constraints_ncvx_nodal:
         for g_id, constraint in enumerate(params.veh.constraints_ncvx_nodal):
-            constr += [((g[g_id][node] + grad_g_x[g_id][node] @ dx[node] + grad_g_u[g_id][node] @ du[node])) <= nu_vb[node] for node in constraint.nodes]
+            constr += [((g[g_id][node] + grad_g_x[g_id][node] @ dx[node] + grad_g_u[g_id][node] @ du[node])) == nu_vb[node] for node in constraint.nodes]
             
     # TODO: (norrisg) remove this
     if hasattr(params.veh, 'g_cvx_nodal'):
