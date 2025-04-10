@@ -124,7 +124,7 @@ class SimConfig:
     debug: bool = False
     solver: str = "QOCO"
     cvxpygen: bool = False
-    custom_integrator: bool = False
+    custom_integrator: bool = True
     S_x: np.ndarray = None
     c_x: np.ndarray = None
     S_u: np.ndarray = None

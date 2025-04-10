@@ -1,11 +1,12 @@
 import jax.numpy as jnp
 from typing import List
 
+import cvxpy as cp
+
 from openscvx.config import ScpConfig, SimConfig, Config
 from openscvx.dynamics import Dynamics
+from openscvx.discretization import ExactDis
 from openscvx.constraints.boundary import BoundaryConstraint
-
-# from openscvx.constraints.custom import CustomConstraint
 from openscvx.ptr import PTR_init, PTR_main, PTR_post
 
 
@@ -79,13 +80,9 @@ class TrajOptProblem:
 
         for constraint in constraints:
             if constraint.constraint_type == "ctcs":
-                # Bind the current 'constraint' function to 'func' to prevent late binding issue for lambda functions
-                if constraint.penalty == 'Default':
-                    self.constraints_ctcs.append(
-                        lambda x, u, func=constraint: jnp.sum(
-                            constraint.penalty(func(x,u))
-                        )
-                    )
+                self.constraints_ctcs.append(
+                    lambda x, u, func=constraint: jnp.sum(func.penalty(func(x, u)))
+                )
             elif constraint.constraint_type == "nodal":
                 self.constraints_nodal.append(constraint)
             elif constraint.constraint_type == "ncvx_nodal":
@@ -113,14 +110,30 @@ class TrajOptProblem:
             veh=veh,
         )
 
-        self.ocp, self.aug_dy, self.cpg_solve = PTR_init(self.params)
+        self.ocp: cp.Problem = None
+        self.dynamics_discretized: ExactDis = None
+        self.cpg_solve = None
+
+    def initialize(self):
+        # Ensure parameter sizes and normalization are correct
+        self.params.scp.__post_init__()
+        self.params.sim.__post_init__()
+
+        self.ocp, self.dynamics_discretized, self.cpg_solve = PTR_init(self.params)
 
     def solve(self):
         # Ensure parameter sizes and normalization are correct
         self.params.scp.__post_init__()
         self.params.sim.__post_init__()
 
-        return PTR_main(self.params, self.ocp, self.aug_dy, self.cpg_solve)
+        if self.ocp is None or self.dynamics_discretized is None:
+            raise ValueError(
+                "Problem has not been initialized. Call initialize() before solve()"
+            )
+
+        return PTR_main(
+            self.params, self.ocp, self.dynamics_discretized, self.cpg_solve
+        )
 
     def post_process(self, result):
-        return PTR_post(self.params, result, self.aug_dy)
+        return PTR_post(self.params, result, self.dynamics_discretized)

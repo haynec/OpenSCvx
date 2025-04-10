@@ -12,6 +12,7 @@ from examples.params.obstacle_avoidance import problem as obstacle_avoidance_pro
 def test_obstacle_avoidance():
     # This test is specific to the obstacle avoidance problem
     problem = obstacle_avoidance_problem
+    problem.initialize()
     result = problem.solve()
     
     # Assuming PTR_main returns a dictionary
@@ -25,6 +26,7 @@ def test_obstacle_avoidance():
 def test_drone_racing():
     # This test is specific to the drone racing problem
     problem = drone_racing_problem
+    problem.initialize()
     result = problem.solve()
     
     # Assuming PTR_main returns a dictionary
@@ -38,6 +40,7 @@ def test_drone_racing():
 def test_dr_vp():
     # This test is specific to the dr_vp problem
     problem = dr_vp_problem
+    problem.initialize()
     result = problem.solve()
     
     # Assuming PTR_main returns a dictionary
@@ -51,6 +54,7 @@ def test_dr_vp():
 def test_dr_vp_polytope():
     # This test is specific to the dr_vp_polytope problem
     problem = dr_vp_polytope_problem
+    problem.initialize()
     result = problem.solve()
     
     # Assuming PTR_main returns a dictionary
@@ -64,6 +68,7 @@ def test_dr_vp_polytope():
 def test_cinema_vp():
     # This test is specific to the cinema_vp problem
     problem = cinema_vp_problem
+    problem.initialize()
     result = problem.solve()
     
     # Assuming PTR_main returns a dictionary
