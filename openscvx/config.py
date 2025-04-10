@@ -124,6 +124,7 @@ class SimConfig:
     debug: bool = False
     solver: str = "QOCO"
     cvxpygen: bool = False
+    custom_integrator: bool = True
     S_x: np.ndarray = None
     c_x: np.ndarray = None
     S_u: np.ndarray = None
@@ -173,6 +174,7 @@ class ScpConfig:
     ep_vb: float = 1e-4
     ep_vc: float = 1e-8
     lam_cost: float = 0.0
+    lam_vb: float = 0.0
     k_max: int = 200
     n: int = None
     dis_type: str = "FOH"
@@ -188,7 +190,7 @@ class ScpConfig:
     fixed_final_att: bool = False
 
     def __post_init__(self):
-        keys_to_scale = ["w_tr", "lam_vc", "lam_cost"]
+        keys_to_scale = ["w_tr", "lam_vc", "lam_cost", "lam_vb"]
         scale = max(getattr(self, key) for key in keys_to_scale)
         for key in keys_to_scale:
             setattr(self, key, getattr(self, key) / scale)

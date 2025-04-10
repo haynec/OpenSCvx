@@ -60,8 +60,12 @@ class ExactDis:
         self.tau_grid = jnp.linspace(0, 1, self.params.scp.n)
 
         if not params.sim.debug:
-            calculate_discretization_lower = jit(self.calculate_discretization).lower(np.ones((self.params.scp.n, self.params.sim.n_states)), np.ones((self.params.scp.n, self.params.sim.n_controls)))
-            self.calculate_discretization = calculate_discretization_lower.compile()
+            if params.sim.custom_integrator:
+                calculate_discretization_lower = jit(self.calculate_discretization).lower(np.ones((self.params.scp.n, self.params.sim.n_states)), np.ones((self.params.scp.n, self.params.sim.n_controls)))
+                self.calculate_discretization = calculate_discretization_lower.compile()
+            else:
+                dVdt_lower = jit(self.dVdt).lower(0.0, np.ones(int(self.i5*(self.params.scp.n-1))), np.ones((self.params.scp.n-1, self.params.sim.n_controls)), np.ones((self.params.scp.n-1, self.params.sim.n_controls)))
+                self.dVdt = dVdt_lower.compile()
     
     def s_to_t(self, u, params: Config):
         t = [0]
@@ -106,19 +110,28 @@ class ExactDis:
         # Extract the number of states and controls from the parameters
         n_x = self.params.sim.n_states
         n_u = self.params.sim.n_controls
-
-        # Initialize the augmented state vector
-        V0 = jnp.zeros((x.shape[0]-1, self.i5))
-
-        # Vectorized integration
-        V0 = V0.at[:, self.i0:self.i1].set(x[:-1, :].astype(float))
-        V0 = V0.at[:, self.i1:self.i2].set(np.eye(n_x).reshape(1, n_x * n_x).repeat(self.params.scp.n - 1, axis=0))
-        # int_result = itg.solve_ivp(self.dVdt, (self.tau_grid[0], self.tau_grid[1]), V0.flatten(), args=(u[:-1, :].astype(float), u[1:, :].astype(float)), method='RK45', t_eval=jnp.linspace(self.tau_grid[0], self.tau_grid[1], 50))
         
-        int_result = self.integrator.solve_ivp(self.dVdt, (self.tau_grid[0], self.tau_grid[1]), V0.flatten(), args=(u[:-1, :].astype(float), u[1:, :].astype(float)), method='RK45', t_eval=self.tau_grid)
-        V = int_result[-1].T.reshape(-1, self.i5)
-        V_multi_shoot = int_result.T
+        if self.params.sim.custom_integrator:
+            # Initialize the augmented state vector
+            V0 = jnp.zeros((x.shape[0]-1, self.i5))
 
+            # Vectorized integration
+            V0 = V0.at[:, self.i0:self.i1].set(x[:-1, :].astype(float))
+            V0 = V0.at[:, self.i1:self.i2].set(np.eye(n_x).reshape(1, n_x * n_x).repeat(self.params.scp.n - 1, axis=0))
+            
+            int_result = self.integrator.solve_ivp(self.dVdt, (self.tau_grid[0], self.tau_grid[1]), V0.flatten(), args=(u[:-1, :].astype(float), u[1:, :].astype(float)), method='RK45', t_eval=self.tau_grid)
+            V = int_result[-1].T.reshape(-1, self.i5)
+            V_multi_shoot = int_result.T
+        else:
+            V0 = np.zeros((x.shape[0]-1, self.i5))
+
+            V0[:, self.i0:self.i1] = x[:-1, :].astype(float)
+            V0[:, self.i1:self.i2] = np.eye(n_x).reshape(1, n_x * n_x).repeat(self.params.scp.n - 1, axis=0)
+
+            int_result = itg.solve_ivp(self.dVdt, (self.tau_grid[0], self.tau_grid[1]), V0.flatten(), args=(u[:-1, :].astype(float), u[1:, :].astype(float)), method='RK45', t_eval=jnp.linspace(self.tau_grid[0], self.tau_grid[1], 50))
+            V = int_result.y[:,-1].reshape(-1, self.i5)
+            V_multi_shoot = int_result.y
+    
         # Flatten matrices in column-major (Fortran) order for cvxpy
         A_bar = V[:, self.i1:self.i2].reshape((self.params.scp.n - 1, n_x, n_x)).transpose(1, 2, 0).reshape(n_x * n_x, -1, order='F').T
         B_bar = V[:, self.i2:self.i3].reshape((self.params.scp.n - 1, n_x, n_u)).transpose(1, 2, 0).reshape(n_x * n_u, -1, order='F').T

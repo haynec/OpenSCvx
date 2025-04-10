@@ -6,10 +6,10 @@ import jax.numpy as jnp
 from openscvx.trajoptproblem import TrajOptProblem
 from openscvx.utils import qdcm, SSMP, SSM, rot, gen_vertices
 from openscvx.constraints.boundary import BoundaryConstraint as bc
-from openscvx.constraints.decorators import ctcs, nodal
+from openscvx.constraints.decorators import ctcs, nodal, ncvx_nodal
 
 n = 33  # Number of Nodes
-total_time = 40.0  # Total time for the simulation
+total_time = 30.0  # Total time for the simulation
 
 max_state = np.array(
     [200, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1e-4]
@@ -25,7 +25,7 @@ final_state = bc(jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time]
 final_state.type[3:13] = "Free"
 final_state.type[13] = "Minimize"
 
-initial_control = np.array([0, 0, 10, 0, 0, 0, 1])
+initial_control = np.array([0., 0., 10., 0., 0., 0., 1.])
 max_control = np.array(
     [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time]
 )  # Upper Bound on the controls
@@ -33,8 +33,8 @@ min_control = np.array([0, 0, 0, -18.665, -18.665, -0.55562, 0.3 * total_time])
 
 
 ### Sensor Params ###
-alpha_x = 6.0  # Angle for the x-axis of Sensor Cone
-alpha_y = 6.0  # Angle for the y-axis of Sensor Cone
+alpha_x = 4.0  # Angle for the x-axis of Sensor Cone
+alpha_y = 4.0  # Angle for the y-axis of Sensor Cone
 A_cone = np.diag(
     [
         1 / np.tan(np.pi / alpha_x),
@@ -79,25 +79,30 @@ for center in gate_centers:
 
 n_subs = 10
 init_poses = []
-np.random.seed(0)
+np.random.seed(5)
 for i in range(n_subs):
-    init_pose = np.array([100.0, -60.0, 20.0])
+    init_pose = np.array([100.0, -70.0, 20.0])
     init_pose[:2] = init_pose[:2] + np.random.random(2) * 20.0
     init_poses.append(init_pose)
 
 init_poses = init_poses
 
 
-def g_vp(p_s_I, x):
+def g_vp(x, u, p_s_I):
     p_s_s = R_sb @ qdcm(x[6:10]).T @ (p_s_I - x[0:3])
     return jnp.linalg.norm(A_cone @ p_s_s, ord=norm_type) - (c.T @ p_s_s)
 
 
+def g_cvx_nodal(x):  # Nodal Convex Inequality Constraints
+    constr = []
+    for node, cen in zip(gate_nodes, A_gate_cen):
+        constr += [cp.norm(A_gate @ x[node][:3] - cen, "inf") <= 1]
+    return constr
+
+
 constraints = []
-constraints.append(ctcs(lambda x, u: x[:-1] - max_state[:-1]))
-constraints.append(ctcs(lambda x, u: min_state[:-1] - x[:-1]))
 for pose in init_poses:
-    constraints.append(ctcs(lambda x, u, p=pose: g_vp(p, x)))
+    constraints.append(ncvx_nodal(lambda x, u, p = pose: g_vp(x, u, p)))
 for node, cen in zip(gate_nodes, A_gate_cen):
     constraints.append(
         nodal(
@@ -109,7 +114,7 @@ for node, cen in zip(gate_nodes, A_gate_cen):
 
 def dynamics(x, u):
     m = 1.0  # Mass of the drone
-    g_const = -9.18
+    g_const = -9.81
     J_b = jnp.array([1.0, 1.0, 1.0])  # Moment of Inertia of the drone
     # Unpack the state and control vectors
     v = x[3:6]
@@ -187,16 +192,16 @@ problem = TrajOptProblem(
 problem.params.sim.dt = 0.1
 problem.params.sim.custom_integrator = False
 
-
-problem.params.scp.w_tr = 2e0  # Weight on the Trust Reigon
-problem.params.scp.lam_cost = 1e-1  # 0e-1,  # Weight on the Minimal Time Objective
-problem.params.scp.lam_vc = 1e1  # 1e1,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
+problem.params.scp.w_tr = 8e1  # Weight on the Trust Reigon
+problem.params.scp.lam_cost = 2e1  # Weight on the Minimal Time Objective
+problem.params.scp.lam_vc = 1e2  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
+problem.params.scp.lam_vb = 4e0  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
 problem.params.scp.ep_tr = 1e-3  # Trust Region Tolerance
 problem.params.scp.ep_vb = 1e-4  # Virtual Control Tolerance
 problem.params.scp.ep_vc = 1e-8  # Virtual Control Tolerance
 problem.params.scp.cost_drop = 10  # SCP iteration to relax minimal final time objective
 problem.params.scp.cost_relax = 0.8  # Minimal Time Relaxation Factor
-problem.params.scp.w_tr_adapt = 1.4  # Trust Region Adaptation Factor
+problem.params.scp.w_tr_adapt = 1.05  # Trust Region Adaptation Factor
 problem.params.scp.w_tr_max_scaling_factor = 1e2  # Maximum Trust Region Weight
 
 problem.params.veh.R_sb = R_sb
