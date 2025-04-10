@@ -97,11 +97,14 @@ constraints = []
 constraints.append(ctcs(lambda x, u: x[:-1] - max_state[:-1]))
 constraints.append(ctcs(lambda x, u: min_state[:-1] - x[:-1]))
 for pose in init_poses:
-    constraints.append(ctcs(lambda x, u: g_vp(pose, x)))
+    constraints.append(ctcs(lambda x, u, p=pose: g_vp(p, x)))
 for node, cen in zip(gate_nodes, A_gate_cen):
     constraints.append(
-        nodal(lambda x, u: cp.norm(A_gate @ x[:3] - cen, "inf") <= 1, nodes=[node])
-    )
+        nodal(
+            lambda x, u, A=A_gate, c=cen: cp.norm(A @ x[:3] - c, "inf") <= 1,
+            nodes=[node],
+        )
+    )  # use local variables inside the lambda function
 
 
 def dynamics(x, u):
