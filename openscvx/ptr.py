@@ -8,7 +8,7 @@ import time
 import sys
 from termcolor import colored
 
-from openscvx.discretization import AugmentedDynamics
+from openscvx.discretization import ExactDis
 from openscvx.config import Config
 from openscvx.propagation import full_subject_traj_time, subject_traj, u_lambda, simulate_nonlinear_time
 from openscvx.ocp import OCP
@@ -17,7 +17,7 @@ from openscvx.plotting import plot_initial_guess
 import warnings
 warnings.filterwarnings("ignore")
 
-def PTR_init(params: Config) -> tuple[cp.Problem, AugmentedDynamics]:
+def PTR_init(params: Config) -> tuple[cp.Problem, ExactDis]:
     intro()
 
     t_0_while = time.time()
@@ -31,7 +31,7 @@ def PTR_init(params: Config) -> tuple[cp.Problem, AugmentedDynamics]:
     else:
         cpg_solve = None
 
-    aug_dy = AugmentedDynamics(params)
+    aug_dy = ExactDis(params)
 
     # Solve a dumb problem to intilize DPP and JAX jacobians
     _ = PTR_subproblem(cpg_solve, params.sim.x_bar, params.sim.u_bar, aug_dy, ocp, params)
@@ -40,7 +40,7 @@ def PTR_init(params: Config) -> tuple[cp.Problem, AugmentedDynamics]:
     print("Total Initialization Time: ", t_f_while - t_0_while)
     return ocp, aug_dy, cpg_solve
 
-def PTR_main(params: Config, prob: cp.Problem, aug_dy: AugmentedDynamics, cpg_solve) -> dict:
+def PTR_main(params: Config, prob: cp.Problem, aug_dy: ExactDis, cpg_solve) -> dict:
     J_vb = 1E2
     J_vc = 1E2
     J_tr = 1E2
@@ -152,7 +152,7 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: AugmentedDynamics, cpg_so
     )
     return result
 
-def PTR_post(params: Config, result: dict, aug_dy: AugmentedDynamics) -> dict:
+def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
     t_0_while = time.time()
     x = result['state_scp']
     u = result['control_scp']
@@ -216,13 +216,14 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     prob.param_dict['u_bar'].value = u_bar
     
     t0 = time.time()
-    A_bar, B_bar, C_bar, z_bar, V_multi_shoot = aug_dy.calculate_discretization(x_bar, u_bar)
+    A_bar, B_bar, C_bar, z_bar, V_multi_shoot = aug_dy.calculate_discretization(x_bar, u_bar.astype(float))
     dis_time = time.time() - t0
     
-    prob.param_dict['A_d'].value = A_bar
-    prob.param_dict['B_d'].value = B_bar
-    prob.param_dict['C_d'].value = C_bar
-    prob.param_dict['z_d'].value = z_bar
+    prob.param_dict['A_d'].value = np.asarray(A_bar)
+    prob.param_dict['B_d'].value = np.asarray(B_bar)
+    prob.param_dict['C_d'].value = np.asarray(C_bar)
+    prob.param_dict['z_d'].value = np.asarray(z_bar)
+    dis_time = time.time() - t0
     
     prob.param_dict['w_tr'].value = params.scp.w_tr
     prob.param_dict['lam_cost'].value = params.scp.lam_cost
