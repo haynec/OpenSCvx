@@ -223,6 +223,12 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     prob.param_dict['C_d'].value = np.asarray(C_bar)
     prob.param_dict['z_d'].value = np.asarray(z_bar)
     dis_time = time.time() - t0
+
+    if params.veh.constraints_ncvx_nodal:
+        for g_id, constraint in enumerate(params.veh.constraints_ncvx_nodal):
+            prob.param_dict['g_' + str(g_id)].value = np.asarray(constraint.g(x_bar, u_bar))
+            prob.param_dict['grad_g_x_' + str(g_id)].value = np.asarray(constraint.grad_g_x(x_bar, u_bar))
+            prob.param_dict['grad_g_u_' + str(g_id)].value = np.asarray(constraint.grad_g_u(x_bar, u_bar.astype(float)))
     
     prob.param_dict['w_tr'].value = params.scp.w_tr
     prob.param_dict['lam_cost'].value = params.scp.lam_cost
@@ -250,10 +256,11 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     J_tr_vec.append(la.norm(la.inv(params.sim.S_x) @ (x[0] - x_bar[0])))
     for k in range(params.scp.n):
         J_tr_vec.append(la.norm(la.inv(sla.block_diag(params.sim.S_x, params.sim.S_u)) @ (np.hstack((x[k], u[k-1])) - np.hstack((x_bar[k], u_bar[k-1]))))**2)
-
-        J_vb = 0
-        J_vb_vec.append(J_vb)
         J_vc_vec.append(np.sum(np.abs(prob.var_dict['nu'].value[k-1])))
+    if params.veh.constraints_ncvx_nodal:
+        J_vb_vec = np.maximum(0, prob.var_dict['nu_vb'].value)
+    else:
+        J_vb_vec = 0
     return x, u, costs, prob.value, J_vb_vec, J_vc_vec, J_tr_vec, prob.status, V_multi_shoot, subprop_time, dis_time
 
 def scp_traj_interp(scp_trajs, params):

@@ -13,6 +13,7 @@ class Dynamics:
         dynamics: callable,
         constraints_ctcs: List[callable],
         constraints_nodal: List[callable],
+        constraints_ncvx_nodal: List[callable],
         initial_state,
         final_state,
     ):
@@ -20,6 +21,7 @@ class Dynamics:
         self.dynamics = dynamics
         self.constraints_ctcs = constraints_ctcs
         self.constraints_nodal = constraints_nodal
+        self.constraints_ncvx_nodal = constraints_ncvx_nodal
 
         # CTCS Functions
         self.g_jit = jax.jit(self.g_func)

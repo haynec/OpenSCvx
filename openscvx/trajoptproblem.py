@@ -53,7 +53,8 @@ class TrajOptProblem:
                 k_max=200,
                 w_tr=1e1,  # Weight on the Trust Reigon
                 lam_cost=1e1,  # Weight on the Nonlinear Cost
-                lam_vc=1e2,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
+                lam_vc=1e2,  # Weight on the Virtual Control Objective
+                lam_vb=0e0, # Weight on the Virtual Buffer Objective (only for penalized nodal constraints)
                 ep_tr=1e-4,  # Trust Region Tolerance
                 ep_vb=1e-4,  # Virtual Control Tolerance
                 ep_vc=1e-8,  # Virtual Control Tolerance for CTCS
@@ -74,6 +75,7 @@ class TrajOptProblem:
 
         self.constraints_ctcs = []
         self.constraints_nodal = []
+        self.constraints_ncvx_nodal = []
 
         for constraint in constraints:
             if constraint.constraint_type == "ctcs":
@@ -86,6 +88,11 @@ class TrajOptProblem:
                     )
             elif constraint.constraint_type == "nodal":
                 self.constraints_nodal.append(constraint)
+            elif constraint.constraint_type == "ncvx_nodal":
+                if constraint.nodes == 'All':
+                    constraint.nodes = list(range(N))
+                # constraint.g = 
+                self.constraints_ncvx_nodal.append(constraint)
             else:
                 raise ValueError(
                     f"Unknown constraint type: {constraint.constraint_type}, All constraints must be decorated with @ctcs or @nodal"
@@ -95,6 +102,7 @@ class TrajOptProblem:
             dynamics,
             self.constraints_ctcs,
             self.constraints_nodal,  # TODO (norrisg) Maybe move this outside of the dynamics?
+            self.constraints_ncvx_nodal,
             initial_state=initial_state,
             final_state=final_state,
         )
