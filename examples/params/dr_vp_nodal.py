@@ -102,8 +102,14 @@ def g_cvx_nodal(x):  # Nodal Convex Inequality Constraints
 
 constraints = []
 for pose in init_poses:
-    constraints.append(ncvx_nodal(lambda x, u: g_vp(x, u, pose)))
-constraints.append(nodal(lambda x, u: g_cvx_nodal(x)))
+    constraints.append(ncvx_nodal(lambda x, u, p=pose: g_vp(x, u, p)))
+for node, cen in zip(gate_nodes, A_gate_cen):
+    constraints.append(
+        nodal(
+            lambda x, u, A=A_gate, c=cen: cp.norm(A @ x[:3] - c, "inf") <= 1,
+            nodes=[node],
+        )
+    )  # use local variables inside the lambda function
 
 
 def dynamics(x, u):
@@ -184,6 +190,7 @@ problem = TrajOptProblem(
 )
 
 problem.params.sim.dt = 0.1
+problem.params.sim.custom_integrator = False
 
 problem.params.scp.w_tr = 8e1  # Weight on the Trust Reigon
 problem.params.scp.lam_cost = 2e1  # Weight on the Minimal Time Objective
