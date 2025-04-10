@@ -26,6 +26,7 @@ def test_obstacle_avoidance():
 def test_drone_racing():
     # This test is specific to the drone racing problem
     problem = drone_racing_problem
+    problem.params.sim.custom_integrator = False
     problem.initialize()
     result = problem.solve()
     
@@ -40,6 +41,7 @@ def test_drone_racing():
 def test_dr_vp():
     # This test is specific to the dr_vp problem
     problem = dr_vp_problem
+    problem.params.sim.custom_integrator = False
     problem.initialize()
     result = problem.solve()
     
@@ -54,6 +56,7 @@ def test_dr_vp():
 def test_dr_vp_polytope():
     # This test is specific to the dr_vp_polytope problem
     problem = dr_vp_polytope_problem
+    problem.params.sim.custom_integrator = False
     problem.initialize()
     result = problem.solve()
     
@@ -68,6 +71,7 @@ def test_dr_vp_polytope():
 def test_cinema_vp():
     # This test is specific to the cinema_vp problem
     problem = cinema_vp_problem
+    problem.params.sim.custom_integrator = False
     problem.initialize()
     result = problem.solve()
     
