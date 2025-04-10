@@ -89,9 +89,9 @@ Check out the problem definitions inside `examples/params` to see how to define 
 ## What is implemented
 This repo has the following features:
 1. Free Final Time
-2. Fully adaptive time dilation (s is appended to the control vector)
+2. Fully adaptive time dilation (```s``` is appended to the control vector)
 3. Continuous-Time Constraint Satisfaction
-4. FOH and ZOH exact discretization (t is a state so you can bring your own scheme)
+4. FOH and ZOH exact discretization (```t``` is a state so you can bring your own scheme)
 6. Vectorized and Ahead-of-Time (AOT) Compiled Multishooting Discretization
 7. JAX Autodiff for Jacobians
 
