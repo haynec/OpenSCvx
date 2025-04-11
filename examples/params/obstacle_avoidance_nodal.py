@@ -3,7 +3,7 @@ import jax.numpy as jnp
 
 from openscvx.trajoptproblem import TrajOptProblem
 from openscvx.constraints.boundary import BoundaryConstraint as bc
-from openscvx.constraints.decorators import ctcs, ncvx_nodal
+from openscvx.constraints.decorators import ctcs, nodal
 from openscvx.utils import qdcm, SSMP, SSM, generate_orthogonal_unit_vectors
 
 n = 6
@@ -72,7 +72,7 @@ for _ in obstacle_centers:
 constraints = []
 for center, A_obs_s in zip(obstacle_centers, A_obs):
     # constraints.append(ctcs(lambda x, u: g_obs(center, A, x)))
-    constraints.append(ncvx_nodal(lambda x, u, c=center, A=A_obs_s: g_obs(x, u, c, A)))
+    constraints.append(nodal(lambda x, u, c=center, A=A_obs_s: g_obs(x, u, c, A), convex=False))
 constraints.append(ctcs(lambda x, u: x[:-1] - max_state[:-1]))
 constraints.append(ctcs(lambda x, u: min_state[:-1] - x[:-1]))
 

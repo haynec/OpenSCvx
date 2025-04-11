@@ -6,7 +6,7 @@ import jax.numpy as jnp
 from openscvx.trajoptproblem import TrajOptProblem
 from openscvx.utils import qdcm, SSMP, SSM, rot, gen_vertices
 from openscvx.constraints.boundary import BoundaryConstraint as bc
-from openscvx.constraints.decorators import ctcs, nodal, ncvx_nodal
+from openscvx.constraints.decorators import ctcs, nodal
 
 n = 33  # Number of Nodes
 total_time = 30.0  # Total time for the simulation
@@ -102,12 +102,12 @@ def g_cvx_nodal(x):  # Nodal Convex Inequality Constraints
 
 constraints = []
 for pose in init_poses:
-    constraints.append(ncvx_nodal(lambda x, u, p = pose: g_vp(x, u, p)))
+    constraints.append(nodal(lambda x, u, p = pose: g_vp(x, u, p), convex=False))
 for node, cen in zip(gate_nodes, A_gate_cen):
     constraints.append(
         nodal(
             lambda x, u, A=A_gate, c=cen: cp.norm(A @ x[:3] - c, "inf") <= 1,
-            nodes=[node],
+            nodes=[node], convex=True,
         )
     )  # use local variables inside the lambda function
 
