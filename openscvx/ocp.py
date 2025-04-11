@@ -67,8 +67,9 @@ def OCP(params: Config):
     #############
     # CONSTRAINTS
     #############
+    g_id = 0
     if params.veh.constraints_nodal:
-        for g_id, constraint in enumerate(params.veh.constraints_nodal):
+        for constraint in params.veh.constraints_nodal:
             if constraint.nodes is None:
                 nodes = range(params.scp.n)
             else:
@@ -76,8 +77,10 @@ def OCP(params: Config):
 
             if constraint.convex:
                 constr += [constraint(x_nonscaled[node], u_nonscaled[node]) for node in nodes]
+
             elif not constraint.convex:
                 constr += [((g[g_id][node] + grad_g_x[g_id][node] @ dx[node] + grad_g_u[g_id][node] @ du[node])) == nu_vb[g_id][node] for node in nodes]
+                g_id += 1
 
     for i in range(params.sim.n_states-1):
         if params.sim.initial_state.type[i] == 'Fix':
