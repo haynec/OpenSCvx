@@ -117,10 +117,13 @@ def OCP(params: Config):
     
     cost += sum(w_tr * cp.sum_squares(sla.block_diag(la.inv(S_x), la.inv(S_u)) @ cp.hstack((dx[i], du[i]))) for i in range(params.scp.n)) # Trust Region Cost
     cost += sum(params.scp.lam_vc * cp.sum(cp.abs(nu[i-1])) for i in range(1, params.scp.n)) # Virtual Control Slack
+    
+    g_id = 0
     if params.veh.constraints_nodal:
-        for g_id, constraint in enumerate(params.veh.constraints_nodal):
+        for constraint in params.veh.constraints_nodal:
             if not constraint.convex:
                 cost += params.scp.lam_vb * cp.sum(cp.pos(nu_vb[g_id]))
+                g_id += 1
 
     constr += [cp.abs(x_nonscaled[i][-1] - x_nonscaled[i-1][-1]) <= params.sim.max_state[-1] for i in range(1, params.scp.n)] # LICQ Constraint
     constr += [x_nonscaled[0][-1] == 0]
