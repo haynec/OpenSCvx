@@ -76,6 +76,7 @@ for node, cen in zip(gate_nodes, A_gate_cen):
         nodal(
             lambda x, u, A=A_gate, c=cen: cp.norm(A @ x[:3] - c, "inf") <= 1,
             nodes=[node],
+            convex=True,
         )
     )  # use local variables inside the lambda function
 
