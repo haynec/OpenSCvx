@@ -86,6 +86,8 @@ Check out the problem definitions inside `examples/params` to see how to define 
 - [ ] Linear vs. Nonlinear Cost Trust Region Update
 - [ ] Auto-SCvx Weight Tuning
 - [ ] Compiled at the subproblem level with JAX
+- [ ] Save and reload the compiled JAX code
+- [ ] Single Shot propagation
 ## What is implemented
 This repo has the following features:
 1. Free Final Time
