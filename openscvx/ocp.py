@@ -79,24 +79,6 @@ def OCP(params: Config):
             elif not constraint.convex:
                 constr += [((g[g_id][node] + grad_g_x[g_id][node] @ dx[node] + grad_g_u[g_id][node] @ du[node])) == nu_vb[g_id][node] for node in nodes]
 
-    # if params.veh.constraints_ncvx_nodal:
-    #     for g_id, constraint in enumerate(params.veh.constraints_ncvx_nodal):
-    #         constr += [((g[g_id][node] + grad_g_x[g_id][node] @ dx[node] + grad_g_u[g_id][node] @ du[node])) == nu_vb[g_id][node] for node in constraint.nodes]
-            
-    # TODO: (norrisg) remove this
-    if hasattr(params.veh, 'g_cvx_nodal'):
-        constr += params.veh.g_cvx_nodal(x_nonscaled) # Nodal Convex Inequality Constraints
-    
-    if hasattr(params.veh, 'h_cvx_nodal'):
-        constr += params.veh.h_cvx_nodal(x_nonscaled) # Nodal Convex Equality Constraints
-    
-    if hasattr(params.veh, 'g_ncvx_nodal'):
-        constr += params.veh.g_ncvx_nodal(x_nonscaled) # Nodal Nonconvex Inequality Constraints
-    
-    if hasattr(params.veh, 'h_ncvx_nodal'):
-        constr += params.veh.h_ncvx_nodal(x_nonscaled) # Nodal Nonconvex Equality Constraints
-    
-
     for i in range(params.sim.n_states-1):
         if params.sim.initial_state.type[i] == 'Fix':
             constr += [x_nonscaled[0][i] == params.sim.initial_state.value[i]]  # Initial Boundary Conditions
