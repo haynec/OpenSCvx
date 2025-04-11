@@ -3,10 +3,9 @@ import pytest
 import jax
 
 from examples.params.cinema_vp import problem as cinema_vp_problem
-from examples.params.dr_vp_polytope import problem as dr_vp_polytope_problem
 from examples.params.dr_vp import problem as dr_vp_problem
-from examples.params.drone_racing import problem as drone_racing_problem
 from examples.params.obstacle_avoidance import problem as obstacle_avoidance_problem
+from examples.params.dr_vp_nodal import problem as dr_vp_polytope_problem
 
 
 def test_obstacle_avoidance():
@@ -23,9 +22,9 @@ def test_obstacle_avoidance():
     # Clean up jax memory usage
     jax.clear_caches()
 
-def test_drone_racing():
-    # This test is specific to the drone racing problem
-    problem = drone_racing_problem
+def test_dr_vp_nodal():
+    # This test is specific to the dr_vp_nodal problem
+    problem = dr_vp_polytope_problem
     problem.params.sim.custom_integrator = False
     problem.initialize()
     result = problem.solve()
@@ -33,7 +32,7 @@ def test_drone_racing():
     # Assuming PTR_main returns a dictionary
     output_dict = result
     
-    assert output_dict['converged'], "Drone Racing Process failed with output"
+    assert output_dict['converged'], "DR VP Nodal Process failed with output"
     
     # Clean up jax memory usage
     jax.clear_caches()
@@ -49,21 +48,6 @@ def test_dr_vp():
     output_dict = result
     
     assert output_dict['converged'], "DR VP Process failed with output"
-    
-    # Clean up jax memory usage
-    jax.clear_caches()
-
-def test_dr_vp_polytope():
-    # This test is specific to the dr_vp_polytope problem
-    problem = dr_vp_polytope_problem
-    problem.params.sim.custom_integrator = False
-    problem.initialize()
-    result = problem.solve()
-    
-    # Assuming PTR_main returns a dictionary
-    output_dict = result
-    
-    assert output_dict['converged'], "DR VP Polytope Process failed with output"
     
     # Clean up jax memory usage
     jax.clear_caches()
