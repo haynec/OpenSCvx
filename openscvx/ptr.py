@@ -1,5 +1,4 @@
 import numpy as np
-import scipy.linalg as sla
 import numpy.linalg as la
 import cvxpy as cp
 import pickle
@@ -133,14 +132,10 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: ExactDis, cpg_solve) -> d
     # Print with bold text
     print("------------------------------------------------ " + BOLD + "RESULTS" + RESET + " ------------------------------------------------")
     print("Total Computation Time: ", t_f_while - t_0_while)
-    
-    t = np.array(aug_dy.s_to_t(u, params))
-
-    params.sim.total_time = t[-1]
 
     result = dict(
         converged = k <= params.scp.k_max,
-        tof = t[-1],
+        tof = x[:,-2][-1],
         control_scp = u,
         state_scp = x,
         scp_trajs = scp_trajs,
@@ -208,10 +203,6 @@ def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
 
 
 def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
-    J_vb_vec = []
-    J_vc_vec = []
-    J_tr_vec = []
-    
     prob.param_dict['x_bar'].value = x_bar
     prob.param_dict['u_bar'].value = u_bar
     
@@ -254,10 +245,15 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
             costs = x[:,i]
         i += 1
 
-    J_tr_vec.append(la.norm(la.inv(params.sim.S_x) @ (x[0] - x_bar[0])))
-    for k in range(params.scp.n):
-        J_tr_vec.append(la.norm(la.inv(sla.block_diag(params.sim.S_x, params.sim.S_u)) @ (np.hstack((x[k], u[k-1])) - np.hstack((x_bar[k], u_bar[k-1]))))**2)
-        J_vc_vec.append(np.sum(np.abs(prob.var_dict['nu'].value[k-1])))
+    # Create the block diagonal matrix using jax.numpy.block
+    inv_block_diag = np.block([
+        [params.sim.inv_S_x, np.zeros((params.sim.inv_S_x.shape[0], params.sim.inv_S_u.shape[1]))],
+        [np.zeros((params.sim.inv_S_u.shape[0], params.sim.inv_S_x.shape[1])), params.sim.inv_S_u]
+    ])
+
+    # Calculate J_tr_vec using the JAX-compatible block diagonal matrix
+    J_tr_vec = la.norm(inv_block_diag @ np.hstack((x - x_bar, u - u_bar)).T, axis=0)**2
+    J_vc_vec = np.sum(np.abs(prob.var_dict['nu'].value), axis = 1)
     
     id_ncvx = 0
     J_vb_vec = 0
@@ -283,14 +279,14 @@ def intro():
     warnings.filterwarnings("ignore")
     ascii_art = '''
                              
-                               ____                    _____  _____           
-                              / __ \                  / ____|/ ____|          
-                             | |  | |_ __   ___ _ __ | (___ | |  __   ____  __
-                             | |  | | '_ \ / _ \ '_ \ \___ \| |  \ \ / /\ \/ /
-                             | |__| | |_) |  __/ | | |____) | |___\ V /  >  < 
-                              \____/| .__/ \___|_| |_|_____/ \_____\_/  /_/\_\ 
-                                    | |                                       
-                                    |_|                                       
+                             ____                    _____  _____           
+                            / __ \                  / ____|/ ____|          
+                           | |  | |_ __   ___ _ __ | (___ | |  __   ____  __
+                           | |  | | '_ \ / _ \ '_ \ \___ \| |  \ \ / /\ \/ /
+                           | |__| | |_) |  __/ | | |____) | |___\ V /  >  < 
+                            \____/| .__/ \___|_| |_|_____/ \_____\_/  /_/\_\ 
+                                  | |                                       
+                                  |_|                                       
 ---------------------------------------------------------------------------------------------------------
                                 Author: Chris Hayner and Griffin Norris
                                     Autonomous Controls Laboratory
