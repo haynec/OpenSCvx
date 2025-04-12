@@ -126,8 +126,10 @@ class SimConfig:
     cvxpygen: bool = False
     custom_integrator: bool = True
     S_x: np.ndarray = None
+    inv_S_x: np.ndarray = None
     c_x: np.ndarray = None
     S_u: np.ndarray = None
+    inv_S_u: np.ndarray = None
     c_u: np.ndarray = None
 
     def __post_init__(self):
@@ -160,10 +162,13 @@ class SimConfig:
             self.S_x, self.c_x = get_affine_scaling_matrices(
                 self.n_states, self.min_state, self.max_state
             )
+            # Use the fact that S_x is diagonal to compute the inverse
+            self.inv_S_x = np.diag(1 / np.diag(self.S_x))
         if self.S_u is None or self.c_u is None:
             self.S_u, self.c_u = get_affine_scaling_matrices(
                 self.n_controls, self.min_control, self.max_control
             )
+            self.inv_S_u = np.diag(1 / np.diag(self.S_u))
 
 
 @dataclass

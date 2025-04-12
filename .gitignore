@@ -10,6 +10,9 @@ __pycache__/
 *.prof
 *.pkl
 
+# JAX Compilation Cache
+jax_compilation_cache/*
+
 # C extensions
 *.so
 
