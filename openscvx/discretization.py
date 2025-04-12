@@ -1,5 +1,5 @@
 import jax.numpy as jnp
-from jax import jit
+from jax import jit, lax
 import numpy as np
 import scipy.integrate as itg
 
@@ -10,12 +10,15 @@ class RK45:
         pass
 
     def rk45_step(self, f, t, y, h, *args):
-        k1 = f(t, y, *args)
-        k2 = f(t + h/4, y + h*k1/4, *args)
-        k3 = f(t + 3*h/8, y + 3*h*k1/32 + 9*h*k2/32, *args)
-        k4 = f(t + 12*h/13, y + 1932*h*k1/2197 - 7200*h*k2/2197 + 7296*h*k3/2197, *args)
-        k5 = f(t + h, y + 439*h*k1/216 - 8*h*k2 + 3680*h*k3/513 - 845*h*k4/4104, *args)
-
+        def compute_k(f, t, y, h, *args):
+            k1 = f(t, y, *args)
+            k2 = f(t + h/4, y + h*k1/4, *args)
+            k3 = f(t + 3*h/8, y + 3*h*k1/32 + 9*h*k2/32, *args)
+            k4 = f(t + 12*h/13, y + 1932*h*k1/2197 - 7200*h*k2/2197 + 7296*h*k3/2197, *args)
+            k5 = f(t + h, y + 439*h*k1/216 - 8*h*k2 + 3680*h*k3/513 - 845*h*k4/4104, *args)
+            return k1, k2, k3, k4, k5
+        
+        k1, k2, k3, k4, k5 = compute_k(f, t, y, h, *args)
         y_next = y + h * (25*k1/216 + 1408*k3/2565 + 2197*k4/4104 - k5/5)
         return y_next
 
@@ -30,12 +33,13 @@ class RK45:
         V_result = jnp.zeros((len(t_eval), len(V0)))
         V_result = V_result.at[0].set(V0)
         
-        t = tau_grid[0]
-        y = V0
-        for i in range(1, len(t_eval)):
-            V_result = V_result.at[i].set(self.rk45_step(dVdt, t, y, h, *args))
-            t += h
-            y = V_result[i]
+        def body_fun(i, val):
+            t, y, V_result = val
+            y_next = self.rk45_step(dVdt, t, y, h, *args)
+            V_result = V_result.at[i].set(y_next)
+            return (t + h, y_next, V_result)
+
+        _, _, V_result = lax.fori_loop(1, len(t_eval), body_fun, (tau_grid[0], V0, V_result))
         
         return V_result
 

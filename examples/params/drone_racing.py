@@ -141,6 +141,7 @@ problem = TrajOptProblem(
 )
 
 problem.params.sim.dt = 0.01
+problem.params.sim.custom_integrator = True
 
 problem.params.scp.w_tr = 2e0  # Weight on the Trust Reigon
 problem.params.scp.lam_cost = 1e-1  # 0e-1,  # Weight on the Minimal Time Objective

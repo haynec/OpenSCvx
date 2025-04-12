@@ -105,7 +105,7 @@ problem = TrajOptProblem(
 )
 
 problem.params.sim.dt = 0.01
-problem.params.sim.custom_integrator = False
+problem.params.sim.custom_integrator = True
 
 problem.params.scp.lam_vb = 1E0
 
