@@ -76,7 +76,6 @@ class TrajOptProblem:
 
         self.constraints_ctcs = []
         self.constraints_nodal = []
-        self.constraints_ncvx_nodal = []
 
         for constraint in constraints:
             if constraint.constraint_type == "ctcs":
@@ -85,11 +84,6 @@ class TrajOptProblem:
                 )
             elif constraint.constraint_type == "nodal":
                 self.constraints_nodal.append(constraint)
-            elif constraint.constraint_type == "ncvx_nodal":
-                if constraint.nodes == 'All':
-                    constraint.nodes = list(range(N))
-                # constraint.g = 
-                self.constraints_ncvx_nodal.append(constraint)
             else:
                 raise ValueError(
                     f"Unknown constraint type: {constraint.constraint_type}, All constraints must be decorated with @ctcs or @nodal"
@@ -99,7 +93,6 @@ class TrajOptProblem:
             dynamics,
             self.constraints_ctcs,
             self.constraints_nodal,  # TODO (norrisg) Maybe move this outside of the dynamics?
-            self.constraints_ncvx_nodal,
             initial_state=initial_state,
             final_state=final_state,
         )
