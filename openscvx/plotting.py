@@ -7,30 +7,6 @@ import pickle
 from openscvx.utils import qdcm
 from openscvx.config import Config
 
-# def full_subject_traj(x_full, params, init):
-#     t_full = x_full[params.veh.t_inds]
-#     subs_traj = []
-#     subs_traj_sen = []
-
-#     if params.vp.tracking:
-#         subs_traj = [params.veh.get_kp_pose(t_full)]
-#     else:
-#         for pose in params.veh.init_poses:
-#             subs_traj.append(pose)
-    
-#     if not init:
-#         R_sb = params.vp.R_sb
-#         for sub_traj in subs_traj:
-#             sub_traj_sen = []
-#             for i in range(x_full.shape[0]):
-#                 sub_pose = sub_traj[i]
-#                 sub_traj_sen.append(R_sb @ qdcm(x_full[i, 6:10]).T @ (sub_pose - x_full[i, 0:3]))
-#             subs_traj_sen.append(sub_traj_sen)
-#     else:
-#         subs_traj_sen = None
-    
-#     return subs_traj, np.array(t_full).flatten(), subs_traj_sen
-
 def full_subject_traj_time(results, params):
     x_full = results['state']
     x_nodes = results['scp_trajs'][-1]
