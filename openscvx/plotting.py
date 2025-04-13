@@ -7,6 +7,89 @@ import pickle
 from openscvx.utils import qdcm
 from openscvx.config import Config
 
+# def full_subject_traj(x_full, params, init):
+#     t_full = x_full[params.veh.t_inds]
+#     subs_traj = []
+#     subs_traj_sen = []
+
+#     if params.vp.tracking:
+#         subs_traj = [params.veh.get_kp_pose(t_full)]
+#     else:
+#         for pose in params.veh.init_poses:
+#             subs_traj.append(pose)
+    
+#     if not init:
+#         R_sb = params.vp.R_sb
+#         for sub_traj in subs_traj:
+#             sub_traj_sen = []
+#             for i in range(x_full.shape[0]):
+#                 sub_pose = sub_traj[i]
+#                 sub_traj_sen.append(R_sb @ qdcm(x_full[i, 6:10]).T @ (sub_pose - x_full[i, 0:3]))
+#             subs_traj_sen.append(sub_traj_sen)
+#     else:
+#         subs_traj_sen = None
+    
+#     return subs_traj, np.array(t_full).flatten(), subs_traj_sen
+
+def full_subject_traj_time(results, params):
+    x_full = results['state']
+    x_nodes = results['scp_trajs'][-1]
+    t_nodes = x_nodes[:,params.veh.t_inds]
+    t_full = results['t_full']
+    subs_traj = []
+    subs_traj_node = []
+    subs_traj_sen = []
+    subs_traj_sen_node = []
+    
+    if hasattr(params.veh, 'get_kp_pose'):
+        subs_traj.append(params.veh.get_kp_pose(t_full))
+        subs_traj_node.append(params.veh.get_kp_pose(t_nodes))
+    else:
+        for pose in params.veh.init_poses:
+            # repeat the pose for all time steps
+            pose_full = np.repeat(pose[:,np.newaxis], x_full.shape[0], axis=1).T
+            subs_traj.append(pose_full)
+            
+            pose_node = np.repeat(pose[:,np.newaxis], x_nodes.shape[0], axis=1).T
+            subs_traj_node.append(pose_node)
+        
+    R_sb = params.veh.R_sb
+    for sub_traj in subs_traj:
+        sub_traj_sen = []
+        for i in range(x_full.shape[0]):
+            sub_pose = sub_traj[i]
+            sub_traj_sen.append(R_sb @ qdcm(x_full[i, 6:10]).T @ (sub_pose - x_full[i, 0:3]))
+        subs_traj_sen.append(np.array(sub_traj_sen).squeeze())
+
+    for sub_traj_node in subs_traj_node:
+        sub_traj_sen_node = []
+        for i in range(x_nodes.shape[0]):
+            sub_pose = sub_traj_node[i]
+            sub_traj_sen_node.append(R_sb @ qdcm(x_nodes[i, 6:10]).T @ (sub_pose - x_nodes[i, 0:3]))
+        subs_traj_sen_node.append(np.array(sub_traj_sen_node).squeeze())
+    return subs_traj, subs_traj_sen, subs_traj_node, subs_traj_sen_node
+
+def subject_traj(x, params: Config):
+    subs_traj = []
+    subs_traj_sen = []
+    t = x[:,params.veh.t_inds]
+    if hasattr(params.veh, 'get_kp_pose'):
+        subs_traj = [params.veh.get_kp_pose(t)]
+    else:
+        for pose in params.veh.init_poses:
+            sub_traj = []
+            pose = np.repeat(pose[:,np.newaxis], x.shape[0], axis=1).T
+            subs_traj.append(pose)
+
+    R_sb = params.veh.R_sb
+    for sub_traj in subs_traj:
+        sub_traj_sen = []
+        for i in range(x.shape[0]):
+            sub_pose = sub_traj[i]
+            sub_traj_sen.append(R_sb @ qdcm(x[i, 6:10]).T @ (sub_pose - x[i, 0:3]))
+        subs_traj_sen.append(sub_traj_sen)
+    return subs_traj_sen
+
 def save_gate_parameters(gates, params: Config):
     gate_centers = []
     gate_vertices = []
@@ -129,8 +212,7 @@ def plot_initial_guess(result, params: Config):
 
 def plot_camera_view(result: dict, params: Config) -> None:
     title = r'$\text{Camera View}$'
-    sub_positions_sen = result['sub_positions_sen']
-    sub_positions_sen_node = result['sub_positions_sen_node']
+    sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result['state'], params, False)
     fig = go.Figure()
 
     # Create a cone plot
@@ -219,8 +301,7 @@ def plot_camera_view(result: dict, params: Config) -> None:
 
 def plot_camera_animation(result: dict, params, path="") -> None:
     title = r'$\text{Camera Animation}$'
-    sub_positions_sen = result['sub_positions_sen']
-    sub_positions_sen_node = result['sub_positions_sen_node']
+    _, subs_positions_sen, _, subs_positions_sen_node = full_subject_traj_time(result, params)
     fig = go.Figure()
 
     # Add blank plots for the subjects
@@ -262,16 +343,16 @@ def plot_camera_animation(result: dict, params, path="") -> None:
     fig.add_trace(go.Scatter(x=X, y=Y, mode='lines', line=dict(color='red', width=5), name=r'$\text{Camera Frame}$', showlegend=False))
 
     # Choose a random color for each subject
-    colors = [f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})' for _ in sub_positions_sen]
+    colors = [f'rgb({random.randint(10,255)}, {random.randint(10,255)}, {random.randint(10,255)})' for _ in subs_positions_sen]
 
     frames = []
     # Animate the subjects along their trajectories
-    for i in range(0, len(sub_positions_sen[0]), 2):
+    for i in range(0, len(subs_positions_sen[0]), 2):
         frame_data = []
-        for sub_idx, sub_traj in enumerate(sub_positions_sen):
+        for sub_idx, sub_traj in enumerate(subs_positions_sen):
             color = colors[sub_idx]
             sub_traj = np.array(sub_traj)
-            sub_traj_nodal = np.array(sub_positions_sen_node[sub_idx])
+            sub_traj_nodal = np.array(subs_positions_sen_node[sub_idx])
             sub_traj[:, 0] /= sub_traj[:, 2]
             sub_traj[:, 1] /= sub_traj[:, 2]
             frame_data.append(go.Scatter(x=sub_traj[:i+1, 0], y=sub_traj[:i+1, 1], mode='lines', line=dict(color=color, width=3), showlegend=False))
@@ -391,8 +472,7 @@ def plot_camera_animation(result: dict, params, path="") -> None:
 
 def plot_camera_polytope_animation(result: dict, params, path="") -> None:
     title = r'$\text{Camera Animation}$'
-    sub_positions_sen = result['sub_positions_sen']
-    sub_positions_sen_node = result['sub_positions_sen_node']
+    sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result['state'], params, False)
     fig = go.Figure()
 
     # Add blank plots for the subjects
@@ -658,8 +738,7 @@ def plot_camera_polytope_animation(result: dict, params, path="") -> None:
 
 def plot_conic_view_animation(result: dict, params, path="") -> None:
     title = r'$\text{Conic Constraint}$'
-    sub_positions_sen = result['sub_positions_sen']
-    sub_positions_sen_node = result['sub_positions_sen_node']
+    sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result['state'], params, False)
     fig = go.Figure()
     for i in range(100):
         fig.add_trace(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='blue', width = 2)))
@@ -859,8 +938,7 @@ def plot_conic_view_animation(result: dict, params, path="") -> None:
 
 def plot_conic_view_polytope_animation(result: dict, params, path="") -> None:
     title = r'$\text{Conic Constraint}$'
-    sub_positions_sen = result['sub_positions_sen']
-    sub_positions_sen_node = result['sub_positions_sen_node']
+    sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result['state'], params, False)
     fig = go.Figure()
     for i in range(500):
         fig.add_trace(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='blue', width = 2)))
@@ -1164,7 +1242,8 @@ def plot_animation(result: dict,
     drone_velocities = result["state"][:, 3:6]
     drone_attitudes = result["state"][:, 6:10]
     drone_forces = result["control"][:, :3]
-    subs_positions = result["sub_positions"]
+    subs_positions = subject_traj(result['state'], params)
+
 
     np.save(f'{path}results/drone_positions.npy', drone_positions)
     np.save(f'{path}results/drone_velocities.npy', drone_velocities)
@@ -1547,12 +1626,12 @@ def plot_scp_animation(result: dict,
     drone_positions = result["state"][:, :3]
     drone_attitudes = result["state"][:, 6:10]
     drone_forces = result["control"][:, :3]
-    scp_interp_trajs = result["scp_interp"]
+    scp_interp_trajs = scp_traj_interp(result["scp_trajs"], params)
     scp_ctcs_trajs = result["scp_trajs"]
     scp_multi_shoot = result["scp_multi_shoot"]
     # obstacles = result_ctcs["obstacles"]
     # gates = result_ctcs["gates"]
-    subs_positions = result["sub_positions"]
+    subs_positions = subject_traj(result['state'], params)
     fig = go.Figure(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='gray', width = 2), name='SCP Iterations'))
     for j in range(200):
         fig.add_trace(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='gray', width = 2)))
@@ -1797,8 +1876,19 @@ def plot_scp_animation(result: dict,
 
     fig.show()
 
+def scp_traj_interp(scp_trajs, params):
+    scp_prop_trajs = []
+    for traj in scp_trajs:
+        states = []
+        for k in range(params.scp.n):
+            traj_temp = np.repeat(np.expand_dims(traj[k], axis = 1), params.sim.inter_sample - 1, axis = 1)
+            for i in range(1, params.sim.inter_sample - 1):
+                states.append(traj_temp[:,i])
+        scp_prop_trajs.append(np.array(states))
+    return scp_prop_trajs
+
 def plot_state(result, params: Config):
-    scp_trajs = result["scp_interp"]
+    scp_trajs = scp_traj_interp(result["scp_trajs"], params)
     x_full = result["state"]
 
     fig = make_subplots(rows=2, cols=7, subplot_titles=('X Position', 'Y Position', 'Z Position', 'X Velocity', 'Y Velocity', 'Z Velocity', 'CTCS Augmentation', 'Q1', 'Q2', 'Q3', 'Q4', 'X Angular Rate', 'Y Angular Rate', 'Z Angular Rate'))
