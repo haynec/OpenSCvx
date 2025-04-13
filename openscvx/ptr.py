@@ -9,9 +9,8 @@ from termcolor import colored
 
 from openscvx.discretization import ExactDis
 from openscvx.config import Config
-from openscvx.propagation import full_subject_traj_time, subject_traj, u_lambda, simulate_nonlinear_time
+from openscvx.propagation import u_lambda, simulate_nonlinear_time
 from openscvx.ocp import OCP
-from openscvx.plotting import plot_initial_guess
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -151,7 +150,6 @@ def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
     t_0_post = time.time()
     x = result['state_scp']
     u = result['control_scp']
-    scp_trajs = result['scp_trajs']
 
     t = np.array(aug_dy.s_to_t(u, params))
 
@@ -161,14 +159,6 @@ def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
     tau_vals, u_full = aug_dy.t_to_tau(u_lam, t_full, u, t, params)
 
     x_full = simulate_nonlinear_time(x[0], u_lam, tau_vals, t, aug_dy, params)
-
-    x_sub_full = []
-    if hasattr(params.veh, 'init_poses') or hasattr(params.veh, 'get_kp_pose'):
-        x_sub_full, _, x_sub_sen = full_subject_traj_time(x_full, params, False)
-        x_sub_sen_node = subject_traj(x, params)
-    else:
-        x_sub_sen = []
-        x_sub_sen_node = []
 
     print("Total CTCS Constraint Violation:", x_full[-1, params.veh.y_inds])
     i = 0
@@ -183,17 +173,11 @@ def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
             cost += x[-1, i]
         i +=1
     print("Cost: ", cost)
-    
-    scp_trajs_interp = scp_traj_interp(scp_trajs, params)\
 
     more_result = dict(
         t_full = t_full,
         state = x_full,
-        control = u_full,
-        sub_positions = x_sub_full,
-        sub_positions_sen = x_sub_sen,
-        sub_positions_sen_node = x_sub_sen_node,
-        scp_interp = scp_trajs_interp,
+        control = u_full
     )
 
     t_f_post = time.time()
@@ -209,10 +193,11 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     t0 = time.time()
     A_bar, B_bar, C_bar, z_bar, V_multi_shoot = aug_dy.calculate_discretization(x_bar, u_bar.astype(float))
     
-    prob.param_dict['A_d'].value = np.asarray(A_bar)
-    prob.param_dict['B_d'].value = np.asarray(B_bar)
-    prob.param_dict['C_d'].value = np.asarray(C_bar)
-    prob.param_dict['z_d'].value = np.asarray(z_bar)
+
+    prob.param_dict['A_d'].value = A_bar.__array__()
+    prob.param_dict['B_d'].value = B_bar.__array__()
+    prob.param_dict['C_d'].value = C_bar.__array__()
+    prob.param_dict['z_d'].value = z_bar.__array__()
     dis_time = time.time() - t0
 
     if params.veh.constraints_nodal:
@@ -263,30 +248,19 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
             id_ncvx += 1
     return x, u, costs, prob.value, J_vb_vec, J_vc_vec, J_tr_vec, prob.status, V_multi_shoot, subprop_time, dis_time
 
-def scp_traj_interp(scp_trajs, params):
-    scp_prop_trajs = []
-    for traj in scp_trajs:
-        states = []
-        for k in range(params.scp.n):
-            traj_temp = np.repeat(np.expand_dims(traj[k], axis = 1), params.sim.inter_sample - 1, axis = 1)
-            for i in range(1, params.sim.inter_sample - 1):
-                states.append(traj_temp[:,i])
-        scp_prop_trajs.append(np.array(states))
-    return scp_prop_trajs
-
 def intro():
     # Silence syntax warnings
     warnings.filterwarnings("ignore")
     ascii_art = '''
                              
-                             ____                    _____  _____           
-                            / __ \                  / ____|/ ____|          
-                           | |  | |_ __   ___ _ __ | (___ | |  __   ____  __
-                           | |  | | '_ \ / _ \ '_ \ \___ \| |  \ \ / /\ \/ /
-                           | |__| | |_) |  __/ | | |____) | |___\ V /  >  < 
-                            \____/| .__/ \___|_| |_|_____/ \_____\_/  /_/\_\ 
-                                  | |                                       
-                                  |_|                                       
+                            ____                    _____  _____           
+                           / __ \                  / ____|/ ____|          
+                          | |  | |_ __   ___ _ __ | (___ | |  __   ____  __
+                          | |  | | '_ \ / _ \ '_ \ \___ \| |  \ \ / /\ \/ /
+                          | |__| | |_) |  __/ | | |____) | |___\ V /  >  < 
+                           \____/| .__/ \___|_| |_|_____/ \_____\_/  /_/\_\ 
+                                 | |                                       
+                                 |_|                                       
 ---------------------------------------------------------------------------------------------------------
                                 Author: Chris Hayner and Griffin Norris
                                     Autonomous Controls Laboratory
