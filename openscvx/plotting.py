@@ -45,27 +45,6 @@ def full_subject_traj_time(results, params):
         subs_traj_sen_node.append(np.array(sub_traj_sen_node).squeeze())
     return subs_traj, subs_traj_sen, subs_traj_node, subs_traj_sen_node
 
-def subject_traj(x, params: Config):
-    subs_traj = []
-    subs_traj_sen = []
-    t = x[:,params.veh.t_inds]
-    if hasattr(params.veh, 'get_kp_pose'):
-        subs_traj = [params.veh.get_kp_pose(t)]
-    else:
-        for pose in params.veh.init_poses:
-            sub_traj = []
-            pose = np.repeat(pose[:,np.newaxis], x.shape[0], axis=1).T
-            subs_traj.append(pose)
-
-    R_sb = params.veh.R_sb
-    for sub_traj in subs_traj:
-        sub_traj_sen = []
-        for i in range(x.shape[0]):
-            sub_pose = sub_traj[i]
-            sub_traj_sen.append(R_sb @ qdcm(x[i, 6:10]).T @ (sub_pose - x[i, 0:3]))
-        subs_traj_sen.append(sub_traj_sen)
-    return subs_traj_sen
-
 def save_gate_parameters(gates, params: Config):
     gate_centers = []
     gate_vertices = []
@@ -1607,7 +1586,8 @@ def plot_scp_animation(result: dict,
     scp_multi_shoot = result["scp_multi_shoot"]
     # obstacles = result_ctcs["obstacles"]
     # gates = result_ctcs["gates"]
-    subs_positions = subject_traj(result['state'], params)
+    if hasattr(params.veh, 'get_kp_pose') or hasattr(params.veh, 'init_poses'):
+        subs_positions, _, _, _ = full_subject_traj_time(result, params)
     fig = go.Figure(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='gray', width = 2), name='SCP Iterations'))
     for j in range(200):
         fig.add_trace(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='gray', width = 2)))
