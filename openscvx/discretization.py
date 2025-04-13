@@ -63,14 +63,6 @@ class ExactDis:
 
         self.tau_grid = jnp.linspace(0, 1, self.params.scp.n)
 
-        if not params.sim.debug:
-            if params.sim.custom_integrator:
-                calculate_discretization_lower = jit(self.calculate_discretization).lower(np.ones((self.params.scp.n, self.params.sim.n_states)), np.ones((self.params.scp.n, self.params.sim.n_controls)))
-                self.calculate_discretization = calculate_discretization_lower.compile()
-            else:
-                dVdt_lower = jit(self.dVdt).lower(0.0, np.ones(int(self.i5*(self.params.scp.n-1))), np.ones((self.params.scp.n-1, self.params.sim.n_controls)), np.ones((self.params.scp.n-1, self.params.sim.n_controls)))
-                self.dVdt = dVdt_lower.compile()
-    
     def s_to_t(self, u, params: Config):
         t = [0]
         tau = np.linspace(0, 1, params.scp.n)
