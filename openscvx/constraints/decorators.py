@@ -24,7 +24,7 @@ def ctcs(func: callable, penalty="squared_relu") -> callable:
     return func
 
 
-def nodal(func: callable, nodes: list[int] = None, convex: bool = False) -> callable:
+def nodal(func: callable, nodes: list[int] = None, convex: bool = False, inter_nodal: bool = False) -> callable:
     """Decorator to mark a function as a 'nodal' constraint."""
     func.constraint_type = "nodal"
     func.nodes = nodes
@@ -34,4 +34,8 @@ def nodal(func: callable, nodes: list[int] = None, convex: bool = False) -> call
         func.g = vmap(jit(func), in_axes=(0, 0))
         func.grad_g_x = jit(vmap(jacfwd(func, argnums=0), in_axes=(0, 0)))
         func.grad_g_u = jit(vmap(jacfwd(func, argnums=1), in_axes=(0, 0)))
+    if inter_nodal:
+        func.g = jit(func)
+        func.grad_g_x = jit(jacfwd(func, argnums=0))
+        func.grad_g_u = jit(jacfwd(func, argnums=1))
     return func
