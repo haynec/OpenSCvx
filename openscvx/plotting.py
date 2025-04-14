@@ -1202,8 +1202,6 @@ def plot_animation(result: dict,
     if hasattr(params.veh, 'get_kp_pose') or "init_poses" in result:
         subs_positions, _, _, _ = full_subject_traj_time(result, params)
 
-    np.save(f'{path}results/drone_positions.npy', drone_positions)
-    np.save(f'{path}results/drone_velocities.npy', drone_velocities)
     step = 2
     indices = np.array(list(range(drone_positions.shape[0]-1)[::step]) + [drone_positions.shape[0]-1])
 
