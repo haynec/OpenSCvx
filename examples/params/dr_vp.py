@@ -27,9 +27,9 @@ final_state.type[13] = "Minimize"
 
 initial_control = np.array([0, 0, 10, 0, 0, 0])
 max_control = np.array(
-    [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time]
+    [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562]
 )  # Upper Bound on the controls
-min_control = np.array([0, 0, 0, -18.665, -18.665, -0.55562, 0.3 * total_time])
+min_control = np.array([0, 0, 0, -18.665, -18.665, -0.55562])
 
 
 ### Sensor Params ###

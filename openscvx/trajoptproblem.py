@@ -36,6 +36,9 @@ class TrajOptProblem:
         x_min_augmented = np.hstack([x_min, 0])
         x_max_augmented = np.hstack([x_max, 1e-4])
 
+        u_min_augmented = np.hstack([u_min, 0.3*time_init])
+        u_max_augmented = np.hstack([u_max, 3.0*time_init])
+
         x_bar_augmented = np.hstack([x_guess, np.full((x_guess.shape[0], 1), 0)])
         u_bar_augmented = np.hstack([u_guess, np.full((u_guess.shape[0], 1), time_init)])
 
@@ -48,8 +51,8 @@ class TrajOptProblem:
                 max_state=x_max_augmented,
                 min_state=x_min_augmented,
                 initial_control=initial_control,
-                max_control=u_max,
-                min_control=u_min,
+                max_control=u_max_augmented,
+                min_control=u_min_augmented,
                 total_time=time_init,
                 n_states=len(x_max),
                 dt=0.1,
