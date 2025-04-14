@@ -32,15 +32,19 @@ class TrajOptProblem:
         scp: ScpConfig = None,
         sim: SimConfig = None,
     ):
-        
+
+        # TODO (norrisg) move this into some augmentation function, if we want to make this be executed after the init (i.e. within problem.initialize) need to rethink how problem is defined
+
         x_min_augmented = np.hstack([x_min, 0])
         x_max_augmented = np.hstack([x_max, 1e-4])
 
-        u_min_augmented = np.hstack([u_min, 0.3*time_init])
-        u_max_augmented = np.hstack([u_max, 3.0*time_init])
+        u_min_augmented = np.hstack([u_min, 0.3 * time_init])
+        u_max_augmented = np.hstack([u_max, 3.0 * time_init])
 
         x_bar_augmented = np.hstack([x_guess, np.full((x_guess.shape[0], 1), 0)])
-        u_bar_augmented = np.hstack([u_guess, np.full((u_guess.shape[0], 1), time_init)])
+        u_bar_augmented = np.hstack(
+            [u_guess, np.full((u_guess.shape[0], 1), time_init)]
+        )
 
         if sim is None:
             sim = SimConfig(
@@ -65,7 +69,7 @@ class TrajOptProblem:
                 w_tr=1e1,  # Weight on the Trust Reigon
                 lam_cost=1e1,  # Weight on the Nonlinear Cost
                 lam_vc=1e2,  # Weight on the Virtual Control Objective
-                lam_vb=0e0, # Weight on the Virtual Buffer Objective (only for penalized nodal constraints)
+                lam_vb=0e0,  # Weight on the Virtual Buffer Objective (only for penalized nodal constraints)
                 ep_tr=1e-4,  # Trust Region Tolerance
                 ep_vb=1e-4,  # Virtual Control Tolerance
                 ep_vc=1e-8,  # Virtual Control Tolerance for CTCS
@@ -133,12 +137,23 @@ class TrajOptProblem:
 
         if not self.params.sim.debug:
             if self.params.sim.custom_integrator:
-                calculate_discretization_lower = jit(self.dynamics_discretized.calculate_discretization).lower(np.ones((self.params.scp.n, self.params.sim.n_states)), np.ones((self.params.scp.n, self.params.sim.n_controls)))
-                self.dynamics_discretized.calculate_discretization = calculate_discretization_lower.compile()
+                calculate_discretization_lower = jit(
+                    self.dynamics_discretized.calculate_discretization
+                ).lower(
+                    np.ones((self.params.scp.n, self.params.sim.n_states)),
+                    np.ones((self.params.scp.n, self.params.sim.n_controls)),
+                )
+                self.dynamics_discretized.calculate_discretization = (
+                    calculate_discretization_lower.compile()
+                )
             else:
-                dVdt_lower = jit(self.dynamics_discretized.dVdt).lower(0.0, np.ones(int(self.i5*(self.params.scp.n-1))), np.ones((self.params.scp.n-1, self.params.sim.n_controls)), np.ones((self.params.scp.n-1, self.params.sim.n_controls)))
+                dVdt_lower = jit(self.dynamics_discretized.dVdt).lower(
+                    0.0,
+                    np.ones(int(self.i5 * (self.params.scp.n - 1))),
+                    np.ones((self.params.scp.n - 1, self.params.sim.n_controls)),
+                    np.ones((self.params.scp.n - 1, self.params.sim.n_controls)),
+                )
                 self.dynamics_discretized.dVdt = dVdt_lower.compile()
-
 
     def solve(self):
         # Ensure parameter sizes and normalization are correct
