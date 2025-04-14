@@ -1,11 +1,12 @@
 import jax.numpy as jnp
 from jax import jit, lax
 import numpy as np
+import diffrax  as dfx
 import scipy.integrate as itg
 
 from openscvx.config import Config
 
-class RK45:
+class RK45_Custom:
     def __init__(self):
         pass
 
@@ -43,6 +44,32 @@ class RK45:
         
         return V_result
 
+
+class Diffrax:
+    def __init__(self):
+        pass
+    
+    def solve_ivp(self, dVdt, tau_grid, V0, args, t_eval=None):
+        # if t_eval is None:
+        t_eval = jnp.linspace(tau_grid[0], tau_grid[1], 50)
+
+        term = dfx.ODETerm(lambda t, y, args: dVdt(t, y, *args))
+        stepsize_controller = dfx.PIDController(rtol=1e-5, atol=1e-8)
+        solution = dfx.diffeqsolve(
+            term,
+            dfx.Tsit5(),
+            t0=tau_grid[0],
+            t1=tau_grid[1],
+            dt0=(tau_grid[1] - tau_grid[0]) / (len(t_eval) - 1),
+            y0=V0,
+            args=args,
+            stepsize_controller=stepsize_controller,
+            saveat=dfx.SaveAt(ts=t_eval)
+        )
+
+        return solution.ys
+
+
 class ExactDis:
     def __init__(self, params: Config) -> None:
         self.params = params
@@ -59,7 +86,10 @@ class ExactDis:
         self.i4 = self.i3 + n_x * n_u
         self.i5 = self.i4 + n_x
 
-        self.integrator = RK45()
+        if self.params.sim.diffrax:
+            self.integrator = Diffrax()
+        else:
+            self.integrator = RK45_Custom()
 
         self.tau_grid = jnp.linspace(0, 1, self.params.scp.n)
 
@@ -115,7 +145,9 @@ class ExactDis:
             V0 = V0.at[:, self.i0:self.i1].set(x[:-1, :].astype(float))
             V0 = V0.at[:, self.i1:self.i2].set(np.eye(n_x).reshape(1, n_x * n_x).repeat(self.params.scp.n - 1, axis=0))
             
-            int_result = self.integrator.solve_ivp(self.dVdt, (self.tau_grid[0], self.tau_grid[1]), V0.flatten(), args=(u[:-1, :].astype(float), u[1:, :].astype(float)), method='RK45', t_eval=self.tau_grid)
+            int_result = self.integrator.solve_ivp(self.dVdt, (self.tau_grid[0], self.tau_grid[1]), V0.flatten(), args=(u[:-1, :].astype(float), u[1:, :].astype(float)), t_eval=self.tau_grid)
+            
+
             V = int_result[-1].T.reshape(-1, self.i5)
             V_multi_shoot = int_result.T
         else:
