@@ -148,8 +148,8 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: ExactDis, cpg_solve) -> d
 
 def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
     t_0_post = time.time()
-    x = result['state_scp']
-    u = result['control_scp']
+    x = result["x"]
+    u = result["u"]
 
     t = np.array(aug_dy.s_to_t(u, params))
 
