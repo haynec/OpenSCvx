@@ -2,6 +2,8 @@ import jax.numpy as jnp
 from typing import List
 
 import cvxpy as cp
+from jax import jit
+import numpy as np
 
 from openscvx.config import ScpConfig, SimConfig, Config
 from openscvx.dynamics import Dynamics
@@ -107,6 +109,27 @@ class TrajOptProblem:
         self.params.sim.__post_init__()
 
         self.ocp, self.dynamics_discretized, self.cpg_solve = PTR_init(self.params)
+
+        # Extract the number of states and controls from the parameters
+        n_x = self.params.sim.n_states
+        n_u = self.params.sim.n_controls
+
+        # Define indices for slicing the augmented state vector
+        self.i0 = 0
+        self.i1 = n_x
+        self.i2 = self.i1 + n_x * n_x
+        self.i3 = self.i2 + n_x * n_u
+        self.i4 = self.i3 + n_x * n_u
+        self.i5 = self.i4 + n_x
+
+        if not self.params.sim.debug:
+            if self.params.sim.custom_integrator:
+                calculate_discretization_lower = jit(self.dynamics_discretized.calculate_discretization).lower(np.ones((self.params.scp.n, self.params.sim.n_states)), np.ones((self.params.scp.n, self.params.sim.n_controls)))
+                self.dynamics_discretized.calculate_discretization = calculate_discretization_lower.compile()
+            else:
+                dVdt_lower = jit(self.dynamics_discretized.dVdt).lower(0.0, np.ones(int(self.i5*(self.params.scp.n-1))), np.ones((self.params.scp.n-1, self.params.sim.n_controls)), np.ones((self.params.scp.n-1, self.params.sim.n_controls)))
+                self.dynamics_discretized.dVdt = dVdt_lower.compile()
+
 
     def solve(self):
         # Ensure parameter sizes and normalization are correct
