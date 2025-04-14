@@ -12,10 +12,10 @@ n = 33  # Number of Nodes
 total_time = 40.0  # Total time for the simulation
 
 max_state = np.array(
-    [200, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1e-4]
+    [200, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100]
 )  # Upper Bound on the states
 min_state = np.array(
-    [-200, -100, 15, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0]
+    [-200, -100, 15, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0]
 )  # Lower Bound on the states
 
 initial_state = bc(jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]))
@@ -94,8 +94,8 @@ def g_vp(p_s_I, x):
 
 
 constraints = []
-constraints.append(ctcs(lambda x, u: x[:-1] - max_state[:-1]))
-constraints.append(ctcs(lambda x, u: min_state[:-1] - x[:-1]))
+constraints.append(ctcs(lambda x, u: x[:-1] - max_state))
+constraints.append(ctcs(lambda x, u: min_state - x[:-1]))
 for pose in init_poses:
     constraints.append(ctcs(lambda x, u, p=pose: g_vp(p, x)))
 for node, cen in zip(gate_nodes, A_gate_cen):
@@ -136,7 +136,7 @@ s = total_time
 u_bar[:, -1] = np.repeat(s, n)
 
 x_bar = np.repeat(np.expand_dims(np.zeros_like(max_state), axis=0), n, axis=0)
-x_bar[:, :-1] = np.linspace(initial_state.value, final_state.value, n)
+x_bar[:, :] = np.linspace(initial_state.value, final_state.value, n)
 
 i = 0
 origins = [initial_state.value[:3]]

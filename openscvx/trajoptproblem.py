@@ -32,6 +32,9 @@ class TrajOptProblem:
         scp: ScpConfig = None,
         sim: SimConfig = None,
     ):
+        
+        x_min_augmented = np.hstack([x_min, 0])
+        x_max_augmented = np.hstack([x_max, 1e-4])
 
         if sim is None:
             sim = SimConfig(
@@ -39,8 +42,8 @@ class TrajOptProblem:
                 u_bar=u_guess,
                 initial_state=initial_state,
                 final_state=final_state,
-                max_state=x_max,
-                min_state=x_min,
+                max_state=x_max_augmented,
+                min_state=x_min_augmented,
                 initial_control=initial_control,
                 max_control=u_max,
                 min_control=u_min,
