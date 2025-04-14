@@ -131,6 +131,7 @@ class SimConfig:
     S_u: np.ndarray = None
     inv_S_u: np.ndarray = None
     c_u: np.ndarray = None
+    diffrax: bool = False
 
     def __post_init__(self):
         self.n_states = len(self.max_state)
