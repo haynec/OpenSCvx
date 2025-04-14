@@ -36,9 +36,11 @@ class TrajOptProblem:
         x_min_augmented = np.hstack([x_min, 0])
         x_max_augmented = np.hstack([x_max, 1e-4])
 
+        x_bar_augmented = np.hstack([x_guess, np.full((x_guess.shape[0], 1), 0)])
+
         if sim is None:
             sim = SimConfig(
-                x_bar=x_guess,
+                x_bar=x_bar_augmented,
                 u_bar=u_guess,
                 initial_state=initial_state,
                 final_state=final_state,
