@@ -31,15 +31,19 @@ class TrajOptProblem:
         u_min: jnp.ndarray,
         scp: ScpConfig = None,
         sim: SimConfig = None,
+        ctcs_augmentation_min=0.0,
+        ctcs_augmentation_max=1e-4,
+        time_dilation_factor_min=0.3,
+        time_dilation_factor_max=3.0,
     ):
 
         # TODO (norrisg) move this into some augmentation function, if we want to make this be executed after the init (i.e. within problem.initialize) need to rethink how problem is defined
 
-        x_min_augmented = np.hstack([x_min, 0])
-        x_max_augmented = np.hstack([x_max, 1e-4])
+        x_min_augmented = np.hstack([x_min, ctcs_augmentation_min])
+        x_max_augmented = np.hstack([x_max, ctcs_augmentation_max])
 
-        u_min_augmented = np.hstack([u_min, 0.3 * time_init])
-        u_max_augmented = np.hstack([u_max, 3.0 * time_init])
+        u_min_augmented = np.hstack([u_min, time_dilation_factor_min * time_init])
+        u_max_augmented = np.hstack([u_max, time_dilation_factor_max * time_init])
 
         x_bar_augmented = np.hstack([x_guess, np.full((x_guess.shape[0], 1), 0)])
         u_bar_augmented = np.hstack(
