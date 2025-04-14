@@ -25,7 +25,7 @@ final_state = bc(jnp.array([10.0, 0.0, 20.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 
 final_state.type[3:13] = "Free"
 final_state.type[13] = "Minimize"
 
-initial_control = np.array([0, 0, 10, 0, 0, 0, 1])
+initial_control = np.array([0, 0, 10, 0, 0, 0])
 max_control = np.array(
     [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time]
 )  # Upper Bound on the controls
@@ -132,8 +132,6 @@ def dynamics(x, u):
 
 
 u_bar = np.repeat(np.expand_dims(initial_control, axis=0), n, axis=0)
-s = total_time
-u_bar[:, -1] = np.repeat(s, n)
 
 x_bar = np.repeat(np.expand_dims(np.zeros_like(max_state), axis=0), n, axis=0)
 x_bar[:, :] = np.linspace(initial_state.value, final_state.value, n)
