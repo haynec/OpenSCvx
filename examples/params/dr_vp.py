@@ -12,16 +12,16 @@ n = 33  # Number of Nodes
 total_time = 40.0  # Total time for the simulation
 
 max_state = np.array(
-    [200, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100]
+    [200.0, 100.0, 50.0, 100.0, 100.0, 100.0, 1.0, 1.0, 1.0, 1.0, 10.0, 10.0, 10.0, 100.0]
 )  # Upper Bound on the states
 min_state = np.array(
-    [-200, -100, 15, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0]
+    [-200.0, -100.0, 15.0, -100.0, -100.0, -100.0, -1.0, -1.0, -1.0, -1.0, -10.0, -10.0, -10.0, 0.0]
 )  # Lower Bound on the states
 
-initial_state = bc(jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]))
+initial_state = bc(jnp.array([10.0, 0.0, 20.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]))
 initial_state.type[6:13] = "Free"
 
-final_state = bc(jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time]))
+final_state = bc(jnp.array([10.0, 0.0, 20.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, total_time]))
 final_state.type[3:13] = "Free"
 final_state.type[13] = "Minimize"
 
