@@ -20,7 +20,7 @@ def full_subject_traj_time(results, params):
     if hasattr(params.veh, 'get_kp_pose'):
         subs_traj.append(params.veh.get_kp_pose(t_full))
         subs_traj_node.append(params.veh.get_kp_pose(t_nodes))
-    else:
+    elif hasattr(params.veh, 'init_poses'):
         for pose in params.veh.init_poses:
             # repeat the pose for all time steps
             pose_full = np.repeat(pose[:,np.newaxis], x_full.shape[0], axis=1).T
@@ -28,7 +28,9 @@ def full_subject_traj_time(results, params):
             
             pose_node = np.repeat(pose[:,np.newaxis], x_nodes.shape[0], axis=1).T
             subs_traj_node.append(pose_node)
-        
+    else:
+        raise ValueError("No valid method to get keypoint poses.")
+
     R_sb = params.veh.R_sb
     for sub_traj in subs_traj:
         sub_traj_sen = []
@@ -1197,7 +1199,8 @@ def plot_animation(result: dict,
     drone_velocities = result["state"][:, 3:6]
     drone_attitudes = result["state"][:, 6:10]
     drone_forces = result["control"][:, :3]
-    subs_positions, _, _, _ = full_subject_traj_time(result, params)
+    if hasattr(params.veh, 'get_kp_pose') or "init_poses" in result:
+        subs_positions, _, _, _ = full_subject_traj_time(result, params)
 
     np.save(f'{path}results/drone_positions.npy', drone_positions)
     np.save(f'{path}results/drone_velocities.npy', drone_velocities)
@@ -1227,9 +1230,10 @@ def plot_animation(result: dict,
 
         subs_pose = []
 
-        for sub_positions in subs_positions:
-            subs_pose.append(sub_positions[indices[i]])
-        
+        if hasattr(params.veh, 'get_kp_pose') or "init_poses" in result:
+            for sub_positions in subs_positions:
+                subs_pose.append(sub_positions[indices[i]])
+
         # Convert quaternion to rotation matrix
         rotation_matrix = qdcm(att)
 
@@ -1333,18 +1337,7 @@ def plot_animation(result: dict,
             data.append(go.Scatter3d(x=[sub_pose[0]], y=[sub_pose[1]], z=[sub_pose[2]], mode='markers', marker=dict(size=10, color=color_kp[j]), showlegend=False, name='Subject'))
             # if params.vp.n_subs != 1:
             j += 1
-        
-        # Check if params.veh.covariance exists
-        if hasattr(params.veh, 'covariance') and params.veh.covariance:
-            p = params.veh.p_I
-            x = p[:, 0]
-            y = p[:, 1]
-            z = p[:, 2]
-            
-            cov = result['state'][i, 13:params.veh.mass_inds]
-            # Get the z values
-            data.append(go.Scatter3d(x=x, y=y, z=z, mode='markers', marker=dict(size=10, color=cov, colorscale='Viridis',  cmin=0, cmax=np.max(result['state'][:, 13:params.veh.mass_inds]))))
-            
+    
         data.append(go.Scatter3d(
             x=drone_positions[:indices[i]+1,0], 
             y=drone_positions[:indices[i]+1,1], 
