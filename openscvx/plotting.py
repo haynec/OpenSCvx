@@ -419,12 +419,6 @@ def plot_camera_animation(result: dict, params, path="") -> None:
     # # Remove the paper background
     # fig.update_layout(paper_bgcolor='rgba(0,0,0,0)')
 
-    # # Generate embded html make it so that it doesn't autoplay
-    # html_str = fig.to_html(full_html=False, include_plotlyjs='cdn', auto_play=False)
-    # # Save the html string to a file
-    # with open(f'{path}results/animation_camera.html', 'w') as f:
-    #     f.write(html_str)
-
     fig.show()  
 
 def plot_camera_polytope_animation(result: dict, params, path="") -> None:
@@ -684,13 +678,6 @@ def plot_camera_polytope_animation(result: dict, params, path="") -> None:
 
     # # Remove the paper background
     # fig.update_layout(paper_bgcolor='rgba(0,0,0,0)')
-
-    # # Generate embded html make it so that it doesn't autoplay
-    # html_str = fig.to_html(full_html=False, include_plotlyjs='cdn', auto_play=False)
-    # # Save the html string to a file
-    # with open(f'{path}results/animation_camera.html', 'w') as f:
-    #     f.write(html_str)
-
     fig.show()  
 
 def plot_conic_view_animation(result: dict, params, path="") -> None:
@@ -884,12 +871,6 @@ def plot_conic_view_animation(result: dict, params, path="") -> None:
 
     # # Remove the paper background
     # fig.update_layout(paper_bgcolor='rgba(0,0,0,0)')
-
-    # # Generate embded html
-    # html_str = fig.to_html(full_html=False, include_plotlyjs='cdn', auto_play=False)
-    # # Save the html string to a file
-    # with open(f'{path}results/conic_animation.html', 'w') as f:
-    #     f.write(html_str)
 
     fig.show()
 
@@ -1553,14 +1534,6 @@ def plot_animation(result: dict,
     # # Remove the paper background
     # fig.update_layout(paper_bgcolor='rgba(0,0,0,0)')
 
-    
-
-    # Generate embded html
-    html_str = fig.to_html(full_html=False, include_plotlyjs='cdn', auto_play=False)
-    # Save the html string to a file
-    with open(f'{path}results/animation.html', 'w') as f:
-        f.write(html_str)
-
     fig.show()
 
 def plot_scp_animation(result: dict,
@@ -1812,13 +1785,6 @@ def plot_scp_animation(result: dict,
 
     # # Remove the paper background
     # fig.update_layout(paper_bgcolor='rgba(0,0,0,0)')
-                      
-
-    # Generate embded html
-    html_str = fig.to_html(full_html=False, include_plotlyjs='cdn', auto_play=False)
-    # Save the html string to a file
-    with open(f'{path}results/scp_animation.html', 'w') as f:
-        f.write(html_str)
 
     fig.show()
 
