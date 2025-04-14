@@ -169,7 +169,7 @@ def plot_initial_guess(result, params: Config):
 
 def plot_camera_view(result: dict, params: Config) -> None:
     title = r'$\text{Camera View}$'
-    sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result['state'], params, False)
+    sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result["x_full"], params, False)
     fig = go.Figure()
 
     # Create a cone plot
@@ -423,7 +423,7 @@ def plot_camera_animation(result: dict, params, path="") -> None:
 
 def plot_camera_polytope_animation(result: dict, params, path="") -> None:
     title = r'$\text{Camera Animation}$'
-    sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result['state'], params, False)
+    sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result["x_full"], params, False)
     fig = go.Figure()
 
     # Add blank plots for the subjects
@@ -682,7 +682,7 @@ def plot_camera_polytope_animation(result: dict, params, path="") -> None:
 
 def plot_conic_view_animation(result: dict, params, path="") -> None:
     title = r'$\text{Conic Constraint}$'
-    sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result['state'], params, False)
+    sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result["x_full"], params, False)
     fig = go.Figure()
     for i in range(100):
         fig.add_trace(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='blue', width = 2)))
@@ -876,7 +876,7 @@ def plot_conic_view_animation(result: dict, params, path="") -> None:
 
 def plot_conic_view_polytope_animation(result: dict, params, path="") -> None:
     title = r'$\text{Conic Constraint}$'
-    sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result['state'], params, False)
+    sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result["x_full"], params, False)
     fig = go.Figure()
     for i in range(500):
         fig.add_trace(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='blue', width = 2)))
@@ -1173,13 +1173,13 @@ def plot_animation(result: dict,
                    params,
                    path="",
                    ) -> None:
-    tof = result["tof"]
+    tof = result["t_final"]
     # Make title say quadrotor simulation and insert the variable tof into the title
     # title = 'Quadrotor Simulation: Time of Flight = ' + str(tof) + 's'
-    drone_positions = result["state"][:, :3]
-    drone_velocities = result["state"][:, 3:6]
-    drone_attitudes = result["state"][:, 6:10]
-    drone_forces = result["control"][:, :3]
+    drone_positions = result["x_full"][:, :3]
+    drone_velocities = result["x_full"][:, 3:6]
+    drone_attitudes = result["x_full"][:, 6:10]
+    drone_forces = result["u_full"][:, :3]
     if hasattr(params.veh, 'get_kp_pose') or "init_poses" in result:
         subs_positions, _, _, _ = full_subject_traj_time(result, params)
 
@@ -1539,14 +1539,14 @@ def plot_animation(result: dict,
 def plot_scp_animation(result: dict,
                        params = None,
                        path=""):
-    tof = result["tof"]
+    tof = result["t_final"]
     title = f'SCP Simulation: {tof} seconds'
-    drone_positions = result["state"][:, :3]
-    drone_attitudes = result["state"][:, 6:10]
-    drone_forces = result["control"][:, :3]
-    scp_interp_trajs = scp_traj_interp(result["scp_trajs"], params)
-    scp_ctcs_trajs = result["scp_trajs"]
-    scp_multi_shoot = result["scp_multi_shoot"]
+    drone_positions = result["x_full"][:, :3]
+    drone_attitudes = result["x_full"][:, 6:10]
+    drone_forces = result["u_full"][:, :3]
+    scp_interp_trajs = scp_traj_interp(result["x_history"], params)
+    scp_ctcs_trajs = result["x_history"]
+    scp_multi_shoot = result["discretization"]
     # obstacles = result_ctcs["obstacles"]
     # gates = result_ctcs["gates"]
     if hasattr(params.veh, 'get_kp_pose') or hasattr(params.veh, 'init_poses'):
@@ -1800,8 +1800,8 @@ def scp_traj_interp(scp_trajs, params):
     return scp_prop_trajs
 
 def plot_state(result, params: Config):
-    scp_trajs = scp_traj_interp(result["scp_trajs"], params)
-    x_full = result["state"]
+    scp_trajs = scp_traj_interp(result["x_history"], params)
+    x_full = result["x_full"]
 
     fig = make_subplots(rows=2, cols=7, subplot_titles=('X Position', 'Y Position', 'Z Position', 'X Velocity', 'Y Velocity', 'Z Velocity', 'CTCS Augmentation', 'Q1', 'Q2', 'Q3', 'Q4', 'X Angular Rate', 'Y Angular Rate', 'Z Angular Rate'))
     fig.update_layout(title_text="State Trajectories", template='plotly_dark')
@@ -1927,8 +1927,8 @@ def plot_state(result, params: Config):
     fig.show()
 
 def plot_control(result, params: Config):
-    scp_controls = result["scp_controls"]
-    u = result["control_scp"]
+    scp_controls = result["u_history"]
+    u = result["u"]
 
     fx_min = params.sim.min_control[0]
     fx_max = params.sim.max_control[0]
@@ -1991,9 +1991,9 @@ def plot_control(result, params: Config):
 
 def plot_losses(result, params: Config):
     # Plot J_tr, J_vb, J_vc, J_vc_ctcs
-    J_tr = result["J_tr_vec"]
-    J_vb = result["J_vb_vec"]
-    J_vc = result["J_vc_vec"]
+    J_tr = result["J_tr_history"]
+    J_vb = result["J_vb_history"]
+    J_vc = result["J_vc_history"]
     J_vc_ctcs = result["J_vc_ctcs_vec"]
 
     fig = make_subplots(rows=2, cols=2, subplot_titles=('J_tr', 'J_vb', 'J_vc', 'J_vc_ctcs'))
