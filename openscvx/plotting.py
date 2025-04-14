@@ -1197,8 +1197,7 @@ def plot_animation(result: dict,
     drone_velocities = result["state"][:, 3:6]
     drone_attitudes = result["state"][:, 6:10]
     drone_forces = result["control"][:, :3]
-    subs_positions = subject_traj(result['state'], params)
-
+    subs_positions, _, _, _ = full_subject_traj_time(result, params)
 
     np.save(f'{path}results/drone_positions.npy', drone_positions)
     np.save(f'{path}results/drone_velocities.npy', drone_velocities)
