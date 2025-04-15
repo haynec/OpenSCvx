@@ -25,7 +25,7 @@ def test_obstacle_avoidance():
 def test_dr_vp_nodal():
     # This test is specific to the dr_vp_nodal problem
     problem = dr_vp_polytope_problem
-    problem.params.sim.custom_integrator = False
+    problem.params.dis.custom_integrator = False
     problem.initialize()
     result = problem.solve()
     
@@ -40,7 +40,7 @@ def test_dr_vp_nodal():
 def test_dr_vp():
     # This test is specific to the dr_vp problem
     problem = dr_vp_problem
-    problem.params.sim.custom_integrator = False
+    problem.params.dis.custom_integrator = False
     problem.initialize()
     result = problem.solve()
     
@@ -55,7 +55,7 @@ def test_dr_vp():
 def test_cinema_vp():
     # This test is specific to the cinema_vp problem
     problem = cinema_vp_problem
-    problem.params.sim.custom_integrator = False
+    problem.params.dis.custom_integrator = False
     problem.initialize()
     result = problem.solve()
     

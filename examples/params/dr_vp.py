@@ -182,7 +182,7 @@ problem = TrajOptProblem(
 )
 
 problem.params.sim.dt = 0.1
-problem.params.sim.custom_integrator = True
+problem.params.dis.custom_integrator = True
 
 
 problem.params.scp.w_tr = 2e0  # Weight on the Trust Reigon
