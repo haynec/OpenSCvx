@@ -8,8 +8,8 @@ from openscvx.utils import qdcm
 from openscvx.config import Config
 
 def full_subject_traj_time(results, params):
-    x_full = results['state']
-    x_nodes = results['scp_trajs'][-1]
+    x_full = results["x_full"]
+    x_nodes = results["x"]
     t_nodes = x_nodes[:,params.veh.t_inds]
     t_full = results['t_full']
     subs_traj = []
