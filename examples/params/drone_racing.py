@@ -11,25 +11,25 @@ n = 22  # Number of Nodes
 total_time = 24.0  # Total time for the simulation
 
 max_state = np.array(
-    [200, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1e-4]
+    [200.0, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100]
 )  # Upper Bound on the states
 min_state = np.array(
-    [-200, -100, 15, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0]
+    [-200.0, -100, 15, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0]
 )  # Lower Bound on the states
 
-initial_state = bc(jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]))
+initial_state = bc(jnp.array([10.0, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]))
 initial_state.type[6:13] = "Free"
 
-final_state = bc(jnp.array([10, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time]))
+final_state = bc(jnp.array([10.0, 0, 20, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time]))
 final_state.type[3:13] = "Free"
 final_state.type[13] = "Minimize"
 
-initial_control = np.array([0, 0, 10, 0, 0, 0, 1])
+initial_control = np.array([0.0, 0, 10, 0, 0, 0])
 max_control = np.array(
-    [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time]
+    [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562]
 )  # Upper Bound on the controls
 min_control = np.array(
-    [0, 0, 0, -18.665, -18.665, -0.55562, 0.3 * total_time]
+    [0, 0, 0, -18.665, -18.665, -0.55562]
 )  # Lower Bound on the controls
 
 m = 1.0  # Mass of the drone
@@ -68,8 +68,8 @@ for center in gate_centers:
 
 
 constraints = [
-    ctcs(lambda x, u: (x[:-1] - max_state[:-1])),
-    ctcs(lambda x, u: (min_state[:-1] - x[:-1])),
+    ctcs(lambda x, u: (x[:-1] - max_state)),
+    ctcs(lambda x, u: (min_state - x[:-1])),
 ]
 for node, cen in zip(gate_nodes, A_gate_cen):
     constraints.append(
@@ -102,11 +102,7 @@ def dynamics(x, u):
 
 
 u_bar = np.repeat(np.expand_dims(initial_control, axis=0), n, axis=0)
-s = total_time
-u_bar[:, -1] = np.repeat(s, n)
-
-x_bar = np.repeat(np.expand_dims(np.zeros_like(max_state), axis=0), n, axis=0)
-x_bar[:, :-1] = np.linspace(initial_state.value, final_state.value, n)
+x_bar = np.linspace(initial_state.value, final_state.value, n)
 
 i = 0
 origins = [initial_state.value[:3]]
