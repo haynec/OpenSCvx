@@ -107,7 +107,7 @@ class SimConfig:
     x_bar: np.ndarray
     u_bar: np.ndarray
     initial_state: np.ndarray
-    initial_control: np.ndarray
+    initial_control: np.ndarray # TODO: (norrisg) remove, not used anywhere
     final_state: np.ndarray
     max_state: np.ndarray
     min_state: np.ndarray
@@ -151,9 +151,6 @@ class SimConfig:
         assert (
             self.min_state.shape[0] == self.n_states
         ), f"Min state must have {self.n_states} elements"
-        assert (
-            self.initial_control.shape[0] == self.n_controls
-        ), f"Initial control must have {self.n_controls} elements"
         assert (
             self.max_control.shape[0] == self.n_controls
         ), f"Max control must have {self.n_controls} elements"

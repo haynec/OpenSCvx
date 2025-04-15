@@ -9,19 +9,19 @@ from openscvx.utils import qdcm, SSMP, SSM, generate_orthogonal_unit_vectors
 n = 6
 total_time = 4.0  # Total time for the simulation
 
-max_state = np.array([200, 10, 20, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100, 1e-4])
+max_state = np.array([200., 10, 20, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 100])
 min_state = np.array(
-    [-200, -100, 0, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0]
+    [-200., -100, 0, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0]
 )
 
-initial_state = bc(jnp.array([10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]))
+initial_state = bc(jnp.array([10., 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0]))
 initial_state.type[6:13] = "Free"
 
-final_state = bc(jnp.array([-10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time]))
+final_state = bc(jnp.array([-10., 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, total_time]))
 final_state.type[3:13] = "Free"
 final_state.type[13] = "Minimize"
 
-initial_control = np.array([0., 0., 50., 0., 0., 0., 1.])
+initial_control = np.array([0., 0., 50., 0., 0., 0.])
 
 
 def dynamics(x, u):
@@ -73,16 +73,12 @@ constraints = []
 for center, A_obs_s in zip(obstacle_centers, A_obs):
     # constraints.append(ctcs(lambda x, u: g_obs(center, A, x)))
     constraints.append(nodal(lambda x, u, c=center, A=A_obs_s: g_obs(x, u, c, A), convex=False))
-constraints.append(ctcs(lambda x, u: x[:-1] - max_state[:-1]))
-constraints.append(ctcs(lambda x, u: min_state[:-1] - x[:-1]))
+constraints.append(ctcs(lambda x, u: x[:-1] - max_state))
+constraints.append(ctcs(lambda x, u: min_state - x[:-1]))
 
 
 u_bar = np.repeat(np.expand_dims(initial_control, axis=0), n, axis=0)
-s = total_time
-u_bar[:, -1] = np.repeat(s, n)
-
-x_bar = np.repeat(np.expand_dims(np.zeros_like(max_state), axis=0), n, axis=0)
-x_bar[:, :-1] = np.linspace(initial_state.value, final_state.value, n)
+x_bar = np.linspace(initial_state.value, final_state.value, n)
 
 problem = TrajOptProblem(
     dynamics=dynamics,
@@ -97,10 +93,10 @@ problem = TrajOptProblem(
     x_max=max_state,
     x_min=min_state,
     u_max=np.array(
-        [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time]
+        [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562]
     ),  # Upper Bound on the controls
     u_min=np.array(
-        [0, 0, 0, -18.665, -18.665, -0.55562, 0.3 * total_time]
+        [0, 0, 0, -18.665, -18.665, -0.55562]
     ),  # Lower Bound on the controls
 )
 
