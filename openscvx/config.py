@@ -107,7 +107,6 @@ class SimConfig:
     x_bar: np.ndarray
     u_bar: np.ndarray
     initial_state: np.ndarray
-    initial_control: np.ndarray # TODO: (norrisg) remove, not used anywhere
     final_state: np.ndarray
     max_state: np.ndarray
     min_state: np.ndarray
