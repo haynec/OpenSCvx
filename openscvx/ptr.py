@@ -134,22 +134,22 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: ExactDis, cpg_solve) -> d
 
     result = dict(
         converged = k <= params.scp.k_max,
-        t_final = x[:,-2][-1],
-        u = u,
-        x = x,
-        x_history = scp_trajs,
-        u_history = scp_controls,
-        discretization_history = V_multi_shoot_traj,
-        J_tr_history = J_tr_vec,
-        J_vb_history = J_vb_vec,
-        J_vc_history = J_vc_vec,
+        tof = x[:,-2][-1],
+        control_scp = u,
+        state_scp = x,
+        scp_trajs = scp_trajs,
+        scp_controls = scp_controls,
+        scp_multi_shoot = V_multi_shoot_traj,
+        J_tr_vec = J_tr_vec,
+        J_vb_vec = J_vb_vec,
+        J_vc_vec = J_vc_vec,
     )
     return result
 
 def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
     t_0_post = time.time()
-    x = result["x"]
-    u = result["u"]
+    x = result['state_scp']
+    u = result['control_scp']
 
     t = np.array(aug_dy.s_to_t(u, params))
 
@@ -176,8 +176,8 @@ def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
 
     more_result = dict(
         t_full = t_full,
-        x_full = x_full,
-        u_full = u_full
+        state = x_full,
+        control = u_full
     )
 
     t_f_post = time.time()
@@ -213,11 +213,11 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     if params.sim.cvxpygen:
         t0 = time.time()
         prob.register_solve('CPG', cpg_solve)
-        prob.solve(method = 'CPG', abstol = 1E-6, reltol = 1E-9)
+        prob.solve(method = 'CPG', **params.sim.solver_args)
         subprop_time = time.time() - t0
     else:
         t0 = time.time()
-        prob.solve(solver = params.sim.solver, enforce_dpp = True, abstol = 1E-6, reltol = 1E-9)
+        prob.solve(solver = params.sim.solver, enforce_dpp = True, **params.sim.solver_args)
         subprop_time = time.time() - t0
 
     x = (params.sim.S_x @ prob.var_dict['x'].value.T + np.expand_dims(params.sim.c_x, axis = 1)).T
