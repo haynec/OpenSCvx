@@ -181,7 +181,7 @@ problem = TrajOptProblem(
     u_min=min_control,  # Lower Bound on the controls
 )
 
-problem.params.sim.dt = 0.1
+problem.params.prp.dt = 0.1
 problem.params.dis.custom_integrator = True
 
 

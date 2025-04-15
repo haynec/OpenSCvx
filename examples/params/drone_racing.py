@@ -135,7 +135,7 @@ problem = TrajOptProblem(
     u_min=min_control,  # Lower Bound on the controls
 )
 
-problem.params.sim.dt = 0.01
+problem.params.prp.dt = 0.01
 problem.params.dis.custom_integrator = True
 
 problem.params.scp.w_tr = 2e0  # Weight on the Trust Reigon

@@ -102,7 +102,7 @@ problem = TrajOptProblem(
 
 problem.params.scp.w_tr_adapt = 1.8
 
-problem.params.sim.dt = 0.01
+problem.params.prp.dt = 0.01
 problem.params.dis.custom_integrator = True
 problem.params.cvx.cvxpygen = False
 
