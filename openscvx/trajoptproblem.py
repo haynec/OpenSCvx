@@ -31,19 +31,36 @@ class TrajOptProblem:
         u_min: jnp.ndarray,
         scp: ScpConfig = None,
         sim: SimConfig = None,
+        ctcs_augmentation_min=0.0,
+        ctcs_augmentation_max=1e-4,
+        time_dilation_factor_min=0.3,
+        time_dilation_factor_max=3.0,
     ):
+
+        # TODO (norrisg) move this into some augmentation function, if we want to make this be executed after the init (i.e. within problem.initialize) need to rethink how problem is defined
+
+        x_min_augmented = np.hstack([x_min, ctcs_augmentation_min])
+        x_max_augmented = np.hstack([x_max, ctcs_augmentation_max])
+
+        u_min_augmented = np.hstack([u_min, time_dilation_factor_min * time_init])
+        u_max_augmented = np.hstack([u_max, time_dilation_factor_max * time_init])
+
+        x_bar_augmented = np.hstack([x_guess, np.full((x_guess.shape[0], 1), 0)])
+        u_bar_augmented = np.hstack(
+            [u_guess, np.full((u_guess.shape[0], 1), time_init)]
+        )
 
         if sim is None:
             sim = SimConfig(
-                x_bar=x_guess,
-                u_bar=u_guess,
+                x_bar=x_bar_augmented,
+                u_bar=u_bar_augmented,
                 initial_state=initial_state,
                 final_state=final_state,
-                max_state=x_max,
-                min_state=x_min,
+                max_state=x_max_augmented,
+                min_state=x_min_augmented,
                 initial_control=initial_control,
-                max_control=u_max,
-                min_control=u_min,
+                max_control=u_max_augmented,
+                min_control=u_min_augmented,
                 total_time=time_init,
                 n_states=len(x_max),
                 dt=0.1,
@@ -56,7 +73,7 @@ class TrajOptProblem:
                 w_tr=1e1,  # Weight on the Trust Reigon
                 lam_cost=1e1,  # Weight on the Nonlinear Cost
                 lam_vc=1e2,  # Weight on the Virtual Control Objective
-                lam_vb=0e0, # Weight on the Virtual Buffer Objective (only for penalized nodal constraints)
+                lam_vb=0e0,  # Weight on the Virtual Buffer Objective (only for penalized nodal constraints)
                 ep_tr=1e-4,  # Trust Region Tolerance
                 ep_vb=1e-4,  # Virtual Control Tolerance
                 ep_vc=1e-8,  # Virtual Control Tolerance for CTCS
@@ -124,12 +141,23 @@ class TrajOptProblem:
 
         if not self.params.sim.debug:
             if self.params.sim.custom_integrator:
-                calculate_discretization_lower = jit(self.dynamics_discretized.calculate_discretization).lower(np.ones((self.params.scp.n, self.params.sim.n_states)), np.ones((self.params.scp.n, self.params.sim.n_controls)))
-                self.dynamics_discretized.calculate_discretization = calculate_discretization_lower.compile()
+                calculate_discretization_lower = jit(
+                    self.dynamics_discretized.calculate_discretization
+                ).lower(
+                    np.ones((self.params.scp.n, self.params.sim.n_states)),
+                    np.ones((self.params.scp.n, self.params.sim.n_controls)),
+                )
+                self.dynamics_discretized.calculate_discretization = (
+                    calculate_discretization_lower.compile()
+                )
             else:
-                dVdt_lower = jit(self.dynamics_discretized.dVdt).lower(0.0, np.ones(int(self.i5*(self.params.scp.n-1))), np.ones((self.params.scp.n-1, self.params.sim.n_controls)), np.ones((self.params.scp.n-1, self.params.sim.n_controls)))
+                dVdt_lower = jit(self.dynamics_discretized.dVdt).lower(
+                    0.0,
+                    np.ones(int(self.i5 * (self.params.scp.n - 1))),
+                    np.ones((self.params.scp.n - 1, self.params.sim.n_controls)),
+                    np.ones((self.params.scp.n - 1, self.params.sim.n_controls)),
+                )
                 self.dynamics_discretized.dVdt = dVdt_lower.compile()
-
 
     def solve(self):
         # Ensure parameter sizes and normalization are correct

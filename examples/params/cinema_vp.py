@@ -18,24 +18,24 @@ s_inds = -1  # Time dilation index in Control
 
 
 max_state = np.array(
-    [200, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 2000, 40, 1e-8]
+    [200.0, 100, 50, 100, 100, 100, 1, 1, 1, 1, 10, 10, 10, 2000, 40]
 )  # Upper Bound on the states
 min_state = np.array(
-    [-100, -100, -10, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0, 0]
+    [-100.0, -100, -10, -100, -100, -100, -1, -1, -1, -1, -10, -10, -10, 0, 0]
 )  # Lower Bound on the states
 
-initial_state = bc(jnp.array([8, -0.2, 2.2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]))
+initial_state = bc(jnp.array([8.0, -0.2, 2.2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]))
 initial_state.type[6:13] = "Free"
 
-final_state = bc(jnp.array([-10, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 40]))
+final_state = bc(jnp.array([-10.0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 40]))
 final_state.type[0:13] = "Free"
 final_state.type[13] = "Minimize"
 
 max_control = np.array(
-    [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562, 3.0 * total_time]
+    [0, 0, 4.179446268 * 9.81, 18.665, 18.665, 0.55562]
 )
-min_control = np.array([0, 0, 0, -18.665, -18.665, -0.55562, 0.3 * total_time])
-initial_control = np.array([0, 0, 10, 0, 0, 0, 1])
+min_control = np.array([0, 0, 0, -18.665, -18.665, -0.55562])
+initial_control = np.array([0, 0, 10, 0, 0, 0])
 
 init_pose = np.array([13.0, 0.0, 2.0])
 min_range = 4.0
@@ -110,19 +110,15 @@ def g_max(x):
 
 constraints = [
     ctcs(lambda x, u: np.sqrt(2e1) * g_vp(x)),
-    ctcs(lambda x, u: x[:-1] - max_state[:-1]),
-    ctcs(lambda x, u: min_state[:-1] - x[:-1]),
+    ctcs(lambda x, u: x[:-1] - max_state),
+    ctcs(lambda x, u: min_state - x[:-1]),
     ctcs(lambda x, u: g_min(x)),
     ctcs(lambda x, u: g_max(x)),
 ]
 
 
 u_bar = np.repeat(np.expand_dims(initial_control, axis=0), n, axis=0)
-s = total_time
-u_bar[:, -1] = np.repeat(s, n)
-
-x_bar = np.repeat(np.expand_dims(np.zeros_like(max_state), axis=0), n, axis=0)
-x_bar[:, :y_inds] = np.linspace(initial_state.value, final_state.value, n)
+x_bar = np.linspace(initial_state.value, final_state.value, n)
 
 x_bar[:, :3] = get_kp_pose(x_bar[:, t_inds]) + jnp.array([-5, 0.2, 0.2])[None, :]
 
@@ -152,6 +148,7 @@ problem = TrajOptProblem(
     x_min=min_state,
     u_max=max_control,  # Upper Bound on the controls
     u_min=min_control,  # Lower Bound on the controls
+    ctcs_augmentation_max=1e-8,
 )
 
 problem.params.sim.dt = 0.1
