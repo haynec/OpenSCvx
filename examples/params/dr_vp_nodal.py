@@ -199,8 +199,8 @@ problem.params.scp.cost_relax = 0.8  # Minimal Time Relaxation Factor
 problem.params.scp.w_tr_adapt = 1.05  # Trust Region Adaptation Factor
 problem.params.scp.w_tr_max_scaling_factor = 1e2  # Maximum Trust Region Weight
 
-problem.params.veh.R_sb = R_sb
-problem.params.veh.init_poses = init_poses
+problem.params.dyn.R_sb = R_sb
+problem.params.dyn.init_poses = init_poses
 
 plotting_dict = dict(
     vertices=vertices,
