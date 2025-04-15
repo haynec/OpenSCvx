@@ -1,5 +1,5 @@
 import numpy as np
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import Dict
 
 from openscvx.dynamics import Dynamics
@@ -90,6 +90,8 @@ class SimConfig:
 
 @dataclass
 class ScpConfig:
+    n: int = None
+    k_max: int = 200
     w_tr: float
     lam_vc: float
     ep_tr: float = 1e-4
@@ -97,8 +99,6 @@ class ScpConfig:
     ep_vc: float = 1e-8
     lam_cost: float = 0.0
     lam_vb: float = 0.0
-    k_max: int = 200
-    n: int = None
     uniform_time_grid: bool = False
     cost_drop: int = -1
     cost_relax: float = 1.0
@@ -114,10 +114,6 @@ class ScpConfig:
 
         if self.w_tr_max_scaling_factor is not None and self.w_tr_max is None:
             self.w_tr_max = self.w_tr_max_scaling_factor * self.w_tr
-
-
-# Make a new class call VehConfig which takes in a functionhandle
-# The function handle will be passed the config object
 
 
 @dataclass
