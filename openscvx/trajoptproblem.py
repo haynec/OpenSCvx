@@ -5,7 +5,7 @@ import cvxpy as cp
 from jax import jit
 import numpy as np
 
-from openscvx.config import ScpConfig, SimConfig, DiscretizationConfig, Config
+from openscvx.config import ScpConfig, SimConfig, DiscretizationConfig, DevConfig, Config
 from openscvx.dynamics import Dynamics
 from openscvx.discretization import ExactDis
 from openscvx.constraints.boundary import BoundaryConstraint
@@ -31,6 +31,7 @@ class TrajOptProblem:
         scp: ScpConfig = None,
         dis: DiscretizationConfig = None,
         sim: SimConfig = None,
+        dev: DevConfig = None,
         ctcs_augmentation_min=0.0,
         ctcs_augmentation_max=1e-4,
         time_dilation_factor_min=0.3,
@@ -89,6 +90,9 @@ class TrajOptProblem:
                 self.scp.n == N
             ), "Number of segments must be the same as in the config"
 
+        if dev is None:
+            dev = DevConfig()
+
         self.constraints_ctcs = []
         self.constraints_nodal = []
 
@@ -117,6 +121,7 @@ class TrajOptProblem:
             scp=scp,
             veh=veh,
             dis=dis,
+            dev=dev,
         )
 
         self.ocp: cp.Problem = None
@@ -142,7 +147,7 @@ class TrajOptProblem:
         self.i4 = self.i3 + n_x * n_u
         self.i5 = self.i4 + n_x
 
-        if not self.params.sim.debug:
+        if not self.params.dev.debug:
             if self.params.dis.custom_integrator:
                 calculate_discretization_lower = jit(
                     self.dynamics_discretized.calculate_discretization

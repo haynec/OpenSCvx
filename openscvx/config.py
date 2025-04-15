@@ -19,6 +19,10 @@ class DiscretizationConfig:
     diffrax_args: Dict = field(default_factory=dict)
 
 
+@dataclass
+class DevConfig:
+    profiling: bool = False
+    debug: bool = False
 
 @dataclass
 class SimConfig:
@@ -35,8 +39,6 @@ class SimConfig:
     n_controls: int = None
     inter_sample: int = 30
     dt: float = 0.1
-    profiling: bool = False
-    debug: bool = False
     solver: str = "QOCO"
     solver_args: dict = field(default_factory=lambda: {'abstol': 1E-6, 'reltol': 1E-9})
     cvxpygen: bool = False
@@ -94,7 +96,6 @@ class ScpConfig:
     lam_vb: float = 0.0
     k_max: int = 200
     n: int = None
-    dis_type: str = "FOH"
     uniform_time_grid: bool = False
     cost_drop: int = -1
     cost_relax: float = 1.0
@@ -122,6 +123,7 @@ class Config:
     scp: ScpConfig
     veh: Dynamics
     dis: DiscretizationConfig
+    dev: DevConfig
 
     def __post_init__(self):
         pass

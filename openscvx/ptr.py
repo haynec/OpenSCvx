@@ -61,7 +61,7 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: ExactDis, cpg_solve) -> d
 
     k = 1
 
-    if params.sim.profiling:
+    if params.dev.profiling:
         import cProfile
         pr = cProfile.Profile()
         
@@ -116,7 +116,7 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: ExactDis, cpg_solve) -> d
 
     t_f_while = time.time()
     # Disable the profiler
-    if params.sim.profiling:
+    if params.dev.profiling:
         pr.disable()
         
         # Save results so it can be viusualized with snakeviz
