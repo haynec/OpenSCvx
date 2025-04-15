@@ -6,6 +6,22 @@ import scipy.integrate as itg
 
 from openscvx.config import Config
 
+SOLVER_MAP = {
+    "Tsit5": dfx.Tsit5,
+    "Euler": dfx.Euler,
+    "Heun": dfx.Heun,
+    "Midpoint": dfx.Midpoint,
+    "Ralston": dfx.Ralston,
+    "Dopri5": dfx.Dopri5,
+    "Dopri8": dfx.Dopri8,
+    "Bosh3": dfx.Bosh3,
+    "ReversibleHeun": dfx.ReversibleHeun,
+    "ImplicitEuler": dfx.ImplicitEuler,
+    "KenCarp3": dfx.KenCarp3,
+    "KenCarp4": dfx.KenCarp4,
+    "KenCarp5": dfx.KenCarp5
+}
+
 class RK45_Custom:
     def __init__(self):
         pass
@@ -46,25 +62,31 @@ class RK45_Custom:
 
 
 class Diffrax:
-    def __init__(self):
-        pass
+    def __init__(self, params):
+        self.params = params
     
     def solve_ivp(self, dVdt, tau_grid, V0, args, t_eval=None):
         # if t_eval is None:
         t_eval = jnp.linspace(tau_grid[0], tau_grid[1], 50)
 
+        solver_class = SOLVER_MAP.get(self.params.sim.diffrax_solver)
+        if solver_class is None:
+            raise ValueError(f"Unknown solver: {self.params.sim.solver_name}")
+        solver = solver_class()
+
         term = dfx.ODETerm(lambda t, y, args: dVdt(t, y, *args))
         stepsize_controller = dfx.PIDController(rtol=1e-5, atol=1e-8)
         solution = dfx.diffeqsolve(
             term,
-            dfx.Tsit5(),
+            solver = solver,
             t0=tau_grid[0],
             t1=tau_grid[1],
             dt0=(tau_grid[1] - tau_grid[0]) / (len(t_eval) - 1),
             y0=V0,
             args=args,
             stepsize_controller=stepsize_controller,
-            saveat=dfx.SaveAt(ts=t_eval)
+            saveat=dfx.SaveAt(ts=t_eval),
+            **self.params.sim.diffrax_args
         )
 
         return solution.ys
@@ -87,7 +109,7 @@ class ExactDis:
         self.i5 = self.i4 + n_x
 
         if self.params.sim.diffrax:
-            self.integrator = Diffrax()
+            self.integrator = Diffrax(self.params)
         else:
             self.integrator = RK45_Custom()
 
