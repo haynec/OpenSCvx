@@ -115,8 +115,6 @@ class SimConfig:
     total_time: float
     n_states: int = None
     n_controls: int = None
-    max_dt: float = 1e2
-    min_dt: float = 1e-2
     inter_sample: int = 30
     dt: float = 0.1
     profiling: bool = False
