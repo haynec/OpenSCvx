@@ -92,8 +92,8 @@ class SimConfig:
 class ScpConfig:
     n: int = None
     k_max: int = 200
-    w_tr: float
-    lam_vc: float
+    w_tr: float = 1e0
+    lam_vc: float = 1e0
     ep_tr: float = 1e-4
     ep_vb: float = 1e-4
     ep_vc: float = 1e-8
