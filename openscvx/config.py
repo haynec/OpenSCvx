@@ -10,12 +10,13 @@ def get_affine_scaling_matrices(n, minimum, maximum):
     c = (maximum + minimum) / 2
     return S, c
 
+
 @dataclass
 class DiscretizationConfig:
     dis_type: str = "FOH"
     custom_integrator: bool = True
     diffrax: bool = False
-    diffrax_solver: str = 'Tsit5'
+    diffrax_solver: str = "Tsit5"
     diffrax_args: Dict = field(default_factory=dict)
 
 
@@ -24,11 +25,13 @@ class DevConfig:
     profiling: bool = False
     debug: bool = False
 
+
 @dataclass
 class ConvexSolverConfig:
     solver: str = "QOCO"
-    solver_args: dict = field(default_factory=lambda: {'abstol': 1E-6, 'reltol': 1E-9})
+    solver_args: dict = field(default_factory=lambda: {"abstol": 1e-6, "reltol": 1e-9})
     cvxpygen: bool = False
+
 
 @dataclass
 class PropagationConfig:
