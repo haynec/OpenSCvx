@@ -160,15 +160,15 @@ def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
 
     x_full = simulate_nonlinear_time(x[0], u_lam, tau_vals, t, aug_dy, params)
 
-    print("Total CTCS Constraint Violation:", x_full[-1, params.veh.y_inds])
+    print("Total CTCS Constraint Violation:", x_full[-1, params.dyn.y_inds])
     i = 0
     cost = np.zeros_like(x[-1, i])
-    for type in params.veh.initial_state.type:
+    for type in params.dyn.initial_state.type:
         if type == 'Minimize':
             cost += x[0, i]
         i +=1
     i = 0
-    for type in params.veh.final_state.type:
+    for type in params.dyn.final_state.type:
         if type == 'Minimize':
             cost += x[-1, i]
         i +=1
@@ -200,8 +200,8 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     prob.param_dict['z_d'].value = z_bar.__array__()
     dis_time = time.time() - t0
 
-    if params.veh.constraints_nodal:
-        for g_id, constraint in enumerate(params.veh.constraints_nodal):
+    if params.dyn.constraints_nodal:
+        for g_id, constraint in enumerate(params.dyn.constraints_nodal):
             if not constraint.convex:
                 prob.param_dict['g_' + str(g_id)].value = np.asarray(constraint.g(x_bar, u_bar))
                 prob.param_dict['grad_g_x_' + str(g_id)].value = np.asarray(constraint.grad_g_x(x_bar, u_bar))
@@ -225,7 +225,7 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
 
     i = 0
     costs = 0
-    for type in params.veh.final_state.type:
+    for type in params.dyn.final_state.type:
         if type == 'Minimize':
             costs = x[:,i]
         i += 1
@@ -242,7 +242,7 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     
     id_ncvx = 0
     J_vb_vec = 0
-    for constraint in params.veh.constraints_nodal:
+    for constraint in params.dyn.constraints_nodal:
         if constraint.convex == False:
             J_vb_vec += np.maximum(0, prob.var_dict['nu_vb_' + str(id_ncvx)].value)
             id_ncvx += 1

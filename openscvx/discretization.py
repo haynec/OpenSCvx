@@ -239,15 +239,15 @@ class ExactDis:
         u = u[:x.shape[0]]
 
         # Compute the nonlinear propagation term
-        f = self.params.veh.state_dot(x, u[:,:-1])
+        f = self.params.dyn.state_dot(x, u[:,:-1])
         F = s[:, None] * f
 
         # Evaluate the State Jacobian
-        dfdx = self.params.veh.A(x, u[:,:-1])
+        dfdx = self.params.dyn.A(x, u[:,:-1])
         sdfdx = s[:, None, None] * dfdx
 
         # Evaluate the Control Jacobian
-        dfdu_veh = self.params.veh.B(x, u[:,:-1])
+        dfdu_veh = self.params.dyn.B(x, u[:,:-1])
         dfdu = dfdu.at[:, :, :-1].set(s[:, None, None] * dfdu_veh)
         dfdu = dfdu.at[:, :, -1].set(f)
         
@@ -278,4 +278,4 @@ class ExactDis:
             beta = (tau - tau_init) * self.params.scp.n
         u = u_current + beta * (u_next - u_current)
         
-        return  u[:, idx_s] * self.params.veh.state_dot(x, u[:,:-1]).squeeze()
+        return  u[:, idx_s] * self.params.dyn.state_dot(x, u[:,:-1]).squeeze()

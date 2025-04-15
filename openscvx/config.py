@@ -127,7 +127,7 @@ class ScpConfig:
 class Config:
     sim: SimConfig
     scp: ScpConfig
-    veh: Dynamics
+    dyn: Dynamics
     cvx: ConvexSolverConfig
     dis: DiscretizationConfig
     prp: PropagationConfig

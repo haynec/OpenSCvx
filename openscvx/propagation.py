@@ -23,7 +23,7 @@ def simulate_nonlinear_time(x_0, u_lam, tau_vals, t, aug_dy, params: Config):
         # Obtain those values from tau_vals
         tau_cur = tau_vals[(tau_inds >= k) & (tau_inds < k+1)]
 
-        sol = itg.solve_ivp(aug_dy.prop_aug_dy, (tau[k], tau[k+1]), x_0, args=(np.array(controls_current), np.array(controls_next), np.array([[tau[k]]]), params.veh.s_inds), method='DOP853', dense_output=True)
+        sol = itg.solve_ivp(aug_dy.prop_aug_dy, (tau[k], tau[k+1]), x_0, args=(np.array(controls_current), np.array(controls_next), np.array([[tau[k]]]), params.dyn.s_inds), method='DOP853', dense_output=True)
         x = sol.y
         x_time = sol.sol(tau_cur)
         for i in range(x_time.shape[1]):

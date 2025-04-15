@@ -132,7 +132,7 @@ class TrajOptProblem:
         self.params = Config(
             sim=sim,
             scp=scp,
-            veh=veh,
+            dyn=veh,
             dis=dis,
             dev=dev,
             cvx=cvx,
