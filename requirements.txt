@@ -8,3 +8,4 @@ jax
 plotly
 pyaml
 termcolor
+diffrax
