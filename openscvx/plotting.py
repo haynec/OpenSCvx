@@ -1793,8 +1793,8 @@ def scp_traj_interp(scp_trajs, params):
     for traj in scp_trajs:
         states = []
         for k in range(params.scp.n):
-            traj_temp = np.repeat(np.expand_dims(traj[k], axis = 1), params.sim.inter_sample - 1, axis = 1)
-            for i in range(1, params.sim.inter_sample - 1):
+            traj_temp = np.repeat(np.expand_dims(traj[k], axis = 1), params.prp.inter_sample - 1, axis = 1)
+            for i in range(1, params.prp.inter_sample - 1):
                 states.append(traj_temp[:,i])
         scp_prop_trajs.append(np.array(states))
     return scp_prop_trajs

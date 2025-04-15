@@ -5,7 +5,7 @@ import cvxpy as cp
 from jax import jit
 import numpy as np
 
-from openscvx.config import ScpConfig, SimConfig, ConvexSolverConfig, DiscretizationConfig, DevConfig, Config
+from openscvx.config import ScpConfig, SimConfig, ConvexSolverConfig, DiscretizationConfig, PropagationConfig, DevConfig, Config
 from openscvx.dynamics import Dynamics
 from openscvx.discretization import ExactDis
 from openscvx.constraints.boundary import BoundaryConstraint
@@ -30,6 +30,7 @@ class TrajOptProblem:
         u_min: jnp.ndarray,
         scp: ScpConfig = None,
         dis: DiscretizationConfig = None,
+        prp: PropagationConfig = None,
         sim: SimConfig = None,
         dev: DevConfig = None,
         cvx: ConvexSolverConfig = None,
@@ -67,7 +68,6 @@ class TrajOptProblem:
                 min_control=u_min_augmented,
                 total_time=time_init,
                 n_states=len(x_max),
-                dt=0.1,
             )
 
         if scp is None:
@@ -95,6 +95,8 @@ class TrajOptProblem:
             dev = DevConfig()
         if cvx is None:
             cvx = ConvexSolverConfig()
+        if prp is None:
+            prp = PropagationConfig()
 
         self.constraints_ctcs = []
         self.constraints_nodal = []
@@ -126,6 +128,7 @@ class TrajOptProblem:
             dis=dis,
             dev=dev,
             cvx=cvx,
+            prp=prp,
         )
 
         self.ocp: cp.Problem = None

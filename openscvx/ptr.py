@@ -154,7 +154,7 @@ def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
     t = np.array(aug_dy.s_to_t(u, params))
 
     u_lam = u_lambda(u, t, params)
-    t_full = np.arange(0, t[-1], params.sim.dt)
+    t_full = np.arange(0, t[-1], params.prp.dt)
 
     tau_vals, u_full = aug_dy.t_to_tau(u_lam, t_full, u, t, params)
 

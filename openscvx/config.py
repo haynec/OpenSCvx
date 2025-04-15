@@ -31,6 +31,12 @@ class ConvexSolverConfig:
     cvxpygen: bool = False
 
 @dataclass
+class PropagationConfig:
+    inter_sample: int = 30
+    dt: float = 0.1
+
+
+@dataclass
 class SimConfig:
     x_bar: np.ndarray
     u_bar: np.ndarray
@@ -43,8 +49,6 @@ class SimConfig:
     total_time: float
     n_states: int = None
     n_controls: int = None
-    inter_sample: int = 30
-    dt: float = 0.1
     S_x: np.ndarray = None
     inv_S_x: np.ndarray = None
     c_x: np.ndarray = None
@@ -123,6 +127,7 @@ class Config:
     veh: Dynamics
     cvx: ConvexSolverConfig
     dis: DiscretizationConfig
+    prp: PropagationConfig
     dev: DevConfig
 
     def __post_init__(self):
