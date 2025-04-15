@@ -104,7 +104,7 @@ problem.params.scp.w_tr_adapt = 1.8
 
 problem.params.sim.dt = 0.01
 problem.params.dis.custom_integrator = True
-problem.params.sim.cvxpygen = False
+problem.params.cvx.cvxpygen = False
 
 plotting_dict = dict(
     obstacles_centers=obstacle_centers,
