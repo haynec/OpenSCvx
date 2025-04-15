@@ -25,6 +25,12 @@ class DevConfig:
     debug: bool = False
 
 @dataclass
+class ConvexSolverConfig:
+    solver: str = "QOCO"
+    solver_args: dict = field(default_factory=lambda: {'abstol': 1E-6, 'reltol': 1E-9})
+    cvxpygen: bool = False
+
+@dataclass
 class SimConfig:
     x_bar: np.ndarray
     u_bar: np.ndarray
@@ -39,9 +45,6 @@ class SimConfig:
     n_controls: int = None
     inter_sample: int = 30
     dt: float = 0.1
-    solver: str = "QOCO"
-    solver_args: dict = field(default_factory=lambda: {'abstol': 1E-6, 'reltol': 1E-9})
-    cvxpygen: bool = False
     S_x: np.ndarray = None
     inv_S_x: np.ndarray = None
     c_x: np.ndarray = None
@@ -122,6 +125,7 @@ class Config:
     sim: SimConfig
     scp: ScpConfig
     veh: Dynamics
+    cvx: ConvexSolverConfig
     dis: DiscretizationConfig
     dev: DevConfig
 

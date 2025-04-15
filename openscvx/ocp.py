@@ -132,15 +132,15 @@ def OCP(params: Config):
     # PROBLEM
     #########
     prob = cp.Problem(cp.Minimize(cost), constr)
-    if params.sim.cvxpygen:
+    if params.cvx.cvxpygen:
         # Check to see if solver directory exists
         if not os.path.exists('solver'):
-            cpg.generate_code(prob, solver = params.sim.solver, code_dir='solver', wrapper = True)
+            cpg.generate_code(prob, solver = params.cvx.solver, code_dir='solver', wrapper = True)
         else:
             # Prompt the use to indicate if they wish to overwrite the solver directory or use the existing compiled solver
             overwrite = input("Solver directory already exists. Overwrite? (y/n): ")
             if overwrite.lower() == 'y':
-                cpg.generate_code(prob, solver = params.sim.solver, code_dir='solver', wrapper = True)
+                cpg.generate_code(prob, solver = params.cvx.solver, code_dir='solver', wrapper = True)
             else:
                 pass
     return prob

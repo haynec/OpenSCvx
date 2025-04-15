@@ -22,7 +22,7 @@ def PTR_init(params: Config) -> tuple[cp.Problem, ExactDis]:
 
     ocp = OCP(params) # Initialize the problem
 
-    if params.sim.cvxpygen:
+    if params.cvx.cvxpygen:
         from solver.cpg_solver import cpg_solve
         with open('solver/problem.pickle', 'rb') as f:
             prob = pickle.load(f)
@@ -210,14 +210,14 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     prob.param_dict['w_tr'].value = params.scp.w_tr
     prob.param_dict['lam_cost'].value = params.scp.lam_cost
 
-    if params.sim.cvxpygen:
+    if params.cvx.cvxpygen:
         t0 = time.time()
         prob.register_solve('CPG', cpg_solve)
-        prob.solve(method = 'CPG', **params.sim.solver_args)
+        prob.solve(method = 'CPG', **params.cvx.solver_args)
         subprop_time = time.time() - t0
     else:
         t0 = time.time()
-        prob.solve(solver = params.sim.solver, enforce_dpp = True, **params.sim.solver_args)
+        prob.solve(solver = params.cvx.solver, enforce_dpp = True, **params.cvx.solver_args)
         subprop_time = time.time() - t0
 
     x = (params.sim.S_x @ prob.var_dict['x'].value.T + np.expand_dims(params.sim.c_x, axis = 1)).T

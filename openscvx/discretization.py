@@ -71,7 +71,7 @@ class Diffrax:
 
         solver_class = SOLVER_MAP.get(self.params.dis.diffrax_solver)
         if solver_class is None:
-            raise ValueError(f"Unknown solver: {self.params.sim.solver_name}")
+            raise ValueError(f"Unknown solver: {self.params.cvx.solver_name}")
         solver = solver_class()
 
         term = dfx.ODETerm(lambda t, y, args: dVdt(t, y, *args))
