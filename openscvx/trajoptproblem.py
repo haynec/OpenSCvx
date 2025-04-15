@@ -5,7 +5,15 @@ import cvxpy as cp
 from jax import jit
 import numpy as np
 
-from openscvx.config import ScpConfig, SimConfig, ConvexSolverConfig, DiscretizationConfig, PropagationConfig, DevConfig, Config
+from openscvx.config import (
+    ScpConfig,
+    SimConfig,
+    ConvexSolverConfig,
+    DiscretizationConfig,
+    PropagationConfig,
+    DevConfig,
+    Config,
+)
 from openscvx.dynamics import Dynamics
 from openscvx.discretization import ExactDis
 from openscvx.constraints.boundary import BoundaryConstraint
@@ -55,7 +63,7 @@ class TrajOptProblem:
 
         if dis is None:
             dis = DiscretizationConfig()
-        
+
         if sim is None:
             sim = SimConfig(
                 x_bar=x_bar_augmented,
