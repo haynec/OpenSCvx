@@ -69,7 +69,7 @@ class Diffrax:
         # if t_eval is None:
         t_eval = jnp.linspace(tau_grid[0], tau_grid[1], 50)
 
-        solver_class = SOLVER_MAP.get(self.params.sim.diffrax_solver)
+        solver_class = SOLVER_MAP.get(self.params.dis.diffrax_solver)
         if solver_class is None:
             raise ValueError(f"Unknown solver: {self.params.sim.solver_name}")
         solver = solver_class()
@@ -86,7 +86,7 @@ class Diffrax:
             args=args,
             stepsize_controller=stepsize_controller,
             saveat=dfx.SaveAt(ts=t_eval),
-            **self.params.sim.diffrax_args
+            **self.params.dis.diffrax_args
         )
 
         return solution.ys
@@ -108,7 +108,7 @@ class ExactDis:
         self.i4 = self.i3 + n_x * n_u
         self.i5 = self.i4 + n_x
 
-        if self.params.sim.diffrax:
+        if self.params.dis.diffrax:
             self.integrator = Diffrax(self.params)
         else:
             self.integrator = RK45_Custom()
@@ -121,7 +121,7 @@ class ExactDis:
         for k in range(1, params.scp.n):
             s_kp = u[k-1,-1]
             s_k = u[k,-1]
-            if params.scp.dis_type == 'ZOH':
+            if params.dis.dis_type == 'ZOH':
                 t.append(t[k-1] + (tau[k] - tau[k-1])*(s_kp))
             else:
                 t.append(t[k-1] + 0.5 * (s_k + s_kp) * (tau[k] - tau[k-1]))
@@ -139,7 +139,7 @@ class ExactDis:
             tau_p = tau_nodal[k_nodal]
 
             s_k = u[k, -1]
-            if params.scp.dis_type == 'ZOH':
+            if params.dis.dis_type == 'ZOH':
                 tau[k] = tau_p + (t[k] - tp) / s_kp
             else:
                 tau[k] = tau_p + 2 * (t[k] - tp) / (s_k + s_kp)
@@ -159,7 +159,7 @@ class ExactDis:
         n_x = self.params.sim.n_states
         n_u = self.params.sim.n_controls
         
-        if self.params.sim.custom_integrator:
+        if self.params.dis.custom_integrator:
             # Initialize the augmented state vector
             V0 = jnp.zeros((x.shape[0]-1, self.i5))
 
@@ -220,9 +220,9 @@ class ExactDis:
         V = V.reshape(-1, self.i5)
 
         # Compute the interpolation factor based on the discretization type
-        if self.params.scp.dis_type == 'ZOH':
+        if self.params.dis.dis_type == 'ZOH':
             beta = 0.
-        elif self.params.scp.dis_type == 'FOH':
+        elif self.params.dis.dis_type == 'FOH':
             beta = (tau) * self.params.scp.n
         alpha = 1 - beta
 
@@ -272,9 +272,9 @@ class ExactDis:
                     idx_s: int) -> np.ndarray:
         x = x[None, :]
         
-        if self.params.scp.dis_type == "ZOH":
+        if self.params.dis.dis_type == "ZOH":
             beta = 0.0
-        elif self.params.scp.dis_type == "FOH":
+        elif self.params.dis.dis_type == "FOH":
             beta = (tau - tau_init) * self.params.scp.n
         u = u_current + beta * (u_next - u_current)
         

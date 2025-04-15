@@ -10,6 +10,15 @@ def get_affine_scaling_matrices(n, minimum, maximum):
     c = (maximum + minimum) / 2
     return S, c
 
+@dataclass
+class DiscretizationConfig:
+    dis_type: str = "FOH"
+    custom_integrator: bool = True
+    diffrax: bool = False
+    diffrax_solver: str = 'Tsit5'
+    diffrax_args: Dict = field(default_factory=dict)
+
+
 
 @dataclass
 class SimConfig:
@@ -31,16 +40,12 @@ class SimConfig:
     solver: str = "QOCO"
     solver_args: dict = field(default_factory=lambda: {'abstol': 1E-6, 'reltol': 1E-9})
     cvxpygen: bool = False
-    custom_integrator: bool = True
     S_x: np.ndarray = None
     inv_S_x: np.ndarray = None
     c_x: np.ndarray = None
     S_u: np.ndarray = None
     inv_S_u: np.ndarray = None
     c_u: np.ndarray = None
-    diffrax: bool = False
-    diffrax_solver: str = 'Tsit5'
-    diffrax_args: Dict = field(default_factory=dict)
 
     def __post_init__(self):
         self.n_states = len(self.max_state)
@@ -116,6 +121,7 @@ class Config:
     sim: SimConfig
     scp: ScpConfig
     veh: Dynamics
+    dis: DiscretizationConfig
 
     def __post_init__(self):
         pass

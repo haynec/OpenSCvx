@@ -49,7 +49,7 @@ def u_lambda(u, t, params: Config):
     t = t.flatten()
 
     # Determine the interpolation method based on params
-    if params.scp.dis_type == 'ZOH':
+    if params.dis.dis_type == 'ZOH':
         kind = 'previous'
     else:
         kind = 'linear'

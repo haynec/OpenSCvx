@@ -5,7 +5,7 @@ import cvxpy as cp
 from jax import jit
 import numpy as np
 
-from openscvx.config import ScpConfig, SimConfig, Config
+from openscvx.config import ScpConfig, SimConfig, DiscretizationConfig, Config
 from openscvx.dynamics import Dynamics
 from openscvx.discretization import ExactDis
 from openscvx.constraints.boundary import BoundaryConstraint
@@ -29,6 +29,7 @@ class TrajOptProblem:
         u_max: jnp.ndarray,
         u_min: jnp.ndarray,
         scp: ScpConfig = None,
+        dis: DiscretizationConfig = None,
         sim: SimConfig = None,
         ctcs_augmentation_min=0.0,
         ctcs_augmentation_max=1e-4,
@@ -49,6 +50,9 @@ class TrajOptProblem:
             [u_guess, np.full((u_guess.shape[0], 1), time_init)]
         )
 
+        if dis is None:
+            dis = DiscretizationConfig()
+        
         if sim is None:
             sim = SimConfig(
                 x_bar=x_bar_augmented,
@@ -112,6 +116,7 @@ class TrajOptProblem:
             sim=sim,
             scp=scp,
             veh=veh,
+            dis=dis,
         )
 
         self.ocp: cp.Problem = None
@@ -138,7 +143,7 @@ class TrajOptProblem:
         self.i5 = self.i4 + n_x
 
         if not self.params.sim.debug:
-            if self.params.sim.custom_integrator:
+            if self.params.dis.custom_integrator:
                 calculate_discretization_lower = jit(
                     self.dynamics_discretized.calculate_discretization
                 ).lower(
