@@ -20,7 +20,6 @@ The main packages are:
 - ```jax``` - is used for determining the Jacobians using automatic differentiation, vectorization, and ahead-of-time (AOT) compilation of the dynamics and their Jacobians 
 - ```numpy``` - is used for numerical operations
 - ```scipy``` - is used for the numerical integration of the dynamics
-- ```pyaml```  - is used for reading the configuration files
 - ```termcolor``` - is used for pretty command line output
 - ```plotly``` - is used for all visualizations
 
