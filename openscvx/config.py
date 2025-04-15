@@ -182,15 +182,11 @@ class ScpConfig:
     n: int = None
     dis_type: str = "FOH"
     uniform_time_grid: bool = False
-    fixed_final_time: bool = False
     cost_drop: int = -1
     cost_relax: float = 1.0
     w_tr_adapt: float = 1.0
     w_tr_max: float = None
     w_tr_max_scaling_factor: float = None
-    fixed_final_vel: bool = False
-    fixed_initial_att: bool = False
-    fixed_final_att: bool = False
 
     def __post_init__(self):
         keys_to_scale = ["w_tr", "lam_vc", "lam_cost", "lam_vb"]
