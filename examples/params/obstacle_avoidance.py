@@ -90,7 +90,6 @@ problem = TrajOptProblem(
     u_guess=u_bar,
     initial_state=initial_state,  # Initial State
     final_state=final_state,
-    initial_control=initial_control,
     x_max=max_state,
     x_min=min_state,
     u_max=np.array(
@@ -103,9 +102,9 @@ problem = TrajOptProblem(
 
 problem.params.scp.w_tr_adapt = 1.8
 
-problem.params.sim.dt = 0.01
-problem.params.sim.custom_integrator = True
-problem.params.sim.cvxpygen = False
+problem.params.prp.dt = 0.01
+problem.params.dis.custom_integrator = True
+problem.params.cvx.cvxpygen = False
 
 plotting_dict = dict(
     obstacles_centers=obstacle_centers,

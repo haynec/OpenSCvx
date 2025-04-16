@@ -89,7 +89,6 @@ problem = TrajOptProblem(
     u_guess=u_bar,
     initial_state=initial_state,  # Initial State
     final_state=final_state,
-    initial_control=initial_control,
     x_max=max_state,
     x_min=min_state,
     u_max=np.array(
@@ -100,8 +99,8 @@ problem = TrajOptProblem(
     ),  # Lower Bound on the controls
 )
 
-problem.params.sim.dt = 0.01
-problem.params.sim.custom_integrator = True
+problem.params.prp.dt = 0.01
+problem.params.dis.custom_integrator = True
 
 problem.params.scp.lam_vb = 1E0
 

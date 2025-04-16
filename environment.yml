@@ -7,7 +7,6 @@ dependencies:
   - pip
   - scipy
   - numpy
-  - pyaml
   - termcolor
   - plotly
   - pip:

@@ -10,18 +10,18 @@ from openscvx.config import Config
 def full_subject_traj_time(results, params):
     x_full = results["x_full"]
     x_nodes = results["x"]
-    t_nodes = x_nodes[:,params.veh.t_inds]
+    t_nodes = x_nodes[:,params.dyn.t_inds]
     t_full = results['t_full']
     subs_traj = []
     subs_traj_node = []
     subs_traj_sen = []
     subs_traj_sen_node = []
     
-    if hasattr(params.veh, 'get_kp_pose'):
-        subs_traj.append(params.veh.get_kp_pose(t_full))
-        subs_traj_node.append(params.veh.get_kp_pose(t_nodes))
-    elif hasattr(params.veh, 'init_poses'):
-        for pose in params.veh.init_poses:
+    if hasattr(params.dyn, 'get_kp_pose'):
+        subs_traj.append(params.dyn.get_kp_pose(t_full))
+        subs_traj_node.append(params.dyn.get_kp_pose(t_nodes))
+    elif hasattr(params.dyn, 'init_poses'):
+        for pose in params.dyn.init_poses:
             # repeat the pose for all time steps
             pose_full = np.repeat(pose[:,np.newaxis], x_full.shape[0], axis=1).T
             subs_traj.append(pose_full)
@@ -31,7 +31,7 @@ def full_subject_traj_time(results, params):
     else:
         raise ValueError("No valid method to get keypoint poses.")
 
-    R_sb = params.veh.R_sb
+    R_sb = params.dyn.R_sb
     for sub_traj in subs_traj:
         sub_traj_sen = []
         for i in range(x_full.shape[0]):
@@ -256,7 +256,7 @@ def plot_camera_view(result: dict, params: Config) -> None:
 
     fig.show()
 
-def plot_camera_animation(result: dict, params, path="") -> None:
+def plot_camera_animation(result: dict, params:Config, path="") -> None:
     title = r'$\text{Camera Animation}$'
     _, subs_positions_sen, _, subs_positions_sen_node = full_subject_traj_time(result, params)
     fig = go.Figure()
@@ -272,7 +272,7 @@ def plot_camera_animation(result: dict, params, path="") -> None:
         raise ValueError("`alpha_x` and `alpha_y` not found in result dictionary.")
 
     # Meshgrid
-    range_limit = 10 if hasattr(params.veh, 'get_kp_pose') else 80
+    range_limit = 10 if hasattr(params.dyn, 'get_kp_pose') else 80
     x = np.linspace(-range_limit, range_limit, 50)
     y = np.linspace(-range_limit, range_limit, 50)
     X, Y = np.meshgrid(x, y)
@@ -421,7 +421,7 @@ def plot_camera_animation(result: dict, params, path="") -> None:
 
     fig.show()  
 
-def plot_camera_polytope_animation(result: dict, params, path="") -> None:
+def plot_camera_polytope_animation(result: dict, params: Config, path="") -> None:
     title = r'$\text{Camera Animation}$'
     sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result["x_full"], params, False)
     fig = go.Figure()
@@ -680,7 +680,7 @@ def plot_camera_polytope_animation(result: dict, params, path="") -> None:
     # fig.update_layout(paper_bgcolor='rgba(0,0,0,0)')
     fig.show()  
 
-def plot_conic_view_animation(result: dict, params, path="") -> None:
+def plot_conic_view_animation(result: dict, params: Config, path="") -> None:
     title = r'$\text{Conic Constraint}$'
     sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result["x_full"], params, False)
     fig = go.Figure()
@@ -695,7 +695,7 @@ def plot_conic_view_animation(result: dict, params, path="") -> None:
         raise ValueError("`alpha_x` and `alpha_y` not found in result dictionary.")
 
     # Meshgrid
-    if hasattr(params.veh, 'get_kp_pose'):
+    if hasattr(params.dyn, 'get_kp_pose'):
         x = np.linspace(-6, 6, 20)
         y = np.linspace(-6, 6, 20)
         z = np.linspace(-6, 6, 20)
@@ -720,7 +720,7 @@ def plot_conic_view_animation(result: dict, params, path="") -> None:
         fig.add_trace(go.Surface(x=X, y=Y, z=z.reshape(20,20), opacity = 0.25, showscale=False))
         frames = []
 
-        if hasattr(params.veh, 'get_kp_pose'):
+        if hasattr(params.dyn, 'get_kp_pose'):
             x_vals = 12 * np.ones_like(np.array(sub_positions_sen[0])[:,0])
             y_vals = 12 * np.ones_like(np.array(sub_positions_sen[0])[:,0])
         else:
@@ -767,7 +767,7 @@ def plot_conic_view_animation(result: dict, params, path="") -> None:
             sub_traj = np.array(sub_traj)
             sub_traj_nodal = np.array(sub_positions_sen_node[sub_idx])
 
-            if hasattr(params.veh, 'get_kp_pose'):
+            if hasattr(params.dyn, 'get_kp_pose'):
                 x_vals = 12 * np.ones_like(sub_traj[:i+1, 0])
                 y_vals = 12 * np.ones_like(sub_traj[:i+1, 0])
             else:
@@ -874,7 +874,7 @@ def plot_conic_view_animation(result: dict, params, path="") -> None:
 
     fig.show()
 
-def plot_conic_view_polytope_animation(result: dict, params, path="") -> None:
+def plot_conic_view_polytope_animation(result: dict, params: Config, path="") -> None:
     title = r'$\text{Conic Constraint}$'
     sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result["x_full"], params, False)
     fig = go.Figure()
@@ -1170,7 +1170,7 @@ def plot_conic_view_polytope_animation(result: dict, params, path="") -> None:
     fig.show()
 
 def plot_animation(result: dict,
-                   params,
+                   params: Config,
                    path="",
                    ) -> None:
     tof = result["t_final"]
@@ -1180,7 +1180,7 @@ def plot_animation(result: dict,
     drone_velocities = result["x_full"][:, 3:6]
     drone_attitudes = result["x_full"][:, 6:10]
     drone_forces = result["u_full"][:, :3]
-    if hasattr(params.veh, 'get_kp_pose') or "init_poses" in result:
+    if hasattr(params.dyn, 'get_kp_pose') or "init_poses" in result:
         subs_positions, _, _, _ = full_subject_traj_time(result, params)
 
     step = 2
@@ -1193,7 +1193,7 @@ def plot_animation(result: dict,
     frames = []
     i = 0
     # Generate a color for each keypoint
-    if "init_poses" in result or hasattr(params.veh, 'get_kp_pose'):
+    if "init_poses" in result or hasattr(params.dyn, 'get_kp_pose'):
         color_kp = []
         if "init_poses" in result:
             for j in range(len(result["init_poses"])):
@@ -1209,7 +1209,7 @@ def plot_animation(result: dict,
 
         subs_pose = []
 
-        if hasattr(params.veh, 'get_kp_pose') or "init_poses" in result:
+        if hasattr(params.dyn, 'get_kp_pose') or "init_poses" in result:
             for sub_positions in subs_positions:
                 subs_pose.append(sub_positions[indices[i]])
 
@@ -1224,11 +1224,11 @@ def plot_animation(result: dict,
         rotated_axes = np.dot(rotation_matrix, axes).T
 
         # Meshgrid
-        if hasattr(params.veh, 'get_kp_pose'):    
+        if hasattr(params.dyn, 'get_kp_pose'):    
             x = np.linspace(-5, 5, 20)
             y = np.linspace(-5, 5, 20)
             z = np.linspace(-5, 5, 20)
-        elif hasattr(params.veh, 'covariance') and params.veh.covariance:
+        elif hasattr(params.dyn, 'covariance') and params.dyn.covariance:
             x = np.linspace(-2000, 2000, 20)
             y = np.linspace(-2000, 2000, 20)
             z = np.linspace(-2000, 2000, 20)
@@ -1243,7 +1243,7 @@ def plot_animation(result: dict,
         data = []
 
         # Define the condition for the second order cone
-        if (hasattr(params.veh, 'init_poses') or hasattr(params.veh, 'get_kp_pose')):
+        if (hasattr(params.dyn, 'init_poses') or hasattr(params.dyn, 'get_kp_pose')):
             if "alpha_x" in result and "alpha_y" in result:
                 A = np.diag([1 / np.tan(np.pi / result["alpha_y"]), 1 / np.tan(np.pi / result["alpha_x"])])  # Conic Matrix
             else:
@@ -1333,7 +1333,7 @@ def plot_animation(result: dict,
         
 
         # Make the subject draw a line as it moves
-        if hasattr(params.veh, 'get_kp_pose'):
+        if hasattr(params.dyn, 'get_kp_pose'):
             for sub_positions in subs_positions:
                 data.append(go.Scatter3d(x=sub_positions[:indices[i]+1,0], y=sub_positions[:indices[i]+1,1], z=sub_positions[:indices[i]+1,2], mode='lines', line=dict(color='red', width = 10), name='Subject Position'))
                 
@@ -1453,8 +1453,8 @@ def plot_animation(result: dict,
     
     fig.update_layout(scene=dict(aspectmode='manual', aspectratio=dict(x=10, y=10, z=10)))
     
-    # Check if params.veh.covairance exists
-    if hasattr(params.veh, 'covariance'):
+    # Check if params.dyn.covairance exists
+    if hasattr(params.dyn, 'covariance'):
         fig.update_layout(scene=dict(xaxis=dict(range=[0, 4000]), yaxis=dict(range=[0, 4000]), zaxis=dict(range=[-1000, 3000])))
     else:
         fig.update_layout(scene=dict(xaxis=dict(range=[-200, 200]), yaxis=dict(range=[-200, 200]), zaxis=dict(range=[-200, 200])))
@@ -1549,7 +1549,7 @@ def plot_scp_animation(result: dict,
     scp_multi_shoot = result["discretization"]
     # obstacles = result_ctcs["obstacles"]
     # gates = result_ctcs["gates"]
-    if hasattr(params.veh, 'get_kp_pose') or hasattr(params.veh, 'init_poses'):
+    if hasattr(params.dyn, 'get_kp_pose') or hasattr(params.dyn, 'init_poses'):
         subs_positions, _, _, _ = full_subject_traj_time(result, params)
     fig = go.Figure(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='gray', width = 2), name='SCP Iterations'))
     for j in range(200):
@@ -1659,7 +1659,7 @@ def plot_scp_animation(result: dict,
             
     # Add the subject positions
     if "n_subs" in result and result["n_subs"] != 0:     
-        if hasattr(params.veh, 'get_kp_pose'):
+        if hasattr(params.dyn, 'get_kp_pose'):
             for sub_positions in subs_positions:
                 fig.add_trace(go.Scatter3d(x=sub_positions[:,0], y=sub_positions[:,1], z=sub_positions[:,2], mode='lines', line=dict(color='red', width = 5), showlegend=False))
         else:
@@ -1766,7 +1766,7 @@ def plot_scp_animation(result: dict,
     )
 
     # Rotate the camera view to the left
-    if not hasattr(params.veh, 'get_kp_pose'):
+    if not hasattr(params.dyn, 'get_kp_pose'):
         fig.update_layout(scene_camera=dict(up=dict(x=0, y=0, z=90), center=dict(x=1, y=0.3, z=1), eye=dict(x=-1, y=2, z=1)))
 
     # # Make the background transparent
@@ -1788,13 +1788,13 @@ def plot_scp_animation(result: dict,
 
     fig.show()
 
-def scp_traj_interp(scp_trajs, params):
+def scp_traj_interp(scp_trajs, params: Config):
     scp_prop_trajs = []
     for traj in scp_trajs:
         states = []
         for k in range(params.scp.n):
-            traj_temp = np.repeat(np.expand_dims(traj[k], axis = 1), params.sim.inter_sample - 1, axis = 1)
-            for i in range(1, params.sim.inter_sample - 1):
+            traj_temp = np.repeat(np.expand_dims(traj[k], axis = 1), params.prp.inter_sample - 1, axis = 1)
+            for i in range(1, params.prp.inter_sample - 1):
                 states.append(traj_temp[:,i])
         scp_prop_trajs.append(np.array(states))
     return scp_prop_trajs

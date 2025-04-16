@@ -143,7 +143,6 @@ problem = TrajOptProblem(
     u_guess=u_bar,
     initial_state=initial_state,  # Initial State
     final_state=final_state,
-    initial_control=initial_control,
     x_max=max_state,
     x_min=min_state,
     u_max=max_control,  # Upper Bound on the controls
@@ -151,8 +150,8 @@ problem = TrajOptProblem(
     ctcs_augmentation_max=1e-8,
 )
 
-problem.params.sim.dt = 0.1
-problem.params.sim.custom_integrator = True
+problem.params.prp.dt = 0.1
+problem.params.dis.custom_integrator = True
 
 problem.params.scp.w_tr = 4e0  # Weight on the Trust Reigon
 problem.params.scp.lam_cost = 1e-2  # Weight on the Minimal Fuel Objective
@@ -165,9 +164,9 @@ problem.params.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS
 problem.params.scp.w_tr_adapt = 1.3  # Trust Region Adaptation Factor
 problem.params.scp.w_tr_max_scaling_factor = 1e3  # Maximum Trust Region Weight
 
-problem.params.veh.R_sb = R_sb
-problem.params.veh.init_pose = init_pose
-problem.params.veh.get_kp_pose = get_kp_pose
+problem.params.dyn.R_sb = R_sb
+problem.params.dyn.init_pose = init_pose
+problem.params.dyn.get_kp_pose = get_kp_pose
 
 plotting_dict = dict(
     n_subs=n_subs,

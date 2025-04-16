@@ -22,7 +22,7 @@ def PTR_init(params: Config) -> tuple[cp.Problem, ExactDis]:
 
     ocp = OCP(params) # Initialize the problem
 
-    if params.sim.cvxpygen:
+    if params.cvx.cvxpygen:
         from solver.cpg_solver import cpg_solve
         with open('solver/problem.pickle', 'rb') as f:
             prob = pickle.load(f)
@@ -61,7 +61,7 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: ExactDis, cpg_solve) -> d
 
     k = 1
 
-    if params.sim.profiling:
+    if params.dev.profiling:
         import cProfile
         pr = cProfile.Profile()
         
@@ -116,7 +116,7 @@ def PTR_main(params: Config, prob: cp.Problem, aug_dy: ExactDis, cpg_solve) -> d
 
     t_f_while = time.time()
     # Disable the profiler
-    if params.sim.profiling:
+    if params.dev.profiling:
         pr.disable()
         
         # Save results so it can be viusualized with snakeviz
@@ -154,21 +154,21 @@ def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
     t = np.array(aug_dy.s_to_t(u, params))
 
     u_lam = u_lambda(u, t, params)
-    t_full = np.arange(0, t[-1], params.sim.dt)
+    t_full = np.arange(0, t[-1], params.prp.dt)
 
     tau_vals, u_full = aug_dy.t_to_tau(u_lam, t_full, u, t, params)
 
     x_full = simulate_nonlinear_time(x[0], u_lam, tau_vals, t, aug_dy, params)
 
-    print("Total CTCS Constraint Violation:", x_full[-1, params.veh.y_inds])
+    print("Total CTCS Constraint Violation:", x_full[-1, params.dyn.y_inds])
     i = 0
     cost = np.zeros_like(x[-1, i])
-    for type in params.veh.initial_state.type:
+    for type in params.dyn.initial_state.type:
         if type == 'Minimize':
             cost += x[0, i]
         i +=1
     i = 0
-    for type in params.veh.final_state.type:
+    for type in params.dyn.final_state.type:
         if type == 'Minimize':
             cost += x[-1, i]
         i +=1
@@ -200,8 +200,8 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     prob.param_dict['z_d'].value = z_bar.__array__()
     dis_time = time.time() - t0
 
-    if params.veh.constraints_nodal:
-        for g_id, constraint in enumerate(params.veh.constraints_nodal):
+    if params.dyn.constraints_nodal:
+        for g_id, constraint in enumerate(params.dyn.constraints_nodal):
             if not constraint.convex:
                 prob.param_dict['g_' + str(g_id)].value = np.asarray(constraint.g(x_bar, u_bar))
                 prob.param_dict['grad_g_x_' + str(g_id)].value = np.asarray(constraint.grad_g_x(x_bar, u_bar))
@@ -210,14 +210,14 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     prob.param_dict['w_tr'].value = params.scp.w_tr
     prob.param_dict['lam_cost'].value = params.scp.lam_cost
 
-    if params.sim.cvxpygen:
+    if params.cvx.cvxpygen:
         t0 = time.time()
         prob.register_solve('CPG', cpg_solve)
-        prob.solve(method = 'CPG', **params.sim.solver_args)
+        prob.solve(method = 'CPG', **params.cvx.solver_args)
         subprop_time = time.time() - t0
     else:
         t0 = time.time()
-        prob.solve(solver = params.sim.solver, enforce_dpp = True, **params.sim.solver_args)
+        prob.solve(solver = params.cvx.solver, enforce_dpp = True, **params.cvx.solver_args)
         subprop_time = time.time() - t0
 
     x = (params.sim.S_x @ prob.var_dict['x'].value.T + np.expand_dims(params.sim.c_x, axis = 1)).T
@@ -225,7 +225,7 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
 
     i = 0
     costs = 0
-    for type in params.veh.final_state.type:
+    for type in params.dyn.final_state.type:
         if type == 'Minimize':
             costs = x[:,i]
         i += 1
@@ -242,7 +242,7 @@ def PTR_subproblem(cpg_solve, x_bar, u_bar, aug_dy, prob, params: Config):
     
     id_ncvx = 0
     J_vb_vec = 0
-    for constraint in params.veh.constraints_nodal:
+    for constraint in params.dyn.constraints_nodal:
         if constraint.convex == False:
             J_vb_vec += np.maximum(0, prob.var_dict['nu_vb_' + str(id_ncvx)].value)
             id_ncvx += 1

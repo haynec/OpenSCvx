@@ -129,15 +129,14 @@ problem = TrajOptProblem(
     u_guess=u_bar,
     initial_state=initial_state,  # Initial State
     final_state=final_state,
-    initial_control=initial_control,
     x_max=max_state,
     x_min=min_state,
     u_max=max_control,  # Upper Bound on the controls
     u_min=min_control,  # Lower Bound on the controls
 )
 
-problem.params.sim.dt = 0.01
-problem.params.sim.custom_integrator = True
+problem.params.prp.dt = 0.01
+problem.params.dis.custom_integrator = True
 
 problem.params.scp.w_tr = 2e0  # Weight on the Trust Reigon
 problem.params.scp.lam_cost = 1e-1  # 0e-1,  # Weight on the Minimal Time Objective

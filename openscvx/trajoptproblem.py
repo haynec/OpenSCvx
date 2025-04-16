@@ -5,7 +5,15 @@ import cvxpy as cp
 from jax import jit
 import numpy as np
 
-from openscvx.config import ScpConfig, SimConfig, Config
+from openscvx.config import (
+    ScpConfig,
+    SimConfig,
+    ConvexSolverConfig,
+    DiscretizationConfig,
+    PropagationConfig,
+    DevConfig,
+    Config,
+)
 from openscvx.dynamics import Dynamics
 from openscvx.discretization import ExactDis
 from openscvx.constraints.boundary import BoundaryConstraint
@@ -24,13 +32,16 @@ class TrajOptProblem:
         u_guess: jnp.ndarray,
         initial_state: BoundaryConstraint,
         final_state: BoundaryConstraint,
-        initial_control: jnp.ndarray,
         x_max: jnp.ndarray,
         x_min: jnp.ndarray,
         u_max: jnp.ndarray,
         u_min: jnp.ndarray,
         scp: ScpConfig = None,
+        dis: DiscretizationConfig = None,
+        prp: PropagationConfig = None,
         sim: SimConfig = None,
+        dev: DevConfig = None,
+        cvx: ConvexSolverConfig = None,
         ctcs_augmentation_min=0.0,
         ctcs_augmentation_max=1e-4,
         time_dilation_factor_min=0.3,
@@ -50,6 +61,9 @@ class TrajOptProblem:
             [u_guess, np.full((u_guess.shape[0], 1), time_init)]
         )
 
+        if dis is None:
+            dis = DiscretizationConfig()
+
         if sim is None:
             sim = SimConfig(
                 x_bar=x_bar_augmented,
@@ -58,12 +72,10 @@ class TrajOptProblem:
                 final_state=final_state,
                 max_state=x_max_augmented,
                 min_state=x_min_augmented,
-                initial_control=initial_control,
                 max_control=u_max_augmented,
                 min_control=u_min_augmented,
                 total_time=time_init,
                 n_states=len(x_max),
-                dt=0.1,
             )
 
         if scp is None:
@@ -86,6 +98,13 @@ class TrajOptProblem:
             assert (
                 self.scp.n == N
             ), "Number of segments must be the same as in the config"
+
+        if dev is None:
+            dev = DevConfig()
+        if cvx is None:
+            cvx = ConvexSolverConfig()
+        if prp is None:
+            prp = PropagationConfig()
 
         self.constraints_ctcs = []
         self.constraints_nodal = []
@@ -113,7 +132,11 @@ class TrajOptProblem:
         self.params = Config(
             sim=sim,
             scp=scp,
-            veh=veh,
+            dyn=veh,
+            dis=dis,
+            dev=dev,
+            cvx=cvx,
+            prp=prp,
         )
 
         self.ocp: cp.Problem = None
@@ -139,8 +162,8 @@ class TrajOptProblem:
         self.i4 = self.i3 + n_x * n_u
         self.i5 = self.i4 + n_x
 
-        if not self.params.sim.debug:
-            if self.params.sim.custom_integrator:
+        if not self.params.dev.debug:
+            if self.params.dis.custom_integrator:
                 calculate_discretization_lower = jit(
                     self.dynamics_discretized.calculate_discretization
                 ).lower(

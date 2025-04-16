@@ -199,14 +199,13 @@ problem = TrajOptProblem(
     u_guess=u_bar,
     initial_state=initial_state,  # Initial State
     final_state=final_state,
-    initial_control=initial_control,
     x_max=max_state,
     x_min=min_state,
     u_max=max_control,  # Upper Bound on the controls
     u_min=min_control,  # Lower Bound on the controls
 )
 
-problem.params.sim.dt = 0.01
+problem.params.prp.dt = 0.01
 
 problem.params.scp.k_max = 50
 problem.params.scp.w_tr = 2e0  # 2e0,  # Weight on the Trust Reigon
@@ -220,8 +219,8 @@ problem.params.scp.cost_relax = 0.8  # Minimal Time Relaxation Factor
 problem.params.scp.w_tr_adapt = 1.2  # Trust Region Adaptation Factor
 problem.params.scp.w_tr_max_scaling_factor = 1e2  # Maximum Trust Region Weight
 
-problem.params.veh.R_sb = R_sb
-problem.params.veh.init_poses = init_poses
+problem.params.dyn.R_sb = R_sb
+problem.params.dyn.init_poses = init_poses
 
 plotting_dict = dict(
     vertices=vertices,
