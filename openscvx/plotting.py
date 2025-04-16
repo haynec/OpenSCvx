@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import numpy as np
 import pickle
 
-from openscvx.utils import qdcm
+from openscvx.utils import qdcm, get_kp_pose
 from openscvx.config import Config
 
 def full_subject_traj_time(results, params):
@@ -17,11 +17,13 @@ def full_subject_traj_time(results, params):
     subs_traj_sen = []
     subs_traj_sen_node = []
     
-    if hasattr(params.dyn, 'get_kp_pose'):
-        subs_traj.append(params.dyn.get_kp_pose(t_full))
-        subs_traj_node.append(params.dyn.get_kp_pose(t_nodes))
-    elif hasattr(params.dyn, 'init_poses'):
-        for pose in params.dyn.init_poses:
+    # if hasattr(params.dyn, 'get_kp_pose'):
+    if "moving_subject" in results and "init_poses" in results:
+        init_poses = results["init_poses"]
+        subs_traj.append(get_kp_pose(t_full, init_poses))
+        subs_traj_node.append(get_kp_pose(t_nodes, init_poses))
+    elif "init_poses" in results:
+        for pose in results["init_poses"]:
             # repeat the pose for all time steps
             pose_full = np.repeat(pose[:,np.newaxis], x_full.shape[0], axis=1).T
             subs_traj.append(pose_full)
@@ -31,21 +33,24 @@ def full_subject_traj_time(results, params):
     else:
         raise ValueError("No valid method to get keypoint poses.")
 
-    R_sb = params.dyn.R_sb
-    for sub_traj in subs_traj:
-        sub_traj_sen = []
-        for i in range(x_full.shape[0]):
-            sub_pose = sub_traj[i]
-            sub_traj_sen.append(R_sb @ qdcm(x_full[i, 6:10]).T @ (sub_pose - x_full[i, 0:3]))
-        subs_traj_sen.append(np.array(sub_traj_sen).squeeze())
+    if "R_sb" in results:
+        R_sb = results["R_sb"]
+        for sub_traj in subs_traj:
+            sub_traj_sen = []
+            for i in range(x_full.shape[0]):
+                sub_pose = sub_traj[i]
+                sub_traj_sen.append(R_sb @ qdcm(x_full[i, 6:10]).T @ (sub_pose - x_full[i, 0:3]))
+            subs_traj_sen.append(np.array(sub_traj_sen).squeeze())
 
-    for sub_traj_node in subs_traj_node:
-        sub_traj_sen_node = []
-        for i in range(x_nodes.shape[0]):
-            sub_pose = sub_traj_node[i]
-            sub_traj_sen_node.append(R_sb @ qdcm(x_nodes[i, 6:10]).T @ (sub_pose - x_nodes[i, 0:3]))
-        subs_traj_sen_node.append(np.array(sub_traj_sen_node).squeeze())
-    return subs_traj, subs_traj_sen, subs_traj_node, subs_traj_sen_node
+        for sub_traj_node in subs_traj_node:
+            sub_traj_sen_node = []
+            for i in range(x_nodes.shape[0]):
+                sub_pose = sub_traj_node[i]
+                sub_traj_sen_node.append(R_sb @ qdcm(x_nodes[i, 6:10]).T @ (sub_pose - x_nodes[i, 0:3]))
+            subs_traj_sen_node.append(np.array(sub_traj_sen_node).squeeze())
+        return subs_traj, subs_traj_sen, subs_traj_node, subs_traj_sen_node
+    else:
+        raise ValueError("`R_sb` not found in results dictionary. Cannot compute sensor frame.")
 
 def save_gate_parameters(gates, params: Config):
     gate_centers = []
@@ -272,7 +277,7 @@ def plot_camera_animation(result: dict, params:Config, path="") -> None:
         raise ValueError("`alpha_x` and `alpha_y` not found in result dictionary.")
 
     # Meshgrid
-    range_limit = 10 if hasattr(params.dyn, 'get_kp_pose') else 80
+    range_limit = 10 if "moving_subject" in result else 80
     x = np.linspace(-range_limit, range_limit, 50)
     y = np.linspace(-range_limit, range_limit, 50)
     X, Y = np.meshgrid(x, y)
@@ -695,7 +700,7 @@ def plot_conic_view_animation(result: dict, params: Config, path="") -> None:
         raise ValueError("`alpha_x` and `alpha_y` not found in result dictionary.")
 
     # Meshgrid
-    if hasattr(params.dyn, 'get_kp_pose'):
+    if "moving_subject" in result:
         x = np.linspace(-6, 6, 20)
         y = np.linspace(-6, 6, 20)
         z = np.linspace(-6, 6, 20)
@@ -720,7 +725,7 @@ def plot_conic_view_animation(result: dict, params: Config, path="") -> None:
         fig.add_trace(go.Surface(x=X, y=Y, z=z.reshape(20,20), opacity = 0.25, showscale=False))
         frames = []
 
-        if hasattr(params.dyn, 'get_kp_pose'):
+        if "moving_subject" in result:
             x_vals = 12 * np.ones_like(np.array(sub_positions_sen[0])[:,0])
             y_vals = 12 * np.ones_like(np.array(sub_positions_sen[0])[:,0])
         else:
@@ -767,7 +772,7 @@ def plot_conic_view_animation(result: dict, params: Config, path="") -> None:
             sub_traj = np.array(sub_traj)
             sub_traj_nodal = np.array(sub_positions_sen_node[sub_idx])
 
-            if hasattr(params.dyn, 'get_kp_pose'):
+            if "moving_subject" in result:
                 x_vals = 12 * np.ones_like(sub_traj[:i+1, 0])
                 y_vals = 12 * np.ones_like(sub_traj[:i+1, 0])
             else:
@@ -1180,7 +1185,7 @@ def plot_animation(result: dict,
     drone_velocities = result["x_full"][:, 3:6]
     drone_attitudes = result["x_full"][:, 6:10]
     drone_forces = result["u_full"][:, :3]
-    if hasattr(params.dyn, 'get_kp_pose') or "init_poses" in result:
+    if "moving_subject" in result or "init_poses" in result:
         subs_positions, _, _, _ = full_subject_traj_time(result, params)
 
     step = 2
@@ -1193,7 +1198,7 @@ def plot_animation(result: dict,
     frames = []
     i = 0
     # Generate a color for each keypoint
-    if "init_poses" in result or hasattr(params.dyn, 'get_kp_pose'):
+    if "init_poses" in result or "moving_subject" in result:
         color_kp = []
         if "init_poses" in result:
             for j in range(len(result["init_poses"])):
@@ -1209,7 +1214,7 @@ def plot_animation(result: dict,
 
         subs_pose = []
 
-        if hasattr(params.dyn, 'get_kp_pose') or "init_poses" in result:
+        if "moving_subject" in result or "init_poses" in result:
             for sub_positions in subs_positions:
                 subs_pose.append(sub_positions[indices[i]])
 
@@ -1224,7 +1229,7 @@ def plot_animation(result: dict,
         rotated_axes = np.dot(rotation_matrix, axes).T
 
         # Meshgrid
-        if hasattr(params.dyn, 'get_kp_pose'):    
+        if "moving_subject" in result:    
             x = np.linspace(-5, 5, 20)
             y = np.linspace(-5, 5, 20)
             z = np.linspace(-5, 5, 20)
@@ -1243,7 +1248,7 @@ def plot_animation(result: dict,
         data = []
 
         # Define the condition for the second order cone
-        if (hasattr(params.dyn, 'init_poses') or hasattr(params.dyn, 'get_kp_pose')):
+        if ("init_poses" in result or "moving_subject" in result):
             if "alpha_x" in result and "alpha_y" in result:
                 A = np.diag([1 / np.tan(np.pi / result["alpha_y"]), 1 / np.tan(np.pi / result["alpha_x"])])  # Conic Matrix
             else:
@@ -1333,44 +1338,45 @@ def plot_animation(result: dict,
         
 
         # Make the subject draw a line as it moves
-        if hasattr(params.dyn, 'get_kp_pose'):
-            for sub_positions in subs_positions:
-                data.append(go.Scatter3d(x=sub_positions[:indices[i]+1,0], y=sub_positions[:indices[i]+1,1], z=sub_positions[:indices[i]+1,2], mode='lines', line=dict(color='red', width = 10), name='Subject Position'))
-                
-                sub_position = sub_positions[indices[i]]
+        if "moving_subject" in result:
+            if result["moving_subject"]:
+                for sub_positions in subs_positions:
+                    data.append(go.Scatter3d(x=sub_positions[:indices[i]+1,0], y=sub_positions[:indices[i]+1,1], z=sub_positions[:indices[i]+1,2], mode='lines', line=dict(color='red', width = 10), name='Subject Position'))
+                    
+                    sub_position = sub_positions[indices[i]]
 
-                # Plot two spheres as a surface at the location of the subject to represent the minimum and maximum allowed range from the subject
-                n = 20
-                # Generate points on the unit sphere
-                u = np.linspace(0, 2 * np.pi, n)
-                v = np.linspace(0, np.pi, n)
+                    # Plot two spheres as a surface at the location of the subject to represent the minimum and maximum allowed range from the subject
+                    n = 20
+                    # Generate points on the unit sphere
+                    u = np.linspace(0, 2 * np.pi, n)
+                    v = np.linspace(0, np.pi, n)
 
-                x = np.outer(np.cos(u), np.sin(v))
-                y = np.outer(np.sin(u), np.sin(v))
-                z = np.outer(np.ones(np.size(u)), np.cos(v))
+                    x = np.outer(np.cos(u), np.sin(v))
+                    y = np.outer(np.sin(u), np.sin(v))
+                    z = np.outer(np.ones(np.size(u)), np.cos(v))
 
-                if "min_range" in result and "max_range" in result:
-                    # Scale points by minimum range
-                    x_min = result["min_range"] * x
-                    y_min = result["min_range"] * y
-                    z_min = result["min_range"] * z
+                    if "min_range" in result and "max_range" in result:
+                        # Scale points by minimum range
+                        x_min = result["min_range"] * x
+                        y_min = result["min_range"] * y
+                        z_min = result["min_range"] * z
 
-                    # Scale points by maximum range
-                    x_max = result["max_range"] * x
-                    y_max = result["max_range"] * y
-                    z_max = result["max_range"] * z
-                else:
-                    raise ValueError("`min_range` and `max_range` not found in result dictionary.")
+                        # Scale points by maximum range
+                        x_max = result["max_range"] * x
+                        y_max = result["max_range"] * y
+                        z_max = result["max_range"] * z
+                    else:
+                        raise ValueError("`min_range` and `max_range` not found in result dictionary.")
 
-                # Rotate and translate points
-                points_min = np.array([x_min.flatten(), y_min.flatten(), z_min.flatten()])
-                points_max = np.array([x_max.flatten(), y_max.flatten(), z_max.flatten()])
-                
-                points_min = points_min.T + sub_position
-                points_max = points_max.T + sub_position
+                    # Rotate and translate points
+                    points_min = np.array([x_min.flatten(), y_min.flatten(), z_min.flatten()])
+                    points_max = np.array([x_max.flatten(), y_max.flatten(), z_max.flatten()])
+                    
+                    points_min = points_min.T + sub_position
+                    points_max = points_max.T + sub_position
 
-                data.append(go.Surface(x=points_min[:, 0].reshape(n,n), y=points_min[:, 1].reshape(n,n), z=points_min[:, 2].reshape(n,n), opacity = 0.2, colorscale='reds', name='Minimum Range', showlegend=True, showscale=False))
-                data.append(go.Surface(x=points_max[:, 0].reshape(n,n), y=points_max[:, 1].reshape(n,n), z=points_max[:, 2].reshape(n,n), opacity = 0.2, colorscale='blues', name='Maximum Range', showlegend=True, showscale=False))
+                    data.append(go.Surface(x=points_min[:, 0].reshape(n,n), y=points_min[:, 1].reshape(n,n), z=points_min[:, 2].reshape(n,n), opacity = 0.2, colorscale='reds', name='Minimum Range', showlegend=True, showscale=False))
+                    data.append(go.Surface(x=points_max[:, 0].reshape(n,n), y=points_max[:, 1].reshape(n,n), z=points_max[:, 2].reshape(n,n), opacity = 0.2, colorscale='blues', name='Maximum Range', showlegend=True, showscale=False))
 
 
         frame.data = data
@@ -1549,7 +1555,7 @@ def plot_scp_animation(result: dict,
     scp_multi_shoot = result["discretization"]
     # obstacles = result_ctcs["obstacles"]
     # gates = result_ctcs["gates"]
-    if hasattr(params.dyn, 'get_kp_pose') or hasattr(params.dyn, 'init_poses'):
+    if "moving_subject" in result or "init_poses" in result:
         subs_positions, _, _, _ = full_subject_traj_time(result, params)
     fig = go.Figure(go.Scatter3d(x=[], y=[], z=[], mode='lines+markers', line=dict(color='gray', width = 2), name='SCP Iterations'))
     for j in range(200):
@@ -1659,9 +1665,10 @@ def plot_scp_animation(result: dict,
             
     # Add the subject positions
     if "n_subs" in result and result["n_subs"] != 0:     
-        if hasattr(params.dyn, 'get_kp_pose'):
-            for sub_positions in subs_positions:
-                fig.add_trace(go.Scatter3d(x=sub_positions[:,0], y=sub_positions[:,1], z=sub_positions[:,2], mode='lines', line=dict(color='red', width = 5), showlegend=False))
+        if "moving_subject" in result:
+            if result["moving_subject"]:
+                for sub_positions in subs_positions:
+                    fig.add_trace(go.Scatter3d(x=sub_positions[:,0], y=sub_positions[:,1], z=sub_positions[:,2], mode='lines', line=dict(color='red', width = 5), showlegend=False))
         else:
             # Plot the subject positions as points
             for sub_positions in subs_positions:
@@ -1766,7 +1773,7 @@ def plot_scp_animation(result: dict,
     )
 
     # Rotate the camera view to the left
-    if not hasattr(params.dyn, 'get_kp_pose'):
+    if not "moving_subject" in result:
         fig.update_layout(scene_camera=dict(up=dict(x=0, y=0, z=90), center=dict(x=1, y=0.3, z=1), eye=dict(x=-1, y=2, z=1)))
 
     # # Make the background transparent

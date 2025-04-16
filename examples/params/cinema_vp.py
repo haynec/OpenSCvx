@@ -3,7 +3,7 @@ import numpy.linalg as la
 import jax.numpy as jnp
 
 from openscvx.trajoptproblem import TrajOptProblem
-from openscvx.utils import qdcm, SSMP, SSM
+from openscvx.utils import qdcm, SSMP, SSM, get_kp_pose
 from openscvx.constraints.boundary import BoundaryConstraint as bc
 from openscvx.constraints.decorators import ctcs
 
@@ -81,30 +81,19 @@ def dynamics(x, u):
     return jnp.hstack([r_dot, v_dot, q_dot, w_dot, fuel_dot])
 
 
-def get_kp_pose(t):
-    loop_time = 40.0
-    loop_radius = 20.0
-
-    t_angle = t / loop_time * (2 * jnp.pi)
-    x = loop_radius * jnp.sin(t_angle)
-    y = x * jnp.cos(t_angle)
-    z = 0.5 * x * jnp.sin(t_angle)
-    return jnp.array([x, y, z]).T + init_pose
-
-
 def g_vp(x):
-    p_s_I = get_kp_pose(x[t_inds])
+    p_s_I = get_kp_pose(x[t_inds], init_pose)
     p_s_s = R_sb @ qdcm(x[6:10]).T @ (p_s_I - x[:3])
     return jnp.linalg.norm(A_cone @ p_s_s, ord=norm_type) - (c.T @ p_s_s)
 
 
 def g_min(x):
-    p_s_I = get_kp_pose(x[t_inds])
+    p_s_I = get_kp_pose(x[t_inds], init_pose)
     return min_range - jnp.linalg.norm(p_s_I - x[:3])
 
 
 def g_max(x):
-    p_s_I = get_kp_pose(x[t_inds])
+    p_s_I = get_kp_pose(x[t_inds], init_pose)
     return jnp.linalg.norm(p_s_I - x[:3]) - max_range
 
 
@@ -120,12 +109,12 @@ constraints = [
 u_bar = np.repeat(np.expand_dims(initial_control, axis=0), n, axis=0)
 x_bar = np.linspace(initial_state.value, final_state.value, n)
 
-x_bar[:, :3] = get_kp_pose(x_bar[:, t_inds]) + jnp.array([-5, 0.2, 0.2])[None, :]
+x_bar[:, :3] = get_kp_pose(x_bar[:, t_inds], init_pose) + jnp.array([-5, 0.2, 0.2])[None, :]
 
 R_sb = R_sb  # Sensor to body frame
 b = R_sb @ np.array([0, 1, 0])
 for k in range(n):
-    kp = get_kp_pose(x_bar[k, t_inds])
+    kp = get_kp_pose(x_bar[k, t_inds], init_pose)
     a = kp - x_bar[k, :3]
     # Determine the direction cosine matrix that aligns the z-axis of the sensor frame with the relative position vector
     q_xyz = np.cross(b, a)
@@ -164,10 +153,6 @@ problem.params.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS
 problem.params.scp.w_tr_adapt = 1.3  # Trust Region Adaptation Factor
 problem.params.scp.w_tr_max_scaling_factor = 1e3  # Maximum Trust Region Weight
 
-problem.params.dyn.R_sb = R_sb
-problem.params.dyn.init_pose = init_pose
-problem.params.dyn.get_kp_pose = get_kp_pose
-
 plotting_dict = dict(
     n_subs=n_subs,
     alpha_x=alpha_x,
@@ -177,4 +162,5 @@ plotting_dict = dict(
     norm_type=norm_type,
     min_range=min_range,
     max_range=max_range,
+    moving_subject=True,
 )

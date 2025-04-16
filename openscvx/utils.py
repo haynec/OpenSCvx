@@ -66,3 +66,15 @@ def gen_vertices(center, radii):
     vertices.append(center + rot @ [-radii[0], 0, -radii[2]])
     vertices.append(center + rot @ [radii[0], 0, -radii[2]])
     return vertices
+
+
+# TODO (haynec): make this less hardcoded
+def get_kp_pose(t, init_pose):
+    loop_time = 40.0
+    loop_radius = 20.0
+
+    t_angle = t / loop_time * (2 * jnp.pi)
+    x = loop_radius * jnp.sin(t_angle)
+    y = x * jnp.cos(t_angle)
+    z = 0.5 * x * jnp.sin(t_angle)
+    return jnp.array([x, y, z]).T + init_pose
