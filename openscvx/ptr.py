@@ -9,7 +9,6 @@ from termcolor import colored
 
 from openscvx.discretization import ExactDis
 from openscvx.config import Config
-from openscvx.propagation import u_lambda, simulate_nonlinear_time
 from openscvx.ocp import OCP
 
 import warnings
@@ -153,12 +152,11 @@ def PTR_post(params: Config, result: dict, aug_dy: ExactDis) -> dict:
 
     t = np.array(aug_dy.s_to_t(u, params))
 
-    u_lam = u_lambda(u, t, params)
     t_full = np.arange(0, t[-1], params.prp.dt)
 
-    tau_vals, u_full = aug_dy.t_to_tau(u_lam, t_full, u, t, params)
+    tau_vals, u_full = aug_dy.t_to_tau(u, t_full, u, t, params)
 
-    x_full = simulate_nonlinear_time(x[0], u_lam, tau_vals, t, aug_dy, params)
+    x_full = aug_dy.simulate_nonlinear_time(x[0], u, tau_vals, t)
 
     print("Total CTCS Constraint Violation:", x_full[-1, params.dyn.y_inds])
     i = 0

@@ -2,7 +2,6 @@ import jax.numpy as jnp
 from jax import jit, lax
 import numpy as np
 import diffrax  as dfx
-import scipy.integrate as itg
 
 from openscvx.config import Config
 
@@ -59,23 +58,53 @@ class RK45_Custom:
         _, _, V_result = lax.fori_loop(1, len(t_eval), body_fun, (tau_grid[0], V0, V_result))
         
         return V_result
+    
+class Diffrax_Prop:
+    def __init__(self, params):
+        self.params = params
+        self.func = ExactDis(params).prop_aug_dy
+    
+    def solve_ivp(self, V0, tau_grid, u_cur, u_next, tau_init, idx_s):
+        t_eval = jnp.linspace(tau_grid[0], tau_grid[1], 50)
 
+        solver_class = SOLVER_MAP.get(self.params.prp.solver)
+        if solver_class is None:
+            raise ValueError(f"Unknown solver: {self.params.prp.solver}")
+        solver = solver_class()
+
+        args = (u_cur, u_next, tau_init, idx_s)
+
+        term = dfx.ODETerm(lambda t, y, args: self.func(t, y, *args))
+        stepsize_controller = dfx.PIDController(rtol=self.params.prp.rtol, atol=self.params.prp.atol)
+        solution = dfx.diffeqsolve(
+            term,
+            solver = solver,
+            t0=tau_grid[0],
+            t1=tau_grid[1],
+            dt0=(tau_grid[1] - tau_grid[0]) / (len(t_eval) - 1),
+            y0=V0,
+            args=args,
+            stepsize_controller=stepsize_controller,
+            saveat=dfx.SaveAt(dense=True, ts=t_eval),
+            **self.params.prp.args
+        )
+
+        return solution
 
 class Diffrax:
     def __init__(self, params):
         self.params = params
     
     def solve_ivp(self, dVdt, tau_grid, V0, args, t_eval=None):
-        # if t_eval is None:
         t_eval = jnp.linspace(tau_grid[0], tau_grid[1], 50)
 
-        solver_class = SOLVER_MAP.get(self.params.dis.diffrax_solver)
+        solver_class = SOLVER_MAP.get(self.params.dis.solver)
         if solver_class is None:
-            raise ValueError(f"Unknown solver: {self.params.dis.diffrax_solver}")
+            raise ValueError(f"Unknown solver: {self.params.dis.solver}")
         solver = solver_class()
 
         term = dfx.ODETerm(lambda t, y, args: dVdt(t, y, *args))
-        stepsize_controller = dfx.PIDController(rtol=1e-5, atol=1e-8)
+        stepsize_controller = dfx.PIDController(rtol=self.params.dis.rtol, atol=self.params.dis.atol)
         solution = dfx.diffeqsolve(
             term,
             solver = solver,
@@ -86,7 +115,7 @@ class Diffrax:
             args=args,
             stepsize_controller=stepsize_controller,
             saveat=dfx.SaveAt(ts=t_eval),
-            **self.params.dis.diffrax_args
+            **self.params.dis.args
         )
 
         return solution.ys
@@ -108,10 +137,11 @@ class ExactDis:
         self.i4 = self.i3 + n_x * n_u
         self.i5 = self.i4 + n_x
 
-        if self.params.dis.diffrax:
-            self.integrator = Diffrax(self.params)
-        else:
+        
+        if self.params.dis.custom_integrator:
             self.integrator = RK45_Custom()
+        else:
+            self.integrator = Diffrax(self.params)
 
         self.tau_grid = jnp.linspace(0, 1, self.params.scp.n)
 
@@ -127,7 +157,8 @@ class ExactDis:
                 t.append(t[k-1] + 0.5 * (s_k + s_kp) * (tau[k] - tau[k-1]))
         return t
     
-    def t_to_tau(self, u_lam, t, u_nodal, t_nodal, params: Config):
+    def t_to_tau(self, u, t, u_nodal, t_nodal, params: Config):
+        u_lam = lambda new_t: np.array([np.interp(new_t, t_nodal, u[:, i]) for i in range(u.shape[1])]).T
         u = np.array([u_lam(t_i) for t_i in t])
 
         tau = np.zeros(len(t))
@@ -159,28 +190,18 @@ class ExactDis:
         n_x = self.params.sim.n_states
         n_u = self.params.sim.n_controls
         
-        if self.params.dis.custom_integrator:
-            # Initialize the augmented state vector
-            V0 = jnp.zeros((x.shape[0]-1, self.i5))
+        # Initialize the augmented state vector
+        V0 = jnp.zeros((x.shape[0]-1, self.i5))
 
-            # Vectorized integration
-            V0 = V0.at[:, self.i0:self.i1].set(x[:-1, :].astype(float))
-            V0 = V0.at[:, self.i1:self.i2].set(np.eye(n_x).reshape(1, n_x * n_x).repeat(self.params.scp.n - 1, axis=0))
-            
-            int_result = self.integrator.solve_ivp(self.dVdt, (self.tau_grid[0], self.tau_grid[1]), V0.flatten(), args=(u[:-1, :].astype(float), u[1:, :].astype(float)), t_eval=self.tau_grid)
-            
+        # Vectorized integration
+        V0 = V0.at[:, self.i0:self.i1].set(x[:-1, :].astype(float))
+        V0 = V0.at[:, self.i1:self.i2].set(np.eye(n_x).reshape(1, n_x * n_x).repeat(self.params.scp.n - 1, axis=0))
+        
+        int_result = self.integrator.solve_ivp(self.dVdt, (self.tau_grid[0], self.tau_grid[1]), V0.flatten(), args=(u[:-1, :].astype(float), u[1:, :].astype(float)), t_eval=self.tau_grid)
+        
 
-            V = int_result[-1].T.reshape(-1, self.i5)
-            V_multi_shoot = int_result.T
-        else:
-            V0 = np.zeros((x.shape[0]-1, self.i5))
-
-            V0[:, self.i0:self.i1] = x[:-1, :].astype(float)
-            V0[:, self.i1:self.i2] = np.eye(n_x).reshape(1, n_x * n_x).repeat(self.params.scp.n - 1, axis=0)
-
-            int_result = itg.solve_ivp(self.dVdt, (self.tau_grid[0], self.tau_grid[1]), V0.flatten(), args=(u[:-1, :].astype(float), u[1:, :].astype(float)), method='RK45', t_eval=jnp.linspace(self.tau_grid[0], self.tau_grid[1], 50))
-            V = int_result.y[:,-1].reshape(-1, self.i5)
-            V_multi_shoot = int_result.y
+        V = int_result[-1].T.reshape(-1, self.i5)
+        V_multi_shoot = int_result.T
     
         # Flatten matrices in column-major (Fortran) order for cvxpy
         A_bar = V[:, self.i1:self.i2].reshape((self.params.scp.n - 1, n_x, n_x)).transpose(1, 2, 0).reshape(n_x * n_x, -1, order='F').T
@@ -279,3 +300,42 @@ class ExactDis:
         u = u_current + beta * (u_next - u_current)
         
         return  u[:, idx_s] * self.params.dyn.state_dot(x, u[:,:-1]).squeeze()
+
+    def simulate_nonlinear_time(self, x_0, u, tau_vals, t):
+        params = self.params
+        states = np.empty((x_0.shape[0], 0))  # Initialize states as a 2D array with shape (n, 0)
+
+        tau = np.linspace(0, 1, params.scp.n)
+
+        u_lam = lambda new_t: np.array([np.interp(new_t, t, u[:, i]) for i in range(u.shape[1])]).T
+
+        # Bin the tau_vals into with respect to the uniform tau grid, tau
+        tau_inds = np.digitize(tau_vals, tau) - 1
+        # Force the last indice to be in the same bin as the previous ones
+        tau_inds = np.where(tau_inds == params.scp.n - 1, params.scp.n - 2, tau_inds)
+
+        prev_count = 0
+
+        for k in range(params.scp.n - 1):
+            controls_current = np.squeeze(u_lam(t[k]))[None, :]
+            controls_next = np.squeeze(u_lam(t[k + 1]))[None, :]
+
+            # Create a mask
+            mask = (tau_inds >= k) & (tau_inds < k + 1)
+
+            count = np.sum(mask)
+
+            # Use count to grab the first count number of elements
+            tau_cur = tau_vals[prev_count:prev_count + count]
+
+            sol = self.params.prp.integrator(x_0, (tau[k], tau[k + 1]), controls_current, controls_next, np.array([[tau[k]]]), params.dyn.s_inds)
+
+            x = sol.ys
+            for tau_i in tau_cur:
+                new_state = sol.evaluate(tau_i).reshape(-1, 1)  # Ensure new_state is 2D
+                states = np.concatenate([states, new_state], axis=1)
+
+            x_0 = x[-1]
+            prev_count += count
+
+        return states.T
