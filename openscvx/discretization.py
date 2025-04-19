@@ -67,15 +67,15 @@ class Diffrax_Prop:
     def solve_ivp(self, V0, tau_grid, u_cur, u_next, tau_init, idx_s):
         t_eval = jnp.linspace(tau_grid[0], tau_grid[1], 50)
 
-        solver_class = SOLVER_MAP.get(self.params.prp.diffrax_solver)
+        solver_class = SOLVER_MAP.get(self.params.prp.solver)
         if solver_class is None:
-            raise ValueError(f"Unknown solver: {self.params.prp.diffrax_solver}")
+            raise ValueError(f"Unknown solver: {self.params.prp.solver}")
         solver = solver_class()
 
         args = (u_cur, u_next, tau_init, idx_s)
 
         term = dfx.ODETerm(lambda t, y, args: self.func(t, y, *args))
-        stepsize_controller = dfx.PIDController(rtol=1e-3, atol=1e-6)
+        stepsize_controller = dfx.PIDController(rtol=self.params.prp.rtol, atol=self.params.prp.atol)
         solution = dfx.diffeqsolve(
             term,
             solver = solver,
@@ -86,7 +86,7 @@ class Diffrax_Prop:
             args=args,
             stepsize_controller=stepsize_controller,
             saveat=dfx.SaveAt(dense=True, ts=t_eval),
-            **self.params.prp.diffrax_args
+            **self.params.prp.args
         )
 
         return solution
@@ -98,13 +98,13 @@ class Diffrax:
     def solve_ivp(self, dVdt, tau_grid, V0, args, t_eval=None):
         t_eval = jnp.linspace(tau_grid[0], tau_grid[1], 50)
 
-        solver_class = SOLVER_MAP.get(self.params.dis.diffrax_solver)
+        solver_class = SOLVER_MAP.get(self.params.dis.solver)
         if solver_class is None:
-            raise ValueError(f"Unknown solver: {self.params.dis.diffrax_solver}")
+            raise ValueError(f"Unknown solver: {self.params.dis.solver}")
         solver = solver_class()
 
         term = dfx.ODETerm(lambda t, y, args: dVdt(t, y, *args))
-        stepsize_controller = dfx.PIDController(rtol=1e-3, atol=1e-6)
+        stepsize_controller = dfx.PIDController(rtol=self.params.dis.rtol, atol=self.params.dis.atol)
         solution = dfx.diffeqsolve(
             term,
             solver = solver,
@@ -115,7 +115,7 @@ class Diffrax:
             args=args,
             stepsize_controller=stepsize_controller,
             saveat=dfx.SaveAt(ts=t_eval),
-            **self.params.dis.diffrax_args
+            **self.params.dis.args
         )
 
         return solution.ys
