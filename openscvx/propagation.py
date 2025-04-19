@@ -1,38 +1,23 @@
 import numpy as np
 import jax.numpy as jnp
-import scipy.integrate as itg
-from scipy.interpolate import interp1d
 
-from openscvx.utils import qdcm
-from openscvx.config import Config
-
-def simulate_nonlinear_time(x_0, u_lam, tau_vals, t, aug_dy, params: Config):
-    states = []
-    tau = np.linspace(0, 1, params.scp.n)
-    
-    # Bin the tau_vals into with respect to the uniform tau grid, tau
-    tau_inds = np.digitize(tau_vals, tau) - 1
-
-    # Force the last indice to be in the same bin as the previous ones
-    tau_inds[tau_inds == params.scp.n-1] = params.scp.n-2
-
-    for k in range(params.scp.n-1):
-        controls_current = np.squeeze(u_lam(t[k]))[None,:]
-        controls_next = np.squeeze(u_lam(t[k+1]))[None,:]
+def jax_interp1d(x, y):
+    def interpolate(x_new):
+        indices = np.searchsorted(x, x_new, side='left')
+        indices = np.clip(indices, 1, len(x) - 1)
         
-        # Obtain those values from tau_vals
-        tau_cur = tau_vals[(tau_inds >= k) & (tau_inds < k+1)]
-
-        sol = itg.solve_ivp(aug_dy.prop_aug_dy, (tau[k], tau[k+1]), x_0, args=(np.array(controls_current), np.array(controls_next), np.array([[tau[k]]]), params.dyn.s_inds), method='DOP853', dense_output=True)
-        x = sol.y
-        x_time = sol.sol(tau_cur)
-        for i in range(x_time.shape[1]):
-            states.append(x_time[:,i])
-        x_0 = x[:,-1]
+        x0, x1 = x[indices - 1], x[indices]
+        y0, y1 = y[indices - 1], y[indices]
+        
+        slope = (y1 - y0) / (x1 - x0)
+        y_new = y0 + slope * (x_new - x0)
+        
+        return y_new
     
-    return np.array(states)
+    return interpolate
 
-def u_lambda(u, t, params: Config):
+
+def u_lambda(u, t):
     """
     Generate a lambda function that linearly interpolates between the control input given a time.
 
@@ -48,19 +33,8 @@ def u_lambda(u, t, params: Config):
     # Ensure t is a 1D array
     t = t.flatten()
 
-    # Determine the interpolation method based on params
-    if params.dis.dis_type == 'ZOH':
-        kind = 'previous'
-    else:
-        kind = 'linear'
-
-    # Create the interpolator
-    interpolators = [interp1d(t, u_row, kind=kind, fill_value="extrapolate") for u_row in u.T]
-
-    # Return the lambda function
-    def interpolate(time):
-        time = np.atleast_1d(time)
-        u_interp = np.array([interp(time) for interp in interpolators])
-        return u_interp.reshape(-1, 1)
+    u = jnp.asarray(u)
+    t = jnp.asarray(t)
+    interpolate = lambda new_t: jnp.array([jnp.interp(new_t, t, u[:, i]) for i in range(u.shape[1])]).T
 
     return interpolate

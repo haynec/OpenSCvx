@@ -15,7 +15,7 @@ from openscvx.config import (
     Config,
 )
 from openscvx.dynamics import Dynamics
-from openscvx.discretization import ExactDis
+from openscvx.discretization import ExactDis, Diffrax_Prop
 from openscvx.constraints.boundary import BoundaryConstraint
 from openscvx.ptr import PTR_init, PTR_main, PTR_post
 
@@ -163,25 +163,19 @@ class TrajOptProblem:
         self.i5 = self.i4 + n_x
 
         if not self.params.dev.debug:
-            if self.params.dis.custom_integrator:
-                calculate_discretization_lower = jit(
-                    self.dynamics_discretized.calculate_discretization
-                ).lower(
-                    np.ones((self.params.scp.n, self.params.sim.n_states)),
-                    np.ones((self.params.scp.n, self.params.sim.n_controls)),
-                )
-                self.dynamics_discretized.calculate_discretization = (
-                    calculate_discretization_lower.compile()
-                )
-            else:
-                dVdt_lower = jit(self.dynamics_discretized.dVdt).lower(
-                    0.0,
-                    np.ones(int(self.i5 * (self.params.scp.n - 1))),
-                    np.ones((self.params.scp.n - 1, self.params.sim.n_controls)),
-                    np.ones((self.params.scp.n - 1, self.params.sim.n_controls)),
-                )
-                self.dynamics_discretized.dVdt = dVdt_lower.compile()
-
+            calculate_discretization_lower = jit(
+                self.dynamics_discretized.calculate_discretization
+            ).lower(
+                np.ones((self.params.scp.n, self.params.sim.n_states)),
+                np.ones((self.params.scp.n, self.params.sim.n_controls)),
+            )
+            self.dynamics_discretized.calculate_discretization = (
+                calculate_discretization_lower.compile()
+            )
+        
+        diff_prop = Diffrax_Prop(self.params)
+        self.params.prp.integrator = jit(diff_prop.solve_ivp)
+        
     def solve(self):
         # Ensure parameter sizes and normalization are correct
         self.params.scp.__post_init__()

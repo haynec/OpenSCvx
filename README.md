@@ -19,7 +19,7 @@ The main packages are:
 - ```cvxpy``` - is used to formulate and solve the convex subproblems
 - ```jax``` - is used for determining the Jacobians using automatic differentiation, vectorization, and ahead-of-time (AOT) compilation of the dynamics and their Jacobians 
 - ```numpy``` - is used for numerical operations
-- ```scipy``` - is used for the numerical integration of the dynamics
+- ```diffrax``` - is used for the numerical integration of the dynamics
 - ```termcolor``` - is used for pretty command line output
 - ```plotly``` - is used for all visualizations
 

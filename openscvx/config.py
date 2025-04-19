@@ -37,6 +37,8 @@ class ConvexSolverConfig:
 class PropagationConfig:
     inter_sample: int = 30
     dt: float = 0.1
+    diffrax_solver: str = "Dopri8"
+    diffrax_args: Dict = field(default_factory=dict)
 
 
 @dataclass

@@ -1,6 +1,7 @@
 import os
 import numpy.linalg as la
-import scipy.linalg as sla
+from numpy import block
+import numpy as np
 import cvxpy as cp
 from cvxpygen import cpg
 from openscvx.config import Config
@@ -23,6 +24,7 @@ def OCP(params: Config):
 
     # Affine Scaling for State
     S_x = params.sim.S_x
+    inv_S_x = params.sim.inv_S_x
     c_x = params.sim.c_x
 
     # Control
@@ -32,6 +34,7 @@ def OCP(params: Config):
 
     # Affine Scaling for Control
     S_u = params.sim.S_u
+    inv_S_u = params.sim.inv_S_u
     c_u = params.sim.c_u
 
     # Discretized Augmented Dynamics Constraints
@@ -115,7 +118,8 @@ def OCP(params: Config):
     # COSTS
     ########
     
-    cost += sum(w_tr * cp.sum_squares(sla.block_diag(la.inv(S_x), la.inv(S_u)) @ cp.hstack((dx[i], du[i]))) for i in range(params.scp.n)) # Trust Region Cost
+    inv = block([[inv_S_x, np.zeros((S_x.shape[0], S_u.shape[1]))], [np.zeros((S_u.shape[0], S_x.shape[1])), inv_S_u]])
+    cost += sum(w_tr * cp.sum_squares(inv @ cp.hstack((dx[i], du[i]))) for i in range(params.scp.n))  # Trust Region Cost
     cost += sum(params.scp.lam_vc * cp.sum(cp.abs(nu[i-1])) for i in range(1, params.scp.n)) # Virtual Control Slack
     
     idx_ncvx = 0

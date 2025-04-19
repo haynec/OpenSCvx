@@ -19,12 +19,12 @@ setup(
     install_requires=[
         "jax",
         "numpy",
-        "scipy",
         "plotly",
         "termcolor",
         "cvxpy",
         "cvxpygen",
-        "qoco"
+        "qoco",
+        "diffrax"
     ],
     include_package_data=True,
     entry_points={
