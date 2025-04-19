@@ -37,5 +37,5 @@ with open('results/results.pickle', 'rb') as f:
 
 results = problem.post_process(results)
 results.update(plotting_dict)
-plot_animation(results, problem.params)
+# plot_animation(results, problem.params)
 # plot_camera_animation(results, problem.params)

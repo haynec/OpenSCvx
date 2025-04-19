@@ -64,13 +64,15 @@ class Diffrax_Prop:
         self.params = params
         self.func = ExactDis(params).prop_aug_dy
     
-    def solve_ivp(self, V0, tau_grid, args):
+    def solve_ivp(self, V0, tau_grid, u_cur, u_next, tau_init, idx_s):
         t_eval = jnp.linspace(tau_grid[0], tau_grid[1], 50)
 
         solver_class = SOLVER_MAP.get(self.params.prp.diffrax_solver)
         if solver_class is None:
             raise ValueError(f"Unknown solver: {self.params.prp.diffrax_solver}")
         solver = solver_class()
+
+        args = (u_cur, u_next, tau_init, idx_s)
 
         term = dfx.ODETerm(lambda t, y, args: self.func(t, y, *args))
         stepsize_controller = dfx.PIDController(rtol=1e-3, atol=1e-6)
@@ -155,7 +157,8 @@ class ExactDis:
                 t.append(t[k-1] + 0.5 * (s_k + s_kp) * (tau[k] - tau[k-1]))
         return t
     
-    def t_to_tau(self, u_lam, t, u_nodal, t_nodal, params: Config):
+    def t_to_tau(self, u, t, u_nodal, t_nodal, params: Config):
+        u_lam = lambda new_t: np.array([np.interp(new_t, t_nodal, u[:, i]) for i in range(u.shape[1])]).T
         u = np.array([u_lam(t_i) for t_i in t])
 
         tau = np.zeros(len(t))
@@ -300,37 +303,37 @@ class ExactDis:
 
     def simulate_nonlinear_time(self, x_0, u, tau_vals, t):
         params = self.params
-        states = jnp.empty((x_0.shape[0], 0))  # Initialize states as a 2D array with shape (n, 0)
+        states = np.empty((x_0.shape[0], 0))  # Initialize states as a 2D array with shape (n, 0)
 
-        tau = jnp.linspace(0, 1, params.scp.n)
+        tau = np.linspace(0, 1, params.scp.n)
 
-        u_lam = lambda new_t: jnp.array([jnp.interp(new_t, t, u[:, i]) for i in range(u.shape[1])]).T
+        u_lam = lambda new_t: np.array([np.interp(new_t, t, u[:, i]) for i in range(u.shape[1])]).T
 
         # Bin the tau_vals into with respect to the uniform tau grid, tau
-        tau_inds = jnp.digitize(tau_vals, tau) - 1
+        tau_inds = np.digitize(tau_vals, tau) - 1
         # Force the last indice to be in the same bin as the previous ones
-        tau_inds = jnp.where(tau_inds == params.scp.n - 1, params.scp.n - 2, tau_inds)
+        tau_inds = np.where(tau_inds == params.scp.n - 1, params.scp.n - 2, tau_inds)
 
         prev_count = 0
 
         for k in range(params.scp.n - 1):
-            controls_current = jnp.squeeze(u_lam(t[k]))[None, :]
-            controls_next = jnp.squeeze(u_lam(t[k + 1]))[None, :]
+            controls_current = np.squeeze(u_lam(t[k]))[None, :]
+            controls_next = np.squeeze(u_lam(t[k + 1]))[None, :]
 
             # Create a mask
             mask = (tau_inds >= k) & (tau_inds < k + 1)
 
-            count = jnp.sum(mask)
+            count = np.sum(mask)
 
             # Use count to grab the first count number of elements
-            tau_cur = lax.dynamic_slice(tau_vals, (prev_count,), (count,))
+            tau_cur = tau_vals[prev_count:prev_count + count]
 
-            sol = self.params.prp.integrator(V0 = x_0, tau_grid = (tau[k], tau[k + 1]), args=(controls_current, controls_next, jnp.array([[tau[k]]]), params.dyn.s_inds))
+            sol = self.params.prp.integrator(x_0, (tau[k], tau[k + 1]), controls_current, controls_next, np.array([[tau[k]]]), params.dyn.s_inds)
 
             x = sol.ys
             for tau_i in tau_cur:
                 new_state = sol.evaluate(tau_i).reshape(-1, 1)  # Ensure new_state is 2D
-                states = jnp.concatenate([states, new_state], axis=1)
+                states = np.concatenate([states, new_state], axis=1)
 
             x_0 = x[-1]
             prev_count += count

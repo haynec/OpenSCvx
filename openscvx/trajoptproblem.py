@@ -163,18 +163,25 @@ class TrajOptProblem:
         self.i5 = self.i4 + n_x
 
         if not self.params.dev.debug:
-            calculate_discretization_lower = jit(
+            self.dynamics_discretized.calculate_discretization = jit(
                 self.dynamics_discretized.calculate_discretization
             ).lower(
                 np.ones((self.params.scp.n, self.params.sim.n_states)),
                 np.ones((self.params.scp.n, self.params.sim.n_controls)),
-            )
-            self.dynamics_discretized.calculate_discretization = (
-                calculate_discretization_lower.compile()
-            )
-        
+            ).compile()
+
         diff_prop = Diffrax_Prop(self.params)
-        self.params.prp.integrator = jit(diff_prop.solve_ivp)
+        self.params.prp.integrator = jit(diff_prop.solve_ivp).lower(
+            np.ones((self.params.sim.n_states)),
+            (0.0, 0.0),
+            np.ones((1, self.params.sim.n_controls)), 
+            np.ones((1, self.params.sim.n_controls)), 
+            np.ones((1,1)), 
+            0
+        ).compile()
+
+
+        # _ = self.dynamics_discretized.simulate_nonlinear_time(np.ones((self.params.sim.n_states)), np.zeros((10, self.params.sim.n_controls)), np.linspace(0,1, 100), np.linspace(0,1, 10))
         
     def solve(self):
         # Ensure parameter sizes and normalization are correct
