@@ -104,9 +104,6 @@ class PenalizedTrustRegion(Algorithm):
             init_state.x, init_state.u.astype(float), params
         )
 
-        init_state.A_bar_history.append(A_bar.__array__())
-        init_state.B_bar_history.append(B_bar.__array__())
-        init_state.C_bar_history.append(C_bar.__array__())
         init_state.x_prop_history.append(x_prop.__array__())
         init_state.V_history.append(V_multi_shoot.__array__())
         _ = self._subproblem(params, init_state, settings)
@@ -148,9 +145,6 @@ class PenalizedTrustRegion(Algorithm):
             )
             dis_time = time.time() - t0
 
-            state.A_bar_history.append(A_bar.__array__())
-            state.B_bar_history.append(B_bar.__array__())
-            state.C_bar_history.append(C_bar.__array__())
             state.x_prop_history.append(x_prop.__array__())
             state.V_history.append(V_multi_shoot.__array__())
 
@@ -171,6 +165,7 @@ class PenalizedTrustRegion(Algorithm):
 
         state.X.append(x_sol)
         state.U.append(u_sol)
+        state.J_lin_history.append(J_total)
 
         t0 = time.time()
         A_bar, B_bar, C_bar, x_prop, V_multi_shoot = self._discretization_solver.call(
@@ -178,9 +173,6 @@ class PenalizedTrustRegion(Algorithm):
         )
         dis_time = time.time() - t0
 
-        state.A_bar_history.append(A_bar.__array__())
-        state.B_bar_history.append(B_bar.__array__())
-        state.C_bar_history.append(C_bar.__array__())
         state.x_prop_history.append(x_prop.__array__())
         state.V_history.append(V_multi_shoot.__array__())
 
@@ -247,10 +239,10 @@ class PenalizedTrustRegion(Algorithm):
         self._solver.update_dynamics_linearization(
             x_bar=state.x,
             u_bar=state.u,
-            A_d=state.A_bar_history[-1],
-            B_d=state.B_bar_history[-1],
-            C_d=state.C_bar_history[-1],
-            x_prop=state.x_prop_history[-1],
+            A_d=state.A_d,
+            B_d=state.B_d,
+            C_d=state.C_d,
+            x_prop=state.x_prop,
         )
 
         # Build constraint linearization data

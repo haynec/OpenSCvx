@@ -65,19 +65,55 @@ class AlgorithmState:
     n_u: int
     N: int
     J_nonlin_history: float
+    J_lin_history: float
     acceptance_ratio_history: float
     X: List[np.ndarray] = field(default_factory=list)
     U: List[np.ndarray] = field(default_factory=list)
     V_history: List[np.ndarray] = field(default_factory=list)
     VC_history: List[np.ndarray] = field(default_factory=list)
     TR_history: List[np.ndarray] = field(default_factory=list)
-    A_bar_history: List[np.ndarray] = field(default_factory=list)
-    B_bar_history: List[np.ndarray] = field(default_factory=list)
-    C_bar_history: List[np.ndarray] = field(default_factory=list)
     x_prop_history: List[np.ndarray] = field(default_factory=list)
     lam_vc_history: List[float] = field(default_factory=list)
     lam_cost_history: List[float] = field(default_factory=list)
     w_tr_history: List[float] = field(default_factory=list)
+
+    def reject_last_solution(self) -> None:
+        """Reject the most recent SCP iterate by rolling back history by one step.
+
+        This is useful when an iteration is deemed unacceptable (e.g., poor
+        acceptance ratio) and we want to revert to the previous iterate.
+
+        Pops the last element from:
+        - V_history, x_prop_history, VC_history, TR_history
+        - X, U
+        - J_lin_history, J_nonlin_history
+
+        Notes:
+        - All pops are guarded; empty lists are left unchanged.
+        - For X/U, we keep at least one element (the initial guess).
+        """
+
+        def _safe_pop(lst: list) -> None:
+            if lst:
+                lst.pop()
+
+        # Always safe to pop if present
+        _safe_pop(self.V_history)
+        _safe_pop(self.x_prop_history)
+        _safe_pop(self.VC_history)
+        _safe_pop(self.TR_history)
+        _safe_pop(self.J_lin_history)
+        _safe_pop(self.J_nonlin_history)
+        # _safe_pop(self.acceptance_ratio_history)
+        # _safe_pop(self.w_tr_history)
+        # _safe_pop(self.lam_vc_history)
+        # _safe_pop(self.lam_cost_history)
+
+        # Keep at least the initial guess
+        if len(self.X) > 1:
+            self.X.pop()
+        if len(self.U) > 1:
+            self.U.pop()
 
     @property
     def x(self) -> np.ndarray:
@@ -242,13 +278,11 @@ class AlgorithmState:
             n_u=settings.sim.n_controls,
             N=settings.scp.n,
             J_nonlin_history=[],
+            J_lin_history=[],
             acceptance_ratio_history=[],
             X=[settings.sim.x.guess.copy()],
             U=[settings.sim.u.guess.copy()],
             V_history=[],
-            A_bar_history=[],
-            B_bar_history=[],
-            C_bar_history=[],
             x_prop_history=[],
             VC_history=[],
             TR_history=[],
