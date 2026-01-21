@@ -6,30 +6,30 @@ JAX-only and not supported in CVXPy lowering.
 
 Operations:
     - **Conditional:** `Cond` - Conditional expression using jax.lax.cond for
-        JAX-traceable branching
+        JAX-traceable branching. Predicate must be an Inequality constraint.
 
 Example:
-    Using conditional logic in dynamics::
+    Using conditional logic in constraints::
 
         import openscvx as ox
 
-        x = ox.State("x", shape=(3,))
-        u = ox.Control("u", shape=(2,))
+        position = ox.State("position", shape=(3,))
+        obstacle = ox.Parameter("obstacle", shape=(3,))
 
-        # Conditional dynamics based on state
-        dynamics = {
-            "x": ox.Cond(
-                ox.Norm(x) > 1.0,  # predicate
-                x / ox.Norm(x),    # true branch: normalize if norm > 1
-                x                   # false branch: keep as is
-            )
-        }
+        # Conditional max speed: slow down when close to obstacle
+        distance = ox.Norm(position - obstacle)
+        max_speed = ox.Cond(
+            distance <= 2.0,  # predicate: True when close to obstacle
+            5.0,              # true branch: reduced speed limit
+            10.0              # false branch: normal speed limit
+        )
 """
 
 from typing import Tuple
 
 import numpy as np
 
+from .constraint import Inequality
 from .expr import Expr, to_expr
 
 
@@ -37,25 +37,30 @@ class Cond(Expr):
     """Conditional expression for JAX-traceable branching.
 
     Implements a conditional expression that selects between two branches based
-    on a predicate. This wraps `jax.lax.cond` to enable conditional logic in
-    symbolic expressions for dynamics and constraints.
+    on an Inequality predicate. This wraps `jax.lax.cond` to enable conditional
+    logic in symbolic expressions for dynamics and constraints.
 
-    The predicate must evaluate to a scalar boolean value. The true and false
-    branches must have broadcastable shapes (following JAX/NumPy broadcasting rules).
+    The predicate must be an Inequality constraint (created with `<=` or `>=`).
+    After canonicalization, the constraint is in the form `lhs <= 0`, so the
+    predicate evaluates to True when the constraint is satisfied (lhs <= 0) and
+    False when violated (lhs > 0).
+
+    The true and false branches must have broadcastable shapes (following
+    JAX/NumPy broadcasting rules).
 
     Attributes:
-        pred: Predicate expression that evaluates to a scalar boolean
+        pred: Inequality constraint used as predicate. True when satisfied.
         true_branch: Expression to evaluate when predicate is True
         false_branch: Expression to evaluate when predicate is False
 
     Example:
-        Define a conditional expression::
+        Conditional velocity limit based on distance::
 
-            x = ox.State("x", shape=(3,))
+            distance = ox.Norm(position - obstacle)
             expr = ox.Cond(
-                ox.Norm(x) > 1.0,  # predicate
-                x / ox.Norm(x),    # true branch
-                x                   # false branch
+                distance <= safety_threshold,  # predicate: True when close
+                5.0,                           # true branch: slow speed
+                10.0                           # false branch: fast speed
             )
 
     Note:
@@ -67,11 +72,22 @@ class Cond(Expr):
         """Initialize a conditional expression.
 
         Args:
-            pred: Predicate expression that evaluates to a scalar boolean
+            pred: Inequality constraint used as the predicate (e.g., x <= 5, y >= 0).
+                After canonicalization, the constraint is in the form (lhs <= 0),
+                so the predicate is True when the constraint is satisfied.
             true_branch: Expression to evaluate when predicate is True
             false_branch: Expression to evaluate when predicate is False
+
+        Raises:
+            TypeError: If pred is not an Inequality constraint
         """
-        self.pred = to_expr(pred)
+        if not isinstance(pred, Inequality):
+            raise TypeError(
+                f"Cond predicate must be an Inequality constraint (e.g., x <= 5, y >= 0), "
+                f"got {type(pred).__name__}. Use comparison operators like '<=' or '>=' "
+                f"to create a valid predicate."
+            )
+        self.pred = pred
         self.true_branch = to_expr(true_branch)
         self.false_branch = to_expr(false_branch)
 
@@ -105,9 +121,7 @@ class Cond(Expr):
 
         # Predicate must be scalar
         if pred_shape != ():
-            raise ValueError(
-                f"Cond predicate must be scalar, got shape {pred_shape}"
-            )
+            raise ValueError(f"Cond predicate must be scalar, got shape {pred_shape}")
 
         # True and false branches must be broadcastable
         try:
@@ -120,4 +134,3 @@ class Cond(Expr):
     def __repr__(self):
         """Return string representation of the conditional."""
         return f"cond({self.pred!r}, {self.true_branch!r}, {self.false_branch!r})"
-
