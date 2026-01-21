@@ -13,20 +13,198 @@ from .constraint import Inequality
 from .expr import Expr, to_expr
 
 
+class All(Expr):
+    """Logical AND reduction over predicates. Wraps jnp.all.
+
+    Reduces one or more Inequality predicates to a single scalar boolean using
+    AND semantics. This is useful for:
+
+    1. Combining multiple scalar predicates: ``All([x >= 0, x <= 10])``
+    2. Reducing a vector predicate: ``All(position >= lower_bound)``
+
+    After evaluation, returns True only if ALL predicates are satisfied.
+
+    Attributes:
+        predicates: List of Inequality constraints to combine with AND.
+
+    Example:
+        Combining scalar predicates::
+
+            in_range = ox.All([x >= 0.0, x <= 10.0])
+            ox.Cond(in_range, 1.0, 0.0)
+
+        Reducing a vector predicate::
+
+            all_positive = ox.All(position >= 0.0)  # position is shape (3,)
+            ox.Cond(all_positive, safe_value, unsafe_value)
+
+    Note:
+        This operation is only supported for JAX lowering. CVXPy lowering will
+        raise NotImplementedError since logical reductions are not DCP-compliant.
+    """
+
+    def __init__(self, predicates: Union[Inequality, List[Inequality]]):
+        """Initialize an All expression.
+
+        Args:
+            predicates: Single Inequality or list of Inequalities to combine.
+                For a single vector Inequality, reduces across all elements.
+                For a list, combines all predicates with AND.
+
+        Raises:
+            TypeError: If predicates is not an Inequality or list of Inequalities
+            ValueError: If predicates list is empty
+        """
+        if isinstance(predicates, Inequality):
+            self.predicates = [predicates]
+        elif isinstance(predicates, list):
+            if len(predicates) == 0:
+                raise ValueError("All predicate list cannot be empty")
+            for i, p in enumerate(predicates):
+                if not isinstance(p, Inequality):
+                    raise TypeError(
+                        f"All predicate[{i}] must be an Inequality constraint "
+                        f"(e.g., x <= 5, y >= 0), got {type(p).__name__}."
+                    )
+            self.predicates = predicates
+        else:
+            raise TypeError(
+                f"All predicates must be an Inequality or list of Inequalities "
+                f"(e.g., x <= 5, [x >= 0, x <= 10]), got {type(predicates).__name__}."
+            )
+
+    def children(self):
+        """Return the child expressions (all predicates)."""
+        return list(self.predicates)
+
+    def canonicalize(self) -> "Expr":
+        """Canonicalize by canonicalizing all predicates."""
+        return All([p.canonicalize() for p in self.predicates])
+
+    def check_shape(self) -> Tuple[int, ...]:
+        """Check shape and return scalar output shape.
+
+        All always reduces to a scalar boolean.
+
+        Returns:
+            tuple: Empty tuple () representing scalar output
+        """
+        # Just validate that predicates have valid shapes
+        for pred in self.predicates:
+            pred.check_shape()
+        return ()
+
+    def __repr__(self):
+        """Return string representation."""
+        if len(self.predicates) == 1:
+            return f"All({self.predicates[0]!r})"
+        return f"All({self.predicates!r})"
+
+
+class Any(Expr):
+    """Logical OR reduction over predicates. Wraps jnp.any.
+
+    Reduces one or more Inequality predicates to a single scalar boolean using
+    OR semantics. This is useful for:
+
+    1. Combining multiple scalar predicates: ``Any([in_region_a, in_region_b])``
+    2. Reducing a vector predicate: ``Any(position >= threshold)``
+
+    After evaluation, returns True if ANY predicate is satisfied.
+
+    Attributes:
+        predicates: List of Inequality constraints to combine with OR.
+
+    Example:
+        Combining scalar predicates (OR logic)::
+
+            in_any_region = ox.Any([in_region_a, in_region_b])
+            ox.Cond(in_any_region, region_value, default_value)
+
+        Reducing a vector predicate::
+
+            any_above = ox.Any(position >= threshold)  # position is shape (3,)
+            ox.Cond(any_above, triggered_value, normal_value)
+
+    Note:
+        This operation is only supported for JAX lowering. CVXPy lowering will
+        raise NotImplementedError since logical reductions are not DCP-compliant.
+    """
+
+    def __init__(self, predicates: Union[Inequality, List[Inequality]]):
+        """Initialize an Any expression.
+
+        Args:
+            predicates: Single Inequality or list of Inequalities to combine.
+                For a single vector Inequality, reduces across all elements.
+                For a list, combines all predicates with OR.
+
+        Raises:
+            TypeError: If predicates is not an Inequality or list of Inequalities
+            ValueError: If predicates list is empty
+        """
+        if isinstance(predicates, Inequality):
+            self.predicates = [predicates]
+        elif isinstance(predicates, list):
+            if len(predicates) == 0:
+                raise ValueError("Any predicate list cannot be empty")
+            for i, p in enumerate(predicates):
+                if not isinstance(p, Inequality):
+                    raise TypeError(
+                        f"Any predicate[{i}] must be an Inequality constraint "
+                        f"(e.g., x <= 5, y >= 0), got {type(p).__name__}."
+                    )
+            self.predicates = predicates
+        else:
+            raise TypeError(
+                f"Any predicates must be an Inequality or list of Inequalities "
+                f"(e.g., x <= 5, [x >= 0, x <= 10]), got {type(predicates).__name__}."
+            )
+
+    def children(self):
+        """Return the child expressions (all predicates)."""
+        return list(self.predicates)
+
+    def canonicalize(self) -> "Expr":
+        """Canonicalize by canonicalizing all predicates."""
+        return Any([p.canonicalize() for p in self.predicates])
+
+    def check_shape(self) -> Tuple[int, ...]:
+        """Check shape and return scalar output shape.
+
+        Any always reduces to a scalar boolean.
+
+        Returns:
+            tuple: Empty tuple () representing scalar output
+        """
+        # Just validate that predicates have valid shapes
+        for pred in self.predicates:
+            pred.check_shape()
+        return ()
+
+    def __repr__(self):
+        """Return string representation."""
+        if len(self.predicates) == 1:
+            return f"Any({self.predicates[0]!r})"
+        return f"Any({self.predicates!r})"
+
+
 class Cond(Expr):
     """Conditional expression for JAX-traceable branching.
 
     Implements a conditional expression that selects between two branches based
-    on one or more Inequality predicates. This wraps `jax.lax.cond` to enable
-    conditional logic in symbolic expressions for dynamics and constraints.
+    on a predicate. This wraps `jax.lax.cond` to enable conditional logic in
+    symbolic expressions for dynamics and constraints.
 
-    The predicate can be either:
+    The predicate can be:
     - A single Inequality constraint (created with `<=` or `>=`)
-    - A list of Inequality constraints (AND semantics: all must be satisfied)
+    - A list of Inequality constraints (AND semantics, shorthand for ``All([...])``)
+    - An ``All`` expression for explicit AND semantics
+    - An ``Any`` expression for OR semantics
 
     After canonicalization, each constraint is in the form `lhs <= 0`, so the
     predicate evaluates to True when the constraint is satisfied (lhs <= 0) and
-    False when violated (lhs > 0). For multiple predicates, all must be satisfied.
+    False when violated (lhs > 0).
 
     The true and false branches must have broadcastable shapes (following
     JAX/NumPy broadcasting rules).
@@ -36,9 +214,9 @@ class Cond(Expr):
     always evaluated.
 
     Attributes:
-        predicates: List of Inequality constraints used as predicates (AND semantics).
-        true_branch: Expression to evaluate when all predicates are True
-        false_branch: Expression to evaluate when any predicate is False
+        predicate: The predicate expression (All, Any, or single Inequality).
+        true_branch: Expression to evaluate when predicate is True
+        false_branch: Expression to evaluate when predicate is False
         node_ranges: Optional list of (start, end) tuples specifying node ranges
             where the conditional is active. None means active at all nodes.
 
@@ -52,12 +230,28 @@ class Cond(Expr):
                 10.0                           # false branch: fast speed
             )
 
-        Multiple predicates with AND semantics::
+        Multiple predicates with AND semantics (explicit)::
 
             expr = ox.Cond(
-                [x >= 0.0, x <= 10.0],  # True when x in [0, 10]
-                1.0,                     # in range
-                0.0                      # out of range
+                ox.All([x >= 0.0, x <= 10.0]),  # True when x in [0, 10]
+                1.0,                             # in range
+                0.0                              # out of range
+            )
+
+        Multiple predicates with OR semantics::
+
+            expr = ox.Cond(
+                ox.Any([in_region_a, in_region_b]),  # True if in either region
+                region_value,
+                default_value
+            )
+
+        Reduce vector predicate::
+
+            expr = ox.Cond(
+                ox.All(position >= lower_bound),  # True if all elements satisfy
+                safe_value,
+                unsafe_value
             )
 
         Conditional active only during specific trajectory phases::
@@ -76,7 +270,7 @@ class Cond(Expr):
 
     def __init__(
         self,
-        pred: Union[Inequality, List[Inequality]],
+        pred: Union[Inequality, List[Inequality], "All", "Any"],
         true_branch,
         false_branch,
         node_ranges: Optional[List[Tuple[int, int]]] = None,
@@ -84,25 +278,27 @@ class Cond(Expr):
         """Initialize a conditional expression.
 
         Args:
-            pred: Inequality constraint or list of Inequality constraints used as
-                the predicate(s). For a single constraint (e.g., x <= 5, y >= 0),
-                the predicate is True when the constraint is satisfied. For a list
-                of constraints, all must be satisfied (AND semantics).
-                After canonicalization, each constraint is in the form (lhs <= 0).
-            true_branch: Expression to evaluate when all predicates are True
-            false_branch: Expression to evaluate when any predicate is False
+            pred: Predicate for the conditional. Can be:
+                - Single Inequality (e.g., x <= 5)
+                - List of Inequalities (AND semantics, shorthand for All([...]))
+                - All expression for explicit AND
+                - Any expression for OR semantics
+            true_branch: Expression to evaluate when predicate is True
+            false_branch: Expression to evaluate when predicate is False
             node_ranges: Optional list of (start, end) tuples specifying node ranges
                 where the conditional is active. Each tuple defines a half-open
                 interval [start, end) of node indices. Outside these ranges, the
                 false branch is always evaluated. None means active at all nodes.
 
         Raises:
-            TypeError: If pred is not an Inequality or list of Inequalities
+            TypeError: If pred is not a valid predicate type
             ValueError: If node_ranges contains invalid ranges
         """
-        # Normalize pred to a list
-        if isinstance(pred, Inequality):
-            predicates = [pred]
+        # Normalize pred to All/Any/Inequality
+        if isinstance(pred, (All, Any)):
+            predicate = pred
+        elif isinstance(pred, Inequality):
+            predicate = pred
         elif isinstance(pred, list):
             if len(pred) == 0:
                 raise ValueError("Cond predicate list cannot be empty")
@@ -112,11 +308,12 @@ class Cond(Expr):
                         f"Cond predicate[{i}] must be an Inequality constraint "
                         f"(e.g., x <= 5, y >= 0), got {type(p).__name__}."
                     )
-            predicates = pred
+            # Wrap list in All for AND semantics (backwards compatibility)
+            predicate = All(pred)
         else:
             raise TypeError(
-                f"Cond predicate must be an Inequality constraint or list of Inequalities "
-                f"(e.g., x <= 5, [x >= 0, x <= 10]), got {type(pred).__name__}."
+                f"Cond predicate must be an Inequality, All, Any, or list of Inequalities "
+                f"(e.g., x <= 5, ox.All([...]), ox.Any([...])), got {type(pred).__name__}."
             )
 
         # Validate node_ranges
@@ -138,45 +335,38 @@ class Cond(Expr):
                         f"node_ranges[{i}] must have start < end, got ({start}, {end})"
                     )
 
-        self.predicates = predicates
+        self.predicate = predicate
         self.true_branch = to_expr(true_branch)
         self.false_branch = to_expr(false_branch)
         self.node_ranges = node_ranges
 
     def children(self):
-        """Return the child expressions: predicates, true branch, and false branch."""
-        return [*self.predicates, self.true_branch, self.false_branch]
+        """Return the child expressions: predicate, true branch, and false branch."""
+        return [self.predicate, self.true_branch, self.false_branch]
 
     def canonicalize(self) -> "Expr":
         """Canonicalize by canonicalizing all children, preserving node_ranges."""
-        predicates = [p.canonicalize() for p in self.predicates]
+        predicate = self.predicate.canonicalize()
         true_branch = self.true_branch.canonicalize()
         false_branch = self.false_branch.canonicalize()
-        return Cond(predicates, true_branch, false_branch, node_ranges=self.node_ranges)
+        return Cond(predicate, true_branch, false_branch, node_ranges=self.node_ranges)
 
     def check_shape(self) -> Tuple[int, ...]:
         """Check and return the output shape of the conditional.
 
-        All predicates must be scalar, and the true and false branches must have
-        broadcastable shapes. The output shape is the broadcasted shape of the
-        two branches.
+        The predicate must be scalar (or reduce to scalar via All/Any), and the
+        true and false branches must have broadcastable shapes. The output shape
+        is the broadcasted shape of the two branches.
 
         Returns:
             tuple: The broadcasted shape of true_branch and false_branch
 
         Raises:
-            ValueError: If any predicate is not scalar or branches have incompatible shapes
+            ValueError: If predicate is not scalar or branches have incompatible shapes
         """
-        # All predicates must be scalar
-        for i, pred in enumerate(self.predicates):
-            pred_shape = pred.check_shape()
-            if pred_shape != ():
-                if len(self.predicates) == 1:
-                    raise ValueError(f"Cond predicate must be scalar, got shape {pred_shape}")
-                else:
-                    raise ValueError(
-                        f"Cond predicate[{i}] must be scalar, got shape {pred_shape}"
-                    )
+        pred_shape = self.predicate.check_shape()
+        if pred_shape != ():
+            raise ValueError(f"Cond predicate must be scalar, got shape {pred_shape}")
 
         true_shape = self.true_branch.check_shape()
         false_shape = self.false_branch.check_shape()
@@ -191,11 +381,7 @@ class Cond(Expr):
 
     def __repr__(self):
         """Return string representation of the conditional."""
-        if len(self.predicates) == 1:
-            pred_repr = repr(self.predicates[0])
-        else:
-            pred_repr = repr(self.predicates)
-        base = f"cond({pred_repr}, {self.true_branch!r}, {self.false_branch!r}"
+        base = f"Cond({self.predicate!r}, {self.true_branch!r}, {self.false_branch!r}"
         if self.node_ranges is not None:
             return f"{base}, node_ranges={self.node_ranges!r})"
         return f"{base})"

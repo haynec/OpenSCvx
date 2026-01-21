@@ -126,7 +126,7 @@ See Also:
     - CVXPy documentation: https://www.cvxpy.org/
 """
 
-from typing import Any, Callable, Dict, Type
+from typing import Callable, Dict, Type
 
 import cvxpy as cp
 
@@ -134,6 +134,8 @@ from openscvx.symbolic.expr import (
     CTCS,
     Abs,
     Add,
+    All,
+    Any,
     Bilerp,
     Block,
     Concat,
@@ -218,7 +220,7 @@ def visitor(expr_cls: Type[Expr]):
     return register
 
 
-def dispatch(lowerer: Any, expr: Expr):
+def dispatch(lowerer: "CvxpyLowerer", expr: Expr):
     """Dispatch an expression to its registered visitor function.
 
     Looks up the visitor function for the expression's type and calls it.
@@ -811,6 +813,42 @@ class CvxpyLowerer:
             "Trigonometric functions like Tan are not DCP-compliant in CVXPy. "
             "Consider using piecewise-linear approximations or handle these constraints "
             "in the dynamics (JAX) layer instead."
+        )
+
+    @visitor(All)
+    def _visit_all(self, node: All) -> cp.Expression:
+        """Raise NotImplementedError for All expression.
+
+        Logical AND reduction (All) is not DCP-compliant in CVXPy as it introduces
+        non-convex boolean logic. All expressions are only supported in JAX lowering.
+
+        Args:
+            node: All expression node
+
+        Raises:
+            NotImplementedError: Always raised since logical reductions are not DCP-compliant
+        """
+        raise NotImplementedError(
+            "Logical reduction expressions (All) are not DCP-compliant in CVXPy. "
+            "Logical operations are only supported in JAX lowering."
+        )
+
+    @visitor(Any)
+    def _visit_any(self, node: Any) -> cp.Expression:
+        """Raise NotImplementedError for Any expression.
+
+        Logical OR reduction (Any) is not DCP-compliant in CVXPy as it introduces
+        non-convex boolean logic. Any expressions are only supported in JAX lowering.
+
+        Args:
+            node: Any expression node
+
+        Raises:
+            NotImplementedError: Always raised since logical reductions are not DCP-compliant
+        """
+        raise NotImplementedError(
+            "Logical reduction expressions (Any) are not DCP-compliant in CVXPy. "
+            "Logical operations are only supported in JAX lowering."
         )
 
     @visitor(Cond)

@@ -2,6 +2,8 @@
 
 This module tests logical/control flow nodes:
 
+- All: Logical AND reduction over predicates
+- Any: Logical OR reduction over predicates
 - Cond: Conditional expression using jax.lax.cond
 
 Tests are organized by node type, with each section covering:
@@ -16,8 +18,394 @@ Tests are organized by node type, with each section covering:
 import numpy as np
 import pytest
 
-from openscvx.symbolic.expr import Cond, Constant, Inequality, State, Variable
+from openscvx.symbolic.expr import All, Any, Cond, Constant, Inequality, State, Variable
 from openscvx.symbolic.expr.linalg import Norm
+
+# =============================================================================
+# All
+# =============================================================================
+
+
+# --- All: Creation & Properties ---
+
+
+def test_all_creation_single_predicate():
+    """Test All creation with a single predicate."""
+    x = Variable("x", shape=(3,))
+    pred = Norm(x) <= 1.0
+
+    all_expr = All(pred)
+
+    assert len(all_expr.predicates) == 1
+    assert all_expr.predicates[0] is pred
+
+
+def test_all_creation_multiple_predicates():
+    """Test All creation with multiple predicates."""
+    x = Variable("x", shape=())
+    pred1 = x >= 0.0
+    pred2 = x <= 10.0
+
+    all_expr = All([pred1, pred2])
+
+    assert len(all_expr.predicates) == 2
+    assert all_expr.predicates[0] is pred1
+    assert all_expr.predicates[1] is pred2
+
+
+def test_all_children():
+    """Test that children() returns all predicates."""
+    x = Variable("x", shape=())
+    pred1 = x >= 0.0
+    pred2 = x <= 10.0
+
+    all_expr = All([pred1, pred2])
+    children = all_expr.children()
+
+    assert len(children) == 2
+    assert children[0] is pred1
+    assert children[1] is pred2
+
+
+def test_all_repr():
+    """Test string representation of All."""
+    x = Variable("x", shape=())
+    pred = x <= 1.0
+
+    all_single = All(pred)
+    assert "All(" in repr(all_single)
+
+    all_multiple = All([pred, x >= 0.0])
+    assert "All([" in repr(all_multiple)
+
+
+# --- All: Validation ---
+
+
+def test_all_requires_inequality():
+    """Test that All raises TypeError for non-Inequality."""
+    x = Variable("x", shape=())
+
+    with pytest.raises(TypeError, match="must be an Inequality"):
+        All(x)
+
+
+def test_all_empty_list_raises():
+    """Test that All raises ValueError for empty list."""
+    with pytest.raises(ValueError, match="cannot be empty"):
+        All([])
+
+
+def test_all_list_with_non_inequality_raises():
+    """Test that All raises TypeError for list containing non-Inequality."""
+    x = Variable("x", shape=())
+    pred = x <= 1.0
+
+    with pytest.raises(TypeError, match="predicate\\[1\\] must be an Inequality"):
+        All([pred, x])
+
+
+# --- All: Shape Checking ---
+
+
+def test_all_shape_always_scalar():
+    """Test that All always returns scalar shape."""
+    x = Variable("x", shape=())
+    all_scalar = All(x <= 1.0)
+    assert all_scalar.check_shape() == ()
+
+    y = Variable("y", shape=(3,))
+    all_vector = All(y <= np.array([1.0, 2.0, 3.0]))
+    assert all_vector.check_shape() == ()
+
+
+# --- All: Canonicalization ---
+
+
+def test_all_canonicalize():
+    """Test that canonicalization recurses into predicates."""
+    from openscvx.symbolic.expr import Add, Sub
+
+    x = Variable("x", shape=())
+    pred = Add(x, Constant(0.0)) <= 1.0
+
+    all_expr = All(pred)
+    canonical = all_expr.canonicalize()
+
+    assert isinstance(canonical, All)
+    assert isinstance(canonical.predicates[0], Inequality)
+    assert isinstance(canonical.predicates[0].lhs, Sub)
+
+
+# --- All: JAX Lowering ---
+
+
+def test_all_jax_scalar_predicates_all_satisfied():
+    """Test All JAX lowering when all predicates are satisfied."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(1,))
+    x._slice = slice(0, 1)
+
+    all_expr = All([x >= 0.0, x <= 10.0])
+    fn = lower_to_jax(all_expr)
+
+    # x = 5.0: both satisfied -> True
+    result = fn(jnp.array([5.0]), None, 0, {})
+    assert result == True  # noqa: E712
+
+
+def test_all_jax_scalar_predicates_one_violated():
+    """Test All JAX lowering when one predicate is violated."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(1,))
+    x._slice = slice(0, 1)
+
+    all_expr = All([x >= 0.0, x <= 10.0])
+    fn = lower_to_jax(all_expr)
+
+    # x = -1.0: first violated -> False
+    result = fn(jnp.array([-1.0]), None, 0, {})
+    assert result == False  # noqa: E712
+
+    # x = 15.0: second violated -> False
+    result = fn(jnp.array([15.0]), None, 0, {})
+    assert result == False  # noqa: E712
+
+
+def test_all_jax_vector_predicate():
+    """Test All JAX lowering with vector predicate."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(3,))
+    x._slice = slice(0, 3)
+
+    # All elements must be >= 0
+    all_expr = All(x >= 0.0)
+    fn = lower_to_jax(all_expr)
+
+    # All positive -> True
+    result = fn(jnp.array([1.0, 2.0, 3.0]), None, 0, {})
+    assert result == True  # noqa: E712
+
+    # One negative -> False
+    result = fn(jnp.array([1.0, -1.0, 3.0]), None, 0, {})
+    assert result == False  # noqa: E712
+
+
+# --- All: CVXPy Lowering ---
+
+
+def test_all_cvxpy_raises_not_implemented():
+    """Test that All raises NotImplementedError in CVXPy lowering."""
+    import cvxpy as cp
+
+    from openscvx.symbolic.lowerers.cvxpy import CvxpyLowerer
+
+    x_cvx = cp.Variable((10, 1), name="x")
+    variable_map = {"x": x_cvx}
+    lowerer = CvxpyLowerer(variable_map)
+
+    x = State("x", shape=(1,))
+    all_expr = All(x <= Constant(1.0))
+
+    with pytest.raises(NotImplementedError, match="not DCP-compliant"):
+        lowerer.lower(all_expr)
+
+
+# =============================================================================
+# Any
+# =============================================================================
+
+
+# --- Any: Creation & Properties ---
+
+
+def test_any_creation_single_predicate():
+    """Test Any creation with a single predicate."""
+    x = Variable("x", shape=(3,))
+    pred = Norm(x) <= 1.0
+
+    any_expr = Any(pred)
+
+    assert len(any_expr.predicates) == 1
+    assert any_expr.predicates[0] is pred
+
+
+def test_any_creation_multiple_predicates():
+    """Test Any creation with multiple predicates."""
+    x = Variable("x", shape=())
+    pred1 = x <= 0.0
+    pred2 = x >= 10.0
+
+    any_expr = Any([pred1, pred2])
+
+    assert len(any_expr.predicates) == 2
+
+
+def test_any_children():
+    """Test that children() returns all predicates."""
+    x = Variable("x", shape=())
+    pred1 = x <= 0.0
+    pred2 = x >= 10.0
+
+    any_expr = Any([pred1, pred2])
+    children = any_expr.children()
+
+    assert len(children) == 2
+
+
+def test_any_repr():
+    """Test string representation of Any."""
+    x = Variable("x", shape=())
+    pred = x <= 1.0
+
+    any_single = Any(pred)
+    assert "Any(" in repr(any_single)
+
+
+# --- Any: Validation ---
+
+
+def test_any_requires_inequality():
+    """Test that Any raises TypeError for non-Inequality."""
+    x = Variable("x", shape=())
+
+    with pytest.raises(TypeError, match="must be an Inequality"):
+        Any(x)
+
+
+def test_any_empty_list_raises():
+    """Test that Any raises ValueError for empty list."""
+    with pytest.raises(ValueError, match="cannot be empty"):
+        Any([])
+
+
+# --- Any: Shape Checking ---
+
+
+def test_any_shape_always_scalar():
+    """Test that Any always returns scalar shape."""
+    x = Variable("x", shape=())
+    any_scalar = Any(x <= 1.0)
+    assert any_scalar.check_shape() == ()
+
+    y = Variable("y", shape=(3,))
+    any_vector = Any(y <= np.array([1.0, 2.0, 3.0]))
+    assert any_vector.check_shape() == ()
+
+
+# --- Any: Canonicalization ---
+
+
+def test_any_canonicalize():
+    """Test that canonicalization recurses into predicates."""
+    from openscvx.symbolic.expr import Add, Sub
+
+    x = Variable("x", shape=())
+    pred = Add(x, Constant(0.0)) <= 1.0
+
+    any_expr = Any(pred)
+    canonical = any_expr.canonicalize()
+
+    assert isinstance(canonical, Any)
+    assert isinstance(canonical.predicates[0], Inequality)
+    assert isinstance(canonical.predicates[0].lhs, Sub)
+
+
+# --- Any: JAX Lowering ---
+
+
+def test_any_jax_scalar_predicates_one_satisfied():
+    """Test Any JAX lowering when one predicate is satisfied."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(1,))
+    x._slice = slice(0, 1)
+
+    # x <= 0 OR x >= 10
+    any_expr = Any([x <= 0.0, x >= 10.0])
+    fn = lower_to_jax(any_expr)
+
+    # x = -1.0: first satisfied -> True
+    result = fn(jnp.array([-1.0]), None, 0, {})
+    assert result == True  # noqa: E712
+
+    # x = 15.0: second satisfied -> True
+    result = fn(jnp.array([15.0]), None, 0, {})
+    assert result == True  # noqa: E712
+
+
+def test_any_jax_scalar_predicates_none_satisfied():
+    """Test Any JAX lowering when no predicates are satisfied."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(1,))
+    x._slice = slice(0, 1)
+
+    # x <= 0 OR x >= 10
+    any_expr = Any([x <= 0.0, x >= 10.0])
+    fn = lower_to_jax(any_expr)
+
+    # x = 5.0: neither satisfied -> False
+    result = fn(jnp.array([5.0]), None, 0, {})
+    assert result == False  # noqa: E712
+
+
+def test_any_jax_vector_predicate():
+    """Test Any JAX lowering with vector predicate.
+
+    Note: For a single vector predicate, Any checks if ALL elements satisfy
+    the predicate (same as All for single predicate). Use multiple predicates
+    for OR between different conditions.
+    """
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(3,))
+    x._slice = slice(0, 3)
+
+    # For a single predicate, Any(pred) behaves like All(pred) internally
+    # because we check if the entire predicate is satisfied
+    any_expr = Any(x >= 0.0)
+    fn = lower_to_jax(any_expr)
+
+    # All positive -> True (single predicate fully satisfied)
+    result = fn(jnp.array([1.0, 2.0, 3.0]), None, 0, {})
+    assert result == True  # noqa: E712
+
+
+# --- Any: CVXPy Lowering ---
+
+
+def test_any_cvxpy_raises_not_implemented():
+    """Test that Any raises NotImplementedError in CVXPy lowering."""
+    import cvxpy as cp
+
+    from openscvx.symbolic.lowerers.cvxpy import CvxpyLowerer
+
+    x_cvx = cp.Variable((10, 1), name="x")
+    variable_map = {"x": x_cvx}
+    lowerer = CvxpyLowerer(variable_map)
+
+    x = State("x", shape=(1,))
+    any_expr = Any(x <= Constant(1.0))
+
+    with pytest.raises(NotImplementedError, match="not DCP-compliant"):
+        lowerer.lower(any_expr)
+
 
 # =============================================================================
 # Cond
@@ -36,8 +424,8 @@ def test_cond_creation_basic():
 
     cond = Cond(pred, true_branch, false_branch)
 
-    assert len(cond.predicates) == 1
-    assert cond.predicates[0] is pred
+    assert isinstance(cond.predicate, Inequality)
+    assert cond.predicate is pred
     assert cond.true_branch is true_branch
     assert cond.false_branch is false_branch
     assert cond.node_ranges is None
@@ -51,6 +439,40 @@ def test_cond_creation_with_node_ranges():
     cond = Cond(pred, 5.0, 10.0, node_ranges=[(0, 3), (5, 8)])
 
     assert cond.node_ranges == [(0, 3), (5, 8)]
+
+
+def test_cond_creation_with_all():
+    """Test Cond creation with All predicate."""
+    x = Variable("x", shape=())
+    all_pred = All([x >= 0.0, x <= 10.0])
+
+    cond = Cond(all_pred, 5.0, 10.0)
+
+    assert isinstance(cond.predicate, All)
+    assert cond.predicate is all_pred
+
+
+def test_cond_creation_with_any():
+    """Test Cond creation with Any predicate."""
+    x = Variable("x", shape=())
+    any_pred = Any([x <= 0.0, x >= 10.0])
+
+    cond = Cond(any_pred, 5.0, 10.0)
+
+    assert isinstance(cond.predicate, Any)
+    assert cond.predicate is any_pred
+
+
+def test_cond_creation_with_list_wraps_in_all():
+    """Test that Cond with list predicate wraps it in All."""
+    x = Variable("x", shape=())
+    pred1 = x >= 0.0
+    pred2 = x <= 10.0
+
+    cond = Cond([pred1, pred2], 5.0, 10.0)
+
+    assert isinstance(cond.predicate, All)
+    assert len(cond.predicate.predicates) == 2
 
 
 def test_cond_children():
@@ -75,7 +497,7 @@ def test_cond_repr():
     pred = x <= 1.0
 
     cond = Cond(pred, 5.0, 10.0)
-    assert "cond(" in repr(cond)
+    assert "Cond(" in repr(cond)
 
     cond_with_ranges = Cond(pred, 5.0, 10.0, node_ranges=[(0, 2)])
     assert "node_ranges=" in repr(cond_with_ranges)
@@ -95,8 +517,8 @@ def test_cond_auto_converts_branches_to_expr():
 # --- Cond: Validation ---
 
 
-def test_cond_requires_inequality_predicate():
-    """Test that Cond raises TypeError for non-Inequality predicate."""
+def test_cond_requires_valid_predicate():
+    """Test that Cond raises TypeError for invalid predicate type."""
     x = Variable("x", shape=())
 
     with pytest.raises(TypeError, match="must be an Inequality"):
@@ -186,6 +608,16 @@ def test_cond_shape_non_scalar_predicate_raises():
         cond.check_shape()
 
 
+def test_cond_shape_with_all_predicate():
+    """Test Cond shape with All predicate (reduces vector to scalar)."""
+    x = Variable("x", shape=(3,))
+    # Vector predicate wrapped in All -> scalar
+    all_pred = All(x <= np.array([1.0, 2.0, 3.0]))
+
+    cond = Cond(all_pred, 5.0, 10.0)
+    assert cond.check_shape() == ()
+
+
 # --- Cond: Canonicalization ---
 
 
@@ -198,8 +630,7 @@ def test_cond_canonicalize_preserves_structure():
     canonical = cond.canonicalize()
 
     assert isinstance(canonical, Cond)
-    assert len(canonical.predicates) == 1
-    assert isinstance(canonical.predicates[0], Inequality)
+    assert isinstance(canonical.predicate, Inequality)
 
 
 def test_cond_canonicalize_preserves_node_ranges():
@@ -228,10 +659,10 @@ def test_cond_canonicalize_recurses_into_children():
 
     # Constraint canonicalizes to standard form: (lhs - rhs) <= 0
     # So (x + 0) <= 1 becomes (x - 1) <= 0, where lhs is Sub(x, 1)
-    assert isinstance(canonical.predicates[0], Inequality)
-    assert isinstance(canonical.predicates[0].lhs, Sub)
-    assert isinstance(canonical.predicates[0].rhs, Constant)
-    assert canonical.predicates[0].rhs.value == 0
+    assert isinstance(canonical.predicate, Inequality)
+    assert isinstance(canonical.predicate.lhs, Sub)
+    assert isinstance(canonical.predicate.rhs, Constant)
+    assert canonical.predicate.rhs.value == 0
     # Check true branch was canonicalized (Add(5, 0) -> 5)
     assert isinstance(canonical.true_branch, Constant)
 
@@ -374,6 +805,56 @@ def test_cond_jax_with_multiple_node_ranges():
     assert jnp.isclose(fn(None, None, 10, {}), 10.0)
 
 
+def test_cond_jax_with_all_predicate():
+    """Test Cond JAX lowering with All predicate."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(1,))
+    x._slice = slice(0, 1)
+
+    # Explicit All: x >= 0 AND x <= 10
+    all_pred = All([x >= 0.0, x <= 10.0])
+    cond = Cond(all_pred, Constant(1.0), Constant(0.0))
+
+    fn = lower_to_jax(cond)
+
+    # x = 5.0: both satisfied -> true branch
+    assert jnp.isclose(fn(jnp.array([5.0]), None, 0, {}), 1.0)
+
+    # x = -1.0: first violated -> false branch
+    assert jnp.isclose(fn(jnp.array([-1.0]), None, 0, {}), 0.0)
+
+    # x = 15.0: second violated -> false branch
+    assert jnp.isclose(fn(jnp.array([15.0]), None, 0, {}), 0.0)
+
+
+def test_cond_jax_with_any_predicate():
+    """Test Cond JAX lowering with Any predicate."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(1,))
+    x._slice = slice(0, 1)
+
+    # Any: x <= 0 OR x >= 10
+    any_pred = Any([x <= 0.0, x >= 10.0])
+    cond = Cond(any_pred, Constant(1.0), Constant(0.0))
+
+    fn = lower_to_jax(cond)
+
+    # x = -1.0: first satisfied -> true branch
+    assert jnp.isclose(fn(jnp.array([-1.0]), None, 0, {}), 1.0)
+
+    # x = 15.0: second satisfied -> true branch
+    assert jnp.isclose(fn(jnp.array([15.0]), None, 0, {}), 1.0)
+
+    # x = 5.0: neither satisfied -> false branch
+    assert jnp.isclose(fn(jnp.array([5.0]), None, 0, {}), 0.0)
+
+
 # --- Cond: CVXPy Lowering ---
 
 
@@ -395,11 +876,11 @@ def test_cond_cvxpy_raises_not_implemented():
         lowerer.lower(cond)
 
 
-# --- Cond: Multiple Predicates (AND semantics) ---
+# --- Cond: Multiple Predicates (backwards compatibility) ---
 
 
-def test_cond_multiple_predicates_and_semantics():
-    """Test Cond with multiple predicates uses AND semantics."""
+def test_cond_list_predicates_and_semantics():
+    """Test Cond with list predicates uses AND semantics (backwards compat)."""
     import jax.numpy as jnp
 
     from openscvx.symbolic.lower import lower_to_jax
@@ -407,10 +888,11 @@ def test_cond_multiple_predicates_and_semantics():
     x = State("x", shape=(1,))
     x._slice = slice(0, 1)
 
-    # x >= 0 AND x <= 10: true branch when x in [0, 10]
+    # List syntax wraps in All internally
     cond = Cond([x >= 0.0, x <= 10.0], Constant(1.0), Constant(0.0))
 
-    assert len(cond.predicates) == 2
+    # Verify it was wrapped in All
+    assert isinstance(cond.predicate, All)
 
     fn = lower_to_jax(cond)
 
