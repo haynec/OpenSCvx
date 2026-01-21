@@ -104,7 +104,6 @@ class PenalizedTrustRegion(Algorithm):
             init_state.x, init_state.u.astype(float), params
         )
 
-        init_state.x_prop_history.append(x_prop.__array__())
         init_state.V_history.append(V_multi_shoot.__array__())
         _ = self._subproblem(params, init_state, settings)
 
@@ -145,7 +144,6 @@ class PenalizedTrustRegion(Algorithm):
             )
             dis_time = time.time() - t0
 
-            state.x_prop_history.append(x_prop.__array__())
             state.V_history.append(V_multi_shoot.__array__())
 
         # Run the subproblem
@@ -173,7 +171,6 @@ class PenalizedTrustRegion(Algorithm):
         )
         dis_time = time.time() - t0
 
-        state.x_prop_history.append(x_prop.__array__())
         state.V_history.append(V_multi_shoot.__array__())
 
 
@@ -242,7 +239,7 @@ class PenalizedTrustRegion(Algorithm):
             A_d=state.A_d,
             B_d=state.B_d,
             C_d=state.C_d,
-            x_prop=state.x_prop_history[-1],
+            x_prop=state.x_prop,
         )
 
         # Build constraint linearization data

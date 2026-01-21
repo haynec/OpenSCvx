@@ -57,24 +57,22 @@ class AlgorithmState:
     J_tr: float
     J_vb: float
     J_vc: float
-    w_tr: float
-    lam_cost: float
-    lam_vc: Union[float, np.ndarray]
-    lam_vb: float
     n_x: int
     n_u: int
     N: int
     J_nonlin_history: float
     J_lin_history: float
+    pred_reduction_history: float
+    actual_reduction_history: float
     acceptance_ratio_history: float
     X: List[np.ndarray] = field(default_factory=list)
     U: List[np.ndarray] = field(default_factory=list)
     V_history: List[np.ndarray] = field(default_factory=list)
     VC_history: List[np.ndarray] = field(default_factory=list)
     TR_history: List[np.ndarray] = field(default_factory=list)
-    x_prop_history: List[np.ndarray] = field(default_factory=list)
-    lam_vc_history: List[float] = field(default_factory=list)
+    lam_vc_history: List[Union[float, np.ndarray]] = field(default_factory=list)
     lam_cost_history: List[float] = field(default_factory=list)
+    lam_vb_history: List[float] = field(default_factory=list)
     w_tr_history: List[float] = field(default_factory=list)
 
     def reject_last_solution(self) -> None:
@@ -99,15 +97,17 @@ class AlgorithmState:
 
         # Always safe to pop if present
         _safe_pop(self.V_history)
-        _safe_pop(self.x_prop_history)
-        # _safe_pop(self.VC_history)
-        # _safe_pop(self.TR_history)
         _safe_pop(self.J_lin_history)
         # _safe_pop(self.J_nonlin_history)
-        # _safe_pop(self.acceptance_ratio_history)
-        # _safe_pop(self.w_tr_history)
-        # _safe_pop(self.lam_vc_history)
-        # _safe_pop(self.lam_cost_history)
+
+        if len(self.lam_vb_history) > 1:
+            self.lam_vb_history.pop()
+        if len(self.lam_vc_history) > 1:
+            self.lam_vc_history.pop()
+        if len(self.lam_cost_history) > 1:
+            self.lam_cost_history.pop()
+        if len(self.w_tr_history) > 1:
+            self.w_tr_history.pop()
 
         # Keep at least the initial guess
         if len(self.X) > 1:
@@ -252,6 +252,50 @@ class AlgorithmState:
         # Extract and reshape C_d matrix
         return V_final[:, i3:i4].reshape(self.N - 1, self.n_x, self.n_u)
 
+    @property
+    def w_tr(self) -> float:
+        """Get current trust region weight.
+
+        Returns:
+            Current trust region weight (latest entry in w_tr_history)
+        """
+        if not self.w_tr_history:
+            raise ValueError("w_tr_history is empty. Initialize state using from_settings().")
+        return self.w_tr_history[-1]
+
+    @property
+    def lam_cost(self) -> float:
+        """Get current cost weight.
+
+        Returns:
+            Current cost weight (latest entry in lam_cost_history)
+        """
+        if not self.lam_cost_history:
+            raise ValueError("lam_cost_history is empty. Initialize state using from_settings().")
+        return self.lam_cost_history[-1]
+
+    @property
+    def lam_vc(self) -> Union[float, np.ndarray]:
+        """Get current virtual control penalty weight.
+
+        Returns:
+            Current virtual control penalty weight (latest entry in lam_vc_history)
+        """
+        if not self.lam_vc_history:
+            raise ValueError("lam_vc_history is empty. Initialize state using from_settings().")
+        return self.lam_vc_history[-1]
+
+    @property
+    def lam_vb(self) -> float:
+        """Get current virtual buffer penalty weight.
+
+        Returns:
+            Current virtual buffer penalty weight (latest entry in lam_vb_history)
+        """
+        if not self.lam_vb_history:
+            raise ValueError("lam_vb_history is empty. Initialize state using from_settings().")
+        return self.lam_vb_history[-1]
+
     @classmethod
     def from_settings(cls, settings: "Config") -> "AlgorithmState":
         """Create initial algorithm state from configuration.
@@ -270,24 +314,22 @@ class AlgorithmState:
             J_tr=1e2,
             J_vb=1e2,
             J_vc=1e2,
-            w_tr=settings.scp.w_tr,
-            lam_cost=settings.scp.lam_cost,
-            lam_vc=settings.scp.lam_vc,
-            lam_vb=settings.scp.lam_vb,
             n_x=settings.sim.n_states,
             n_u=settings.sim.n_controls,
             N=settings.scp.n,
             J_nonlin_history=[],
             J_lin_history=[],
+            pred_reduction_history=[],
+            actual_reduction_history=[],
             acceptance_ratio_history=[],
             X=[settings.sim.x.guess.copy()],
             U=[settings.sim.u.guess.copy()],
             V_history=[],
-            x_prop_history=[],
             VC_history=[],
             TR_history=[],
             lam_vc_history=[settings.scp.lam_vc],
             lam_cost_history=[settings.scp.lam_cost],
+            lam_vb_history=[settings.scp.lam_vb],
             w_tr_history=[settings.scp.w_tr],
         )
 

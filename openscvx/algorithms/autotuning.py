@@ -24,16 +24,17 @@ def update_scp_weights(state: "AlgorithmState", settings: Config, params: dict):
     update_penalties(state, settings, params)
 
     # Update cost relaxation parameter after cost_drop iterations
-    # if state.k > settings.scp.cost_drop:
-    #     state.lam_cost = state.lam_cost * settings.scp.cost_relax
+    if state.k > settings.scp.cost_drop:
+        state.lam_cost_history.append(state.lam_cost_history[-1] * settings.scp.cost_relax)
 
-    eta_1 = 0.1
+    eta_1 = 1E-6
     eta_2 = 0.9
 
     gamma_1 = 2.0
     gamma_2 = 0.5
 
     w_tr_min = 1E-3
+    w_tr_max = 2E40
 
     w_tr_k = state.w_tr
 
@@ -41,26 +42,26 @@ def update_scp_weights(state: "AlgorithmState", settings: Config, params: dict):
         actual_reduction = state.J_nonlin_history[-2] - state.J_nonlin_history[-1]
         predicted_reduction = state.J_nonlin_history[-2] - state.J_lin_history[-1]
         rho = actual_reduction / predicted_reduction
+
+        state.pred_reduction_history.append(predicted_reduction)
+        state.actual_reduction_history.append(actual_reduction)
         state.acceptance_ratio_history.append(rho)
 
         if state.acceptance_ratio_history[-1] >= eta_1:
             if state.acceptance_ratio_history[-1] < eta_2:
-                state.w_tr = w_tr_k
+                state.w_tr_history.append(w_tr_k)
             else:
-                state.w_tr = max(w_tr_min, gamma_2 * w_tr_k)
+                state.w_tr_history.append(max(w_tr_min, gamma_2 * w_tr_k))
             
             state.lam_cost_history.append(settings.scp.lam_cost)
         else:
-            state.w_tr = gamma_1 * w_tr_k
             state.reject_last_solution()
+            state.w_tr_history.append(min(w_tr_max, gamma_1 * w_tr_k))
 
     else:
-        state.w_tr = w_tr_k
+        state.w_tr_history.append(w_tr_k)
         state.lam_vc_history.append(settings.scp.lam_vc)
         state.lam_cost_history.append(settings.scp.lam_cost)
-    
-    # Update trust region weight history
-    state.w_tr_history.append(state.w_tr)
     
 
 
@@ -124,7 +125,7 @@ def update_penalties(state: "AlgorithmState",
     """
 
     x = state.x
-    x_prop = state.x_prop_history[-1]
+    x_prop = state.x_prop
     lam_vc = state.lam_vc
     lam_cost = state.lam_cost
     
