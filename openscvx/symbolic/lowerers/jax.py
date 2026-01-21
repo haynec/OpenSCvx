@@ -1651,8 +1651,8 @@ class JaxLowerer:
                     default_value
                 )
         """
-        # Lower predicate and branches recursively
-        pred_fn = self.lower(node.predicate)
+        # Lower predicate (if any) and branches recursively
+        pred_fn = self.lower(node.predicate) if node.predicate is not None else None
         true_fn = self.lower(node.true_branch)
         false_fn = self.lower(node.false_branch)
 
@@ -1663,15 +1663,18 @@ class JaxLowerer:
         node_ranges = node.node_ranges
 
         def cond_fn(x, u, node_arg, params):
-            pred_val = pred_fn(x, u, node_arg, params)
-
-            # Convert predicate result to boolean
-            if is_boolean_pred:
-                # All/Any already return boolean
-                pred_bool = pred_val
+            # Start with predicate evaluation (or True if no predicate)
+            if pred_fn is None:
+                pred_bool = jnp.array(True)
             else:
-                # Inequality returns residual: satisfied when residual <= 0
-                pred_bool = jnp.squeeze(pred_val) <= 0
+                pred_val = pred_fn(x, u, node_arg, params)
+                # Convert predicate result to boolean
+                if is_boolean_pred:
+                    # All/Any already return boolean
+                    pred_bool = pred_val
+                else:
+                    # Inequality returns residual: satisfied when residual <= 0
+                    pred_bool = jnp.squeeze(pred_val) <= 0
 
             # If node_ranges is specified, check if current node is in range
             if node_ranges is not None:

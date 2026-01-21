@@ -201,6 +201,7 @@ class Cond(Expr):
     - A list of Inequality constraints (AND semantics, shorthand for ``All([...])``)
     - An ``All`` expression for explicit AND semantics
     - An ``Any`` expression for OR semantics
+    - ``None`` for purely node-based switching (requires ``node_ranges``)
 
     After canonicalization, each constraint is in the form `lhs <= 0`, so the
     predicate evaluates to True when the constraint is satisfied (lhs <= 0) and
@@ -263,6 +264,15 @@ class Cond(Expr):
                 node_ranges=[(0, 2), (5, 7)]  # active at nodes 0-1 and 5-6
             )
 
+        Purely node-based switching (no predicate)::
+
+            expr = ox.Cond(
+                None,                          # no predicate
+                boost_thrust,                  # true branch at specified nodes
+                coast_thrust,                  # false branch elsewhere
+                node_ranges=[(0, 10), (20, 30)]  # boost at nodes 0-9 and 20-29
+            )
+
     Note:
         This operation is only supported for JAX lowering. CVXPy lowering will
         raise NotImplementedError since conditional logic is not DCP-compliant.
@@ -270,7 +280,7 @@ class Cond(Expr):
 
     def __init__(
         self,
-        pred: Union[Inequality, List[Inequality], "All", "Any"],
+        pred: Union[Inequality, List[Inequality], "All", "Any", None],
         true_branch,
         false_branch,
         node_ranges: Optional[List[Tuple[int, int]]] = None,
@@ -283,19 +293,28 @@ class Cond(Expr):
                 - List of Inequalities (AND semantics, shorthand for All([...]))
                 - All expression for explicit AND
                 - Any expression for OR semantics
+                - None for purely node-based switching (requires node_ranges)
             true_branch: Expression to evaluate when predicate is True
             false_branch: Expression to evaluate when predicate is False
             node_ranges: Optional list of (start, end) tuples specifying node ranges
                 where the conditional is active. Each tuple defines a half-open
                 interval [start, end) of node indices. Outside these ranges, the
                 false branch is always evaluated. None means active at all nodes.
+                Required when pred is None.
 
         Raises:
             TypeError: If pred is not a valid predicate type
-            ValueError: If node_ranges contains invalid ranges
+            ValueError: If node_ranges contains invalid ranges or pred=None without node_ranges
         """
-        # Normalize pred to All/Any/Inequality
-        if isinstance(pred, (All, Any)):
+        # Normalize pred to All/Any/Inequality/None
+        if pred is None:
+            if node_ranges is None:
+                raise ValueError(
+                    "Cond with pred=None requires node_ranges to be specified. "
+                    "Use node_ranges to define which trajectory nodes take the true branch."
+                )
+            predicate = None
+        elif isinstance(pred, (All, Any)):
             predicate = pred
         elif isinstance(pred, Inequality):
             predicate = pred
@@ -312,8 +331,8 @@ class Cond(Expr):
             predicate = All(pred)
         else:
             raise TypeError(
-                f"Cond predicate must be an Inequality, All, Any, or list of Inequalities "
-                f"(e.g., x <= 5, ox.All([...]), ox.Any([...])), got {type(pred).__name__}."
+                f"Cond predicate must be an Inequality, All, Any, None, or list of Inequalities "
+                f"(e.g., x <= 5, ox.All([...]), ox.Any([...]), None), got {type(pred).__name__}."
             )
 
         # Validate node_ranges
@@ -341,12 +360,14 @@ class Cond(Expr):
         self.node_ranges = node_ranges
 
     def children(self):
-        """Return the child expressions: predicate, true branch, and false branch."""
+        """Return the child expressions: predicate (if any), true branch, and false branch."""
+        if self.predicate is None:
+            return [self.true_branch, self.false_branch]
         return [self.predicate, self.true_branch, self.false_branch]
 
     def canonicalize(self) -> "Expr":
         """Canonicalize by canonicalizing all children, preserving node_ranges."""
-        predicate = self.predicate.canonicalize()
+        predicate = self.predicate.canonicalize() if self.predicate is not None else None
         true_branch = self.true_branch.canonicalize()
         false_branch = self.false_branch.canonicalize()
         return Cond(predicate, true_branch, false_branch, node_ranges=self.node_ranges)
@@ -364,9 +385,10 @@ class Cond(Expr):
         Raises:
             ValueError: If predicate is not scalar or branches have incompatible shapes
         """
-        pred_shape = self.predicate.check_shape()
-        if pred_shape != ():
-            raise ValueError(f"Cond predicate must be scalar, got shape {pred_shape}")
+        if self.predicate is not None:
+            pred_shape = self.predicate.check_shape()
+            if pred_shape != ():
+                raise ValueError(f"Cond predicate must be scalar, got shape {pred_shape}")
 
         true_shape = self.true_branch.check_shape()
         false_shape = self.false_branch.check_shape()
@@ -381,7 +403,8 @@ class Cond(Expr):
 
     def __repr__(self):
         """Return string representation of the conditional."""
-        base = f"Cond({self.predicate!r}, {self.true_branch!r}, {self.false_branch!r}"
+        pred_repr = "None" if self.predicate is None else repr(self.predicate)
+        base = f"Cond({pred_repr}, {self.true_branch!r}, {self.false_branch!r}"
         if self.node_ranges is not None:
             return f"{base}, node_ranges={self.node_ranges!r})"
         return f"{base})"

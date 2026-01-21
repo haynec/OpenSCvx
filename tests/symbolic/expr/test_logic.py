@@ -910,3 +910,54 @@ def test_cond_list_predicates_and_semantics():
 
     # x = 15.0: second violated -> false branch
     assert jnp.isclose(fn(jnp.array([15.0]), None, 0, {}), 0.0)
+
+
+# =============================================================================
+# Cond: pred=None (purely node-based switching)
+# =============================================================================
+
+
+def test_cond_pred_none_requires_node_ranges():
+    """Test that Cond with pred=None requires node_ranges."""
+    with pytest.raises(ValueError, match="pred=None requires node_ranges"):
+        Cond(None, 5.0, 10.0)
+
+
+def test_cond_pred_none_creation_and_properties():
+    """Test Cond creation with pred=None and its properties."""
+    cond = Cond(None, Constant(5.0), Constant(10.0), node_ranges=[(0, 5)])
+
+    assert cond.predicate is None
+    assert cond.node_ranges == [(0, 5)]
+    assert len(cond.children()) == 2  # excludes None predicate
+    assert "Cond(None," in repr(cond)
+    assert cond.check_shape() == ()
+
+    # Canonicalization preserves pred=None
+    canonical = cond.canonicalize()
+    assert canonical.predicate is None
+    assert canonical.node_ranges == [(0, 5)]
+
+
+def test_cond_pred_none_jax_lowering():
+    """Test Cond JAX lowering with pred=None for node-based switching."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    cond = Cond(None, Constant(5.0), Constant(10.0), node_ranges=[(0, 3), (7, 10)])
+    fn = lower_to_jax(cond)
+
+    # In first range -> true branch
+    assert jnp.isclose(fn(None, None, 0, {}), 5.0)
+    assert jnp.isclose(fn(None, None, 2, {}), 5.0)
+
+    # Between ranges -> false branch
+    assert jnp.isclose(fn(None, None, 3, {}), 10.0)
+    assert jnp.isclose(fn(None, None, 5, {}), 10.0)
+
+    # In second range -> true branch
+    assert jnp.isclose(fn(None, None, 7, {}), 5.0)
+
+    # After all ranges -> false branch
+    assert jnp.isclose(fn(None, None, 10, {}), 10.0)
