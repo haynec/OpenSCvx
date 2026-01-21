@@ -1554,8 +1554,12 @@ class JaxLowerer:
         predicate is evaluated first, and then either the true or false branch
         is evaluated based on the predicate value.
 
+        If node_ranges is specified, the conditional is only active within those
+        ranges. Outside the ranges, the false branch is always evaluated.
+
         Args:
-            node: Cond expression node with predicate, true_branch, and false_branch
+            node: Cond expression node with predicate, true_branch, false_branch,
+                and optional node_ranges
 
         Returns:
             Function (x, u, node, params) -> result from selected branch
@@ -1570,8 +1574,8 @@ class JaxLowerer:
 
                 x = ox.State("x", shape=(3,))
                 expr = ox.Cond(
-                    ox.Norm(x) > 1.0,  # predicate
-                    x / ox.Norm(x),    # true branch
+                    ox.Norm(x) >= 1.0,  # predicate
+                    x / ox.Norm(x),     # true branch
                     x                   # false branch
                 )
         """
@@ -1579,6 +1583,9 @@ class JaxLowerer:
         pred_fn = self.lower(node.pred)
         true_fn = self.lower(node.true_branch)
         false_fn = self.lower(node.false_branch)
+
+        # Capture node_ranges for use in closure
+        node_ranges = node.node_ranges
 
         def cond_fn(x, u, node_arg, params):
             # Evaluate predicate
@@ -1591,14 +1598,18 @@ class JaxLowerer:
             # - For Inequality (lhs <= rhs): residual = lhs - rhs
             #   - Satisfied (True): residual <= 0 (negative or zero)
             #   - Violated (False): residual > 0 (positive)
-            # - For Equality (lhs == rhs): residual = lhs - rhs
-            #   - Satisfied (True): residual == 0
-            #   - Violated (False): residual != 0
             # jax.lax.cond treats non-zero as True, zero as False, which is backwards
             # for constraint residuals. We need to check if residual <= 0 for inequalities.
-            # For now, we'll convert to boolean by checking if pred_scalar <= 0
-            # This works for constraint residuals where <= 0 means True
             pred_bool = pred_scalar <= 0
+
+            # If node_ranges is specified, check if current node is in range
+            if node_ranges is not None:
+                # Check if node_arg is within any of the specified ranges [start, end)
+                in_range = jnp.array(False)
+                for start, end in node_ranges:
+                    in_range = in_range | ((node_arg >= start) & (node_arg < end))
+                # Combined predicate: must be in range AND predicate satisfied
+                pred_bool = in_range & pred_bool
 
             # Use jax.lax.cond for conditional evaluation
             return cond(
