@@ -36,7 +36,8 @@ def test_cond_creation_basic():
 
     cond = Cond(pred, true_branch, false_branch)
 
-    assert cond.pred is pred
+    assert len(cond.predicates) == 1
+    assert cond.predicates[0] is pred
     assert cond.true_branch is true_branch
     assert cond.false_branch is false_branch
     assert cond.node_ranges is None
@@ -197,7 +198,8 @@ def test_cond_canonicalize_preserves_structure():
     canonical = cond.canonicalize()
 
     assert isinstance(canonical, Cond)
-    assert isinstance(canonical.pred, Inequality)
+    assert len(canonical.predicates) == 1
+    assert isinstance(canonical.predicates[0], Inequality)
 
 
 def test_cond_canonicalize_preserves_node_ranges():
@@ -226,10 +228,10 @@ def test_cond_canonicalize_recurses_into_children():
 
     # Constraint canonicalizes to standard form: (lhs - rhs) <= 0
     # So (x + 0) <= 1 becomes (x - 1) <= 0, where lhs is Sub(x, 1)
-    assert isinstance(canonical.pred, Inequality)
-    assert isinstance(canonical.pred.lhs, Sub)
-    assert isinstance(canonical.pred.rhs, Constant)
-    assert canonical.pred.rhs.value == 0
+    assert isinstance(canonical.predicates[0], Inequality)
+    assert isinstance(canonical.predicates[0].lhs, Sub)
+    assert isinstance(canonical.predicates[0].rhs, Constant)
+    assert canonical.predicates[0].rhs.value == 0
     # Check true branch was canonicalized (Add(5, 0) -> 5)
     assert isinstance(canonical.true_branch, Constant)
 
@@ -391,3 +393,32 @@ def test_cond_cvxpy_raises_not_implemented():
 
     with pytest.raises(NotImplementedError, match="Conditional expressions.*not DCP-compliant"):
         lowerer.lower(cond)
+
+
+# --- Cond: Multiple Predicates (AND semantics) ---
+
+
+def test_cond_multiple_predicates_and_semantics():
+    """Test Cond with multiple predicates uses AND semantics."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(1,))
+    x._slice = slice(0, 1)
+
+    # x >= 0 AND x <= 10: true branch when x in [0, 10]
+    cond = Cond([x >= 0.0, x <= 10.0], Constant(1.0), Constant(0.0))
+
+    assert len(cond.predicates) == 2
+
+    fn = lower_to_jax(cond)
+
+    # x = 5.0: both satisfied -> true branch
+    assert jnp.isclose(fn(jnp.array([5.0]), None, 0, {}), 1.0)
+
+    # x = -1.0: first violated -> false branch
+    assert jnp.isclose(fn(jnp.array([-1.0]), None, 0, {}), 0.0)
+
+    # x = 15.0: second violated -> false branch
+    assert jnp.isclose(fn(jnp.array([15.0]), None, 0, {}), 0.0)

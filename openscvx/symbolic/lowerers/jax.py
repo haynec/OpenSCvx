@@ -1551,23 +1551,23 @@ class JaxLowerer:
         """Lower conditional expression to JAX function using jax.lax.cond.
 
         Implements JAX-traceable conditional logic by wrapping jax.lax.cond. The
-        predicate is evaluated first, and then either the true or false branch
-        is evaluated based on the predicate value.
+        predicates are evaluated first, and then either the true or false branch
+        is evaluated based on whether all predicates are satisfied (AND semantics).
 
         If node_ranges is specified, the conditional is only active within those
         ranges. Outside the ranges, the false branch is always evaluated.
 
         Args:
-            node: Cond expression node with predicate, true_branch, false_branch,
+            node: Cond expression node with predicates, true_branch, false_branch,
                 and optional node_ranges
 
         Returns:
             Function (x, u, node, params) -> result from selected branch
 
         Note:
-            Uses jax.lax.cond for JAX-traceable conditional evaluation. The predicate
+            Uses jax.lax.cond for JAX-traceable conditional evaluation. Each predicate
             must evaluate to a scalar boolean. Both branches are lowered and the
-            appropriate one is selected at runtime based on the predicate value.
+            appropriate one is selected at runtime based on the combined predicate value.
 
         Example:
             Conditional dynamics based on state::
@@ -1578,9 +1578,17 @@ class JaxLowerer:
                     x / ox.Norm(x),     # true branch
                     x                   # false branch
                 )
+
+            Multiple predicates with AND semantics::
+
+                expr = ox.Cond(
+                    [x >= 0.0, x <= 10.0],  # all must be satisfied
+                    1.0,                     # in range
+                    0.0                      # out of range
+                )
         """
-        # Lower all three expressions recursively
-        pred_fn = self.lower(node.pred)
+        # Lower all predicates and branches recursively
+        pred_fns = [self.lower(p) for p in node.predicates]
         true_fn = self.lower(node.true_branch)
         false_fn = self.lower(node.false_branch)
 
@@ -1588,19 +1596,15 @@ class JaxLowerer:
         node_ranges = node.node_ranges
 
         def cond_fn(x, u, node_arg, params):
-            # Evaluate predicate
-            pred_val = pred_fn(x, u, node_arg, params)
-            # Extract scalar value (predicate must be scalar)
-            pred_scalar = jnp.atleast_1d(pred_val)[0]
-
-            # Convert predicate to boolean
-            # If predicate is a constraint residual (from Inequality/Equality):
-            # - For Inequality (lhs <= rhs): residual = lhs - rhs
-            #   - Satisfied (True): residual <= 0 (negative or zero)
-            #   - Violated (False): residual > 0 (positive)
-            # jax.lax.cond treats non-zero as True, zero as False, which is backwards
-            # for constraint residuals. We need to check if residual <= 0 for inequalities.
-            pred_bool = pred_scalar <= 0
+            # Evaluate all predicates and combine with AND
+            # For Inequality (lhs <= rhs): residual = lhs - rhs
+            #   - Satisfied (True): residual <= 0
+            #   - Violated (False): residual > 0
+            pred_bool = jnp.array(True)
+            for pred_fn in pred_fns:
+                pred_val = pred_fn(x, u, node_arg, params)
+                pred_scalar = jnp.atleast_1d(pred_val)[0]
+                pred_bool = pred_bool & (pred_scalar <= 0)
 
             # If node_ranges is specified, check if current node is in range
             if node_ranges is not None:
@@ -1608,7 +1612,7 @@ class JaxLowerer:
                 in_range = jnp.array(False)
                 for start, end in node_ranges:
                     in_range = in_range | ((node_arg >= start) & (node_arg < end))
-                # Combined predicate: must be in range AND predicate satisfied
+                # Combined predicate: must be in range AND all predicates satisfied
                 pred_bool = in_range & pred_bool
 
             # Use jax.lax.cond for conditional evaluation
