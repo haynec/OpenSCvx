@@ -115,6 +115,9 @@ from .lie import (
 # Linear algebra operations
 from .linalg import Diag, Inv, Norm, Sum, Transpose
 
+# Logical/control flow operations
+from .logic import Cond
+
 # Mathematical functions
 from .math import (
     Abs,
@@ -133,9 +136,6 @@ from .math import (
     Square,
     Tan,
 )
-
-# Logical/control flow operations
-from .logical import Cond
 
 # Spatial/3D operations
 from .spatial import QDCM, SSM, SSMP
