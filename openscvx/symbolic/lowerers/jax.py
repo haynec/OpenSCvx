@@ -1585,7 +1585,7 @@ class JaxLowerer:
             pred_val = pred_fn(x, u, node_arg, params)
             # Extract scalar value (predicate must be scalar)
             pred_scalar = jnp.atleast_1d(pred_val)[0]
-            
+
             # Convert predicate to boolean
             # If predicate is a constraint residual (from Inequality/Equality):
             # - For Inequality (lhs <= rhs): residual = lhs - rhs

@@ -324,7 +324,7 @@ def plot_dubins_car(results: OptimizationResults, params: Config):
 
 def plot_velocity_vs_distance(results: OptimizationResults, params: Config):
     """Plot velocity against distance to obstacle.
-    
+
     This plot demonstrates how the conditional velocity constraint works,
     showing how velocity changes based on proximity to the obstacle.
     """
@@ -333,25 +333,25 @@ def plot_velocity_vs_distance(results: OptimizationResults, params: Config):
     # Extract position and velocity
     position = results.trajectory["position"]
     velocity = results.trajectory.get("speed")
-    
+
     if velocity is None:
         # If speed is not available, try to get it from controls
         velocity = results.controls.get("speed")
-    
+
     if velocity is None:
         raise ValueError("Velocity data not found in results")
-    
+
     # Flatten velocity to 1D array
     velocity = np.asarray(velocity).flatten()
-    
+
     # Get obstacle center and radius
     obs_center = results.plotting_data["obs_center"]
-    obs_radius = results.plotting_data["obs_radius"]
-    
+    _ = results.plotting_data["obs_radius"]
+
     # Calculate distance to obstacle center for each point
     # Distance = ||position - obs_center||
     distance_from_center = np.linalg.norm(position - obs_center, axis=1)
-    
+
     # Plot velocity vs distance
     fig.add_trace(
         go.Scatter(
@@ -363,7 +363,7 @@ def plot_velocity_vs_distance(results: OptimizationResults, params: Config):
             name="Velocity",
         )
     )
-    
+
     # Add vertical line at safety threshold if available
     if "safety_threshold" in results.plotting_data:
         safety_threshold = results.plotting_data["safety_threshold"]
@@ -374,7 +374,7 @@ def plot_velocity_vs_distance(results: OptimizationResults, params: Config):
             annotation_text=f"Safety threshold ({safety_threshold:.2f})",
             annotation_position="top",
         )
-    
+
     # Add horizontal lines for max velocities
     fig.add_hline(
         y=5.0,
@@ -390,7 +390,7 @@ def plot_velocity_vs_distance(results: OptimizationResults, params: Config):
         annotation_text="Max velocity (far): 10.0",
         annotation_position="right",
     )
-    
+
     fig.update_layout(
         title="Velocity vs Distance to Obstacle",
         xaxis_title="Distance from Obstacle Center",
@@ -398,7 +398,7 @@ def plot_velocity_vs_distance(results: OptimizationResults, params: Config):
         template="plotly_dark",
         title_x=0.5,
     )
-    
+
     return fig
 
 

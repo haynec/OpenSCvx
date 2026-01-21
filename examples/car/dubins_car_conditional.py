@@ -74,7 +74,13 @@ constraints.append(ox.ctcs(obs_radius <= ox.linalg.Norm(position - obs_center)))
 
 # Add the conditional velocity constraint
 distance_to_obstacle = ox.linalg.Norm(position - obs_center)
-constraints.append(ox.ctcs(speed <= ox.Cond(distance_to_obstacle <= safety_threshold, 5.0, 10.0), idx=1, penalty="smooth_relu"))
+constraints.append(
+    ox.ctcs(
+        speed <= ox.Cond(distance_to_obstacle <= safety_threshold, 5.0, 10.0),
+        idx=1,
+        penalty="smooth_relu",
+    )
+)
 
 
 # Define normal dynamics (no conditional logic here)
@@ -114,7 +120,6 @@ problem.settings.scp.lam_vc = 1e3
 problem.settings.scp.uniform_time_grid = True
 
 
-
 plotting_dict = {
     "obs_radius": problem.parameters["obs_radius"],
     "obs_center": problem.parameters["obs_center"],
@@ -126,7 +131,7 @@ if __name__ == "__main__":
     print("=" * 70)
     print("Max velocity is 5.0 when within 2.0 units of obstacle, else 10.0")
     print("=" * 70)
-    
+
     problem.initialize()
     results = problem.solve()
     results = problem.post_process()
@@ -134,7 +139,6 @@ if __name__ == "__main__":
 
     # Plot trajectory
     plot_dubins_car(results, problem.settings).show()
-    
+
     # Plot velocity vs distance to obstacle
     plot_velocity_vs_distance(results, problem.settings).show()
-
