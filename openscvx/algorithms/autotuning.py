@@ -91,7 +91,7 @@ def calculate_nonlinear_penalty(x_prop: np.ndarray,
                                 lam_cost: float,
                                 params: dict, 
                                 settings: Config):
-    """Calculate nonlinear penalty J_nonlin = x_prop[cost] + lam_vc(x_prop-x_sol) + lam_vb(g(x_prop)).
+    """Calculate nonlinear penalty
 
     Args:
         x_prop: Propagated state (n_nodes-1, n_states)

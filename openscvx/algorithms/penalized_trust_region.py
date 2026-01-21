@@ -242,7 +242,7 @@ class PenalizedTrustRegion(Algorithm):
             A_d=state.A_d,
             B_d=state.B_d,
             C_d=state.C_d,
-            x_prop=state.x_prop,
+            x_prop=state.x_prop_history[-1],
         )
 
         # Build constraint linearization data

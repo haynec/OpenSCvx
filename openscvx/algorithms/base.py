@@ -100,10 +100,10 @@ class AlgorithmState:
         # Always safe to pop if present
         _safe_pop(self.V_history)
         _safe_pop(self.x_prop_history)
-        _safe_pop(self.VC_history)
-        _safe_pop(self.TR_history)
+        # _safe_pop(self.VC_history)
+        # _safe_pop(self.TR_history)
         _safe_pop(self.J_lin_history)
-        _safe_pop(self.J_nonlin_history)
+        # _safe_pop(self.J_nonlin_history)
         # _safe_pop(self.acceptance_ratio_history)
         # _safe_pop(self.w_tr_history)
         # _safe_pop(self.lam_vc_history)
