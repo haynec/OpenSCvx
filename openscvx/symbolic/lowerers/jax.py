@@ -1595,9 +1595,8 @@ class JaxLowerer:
             results = []
             for pred_fn in pred_fns:
                 pred_val = pred_fn(x, u, node_arg, params)
-                # For vector predicates, jnp.all reduces to scalar (all elements must satisfy)
-                # For Any with multiple predicates, we want OR between predicates
-                results.append(jnp.all(pred_val <= 0))
+                # For vector predicates, jnp.any checks if any element satisfies
+                results.append(jnp.any(pred_val <= 0))
             # Combine all results with OR
             return jnp.any(jnp.array(results))
 

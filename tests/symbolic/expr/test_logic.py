@@ -366,9 +366,8 @@ def test_any_jax_scalar_predicates_none_satisfied():
 def test_any_jax_vector_predicate():
     """Test Any JAX lowering with vector predicate.
 
-    Note: For a single vector predicate, Any checks if ALL elements satisfy
-    the predicate (same as All for single predicate). Use multiple predicates
-    for OR between different conditions.
+    For a vector predicate, Any returns True if ANY element satisfies the
+    predicate (element-wise OR semantics).
     """
     import jax.numpy as jnp
 
@@ -377,14 +376,21 @@ def test_any_jax_vector_predicate():
     x = State("x", shape=(3,))
     x._slice = slice(0, 3)
 
-    # For a single predicate, Any(pred) behaves like All(pred) internally
-    # because we check if the entire predicate is satisfied
+    # Any element >= 0
     any_expr = Any(x >= 0.0)
     fn = lower_to_jax(any_expr)
 
-    # All positive -> True (single predicate fully satisfied)
+    # All positive -> True
     result = fn(jnp.array([1.0, 2.0, 3.0]), None, 0, {})
     assert result == True  # noqa: E712
+
+    # Some positive, some negative -> True (any element satisfies)
+    result = fn(jnp.array([1.0, -1.0, -2.0]), None, 0, {})
+    assert result == True  # noqa: E712
+
+    # All negative -> False (no element satisfies)
+    result = fn(jnp.array([-1.0, -2.0, -3.0]), None, 0, {})
+    assert result == False  # noqa: E712
 
 
 # --- Any: CVXPy Lowering ---
