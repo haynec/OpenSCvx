@@ -19,7 +19,6 @@ import pytest
 from openscvx.symbolic.expr import Cond, Constant, Inequality, State, Variable
 from openscvx.symbolic.expr.linalg import Norm
 
-
 # =============================================================================
 # Cond
 # =============================================================================
@@ -214,10 +213,10 @@ def test_cond_canonicalize_preserves_node_ranges():
 
 def test_cond_canonicalize_recurses_into_children():
     """Test that canonicalization recurses into predicate and branches."""
-    from openscvx.symbolic.expr import Add
+    from openscvx.symbolic.expr import Add, Sub
 
     x = Variable("x", shape=())
-    # pred: (x + 0) <= 1 should canonicalize to x <= 1
+    # pred: (x + 0) <= 1 should canonicalize to (x - 1) <= 0
     pred = Add(x, Constant(0.0)) <= 1.0
     # true branch: 5 + 0 should canonicalize to 5
     true_branch = Add(Constant(5.0), Constant(0.0))
@@ -225,8 +224,12 @@ def test_cond_canonicalize_recurses_into_children():
     cond = Cond(pred, true_branch, 10.0)
     canonical = cond.canonicalize()
 
-    # Check predicate was canonicalized (Add(x, 0) -> x)
-    assert isinstance(canonical.pred.lhs, Variable)
+    # Constraint canonicalizes to standard form: (lhs - rhs) <= 0
+    # So (x + 0) <= 1 becomes (x - 1) <= 0, where lhs is Sub(x, 1)
+    assert isinstance(canonical.pred, Inequality)
+    assert isinstance(canonical.pred.lhs, Sub)
+    assert isinstance(canonical.pred.rhs, Constant)
+    assert canonical.pred.rhs.value == 0
     # Check true branch was canonicalized (Add(5, 0) -> 5)
     assert isinstance(canonical.true_branch, Constant)
 
