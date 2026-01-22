@@ -74,6 +74,8 @@ class AlgorithmState:
     lam_cost_history: List[float] = field(default_factory=list)
     lam_vb_history: List[float] = field(default_factory=list)
     w_tr_history: List[float] = field(default_factory=list)
+    x_full: List[np.ndarray] = field(default_factory=list)
+    x_prop_full: List[np.ndarray] = field(default_factory=list)
 
     def reject_last_solution(self) -> None:
         """Reject the most recent SCP iterate by rolling back history by one step.
@@ -81,39 +83,31 @@ class AlgorithmState:
         This is useful when an iteration is deemed unacceptable (e.g., poor
         acceptance ratio) and we want to revert to the previous iterate.
 
-        Pops the last element from:
+        Overwrites the last element with the second-to-last element in:
         - V_history, x_prop_history, VC_history, TR_history
         - X, U
         - J_lin_history, J_nonlin_history
+        - lam_vb_history, lam_vc_history, lam_cost_history, w_tr_history
 
         Notes:
-        - All pops are guarded; empty lists are left unchanged.
+        - All overwrites are guarded; lists with fewer than 2 elements are left unchanged.
         - For X/U, we keep at least one element (the initial guess).
         """
 
-        def _safe_pop(lst: list) -> None:
-            if lst:
-                lst.pop()
+        def _safe_overwrite(lst: list) -> None:
+            """Overwrite last entry with second-to-last entry if list has at least 2 elements."""
+            if len(lst) >= 2:
+                lst[-1] = lst[-2]
 
-        # Always safe to pop if present
-        _safe_pop(self.V_history)
-        _safe_pop(self.J_lin_history)
-        # _safe_pop(self.J_nonlin_history)
-
-        if len(self.lam_vb_history) > 1:
-            self.lam_vb_history.pop()
-        if len(self.lam_vc_history) > 1:
-            self.lam_vc_history.pop()
-        if len(self.lam_cost_history) > 1:
-            self.lam_cost_history.pop()
-        if len(self.w_tr_history) > 1:
-            self.w_tr_history.pop()
-
-        # Keep at least the initial guess
-        if len(self.X) > 1:
-            self.X.pop()
-        if len(self.U) > 1:
-            self.U.pop()
+        # Overwrite last entry with second-to-last if present
+        _safe_overwrite(self.V_history)
+        _safe_overwrite(self.J_lin_history)
+        _safe_overwrite(self.lam_vb_history)
+        _safe_overwrite(self.lam_vc_history)
+        _safe_overwrite(self.lam_cost_history)
+        _safe_overwrite(self.w_tr_history)
+        _safe_overwrite(self.X)
+        _safe_overwrite(self.U)
 
     @property
     def x(self) -> np.ndarray:
@@ -133,9 +127,11 @@ class AlgorithmState:
         """
         return self.U[-1]
 
-    @property
-    def x_prop(self) -> np.ndarray:
-        """Extract propagated state trajectory from latest V.
+    def x_prop(self, index: int = -1) -> np.ndarray:
+        """Extract propagated state trajectory from V_history.
+
+        Args:
+            index: Index into V_history (default: -1 for latest entry)
 
         Returns:
             Propagated state trajectory x_prop with shape (N-1, n_x), or None if no V_history
@@ -144,14 +140,15 @@ class AlgorithmState:
             After running an iteration, access the propagated states::
 
                 problem.step()
-                x_prop = problem.state.x_prop  # Shape (N-1, n_x)
+                x_prop = problem.state.x_prop()  # Shape (N-1, n_x), latest
+                x_prop_prev = problem.state.x_prop(-2)  # Previous iteration
         """
         if not self.V_history:
             return None
 
         # V_history contains Vmulti from discretization
         # Shape: (flattened_size, n_timesteps) where flattened_size = (N-1) * i4
-        V = self.V_history[-1]
+        V = self.V_history[index]
 
         # Take final timestep and reshape to (N-1, i4)
         i4 = self.n_x + self.n_x * self.n_x + 2 * self.n_x * self.n_u
@@ -160,9 +157,11 @@ class AlgorithmState:
         # Extract propagated state (first n_x elements of each row)
         return V_final[:, : self.n_x]
 
-    @property
-    def A_d(self) -> np.ndarray:
-        """Extract discretized state transition matrix from latest V.
+    def A_d(self, index: int = -1) -> np.ndarray:
+        """Extract discretized state transition matrix from V_history.
+
+        Args:
+            index: Index into V_history (default: -1 for latest entry)
 
         Returns:
             Discretized state Jacobian A_d with shape (N-1, n_x, n_x), or None if no V_history
@@ -171,7 +170,8 @@ class AlgorithmState:
             After running an iteration, access linearization matrices::
 
                 problem.step()
-                A_d = problem.state.A_d  # Shape (N-1, n_x, n_x)
+                A_d = problem.state.A_d()  # Shape (N-1, n_x, n_x), latest
+                A_d_prev = problem.state.A_d(-2)  # Previous iteration
         """
         if not self.V_history:
             return None
@@ -182,7 +182,7 @@ class AlgorithmState:
 
         # V_history contains Vmulti from discretization
         # Shape: (flattened_size, n_timesteps) where flattened_size = (N-1) * i4
-        V = self.V_history[-1]
+        V = self.V_history[index]
 
         # Take final timestep and reshape to (N-1, i4)
         i4 = self.n_x + self.n_x * self.n_x + 2 * self.n_x * self.n_u
@@ -191,9 +191,11 @@ class AlgorithmState:
         # Extract and reshape A_d matrix
         return V_final[:, i1:i2].reshape(self.N - 1, self.n_x, self.n_x)
 
-    @property
-    def B_d(self) -> np.ndarray:
-        """Extract discretized control influence matrix (current node) from latest V.
+    def B_d(self, index: int = -1) -> np.ndarray:
+        """Extract discretized control influence matrix (current node) from V_history.
+
+        Args:
+            index: Index into V_history (default: -1 for latest entry)
 
         Returns:
             Discretized control Jacobian B_d with shape (N-1, n_x, n_u), or None if no V_history
@@ -202,7 +204,8 @@ class AlgorithmState:
             After running an iteration, access linearization matrices::
 
                 problem.step()
-                B_d = problem.state.B_d  # Shape (N-1, n_x, n_u)
+                B_d = problem.state.B_d()  # Shape (N-1, n_x, n_u), latest
+                B_d_prev = problem.state.B_d(-2)  # Previous iteration
         """
         if not self.V_history:
             return None
@@ -213,7 +216,7 @@ class AlgorithmState:
         i3 = i2 + self.n_x * self.n_u
 
         # V_history contains Vmulti from discretization
-        V = self.V_history[-1]
+        V = self.V_history[index]
 
         # Take final timestep and reshape to (N-1, i4)
         i4 = self.n_x + self.n_x * self.n_x + 2 * self.n_x * self.n_u
@@ -222,9 +225,11 @@ class AlgorithmState:
         # Extract and reshape B_d matrix
         return V_final[:, i2:i3].reshape(self.N - 1, self.n_x, self.n_u)
 
-    @property
-    def C_d(self) -> np.ndarray:
-        """Extract discretized control influence matrix (next node) from latest V.
+    def C_d(self, index: int = -1) -> np.ndarray:
+        """Extract discretized control influence matrix (next node) from V_history.
+
+        Args:
+            index: Index into V_history (default: -1 for latest entry)
 
         Returns:
             Discretized control Jacobian C_d with shape (N-1, n_x, n_u), or None if no V_history
@@ -233,7 +238,8 @@ class AlgorithmState:
             After running an iteration, access linearization matrices::
 
                 problem.step()
-                C_d = problem.state.C_d  # Shape (N-1, n_x, n_u)
+                C_d = problem.state.C_d()  # Shape (N-1, n_x, n_u), latest
+                C_d_prev = problem.state.C_d(-2)  # Previous iteration
         """
         if not self.V_history:
             return None
@@ -244,7 +250,7 @@ class AlgorithmState:
         i4 = i3 + self.n_x * self.n_u
 
         # V_history contains Vmulti from discretization
-        V = self.V_history[-1]
+        V = self.V_history[index]
 
         # Take final timestep and reshape to (N-1, i4)
         V_final = V[:, -1].reshape(-1, i4)

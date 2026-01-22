@@ -339,7 +339,7 @@ class ScpConfig:
         n: Optional[int] = None,
         k_max: int = 200,
         w_tr: float = 1.0,
-        lam_vc: float = 1.0,
+        lam_vc: float = 1e1,
         ep_tr: float = 1e-4,
         ep_vb: float = 1e-4,
         ep_vc: float = 1e-8,

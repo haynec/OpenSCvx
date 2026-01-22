@@ -164,6 +164,7 @@ class PenalizedTrustRegion(Algorithm):
         state.X.append(x_sol)
         state.U.append(u_sol)
         state.J_lin_history.append(J_total)
+        state.x_full.append(state.x)
 
         t0 = time.time()
         A_bar, B_bar, C_bar, x_prop, V_multi_shoot = self._discretization_solver.call(
@@ -172,6 +173,7 @@ class PenalizedTrustRegion(Algorithm):
         dis_time = time.time() - t0
 
         state.V_history.append(V_multi_shoot.__array__())
+        state.x_prop_full.append(x_prop.__array__())
 
 
         # Update state in place by appending to history
@@ -236,10 +238,10 @@ class PenalizedTrustRegion(Algorithm):
         self._solver.update_dynamics_linearization(
             x_bar=state.x,
             u_bar=state.u,
-            A_d=state.A_d,
-            B_d=state.B_d,
-            C_d=state.C_d,
-            x_prop=state.x_prop,
+            A_d=state.A_d(),
+            B_d=state.B_d(),
+            C_d=state.C_d(),
+            x_prop=state.x_prop(),
         )
 
         # Build constraint linearization data
@@ -344,7 +346,7 @@ class PenalizedTrustRegion(Algorithm):
             result.status,
             subprop_time,
             vc_mat,
-            abs(tr_mat),
+            tr_mat,
         )
 
     def citation(self) -> List[str]:

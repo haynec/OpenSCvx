@@ -297,3 +297,191 @@ def plot_scp_iterations(
         fig.update_xaxes(title_text="Time (s)", row=total_rows, col=col_idx)
 
     return fig
+
+
+def plot_scp_convergence_histories(result: OptimizationResults):
+    """Plot SCP convergence histories: trust region weight, reduction histories, and acceptance ratio.
+
+    Creates three separate plots:
+    1. Trust region weight (w_tr) history
+    2. Actual and predicted reduction histories (overlaid)
+    3. Acceptance ratio history
+
+    Args:
+        result: OptimizationResults containing the convergence histories.
+
+    Returns:
+        Plotly figure with three subplots
+
+    Example:
+        >>> problem.initialize()
+        >>> result = problem.solve()
+        >>> plot_scp_convergence_histories(result).show()
+    """
+    if not isinstance(result, OptimizationResults):
+        raise TypeError(f"Expected OptimizationResults, got {type(result)}")
+
+    # Create subplots: 3 rows, 1 column
+    fig = make_subplots(
+        rows=3,
+        cols=1,
+        subplot_titles=(
+            "Trust Region Weight History",
+            "Actual vs Predicted Reduction History",
+            "Acceptance Ratio History",
+        ),
+        vertical_spacing=0.12,
+    )
+
+    # Prepare iteration indices (0-indexed for plotting)
+    iterations_w_tr = np.arange(len(result.w_tr_history))
+    iterations_reduction = np.arange(len(result.actual_reduction_history))
+    iterations_ratio = np.arange(len(result.acceptance_ratio_history))
+
+    # Plot 1: Trust region weight history
+    if len(result.w_tr_history) > 0:
+        fig.add_trace(
+            go.Scatter(
+                x=iterations_w_tr,
+                y=result.w_tr_history,
+                mode="lines+markers",
+                name="w_tr",
+                line={"color": "cyan", "width": 2},
+                marker={"size": 6},
+                hovertemplate="Iteration: %{x}<br>w_tr: %{y:.3g}<extra></extra>",
+            ),
+            row=1,
+            col=1,
+        )
+    else:
+        fig.add_annotation(
+            text="No trust region weight history available",
+            xref="x1",
+            yref="y1",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            row=1,
+            col=1,
+        )
+
+    # Plot 2: Actual and predicted reduction histories
+    if len(result.actual_reduction_history) > 0 and len(result.pred_reduction_history) > 0:
+        # Ensure both histories have the same length
+        min_len = min(len(result.actual_reduction_history), len(result.pred_reduction_history))
+        actual_reduction = result.actual_reduction_history[:min_len]
+        predicted_reduction = result.pred_reduction_history[:min_len]
+        iterations_reduction = np.arange(min_len)
+
+        fig.add_trace(
+            go.Scatter(
+                x=iterations_reduction,
+                y=actual_reduction,
+                mode="lines+markers",
+                name="Actual Reduction",
+                line={"color": "green", "width": 2},
+                marker={"size": 6},
+                hovertemplate="Iteration: %{x}<br>Actual Reduction: %{y:.3g}<extra></extra>",
+            ),
+            row=2,
+            col=1,
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=iterations_reduction,
+                y=predicted_reduction,
+                mode="lines+markers",
+                name="Predicted Reduction",
+                line={"color": "orange", "width": 2},
+                marker={"size": 6},
+                hovertemplate="Iteration: %{x}<br>Predicted Reduction: %{y:.3g}<extra></extra>",
+            ),
+            row=2,
+            col=1,
+        )
+    else:
+        fig.add_annotation(
+            text="No reduction history available",
+            xref="x2",
+            yref="y2",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            row=2,
+            col=1,
+        )
+
+    # Plot 3: Acceptance ratio history
+    if len(result.acceptance_ratio_history) > 0:
+        fig.add_trace(
+            go.Scatter(
+                x=iterations_ratio,
+                y=result.acceptance_ratio_history,
+                mode="lines+markers",
+                name="Acceptance Ratio",
+                line={"color": "magenta", "width": 2},
+                marker={"size": 6},
+                hovertemplate="Iteration: %{x}<br>Acceptance Ratio: %{y:.3g}<extra></extra>",
+            ),
+            row=3,
+            col=1,
+        )
+        
+        # Add reference lines at typical thresholds (eta_1=1e-6, eta_2=0.9)
+        fig.add_hline(
+            y=1e-6,
+            line_dash="dash",
+            line_color="red",
+            opacity=0.5,
+            annotation_text="η₁ = 1e-6",
+            row=3,
+            col=1,
+        )
+        fig.add_hline(
+            y=0.9,
+            line_dash="dash",
+            line_color="yellow",
+            opacity=0.5,
+            annotation_text="η₂ = 0.9",
+            row=3,
+            col=1,
+        )
+    else:
+        fig.add_annotation(
+            text="No acceptance ratio history available",
+            xref="x3",
+            yref="y3",
+            x=0.5,
+            y=0.5,
+            showarrow=False,
+            row=3,
+            col=1,
+        )
+
+    # Update layout
+    fig.update_layout(
+        title_text="SCP Convergence Histories",
+        template="plotly_dark",
+        showlegend=True,
+        height=900,
+        legend={
+            "yanchor": "top",
+            "y": 0.99,
+            "xanchor": "left",
+            "x": 1.02,
+            "bgcolor": "rgba(0, 0, 0, 0.5)",
+        },
+    )
+
+    # Update axes labels
+    fig.update_xaxes(title_text="Iteration", row=1, col=1)
+    fig.update_yaxes(title_text="w_tr", type="log", row=1, col=1)
+
+    fig.update_xaxes(title_text="Iteration", row=2, col=1)
+    fig.update_yaxes(title_text="Reduction", row=2, col=1)  # Linear scale
+
+    fig.update_xaxes(title_text="Iteration", row=3, col=1)
+    fig.update_yaxes(title_text="Acceptance Ratio (ρ)", row=3, col=1)
+
+    return fig
