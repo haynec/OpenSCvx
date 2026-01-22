@@ -322,6 +322,86 @@ def plot_dubins_car(results: OptimizationResults, params: Config):
     return fig
 
 
+def plot_velocity_vs_distance(results: OptimizationResults, params: Config):
+    """Plot velocity against distance to obstacle.
+
+    This plot demonstrates how the conditional velocity constraint works,
+    showing how velocity changes based on proximity to the obstacle.
+    """
+    fig = go.Figure()
+
+    # Extract position and velocity
+    position = results.trajectory["position"]
+    velocity = results.trajectory.get("speed")
+
+    if velocity is None:
+        # If speed is not available, try to get it from controls
+        velocity = results.controls.get("speed")
+
+    if velocity is None:
+        raise ValueError("Velocity data not found in results")
+
+    # Flatten velocity to 1D array
+    velocity = np.asarray(velocity).flatten()
+
+    # Get obstacle center and radius
+    obs_center = results.plotting_data["obs_center"]
+    _ = results.plotting_data["obs_radius"]
+
+    # Calculate distance to obstacle center for each point
+    # Distance = ||position - obs_center||
+    distance_from_center = np.linalg.norm(position - obs_center, axis=1)
+
+    # Plot velocity vs distance
+    fig.add_trace(
+        go.Scatter(
+            x=distance_from_center,
+            y=velocity,
+            mode="lines+markers",
+            line={"color": "blue", "width": 2},
+            marker={"size": 5},
+            name="Velocity",
+        )
+    )
+
+    # Add vertical line at safety threshold if available
+    if "safety_threshold" in results.plotting_data:
+        safety_threshold = results.plotting_data["safety_threshold"]
+        fig.add_vline(
+            x=safety_threshold,
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"Safety threshold ({safety_threshold:.2f})",
+            annotation_position="top",
+        )
+
+    # Add horizontal lines for max velocities
+    fig.add_hline(
+        y=5.0,
+        line_dash="dot",
+        line_color="orange",
+        annotation_text="Max velocity (near): 5.0",
+        annotation_position="right",
+    )
+    fig.add_hline(
+        y=10.0,
+        line_dash="dot",
+        line_color="green",
+        annotation_text="Max velocity (far): 10.0",
+        annotation_position="right",
+    )
+
+    fig.update_layout(
+        title="Velocity vs Distance to Obstacle",
+        xaxis_title="Distance from Obstacle Center",
+        yaxis_title="Velocity",
+        template="plotly_dark",
+        title_x=0.5,
+    )
+
+    return fig
+
+
 def plot_dubins_car_disjoint(results: OptimizationResults, params: Config):
     # Plot the trajectory of the Dubins car, but show wp1 and wp2 as circles with centers and radii
     fig = go.Figure()

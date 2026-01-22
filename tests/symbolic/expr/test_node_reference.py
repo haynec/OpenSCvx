@@ -132,7 +132,7 @@ def test_node_reference_in_constraints():
     inequality = (vel_k - vel_k_minus_1) <= max_accel
 
     assert isinstance(inequality, Inequality)
-    assert inequality.check_shape() == ()
+    assert inequality.check_shape() == (3,)  # vector constraint
 
     # Equality constraint
     pos_start = position.at(0)
@@ -140,7 +140,7 @@ def test_node_reference_in_constraints():
     equality = pos_start == pos_end
 
     assert isinstance(equality, Equality)
-    assert equality.check_shape() == ()
+    assert equality.check_shape() == (2,)  # vector constraint
 
     # Note: Cross-node constraints should NOT use .at([...]) wrapper
     # The constraint is auto-detected as cross-node due to NodeReferences
@@ -168,7 +168,7 @@ def test_rate_limit_pattern():
     pos_k_prev = position.at(9)
 
     constraint = (pos_k - pos_k_prev) <= max_step
-    assert constraint.check_shape() == ()
+    assert constraint.check_shape() == (3,)  # vector constraint
 
     # Cross-node constraints are auto-detected - no .at([...]) wrapper needed
     # The constraint is a bare Constraint object
@@ -194,7 +194,7 @@ def test_multi_step_dependencies():
     max_accel = 5.0
     constraint = accel <= max_accel
 
-    assert constraint.check_shape() == ()
+    assert constraint.check_shape() == (1,)  # shape (1,) from state
     assert isinstance(constraint, Inequality)
 
 
@@ -231,7 +231,7 @@ def test_boundary_coupling():
     periodicity_constraint = x_start == x_end
 
     assert isinstance(periodicity_constraint, Equality)
-    assert periodicity_constraint.check_shape() == ()
+    assert periodicity_constraint.check_shape() == (2,)  # vector constraint
 
     # Cross-node constraints are auto-detected - no .at([...]) wrapper needed
     # Just use the bare constraint directly

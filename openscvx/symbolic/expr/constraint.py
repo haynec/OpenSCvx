@@ -89,20 +89,24 @@ class Constraint(Expr):
         return new_constraint
 
     def check_shape(self) -> Tuple[int, ...]:
-        """Check that constraint operands are broadcastable. Returns scalar shape."""
+        """Check that constraint operands are broadcastable and return the shape.
+
+        Returns the broadcasted shape of lhs and rhs, which represents the shape
+        of the constraint residual (lhs - rhs). Vector constraints are interpreted
+        element-wise.
+
+        Returns:
+            tuple: The broadcasted shape of lhs and rhs
+        """
         L_shape = self.lhs.check_shape()
         R_shape = self.rhs.check_shape()
 
         # Figure out their broadcasted shape (or error if incompatible)
         try:
-            np.broadcast_shapes(L_shape, R_shape)
+            return np.broadcast_shapes(L_shape, R_shape)
         except ValueError as e:
             constraint_type = type(self).__name__
             raise ValueError(f"{constraint_type} not broadcastable: {L_shape} vs {R_shape}") from e
-
-        # Allow vector constraints - they're interpreted element-wise
-        # Return () as constraints always produce a scalar
-        return ()
 
     def at(self, nodes: Union[list, tuple]):
         """Apply this constraint only at specific discrete nodes.

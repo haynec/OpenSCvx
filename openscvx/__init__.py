@@ -16,9 +16,12 @@ from openscvx.symbolic.expr import (
     CTCS,
     Abs,
     Add,
+    All,
+    Any,
     Bilerp,
     Block,
     Concat,
+    Cond,
     Constant,
     Constraint,
     Control,
@@ -114,6 +117,10 @@ __all__ = [
     "Max",
     "Linterp",
     "Bilerp",
+    # Logical/control flow operations
+    "All",
+    "Any",
+    "Cond",
     # Constraints
     "Constraint",
     "Equality",

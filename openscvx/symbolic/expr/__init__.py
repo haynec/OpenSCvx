@@ -115,6 +115,9 @@ from .lie import (
 # Linear algebra operations
 from .linalg import Diag, Inv, Norm, Sum, Transpose
 
+# Logical/control flow operations
+from .logic import All, Any, Cond
+
 # Mathematical functions
 from .math import (
     Abs,
@@ -198,6 +201,10 @@ __all__ = [
     "Max",
     "Linterp",
     "Bilerp",
+    # Logical/control flow operations
+    "All",
+    "Any",
+    "Cond",
     # Linear algebra operations
     "Transpose",
     "Stack",
