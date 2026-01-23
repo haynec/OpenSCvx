@@ -29,7 +29,7 @@ from examples.plotting import plot_dubins_car
 from openscvx import Problem, ByofSpec
 
 n = 8
-total_time = 1.2  # Total simulation time
+total_time = 2.0  # Total simulation time
 
 # Define state components
 position = ox.State("position", shape=(2,))  # 2D position [x, y]
@@ -91,8 +91,8 @@ byof: ByofSpec = {
     "convex_costs": [
         # Add a quadratic cost on control effort (speed and angular rate)
         # This penalizes large control inputs to encourage smoother trajectories
-        lambda ocp_vars, settings, params: ocp_vars.w_tr * sum(
-            cp.sum_squares(ocp_vars.u_nonscaled[i] - ocp_vars.u_bar[i] + params['obs_radius']) for i in range(settings.scp.n)
+        lambda ocp_vars, settings, params: sum(
+            cp.sum_squares(settings.sim.inv_S_u @ (ocp_vars.u_nonscaled[i] - ocp_vars.u_bar[i])) + cp.sum_squares(settings.sim.inv_S_x @ (ocp_vars.x_nonscaled[i] - ocp_vars.x_bar[i])) for i in range(settings.scp.n)
         ),
     ]
 }
@@ -119,8 +119,8 @@ problem = Problem(
 
 # Set solver parameters
 problem.settings.prp.dt = 0.01
-problem.settings.scp.w_tr = 1e0
-problem.settings.scp.lam_cost = 4e1
+problem.settings.scp.w_tr = 0e0
+problem.settings.scp.lam_cost = 1e-1
 problem.settings.scp.lam_vc = 1e3
 problem.settings.scp.uniform_time_grid = True
 
