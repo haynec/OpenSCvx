@@ -17,7 +17,7 @@ from .constraint import Constraint
 from .expr import Constant, Expr
 
 
-class STLConstraint(Expr):
+class STLExpr(Expr):
     """Base class for Signal Temporal Logic operators.
 
     STL operators combine predicates (constraints) using temporal and logical
@@ -117,7 +117,7 @@ class STLConstraint(Expr):
         return NodalConstraint(constraint, list(nodes))
 
 
-class Or(STLConstraint):
+class Or(STLExpr):
     """Logical OR operation for STL predicates.
 
     Combines constraint predicates with disjunction. The Or is satisfied if
@@ -132,7 +132,7 @@ class Or(STLConstraint):
     - "Use path 1 OR path 2 OR path 3"
 
     Attributes:
-        predicates: List of predicates (Constraint or STLConstraint objects)
+        predicates: List of predicates (Constraint or STLExpr objects)
 
     Example:
         Visit either waypoint 1 OR waypoint 2:
@@ -173,21 +173,21 @@ class Or(STLConstraint):
         """Initialize a logical OR operation.
 
         Args:
-            *predicates: Two or more Constraint or STLConstraint objects to combine
+            *predicates: Two or more Constraint or STLExpr objects to combine
                         with logical OR. Each represents a predicate to be satisfied.
 
         Raises:
             ValueError: If fewer than two predicates are provided
-            TypeError: If predicates are not Constraint or STLConstraint instances
+            TypeError: If predicates are not Constraint or STLExpr instances
         """
         if len(predicates) < 2:
             raise ValueError("Or requires at least two predicates")
 
         # Validate that all predicates are constraints or STL expressions
         for pred in predicates:
-            if not isinstance(pred, (Constraint, STLConstraint)):
+            if not isinstance(pred, (Constraint, STLExpr)):
                 raise TypeError(
-                    f"Or requires Constraint or STLConstraint predicates, got "
+                    f"Or requires Constraint or STLExpr predicates, got "
                     f"{type(pred).__name__}. "
                     f"Did you mean to write a constraint like 'expr <= value'?"
                 )

@@ -1257,7 +1257,7 @@ class JaxLowerer:
         disjunctive task specifications. Each predicate becomes an STLJax predicate.
 
         Args:
-            node: Or expression node with predicates (Constraint or STLConstraint)
+            node: Or expression node with predicates (Constraint or STLExpr)
 
         Returns:
             Function (x, u, node, params) -> STL robustness value
@@ -1269,7 +1269,7 @@ class JaxLowerer:
 
             Robustness extraction:
             - For Constraint (lhs <= rhs): robustness = rhs - lhs
-            - For STLConstraint: recursively lower the STL expression
+            - For STLExpr: recursively lower the STL expression
 
         Example:
             Used for task specifications like "reach goal A OR goal B"::
@@ -1287,7 +1287,7 @@ class JaxLowerer:
 
         from openscvx.symbolic.expr.arithmetic import Sub
         from openscvx.symbolic.expr.constraint import Constraint
-        from openscvx.symbolic.expr.stl import STLConstraint
+        from openscvx.symbolic.expr.stl import STLExpr
 
         # Extract robustness expressions from predicates and lower them
         robustness_fns = []
@@ -1297,7 +1297,7 @@ class JaxLowerer:
                 # Positive when satisfied (lhs <= rhs means rhs - lhs >= 0)
                 robustness_expr = Sub(pred.rhs, pred.lhs)
                 robustness_fns.append(self.lower(robustness_expr))
-            elif isinstance(pred, STLConstraint):
+            elif isinstance(pred, STLExpr):
                 # For nested STL expressions, lower them directly
                 # They already return robustness values
                 robustness_fns.append(self.lower(pred))
