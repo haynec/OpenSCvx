@@ -203,6 +203,10 @@ class Or(STLConstraint):
     def canonicalize(self) -> "Expr":
         """Canonicalize by flattening nested Or and canonicalizing operands.
 
+        Flattens nested Or operations into a single flat Or with all operands
+        at the same level. For example: Or(a, Or(b, c)) → Or(a, b, c).
+        This can occur when an Or constraint is wrapped and then nested in another Or.
+
         Returns:
             Expr: Canonical form. If only one operand remains, returns it directly.
         """
@@ -210,7 +214,12 @@ class Or(STLConstraint):
 
         for operand in self.operands:
             canonicalized = operand.canonicalize()
-            operands.append(canonicalized)
+            if isinstance(canonicalized, Or):
+                # Flatten nested Or: Or(a, Or(b, c)) -> Or(a, b, c)
+                # This handles cases where constraint wrapping exposes nested Or nodes
+                operands.extend(canonicalized.operands)
+            else:
+                operands.append(canonicalized)
 
         if len(operands) == 1:
             return operands[0]
