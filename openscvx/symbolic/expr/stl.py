@@ -132,7 +132,7 @@ class Or(STLConstraint):
     - "Use path 1 OR path 2 OR path 3"
 
     Attributes:
-        operands: List of robustness expressions (extracted from constraint operands)
+        predicates: List of predicates (Constraint or STLConstraint objects)
 
     Example:
         Visit either waypoint 1 OR waypoint 2:
@@ -152,6 +152,14 @@ class Or(STLConstraint):
             # Enforce continuously over time interval
             constraints = [reach_either.over((3, 5))]
 
+        Nested STL operators are also supported:
+
+            # Or of And expressions
+            expr = ox.stl.Or(
+                ox.stl.And(c1, c2),
+                ox.stl.And(c3, c4),
+            )
+
     Note:
         Or evaluates to a scalar robustness value (positive when satisfied).
         Use `.over()` or `.at()` to convert to a constraint, or manually create
@@ -161,93 +169,82 @@ class Or(STLConstraint):
         stljax.formula.Or: Underlying STLJax implementation used during lowering
     """
 
-    def __init__(self, *operands):
+    def __init__(self, *predicates):
         """Initialize a logical OR operation.
 
         Args:
-            *operands: Two or more Constraint objects to combine with logical OR.
-                      Each operand represents a predicate (constraint to be satisfied).
+            *predicates: Two or more Constraint or STLConstraint objects to combine
+                        with logical OR. Each represents a predicate to be satisfied.
 
         Raises:
-            ValueError: If fewer than two operands are provided
-            TypeError: If operands are not Constraint instances
+            ValueError: If fewer than two predicates are provided
+            TypeError: If predicates are not Constraint or STLConstraint instances
         """
-        if len(operands) < 2:
-            raise ValueError("Or requires at least two operands")
+        if len(predicates) < 2:
+            raise ValueError("Or requires at least two predicates")
 
-        # Validate that all operands are constraints
-        for op in operands:
-            if not isinstance(op, Constraint):
+        # Validate that all predicates are constraints or STL expressions
+        for pred in predicates:
+            if not isinstance(pred, (Constraint, STLConstraint)):
                 raise TypeError(
-                    f"Or requires Constraint operands, got {type(op).__name__}. "
+                    f"Or requires Constraint or STLConstraint predicates, got "
+                    f"{type(pred).__name__}. "
                     f"Did you mean to write a constraint like 'expr <= value'?"
                 )
 
-        # Extract STL robustness values from each constraint
-        # For Inequality lhs <= rhs:
-        #   - Constraint residual: (lhs - rhs) should be <= 0 when satisfied
-        #   - STL robustness: (rhs - lhs) should be >= 0 when satisfied
-        from .arithmetic import Sub
-
-        robustness_values = [Sub(op.rhs, op.lhs) for op in operands]
-
-        # Store robustness expressions as operands
-        # These will be lowered by the @visitor(Or) in the JAX lowerer,
-        # which delegates to STLJax to compute max(robustness_values)
-        self.operands = robustness_values
+        # Store predicates directly - robustness extraction happens during lowering
+        self.predicates = list(predicates)
 
     def children(self):
-        """Return robustness expressions as children."""
-        return self.operands
+        """Return predicates as children."""
+        return self.predicates
 
     def canonicalize(self) -> "Expr":
-        """Canonicalize by flattening nested Or and canonicalizing operands.
+        """Canonicalize by flattening nested Or and canonicalizing predicates.
 
-        Flattens nested Or operations into a single flat Or with all operands
+        Flattens nested Or operations into a single flat Or with all predicates
         at the same level. For example: Or(a, Or(b, c)) → Or(a, b, c).
-        This can occur when an Or constraint is wrapped and then nested in another Or.
 
         Returns:
-            Expr: Canonical form. If only one operand remains, returns it directly.
+            Expr: Canonical form. If only one predicate remains, returns it directly.
         """
-        operands = []
+        predicates = []
 
-        for operand in self.operands:
-            canonicalized = operand.canonicalize()
+        for pred in self.predicates:
+            canonicalized = pred.canonicalize()
             if isinstance(canonicalized, Or):
                 # Flatten nested Or: Or(a, Or(b, c)) -> Or(a, b, c)
-                # This handles cases where constraint wrapping exposes nested Or nodes
-                operands.extend(canonicalized.operands)
+                predicates.extend(canonicalized.predicates)
             else:
-                operands.append(canonicalized)
+                predicates.append(canonicalized)
 
-        if len(operands) == 1:
-            return operands[0]
+        if len(predicates) == 1:
+            return predicates[0]
 
-        # Reconstruct Or with canonicalized operands
+        # Reconstruct Or with canonicalized predicates
         result = Or.__new__(Or)
-        result.operands = operands
+        result.predicates = predicates
         return result
 
     def check_shape(self) -> Tuple[int, ...]:
-        """Validate operand shapes and return scalar shape.
+        """Validate predicate shapes and return scalar shape.
 
         Returns:
             tuple: Empty tuple () indicating a scalar result (STL robustness)
 
         Raises:
-            ValueError: If fewer than two operands exist
+            ValueError: If fewer than two predicates exist
         """
-        if len(self.operands) < 2:
-            raise ValueError("Or requires at least two operands")
+        if len(self.predicates) < 2:
+            raise ValueError("Or requires at least two predicates")
 
-        # Validate all operands
-        for operand in self.operands:
-            operand.check_shape()
+        # Validate all predicates
+        for pred in self.predicates:
+            pred.check_shape()
 
         # Or produces a scalar (STL robustness value)
         return ()
 
     def __repr__(self):
-        operands_repr = " | ".join(repr(op) for op in self.operands)
-        return f"Or({operands_repr})"
+        predicates_repr = " | ".join(repr(p) for p in self.predicates)
+        return f"Or({predicates_repr})"

@@ -1254,10 +1254,10 @@ class JaxLowerer:
         """Lower STL disjunction (Or) to JAX using STLJax library.
 
         Converts a symbolic Or constraint to an STLJax Or formula for handling
-        disjunctive task specifications. Each operand becomes an STLJax predicate.
+        disjunctive task specifications. Each predicate becomes an STLJax predicate.
 
         Args:
-            node: Or expression node with multiple operands
+            node: Or expression node with predicates (Constraint or STLConstraint)
 
         Returns:
             Function (x, u, node, params) -> STL robustness value
@@ -1265,14 +1265,18 @@ class JaxLowerer:
         Note:
             Uses STLJax library for signal temporal logic evaluation. The returned
             function computes the robustness metric for the disjunction, which is
-            positive when at least one operand is satisfied.
+            positive when at least one predicate is satisfied.
+
+            Robustness extraction:
+            - For Constraint (lhs <= rhs): robustness = rhs - lhs
+            - For STLConstraint: recursively lower the STL expression
 
         Example:
             Used for task specifications like "reach goal A OR goal B"::
 
                 goal_A = ox.Norm(x - target_A) <= 1.0
                 goal_B = ox.Norm(x - target_B) <= 1.0
-                task = ox.Or(goal_A, goal_B)
+                task = ox.stl.Or(goal_A, goal_B)
 
         See Also:
             - stljax.formula.Or: Underlying STLJax implementation
@@ -1281,19 +1285,35 @@ class JaxLowerer:
         from stljax.formula import Or as STLOr
         from stljax.formula import Predicate
 
-        # Lower each operand to get their functions
-        operand_fns = [self.lower(operand) for operand in node.operands]
+        from openscvx.symbolic.expr.arithmetic import Sub
+        from openscvx.symbolic.expr.constraint import Constraint
+        from openscvx.symbolic.expr.stl import STLConstraint
+
+        # Extract robustness expressions from predicates and lower them
+        robustness_fns = []
+        for pred in node.predicates:
+            if isinstance(pred, Constraint):
+                # For Constraint (lhs <= rhs): robustness = rhs - lhs
+                # Positive when satisfied (lhs <= rhs means rhs - lhs >= 0)
+                robustness_expr = Sub(pred.rhs, pred.lhs)
+                robustness_fns.append(self.lower(robustness_expr))
+            elif isinstance(pred, STLConstraint):
+                # For nested STL expressions, lower them directly
+                # They already return robustness values
+                robustness_fns.append(self.lower(pred))
+            else:
+                raise TypeError(f"Unexpected predicate type: {type(pred)}")
 
         # Return a function that evaluates the STLJax Or
         def or_fn(x, u, node, params):
-            # Create STLJax predicates for each operand with current params
+            # Create STLJax predicates for each robustness function
             predicates = []
-            for i, operand_fn in enumerate(operand_fns):
+            for i, robustness_fn in enumerate(robustness_fns):
                 # Create a predicate function that captures the current params
                 def make_pred_fn(fn):
                     return lambda x: fn(x, None, None, params)
 
-                pred_fn = make_pred_fn(operand_fn)
+                pred_fn = make_pred_fn(robustness_fn)
                 predicates.append(Predicate(f"pred_{i}", pred_fn))
 
             # Create and evaluate STLJax Or formula
