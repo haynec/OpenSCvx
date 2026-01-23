@@ -194,7 +194,7 @@ def header():
         )
     )
     print(
-        "{:^4} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │  {:^7} │ {:^14}".format(
+        "{:^4} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^14}".format(
             "Iter",
             "Dis Time (ms)",
             "Solve Time (ms)",
@@ -202,6 +202,12 @@ def header():
             "J_tr",
             "J_vb",
             "J_vc",
+            "J_nonlin",
+            "J_lin",
+            "pred_red",
+            "act_red",
+            "acc_ratio",
+            "w_tr",
             "Cost",
             "Solver Status",
         )
@@ -240,14 +246,19 @@ def intermediate(print_queue, params):
                 "{:.1e}".format(data["J_vc"]),
                 col_pos if data["J_vc"] <= params.scp.ep_vc else col_neg,
             )
+            J_nonlin_colored = colored("{:.1e}".format(data.get("J_nonlin", 0.0)))
+            J_lin_colored = colored("{:.1e}".format(data.get("J_lin", 0.0)))
+            pred_reduction_colored = colored("{:.1e}".format(data.get("pred_reduction", 0.0)))
+            actual_reduction_colored = colored("{:.1e}".format(data.get("actual_reduction", 0.0)))
+            acceptance_ratio_colored = colored("{:.2f}".format(data.get("acceptance_ratio", 0.0)))
+            w_tr_colored = colored("{:.1e}".format(data.get("w_tr", 0.0)))
             cost_colored = colored("{:.1e}".format(data["cost"]))
             prob_stat_colored = colored(
                 data["prob_stat"], col_pos if data["prob_stat"] == "optimal" else col_neg
             )
 
             print(
-                "{:^4} │     {:^6.2f}    │      {:^6.2F}     │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ "
-                " {:^7} │ {:^14}".format(
+                "{:^4} │     {:^6.2f}    │      {:^6.2F}     │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^14}".format(
                     iter_colored,
                     data["dis_time"],
                     data["subprop_time"],
@@ -255,6 +266,12 @@ def intermediate(print_queue, params):
                     J_tr_colored,
                     J_vb_colored,
                     J_vc_colored,
+                    J_nonlin_colored,
+                    J_lin_colored,
+                    pred_reduction_colored,
+                    actual_reduction_colored,
+                    acceptance_ratio_colored,
+                    w_tr_colored,
                     cost_colored,
                     prob_stat_colored,
                 )
@@ -266,7 +283,7 @@ def intermediate(print_queue, params):
                 )
             )
             print(
-                "{:^4} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │  {:^7} │ {:^14}".format(
+                "{:^4} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^14}".format(
                     "Iter",
                     "Dis Time (ms)",
                     "Solve Time (ms)",
@@ -274,6 +291,12 @@ def intermediate(print_queue, params):
                     "J_tr",
                     "J_vb",
                     "J_vc",
+                    "J_nonlin",
+                    "J_lin",
+                    "pred_red",
+                    "act_red",
+                    "acc_ratio",
+                    "w_tr",
                     "Cost",
                     "Solver Status",
                 )

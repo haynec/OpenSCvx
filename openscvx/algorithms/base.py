@@ -7,7 +7,7 @@ during SCP iterations.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Union
+from typing import TYPE_CHECKING, List, Optional, Union
 
 import numpy as np
 
@@ -15,6 +15,113 @@ if TYPE_CHECKING:
     from openscvx.config import Config
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
     from openscvx.solvers import ConvexSolver
+
+
+class _IterateView:
+    """Lightweight attribute view into an AlgorithmState iterate.
+
+    This is used to provide ergonomic access like ``state.candidate.x`` while
+    the algorithm stores the actual data on the state (e.g. ``state.inter_x``).
+    Supports both reading and writing.
+    """
+
+    def __init__(self, state: "AlgorithmState", prefix: str):
+        self._state = state
+        self._prefix = prefix
+
+    def _get(self, name: str) -> Optional[object]:
+        return getattr(self._state, f"{self._prefix}{name}", None)
+
+    def _set(self, name: str, value: object) -> None:
+        setattr(self._state, f"{self._prefix}{name}", value)
+
+    @property
+    def x(self) -> Optional[np.ndarray]:
+        return self._get("x")
+
+    @x.setter
+    def x(self, value: Optional[np.ndarray]) -> None:
+        self._set("x", value)
+
+    @property
+    def u(self) -> Optional[np.ndarray]:
+        return self._get("u")
+
+    @u.setter
+    def u(self, value: Optional[np.ndarray]) -> None:
+        self._set("u", value)
+
+    @property
+    def V(self) -> Optional[np.ndarray]:
+        return self._get("V")
+
+    @V.setter
+    def V(self, value: Optional[np.ndarray]) -> None:
+        self._set("V", value)
+
+    @property
+    def x_prop(self) -> Optional[np.ndarray]:
+        return self._get("x_prop")
+
+    @x_prop.setter
+    def x_prop(self, value: Optional[np.ndarray]) -> None:
+        self._set("x_prop", value)
+
+    @property
+    def VC(self) -> Optional[np.ndarray]:
+        return self._get("VC")
+
+    @VC.setter
+    def VC(self, value: Optional[np.ndarray]) -> None:
+        self._set("VC", value)
+
+    @property
+    def TR(self) -> Optional[np.ndarray]:
+        return self._get("TR")
+
+    @TR.setter
+    def TR(self, value: Optional[np.ndarray]) -> None:
+        self._set("TR", value)
+
+    @property
+    def lam_vc(self) -> Optional[Union[float, np.ndarray]]:
+        return self._get("lam_vc")
+
+    @lam_vc.setter
+    def lam_vc(self, value: Optional[Union[float, np.ndarray]]) -> None:
+        self._set("lam_vc", value)
+
+    @property
+    def lam_cost(self) -> Optional[float]:
+        return self._get("lam_cost")
+
+    @lam_cost.setter
+    def lam_cost(self, value: Optional[float]) -> None:
+        self._set("lam_cost", value)
+
+    @property
+    def lam_vb(self) -> Optional[float]:
+        return self._get("lam_vb")
+
+    @lam_vb.setter
+    def lam_vb(self, value: Optional[float]) -> None:
+        self._set("lam_vb", value)
+
+    @property
+    def J_lin(self) -> Optional[float]:
+        return self._get("J_lin")
+
+    @J_lin.setter
+    def J_lin(self, value: Optional[float]) -> None:
+        self._set("J_lin", value)
+
+    @property
+    def J_nonlin(self) -> Optional[float]:
+        return self._get("J_nonlin")
+
+    @J_nonlin.setter
+    def J_nonlin(self, value: Optional[float]) -> None:
+        self._set("J_nonlin", value)
 
 
 @dataclass
@@ -77,37 +184,67 @@ class AlgorithmState:
     x_full: List[np.ndarray] = field(default_factory=list)
     x_prop_full: List[np.ndarray] = field(default_factory=list)
 
-    def reject_last_solution(self) -> None:
-        """Reject the most recent SCP iterate by rolling back history by one step.
+    @property
+    def candidate(self) -> _IterateView:
+        """Convenience view of the current *candidate* iterate.
 
-        This is useful when an iteration is deemed unacceptable (e.g., poor
-        acceptance ratio) and we want to revert to the previous iterate.
+        Algorithms typically store the in-progress iterate on fields prefixed
+        with ``inter_`` (e.g. ``inter_x``, ``inter_u``). This view lets you access
+        them ergonomically:
 
-        Overwrites the last element with the second-to-last element in:
-        - V_history, x_prop_history, VC_history, TR_history
-        - X, U
-        - J_lin_history, J_nonlin_history
-        - lam_vb_history, lam_vc_history, lam_cost_history, w_tr_history
+            - ``state.candidate.x`` -> ``state.inter_x``
+            - ``state.candidate.u`` -> ``state.inter_u``
 
-        Notes:
-        - All overwrites are guarded; lists with fewer than 2 elements are left unchanged.
-        - For X/U, we keep at least one element (the initial guess).
+        Any missing fields return None.
         """
 
-        def _safe_overwrite(lst: list) -> None:
-            """Overwrite last entry with second-to-last entry if list has at least 2 elements."""
-            if len(lst) >= 2:
-                lst[-1] = lst[-2]
+        return _IterateView(self, "inter_")
 
-        # Overwrite last entry with second-to-last if present
-        _safe_overwrite(self.V_history)
-        _safe_overwrite(self.J_lin_history)
-        _safe_overwrite(self.lam_vb_history)
-        _safe_overwrite(self.lam_vc_history)
-        _safe_overwrite(self.lam_cost_history)
-        _safe_overwrite(self.w_tr_history)
-        _safe_overwrite(self.X)
-        _safe_overwrite(self.U)
+    def accept_solution(self) -> None:
+        """Accept the current SCP iterate by updating the state in place."""
+        cand = self.candidate
+
+        if cand.x is None or cand.u is None:
+            raise ValueError(
+                "No candidate iterate to accept. Expected algorithm to set "
+                "`state.inter_x` and `state.inter_u` before calling accept_solution()."
+            )
+
+        self.X.append(cand.x)
+        self.U.append(cand.u)
+
+        if cand.V is not None:
+            self.V_history.append(cand.V)
+        if cand.VC is not None:
+            self.VC_history.append(cand.VC)
+        if cand.TR is not None:
+            self.TR_history.append(cand.TR)
+
+        if cand.lam_vc is not None:
+            self.lam_vc_history.append(cand.lam_vc)
+        if cand.lam_cost is not None:
+            self.lam_cost_history.append(cand.lam_cost)
+        if cand.lam_vb is not None:
+            self.lam_vb_history.append(cand.lam_vb)
+
+        if cand.J_nonlin is not None:
+            self.J_nonlin_history.append(cand.J_nonlin)
+        if cand.J_lin is not None:
+            self.J_lin_history.append(cand.J_lin)
+        
+    def clear_candidate(self) -> None:
+        """Clear the candidate data after accepting."""
+        self.candidate.x = None
+        self.candidate.u = None
+        self.candidate.V = None
+        self.candidate.x_prop = None
+        self.candidate.VC = None
+        self.candidate.TR = None
+        self.candidate.lam_vc = None
+        self.candidate.lam_cost = None
+        self.candidate.lam_vb = None
+        self.candidate.J_lin = None
+        self.candidate.J_nonlin = None
 
     @property
     def x(self) -> np.ndarray:

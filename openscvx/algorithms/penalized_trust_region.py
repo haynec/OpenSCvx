@@ -100,7 +100,7 @@ class PenalizedTrustRegion(Algorithm):
         init_state = AlgorithmState.from_settings(settings)
 
         # Solve a dumb problem to initialize DPP and JAX jacobians
-        A_bar, B_bar, C_bar, x_prop, V_multi_shoot = self._discretization_solver.call(
+        _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
             init_state.x, init_state.u.astype(float), params
         )
 
@@ -139,7 +139,7 @@ class PenalizedTrustRegion(Algorithm):
         # Compute discretization before subproblem only for the first iteration
         if state.k == 1:
             t0 = time.time()
-            A_bar, B_bar, C_bar, x_prop, V_multi_shoot = self._discretization_solver.call(
+            _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
                 state.x, state.u.astype(float), params
             )
             dis_time = time.time() - t0
@@ -161,25 +161,23 @@ class PenalizedTrustRegion(Algorithm):
             tr_mat,
         ) = self._subproblem(params, state, settings)
 
-        state.X.append(x_sol)
-        state.U.append(u_sol)
-        state.J_lin_history.append(J_total)
-        state.x_full.append(state.x)
+        state.candidate.x = x_sol
+        state.candidate.u = u_sol
+        state.candidate.J_lin = J_total
 
         t0 = time.time()
-        A_bar, B_bar, C_bar, x_prop, V_multi_shoot = self._discretization_solver.call(
-            state.x, state.u.astype(float), params
+        _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
+            state.candidate.x, state.candidate.u.astype(float), params
         )
         dis_time = time.time() - t0
 
-        state.V_history.append(V_multi_shoot.__array__())
-        state.x_prop_full.append(x_prop.__array__())
-
+        state.candidate.V = V_multi_shoot.__array__()
+        state.candidate.x_prop = x_prop.__array__()
 
         # Update state in place by appending to history
         # The x_guess/u_guess properties will automatically return the latest entry
-        state.VC_history.append(vc_mat)
-        state.TR_history.append(tr_mat)
+        state.candidate.VC = vc_mat
+        state.candidate.TR = tr_mat
 
         state.J_tr = np.sum(np.array(J_tr_vec))
         state.J_vb = np.sum(np.array(J_vb_vec))
@@ -187,6 +185,20 @@ class PenalizedTrustRegion(Algorithm):
 
         # Update weights in state
         update_scp_weights(state, settings, params)
+
+        # Check if lists are empty
+        if len(state.pred_reduction_history) == 0:
+            pred_reduction = 0.0
+        else:
+            pred_reduction = state.pred_reduction_history[-1]
+        if len(state.actual_reduction_history) == 0:
+            actual_reduction = 0.0
+        else:
+            actual_reduction = state.actual_reduction_history[-1]
+        if len(state.acceptance_ratio_history) == 0:
+            acceptance_ratio = 0.0
+        else:
+            acceptance_ratio = state.acceptance_ratio_history[-1]
 
         # Emit data
         self._emitter(
@@ -199,9 +211,17 @@ class PenalizedTrustRegion(Algorithm):
                 "J_vb": state.J_vb,
                 "J_vc": state.J_vc,
                 "cost": cost[-1],
+                "J_nonlin": state.candidate.J_nonlin,
+                "J_lin": state.candidate.J_lin,
+                "pred_reduction": pred_reduction,
+                "actual_reduction": actual_reduction,
+                "acceptance_ratio": acceptance_ratio,
+                "w_tr": state.w_tr,
                 "prob_stat": prob_stat,
             }
         )
+
+        state.clear_candidate()
 
         # Increment iteration counter
         state.k += 1

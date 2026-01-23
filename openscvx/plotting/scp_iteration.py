@@ -482,6 +482,6 @@ def plot_scp_convergence_histories(result: OptimizationResults):
     fig.update_yaxes(title_text="Reduction", row=2, col=1)  # Linear scale
 
     fig.update_xaxes(title_text="Iteration", row=3, col=1)
-    fig.update_yaxes(title_text="Acceptance Ratio (ρ)", row=3, col=1)
+    fig.update_yaxes(title_text="Acceptance Ratio (ρ)", row=3, col=1, range=[-0.5, 1.5])
 
     return fig
