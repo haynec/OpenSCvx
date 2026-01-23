@@ -38,6 +38,9 @@ def _hash_byof(byof: Optional["ByofSpec"]) -> bytes:
     for c in byof.get("ctcs_constraints", []):
         codes.append(c["constraint_fn"].__code__.co_code)
         codes.append(repr(c["constraint_fn"].__code__.co_consts).encode())
+    for f in byof.get("convex_costs", []):
+        codes.append(f.__code__.co_code)
+        codes.append(repr(f.__code__.co_consts).encode())
 
     return b"".join(codes)
 

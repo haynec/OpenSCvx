@@ -700,5 +700,7 @@ def lower_symbolic_problem(
         u_unified=u_unified,
         x_prop_unified=x_prop_unified,
         cvxpy_params=cvxpy_params,
+        parameters=problem.parameters,  # Store parameter values dict
         algebraic_prop=algebraic_prop_lowered,
+        byof=byof,
     )

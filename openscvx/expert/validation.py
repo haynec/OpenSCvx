@@ -45,7 +45,7 @@ def validate_byof(
     import jax.numpy as jnp
 
     # Validate byof keys
-    valid_keys = {"dynamics", "nodal_constraints", "cross_nodal_constraints", "ctcs_constraints"}
+    valid_keys = {"dynamics", "nodal_constraints", "cross_nodal_constraints", "ctcs_constraints", "convex_costs"}
     invalid_keys = set(byof.keys()) - valid_keys
     if invalid_keys:
         raise ValueError(f"Unknown byof keys: {invalid_keys}. Valid keys: {valid_keys}")
@@ -354,4 +354,17 @@ def validate_byof(
                     raise ValueError(
                         f"byof ctcs_constraints[{i}]['over'] end ({end}) exceeds "
                         f"trajectory length ({N})"
+                    )
+
+    # Validate convex costs
+    for i, cost_fn in enumerate(byof.get("convex_costs", [])):
+        if not callable(cost_fn):
+            raise TypeError(f"byof convex_costs[{i}] must be callable, got {type(cost_fn)}")
+
+        # Check signature - should accept (ocp_vars, settings, params)
+        sig = inspect.signature(cost_fn)
+        if len(sig.parameters) != 3:
+            raise ValueError(
+                f"byof convex_costs[{i}] must have signature f(ocp_vars, settings, params), "
+                f"got {len(sig.parameters)} parameters: {list(sig.parameters.keys())}"
                     )

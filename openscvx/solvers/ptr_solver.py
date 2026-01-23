@@ -686,6 +686,26 @@ def _build_optimal_control_problem(
         ]
         constr += [x_nonscaled[0][idx] == 0]
 
+    ########
+    # BYOF CONVEX COSTS
+    ########
+    # Add user-defined convex costs from byof interface
+    if lowered.byof is not None:
+        convex_costs = lowered.byof.get("convex_costs", [])
+        # Use parameter values from lowered.parameters (contains all parameters from symbolic problem)
+        # This ensures all parameters are accessible, even if they're not used in constraints
+        params_dict = dict(lowered.parameters) if lowered.parameters else {}
+        # Update with current CVXPy parameter values (in case they were modified after initialization)
+        # Note: Parameters accessed via params_dict are fixed at problem build time.
+        # For updateable parameters during solve, access via ocp_vars.cvxpy_params[name].value
+        if lowered.cvxpy_params is not None:
+            for name, param in lowered.cvxpy_params.items():
+                if param.value is not None:
+                    params_dict[name] = param.value
+        for cost_fn in convex_costs:
+            cost_expr = cost_fn(ocp_vars, settings, params_dict)
+            cost += cost_expr
+
     #########
     # PROBLEM
     #########

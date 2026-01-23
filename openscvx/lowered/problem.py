@@ -66,5 +66,11 @@ class LoweredProblem:
     # CVXPy constraint parameters (user-defined parameters lowered to CVXPy)
     cvxpy_params: Dict[str, "cp.Parameter"]
 
+    # Parameter values dict (from symbolic problem, contains all parameters)
+    parameters: Dict[str, any] = field(default_factory=dict)
+
     # Algebraic outputs (vmapped JAX functions for propagation)
     algebraic_prop: Optional[Dict[str, Callable]] = field(default_factory=dict)
+
+    # BYOF specification (for convex costs and other expert features)
+    byof: Optional[dict] = None

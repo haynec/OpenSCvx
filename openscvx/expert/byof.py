@@ -92,10 +92,16 @@ from typing import TYPE_CHECKING, Any, Callable, List, Literal, Tuple, TypedDict
 
 if TYPE_CHECKING:
     from jax import Array as JaxArray
+    import cvxpy as cp
+    from openscvx.lowered.cvxpy_variables import CVXPyVariables
+    from openscvx.config import Config
 else:
     JaxArray = Any
+    cp = Any
+    CVXPyVariables = Any
+    Config = Any
 
-__all__ = ["ByofSpec", "CtcsConstraintSpec", "NodalConstraintSpec", "PenaltyFunction"]
+__all__ = ["ByofSpec", "CtcsConstraintSpec", "NodalConstraintSpec", "PenaltyFunction", "ConvexCostFunction"]
 
 
 # Type aliases for clarity
@@ -104,6 +110,7 @@ NodalConstraintFunction = Callable[[JaxArray, JaxArray, int, dict], JaxArray]
 CrossNodalConstraintFunction = Callable[[JaxArray, JaxArray, dict], JaxArray]
 CtcsConstraintFunction = Callable[[JaxArray, JaxArray, int, dict], float]
 PenaltyFunction = Union[Literal["square", "l1", "huber"], Callable[[float], float]]
+ConvexCostFunction = Callable[["CVXPyVariables", "Config", dict], "cp.Expression"]
 
 
 class NodalConstraintSpec(TypedDict, total=False):
@@ -270,6 +277,15 @@ class ByofSpec(TypedDict, total=False):
         ctcs_constraints: Continuous-time constraint satisfaction via dynamics augmentation.
             Each adds an augmented state accumulating violation penalties.
             See :class:`CtcsConstraintSpec` for details.
+        convex_costs: List of functions that add arbitrary convex costs to the convex subproblem.
+            Each function has signature ``(ocp_vars, settings, params) -> cvxpy.Expression`` where:
+            - ``ocp_vars``: CVXPyVariables dataclass containing all CVXPy variables and parameters
+            - ``settings``: Config object with problem settings
+            - ``params``: Dict of user parameters (same as problem.parameters)
+            - Returns: CVXPy expression to add to the cost (must be convex)
+            All parameters from ocp_vars are accessible (x, u, x_nonscaled, u_nonscaled, etc.).
+            See :class:`CVXPyVariables` for available variables and parameters.
+            Note: Uses CVXPy operations, not JAX (different from other byof functions).
 
     Example:
         Custom dynamics and constraints::
@@ -324,3 +340,4 @@ class ByofSpec(TypedDict, total=False):
     nodal_constraints: List[NodalConstraintSpec]
     cross_nodal_constraints: List[CrossNodalConstraintFunction]
     ctcs_constraints: List[CtcsConstraintSpec]
+    convex_costs: List[ConvexCostFunction]
