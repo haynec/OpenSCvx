@@ -19,6 +19,7 @@ import pytest
 
 from openscvx.symbolic.expr import (
     Constant,
+    Control,
     Norm,
     Parameter,
     State,
@@ -648,3 +649,123 @@ def test_vmap_multi_batch_jax_mixed():
     # dist to [3,4,0] is 5, minus 2 = 3
     expected2 = jnp.array([-1.0, 3.0])
     assert jnp.allclose(result2, expected2, atol=1e-12)
+
+
+# =============================================================================
+# Vmap: State/Control Batching Support
+# =============================================================================
+
+
+def test_vmap_state_batch():
+    """Test Vmap with State batch source: creation, properties, and canonicalization."""
+    positions = State("positions", shape=(5, 3))
+
+    vmap_expr = Vmap(lambda pos: Norm(pos), batch=positions)
+
+    # Creation and properties
+    assert vmap_expr.num_batches == 1
+    assert vmap_expr.is_state == (True,)
+    assert vmap_expr.is_parameter == (False,)
+    assert vmap_expr.is_control == (False,)
+    assert vmap_expr.batch is positions
+    assert vmap_expr.placeholder.shape == (3,)
+    assert vmap_expr.check_shape() == (5,)
+
+    # Children includes State
+    children = vmap_expr.children()
+    assert len(children) == 2
+    assert children[1] is positions
+
+    # Repr
+    assert "State" in repr(vmap_expr) and "positions" in repr(vmap_expr)
+
+    # Canonicalization preserves state info
+    canonical = vmap_expr.canonicalize()
+    assert canonical.is_state == (True,)
+    assert canonical.batch is positions
+
+
+def test_vmap_control_batch():
+    """Test Vmap with Control batch source: creation and properties."""
+    thrusters = Control("thrusters", shape=(4,))
+
+    vmap_expr = Vmap(lambda t: t * 2, batch=thrusters)
+
+    assert vmap_expr.num_batches == 1
+    assert vmap_expr.is_control == (True,)
+    assert vmap_expr.is_state == (False,)
+    assert vmap_expr.batch is thrusters
+    assert vmap_expr.placeholder.shape == ()
+    assert "Control" in repr(vmap_expr) and "thrusters" in repr(vmap_expr)
+
+
+def test_vmap_state_control_jax_lowering():
+    """Test JAX lowering with State, Control, and mixed batches."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    # --- State batch ---
+    positions = State("positions", shape=(3, 2))
+    positions._slice = slice(0, 6)
+
+    vmap_state = Vmap(lambda pos: Norm(pos, ord=2), batch=positions)
+    fn_state = lower_to_jax(vmap_state)
+
+    x_val = jnp.array([1.0, 0.0, 0.0, 1.0, 3.0, 4.0])  # [1,0], [0,1], [3,4]
+    result = fn_state(x_val, None, None, {})
+    assert jnp.allclose(result, jnp.array([1.0, 1.0, 5.0]), atol=1e-12)
+
+    # --- Control batch ---
+    thrusters = Control("thrusters", shape=(4,))
+    thrusters._slice = slice(0, 4)
+
+    vmap_ctrl = Vmap(lambda t: t * 2.0, batch=thrusters)
+    fn_ctrl = lower_to_jax(vmap_ctrl)
+
+    u_val = jnp.array([1.0, 2.0, 3.0, 4.0])
+    result = fn_ctrl(None, u_val, None, {})
+    assert jnp.allclose(result, jnp.array([2.0, 4.0, 6.0, 8.0]), atol=1e-12)
+
+    # --- Mixed State + Parameter ---
+    max_dists = Parameter("max_dists", shape=(3,), value=np.array([2.0, 2.0, 10.0]))
+    vmap_mixed = Vmap(
+        lambda pos, max_d: max_d - Norm(pos, ord=2),
+        batch=[positions, max_dists],
+    )
+    assert vmap_mixed.is_state == (True, False)
+    assert vmap_mixed.is_parameter == (False, True)
+
+    fn_mixed = lower_to_jax(vmap_mixed)
+    params = {"max_dists": jnp.array([2.0, 2.0, 10.0])}
+    result = fn_mixed(x_val, None, None, params)
+    assert jnp.allclose(result, jnp.array([1.0, 1.0, 5.0]), atol=1e-12)
+
+
+def test_vmap_mixed_state_control_batch():
+    """Test Vmap with mixed State and Control batches."""
+    positions = State("positions", shape=(4, 3))
+    thrusts = Control("thrusts", shape=(4, 3))
+
+    vmap_expr = Vmap(
+        lambda pos, thrust: Norm(pos) + Norm(thrust),
+        batch=[positions, thrusts],
+    )
+
+    assert vmap_expr.num_batches == 2
+    assert vmap_expr.is_state == (True, False)
+    assert vmap_expr.is_control == (False, True)
+    assert vmap_expr.check_shape() == (4,)
+
+
+def test_vmap_state_no_slice_raises():
+    """Test that lowering State batch without slice assigned raises error."""
+    from openscvx.symbolic.lower import lower_to_jax
+
+    positions = State("positions", shape=(3, 2))
+    # Intentionally not setting _slice
+
+    vmap_expr = Vmap(lambda pos: Norm(pos), batch=positions)
+
+    with pytest.raises(ValueError, match="has no slice assigned"):
+        lower_to_jax(vmap_expr)

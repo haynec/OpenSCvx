@@ -4,12 +4,16 @@ This module provides symbolic support for JAX's vmap (vectorized map) operation,
 enabling efficient data-parallel computations over batched data within the
 symbolic expression framework.
 
-Vmap supports two modes based on the type of `batch`:
+Vmap supports multiple modes based on the type of `batch`:
 
 - **Constant/array**: Values baked into the compiled function at trace time,
   equivalent to closure-captured values in BYOF. Use for static data.
 - **Parameter**: Values looked up from params dict at runtime, allowing
   updates between SCP iterations. Use for data that may change.
+- **State**: Values extracted from the unified state vector at runtime,
+  enabling vectorized operations over state elements (e.g., multi-agent).
+- **Control**: Values extracted from the unified control vector at runtime,
+  enabling vectorized operations over control elements.
 
 Vmap also supports batching over multiple arguments by passing a list of
 batch sources. Each batch source is mapped to a corresponding lambda argument.
@@ -45,20 +49,33 @@ Example:
             lambda center, radius: radius <= ox.linalg.Norm(position - center),
             batch=[obs_centers, obs_radii]
         )
+
+    Batch over state elements (e.g., multi-agent constraint)::
+
+        # State with n_agents positions
+        positions = ox.State("positions", shape=(n_agents, 3))
+
+        # Apply constraint to each agent's position
+        constraints = ox.Vmap(
+            lambda pos: ox.linalg.Norm(pos) <= max_dist,
+            batch=positions
+        )
 """
 
 import uuid
-from typing import TYPE_CHECKING, Callable, List, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Sequence, Tuple, Union
 
 import numpy as np
 
+from .control import Control
 from .expr import Constant, Expr, Leaf
+from .state import State
 
 if TYPE_CHECKING:
     from .expr import Parameter
 
 # Type alias for a single batch source
-BatchSource = Union[np.ndarray, Constant, "Parameter"]
+BatchSource = Union[np.ndarray, Constant, "Parameter", State, Control]
 
 
 class _Placeholder(Leaf):
@@ -120,13 +137,19 @@ class Vmap(Expr):
       at trace time, equivalent to closure-captured values in BYOF.
     - **Parameter**: Data is looked up from the params dict at runtime,
       allowing the same compiled code to be reused with different values.
+    - **State**: Data is extracted from the unified state vector at runtime,
+      enabling vectorized operations over state elements (e.g., multi-agent).
+    - **Control**: Data is extracted from the unified control vector at runtime,
+      enabling vectorized operations over control elements.
 
     Attributes:
-        _batches (tuple): Tuple of data sources (Constant or Parameter)
+        _batches (tuple): Tuple of data sources (Constant, Parameter, State, or Control)
         _axis (int): The axis to vmap over (default: 0)
         _placeholders (tuple): Tuple of placeholders used in the expression
         _child (Expr): The expression tree built from the user's lambda
         _is_parameter (tuple): Tuple of bools indicating which batches are Parameters
+        _is_state (tuple): Tuple of bools indicating which batches are States
+        _is_control (tuple): Tuple of bools indicating which batches are Controls
 
     Example:
         Compute distances to multiple reference points (baked-in)::
@@ -164,10 +187,35 @@ class Vmap(Expr):
             )
             # constraints has shape (100,)
 
+        With State batching (multi-agent)::
+
+            # State representing n_agents positions, each 3D
+            agent_positions = ox.State("agent_positions", shape=(n_agents, 3))
+
+            # Apply constraint to each agent's position
+            constraints = ox.Vmap(
+                lambda pos: ox.linalg.Norm(pos) <= max_distance,
+                batch=agent_positions
+            )
+            # constraints has shape (n_agents,)
+
+        With Control batching::
+
+            # Control representing n_thrusters, each scalar
+            thrusters = ox.Control("thrusters", shape=(n_thrusters,))
+
+            # Apply constraint to each thruster
+            constraints = ox.Vmap(
+                lambda t: t <= max_thrust,
+                batch=thrusters
+            )
+            # constraints has shape (n_thrusters,)
+
     Note:
         - For static data that won't change, pass a numpy array or Constant
           to get closure-equivalent behavior (numerically identical to BYOF).
         - For data that needs to be updated between iterations, use Parameter.
+        - For vectorized operations over state/control elements, pass State/Control.
         - When using multiple batches, all must have the same size along the
           vmap axis.
 
@@ -203,12 +251,14 @@ class Vmap(Expr):
                 arguments and returns a symbolic expression. Each Placeholder
                 represents a single element from the corresponding batched data.
             batch: The batched data to vmap over. Can be:
-                  - A single batch source (numpy array, Constant, or Parameter)
+                  - A single batch source (numpy array, Constant, Parameter, State, or Control)
                   - A list/tuple of batch sources for multi-argument vmapping
                   Each batch source can be:
                   - numpy array: baked into compiled function (closure-equivalent)
                   - Constant: baked into compiled function (closure-equivalent)
                   - Parameter: looked up from params dict at runtime
+                  - State: extracted from unified state vector at runtime
+                  - Control: extracted from unified control vector at runtime
             axis: The axis to vmap over. Default is 0 (first axis).
                   Applied to all batch sources.
 
@@ -230,6 +280,11 @@ class Vmap(Expr):
                     lambda c, r: r <= ox.linalg.Norm(position - c),
                     batch=[centers, radii]
                 )
+
+            State batching (multi-agent)::
+
+                agent_positions = ox.State("positions", shape=(n_agents, 3))
+                ox.Vmap(lambda pos: g(pos), batch=agent_positions)
         """
         from .expr import Parameter
 
@@ -240,37 +295,54 @@ class Vmap(Expr):
             batch_list = [batch]
 
         # Normalize each batch source: wrap raw arrays in Constant
+        # Keep State/Control/Parameter as-is
         normalized_batches = []
         is_parameter_flags = []
+        is_state_flags = []
+        is_control_flags = []
         for b in batch_list:
             if isinstance(b, np.ndarray):
                 b = Constant(b)
-            elif not isinstance(b, (Constant, Parameter)):
+            elif not isinstance(b, (Constant, Parameter, State, Control)):
                 # Try to convert to array then Constant
                 b = Constant(np.asarray(b))
             normalized_batches.append(b)
             is_parameter_flags.append(isinstance(b, Parameter))
+            is_state_flags.append(isinstance(b, State))
+            is_control_flags.append(isinstance(b, Control))
 
         self._batches = tuple(normalized_batches)
         self._axis = axis
         self._is_parameter = tuple(is_parameter_flags)
+        self._is_state = tuple(is_state_flags)
+        self._is_control = tuple(is_control_flags)
 
         # Get batch size from first batch and validate all batches match
-        def get_batch_shape(b, is_param):
-            return b.shape if is_param else b.value.shape
+        def get_batch_shape(b, is_param, is_state, is_control):
+            # Parameter, State, and Control have .shape directly
+            # Constant has .value.shape
+            if is_param or is_state or is_control:
+                return b.shape
+            else:
+                return b.value.shape
 
-        first_shape = get_batch_shape(self._batches[0], self._is_parameter[0])
+        first_shape = get_batch_shape(
+            self._batches[0],
+            self._is_parameter[0],
+            self._is_state[0],
+            self._is_control[0],
+        )
         if axis < 0 or axis >= len(first_shape):
             raise ValueError(f"Vmap axis {axis} out of bounds for data with shape {first_shape}")
         batch_size = first_shape[axis]
 
         # Validate all batches have the same size along the vmap axis
-        for i, (b, is_param) in enumerate(zip(self._batches, self._is_parameter)):
-            shape = get_batch_shape(b, is_param)
+        for i, (b, is_param, is_state, is_control) in enumerate(
+            zip(self._batches, self._is_parameter, self._is_state, self._is_control)
+        ):
+            shape = get_batch_shape(b, is_param, is_state, is_control)
             if axis >= len(shape):
-                raise ValueError(
-                    f"Vmap axis {axis} out of bounds for batch {i} with shape {shape}"
-                )
+                raise ValueError(f"Vmap axis {axis} out of bounds for batch {i} with shape {shape}")
             if shape[axis] != batch_size:
                 raise ValueError(
                     f"Batch size mismatch: batch 0 has size {batch_size} along axis {axis}, "
@@ -279,8 +351,10 @@ class Vmap(Expr):
 
         # Create placeholders for each batch
         placeholders = []
-        for b, is_param in zip(self._batches, self._is_parameter):
-            shape = get_batch_shape(b, is_param)
+        for b, is_param, is_state, is_control in zip(
+            self._batches, self._is_parameter, self._is_state, self._is_control
+        ):
+            shape = get_batch_shape(b, is_param, is_state, is_control)
             # Compute per-element shape by removing the vmap axis
             per_elem_shape = tuple(s for i, s in enumerate(shape) if i != axis)
             placeholders.append(_Placeholder(shape=per_elem_shape))
@@ -294,12 +368,12 @@ class Vmap(Expr):
             self._child = fn(*self._placeholders)
 
     @property
-    def batches(self) -> Tuple[Union[Constant, "Parameter"], ...]:
+    def batches(self) -> Tuple[Union[Constant, "Parameter", State, Control], ...]:
         """Tuple of batched data sources being vmapped over."""
         return self._batches
 
     @property
-    def batch(self) -> Union[Constant, "Parameter"]:
+    def batch(self) -> Union[Constant, "Parameter", State, Control]:
         """The first batched data source (for single-batch backward compatibility)."""
         return self._batches[0]
 
@@ -324,6 +398,16 @@ class Vmap(Expr):
         return self._is_parameter
 
     @property
+    def is_state(self) -> Tuple[bool, ...]:
+        """Tuple of bools indicating which batches are States (state vector lookup)."""
+        return self._is_state
+
+    @property
+    def is_control(self) -> Tuple[bool, ...]:
+        """Tuple of bools indicating which batches are Controls (control vector lookup)."""
+        return self._is_control
+
+    @property
     def num_batches(self) -> int:
         """Number of batch arguments."""
         return len(self._batches)
@@ -332,14 +416,16 @@ class Vmap(Expr):
         """Return child expressions.
 
         Returns:
-            list: The vmapped expression and any Parameter data sources.
-                  Parameters are included so traverse() finds them for parameter
+            list: The vmapped expression and any Parameter/State/Control data sources.
+                  These are included so traverse() finds them for parameter/variable
                   collection in preprocessing.
         """
         result = [self._child]
-        # Include Parameter batches so they are discovered during traversal
-        for b, is_param in zip(self._batches, self._is_parameter):
-            if is_param:
+        # Include Parameter/State/Control batches so they are discovered during traversal
+        for b, is_param, is_state, is_control in zip(
+            self._batches, self._is_parameter, self._is_state, self._is_control
+        ):
+            if is_param or is_state or is_control:
                 result.append(b)
         return result
 
@@ -357,6 +443,8 @@ class Vmap(Expr):
         new_vmap._placeholders = self._placeholders
         new_vmap._child = canon_child
         new_vmap._is_parameter = self._is_parameter
+        new_vmap._is_state = self._is_state
+        new_vmap._is_control = self._is_control
         return new_vmap
 
     def check_shape(self) -> Tuple[int, ...]:
@@ -377,7 +465,8 @@ class Vmap(Expr):
 
         # Get batch size from first batch (all batches have same size along axis)
         first_batch = self._batches[0]
-        if self._is_parameter[0]:
+        # Parameter, State, and Control have .shape directly; Constant has .value.shape
+        if self._is_parameter[0] or self._is_state[0] or self._is_control[0]:
             batch_size = first_batch.shape[self._axis]
         else:
             batch_size = first_batch.value.shape[self._axis]
@@ -394,10 +483,14 @@ class Vmap(Expr):
         hasher.update(str(self._axis).encode())
         hasher.update(str(len(self._batches)).encode())
 
-        for b, is_param in zip(self._batches, self._is_parameter):
+        for b, is_param, is_state, is_control in zip(
+            self._batches, self._is_parameter, self._is_state, self._is_control
+        ):
             hasher.update(str(is_param).encode())
-            if is_param:
-                # Hash Parameter by name and shape (not value - value can change)
+            hasher.update(str(is_state).encode())
+            hasher.update(str(is_control).encode())
+            if is_param or is_state or is_control:
+                # Hash Parameter/State/Control by name and shape (not value - value can change)
                 b._hash_into(hasher)
             else:
                 # Hash Constant by value (baked in, won't change)
@@ -412,9 +505,15 @@ class Vmap(Expr):
             str: Description of the Vmap
         """
         batch_strs = []
-        for b, is_param in zip(self._batches, self._is_parameter):
+        for b, is_param, is_state, is_control in zip(
+            self._batches, self._is_parameter, self._is_state, self._is_control
+        ):
             if is_param:
                 batch_strs.append(f"Parameter({b.name!r})")
+            elif is_state:
+                batch_strs.append(f"State({b.name!r})")
+            elif is_control:
+                batch_strs.append(f"Control({b.name!r})")
             else:
                 batch_strs.append(f"Constant(shape={b.value.shape})")
 
