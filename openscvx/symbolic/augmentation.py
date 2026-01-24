@@ -53,7 +53,7 @@ Example:
         # controls_aug includes original controls + time dilation
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 
@@ -383,126 +383,6 @@ def get_nodal_constraints_from_ctcs(
         if ctcs.check_nodally:
             nodal_ctcs.append((ctcs.constraint, ctcs.nodes))
     return nodal_ctcs
-
-
-def augment_with_time_state(
-    states: List[State],
-    constraints: ConstraintSet,
-    time_initial: float | tuple,
-    time_final: float | tuple,
-    time_min: float,
-    time_max: float,
-    N: int,
-    time_scaling_min: Optional[float] = None,
-    time_scaling_max: Optional[float] = None,
-) -> Tuple[List[State], ConstraintSet]:
-    """Augment problem with a time state variable.
-
-    Creates a time state variable if one doesn't already exist and adds it to the
-    states list. Also adds CTCS constraints to enforce time bounds continuously
-    throughout the trajectory.
-
-    The time state tracks physical time along the trajectory and is used for
-    time-optimal control problems. Boundary conditions can be fixed values or
-    free variables with initial guesses.
-
-    Args:
-        states: List of State objects (will not be modified, copy is returned)
-        constraints: ConstraintSet with unsorted constraints (will be modified in place)
-        time_initial: Initial time boundary condition:
-            - float: Fixed initial time
-            - tuple: ("free", guess) for free initial time with initial guess
-        time_final: Final time boundary condition (same format as time_initial)
-        time_min: Minimum bound for time variable throughout trajectory
-        time_max: Maximum bound for time variable throughout trajectory
-        N: Number of discretization nodes (for initial guess generation)
-
-    Returns:
-        Tuple of:
-            - Updated states list (original + time state if created)
-            - The same ConstraintSet with time CTCS constraints added to unsorted
-
-    Note:
-        If a state named "time" already exists (either a Time instance or a
-        regular State), it is not recreated. For Time instances, the default
-        guess is filled in if not already set.
-
-    Example:
-        Get augmented states::
-
-            x = ox.State("x", shape=(3,))
-            constraints = ConstraintSet()
-            states_aug, constraints = augment_with_time_state(
-                states=[x],
-                constraints=constraints,
-                time_initial=0.0,
-                time_final=("free", 10.0),
-                time_min=0.0,
-                time_max=100.0,
-                N=50
-            )
-
-        states_aug now includes time state with initial=0, final=free
-    """
-    from openscvx.symbolic.time import Time
-
-    # Create copy of states to avoid mutating input
-    states_aug = list(states)
-
-    # Check if a time state already exists
-    time_state = None
-    for state in states_aug:
-        if state.name == "time":
-            time_state = state
-            break
-
-    if time_state is None:
-        # Create time State only if it doesn't exist
-        time_state = State("time", shape=(1,))
-        time_state.min = np.array([time_min])
-        time_state.max = np.array([time_max])
-
-        # Set time boundary conditions
-        time_state.initial = [time_initial]
-        time_state.final = [time_final]
-
-        # Create initial guess for time (linear interpolation)
-        time_guess_start = (
-            time_state.initial[0]
-            if isinstance(time_state.initial[0], (int, float))
-            else time_state.initial[0][1]
-        )
-        time_guess_end = (
-            time_state.final[0]
-            if isinstance(time_state.final[0], (int, float))
-            else time_state.final[0][1]
-        )
-        time_state.guess = np.linspace(time_guess_start, time_guess_end, N).reshape(-1, 1)
-
-        # Transfer scaling_min/max from Time object if provided
-        if time_scaling_min is not None:
-            time_state.scaling_min = np.array([time_scaling_min])
-        if time_scaling_max is not None:
-            time_state.scaling_max = np.array([time_scaling_max])
-
-        # Add time state to the list
-        states_aug.append(time_state)
-
-        # Add CTCS constraints for time bounds to unsorted
-        constraints.unsorted.append(CTCS(time_state <= time_state.max))
-        constraints.unsorted.append(CTCS(time_state.min <= time_state))
-    else:
-        # Time state already exists - handle Time instances specially
-        if isinstance(time_state, Time):
-            # Fill in default guess if not already set
-            if time_state.guess is None:
-                time_state.guess = time_state._generate_default_guess(N)
-
-            # Add CTCS constraints for time bounds (Time instances need these too)
-            constraints.unsorted.append(CTCS(time_state <= time_state.max))
-            constraints.unsorted.append(CTCS(time_state.min <= time_state))
-
-    return states_aug, constraints
 
 
 def augment_dynamics_with_ctcs(
