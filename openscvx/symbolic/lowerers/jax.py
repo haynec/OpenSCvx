@@ -1447,12 +1447,15 @@ class JaxLowerer:
     def _visit_vmap(self, node: Vmap):
         """Lower Vmap to jax.vmap.
 
-        Handles two cases based on the type of the data source:
+        Handles two cases based on the type of each data source:
 
         - **Constant/array**: Data is baked into the closure at lowering time,
           equivalent to closure-captured values in BYOF.
         - **Parameter**: Data is looked up from params dict at runtime,
           allowing updates between SCP iterations.
+
+        Supports multiple batch arguments, each mapped to a corresponding
+        placeholder in the inner expression.
 
         Args:
             node: Vmap expression node
@@ -1461,36 +1464,77 @@ class JaxLowerer:
             Function (x, u, node_idx, params) -> vmapped result
 
         Example:
-            For ox.Vmap(lambda p: ox.linalg.Norm(x - p), over=points):
+            For ox.Vmap(lambda p: ox.linalg.Norm(x - p), batch=points):
             - points has shape (10, 3)
             - Output has shape (10,) - one norm per point
+
+            For ox.Vmap(lambda c, r: r <= norm(x - c), batch=[centers, radii]):
+            - centers has shape (100, 3), radii has shape (100,)
+            - Output has shape (100,) - one result per center/radius pair
         """
         inner_fn = self.lower(node._child)
-        placeholder_key = node._placeholder.name
         axis = node._axis
+        num_batches = node.num_batches
 
-        if node.is_parameter:
-            # Parameter: runtime lookup from params dict
-            param_name = node._batch.name
+        # Collect placeholder keys and classify batches
+        placeholder_keys = tuple(p.name for p in node._placeholders)
+
+        # Check if any batch is a Parameter (requires runtime lookup)
+        any_parameter = any(node._is_parameter)
+
+        if any_parameter:
+            # At least one Parameter: need runtime lookup
+            # Build lists of param names (for Parameters) and baked data (for Constants)
+            param_names = []
+            baked_data = []
+            for b, is_param in zip(node._batches, node._is_parameter):
+                if is_param:
+                    param_names.append(b.name)
+                    baked_data.append(None)
+                else:
+                    param_names.append(None)
+                    baked_data.append(jnp.array(b.value))
+
+            # Freeze these for the closure
+            param_names = tuple(param_names)
+            baked_data = tuple(baked_data)
+            is_parameter = node._is_parameter
 
             def vmapped_fn(x, u, node_idx, params):
-                # Look up the batched data from params at runtime
-                data = params[param_name]
+                # Gather data from params (for Parameters) or baked values (for Constants)
+                data_arrays = []
+                for pname, baked, is_param in zip(param_names, baked_data, is_parameter):
+                    if is_param:
+                        data_arrays.append(params[pname])
+                    else:
+                        data_arrays.append(baked)
 
-                def inner(v):
-                    return inner_fn(x, u, node_idx, {**params, placeholder_key: v})
+                def inner(*vs):
+                    # Inject all placeholder values into params
+                    new_params = {**params}
+                    for key, v in zip(placeholder_keys, vs):
+                        new_params[key] = v
+                    return inner_fn(x, u, node_idx, new_params)
 
-                return jax.vmap(inner, in_axes=axis)(data)
+                # vmap over all batch arguments along the same axis
+                in_axes = tuple(axis for _ in range(num_batches))
+                return jax.vmap(inner, in_axes=in_axes)(*data_arrays)
 
         else:
-            # Constant/array: baked in at lowering time (closure-equivalent)
-            data = jnp.array(node._batch.value)
+            # All Constants: bake all data into closure at lowering time
+            baked_data = tuple(jnp.array(b.value) for b in node._batches)
 
             def vmapped_fn(x, u, node_idx, params):
-                def inner(v):
-                    return inner_fn(x, u, node_idx, {**params, placeholder_key: v})
+                def inner(*vs):
+                    # Inject all placeholder values into params
+                    new_params = {**params}
+                    for key, v in zip(placeholder_keys, vs):
+                        new_params[key] = v
+                    return inner_fn(x, u, node_idx, new_params)
 
-                return jax.vmap(inner, in_axes=axis)(data)
+                # vmap over all batch arguments along the same axis
+                in_axes = tuple(axis for _ in range(num_batches))
+                return jax.vmap(inner, in_axes=in_axes)(*baked_data)
 
         return vmapped_fn
 

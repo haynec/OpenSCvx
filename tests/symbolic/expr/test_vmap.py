@@ -65,7 +65,8 @@ def test_vmap_creation_with_numpy_array():
 
     assert isinstance(vmap_expr, Vmap)
     assert vmap_expr.axis == 0
-    assert not vmap_expr.is_parameter
+    assert vmap_expr.is_parameter == (False,)
+    assert vmap_expr.num_batches == 1
     assert isinstance(vmap_expr.batch, Constant)
     assert isinstance(vmap_expr.placeholder, _Placeholder)
     assert vmap_expr.placeholder.shape == (3,)  # Per-element shape
@@ -79,7 +80,7 @@ def test_vmap_creation_with_constant():
     vmap_expr = Vmap(lambda p: Norm(x - p), batch=data)
 
     assert isinstance(vmap_expr, Vmap)
-    assert not vmap_expr.is_parameter
+    assert vmap_expr.is_parameter == (False,)
     assert vmap_expr.batch is data
 
 
@@ -92,7 +93,7 @@ def test_vmap_creation_with_parameter():
     vmap_expr = Vmap(lambda p: Norm(x - p), batch=refs)
 
     assert isinstance(vmap_expr, Vmap)
-    assert vmap_expr.is_parameter
+    assert vmap_expr.is_parameter == (True,)
     assert vmap_expr.batch is refs
 
 
@@ -226,7 +227,7 @@ def test_vmap_canonicalize():
     # Should still be a Vmap with preserved properties
     assert isinstance(canonical, Vmap)
     assert canonical.axis == 0
-    assert canonical.is_parameter
+    assert canonical.is_parameter == (True,)
     assert canonical.placeholder is vmap_expr.placeholder
 
 
@@ -412,3 +413,238 @@ def test_vmap_hash():
     # Placeholders also have unique hashes
     p1, p2 = _Placeholder(shape=(3,)), _Placeholder(shape=(3,))
     assert p1.structural_hash() != p2.structural_hash()
+
+
+# =============================================================================
+# Vmap: Multi-Batch Support
+# =============================================================================
+
+
+def test_vmap_multi_batch_creation():
+    """Test Vmap creation with multiple batch arguments."""
+    x = Variable("x", shape=(3,))
+    centers = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+    radii = np.array([0.5, 0.7, 0.9])
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c) - r,
+        batch=[centers, radii],
+    )
+
+    assert vmap_expr.num_batches == 2
+    assert vmap_expr.is_parameter == (False, False)
+    assert len(vmap_expr.placeholders) == 2
+    assert vmap_expr.placeholders[0].shape == (3,)  # center shape
+    assert vmap_expr.placeholders[1].shape == ()  # radius shape (scalar)
+
+
+def test_vmap_multi_batch_with_parameters():
+    """Test Vmap with multiple Parameter batches."""
+    x = Variable("x", shape=(3,))
+    centers_data = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    radii_data = np.array([0.5, 0.7])
+
+    centers = Parameter("centers", shape=(2, 3), value=centers_data)
+    radii = Parameter("radii", shape=(2,), value=radii_data)
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c) - r,
+        batch=[centers, radii],
+    )
+
+    assert vmap_expr.num_batches == 2
+    assert vmap_expr.is_parameter == (True, True)
+    assert vmap_expr.batches[0] is centers
+    assert vmap_expr.batches[1] is radii
+
+
+def test_vmap_multi_batch_mixed_types():
+    """Test Vmap with mixed Constant and Parameter batches."""
+    x = Variable("x", shape=(3,))
+    centers = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])  # Will become Constant
+    radii = Parameter("radii", shape=(2,), value=np.array([0.5, 0.7]))
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c) - r,
+        batch=[centers, radii],
+    )
+
+    assert vmap_expr.num_batches == 2
+    assert vmap_expr.is_parameter == (False, True)
+    assert isinstance(vmap_expr.batches[0], Constant)
+    assert vmap_expr.batches[1] is radii
+
+
+def test_vmap_multi_batch_shape():
+    """Test shape checking for multi-batch Vmap."""
+    x = Variable("x", shape=(3,))
+    centers = np.random.randn(10, 3)
+    radii = np.random.randn(10)
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c) - r,
+        batch=[centers, radii],
+    )
+
+    # Inner expression produces scalar, vmap over 10 -> (10,)
+    assert vmap_expr.check_shape() == (10,)
+
+
+def test_vmap_multi_batch_size_mismatch():
+    """Test that Vmap raises error when batch sizes don't match."""
+    x = Variable("x", shape=(3,))
+    centers = np.random.randn(10, 3)
+    radii = np.random.randn(5)  # Different size!
+
+    with pytest.raises(ValueError, match="Batch size mismatch"):
+        Vmap(lambda c, r: Norm(x - c) - r, batch=[centers, radii])
+
+
+def test_vmap_multi_batch_children():
+    """Test children() for multi-batch Vmap with mixed types."""
+    x = Variable("x", shape=(3,))
+    centers = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])  # Constant
+    radii = Parameter("radii", shape=(2,), value=np.array([0.5, 0.7]))
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c) - r,
+        batch=[centers, radii],
+    )
+
+    children = vmap_expr.children()
+
+    # Should include inner expr and Parameter (but not Constant)
+    assert len(children) == 2
+    assert children[1] is radii
+
+
+def test_vmap_multi_batch_repr():
+    """Test repr for multi-batch Vmap."""
+    x = Variable("x", shape=(3,))
+    centers = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    radii = Parameter("radii", shape=(2,), value=np.array([0.5, 0.7]))
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c) - r,
+        batch=[centers, radii],
+    )
+
+    repr_str = repr(vmap_expr)
+    assert "Vmap" in repr_str
+    assert "Constant" in repr_str
+    assert "Parameter" in repr_str
+    assert "radii" in repr_str
+
+
+# --- Multi-Batch JAX Lowering ---
+
+
+def test_vmap_multi_batch_jax_constants():
+    """Test JAX lowering of multi-batch Vmap with all Constants."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(3,))
+    x._slice = slice(0, 3)
+
+    centers = np.array([[0.0, 0.0, 0.0], [3.0, 4.0, 0.0]])
+    radii = np.array([0.0, 1.0])
+
+    # distance - radius (obstacle avoidance style)
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c, ord=2) - r,
+        batch=[centers, radii],
+    )
+
+    fn = lower_to_jax(vmap_expr)
+
+    x_val = jnp.array([0.0, 0.0, 0.0])
+    result = fn(x_val, None, None, {})
+
+    # At origin: dist to [0,0,0] is 0, minus 0 = 0
+    #            dist to [3,4,0] is 5, minus 1 = 4
+    expected = jnp.array([0.0, 4.0])
+    assert jnp.allclose(result, expected, atol=1e-12)
+
+
+def test_vmap_multi_batch_jax_parameters():
+    """Test JAX lowering of multi-batch Vmap with all Parameters."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(3,))
+    x._slice = slice(0, 3)
+
+    centers_data = np.array([[0.0, 0.0, 0.0], [3.0, 4.0, 0.0]])
+    radii_data = np.array([0.0, 1.0])
+
+    centers = Parameter("centers", shape=(2, 3), value=centers_data)
+    radii = Parameter("radii", shape=(2,), value=radii_data)
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c, ord=2) - r,
+        batch=[centers, radii],
+    )
+
+    fn = lower_to_jax(vmap_expr)
+
+    x_val = jnp.array([0.0, 0.0, 0.0])
+    params = {
+        "centers": jnp.array(centers_data),
+        "radii": jnp.array(radii_data),
+    }
+    result = fn(x_val, None, None, params)
+
+    expected = jnp.array([0.0, 4.0])
+    assert jnp.allclose(result, expected, atol=1e-12)
+
+    # Test runtime update
+    params2 = {
+        "centers": jnp.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+        "radii": jnp.array([0.5, 0.5]),
+    }
+    result2 = fn(x_val, None, None, params2)
+
+    # dist to [1,0,0] is 1, minus 0.5 = 0.5
+    # dist to [0,1,0] is 1, minus 0.5 = 0.5
+    expected2 = jnp.array([0.5, 0.5])
+    assert jnp.allclose(result2, expected2, atol=1e-12)
+
+
+def test_vmap_multi_batch_jax_mixed():
+    """Test JAX lowering of multi-batch Vmap with mixed Constant/Parameter."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(3,))
+    x._slice = slice(0, 3)
+
+    # Centers are baked in (Constant), radii are runtime (Parameter)
+    centers = np.array([[0.0, 0.0, 0.0], [3.0, 4.0, 0.0]])
+    radii = Parameter("radii", shape=(2,), value=np.array([0.0, 1.0]))
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c, ord=2) - r,
+        batch=[centers, radii],
+    )
+
+    fn = lower_to_jax(vmap_expr)
+
+    x_val = jnp.array([0.0, 0.0, 0.0])
+
+    # First call
+    params1 = {"radii": jnp.array([0.0, 1.0])}
+    result1 = fn(x_val, None, None, params1)
+    expected1 = jnp.array([0.0, 4.0])
+    assert jnp.allclose(result1, expected1, atol=1e-12)
+
+    # Update radii at runtime (centers stay baked)
+    params2 = {"radii": jnp.array([1.0, 2.0])}
+    result2 = fn(x_val, None, None, params2)
+    # dist to [0,0,0] is 0, minus 1 = -1
+    # dist to [3,4,0] is 5, minus 2 = 3
+    expected2 = jnp.array([-1.0, 3.0])
+    assert jnp.allclose(result2, expected2, atol=1e-12)
