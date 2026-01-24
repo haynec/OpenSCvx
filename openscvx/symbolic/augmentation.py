@@ -423,8 +423,9 @@ def augment_with_time_state(
             - The same ConstraintSet with time CTCS constraints added to unsorted
 
     Note:
-        If a state named "time" already exists, it is not modified and no
-        constraints are added.
+        If a state named "time" already exists (either a Time instance or a
+        regular State), it is not recreated. For Time instances, the default
+        guess is filled in if not already set.
 
     Example:
         Get augmented states::
@@ -443,6 +444,8 @@ def augment_with_time_state(
 
         states_aug now includes time state with initial=0, final=free
     """
+    from openscvx.symbolic.time import Time
+
     # Create copy of states to avoid mutating input
     states_aug = list(states)
 
@@ -488,6 +491,16 @@ def augment_with_time_state(
         # Add CTCS constraints for time bounds to unsorted
         constraints.unsorted.append(CTCS(time_state <= time_state.max))
         constraints.unsorted.append(CTCS(time_state.min <= time_state))
+    else:
+        # Time state already exists - handle Time instances specially
+        if isinstance(time_state, Time):
+            # Fill in default guess if not already set
+            if time_state.guess is None:
+                time_state.guess = time_state._generate_default_guess(N)
+
+            # Add CTCS constraints for time bounds (Time instances need these too)
+            constraints.unsorted.append(CTCS(time_state <= time_state.max))
+            constraints.unsorted.append(CTCS(time_state.min <= time_state))
 
     return states_aug, constraints
 

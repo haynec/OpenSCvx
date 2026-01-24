@@ -650,63 +650,77 @@ def validate_time_parameters(
 ]:
     """Validate time parameter usage and configuration.
 
-    There are two valid approaches for handling time in trajectory optimization:
+    There are three valid approaches for handling time in trajectory optimization:
 
-    1. Auto-create time (recommended): Don't include "time" in states, provide Time object.
-       The time state is automatically created and managed.
+    1. Auto-add time (recommended): Provide Time object via `time=` argument.
+       Time is automatically added to states if not already present.
 
-    2. User-provided time (advanced): Include a "time" State in states. The Time object
-       is ignored and the user has full control over time dynamics.
+    2. Time in states list: Include the Time object directly in the states list.
+       This allows using time in constraint expressions. The `time=` argument
+       should still be provided (can be the same Time object or will be ignored).
+
+    3. Manual time state (advanced): Include a regular State("time", ...) in states.
+       The Time object is ignored and you have full control over time dynamics.
 
     Args:
-        states: List of State objects
-        time: Time configuration object (required, but ignored if time state exists)
+        states: List of State objects (may include a Time instance)
+        time: Time configuration object (required)
 
     Returns:
         Tuple of (has_time_state, time_initial, time_final, time_derivative, time_min, time_max):
-            - has_time_state: True if user provided a time state
-            - time_initial: Initial time value (None if user-provided time)
-            - time_final: Final time value (None if user-provided time)
-            - time_derivative: Always 1.0 for auto-created time (None if user-provided)
-            - time_min: Minimum time bound (None if user-provided)
-            - time_max: Maximum time bound (None if user-provided)
+            - has_time_state: True if time state already exists in states
+            - time_initial: Initial time value (None if time in states)
+            - time_final: Final time value (None if time in states)
+            - time_derivative: Always 1.0 for auto-created time (None if in states)
+            - time_min: Minimum time bound (None if time in states)
+            - time_max: Maximum time bound (None if time in states)
 
     Raises:
         ValueError: If Time object is not provided or has invalid type
 
     Example:
-            # Approach 1: Auto-create time
-            x = ox.State("x", shape=(3,))
-            time_obj = ox.Time(initial=0.0, final=10.0)
-            validate_time_parameters([x], time_obj)
-        (False, 0.0, 10.0, 1.0, None, None)
+        Approach 1 - Auto-add time:
 
-            # Approach 2: User-provided time
             x = ox.State("x", shape=(3,))
-            time_state = ox.State("time", shape=())
+            time_obj = ox.Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+            validate_time_parameters([x], time_obj)
+            # Returns (False, 0.0, 10.0, 1.0, 0.0, 20.0)
+
+        Approach 2 - Time in states (for time-dependent constraints):
+
+            x = ox.State("x", shape=(3,))
+            time_obj = ox.Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+            validate_time_parameters([x, time_obj], time_obj)
+            # Returns (True, None, None, None, None, None)
+
+        Approach 3 - Manual time state:
+
+            x = ox.State("x", shape=(3,))
+            time_state = ox.State("time", shape=(1,))
+            time_obj = ox.Time(initial=0.0, final=10.0, min=0.0, max=20.0)
             validate_time_parameters([x, time_state], time_obj)
-        (True, None, None, None, None, None)
+            # Returns (True, None, None, None, None, None)
     """
     from openscvx.symbolic.time import Time
 
     if not isinstance(time, Time):
         raise ValueError(f"Expected Time object, but got {type(time).__name__}")
 
+    # Check if any state named "time" exists (could be Time instance or regular State)
     has_time_state = any(state.name == "time" for state in states)
 
     if has_time_state:
-        # Approach 2: User-provided time state
-        # Time object is provided but ignored - user handles everything via State
-        # Return None for all time parameters since user handles everything
+        # Time state already in states list - user handles everything
+        # Return None for all time parameters since state already exists
         return True, None, None, None, None, None
     else:
-        # Approach 1: Auto-create time state
-        # Extract values from Time object
-        time_initial = time.initial
-        time_final = time.final
+        # Auto-add time state from Time object
+        # Extract values from Time object (use raw values stored during init)
+        time_initial = time._time_initial_raw
+        time_final = time._time_final_raw
         time_derivative = 1.0  # Always 1.0 when using Time object
-        time_min = time.min
-        time_max = time.max
+        time_min = time._time_min
+        time_max = time._time_max
 
         return False, time_initial, time_final, time_derivative, time_min, time_max
 
