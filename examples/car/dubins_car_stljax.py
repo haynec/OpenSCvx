@@ -57,7 +57,7 @@ angular_rate.guess = np.zeros((n, 1))
 
 # Define time (needed for time-dependent constraints)
 # Time is a State subclass, so it can be used directly in expressions
-time = ox.Time(initial=0.0, final=total_time, min=0.0, max=10.0)
+time = ox.Time(initial=0.0, final=("minimize", total_time), min=0.0, max=10.0)
 
 
 # Define list of all states and controls
