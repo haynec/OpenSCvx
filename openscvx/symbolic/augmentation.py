@@ -516,7 +516,25 @@ def augment_dynamics_with_ctcs(
     time_final = time_state.final[0]
     time_dilation.min = np.array([time_dilation_factor_min * time_final])
     time_dilation.max = np.array([time_dilation_factor_max * time_final])
-    time_dilation.guess = np.ones([N, 1]) * time_final
+
+    # Compute initial guess for time_dilation from time.guess using finite differences
+    # The relationship is: dt/dtau = time_dilation, where tau is normalized time [0,1]
+    # With N nodes, dtau = 1/(N-1) between consecutive nodes
+    time_guess = time_state.guess.flatten()  # Shape (N,)
+    time_dilation_guess = np.zeros(N)
+
+    if N > 1:
+        dtau = 1.0 / (N - 1)  # Normalized time step between nodes
+        # Compute finite difference: time_dilation[k] = (time[k+1] - time[k]) / dtau
+        for k in range(N - 1):
+            time_dilation_guess[k] = (time_guess[k + 1] - time_guess[k]) / dtau
+        # For the last node, use the previous value (extrapolate)
+        time_dilation_guess[N - 1] = time_dilation_guess[N - 2]
+    else:
+        # Single node case: use time_final as guess
+        time_dilation_guess[0] = time_final
+
+    time_dilation.guess = time_dilation_guess.reshape(-1, 1)
 
     controls_augmented.append(time_dilation)
 
