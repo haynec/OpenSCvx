@@ -209,7 +209,7 @@ def test_boundary_condition_helpers():
     assert s2.final_type[1] == "Maximize"
 
     # Test using helpers with Time
-    # Note: Time doesn't accept "fixed" as a tuple (plain numbers are fixed)
+    # Time is now a State subclass, so initial/final return arrays
     from openscvx import Time
 
     time1 = Time(
@@ -218,8 +218,10 @@ def test_boundary_condition_helpers():
         min=0.0,
         max=20.0,
     )
-    assert time1.initial == 0.0
-    assert time1.final == ox.Minimize(10.0)
+    # Time.initial/final return numpy arrays (State behavior)
+    assert np.allclose(time1.initial, [0.0])
+    assert np.allclose(time1.final, [10.0])
+    assert time1.final_type[0] == "Minimize"
 
     time2 = Time(
         initial=0.0,  # Plain number still works
@@ -227,8 +229,9 @@ def test_boundary_condition_helpers():
         min=0.0,
         max=20.0,
     )
-    assert time2.initial == 0.0
-    assert time2.final == ox.Free(5.0)
+    assert np.allclose(time2.initial, [0.0])
+    assert np.allclose(time2.final, [5.0])
+    assert time2.final_type[0] == "Free"
 
     time3 = Time(
         initial=ox.Maximize(0.0),
@@ -236,8 +239,9 @@ def test_boundary_condition_helpers():
         min=0.0,
         max=20.0,
     )
-    assert time3.initial == ox.Maximize(0.0)
-    assert time3.final == 10.0
+    assert np.allclose(time3.initial, [0.0])
+    assert time3.initial_type[0] == "Maximize"
+    assert np.allclose(time3.final, [10.0])
 
 
 # --- State: Shape Checking ---

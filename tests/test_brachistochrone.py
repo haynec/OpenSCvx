@@ -588,9 +588,9 @@ def test_parameters():
         min=0.0,
         max=10.0,
     )
-    # Apply custom scaling for time
-    time.scaling_min = 0.0
-    time.scaling_max = 2.0
+    # Apply custom scaling for time (Time is a State with shape=(1,))
+    time.scaling_min = [0.0]
+    time.scaling_max = [2.0]
 
     problem = Problem(
         dynamics=dynamics,
