@@ -4,133 +4,247 @@ This module provides symbolic expression nodes for Signal Temporal Logic (STL)
 operations, enabling the specification of complex temporal and logical constraints
 in optimization problems. STL is particularly useful for robotics and autonomous
 systems where tasks involve temporal reasoning.
+
+STL operators accept Constraint objects (predicates) and extract robustness
+expressions which are lowered to STLJax during compilation.
 """
 
-from typing import Tuple
+from typing import Optional, Tuple, Union
 
 import numpy as np
 
-from .expr import Expr, to_expr
+from .constraint import Constraint
+from .expr import Constant, Expr
 
 
-class Or(Expr):
-    """Logical OR operation for disjunctive constraints.
+class STLExpr(Expr):
+    """Base class for Signal Temporal Logic operators.
 
-    Represents a logical disjunction (OR) between multiple constraint expressions.
-    This is particularly useful in STL-based trajectory optimization for expressing
-    choices or alternatives in task specifications. The Or operation is typically
-    relaxed using smooth approximations (e.g., LogSumExp) during optimization.
+    STL operators combine predicates (constraints) using temporal and logical
+    operations. This base class provides:
+    - Common functionality for all STL operators
+    - Helper methods like `.over()` and `.at()` to convert STL expressions to constraints
+    - Future: utility methods for STL formula manipulation, pretty-printing, etc.
+
+    STL operators are Expr nodes that store robustness expressions. During lowering,
+    they are handled by STLJax which computes the appropriate smooth approximations.
+
+    STL Robustness Convention:
+        STL uses "robustness" values that are positive when constraints are satisfied.
+        For an Inequality constraint `lhs <= rhs`:
+        - Constraint residual: `lhs - rhs` (should be <= 0 when satisfied)
+        - STL robustness: `rhs - lhs` (should be >= 0 when satisfied)
+
+    Example:
+        STL operators can be converted to constraints using helper methods:
+
+            wp1 = Norm(pos - c_1) <= r_1
+            wp2 = Norm(pos - c_2) <= r_2
+            visit_either = ox.stl.Or(wp1, wp2)  # STL operator
+
+            # Convert to constraint with .over()
+            constraints = [visit_either.over((3, 5))]
+
+    Note:
+        This is a base class. Use concrete subclasses like Or, And,
+        Eventually, Always, or Until for actual STL specifications.
+    """
+
+    def over(
+        self,
+        interval: tuple[int, int],
+        penalty: str = "squared_relu",
+        idx: Optional[int] = None,
+        check_nodally: bool = False,
+    ):
+        """Apply this STL expression over a continuous interval using CTCS.
+
+        Converts the STL expression to a constraint and wraps it in CTCS
+        for continuous-time enforcement.
+
+        Args:
+            interval: Tuple of (start, end) node indices for enforcement interval
+            penalty: Penalty function type for CTCS
+            idx: Optional grouping index for multiple augmented states
+            check_nodally: Whether to also enforce at discrete nodes
+
+        Returns:
+            CTCS: Continuous-time constraint satisfaction wrapper
+
+        Example:
+            Enforce STL expression over an interval:
+
+                visit_either = ox.stl.Or(wp1, wp2)
+                constraint = visit_either.over((3, 5))
+        """
+        from .arithmetic import Neg
+        from .constraint import CTCS, Inequality
+
+        # Create constraint: -STL_expr(...) <= 0
+        # STL expressions evaluate to robustness (positive when satisfied)
+        # We negate to get constraint residual (negative when satisfied)
+        constraint = Inequality(Neg(self), Constant(np.array(0.0)))
+
+        return CTCS(
+            constraint, penalty=penalty, nodes=interval, idx=idx, check_nodally=check_nodally
+        )
+
+    def at(self, nodes: Union[list, tuple]):
+        """Apply this STL expression only at specific nodes.
+
+        Converts the STL expression to a constraint and wraps it in NodalConstraint.
+
+        Args:
+            nodes: List of node indices where the constraint should be enforced
+
+        Returns:
+            NodalConstraint: Nodal constraint wrapper
+
+        Example:
+            Enforce STL expression at specific nodes:
+
+                visit_either = ox.stl.Or(wp1, wp2)
+                constraint = visit_either.at([0, 5, 10])
+        """
+        from .arithmetic import Neg
+        from .constraint import Inequality, NodalConstraint
+
+        # Create constraint: -STL_expr(...) <= 0
+        constraint = Inequality(Neg(self), Constant(np.array(0.0)))
+
+        if isinstance(nodes, int):
+            nodes = [nodes]
+        return NodalConstraint(constraint, list(nodes))
+
+
+class Or(STLExpr):
+    """Logical OR operation for STL predicates.
+
+    Combines constraint predicates with disjunction. The Or is satisfied if
+    at least one of its operands is satisfied.
+
+    During lowering, this is handled by STLJax which computes the smooth maximum
+    (LogSumExp) of the robustness values automatically.
 
     The Or operation allows expressing constraints like:
-
     - "Reach either goal A OR goal B"
     - "Avoid obstacle 1 OR obstacle 2" (at least one must be satisfied)
     - "Use path 1 OR path 2 OR path 3"
 
-    During optimization, the disjunction is typically approximated using:
-        Or(φ₁, φ₂, ..., φₙ) ≈ LSE(φ₁, φ₂, ..., φₙ) ≥ 0
-
-    where LSE is the LogSumExp (smooth maximum) function.
-
     Attributes:
-        operands: List of expressions representing the disjunctive clauses
+        predicates: List of predicates (Constraint or STLExpr objects)
 
     Example:
-        Use Or STL operator to enforce that robot must reach either of two goal regions:
+        Visit either waypoint 1 OR waypoint 2:
 
             import openscvx as ox
-            x = ox.State("x", shape=(2,))
+            position = ox.State("pos", shape=(2,))
             goal_a = ox.Parameter("goal_a", shape=(2,), value=[1.0, 1.0])
             goal_b = ox.Parameter("goal_b", shape=(2,), value=[-1.0, -1.0])
-            # Robot is within 0.5 units of either goal
-            reach_a = 0.25 - ox.Norm(x - goal_a)**2
-            reach_b = 0.25 - ox.Norm(x - goal_b)**2
-            reach_either = ox.Or(reach_a, reach_b)
+
+            # Define predicates as constraints
+            reach_a = ox.Norm(position - goal_a) <= 0.5
+            reach_b = ox.Norm(position - goal_b) <= 0.5
+
+            # Combine with OR operator
+            reach_either = ox.stl.Or(reach_a, reach_b)
+
+            # Enforce continuously over time interval
+            constraints = [reach_either.over((3, 5))]
+
+        Nested STL operators are also supported:
+
+            # Or of And expressions
+            expr = ox.stl.Or(
+                ox.stl.And(c1, c2),
+                ox.stl.And(c3, c4),
+            )
 
     Note:
-        The Or operation produces a scalar result even when operands are vector
-        expressions, as it represents a single logical proposition.
+        Or evaluates to a scalar robustness value (positive when satisfied).
+        Use `.over()` or `.at()` to convert to a constraint, or manually create
+        a constraint with: `-Or(...) <= 0`
 
     See Also:
-        LogSumExp: Common smooth approximation for OR operations
-        Max: Hard maximum (non-smooth alternative)
+        stljax.formula.Or: Underlying STLJax implementation used during lowering
     """
 
-    def __init__(self, *operands):
+    def __init__(self, *predicates):
         """Initialize a logical OR operation.
 
         Args:
-            *operands: Two or more expressions to combine with logical OR.
-                      Each operand typically represents a constraint or condition.
+            *predicates: Two or more Constraint or STLExpr objects to combine
+                        with logical OR. Each represents a predicate to be satisfied.
 
         Raises:
-            ValueError: If fewer than two operands are provided
+            ValueError: If fewer than two predicates are provided
+            TypeError: If predicates are not Constraint or STLExpr instances
         """
-        if len(operands) < 2:
-            raise ValueError("Or requires at least two operands")
-        self.operands = [to_expr(op) for op in operands]
+        if len(predicates) < 2:
+            raise ValueError("Or requires at least two predicates")
+
+        # Validate that all predicates are constraints or STL expressions
+        for pred in predicates:
+            if not isinstance(pred, (Constraint, STLExpr)):
+                raise TypeError(
+                    f"Or requires Constraint or STLExpr predicates, got "
+                    f"{type(pred).__name__}. "
+                    f"Did you mean to write a constraint like 'expr <= value'?"
+                )
+
+        # Store predicates directly - robustness extraction happens during lowering
+        self.predicates = list(predicates)
 
     def children(self):
-        return self.operands
+        """Return predicates as children."""
+        return self.predicates
 
     def canonicalize(self) -> "Expr":
-        """Canonicalize by flattening nested Or expressions.
+        """Canonicalize by flattening nested Or and canonicalizing predicates.
 
-        Flattens nested Or operations into a single flat Or with all clauses
+        Flattens nested Or operations into a single flat Or with all predicates
         at the same level. For example: Or(a, Or(b, c)) → Or(a, b, c).
-        Also canonicalizes all operands recursively.
 
         Returns:
-            Expr: Canonical form of the Or expression. If only one operand
-                  remains after canonicalization, returns that operand directly.
+            Expr: Canonical form. If only one predicate remains, returns it directly.
         """
-        operands = []
+        predicates = []
 
-        for operand in self.operands:
-            canonicalized = operand.canonicalize()
+        for pred in self.predicates:
+            canonicalized = pred.canonicalize()
             if isinstance(canonicalized, Or):
                 # Flatten nested Or: Or(a, Or(b, c)) -> Or(a, b, c)
-                operands.extend(canonicalized.operands)
+                predicates.extend(canonicalized.predicates)
             else:
-                operands.append(canonicalized)
+                predicates.append(canonicalized)
 
-        # Return simplified Or expression
-        if len(operands) == 1:
-            return operands[0]
-        return Or(*operands)
+        if len(predicates) == 1:
+            return predicates[0]
+
+        # Reconstruct Or with canonicalized predicates
+        result = Or.__new__(Or)
+        result.predicates = predicates
+        return result
 
     def check_shape(self) -> Tuple[int, ...]:
-        """Validate operand shapes and return result shape.
-
-        Checks that all operands have compatible (broadcastable) shapes. The Or
-        operation supports broadcasting, allowing mixing of scalars and vectors.
+        """Validate predicate shapes and return scalar shape.
 
         Returns:
-            tuple: Empty tuple () indicating a scalar result, as Or represents
-                   a single logical proposition
+            tuple: Empty tuple () indicating a scalar result (STL robustness)
 
         Raises:
-            ValueError: If fewer than two operands exist
-            ValueError: If operand shapes are not broadcastable
+            ValueError: If fewer than two predicates exist
         """
-        if len(self.operands) < 2:
-            raise ValueError("Or requires at least two operands")
+        if len(self.predicates) < 2:
+            raise ValueError("Or requires at least two predicates")
 
-        # Validate all operands and get their shapes
-        operand_shapes = [operand.check_shape() for operand in self.operands]
+        # Validate all predicates
+        for pred in self.predicates:
+            pred.check_shape()
 
-        # For logical operations, all operands should be broadcastable
-        # This allows mixing scalars with vectors for element-wise operations
-        try:
-            result_shape = operand_shapes[0]
-            for shape in operand_shapes[1:]:
-                result_shape = np.broadcast_shapes(result_shape, shape)
-        except ValueError as e:
-            raise ValueError(f"Or operands not broadcastable: {operand_shapes}") from e
-
-        # Or produces a scalar result (like constraints)
+        # Or produces a scalar (STL robustness value)
         return ()
 
     def __repr__(self):
-        operands_repr = " | ".join(repr(op) for op in self.operands)
-        return f"Or({operands_repr})"
+        predicates_repr = " | ".join(repr(p) for p in self.predicates)
+        return f"Or({predicates_repr})"

@@ -83,20 +83,18 @@ dynamics = {
     "time": 1.0,
 }
 
-# Create symbolic expressions for waypoint predicates
-wp1_pred = wp1_radius - ox.linalg.Norm(position - wp1_center)
-wp2_pred = wp2_radius - ox.linalg.Norm(position - wp2_center)
-
-# Create symbolic OR expression using the new Or node
-visit_wp_or_expr = ox.stl.Or(wp1_pred, wp2_pred)
-
 # Generate box constraints for all states
 constraints = []
 for state in states:
     constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
+# Create symbolic expressions for waypoint predicates as constraints
+wp1_pred = ox.linalg.Norm(position - wp1_center) <= wp1_radius
+wp2_pred = ox.linalg.Norm(position - wp2_center) <= wp2_radius
+
 # Visit waypoint constraints using symbolic Or
-constraints.append(ox.ctcs(-visit_wp_or_expr <= 0.0).over((3, 5)))
+# Note: visit_wp_or_expr is already a constraint, so we can use .over() directly
+constraints.append(ox.stl.Or(wp1_pred, wp2_pred).over((3, 5)))
 
 # Build the problem
 time_config = ox.Time(
