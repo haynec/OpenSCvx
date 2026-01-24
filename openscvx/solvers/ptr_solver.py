@@ -627,7 +627,8 @@ def _build_optimal_control_problem(
             + C_d[i - 1] @ du_nonscaled[i]
             + x_prop[i - 1]
             - c_x
-        ) + nu[i - 1]
+        )
+        + nu[i - 1]
         for i in range(1, settings.scp.n)
     ]  # Dynamics Constraint
 
