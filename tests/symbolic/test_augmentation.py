@@ -218,6 +218,7 @@ def test_augment_no_ctcs_constraints():
     states = [x, time]
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
@@ -248,6 +249,7 @@ def test_augment_single_ctcs_constraint():
     states = [x, time]
     controls = [u]
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     # CTCS constraint
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
@@ -285,6 +287,7 @@ def test_augment_multiple_ctcs_constraints():
     states = [x, time]
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     # Multiple CTCS constraints with different penalties
     c1 = ctcs(x[0] <= 1.0, penalty="squared_relu")
@@ -329,6 +332,7 @@ def test_augment_penalty_expression_structure():
     states = [time, x]  # time first since it was at index 0
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     # Create CTCS with squared_relu penalty
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
@@ -370,6 +374,7 @@ def test_augment_single_penalty_no_add():
     states = [time, x]  # time first since it was at index 0
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
@@ -399,6 +404,7 @@ def test_augment_multiple_penalties_create_add():
     states = [x, time]
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     c1 = ctcs(x[0] <= 1.0, penalty="squared_relu")
     c2 = ctcs(x[1] <= 2.0, penalty="huber")
@@ -426,6 +432,7 @@ def test_augment_empty_states_list():
     states = [time]
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     # CTCS constraint on a constant (unusual but valid)
     constraint = ctcs(Constant(1.0) <= 2.0)
@@ -459,6 +466,7 @@ def test_augment_with_different_penalties():
     states = [time, x]  # time first since it was at index 0
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     penalties = ["squared_relu", "huber", "smooth_relu"]
     constraints = [ctcs(x <= float(i), penalty=p) for i, p in enumerate(penalties)]
@@ -498,6 +506,7 @@ def test_augment_preserves_original_controls():
     states = [time, x]  # time first since it was at index 0
     controls = [u1, u2]
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
@@ -782,6 +791,7 @@ def test_augmented_state_bounds():
     states = [time, x]
     controls = []
     N = 5
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
@@ -814,6 +824,7 @@ def test_time_dilation_control_bounds():
     states = [x, time]
     controls = []
     N = 3
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
 
@@ -935,6 +946,7 @@ def test_ctcs_multiple_augmented_states():
     states = [x, time]
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     # Create constraints with different node intervals (different idx groups)
     c1 = ctcs(x[0] <= 1.0, nodes=(0, 5), idx=0)
