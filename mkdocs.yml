@@ -166,12 +166,12 @@ nav:
       -  'getting-started.md'
       - 'examples.md'
       - 'citation.md'
-    - Usage:
-      - 'Usage/basic_problem_setup.md'
-      - 'Usage/advanced_problem_setup.md'
+    - Users Guide:
+      - 'UsersGuide/basic_problem_setup.md'
+      - 'UsersGuide/advanced_problem_setup.md'
       - Tutorials:
-          - 'Usage/tutorial_6dof_obstacle_avoidance.md'
-          - 'Usage/tutorial_6dof_los_guidance.md'
+          - 'UsersGuide/tutorial_6dof_obstacle_avoidance.md'
+          - 'UsersGuide/tutorial_6dof_los_guidance.md'
     - Examples: examples/
     - Code Reference: reference/
     - Foundations:
