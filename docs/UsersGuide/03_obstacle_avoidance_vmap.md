@@ -14,6 +14,11 @@ This tutorial covers:
 
 ## 6-DOF Obstacle Avoidance
 
+!!! tip "Try it yourself"
+    This tutorial is available as an interactive Colab notebook:
+
+    [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1xLPC_UJWC35oPRIAY3vkxi8WEYnHCysQ?usp=sharing)
+
 ### The Problem
 
 We consider a quadrotor navigating through a field of ellipsoidal obstacles in minimum time.
