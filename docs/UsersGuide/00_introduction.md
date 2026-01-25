@@ -1,46 +1,41 @@
-# Tutorials
+# Users Guide
 
-This section provides step-by-step tutorials for using OpenSCvx to solve trajectory optimization problems. Each tutorial includes a Google Colab notebook for interactive learning.
+Welcome to the OpenSCvx Users Guide. This section aims to provides a progressive and useful introduction to trajectory optimization with OpenSCvx, starting from first principles and building toward complex, representative problems.
 
-## Getting Started
+## Learning Path
 
-If you're new to OpenSCvx, we recommend:
+The tutorials are designed to be read in order. Each builds on concepts from the previous, introducing new features in the context of increasingly realistic problems.
 
-1. Start with the [Basic Problem Setup](basic_problem_setup.md) guide
-2. Work through the 6DoF Obstacle Avoidance tutorial
-3. Progress to the Line-of-Sight Guidance tutorial for advanced concepts
-4. Explore the [Examples](../examples.md) section for additional problems
+| Tutorial | Problem | You Will Learn |
+|----------|---------|----------------|
+| [01 - Hello Brachistochrone](01_hello_world_brachistochrone.md) | Minimum-time descent curve | Core API: states, controls, dynamics, time, CTCS constraints, solving |
+| [02 - Drone Racing](02_drone_racing_constraints.md) | Racing through gates | Nodal constraints, `.at()`, `.over()`, `.convex()`, keyframe initialization |
+| [03 - Obstacle Avoidance](03_obstacle_avoidance_vmap.md) | 6-DOF navigation | Quaternion dynamics, spatial utilities, `ox.Parameter`, `ox.Vmap` |
+| [04 - Viewpoint Constraints](04_viewpoint_constraints.md) | Perception-constrained racing | Custom symbolic functions, Vmap with custom functions, attitude initialization |
 
-## Available Tutorials
+## Quick Start
 
-### [6DoF Obstacle Avoidance](tutorial_6dof_obstacle_avoidance.md)
+If you're new to OpenSCvx, start with [Hello Brachistochrone](01_hello_world_brachistochrone.md). By the end of that tutorial you will have solved your first trajectory optimization problem and understand the core workflow:
 
-<a href="https://colab.research.google.com/drive/1xLPC_UJWC35oPRIAY3vkxi8WEYnHCysQ?usp=sharing" target="_blank">
-  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in Colab">
-</a>
+1. Define states and controls with `ox.State` and `ox.Control`
+2. Specify dynamics as a dictionary of symbolic expressions
+3. Add constraints using `ox.ctcs()` for continuous enforcement
+4. Create a `Problem`, initialize, solve, and post-process
 
-Learn how to solve a minimum-time trajectory optimization problem for a 6-degree-of-freedom drone navigating around obstacles. This tutorial covers:
+From there, each subsequent tutorial introduces new capabilities while reinforcing the fundamentals.
 
-- State and control variable definition
-- 6DoF dynamics with quaternions
-- Obstacle avoidance constraints
-- Continuous-time constraint satisfaction
-- Problem instantiation and solving
+## Interactive Notebooks
 
-### [6DoF Line-of-Sight Guidance](tutorial_6dof_los_guidance.md)
+Tutorials 03 and 04 include Google Colab notebooks for interactive learning:
 
-<a href="https://colab.research.google.com/drive/1b3NEx288h4r4HuvCOj-fexmt90PPhKUw?usp=sharing" target="_blank">
-  <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open in Colab">
-</a>
+- [6-DOF Obstacle Avoidance ![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1xLPC_UJWC35oPRIAY3vkxi8WEYnHCysQ?usp=sharing)
+- [Viewpoint Constraints ![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1b3NEx288h4r4HuvCOj-fexmt90PPhKUw?usp=sharing)
 
-Solve a complex trajectory optimization problem involving gate navigation and line-of-sight constraints. This advanced tutorial demonstrates:
+These notebooks let you run the examples without local setup and experiment with parameters in real-time.
 
-- Multi-gate navigation with sequence constraints
-- Line-of-sight guidance constraints
-- Mixed continuous and discrete constraints
-- Advanced initial guess generation
-- SCP parameter tuning
+## Beyond the Tutorials
 
-## Interactive Learning
+After completing the tutorials, explore:
 
-Each tutorial includes a Google Colab notebook that you can run interactively without setting up a local environment. The notebooks contain the complete code examples and allow you to experiment with parameters and see results in real-time.
+- [Examples](../Examples/index.md) — Complete problem implementations across domains
+- [API Reference](../Reference/index.md) — Detailed documentation for all classes and functions
