@@ -265,3 +265,4 @@ results = problem.post_process()
 - [Full 6-DOF Drone Racing](../Examples/drone/drone_racing.md) — adds attitude dynamics
 - [API Reference: Constraints](../Reference/constraints.md)
 - [Obstacle Avoidance: 6-DOF Dynamics, Parameters, and Vmap](03_obstacle_avoidance_vmap.md)
+- [Viewpoint Constraints: Custom Functions and Perception](04_viewpoint_constraints.md)

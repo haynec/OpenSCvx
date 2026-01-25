@@ -335,3 +335,4 @@ where the right-hand side is computed as one vectorized operation.
 - [Complete Vmap Obstacle Avoidance Example](../Examples/drone/obstacle_avoidance_vmap.md)
 - [API Reference: Spatial Utilities](../Reference/spatial.md)
 - [API Reference: Parameters](../Reference/parameters.md)
+- [Viewpoint Constraints: Custom Functions and Perception](04_viewpoint_constraints.md)
