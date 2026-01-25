@@ -1,4 +1,4 @@
-# Drone Racing: Constraints and 3DoF Dynamics
+# Drone Racing: Constraints and 3-DOF Dynamics
 
 In this tutorial we build on the concepts from [Hello Brachistochrone](01_hello_world_brachistochrone.md) to tackle a more interesting problem: time-optimal drone racing through gates.
 We will introduce 3D double-integrator dynamics and explore the various constraint types available in OpenSCvx.
@@ -264,3 +264,4 @@ results = problem.post_process()
 - [Complete Drone Racing Example](../Examples/drone/dr_double_integrator.md)
 - [Full 6-DOF Drone Racing](../Examples/drone/drone_racing.md) — adds attitude dynamics
 - [API Reference: Constraints](../Reference/constraints.md)
+- [Obstacle Avoidance: 6-DOF Dynamics, Parameters, and Vmap](03_obstacle_avoidance_vmap.md)
