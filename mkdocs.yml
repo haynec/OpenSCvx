@@ -172,6 +172,7 @@ nav:
       - 'UsersGuide/02_drone_racing_constraints.md'
       - 'UsersGuide/03_obstacle_avoidance_vmap.md'
       - 'UsersGuide/04_viewpoint_constraints.md'
+      - 'UsersGuide/05_visualization.md'
       - 'UsersGuide/basic_problem_setup.md'
       - 'UsersGuide/advanced_problem_setup.md'
       - Tutorials:
