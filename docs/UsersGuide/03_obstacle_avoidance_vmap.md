@@ -268,11 +268,11 @@ results = problem.post_process()
 
 ---
 
-## Data Parallelism Vmap
+## Data Parallelism: Vmap
 
 The approach above works well for a handful of obstacles. But what if you have 64 obstacles? Or 2000?
 
-Creating individual CTCS constraints in a loop means each constraint is traced and compiled separately, this doesn't scale.
+Creating individual CTCS constraints in a loop means each constraint object is processed separately by the constraint system, this doesn't scale.
 
 ### The Scaling Problem
 
@@ -296,7 +296,7 @@ for i in range(n_obstacles):
     )
 ```
 
-Each constraint is independently lowered, traced, and compiled. For 64 obstacles this is slow; for 2000+ it becomes impractical.
+This creates N separate constraint objects, each processed independently. For 64 obstacles this adds overhead; for 2000+ it becomes impractical.
 
 ### Vectorized Constraints with Vmap
 
@@ -320,6 +320,9 @@ r_i \leq \lVert \mathbf{p} - \mathbf{c}_i \rVert \quad \forall i \in [1, N_{\mat
 $$
 
 where the right-hand side is computed as one vectorized operation.
+
+!!! warning
+    `ox.Vmap` is specifically for **data parallelism**: applying the same operation across a batch of inputs. It is unfortunately not a _panacea_ for magically parallelizing every operation.
 
 ### Complete Vmap Example
 
