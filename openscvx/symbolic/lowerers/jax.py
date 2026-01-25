@@ -178,6 +178,7 @@ from openscvx.symbolic.expr.lie import (
 )
 from openscvx.symbolic.expr.linalg import Inv
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.time import Time
 
 _JAX_VISITORS: Dict[Type[Expr], Callable] = {}
 """Registry mapping expression types to their visitor functions."""
@@ -328,6 +329,7 @@ class JaxLowerer:
             value = value.squeeze()
         return lambda x, u, node, params: value
 
+    @visitor(Time)
     @visitor(State)
     def _visit_state(self, node: State):
         """Lower a state variable to a JAX function.
@@ -336,7 +338,7 @@ class JaxLowerer:
         the slice assigned during unification.
 
         Args:
-            node: State expression node
+            node: State expression node (or Time, which is a State subclass)
 
         Returns:
             Function (x, u, node, params) -> x[slice]
