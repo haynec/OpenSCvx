@@ -1,4 +1,4 @@
-# Looking Back: Viewpoint Constraints
+# 04 Looking Back: Viewpoint Constraints
 
 In this tutorial we will combine what we have learned in the past several exercises while introducing a new viewplanning constraint formulation.
 We'll combine 6-DOF dynamics, gate constraints, and Vmap to solve a drone racing problem where the drone must maintain line-of-sight to a set of targets throughout its entire trajectory.
@@ -352,5 +352,5 @@ This tutorial demonstrated several practical patterns:
 
 - [Complete Example Code](../Examples/drone/dr_vp.md)
 - [RA-L Paper: Line-of-Sight Constrained Trajectory Optimization](https://haynec.github.io/papers/los/)
-- [API Reference: Spatial Utilities](../Reference/spatial.md)
+- [API Reference: Spatial Utilities](../Reference/symbolic/expr/spatial.md)
 - [Visualization: 2D Plots and 3D Interactive](05_visualization.md)

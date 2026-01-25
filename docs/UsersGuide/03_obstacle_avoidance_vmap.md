@@ -1,4 +1,4 @@
-# Obstacle Avoidance: 6-DOF Dynamics, Parameters, and Vmap
+# 03 Obstacle Avoidance: 6-DOF Dynamics, Parameters, and Vmap
 
 In this tutorial we tackle a more realistic drone control problem: navigating through obstacles with full 6-DOF rigid body dynamics.
 We will introduce quaternion-based attitude representation, the spatial utility functions, and show how to define obstacles as Parameters for runtime updates.
@@ -333,7 +333,7 @@ where the right-hand side is computed as one vectorized operation.
 
 - [Complete 6-DOF Obstacle Avoidance Example](../Examples/drone/obstacle_avoidance.md)
 - [Complete Vmap Obstacle Avoidance Example](../Examples/drone/obstacle_avoidance_vmap.md)
-- [API Reference: Spatial Utilities](../Reference/spatial.md)
-- [API Reference: Parameters](../Reference/parameters.md)
+- [API Reference: Spatial Utilities](../Reference/symbolic/expr/spatial.md)
+- [API Reference: Parameters](../Reference/symbolic/expr/expr.md)
 - [Viewpoint Constraints: Custom Functions and Perception](04_viewpoint_constraints.md)
 - [Visualization: 2D Plots and 3D Interactive](05_visualization.md)

@@ -1,4 +1,4 @@
-# Hello Brachistochrone
+# 01 Hello Brachistochrone
 
 In this _hello world_ tutorial we will introduce the reader to the fundamental concepts and API needed to define and solve a problem using OpenSCvx as well as how the results can be accessed.
 Our example of choice in this endeavor is the _Brachistochrone problem_, which we briefly describe below before delving into the implementation.

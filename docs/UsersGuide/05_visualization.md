@@ -1,4 +1,4 @@
-# Visualizing Results
+# 05 Visualizing Results
 
 Once you've solved a trajectory optimization problem, you'll want to see the results. OpenSCvx provides two complementary visualization systems:
 
