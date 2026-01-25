@@ -60,6 +60,17 @@ Example:
             lambda pos: ox.linalg.Norm(pos) <= max_dist,
             batch=positions
         )
+
+    Batch over a non-default axis::
+
+        # Data shaped (features, n_samples) - batch over axis 1
+        samples = ox.Parameter("samples", shape=(3, n_samples), value=data)
+        results = ox.Vmap(
+            lambda sample: ox.linalg.Norm(sample),
+            batch=samples,
+            axis=1  # batch over samples, not features
+        )
+        # results has shape (n_samples,)
 """
 
 import uuid
@@ -211,6 +222,17 @@ class Vmap(Expr):
             )
             # constraints has shape (n_thrusters,)
 
+        Batching over a non-default axis::
+
+            # Data shaped (features, n_samples) - batch over axis 1
+            samples = ox.Parameter("samples", shape=(3, n_samples), value=data)
+            results = ox.Vmap(
+                lambda sample: ox.linalg.Norm(sample),
+                batch=samples,
+                axis=1  # batch over samples, not features
+            )
+            # results has shape (n_samples,)
+
     Note:
         - For static data that won't change, pass a numpy array or Constant
           to get closure-equivalent behavior (numerically identical to BYOF).
@@ -285,6 +307,12 @@ class Vmap(Expr):
 
                 agent_positions = ox.State("positions", shape=(n_agents, 3))
                 ox.Vmap(lambda pos: g(pos), batch=agent_positions)
+
+            Non-default axis::
+
+                # Batch over axis 1 instead of axis 0
+                data = ox.Parameter("data", shape=(3, n_samples))
+                ox.Vmap(lambda x: f(x), batch=data, axis=1)
         """
         from .expr import Parameter
 
