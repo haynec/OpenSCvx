@@ -157,6 +157,7 @@ controls = [theta]
 
 Here, we do _not_ specify an initial or final value for the control but we _do_ need to specify an initial guess.
 The initial guess must be of shape $(n_u \times n_{\mathrm{nodes}})$, providing an initial guess for each control at every node.
+Technically, we can also provide a `.guess` for states. However, these default to a linear interpolation between initial and final conditions which is sufficient in most cases.
 
 ### Dynamics
 
@@ -221,7 +222,7 @@ Note that we do not need to specify continuous box constraints for the controls.
 This is because, by default, the controls are interpolated using first-order hold.
 Therefore, by constraining the discrete nodes to lie within the bounds we can trivially see that the continuous case is guaranteed as well.
 
-We will explore the various forms of constraints supported by OpenSCvx more in the [next tutorial]()
+We will explore the various forms of constraints supported by OpenSCvx more in the [next tutorial](02_drone_racing_constraints.md)
 
 ### Time
 
@@ -287,7 +288,7 @@ theta_traj = results.trajectory["theta"]
 ## Further Reading
 
 - [Complete Brachistochrone Example](../Examples/abstract/brachistochrone.md)
-- [Next tutorial]()
+- [Drone Racing: Constraints and 3DoF Dynamics](02_drone_racing_constraints)
 
 At this point you are well-equipped to go out and start constructing trajectory optimization problems.
 If you are so-inclined you can dive into the [API reference documentation](../Reference/problem.md) or the [examples](../Examples/drone/drone_racing.md) and figure the rest out yourself.
