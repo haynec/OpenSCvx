@@ -285,10 +285,35 @@ pos_nodes = results.nodes["position"]
 theta_traj = results.trajectory["theta"]
 ```
 
+### Visualizing the Results
+
+OpenSCvx provides built-in plotting utilities for quick visualization of your results. The simplest way to see your solution is with `plot_states()` and `plot_controls()`:
+
+```python
+from openscvx.plotting import plot_states, plot_controls
+
+# Plot all state trajectories in a subplot grid
+plot_states(results, ["position", "velocity"]).show()
+
+# Plot control trajectories
+plot_controls(results, ["theta"]).show()
+```
+
+These functions create interactive Plotly figures showing:
+
+- **Green lines**: High-fidelity propagated trajectory
+- **Cyan markers**: Discrete optimization nodes
+- **Red dashed lines**: Variable bounds
+
+For the Brachistochrone problem, you'll see the position trace out the characteristic cycloid curve, while the control angle `theta` smoothly varies from near-vertical at the start to nearly horizontal at the end.
+
+For more advanced visualization options including 3D interactive plots, see [Tutorial 05: Visualization](05_visualization.md).
+
 ## Further Reading
 
 - [Complete Brachistochrone Example](../Examples/abstract/brachistochrone.md)
-- [Drone Racing: Constraints and 3DoF Dynamics](02_drone_racing_constraints)
+- [Drone Racing: Constraints and 3DoF Dynamics](02_drone_racing_constraints.md)
+- [Visualization: 2D Plots and 3D Interactive](05_visualization.md)
 
 At this point you are well-equipped to go out and start constructing trajectory optimization problems.
 If you are so-inclined you can dive into the [API reference documentation](../Reference/problem.md) or the [examples](../Examples/drone/drone_racing.md) and figure the rest out yourself.

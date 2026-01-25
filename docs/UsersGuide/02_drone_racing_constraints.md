@@ -238,6 +238,26 @@ results = problem.solve()
 results = problem.post_process()
 ```
 
+### Visualizing 3D Trajectories
+
+With our drone now flying in 3D, simple time series plots don't capture the full picture. The `plot_projections_2d()` function shows XY, XZ, and YZ plane views:
+
+```python
+from openscvx.plotting import plot_states, plot_projections_2d
+
+# Time series of states
+plot_states(results, ["position", "velocity"]).show()
+
+# 2D projections colored by velocity
+plot_projections_2d(
+    results,
+    var_name="position",
+    velocity_var_name="velocity"
+).show()
+```
+
+For fully interactive 3D visualization with animated playback, gates, and thrust vectors, OpenSCvx integrates with [viser](https://viser.studio/). See [Tutorial 05: Visualization](05_visualization.md) for details on building rich 3D visualizations.
+
 ## Constraint Types Summary
 
 | Type | Syntax | Use Case |
@@ -266,3 +286,4 @@ results = problem.post_process()
 - [API Reference: Constraints](../Reference/constraints.md)
 - [Obstacle Avoidance: 6-DOF Dynamics, Parameters, and Vmap](03_obstacle_avoidance_vmap.md)
 - [Viewpoint Constraints: Custom Functions and Perception](04_viewpoint_constraints.md)
+- [Visualization: 2D Plots and 3D Interactive](05_visualization.md)

@@ -336,3 +336,4 @@ where the right-hand side is computed as one vectorized operation.
 - [API Reference: Spatial Utilities](../Reference/spatial.md)
 - [API Reference: Parameters](../Reference/parameters.md)
 - [Viewpoint Constraints: Custom Functions and Perception](04_viewpoint_constraints.md)
+- [Visualization: 2D Plots and 3D Interactive](05_visualization.md)

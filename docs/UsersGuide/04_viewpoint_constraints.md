@@ -353,3 +353,4 @@ This tutorial demonstrated several practical patterns:
 - [Complete Example Code](../Examples/drone/dr_vp.md)
 - [RA-L Paper: Line-of-Sight Constrained Trajectory Optimization](https://haynec.github.io/papers/los/)
 - [API Reference: Spatial Utilities](../Reference/spatial.md)
+- [Visualization: 2D Plots and 3D Interactive](05_visualization.md)
