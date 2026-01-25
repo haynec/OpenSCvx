@@ -175,12 +175,12 @@ nav:
     - Examples: examples/
     - Reference: Reference/
     - Foundations:
-      - 'Overview/scvx.md'
-      - 'Overview/ocp.md'
-      - 'Overview/constraint_reformulation.md'
-      - 'Overview/control_parameterization.md'
-      - 'Overview/time_dilation.md'
-      - 'Overview/discretization.md'
+      - 'Foundations/scvx.md'
+      - 'Foundations/ocp.md'
+      - 'Foundations/constraint_reformulation.md'
+      - 'Foundations/control_parameterization.md'
+      - 'Foundations/time_dilation.md'
+      - 'Foundations/discretization.md'
     - Under the Hood:
       - 'UnderTheHood/vectorization_and_vmapping.md'
       - 'UnderTheHood/lowering_architecture.md'
