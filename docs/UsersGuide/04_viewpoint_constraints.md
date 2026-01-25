@@ -78,8 +78,6 @@ where:
 - $C_{B \leftarrow I}(\mathbf{q})$ rotates from inertial to body frame (depends on attitude)
 - $C_{S \leftarrow B}$ rotates from body to sensor frame (fixed mounting)
 
-As we all know, getting frame transformations right is half the battle. The only question is which half.
-
 ## Implementation
 
 ### Setup
