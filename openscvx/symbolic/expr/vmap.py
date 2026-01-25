@@ -346,15 +346,7 @@ class Vmap(Expr):
         self._is_control = tuple(is_control_flags)
 
         # Get batch size from first batch and validate all batches match
-        def get_batch_shape(b, is_param, is_state, is_control):
-            # Parameter, State, and Control have .shape directly
-            # Constant has .value.shape
-            if is_param or is_state or is_control:
-                return b.shape
-            else:
-                return b.value.shape
-
-        first_shape = get_batch_shape(
+        first_shape = Vmap._get_batch_shape(
             self._batches[0],
             self._is_parameter[0],
             self._is_state[0],
@@ -368,7 +360,7 @@ class Vmap(Expr):
         for i, (b, is_param, is_state, is_control) in enumerate(
             zip(self._batches, self._is_parameter, self._is_state, self._is_control)
         ):
-            shape = get_batch_shape(b, is_param, is_state, is_control)
+            shape = Vmap._get_batch_shape(b, is_param, is_state, is_control)
             if axis >= len(shape):
                 raise ValueError(f"Vmap axis {axis} out of bounds for batch {i} with shape {shape}")
             if shape[axis] != batch_size:
@@ -382,7 +374,7 @@ class Vmap(Expr):
         for b, is_param, is_state, is_control in zip(
             self._batches, self._is_parameter, self._is_state, self._is_control
         ):
-            shape = get_batch_shape(b, is_param, is_state, is_control)
+            shape = Vmap._get_batch_shape(b, is_param, is_state, is_control)
             # Compute per-element shape by removing the vmap axis
             per_elem_shape = tuple(s for i, s in enumerate(shape) if i != axis)
             placeholders.append(_Placeholder(shape=per_elem_shape))
@@ -440,6 +432,22 @@ class Vmap(Expr):
         """Number of batch arguments."""
         return len(self._batches)
 
+    @staticmethod
+    def _get_batch_shape(
+        batch: Union[Constant, "Parameter", State, Control],
+        is_param: bool,
+        is_state: bool,
+        is_control: bool,
+    ) -> Tuple[int, ...]:
+        """Get shape of a batch source.
+
+        Parameter, State, and Control have .shape directly.
+        Constant has .value.shape.
+        """
+        if is_param or is_state or is_control:
+            return batch.shape
+        return batch.value.shape
+
     def children(self):
         """Return child expressions.
 
@@ -492,12 +500,13 @@ class Vmap(Expr):
         inner_shape = self._child.check_shape()
 
         # Get batch size from first batch (all batches have same size along axis)
-        first_batch = self._batches[0]
-        # Parameter, State, and Control have .shape directly; Constant has .value.shape
-        if self._is_parameter[0] or self._is_state[0] or self._is_control[0]:
-            batch_size = first_batch.shape[self._axis]
-        else:
-            batch_size = first_batch.value.shape[self._axis]
+        first_shape = Vmap._get_batch_shape(
+            self._batches[0],
+            self._is_parameter[0],
+            self._is_state[0],
+            self._is_control[0],
+        )
+        batch_size = first_shape[self._axis]
 
         return (batch_size,) + inner_shape
 
