@@ -171,6 +171,7 @@ nav:
       - 'UsersGuide/01_hello_world_brachistochrone.md'
       - 'UsersGuide/02_drone_racing_constraints.md'
       - 'UsersGuide/03_obstacle_avoidance_vmap.md'
+      - 'UsersGuide/04_viewpoint_constraints.md'
       - 'UsersGuide/basic_problem_setup.md'
       - 'UsersGuide/advanced_problem_setup.md'
       - Tutorials:
