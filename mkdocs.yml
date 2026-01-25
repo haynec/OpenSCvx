@@ -167,6 +167,8 @@ nav:
       - 'examples.md'
       - 'citation.md'
     - Users Guide:
+      - 'UsersGuide/00_introduction.md'
+      - 'UsersGuide/01_hello_world_brachistochrone.md'
       - 'UsersGuide/basic_problem_setup.md'
       - 'UsersGuide/advanced_problem_setup.md'
       - Tutorials:
