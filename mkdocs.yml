@@ -172,7 +172,7 @@ nav:
       - Tutorials:
           - 'UsersGuide/tutorial_6dof_obstacle_avoidance.md'
           - 'UsersGuide/tutorial_6dof_los_guidance.md'
-    - Examples: examples/
+    - Examples: Examples/
     - Reference: Reference/
     - Foundations:
       - 'Foundations/scvx.md'
