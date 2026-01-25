@@ -5,7 +5,7 @@ We will introduce 3D double-integrator dynamics and explore the various constrai
 
 This tutorial covers:
 
-- 3DoF Double-integrator (point mass) dynamics
+- 3DoF double-integrator (point mass) dynamics
 - Nodal constraints with `.at()`
 - Convex constraint marking with `.convex()`
 - Keyframe-based initialization with `ox.init.linspace()`

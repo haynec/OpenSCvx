@@ -26,7 +26,7 @@ From there, each subsequent tutorial introduces new capabilities while reinforci
 
 ## Interactive Notebooks
 
-Tutorials 03 and 04 include Google Colab notebooks for interactive learning:
+Some tutorials include Google Colab notebooks for interactive learning:
 
 - [6-DOF Obstacle Avoidance ![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1xLPC_UJWC35oPRIAY3vkxi8WEYnHCysQ?usp=sharing)
 - [Viewpoint Constraints ![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1b3NEx288h4r4HuvCOj-fexmt90PPhKUw?usp=sharing)

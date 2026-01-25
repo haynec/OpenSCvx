@@ -22,7 +22,7 @@ This tutorial covers:
 ### The Problem
 
 We consider a quadrotor navigating through a field of ellipsoidal obstacles in minimum time.
-Unlike the double-integrator model from [Tutorial 02](02_drone_racing_constraints.md), we now model the full rotational dynamics:
+Unlike the double-integrator model from [Drone Racing: Constraints and 3-DOF Dynamics](02_drone_racing_constraints.md), we now model the full rotational dynamics:
 
 $$
 \begin{align}
