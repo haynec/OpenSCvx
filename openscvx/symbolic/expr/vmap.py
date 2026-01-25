@@ -6,71 +6,19 @@ symbolic expression framework.
 
 Vmap supports multiple modes based on the type of `batch`:
 
-- **Constant/array**: Values baked into the compiled function at trace time,
-  equivalent to closure-captured values in BYOF. Use for static data.
-- **Parameter**: Values looked up from params dict at runtime, allowing
-  updates between SCP iterations. Use for data that may change.
-- **State**: Values extracted from the unified state vector at runtime,
-  enabling vectorized operations over state elements (e.g., multi-agent).
-- **Control**: Values extracted from the unified control vector at runtime,
-  enabling vectorized operations over control elements.
+- **Constant/array**: Values baked into the compiled function at trace time, equivalent to
+    closure-captured values in BYOF. Use for static data.
+- **Parameter**: Values looked up from params dict at runtime, allowing updates between SCP
+    iterations. Use for data that may change.
+- **State**: Values extracted from the unified state vector at runtime, enabling vectorized
+    operations over state elements (e.g., multi-agent).
+- **Control**: Values extracted from the unified control vector at runtime, enabling vectorized
+    operations over control elements.
 
 Vmap also supports batching over multiple arguments by passing a list of
 batch sources. Each batch source is mapped to a corresponding lambda argument.
 
-Example:
-    Compute distances from a position to multiple reference points::
-
-        import openscvx as ox
-        import numpy as np
-
-        position = ox.State("position", shape=(3,))
-        init_poses = np.random.randn(10, 3)  # 10 reference points
-
-        # Option 1: Baked-in data (closure-equivalent)
-        distances = ox.Vmap(
-            lambda pose: ox.linalg.Norm(position - pose),
-            batch=init_poses  # or batch=ox.Constant(init_poses)
-        )
-
-        # Option 2: Runtime-updateable Parameter
-        refs = ox.Parameter("refs", shape=(10, 3), value=init_poses)
-        distances = ox.Vmap(
-            lambda pose: ox.linalg.Norm(position - pose),
-            batch=refs
-        )
-
-    Batch over multiple arguments (e.g., centers and radii)::
-
-        obs_centers = ox.Parameter("obs_centers", shape=(100, 3), value=centers)
-        obs_radii = ox.Parameter("obs_radii", shape=(100,), value=radii)
-
-        constraints = ox.Vmap(
-            lambda center, radius: radius <= ox.linalg.Norm(position - center),
-            batch=[obs_centers, obs_radii]
-        )
-
-    Batch over state elements (e.g., multi-agent constraint)::
-
-        # State with n_agents positions
-        positions = ox.State("positions", shape=(n_agents, 3))
-
-        # Apply constraint to each agent's position
-        constraints = ox.Vmap(
-            lambda pos: ox.linalg.Norm(pos) <= max_dist,
-            batch=positions
-        )
-
-    Batch over a non-default axis::
-
-        # Data shaped (features, n_samples) - batch over axis 1
-        samples = ox.Parameter("samples", shape=(3, n_samples), value=data)
-        results = ox.Vmap(
-            lambda sample: ox.linalg.Norm(sample),
-            batch=samples,
-            axis=1  # batch over samples, not features
-        )
-        # results has shape (n_samples,)
+See the :class:`Vmap` class documentation for usage examples.
 """
 
 import uuid
