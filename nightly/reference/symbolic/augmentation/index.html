@@ -4030,17 +4030,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#openscvx.symbolic.augmentation.augment_with_time_state" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        augment_with_time_state
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#openscvx.symbolic.augmentation.decompose_vector_nodal_constraints" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5678,17 +5667,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#openscvx.symbolic.augmentation.augment_with_time_state" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        augment_with_time_state
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#openscvx.symbolic.augmentation.decompose_vector_nodal_constraints" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6113,483 +6091,6 @@ controls_aug includes u and _time_dilation</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>openscvx/symbolic/augmentation.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-495">495</a></span>
-<span class="normal"><a href="#__codelineno-0-496">496</a></span>
-<span class="normal"><a href="#__codelineno-0-497">497</a></span>
-<span class="normal"><a href="#__codelineno-0-498">498</a></span>
-<span class="normal"><a href="#__codelineno-0-499">499</a></span>
-<span class="normal"><a href="#__codelineno-0-500">500</a></span>
-<span class="normal"><a href="#__codelineno-0-501">501</a></span>
-<span class="normal"><a href="#__codelineno-0-502">502</a></span>
-<span class="normal"><a href="#__codelineno-0-503">503</a></span>
-<span class="normal"><a href="#__codelineno-0-504">504</a></span>
-<span class="normal"><a href="#__codelineno-0-505">505</a></span>
-<span class="normal"><a href="#__codelineno-0-506">506</a></span>
-<span class="normal"><a href="#__codelineno-0-507">507</a></span>
-<span class="normal"><a href="#__codelineno-0-508">508</a></span>
-<span class="normal"><a href="#__codelineno-0-509">509</a></span>
-<span class="normal"><a href="#__codelineno-0-510">510</a></span>
-<span class="normal"><a href="#__codelineno-0-511">511</a></span>
-<span class="normal"><a href="#__codelineno-0-512">512</a></span>
-<span class="normal"><a href="#__codelineno-0-513">513</a></span>
-<span class="normal"><a href="#__codelineno-0-514">514</a></span>
-<span class="normal"><a href="#__codelineno-0-515">515</a></span>
-<span class="normal"><a href="#__codelineno-0-516">516</a></span>
-<span class="normal"><a href="#__codelineno-0-517">517</a></span>
-<span class="normal"><a href="#__codelineno-0-518">518</a></span>
-<span class="normal"><a href="#__codelineno-0-519">519</a></span>
-<span class="normal"><a href="#__codelineno-0-520">520</a></span>
-<span class="normal"><a href="#__codelineno-0-521">521</a></span>
-<span class="normal"><a href="#__codelineno-0-522">522</a></span>
-<span class="normal"><a href="#__codelineno-0-523">523</a></span>
-<span class="normal"><a href="#__codelineno-0-524">524</a></span>
-<span class="normal"><a href="#__codelineno-0-525">525</a></span>
-<span class="normal"><a href="#__codelineno-0-526">526</a></span>
-<span class="normal"><a href="#__codelineno-0-527">527</a></span>
-<span class="normal"><a href="#__codelineno-0-528">528</a></span>
-<span class="normal"><a href="#__codelineno-0-529">529</a></span>
-<span class="normal"><a href="#__codelineno-0-530">530</a></span>
-<span class="normal"><a href="#__codelineno-0-531">531</a></span>
-<span class="normal"><a href="#__codelineno-0-532">532</a></span>
-<span class="normal"><a href="#__codelineno-0-533">533</a></span>
-<span class="normal"><a href="#__codelineno-0-534">534</a></span>
-<span class="normal"><a href="#__codelineno-0-535">535</a></span>
-<span class="normal"><a href="#__codelineno-0-536">536</a></span>
-<span class="normal"><a href="#__codelineno-0-537">537</a></span>
-<span class="normal"><a href="#__codelineno-0-538">538</a></span>
-<span class="normal"><a href="#__codelineno-0-539">539</a></span>
-<span class="normal"><a href="#__codelineno-0-540">540</a></span>
-<span class="normal"><a href="#__codelineno-0-541">541</a></span>
-<span class="normal"><a href="#__codelineno-0-542">542</a></span>
-<span class="normal"><a href="#__codelineno-0-543">543</a></span>
-<span class="normal"><a href="#__codelineno-0-544">544</a></span>
-<span class="normal"><a href="#__codelineno-0-545">545</a></span>
-<span class="normal"><a href="#__codelineno-0-546">546</a></span>
-<span class="normal"><a href="#__codelineno-0-547">547</a></span>
-<span class="normal"><a href="#__codelineno-0-548">548</a></span>
-<span class="normal"><a href="#__codelineno-0-549">549</a></span>
-<span class="normal"><a href="#__codelineno-0-550">550</a></span>
-<span class="normal"><a href="#__codelineno-0-551">551</a></span>
-<span class="normal"><a href="#__codelineno-0-552">552</a></span>
-<span class="normal"><a href="#__codelineno-0-553">553</a></span>
-<span class="normal"><a href="#__codelineno-0-554">554</a></span>
-<span class="normal"><a href="#__codelineno-0-555">555</a></span>
-<span class="normal"><a href="#__codelineno-0-556">556</a></span>
-<span class="normal"><a href="#__codelineno-0-557">557</a></span>
-<span class="normal"><a href="#__codelineno-0-558">558</a></span>
-<span class="normal"><a href="#__codelineno-0-559">559</a></span>
-<span class="normal"><a href="#__codelineno-0-560">560</a></span>
-<span class="normal"><a href="#__codelineno-0-561">561</a></span>
-<span class="normal"><a href="#__codelineno-0-562">562</a></span>
-<span class="normal"><a href="#__codelineno-0-563">563</a></span>
-<span class="normal"><a href="#__codelineno-0-564">564</a></span>
-<span class="normal"><a href="#__codelineno-0-565">565</a></span>
-<span class="normal"><a href="#__codelineno-0-566">566</a></span>
-<span class="normal"><a href="#__codelineno-0-567">567</a></span>
-<span class="normal"><a href="#__codelineno-0-568">568</a></span>
-<span class="normal"><a href="#__codelineno-0-569">569</a></span>
-<span class="normal"><a href="#__codelineno-0-570">570</a></span>
-<span class="normal"><a href="#__codelineno-0-571">571</a></span>
-<span class="normal"><a href="#__codelineno-0-572">572</a></span>
-<span class="normal"><a href="#__codelineno-0-573">573</a></span>
-<span class="normal"><a href="#__codelineno-0-574">574</a></span>
-<span class="normal"><a href="#__codelineno-0-575">575</a></span>
-<span class="normal"><a href="#__codelineno-0-576">576</a></span>
-<span class="normal"><a href="#__codelineno-0-577">577</a></span>
-<span class="normal"><a href="#__codelineno-0-578">578</a></span>
-<span class="normal"><a href="#__codelineno-0-579">579</a></span>
-<span class="normal"><a href="#__codelineno-0-580">580</a></span>
-<span class="normal"><a href="#__codelineno-0-581">581</a></span>
-<span class="normal"><a href="#__codelineno-0-582">582</a></span>
-<span class="normal"><a href="#__codelineno-0-583">583</a></span>
-<span class="normal"><a href="#__codelineno-0-584">584</a></span>
-<span class="normal"><a href="#__codelineno-0-585">585</a></span>
-<span class="normal"><a href="#__codelineno-0-586">586</a></span>
-<span class="normal"><a href="#__codelineno-0-587">587</a></span>
-<span class="normal"><a href="#__codelineno-0-588">588</a></span>
-<span class="normal"><a href="#__codelineno-0-589">589</a></span>
-<span class="normal"><a href="#__codelineno-0-590">590</a></span>
-<span class="normal"><a href="#__codelineno-0-591">591</a></span>
-<span class="normal"><a href="#__codelineno-0-592">592</a></span>
-<span class="normal"><a href="#__codelineno-0-593">593</a></span>
-<span class="normal"><a href="#__codelineno-0-594">594</a></span>
-<span class="normal"><a href="#__codelineno-0-595">595</a></span>
-<span class="normal"><a href="#__codelineno-0-596">596</a></span>
-<span class="normal"><a href="#__codelineno-0-597">597</a></span>
-<span class="normal"><a href="#__codelineno-0-598">598</a></span>
-<span class="normal"><a href="#__codelineno-0-599">599</a></span>
-<span class="normal"><a href="#__codelineno-0-600">600</a></span>
-<span class="normal"><a href="#__codelineno-0-601">601</a></span>
-<span class="normal"><a href="#__codelineno-0-602">602</a></span>
-<span class="normal"><a href="#__codelineno-0-603">603</a></span>
-<span class="normal"><a href="#__codelineno-0-604">604</a></span>
-<span class="normal"><a href="#__codelineno-0-605">605</a></span>
-<span class="normal"><a href="#__codelineno-0-606">606</a></span>
-<span class="normal"><a href="#__codelineno-0-607">607</a></span>
-<span class="normal"><a href="#__codelineno-0-608">608</a></span>
-<span class="normal"><a href="#__codelineno-0-609">609</a></span>
-<span class="normal"><a href="#__codelineno-0-610">610</a></span>
-<span class="normal"><a href="#__codelineno-0-611">611</a></span>
-<span class="normal"><a href="#__codelineno-0-612">612</a></span>
-<span class="normal"><a href="#__codelineno-0-613">613</a></span>
-<span class="normal"><a href="#__codelineno-0-614">614</a></span>
-<span class="normal"><a href="#__codelineno-0-615">615</a></span>
-<span class="normal"><a href="#__codelineno-0-616">616</a></span>
-<span class="normal"><a href="#__codelineno-0-617">617</a></span>
-<span class="normal"><a href="#__codelineno-0-618">618</a></span>
-<span class="normal"><a href="#__codelineno-0-619">619</a></span>
-<span class="normal"><a href="#__codelineno-0-620">620</a></span>
-<span class="normal"><a href="#__codelineno-0-621">621</a></span>
-<span class="normal"><a href="#__codelineno-0-622">622</a></span>
-<span class="normal"><a href="#__codelineno-0-623">623</a></span>
-<span class="normal"><a href="#__codelineno-0-624">624</a></span>
-<span class="normal"><a href="#__codelineno-0-625">625</a></span>
-<span class="normal"><a href="#__codelineno-0-626">626</a></span>
-<span class="normal"><a href="#__codelineno-0-627">627</a></span>
-<span class="normal"><a href="#__codelineno-0-628">628</a></span>
-<span class="normal"><a href="#__codelineno-0-629">629</a></span>
-<span class="normal"><a href="#__codelineno-0-630">630</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-495"><a id="__codelineno-0-495" name="__codelineno-0-495"></a><span class="k">def</span><span class="w"> </span><span class="nf">augment_dynamics_with_ctcs</span><span class="p">(</span>
-</span><span id="__span-0-496"><a id="__codelineno-0-496" name="__codelineno-0-496"></a>    <span class="n">xdot</span><span class="p">:</span> <span class="n">Expr</span><span class="p">,</span>
-</span><span id="__span-0-497"><a id="__codelineno-0-497" name="__codelineno-0-497"></a>    <span class="n">states</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">State</span><span class="p">],</span>
-</span><span id="__span-0-498"><a id="__codelineno-0-498" name="__codelineno-0-498"></a>    <span class="n">controls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Control</span><span class="p">],</span>
-</span><span id="__span-0-499"><a id="__codelineno-0-499" name="__codelineno-0-499"></a>    <span class="n">constraints_ctcs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CTCS</span><span class="p">],</span>
-</span><span id="__span-0-500"><a id="__codelineno-0-500" name="__codelineno-0-500"></a>    <span class="n">N</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-</span><span id="__span-0-501"><a id="__codelineno-0-501" name="__codelineno-0-501"></a>    <span class="n">licq_min</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-</span><span id="__span-0-502"><a id="__codelineno-0-502" name="__codelineno-0-502"></a>    <span class="n">licq_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
-</span><span id="__span-0-503"><a id="__codelineno-0-503" name="__codelineno-0-503"></a>    <span class="n">time_dilation_factor_min</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.3</span><span class="p">,</span>
-</span><span id="__span-0-504"><a id="__codelineno-0-504" name="__codelineno-0-504"></a>    <span class="n">time_dilation_factor_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.0</span><span class="p">,</span>
-</span><span id="__span-0-505"><a id="__codelineno-0-505" name="__codelineno-0-505"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Expr</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">State</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="n">Control</span><span class="p">]]:</span>
-</span><span id="__span-0-506"><a id="__codelineno-0-506" name="__codelineno-0-506"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Augment dynamics with continuous-time constraint satisfaction states.</span>
-</span><span id="__span-0-507"><a id="__codelineno-0-507" name="__codelineno-0-507"></a>
-</span><span id="__span-0-508"><a id="__codelineno-0-508" name="__codelineno-0-508"></a><span class="sd">    Implements the CTCS method by adding augmented states and time dilation control</span>
-</span><span id="__span-0-509"><a id="__codelineno-0-509" name="__codelineno-0-509"></a><span class="sd">    to the original dynamics. For each group of CTCS constraints, an augmented state</span>
-</span><span id="__span-0-510"><a id="__codelineno-0-510" name="__codelineno-0-510"></a><span class="sd">    is created whose dynamics are the penalty function of constraint violations.</span>
-</span><span id="__span-0-511"><a id="__codelineno-0-511" name="__codelineno-0-511"></a>
-</span><span id="__span-0-512"><a id="__codelineno-0-512" name="__codelineno-0-512"></a><span class="sd">    The CTCS method enforces path constraints continuously by:</span>
-</span><span id="__span-0-513"><a id="__codelineno-0-513" name="__codelineno-0-513"></a><span class="sd">    1. Creating augmented states with dynamics = penalty(constraint_violation)</span>
-</span><span id="__span-0-514"><a id="__codelineno-0-514" name="__codelineno-0-514"></a><span class="sd">    2. Constraining augmented states to stay near zero (LICQ condition)</span>
-</span><span id="__span-0-515"><a id="__codelineno-0-515" name="__codelineno-0-515"></a><span class="sd">    3. Adding time dilation control to slow down near constraint boundaries</span>
-</span><span id="__span-0-516"><a id="__codelineno-0-516" name="__codelineno-0-516"></a>
-</span><span id="__span-0-517"><a id="__codelineno-0-517" name="__codelineno-0-517"></a><span class="sd">    The augmented dynamics become:</span>
-</span><span id="__span-0-518"><a id="__codelineno-0-518" name="__codelineno-0-518"></a><span class="sd">        x_dot = f(x, u)</span>
-</span><span id="__span-0-519"><a id="__codelineno-0-519" name="__codelineno-0-519"></a><span class="sd">        aug_dot = penalty(g(x, u))  # For each constraint group</span>
-</span><span id="__span-0-520"><a id="__codelineno-0-520" name="__codelineno-0-520"></a><span class="sd">        time_dot = time_dilation</span>
-</span><span id="__span-0-521"><a id="__codelineno-0-521" name="__codelineno-0-521"></a>
-</span><span id="__span-0-522"><a id="__codelineno-0-522" name="__codelineno-0-522"></a><span class="sd">    Args:</span>
-</span><span id="__span-0-523"><a id="__codelineno-0-523" name="__codelineno-0-523"></a><span class="sd">        xdot: Original dynamics expression for states</span>
-</span><span id="__span-0-524"><a id="__codelineno-0-524" name="__codelineno-0-524"></a><span class="sd">        states: List of state variables (must include a state named &quot;time&quot;)</span>
-</span><span id="__span-0-525"><a id="__codelineno-0-525" name="__codelineno-0-525"></a><span class="sd">        controls: List of control variables</span>
-</span><span id="__span-0-526"><a id="__codelineno-0-526" name="__codelineno-0-526"></a><span class="sd">        constraints_ctcs: List of CTCS constraints (should be sorted and grouped)</span>
-</span><span id="__span-0-527"><a id="__codelineno-0-527" name="__codelineno-0-527"></a><span class="sd">        N: Number of discretization nodes</span>
-</span><span id="__span-0-528"><a id="__codelineno-0-528" name="__codelineno-0-528"></a><span class="sd">        licq_min: Minimum bound for augmented states (default: 0.0)</span>
-</span><span id="__span-0-529"><a id="__codelineno-0-529" name="__codelineno-0-529"></a><span class="sd">        licq_max: Maximum bound for augmented states (default: 1e-4)</span>
-</span><span id="__span-0-530"><a id="__codelineno-0-530" name="__codelineno-0-530"></a><span class="sd">        time_dilation_factor_min: Minimum time dilation factor (default: 0.3)</span>
-</span><span id="__span-0-531"><a id="__codelineno-0-531" name="__codelineno-0-531"></a><span class="sd">        time_dilation_factor_max: Maximum time dilation factor (default: 3.0)</span>
-</span><span id="__span-0-532"><a id="__codelineno-0-532" name="__codelineno-0-532"></a>
-</span><span id="__span-0-533"><a id="__codelineno-0-533" name="__codelineno-0-533"></a><span class="sd">    Returns:</span>
-</span><span id="__span-0-534"><a id="__codelineno-0-534" name="__codelineno-0-534"></a><span class="sd">        Tuple of:</span>
-</span><span id="__span-0-535"><a id="__codelineno-0-535" name="__codelineno-0-535"></a><span class="sd">            - Augmented dynamics expression (original + augmented state dynamics)</span>
-</span><span id="__span-0-536"><a id="__codelineno-0-536" name="__codelineno-0-536"></a><span class="sd">            - Updated states list (original + augmented states)</span>
-</span><span id="__span-0-537"><a id="__codelineno-0-537" name="__codelineno-0-537"></a><span class="sd">            - Updated controls list (original + time dilation control)</span>
-</span><span id="__span-0-538"><a id="__codelineno-0-538" name="__codelineno-0-538"></a>
-</span><span id="__span-0-539"><a id="__codelineno-0-539" name="__codelineno-0-539"></a><span class="sd">    Raises:</span>
-</span><span id="__span-0-540"><a id="__codelineno-0-540" name="__codelineno-0-540"></a><span class="sd">        ValueError: If no state named &quot;time&quot; is found in the states list</span>
-</span><span id="__span-0-541"><a id="__codelineno-0-541" name="__codelineno-0-541"></a>
-</span><span id="__span-0-542"><a id="__codelineno-0-542" name="__codelineno-0-542"></a><span class="sd">    Example:</span>
-</span><span id="__span-0-543"><a id="__codelineno-0-543" name="__codelineno-0-543"></a><span class="sd">        Augment dynamics with CTCS penalty states:</span>
-</span><span id="__span-0-544"><a id="__codelineno-0-544" name="__codelineno-0-544"></a>
-</span><span id="__span-0-545"><a id="__codelineno-0-545" name="__codelineno-0-545"></a><span class="sd">            x = ox.State(&quot;x&quot;, shape=(3,))</span>
-</span><span id="__span-0-546"><a id="__codelineno-0-546" name="__codelineno-0-546"></a><span class="sd">            u = ox.Control(&quot;u&quot;, shape=(2,))</span>
-</span><span id="__span-0-547"><a id="__codelineno-0-547" name="__codelineno-0-547"></a><span class="sd">            time = ox.State(&quot;time&quot;, shape=(1,))</span>
-</span><span id="__span-0-548"><a id="__codelineno-0-548" name="__codelineno-0-548"></a><span class="sd">            xdot = u @ A  # Some dynamics</span>
-</span><span id="__span-0-549"><a id="__codelineno-0-549" name="__codelineno-0-549"></a><span class="sd">            constraint = (ox.Norm(x) &lt;= 1.0).over((0, 50))</span>
-</span><span id="__span-0-550"><a id="__codelineno-0-550" name="__codelineno-0-550"></a><span class="sd">            xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(</span>
-</span><span id="__span-0-551"><a id="__codelineno-0-551" name="__codelineno-0-551"></a><span class="sd">                xdot=xdot,</span>
-</span><span id="__span-0-552"><a id="__codelineno-0-552" name="__codelineno-0-552"></a><span class="sd">                states=[x, time],</span>
-</span><span id="__span-0-553"><a id="__codelineno-0-553" name="__codelineno-0-553"></a><span class="sd">                controls=[u],</span>
-</span><span id="__span-0-554"><a id="__codelineno-0-554" name="__codelineno-0-554"></a><span class="sd">                constraints_ctcs=[constraint],</span>
-</span><span id="__span-0-555"><a id="__codelineno-0-555" name="__codelineno-0-555"></a><span class="sd">                N=50</span>
-</span><span id="__span-0-556"><a id="__codelineno-0-556" name="__codelineno-0-556"></a><span class="sd">            )</span>
-</span><span id="__span-0-557"><a id="__codelineno-0-557" name="__codelineno-0-557"></a>
-</span><span id="__span-0-558"><a id="__codelineno-0-558" name="__codelineno-0-558"></a><span class="sd">        states_aug includes x, time, and _ctcs_aug_0,</span>
-</span><span id="__span-0-559"><a id="__codelineno-0-559" name="__codelineno-0-559"></a><span class="sd">        controls_aug includes u and _time_dilation</span>
-</span><span id="__span-0-560"><a id="__codelineno-0-560" name="__codelineno-0-560"></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="__span-0-561"><a id="__codelineno-0-561" name="__codelineno-0-561"></a>    <span class="c1"># Copy the original states and controls lists</span>
-</span><span id="__span-0-562"><a id="__codelineno-0-562" name="__codelineno-0-562"></a>    <span class="n">states_augmented</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">states</span><span class="p">)</span>
-</span><span id="__span-0-563"><a id="__codelineno-0-563" name="__codelineno-0-563"></a>    <span class="n">controls_augmented</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">controls</span><span class="p">)</span>
-</span><span id="__span-0-564"><a id="__codelineno-0-564" name="__codelineno-0-564"></a>
-</span><span id="__span-0-565"><a id="__codelineno-0-565" name="__codelineno-0-565"></a>    <span class="k">if</span> <span class="n">constraints_ctcs</span><span class="p">:</span>
-</span><span id="__span-0-566"><a id="__codelineno-0-566" name="__codelineno-0-566"></a>        <span class="c1"># Group penalty expressions by idx (constraints should already be sorted)</span>
-</span><span id="__span-0-567"><a id="__codelineno-0-567" name="__codelineno-0-567"></a>        <span class="n">penalty_groups</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Expr</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
-</span><span id="__span-0-568"><a id="__codelineno-0-568" name="__codelineno-0-568"></a>
-</span><span id="__span-0-569"><a id="__codelineno-0-569" name="__codelineno-0-569"></a>        <span class="k">for</span> <span class="n">ctcs</span> <span class="ow">in</span> <span class="n">constraints_ctcs</span><span class="p">:</span>
-</span><span id="__span-0-570"><a id="__codelineno-0-570" name="__codelineno-0-570"></a>            <span class="c1"># Keep the CTCS wrapper intact to preserve node interval information</span>
-</span><span id="__span-0-571"><a id="__codelineno-0-571" name="__codelineno-0-571"></a>            <span class="c1"># The JAX lowerer&#39;s visit_ctcs() method will handle the conditional logic</span>
-</span><span id="__span-0-572"><a id="__codelineno-0-572" name="__codelineno-0-572"></a>
-</span><span id="__span-0-573"><a id="__codelineno-0-573" name="__codelineno-0-573"></a>            <span class="c1"># TODO: In the future, apply scaling here if ctcs has a scaling attribute</span>
-</span><span id="__span-0-574"><a id="__codelineno-0-574" name="__codelineno-0-574"></a>            <span class="c1"># if hasattr(ctcs, &#39;scaling&#39;) and ctcs.scaling != 1.0:</span>
-</span><span id="__span-0-575"><a id="__codelineno-0-575" name="__codelineno-0-575"></a>            <span class="c1">#     ctcs = scale_ctcs(ctcs, scaling_factor)</span>
-</span><span id="__span-0-576"><a id="__codelineno-0-576" name="__codelineno-0-576"></a>
-</span><span id="__span-0-577"><a id="__codelineno-0-577" name="__codelineno-0-577"></a>            <span class="k">if</span> <span class="n">ctcs</span><span class="o">.</span><span class="n">idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">penalty_groups</span><span class="p">:</span>
-</span><span id="__span-0-578"><a id="__codelineno-0-578" name="__codelineno-0-578"></a>                <span class="n">penalty_groups</span><span class="p">[</span><span class="n">ctcs</span><span class="o">.</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="__span-0-579"><a id="__codelineno-0-579" name="__codelineno-0-579"></a>            <span class="n">penalty_groups</span><span class="p">[</span><span class="n">ctcs</span><span class="o">.</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ctcs</span><span class="p">)</span>
-</span><span id="__span-0-580"><a id="__codelineno-0-580" name="__codelineno-0-580"></a>
-</span><span id="__span-0-581"><a id="__codelineno-0-581" name="__codelineno-0-581"></a>        <span class="c1"># Create augmented state expressions for each group</span>
-</span><span id="__span-0-582"><a id="__codelineno-0-582" name="__codelineno-0-582"></a>        <span class="n">augmented_state_exprs</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="__span-0-583"><a id="__codelineno-0-583" name="__codelineno-0-583"></a>        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">penalty_groups</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
-</span><span id="__span-0-584"><a id="__codelineno-0-584" name="__codelineno-0-584"></a>            <span class="n">penalty_terms</span> <span class="o">=</span> <span class="n">penalty_groups</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
-</span><span id="__span-0-585"><a id="__codelineno-0-585" name="__codelineno-0-585"></a>            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">penalty_terms</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-</span><span id="__span-0-586"><a id="__codelineno-0-586" name="__codelineno-0-586"></a>                <span class="n">augmented_state_expr</span> <span class="o">=</span> <span class="n">penalty_terms</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-</span><span id="__span-0-587"><a id="__codelineno-0-587" name="__codelineno-0-587"></a>            <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-0-588"><a id="__codelineno-0-588" name="__codelineno-0-588"></a>                <span class="n">augmented_state_expr</span> <span class="o">=</span> <span class="n">Add</span><span class="p">(</span><span class="o">*</span><span class="n">penalty_terms</span><span class="p">)</span>
-</span><span id="__span-0-589"><a id="__codelineno-0-589" name="__codelineno-0-589"></a>            <span class="n">augmented_state_exprs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">augmented_state_expr</span><span class="p">)</span>
-</span><span id="__span-0-590"><a id="__codelineno-0-590" name="__codelineno-0-590"></a>
-</span><span id="__span-0-591"><a id="__codelineno-0-591" name="__codelineno-0-591"></a>        <span class="c1"># Calculate number of augmented states from the penalty groups</span>
-</span><span id="__span-0-592"><a id="__codelineno-0-592" name="__codelineno-0-592"></a>        <span class="n">num_augmented_states</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">penalty_groups</span><span class="p">)</span>
-</span><span id="__span-0-593"><a id="__codelineno-0-593" name="__codelineno-0-593"></a>
-</span><span id="__span-0-594"><a id="__codelineno-0-594" name="__codelineno-0-594"></a>        <span class="c1"># Create augmented state variables</span>
-</span><span id="__span-0-595"><a id="__codelineno-0-595" name="__codelineno-0-595"></a>        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_augmented_states</span><span class="p">):</span>
-</span><span id="__span-0-596"><a id="__codelineno-0-596" name="__codelineno-0-596"></a>            <span class="n">aug_var</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;_ctcs_aug_</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
-</span><span id="__span-0-597"><a id="__codelineno-0-597" name="__codelineno-0-597"></a>            <span class="n">aug_var</span><span class="o">.</span><span class="n">initial</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">licq_min</span><span class="p">])</span>  <span class="c1"># Set initial to respect bounds</span>
-</span><span id="__span-0-598"><a id="__codelineno-0-598" name="__codelineno-0-598"></a>            <span class="n">aug_var</span><span class="o">.</span><span class="n">final</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">&quot;free&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)]</span>
-</span><span id="__span-0-599"><a id="__codelineno-0-599" name="__codelineno-0-599"></a>            <span class="n">aug_var</span><span class="o">.</span><span class="n">min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">licq_min</span><span class="p">])</span>
-</span><span id="__span-0-600"><a id="__codelineno-0-600" name="__codelineno-0-600"></a>            <span class="n">aug_var</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">licq_max</span><span class="p">])</span>
-</span><span id="__span-0-601"><a id="__codelineno-0-601" name="__codelineno-0-601"></a>            <span class="c1"># Set guess to licq_min as well</span>
-</span><span id="__span-0-602"><a id="__codelineno-0-602" name="__codelineno-0-602"></a>            <span class="n">aug_var</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">([</span><span class="n">N</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">licq_min</span><span class="p">)</span>  <span class="c1"># N x num augmented states</span>
-</span><span id="__span-0-603"><a id="__codelineno-0-603" name="__codelineno-0-603"></a>            <span class="n">states_augmented</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">aug_var</span><span class="p">)</span>
-</span><span id="__span-0-604"><a id="__codelineno-0-604" name="__codelineno-0-604"></a>
-</span><span id="__span-0-605"><a id="__codelineno-0-605" name="__codelineno-0-605"></a>        <span class="c1"># Concatenate with original dynamics</span>
-</span><span id="__span-0-606"><a id="__codelineno-0-606" name="__codelineno-0-606"></a>        <span class="n">xdot_aug</span> <span class="o">=</span> <span class="n">Concat</span><span class="p">(</span><span class="n">xdot</span><span class="p">,</span> <span class="o">*</span><span class="n">augmented_state_exprs</span><span class="p">)</span>
-</span><span id="__span-0-607"><a id="__codelineno-0-607" name="__codelineno-0-607"></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-0-608"><a id="__codelineno-0-608" name="__codelineno-0-608"></a>        <span class="n">xdot_aug</span> <span class="o">=</span> <span class="n">xdot</span>
-</span><span id="__span-0-609"><a id="__codelineno-0-609" name="__codelineno-0-609"></a>
-</span><span id="__span-0-610"><a id="__codelineno-0-610" name="__codelineno-0-610"></a>    <span class="n">time_dilation</span> <span class="o">=</span> <span class="n">Control</span><span class="p">(</span><span class="s2">&quot;_time_dilation&quot;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
-</span><span id="__span-0-611"><a id="__codelineno-0-611" name="__codelineno-0-611"></a>
-</span><span id="__span-0-612"><a id="__codelineno-0-612" name="__codelineno-0-612"></a>    <span class="c1"># Set up time dilation bounds and initial guess</span>
-</span><span id="__span-0-613"><a id="__codelineno-0-613" name="__codelineno-0-613"></a>    <span class="c1"># Find the time state by name</span>
-</span><span id="__span-0-614"><a id="__codelineno-0-614" name="__codelineno-0-614"></a>    <span class="n">time_state</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-615"><a id="__codelineno-0-615" name="__codelineno-0-615"></a>    <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">states</span><span class="p">:</span>
-</span><span id="__span-0-616"><a id="__codelineno-0-616" name="__codelineno-0-616"></a>        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;time&quot;</span><span class="p">:</span>
-</span><span id="__span-0-617"><a id="__codelineno-0-617" name="__codelineno-0-617"></a>            <span class="n">time_state</span> <span class="o">=</span> <span class="n">state</span>
-</span><span id="__span-0-618"><a id="__codelineno-0-618" name="__codelineno-0-618"></a>            <span class="k">break</span>
-</span><span id="__span-0-619"><a id="__codelineno-0-619" name="__codelineno-0-619"></a>
-</span><span id="__span-0-620"><a id="__codelineno-0-620" name="__codelineno-0-620"></a>    <span class="k">if</span> <span class="n">time_state</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-621"><a id="__codelineno-0-621" name="__codelineno-0-621"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No state named &#39;time&#39; found in states list&quot;</span><span class="p">)</span>
-</span><span id="__span-0-622"><a id="__codelineno-0-622" name="__codelineno-0-622"></a>
-</span><span id="__span-0-623"><a id="__codelineno-0-623" name="__codelineno-0-623"></a>    <span class="n">time_final</span> <span class="o">=</span> <span class="n">time_state</span><span class="o">.</span><span class="n">final</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-</span><span id="__span-0-624"><a id="__codelineno-0-624" name="__codelineno-0-624"></a>    <span class="n">time_dilation</span><span class="o">.</span><span class="n">min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">time_dilation_factor_min</span> <span class="o">*</span> <span class="n">time_final</span><span class="p">])</span>
-</span><span id="__span-0-625"><a id="__codelineno-0-625" name="__codelineno-0-625"></a>    <span class="n">time_dilation</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">time_dilation_factor_max</span> <span class="o">*</span> <span class="n">time_final</span><span class="p">])</span>
-</span><span id="__span-0-626"><a id="__codelineno-0-626" name="__codelineno-0-626"></a>    <span class="n">time_dilation</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">([</span><span class="n">N</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span> <span class="o">*</span> <span class="n">time_final</span>
-</span><span id="__span-0-627"><a id="__codelineno-0-627" name="__codelineno-0-627"></a>
-</span><span id="__span-0-628"><a id="__codelineno-0-628" name="__codelineno-0-628"></a>    <span class="n">controls_augmented</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">time_dilation</span><span class="p">)</span>
-</span><span id="__span-0-629"><a id="__codelineno-0-629" name="__codelineno-0-629"></a>
-</span><span id="__span-0-630"><a id="__codelineno-0-630" name="__codelineno-0-630"></a>    <span class="k">return</span> <span class="n">xdot_aug</span><span class="p">,</span> <span class="n">states_augmented</span><span class="p">,</span> <span class="n">controls_augmented</span>
-</span></code></pre></div></td></tr></table></div>
-            </details>
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h4 id="openscvx.symbolic.augmentation.augment_with_time_state" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">augment_with_time_state</span><span class="p">(</span><span class="n">states</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">State</span><span class="p">],</span> <span class="n">constraints</span><span class="p">:</span> <span class="n">ConstraintSet</span><span class="p">,</span> <span class="n">time_initial</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">time_final</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">,</span> <span class="n">time_min</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">time_max</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">N</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">time_scaling_min</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">time_scaling_max</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">State</span><span class="p">],</span> <span class="n">ConstraintSet</span><span class="p">]</span></code>
-
-<a href="#openscvx.symbolic.augmentation.augment_with_time_state" class="headerlink" title="Permanent link">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Augment problem with a time state variable.</p>
-<p>Creates a time state variable if one doesn't already exist and adds it to the
-states list. Also adds CTCS constraints to enforce time bounds continuously
-throughout the trajectory.</p>
-<p>The time state tracks physical time along the trajectory and is used for
-time-optimal control problems. Boundary conditions can be fixed values or
-free variables with initial guesses.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>states</code>
-            </td>
-            <td>
-                  <code><span title="typing.List">List</span>[<a class="autorefs autorefs-internal" href="../../../Usage/api_state/#openscvx.symbolic.expr.state.State">State</a>]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>List of State objects (will not be modified, copy is returned)</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>constraints</code>
-            </td>
-            <td>
-                  <code><a class="autorefs autorefs-internal" href="../constraint_set/#openscvx.symbolic.constraint_set.ConstraintSet">ConstraintSet</a></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>ConstraintSet with unsorted constraints (will be modified in place)</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>time_initial</code>
-            </td>
-            <td>
-                  <code><span title="float">float</span> | <span title="tuple">tuple</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Initial time boundary condition:
-- float: Fixed initial time
-- tuple: ("free", guess) for free initial time with initial guess</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>time_final</code>
-            </td>
-            <td>
-                  <code><span title="float">float</span> | <span title="tuple">tuple</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Final time boundary condition (same format as time_initial)</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>time_min</code>
-            </td>
-            <td>
-                  <code><span title="float">float</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Minimum bound for time variable throughout trajectory</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>time_max</code>
-            </td>
-            <td>
-                  <code><span title="float">float</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Maximum bound for time variable throughout trajectory</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>N</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Number of discretization nodes (for initial guess generation)</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="typing.Tuple">Tuple</span>[<span title="typing.List">List</span>[<a class="autorefs autorefs-internal" href="../../../Usage/api_state/#openscvx.symbolic.expr.state.State">State</a>], <a class="autorefs autorefs-internal" href="../constraint_set/#openscvx.symbolic.constraint_set.ConstraintSet">ConstraintSet</a>]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Tuple of:
-- Updated states list (original + time state if created)
-- The same ConstraintSet with time CTCS constraints added to unsorted</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<details class="note" open>
-  <summary>Note</summary>
-  <p>If a state named "time" already exists, it is not modified and no
-constraints are added.</p>
-</details>
-
-<details class="example" open>
-  <summary>Example</summary>
-  <p>Get augmented states::</p>
-<div class="language-python highlight"><pre><span></span><code><span class="n">x</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">State</span><span class="p">(</span><span class="s2">&quot;x&quot;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,))</span>
-<span class="n">constraints</span> <span class="o">=</span> <span class="n">ConstraintSet</span><span class="p">()</span>
-<span class="n">states_aug</span><span class="p">,</span> <span class="n">constraints</span> <span class="o">=</span> <span class="n">augment_with_time_state</span><span class="p">(</span>
-    <span class="n">states</span><span class="o">=</span><span class="p">[</span><span class="n">x</span><span class="p">],</span>
-    <span class="n">constraints</span><span class="o">=</span><span class="n">constraints</span><span class="p">,</span>
-    <span class="n">time_initial</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-    <span class="n">time_final</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;free&quot;</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">),</span>
-    <span class="n">time_min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-    <span class="n">time_max</span><span class="o">=</span><span class="mf">100.0</span><span class="p">,</span>
-    <span class="n">N</span><span class="o">=</span><span class="mi">50</span>
-<span class="p">)</span>
-</code></pre></div>
-<p>states_aug now includes time state with initial=0, final=free</p>
-</details>
-
-            <details class="mkdocstrings-source">
-              <summary>Source code in <code>openscvx/symbolic/augmentation.py</code></summary>
               <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-388">388</a></span>
 <span class="normal"><a href="#__codelineno-0-389">389</a></span>
 <span class="normal"><a href="#__codelineno-0-390">390</a></span>
@@ -6694,111 +6195,211 @@ constraints are added.</p>
 <span class="normal"><a href="#__codelineno-0-489">489</a></span>
 <span class="normal"><a href="#__codelineno-0-490">490</a></span>
 <span class="normal"><a href="#__codelineno-0-491">491</a></span>
-<span class="normal"><a href="#__codelineno-0-492">492</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-388"><a id="__codelineno-0-388" name="__codelineno-0-388"></a><span class="k">def</span><span class="w"> </span><span class="nf">augment_with_time_state</span><span class="p">(</span>
-</span><span id="__span-0-389"><a id="__codelineno-0-389" name="__codelineno-0-389"></a>    <span class="n">states</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">State</span><span class="p">],</span>
-</span><span id="__span-0-390"><a id="__codelineno-0-390" name="__codelineno-0-390"></a>    <span class="n">constraints</span><span class="p">:</span> <span class="n">ConstraintSet</span><span class="p">,</span>
-</span><span id="__span-0-391"><a id="__codelineno-0-391" name="__codelineno-0-391"></a>    <span class="n">time_initial</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">,</span>
-</span><span id="__span-0-392"><a id="__codelineno-0-392" name="__codelineno-0-392"></a>    <span class="n">time_final</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">,</span>
-</span><span id="__span-0-393"><a id="__codelineno-0-393" name="__codelineno-0-393"></a>    <span class="n">time_min</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-</span><span id="__span-0-394"><a id="__codelineno-0-394" name="__codelineno-0-394"></a>    <span class="n">time_max</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-</span><span id="__span-0-395"><a id="__codelineno-0-395" name="__codelineno-0-395"></a>    <span class="n">N</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-</span><span id="__span-0-396"><a id="__codelineno-0-396" name="__codelineno-0-396"></a>    <span class="n">time_scaling_min</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-397"><a id="__codelineno-0-397" name="__codelineno-0-397"></a>    <span class="n">time_scaling_max</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-398"><a id="__codelineno-0-398" name="__codelineno-0-398"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">State</span><span class="p">],</span> <span class="n">ConstraintSet</span><span class="p">]:</span>
-</span><span id="__span-0-399"><a id="__codelineno-0-399" name="__codelineno-0-399"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Augment problem with a time state variable.</span>
+<span class="normal"><a href="#__codelineno-0-492">492</a></span>
+<span class="normal"><a href="#__codelineno-0-493">493</a></span>
+<span class="normal"><a href="#__codelineno-0-494">494</a></span>
+<span class="normal"><a href="#__codelineno-0-495">495</a></span>
+<span class="normal"><a href="#__codelineno-0-496">496</a></span>
+<span class="normal"><a href="#__codelineno-0-497">497</a></span>
+<span class="normal"><a href="#__codelineno-0-498">498</a></span>
+<span class="normal"><a href="#__codelineno-0-499">499</a></span>
+<span class="normal"><a href="#__codelineno-0-500">500</a></span>
+<span class="normal"><a href="#__codelineno-0-501">501</a></span>
+<span class="normal"><a href="#__codelineno-0-502">502</a></span>
+<span class="normal"><a href="#__codelineno-0-503">503</a></span>
+<span class="normal"><a href="#__codelineno-0-504">504</a></span>
+<span class="normal"><a href="#__codelineno-0-505">505</a></span>
+<span class="normal"><a href="#__codelineno-0-506">506</a></span>
+<span class="normal"><a href="#__codelineno-0-507">507</a></span>
+<span class="normal"><a href="#__codelineno-0-508">508</a></span>
+<span class="normal"><a href="#__codelineno-0-509">509</a></span>
+<span class="normal"><a href="#__codelineno-0-510">510</a></span>
+<span class="normal"><a href="#__codelineno-0-511">511</a></span>
+<span class="normal"><a href="#__codelineno-0-512">512</a></span>
+<span class="normal"><a href="#__codelineno-0-513">513</a></span>
+<span class="normal"><a href="#__codelineno-0-514">514</a></span>
+<span class="normal"><a href="#__codelineno-0-515">515</a></span>
+<span class="normal"><a href="#__codelineno-0-516">516</a></span>
+<span class="normal"><a href="#__codelineno-0-517">517</a></span>
+<span class="normal"><a href="#__codelineno-0-518">518</a></span>
+<span class="normal"><a href="#__codelineno-0-519">519</a></span>
+<span class="normal"><a href="#__codelineno-0-520">520</a></span>
+<span class="normal"><a href="#__codelineno-0-521">521</a></span>
+<span class="normal"><a href="#__codelineno-0-522">522</a></span>
+<span class="normal"><a href="#__codelineno-0-523">523</a></span>
+<span class="normal"><a href="#__codelineno-0-524">524</a></span>
+<span class="normal"><a href="#__codelineno-0-525">525</a></span>
+<span class="normal"><a href="#__codelineno-0-526">526</a></span>
+<span class="normal"><a href="#__codelineno-0-527">527</a></span>
+<span class="normal"><a href="#__codelineno-0-528">528</a></span>
+<span class="normal"><a href="#__codelineno-0-529">529</a></span>
+<span class="normal"><a href="#__codelineno-0-530">530</a></span>
+<span class="normal"><a href="#__codelineno-0-531">531</a></span>
+<span class="normal"><a href="#__codelineno-0-532">532</a></span>
+<span class="normal"><a href="#__codelineno-0-533">533</a></span>
+<span class="normal"><a href="#__codelineno-0-534">534</a></span>
+<span class="normal"><a href="#__codelineno-0-535">535</a></span>
+<span class="normal"><a href="#__codelineno-0-536">536</a></span>
+<span class="normal"><a href="#__codelineno-0-537">537</a></span>
+<span class="normal"><a href="#__codelineno-0-538">538</a></span>
+<span class="normal"><a href="#__codelineno-0-539">539</a></span>
+<span class="normal"><a href="#__codelineno-0-540">540</a></span>
+<span class="normal"><a href="#__codelineno-0-541">541</a></span>
+<span class="normal"><a href="#__codelineno-0-542">542</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-388"><a id="__codelineno-0-388" name="__codelineno-0-388"></a><span class="k">def</span><span class="w"> </span><span class="nf">augment_dynamics_with_ctcs</span><span class="p">(</span>
+</span><span id="__span-0-389"><a id="__codelineno-0-389" name="__codelineno-0-389"></a>    <span class="n">xdot</span><span class="p">:</span> <span class="n">Expr</span><span class="p">,</span>
+</span><span id="__span-0-390"><a id="__codelineno-0-390" name="__codelineno-0-390"></a>    <span class="n">states</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">State</span><span class="p">],</span>
+</span><span id="__span-0-391"><a id="__codelineno-0-391" name="__codelineno-0-391"></a>    <span class="n">controls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Control</span><span class="p">],</span>
+</span><span id="__span-0-392"><a id="__codelineno-0-392" name="__codelineno-0-392"></a>    <span class="n">constraints_ctcs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CTCS</span><span class="p">],</span>
+</span><span id="__span-0-393"><a id="__codelineno-0-393" name="__codelineno-0-393"></a>    <span class="n">N</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+</span><span id="__span-0-394"><a id="__codelineno-0-394" name="__codelineno-0-394"></a>    <span class="n">licq_min</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
+</span><span id="__span-0-395"><a id="__codelineno-0-395" name="__codelineno-0-395"></a>    <span class="n">licq_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-4</span><span class="p">,</span>
+</span><span id="__span-0-396"><a id="__codelineno-0-396" name="__codelineno-0-396"></a>    <span class="n">time_dilation_factor_min</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.3</span><span class="p">,</span>
+</span><span id="__span-0-397"><a id="__codelineno-0-397" name="__codelineno-0-397"></a>    <span class="n">time_dilation_factor_max</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.0</span><span class="p">,</span>
+</span><span id="__span-0-398"><a id="__codelineno-0-398" name="__codelineno-0-398"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">Expr</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">State</span><span class="p">],</span> <span class="n">List</span><span class="p">[</span><span class="n">Control</span><span class="p">]]:</span>
+</span><span id="__span-0-399"><a id="__codelineno-0-399" name="__codelineno-0-399"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Augment dynamics with continuous-time constraint satisfaction states.</span>
 </span><span id="__span-0-400"><a id="__codelineno-0-400" name="__codelineno-0-400"></a>
-</span><span id="__span-0-401"><a id="__codelineno-0-401" name="__codelineno-0-401"></a><span class="sd">    Creates a time state variable if one doesn&#39;t already exist and adds it to the</span>
-</span><span id="__span-0-402"><a id="__codelineno-0-402" name="__codelineno-0-402"></a><span class="sd">    states list. Also adds CTCS constraints to enforce time bounds continuously</span>
-</span><span id="__span-0-403"><a id="__codelineno-0-403" name="__codelineno-0-403"></a><span class="sd">    throughout the trajectory.</span>
+</span><span id="__span-0-401"><a id="__codelineno-0-401" name="__codelineno-0-401"></a><span class="sd">    Implements the CTCS method by adding augmented states and time dilation control</span>
+</span><span id="__span-0-402"><a id="__codelineno-0-402" name="__codelineno-0-402"></a><span class="sd">    to the original dynamics. For each group of CTCS constraints, an augmented state</span>
+</span><span id="__span-0-403"><a id="__codelineno-0-403" name="__codelineno-0-403"></a><span class="sd">    is created whose dynamics are the penalty function of constraint violations.</span>
 </span><span id="__span-0-404"><a id="__codelineno-0-404" name="__codelineno-0-404"></a>
-</span><span id="__span-0-405"><a id="__codelineno-0-405" name="__codelineno-0-405"></a><span class="sd">    The time state tracks physical time along the trajectory and is used for</span>
-</span><span id="__span-0-406"><a id="__codelineno-0-406" name="__codelineno-0-406"></a><span class="sd">    time-optimal control problems. Boundary conditions can be fixed values or</span>
-</span><span id="__span-0-407"><a id="__codelineno-0-407" name="__codelineno-0-407"></a><span class="sd">    free variables with initial guesses.</span>
-</span><span id="__span-0-408"><a id="__codelineno-0-408" name="__codelineno-0-408"></a>
-</span><span id="__span-0-409"><a id="__codelineno-0-409" name="__codelineno-0-409"></a><span class="sd">    Args:</span>
-</span><span id="__span-0-410"><a id="__codelineno-0-410" name="__codelineno-0-410"></a><span class="sd">        states: List of State objects (will not be modified, copy is returned)</span>
-</span><span id="__span-0-411"><a id="__codelineno-0-411" name="__codelineno-0-411"></a><span class="sd">        constraints: ConstraintSet with unsorted constraints (will be modified in place)</span>
-</span><span id="__span-0-412"><a id="__codelineno-0-412" name="__codelineno-0-412"></a><span class="sd">        time_initial: Initial time boundary condition:</span>
-</span><span id="__span-0-413"><a id="__codelineno-0-413" name="__codelineno-0-413"></a><span class="sd">            - float: Fixed initial time</span>
-</span><span id="__span-0-414"><a id="__codelineno-0-414" name="__codelineno-0-414"></a><span class="sd">            - tuple: (&quot;free&quot;, guess) for free initial time with initial guess</span>
-</span><span id="__span-0-415"><a id="__codelineno-0-415" name="__codelineno-0-415"></a><span class="sd">        time_final: Final time boundary condition (same format as time_initial)</span>
-</span><span id="__span-0-416"><a id="__codelineno-0-416" name="__codelineno-0-416"></a><span class="sd">        time_min: Minimum bound for time variable throughout trajectory</span>
-</span><span id="__span-0-417"><a id="__codelineno-0-417" name="__codelineno-0-417"></a><span class="sd">        time_max: Maximum bound for time variable throughout trajectory</span>
-</span><span id="__span-0-418"><a id="__codelineno-0-418" name="__codelineno-0-418"></a><span class="sd">        N: Number of discretization nodes (for initial guess generation)</span>
-</span><span id="__span-0-419"><a id="__codelineno-0-419" name="__codelineno-0-419"></a>
-</span><span id="__span-0-420"><a id="__codelineno-0-420" name="__codelineno-0-420"></a><span class="sd">    Returns:</span>
-</span><span id="__span-0-421"><a id="__codelineno-0-421" name="__codelineno-0-421"></a><span class="sd">        Tuple of:</span>
-</span><span id="__span-0-422"><a id="__codelineno-0-422" name="__codelineno-0-422"></a><span class="sd">            - Updated states list (original + time state if created)</span>
-</span><span id="__span-0-423"><a id="__codelineno-0-423" name="__codelineno-0-423"></a><span class="sd">            - The same ConstraintSet with time CTCS constraints added to unsorted</span>
-</span><span id="__span-0-424"><a id="__codelineno-0-424" name="__codelineno-0-424"></a>
-</span><span id="__span-0-425"><a id="__codelineno-0-425" name="__codelineno-0-425"></a><span class="sd">    Note:</span>
-</span><span id="__span-0-426"><a id="__codelineno-0-426" name="__codelineno-0-426"></a><span class="sd">        If a state named &quot;time&quot; already exists, it is not modified and no</span>
-</span><span id="__span-0-427"><a id="__codelineno-0-427" name="__codelineno-0-427"></a><span class="sd">        constraints are added.</span>
-</span><span id="__span-0-428"><a id="__codelineno-0-428" name="__codelineno-0-428"></a>
-</span><span id="__span-0-429"><a id="__codelineno-0-429" name="__codelineno-0-429"></a><span class="sd">    Example:</span>
-</span><span id="__span-0-430"><a id="__codelineno-0-430" name="__codelineno-0-430"></a><span class="sd">        Get augmented states::</span>
+</span><span id="__span-0-405"><a id="__codelineno-0-405" name="__codelineno-0-405"></a><span class="sd">    The CTCS method enforces path constraints continuously by:</span>
+</span><span id="__span-0-406"><a id="__codelineno-0-406" name="__codelineno-0-406"></a><span class="sd">    1. Creating augmented states with dynamics = penalty(constraint_violation)</span>
+</span><span id="__span-0-407"><a id="__codelineno-0-407" name="__codelineno-0-407"></a><span class="sd">    2. Constraining augmented states to stay near zero (LICQ condition)</span>
+</span><span id="__span-0-408"><a id="__codelineno-0-408" name="__codelineno-0-408"></a><span class="sd">    3. Adding time dilation control to slow down near constraint boundaries</span>
+</span><span id="__span-0-409"><a id="__codelineno-0-409" name="__codelineno-0-409"></a>
+</span><span id="__span-0-410"><a id="__codelineno-0-410" name="__codelineno-0-410"></a><span class="sd">    The augmented dynamics become:</span>
+</span><span id="__span-0-411"><a id="__codelineno-0-411" name="__codelineno-0-411"></a><span class="sd">        x_dot = f(x, u)</span>
+</span><span id="__span-0-412"><a id="__codelineno-0-412" name="__codelineno-0-412"></a><span class="sd">        aug_dot = penalty(g(x, u))  # For each constraint group</span>
+</span><span id="__span-0-413"><a id="__codelineno-0-413" name="__codelineno-0-413"></a><span class="sd">        time_dot = time_dilation</span>
+</span><span id="__span-0-414"><a id="__codelineno-0-414" name="__codelineno-0-414"></a>
+</span><span id="__span-0-415"><a id="__codelineno-0-415" name="__codelineno-0-415"></a><span class="sd">    Args:</span>
+</span><span id="__span-0-416"><a id="__codelineno-0-416" name="__codelineno-0-416"></a><span class="sd">        xdot: Original dynamics expression for states</span>
+</span><span id="__span-0-417"><a id="__codelineno-0-417" name="__codelineno-0-417"></a><span class="sd">        states: List of state variables (must include a state named &quot;time&quot;)</span>
+</span><span id="__span-0-418"><a id="__codelineno-0-418" name="__codelineno-0-418"></a><span class="sd">        controls: List of control variables</span>
+</span><span id="__span-0-419"><a id="__codelineno-0-419" name="__codelineno-0-419"></a><span class="sd">        constraints_ctcs: List of CTCS constraints (should be sorted and grouped)</span>
+</span><span id="__span-0-420"><a id="__codelineno-0-420" name="__codelineno-0-420"></a><span class="sd">        N: Number of discretization nodes</span>
+</span><span id="__span-0-421"><a id="__codelineno-0-421" name="__codelineno-0-421"></a><span class="sd">        licq_min: Minimum bound for augmented states (default: 0.0)</span>
+</span><span id="__span-0-422"><a id="__codelineno-0-422" name="__codelineno-0-422"></a><span class="sd">        licq_max: Maximum bound for augmented states (default: 1e-4)</span>
+</span><span id="__span-0-423"><a id="__codelineno-0-423" name="__codelineno-0-423"></a><span class="sd">        time_dilation_factor_min: Minimum time dilation factor (default: 0.3)</span>
+</span><span id="__span-0-424"><a id="__codelineno-0-424" name="__codelineno-0-424"></a><span class="sd">        time_dilation_factor_max: Maximum time dilation factor (default: 3.0)</span>
+</span><span id="__span-0-425"><a id="__codelineno-0-425" name="__codelineno-0-425"></a>
+</span><span id="__span-0-426"><a id="__codelineno-0-426" name="__codelineno-0-426"></a><span class="sd">    Returns:</span>
+</span><span id="__span-0-427"><a id="__codelineno-0-427" name="__codelineno-0-427"></a><span class="sd">        Tuple of:</span>
+</span><span id="__span-0-428"><a id="__codelineno-0-428" name="__codelineno-0-428"></a><span class="sd">            - Augmented dynamics expression (original + augmented state dynamics)</span>
+</span><span id="__span-0-429"><a id="__codelineno-0-429" name="__codelineno-0-429"></a><span class="sd">            - Updated states list (original + augmented states)</span>
+</span><span id="__span-0-430"><a id="__codelineno-0-430" name="__codelineno-0-430"></a><span class="sd">            - Updated controls list (original + time dilation control)</span>
 </span><span id="__span-0-431"><a id="__codelineno-0-431" name="__codelineno-0-431"></a>
-</span><span id="__span-0-432"><a id="__codelineno-0-432" name="__codelineno-0-432"></a><span class="sd">            x = ox.State(&quot;x&quot;, shape=(3,))</span>
-</span><span id="__span-0-433"><a id="__codelineno-0-433" name="__codelineno-0-433"></a><span class="sd">            constraints = ConstraintSet()</span>
-</span><span id="__span-0-434"><a id="__codelineno-0-434" name="__codelineno-0-434"></a><span class="sd">            states_aug, constraints = augment_with_time_state(</span>
-</span><span id="__span-0-435"><a id="__codelineno-0-435" name="__codelineno-0-435"></a><span class="sd">                states=[x],</span>
-</span><span id="__span-0-436"><a id="__codelineno-0-436" name="__codelineno-0-436"></a><span class="sd">                constraints=constraints,</span>
-</span><span id="__span-0-437"><a id="__codelineno-0-437" name="__codelineno-0-437"></a><span class="sd">                time_initial=0.0,</span>
-</span><span id="__span-0-438"><a id="__codelineno-0-438" name="__codelineno-0-438"></a><span class="sd">                time_final=(&quot;free&quot;, 10.0),</span>
-</span><span id="__span-0-439"><a id="__codelineno-0-439" name="__codelineno-0-439"></a><span class="sd">                time_min=0.0,</span>
-</span><span id="__span-0-440"><a id="__codelineno-0-440" name="__codelineno-0-440"></a><span class="sd">                time_max=100.0,</span>
-</span><span id="__span-0-441"><a id="__codelineno-0-441" name="__codelineno-0-441"></a><span class="sd">                N=50</span>
-</span><span id="__span-0-442"><a id="__codelineno-0-442" name="__codelineno-0-442"></a><span class="sd">            )</span>
-</span><span id="__span-0-443"><a id="__codelineno-0-443" name="__codelineno-0-443"></a>
-</span><span id="__span-0-444"><a id="__codelineno-0-444" name="__codelineno-0-444"></a><span class="sd">        states_aug now includes time state with initial=0, final=free</span>
-</span><span id="__span-0-445"><a id="__codelineno-0-445" name="__codelineno-0-445"></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="__span-0-446"><a id="__codelineno-0-446" name="__codelineno-0-446"></a>    <span class="c1"># Create copy of states to avoid mutating input</span>
-</span><span id="__span-0-447"><a id="__codelineno-0-447" name="__codelineno-0-447"></a>    <span class="n">states_aug</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">states</span><span class="p">)</span>
-</span><span id="__span-0-448"><a id="__codelineno-0-448" name="__codelineno-0-448"></a>
-</span><span id="__span-0-449"><a id="__codelineno-0-449" name="__codelineno-0-449"></a>    <span class="c1"># Check if a time state already exists</span>
-</span><span id="__span-0-450"><a id="__codelineno-0-450" name="__codelineno-0-450"></a>    <span class="n">time_state</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-451"><a id="__codelineno-0-451" name="__codelineno-0-451"></a>    <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">states_aug</span><span class="p">:</span>
-</span><span id="__span-0-452"><a id="__codelineno-0-452" name="__codelineno-0-452"></a>        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;time&quot;</span><span class="p">:</span>
-</span><span id="__span-0-453"><a id="__codelineno-0-453" name="__codelineno-0-453"></a>            <span class="n">time_state</span> <span class="o">=</span> <span class="n">state</span>
-</span><span id="__span-0-454"><a id="__codelineno-0-454" name="__codelineno-0-454"></a>            <span class="k">break</span>
-</span><span id="__span-0-455"><a id="__codelineno-0-455" name="__codelineno-0-455"></a>
-</span><span id="__span-0-456"><a id="__codelineno-0-456" name="__codelineno-0-456"></a>    <span class="k">if</span> <span class="n">time_state</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-457"><a id="__codelineno-0-457" name="__codelineno-0-457"></a>        <span class="c1"># Create time State only if it doesn&#39;t exist</span>
-</span><span id="__span-0-458"><a id="__codelineno-0-458" name="__codelineno-0-458"></a>        <span class="n">time_state</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
-</span><span id="__span-0-459"><a id="__codelineno-0-459" name="__codelineno-0-459"></a>        <span class="n">time_state</span><span class="o">.</span><span class="n">min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">time_min</span><span class="p">])</span>
-</span><span id="__span-0-460"><a id="__codelineno-0-460" name="__codelineno-0-460"></a>        <span class="n">time_state</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">time_max</span><span class="p">])</span>
+</span><span id="__span-0-432"><a id="__codelineno-0-432" name="__codelineno-0-432"></a><span class="sd">    Raises:</span>
+</span><span id="__span-0-433"><a id="__codelineno-0-433" name="__codelineno-0-433"></a><span class="sd">        ValueError: If no state named &quot;time&quot; is found in the states list</span>
+</span><span id="__span-0-434"><a id="__codelineno-0-434" name="__codelineno-0-434"></a>
+</span><span id="__span-0-435"><a id="__codelineno-0-435" name="__codelineno-0-435"></a><span class="sd">    Example:</span>
+</span><span id="__span-0-436"><a id="__codelineno-0-436" name="__codelineno-0-436"></a><span class="sd">        Augment dynamics with CTCS penalty states:</span>
+</span><span id="__span-0-437"><a id="__codelineno-0-437" name="__codelineno-0-437"></a>
+</span><span id="__span-0-438"><a id="__codelineno-0-438" name="__codelineno-0-438"></a><span class="sd">            x = ox.State(&quot;x&quot;, shape=(3,))</span>
+</span><span id="__span-0-439"><a id="__codelineno-0-439" name="__codelineno-0-439"></a><span class="sd">            u = ox.Control(&quot;u&quot;, shape=(2,))</span>
+</span><span id="__span-0-440"><a id="__codelineno-0-440" name="__codelineno-0-440"></a><span class="sd">            time = ox.State(&quot;time&quot;, shape=(1,))</span>
+</span><span id="__span-0-441"><a id="__codelineno-0-441" name="__codelineno-0-441"></a><span class="sd">            xdot = u @ A  # Some dynamics</span>
+</span><span id="__span-0-442"><a id="__codelineno-0-442" name="__codelineno-0-442"></a><span class="sd">            constraint = (ox.Norm(x) &lt;= 1.0).over((0, 50))</span>
+</span><span id="__span-0-443"><a id="__codelineno-0-443" name="__codelineno-0-443"></a><span class="sd">            xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(</span>
+</span><span id="__span-0-444"><a id="__codelineno-0-444" name="__codelineno-0-444"></a><span class="sd">                xdot=xdot,</span>
+</span><span id="__span-0-445"><a id="__codelineno-0-445" name="__codelineno-0-445"></a><span class="sd">                states=[x, time],</span>
+</span><span id="__span-0-446"><a id="__codelineno-0-446" name="__codelineno-0-446"></a><span class="sd">                controls=[u],</span>
+</span><span id="__span-0-447"><a id="__codelineno-0-447" name="__codelineno-0-447"></a><span class="sd">                constraints_ctcs=[constraint],</span>
+</span><span id="__span-0-448"><a id="__codelineno-0-448" name="__codelineno-0-448"></a><span class="sd">                N=50</span>
+</span><span id="__span-0-449"><a id="__codelineno-0-449" name="__codelineno-0-449"></a><span class="sd">            )</span>
+</span><span id="__span-0-450"><a id="__codelineno-0-450" name="__codelineno-0-450"></a>
+</span><span id="__span-0-451"><a id="__codelineno-0-451" name="__codelineno-0-451"></a><span class="sd">        states_aug includes x, time, and _ctcs_aug_0,</span>
+</span><span id="__span-0-452"><a id="__codelineno-0-452" name="__codelineno-0-452"></a><span class="sd">        controls_aug includes u and _time_dilation</span>
+</span><span id="__span-0-453"><a id="__codelineno-0-453" name="__codelineno-0-453"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-0-454"><a id="__codelineno-0-454" name="__codelineno-0-454"></a>    <span class="c1"># Copy the original states and controls lists</span>
+</span><span id="__span-0-455"><a id="__codelineno-0-455" name="__codelineno-0-455"></a>    <span class="n">states_augmented</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">states</span><span class="p">)</span>
+</span><span id="__span-0-456"><a id="__codelineno-0-456" name="__codelineno-0-456"></a>    <span class="n">controls_augmented</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">controls</span><span class="p">)</span>
+</span><span id="__span-0-457"><a id="__codelineno-0-457" name="__codelineno-0-457"></a>
+</span><span id="__span-0-458"><a id="__codelineno-0-458" name="__codelineno-0-458"></a>    <span class="k">if</span> <span class="n">constraints_ctcs</span><span class="p">:</span>
+</span><span id="__span-0-459"><a id="__codelineno-0-459" name="__codelineno-0-459"></a>        <span class="c1"># Group penalty expressions by idx (constraints should already be sorted)</span>
+</span><span id="__span-0-460"><a id="__codelineno-0-460" name="__codelineno-0-460"></a>        <span class="n">penalty_groups</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">List</span><span class="p">[</span><span class="n">Expr</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{}</span>
 </span><span id="__span-0-461"><a id="__codelineno-0-461" name="__codelineno-0-461"></a>
-</span><span id="__span-0-462"><a id="__codelineno-0-462" name="__codelineno-0-462"></a>        <span class="c1"># Set time boundary conditions</span>
-</span><span id="__span-0-463"><a id="__codelineno-0-463" name="__codelineno-0-463"></a>        <span class="n">time_state</span><span class="o">.</span><span class="n">initial</span> <span class="o">=</span> <span class="p">[</span><span class="n">time_initial</span><span class="p">]</span>
-</span><span id="__span-0-464"><a id="__codelineno-0-464" name="__codelineno-0-464"></a>        <span class="n">time_state</span><span class="o">.</span><span class="n">final</span> <span class="o">=</span> <span class="p">[</span><span class="n">time_final</span><span class="p">]</span>
+</span><span id="__span-0-462"><a id="__codelineno-0-462" name="__codelineno-0-462"></a>        <span class="k">for</span> <span class="n">ctcs</span> <span class="ow">in</span> <span class="n">constraints_ctcs</span><span class="p">:</span>
+</span><span id="__span-0-463"><a id="__codelineno-0-463" name="__codelineno-0-463"></a>            <span class="c1"># Keep the CTCS wrapper intact to preserve node interval information</span>
+</span><span id="__span-0-464"><a id="__codelineno-0-464" name="__codelineno-0-464"></a>            <span class="c1"># The JAX lowerer&#39;s visit_ctcs() method will handle the conditional logic</span>
 </span><span id="__span-0-465"><a id="__codelineno-0-465" name="__codelineno-0-465"></a>
-</span><span id="__span-0-466"><a id="__codelineno-0-466" name="__codelineno-0-466"></a>        <span class="c1"># Create initial guess for time (linear interpolation)</span>
-</span><span id="__span-0-467"><a id="__codelineno-0-467" name="__codelineno-0-467"></a>        <span class="n">time_guess_start</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="__span-0-468"><a id="__codelineno-0-468" name="__codelineno-0-468"></a>            <span class="n">time_state</span><span class="o">.</span><span class="n">initial</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-</span><span id="__span-0-469"><a id="__codelineno-0-469" name="__codelineno-0-469"></a>            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">time_state</span><span class="o">.</span><span class="n">initial</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">))</span>
-</span><span id="__span-0-470"><a id="__codelineno-0-470" name="__codelineno-0-470"></a>            <span class="k">else</span> <span class="n">time_state</span><span class="o">.</span><span class="n">initial</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
-</span><span id="__span-0-471"><a id="__codelineno-0-471" name="__codelineno-0-471"></a>        <span class="p">)</span>
-</span><span id="__span-0-472"><a id="__codelineno-0-472" name="__codelineno-0-472"></a>        <span class="n">time_guess_end</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="__span-0-473"><a id="__codelineno-0-473" name="__codelineno-0-473"></a>            <span class="n">time_state</span><span class="o">.</span><span class="n">final</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-</span><span id="__span-0-474"><a id="__codelineno-0-474" name="__codelineno-0-474"></a>            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">time_state</span><span class="o">.</span><span class="n">final</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">))</span>
-</span><span id="__span-0-475"><a id="__codelineno-0-475" name="__codelineno-0-475"></a>            <span class="k">else</span> <span class="n">time_state</span><span class="o">.</span><span class="n">final</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
-</span><span id="__span-0-476"><a id="__codelineno-0-476" name="__codelineno-0-476"></a>        <span class="p">)</span>
-</span><span id="__span-0-477"><a id="__codelineno-0-477" name="__codelineno-0-477"></a>        <span class="n">time_state</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">time_guess_start</span><span class="p">,</span> <span class="n">time_guess_end</span><span class="p">,</span> <span class="n">N</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
-</span><span id="__span-0-478"><a id="__codelineno-0-478" name="__codelineno-0-478"></a>
-</span><span id="__span-0-479"><a id="__codelineno-0-479" name="__codelineno-0-479"></a>        <span class="c1"># Transfer scaling_min/max from Time object if provided</span>
-</span><span id="__span-0-480"><a id="__codelineno-0-480" name="__codelineno-0-480"></a>        <span class="k">if</span> <span class="n">time_scaling_min</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-481"><a id="__codelineno-0-481" name="__codelineno-0-481"></a>            <span class="n">time_state</span><span class="o">.</span><span class="n">scaling_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">time_scaling_min</span><span class="p">])</span>
-</span><span id="__span-0-482"><a id="__codelineno-0-482" name="__codelineno-0-482"></a>        <span class="k">if</span> <span class="n">time_scaling_max</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-483"><a id="__codelineno-0-483" name="__codelineno-0-483"></a>            <span class="n">time_state</span><span class="o">.</span><span class="n">scaling_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">time_scaling_max</span><span class="p">])</span>
-</span><span id="__span-0-484"><a id="__codelineno-0-484" name="__codelineno-0-484"></a>
-</span><span id="__span-0-485"><a id="__codelineno-0-485" name="__codelineno-0-485"></a>        <span class="c1"># Add time state to the list</span>
-</span><span id="__span-0-486"><a id="__codelineno-0-486" name="__codelineno-0-486"></a>        <span class="n">states_aug</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">time_state</span><span class="p">)</span>
-</span><span id="__span-0-487"><a id="__codelineno-0-487" name="__codelineno-0-487"></a>
-</span><span id="__span-0-488"><a id="__codelineno-0-488" name="__codelineno-0-488"></a>        <span class="c1"># Add CTCS constraints for time bounds to unsorted</span>
-</span><span id="__span-0-489"><a id="__codelineno-0-489" name="__codelineno-0-489"></a>        <span class="n">constraints</span><span class="o">.</span><span class="n">unsorted</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">CTCS</span><span class="p">(</span><span class="n">time_state</span> <span class="o">&lt;=</span> <span class="n">time_state</span><span class="o">.</span><span class="n">max</span><span class="p">))</span>
-</span><span id="__span-0-490"><a id="__codelineno-0-490" name="__codelineno-0-490"></a>        <span class="n">constraints</span><span class="o">.</span><span class="n">unsorted</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">CTCS</span><span class="p">(</span><span class="n">time_state</span><span class="o">.</span><span class="n">min</span> <span class="o">&lt;=</span> <span class="n">time_state</span><span class="p">))</span>
-</span><span id="__span-0-491"><a id="__codelineno-0-491" name="__codelineno-0-491"></a>
-</span><span id="__span-0-492"><a id="__codelineno-0-492" name="__codelineno-0-492"></a>    <span class="k">return</span> <span class="n">states_aug</span><span class="p">,</span> <span class="n">constraints</span>
+</span><span id="__span-0-466"><a id="__codelineno-0-466" name="__codelineno-0-466"></a>            <span class="c1"># TODO: In the future, apply scaling here if ctcs has a scaling attribute</span>
+</span><span id="__span-0-467"><a id="__codelineno-0-467" name="__codelineno-0-467"></a>            <span class="c1"># if hasattr(ctcs, &#39;scaling&#39;) and ctcs.scaling != 1.0:</span>
+</span><span id="__span-0-468"><a id="__codelineno-0-468" name="__codelineno-0-468"></a>            <span class="c1">#     ctcs = scale_ctcs(ctcs, scaling_factor)</span>
+</span><span id="__span-0-469"><a id="__codelineno-0-469" name="__codelineno-0-469"></a>
+</span><span id="__span-0-470"><a id="__codelineno-0-470" name="__codelineno-0-470"></a>            <span class="k">if</span> <span class="n">ctcs</span><span class="o">.</span><span class="n">idx</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">penalty_groups</span><span class="p">:</span>
+</span><span id="__span-0-471"><a id="__codelineno-0-471" name="__codelineno-0-471"></a>                <span class="n">penalty_groups</span><span class="p">[</span><span class="n">ctcs</span><span class="o">.</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="__span-0-472"><a id="__codelineno-0-472" name="__codelineno-0-472"></a>            <span class="n">penalty_groups</span><span class="p">[</span><span class="n">ctcs</span><span class="o">.</span><span class="n">idx</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ctcs</span><span class="p">)</span>
+</span><span id="__span-0-473"><a id="__codelineno-0-473" name="__codelineno-0-473"></a>
+</span><span id="__span-0-474"><a id="__codelineno-0-474" name="__codelineno-0-474"></a>        <span class="c1"># Create augmented state expressions for each group</span>
+</span><span id="__span-0-475"><a id="__codelineno-0-475" name="__codelineno-0-475"></a>        <span class="n">augmented_state_exprs</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="__span-0-476"><a id="__codelineno-0-476" name="__codelineno-0-476"></a>        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">penalty_groups</span><span class="o">.</span><span class="n">keys</span><span class="p">()):</span>
+</span><span id="__span-0-477"><a id="__codelineno-0-477" name="__codelineno-0-477"></a>            <span class="n">penalty_terms</span> <span class="o">=</span> <span class="n">penalty_groups</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span>
+</span><span id="__span-0-478"><a id="__codelineno-0-478" name="__codelineno-0-478"></a>            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">penalty_terms</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+</span><span id="__span-0-479"><a id="__codelineno-0-479" name="__codelineno-0-479"></a>                <span class="n">augmented_state_expr</span> <span class="o">=</span> <span class="n">penalty_terms</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-0-480"><a id="__codelineno-0-480" name="__codelineno-0-480"></a>            <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-481"><a id="__codelineno-0-481" name="__codelineno-0-481"></a>                <span class="n">augmented_state_expr</span> <span class="o">=</span> <span class="n">Add</span><span class="p">(</span><span class="o">*</span><span class="n">penalty_terms</span><span class="p">)</span>
+</span><span id="__span-0-482"><a id="__codelineno-0-482" name="__codelineno-0-482"></a>            <span class="n">augmented_state_exprs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">augmented_state_expr</span><span class="p">)</span>
+</span><span id="__span-0-483"><a id="__codelineno-0-483" name="__codelineno-0-483"></a>
+</span><span id="__span-0-484"><a id="__codelineno-0-484" name="__codelineno-0-484"></a>        <span class="c1"># Calculate number of augmented states from the penalty groups</span>
+</span><span id="__span-0-485"><a id="__codelineno-0-485" name="__codelineno-0-485"></a>        <span class="n">num_augmented_states</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">penalty_groups</span><span class="p">)</span>
+</span><span id="__span-0-486"><a id="__codelineno-0-486" name="__codelineno-0-486"></a>
+</span><span id="__span-0-487"><a id="__codelineno-0-487" name="__codelineno-0-487"></a>        <span class="c1"># Create augmented state variables</span>
+</span><span id="__span-0-488"><a id="__codelineno-0-488" name="__codelineno-0-488"></a>        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_augmented_states</span><span class="p">):</span>
+</span><span id="__span-0-489"><a id="__codelineno-0-489" name="__codelineno-0-489"></a>            <span class="n">aug_var</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;_ctcs_aug_</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+</span><span id="__span-0-490"><a id="__codelineno-0-490" name="__codelineno-0-490"></a>            <span class="n">aug_var</span><span class="o">.</span><span class="n">initial</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">licq_min</span><span class="p">])</span>  <span class="c1"># Set initial to respect bounds</span>
+</span><span id="__span-0-491"><a id="__codelineno-0-491" name="__codelineno-0-491"></a>            <span class="n">aug_var</span><span class="o">.</span><span class="n">final</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">&quot;free&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)]</span>
+</span><span id="__span-0-492"><a id="__codelineno-0-492" name="__codelineno-0-492"></a>            <span class="n">aug_var</span><span class="o">.</span><span class="n">min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">licq_min</span><span class="p">])</span>
+</span><span id="__span-0-493"><a id="__codelineno-0-493" name="__codelineno-0-493"></a>            <span class="n">aug_var</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">licq_max</span><span class="p">])</span>
+</span><span id="__span-0-494"><a id="__codelineno-0-494" name="__codelineno-0-494"></a>            <span class="c1"># Set guess to licq_min as well</span>
+</span><span id="__span-0-495"><a id="__codelineno-0-495" name="__codelineno-0-495"></a>            <span class="n">aug_var</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">([</span><span class="n">N</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">licq_min</span><span class="p">)</span>  <span class="c1"># N x num augmented states</span>
+</span><span id="__span-0-496"><a id="__codelineno-0-496" name="__codelineno-0-496"></a>            <span class="n">states_augmented</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">aug_var</span><span class="p">)</span>
+</span><span id="__span-0-497"><a id="__codelineno-0-497" name="__codelineno-0-497"></a>
+</span><span id="__span-0-498"><a id="__codelineno-0-498" name="__codelineno-0-498"></a>        <span class="c1"># Concatenate with original dynamics</span>
+</span><span id="__span-0-499"><a id="__codelineno-0-499" name="__codelineno-0-499"></a>        <span class="n">xdot_aug</span> <span class="o">=</span> <span class="n">Concat</span><span class="p">(</span><span class="n">xdot</span><span class="p">,</span> <span class="o">*</span><span class="n">augmented_state_exprs</span><span class="p">)</span>
+</span><span id="__span-0-500"><a id="__codelineno-0-500" name="__codelineno-0-500"></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-501"><a id="__codelineno-0-501" name="__codelineno-0-501"></a>        <span class="n">xdot_aug</span> <span class="o">=</span> <span class="n">xdot</span>
+</span><span id="__span-0-502"><a id="__codelineno-0-502" name="__codelineno-0-502"></a>
+</span><span id="__span-0-503"><a id="__codelineno-0-503" name="__codelineno-0-503"></a>    <span class="n">time_dilation</span> <span class="o">=</span> <span class="n">Control</span><span class="p">(</span><span class="s2">&quot;_time_dilation&quot;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,))</span>
+</span><span id="__span-0-504"><a id="__codelineno-0-504" name="__codelineno-0-504"></a>
+</span><span id="__span-0-505"><a id="__codelineno-0-505" name="__codelineno-0-505"></a>    <span class="c1"># Set up time dilation bounds and initial guess</span>
+</span><span id="__span-0-506"><a id="__codelineno-0-506" name="__codelineno-0-506"></a>    <span class="c1"># Find the time state by name</span>
+</span><span id="__span-0-507"><a id="__codelineno-0-507" name="__codelineno-0-507"></a>    <span class="n">time_state</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-508"><a id="__codelineno-0-508" name="__codelineno-0-508"></a>    <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">states</span><span class="p">:</span>
+</span><span id="__span-0-509"><a id="__codelineno-0-509" name="__codelineno-0-509"></a>        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;time&quot;</span><span class="p">:</span>
+</span><span id="__span-0-510"><a id="__codelineno-0-510" name="__codelineno-0-510"></a>            <span class="n">time_state</span> <span class="o">=</span> <span class="n">state</span>
+</span><span id="__span-0-511"><a id="__codelineno-0-511" name="__codelineno-0-511"></a>            <span class="k">break</span>
+</span><span id="__span-0-512"><a id="__codelineno-0-512" name="__codelineno-0-512"></a>
+</span><span id="__span-0-513"><a id="__codelineno-0-513" name="__codelineno-0-513"></a>    <span class="k">if</span> <span class="n">time_state</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-514"><a id="__codelineno-0-514" name="__codelineno-0-514"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No state named &#39;time&#39; found in states list&quot;</span><span class="p">)</span>
+</span><span id="__span-0-515"><a id="__codelineno-0-515" name="__codelineno-0-515"></a>
+</span><span id="__span-0-516"><a id="__codelineno-0-516" name="__codelineno-0-516"></a>    <span class="n">time_final</span> <span class="o">=</span> <span class="n">time_state</span><span class="o">.</span><span class="n">final</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-0-517"><a id="__codelineno-0-517" name="__codelineno-0-517"></a>    <span class="n">time_dilation</span><span class="o">.</span><span class="n">min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">time_dilation_factor_min</span> <span class="o">*</span> <span class="n">time_final</span><span class="p">])</span>
+</span><span id="__span-0-518"><a id="__codelineno-0-518" name="__codelineno-0-518"></a>    <span class="n">time_dilation</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">time_dilation_factor_max</span> <span class="o">*</span> <span class="n">time_final</span><span class="p">])</span>
+</span><span id="__span-0-519"><a id="__codelineno-0-519" name="__codelineno-0-519"></a>
+</span><span id="__span-0-520"><a id="__codelineno-0-520" name="__codelineno-0-520"></a>    <span class="c1"># Compute initial guess for time_dilation from time.guess using finite differences</span>
+</span><span id="__span-0-521"><a id="__codelineno-0-521" name="__codelineno-0-521"></a>    <span class="c1"># The relationship is: dt/dtau = time_dilation, where tau is normalized time [0,1]</span>
+</span><span id="__span-0-522"><a id="__codelineno-0-522" name="__codelineno-0-522"></a>    <span class="c1"># With N nodes, dtau = 1/(N-1) between consecutive nodes</span>
+</span><span id="__span-0-523"><a id="__codelineno-0-523" name="__codelineno-0-523"></a>    <span class="k">if</span> <span class="n">time_state</span><span class="o">.</span><span class="n">guess</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-524"><a id="__codelineno-0-524" name="__codelineno-0-524"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;time state must have a guess set before augmentation&quot;</span><span class="p">)</span>
+</span><span id="__span-0-525"><a id="__codelineno-0-525" name="__codelineno-0-525"></a>
+</span><span id="__span-0-526"><a id="__codelineno-0-526" name="__codelineno-0-526"></a>    <span class="k">if</span> <span class="n">N</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+</span><span id="__span-0-527"><a id="__codelineno-0-527" name="__codelineno-0-527"></a>        <span class="n">time_guess</span> <span class="o">=</span> <span class="n">time_state</span><span class="o">.</span><span class="n">guess</span><span class="o">.</span><span class="n">flatten</span><span class="p">()</span>  <span class="c1"># Shape (N,)</span>
+</span><span id="__span-0-528"><a id="__codelineno-0-528" name="__codelineno-0-528"></a>        <span class="n">time_dilation_guess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">N</span><span class="p">)</span>
+</span><span id="__span-0-529"><a id="__codelineno-0-529" name="__codelineno-0-529"></a>        <span class="n">dtau</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="p">(</span><span class="n">N</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># Normalized time step between nodes</span>
+</span><span id="__span-0-530"><a id="__codelineno-0-530" name="__codelineno-0-530"></a>        <span class="c1"># Compute finite difference: time_dilation[k] = (time[k+1] - time[k]) / dtau</span>
+</span><span id="__span-0-531"><a id="__codelineno-0-531" name="__codelineno-0-531"></a>        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">N</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+</span><span id="__span-0-532"><a id="__codelineno-0-532" name="__codelineno-0-532"></a>            <span class="n">time_dilation_guess</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">time_guess</span><span class="p">[</span><span class="n">k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">time_guess</span><span class="p">[</span><span class="n">k</span><span class="p">])</span> <span class="o">/</span> <span class="n">dtau</span>
+</span><span id="__span-0-533"><a id="__codelineno-0-533" name="__codelineno-0-533"></a>        <span class="c1"># For the last node, use the previous value (extrapolate)</span>
+</span><span id="__span-0-534"><a id="__codelineno-0-534" name="__codelineno-0-534"></a>        <span class="n">time_dilation_guess</span><span class="p">[</span><span class="n">N</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">time_dilation_guess</span><span class="p">[</span><span class="n">N</span> <span class="o">-</span> <span class="mi">2</span><span class="p">]</span>
+</span><span id="__span-0-535"><a id="__codelineno-0-535" name="__codelineno-0-535"></a>        <span class="n">time_dilation</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">time_dilation_guess</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+</span><span id="__span-0-536"><a id="__codelineno-0-536" name="__codelineno-0-536"></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-537"><a id="__codelineno-0-537" name="__codelineno-0-537"></a>        <span class="c1"># Single node case: use time_final as guess</span>
+</span><span id="__span-0-538"><a id="__codelineno-0-538" name="__codelineno-0-538"></a>        <span class="n">time_dilation</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">([</span><span class="n">N</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span> <span class="o">*</span> <span class="n">time_final</span>
+</span><span id="__span-0-539"><a id="__codelineno-0-539" name="__codelineno-0-539"></a>
+</span><span id="__span-0-540"><a id="__codelineno-0-540" name="__codelineno-0-540"></a>    <span class="n">controls_augmented</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">time_dilation</span><span class="p">)</span>
+</span><span id="__span-0-541"><a id="__codelineno-0-541" name="__codelineno-0-541"></a>
+</span><span id="__span-0-542"><a id="__codelineno-0-542" name="__codelineno-0-542"></a>    <span class="k">return</span> <span class="n">xdot_aug</span><span class="p">,</span> <span class="n">states_augmented</span><span class="p">,</span> <span class="n">controls_augmented</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
