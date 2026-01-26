@@ -8,7 +8,6 @@ The visitor methods that populate the registry live in sibling modules
 from typing import Callable
 
 from openscvx.symbolic.expr import Expr
-
 from openscvx.symbolic.lowerers.jax._registry import dispatch
 
 

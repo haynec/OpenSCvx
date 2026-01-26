@@ -18,22 +18,23 @@ Example::
     result = f(x_val, u_val, node=0, params={})
 """
 
-from openscvx.symbolic.lowerers.jax._lowerer import JaxLowerer
-
 # Import visitor modules to trigger @visitor registration.
 # Each module populates _JAX_VISITORS as a side effect of import.
-from openscvx.symbolic.lowerers.jax import arithmetic  # noqa: F401
-from openscvx.symbolic.lowerers.jax import array  # noqa: F401
-from openscvx.symbolic.lowerers.jax import constraint  # noqa: F401
-from openscvx.symbolic.lowerers.jax import control  # noqa: F401
-from openscvx.symbolic.lowerers.jax import expr  # noqa: F401
-from openscvx.symbolic.lowerers.jax import lie  # noqa: F401
-from openscvx.symbolic.lowerers.jax import linalg  # noqa: F401
-from openscvx.symbolic.lowerers.jax import logic  # noqa: F401
-from openscvx.symbolic.lowerers.jax import math  # noqa: F401
-from openscvx.symbolic.lowerers.jax import spatial  # noqa: F401
-from openscvx.symbolic.lowerers.jax import state  # noqa: F401
-from openscvx.symbolic.lowerers.jax import stl  # noqa: F401
-from openscvx.symbolic.lowerers.jax import vmap  # noqa: F401
+from openscvx.symbolic.lowerers.jax import (
+    arithmetic,  # noqa: F401
+    array,  # noqa: F401
+    constraint,  # noqa: F401
+    control,  # noqa: F401
+    expr,  # noqa: F401
+    lie,  # noqa: F401
+    linalg,  # noqa: F401
+    logic,  # noqa: F401
+    math,  # noqa: F401
+    spatial,  # noqa: F401
+    state,  # noqa: F401
+    stl,  # noqa: F401
+    vmap,  # noqa: F401
+)
+from openscvx.symbolic.lowerers.jax._lowerer import JaxLowerer
 
 __all__ = ["JaxLowerer"]
