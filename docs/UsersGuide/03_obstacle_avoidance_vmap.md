@@ -3,6 +3,7 @@
 In this tutorial we tackle a more realistic drone control problem: navigating through obstacles with full 6-DOF rigid body dynamics.
 We will introduce quaternion-based attitude representation, the spatial utility functions, and show how to define obstacles as Parameters for runtime updates.
 In Part 2, we address scalability—what happens when you have dozens or hundreds of obstacles—and introduce `ox.Vmap` for efficient vectorized constraint evaluation.
+Finally, we show how to use these tools for real-time model-predictive control (MPC) applications.
 
 This tutorial covers:
 
@@ -11,6 +12,7 @@ This tutorial covers:
 - Runtime-updatable parameters with `ox.Parameter`
 - Ellipsoidal obstacle constraints
 - Vectorized constraints with `ox.Vmap`
+- Real-time control with `problem.step()`
 
 ## 6-DOF Obstacle Avoidance
 
@@ -329,10 +331,93 @@ where the right-hand side is computed as one vectorized operation.
 !!! warning
     `ox.Vmap` is specifically for **data parallelism**: applying the same operation across a batch of inputs. It is unfortunately not a _panacea_ for magically parallelizing every operation.
 
+---
+
+## Real-Time Control with `step()`
+
+So far we've used `problem.solve()` which runs the full SCP algorithm to convergence. But for receding-horizon or model-predictive control (MPC) applications, you often want finer control: run a single SCP iteration, update parameters based on new sensor data, and repeat.
+
+### Single-Step Iteration
+
+Use `problem.step()` instead of `problem.solve()` to run one SCP iteration:
+
+```python
+problem.initialize()
+
+# Real-time control loop
+while running:
+    # Run one SCP iteration
+    step_result = problem.step()
+
+    # step_result contains iteration metrics:
+    # - step_result.J_tr: trust region cost
+    # - step_result.J_vc: virtual control cost
+    # - step_result.converged: whether convergence criteria met
+```
+
+Each call to `step()` performs one linearization and convex solve, warm-starting from the previous solution.
+
+### Updating Parameters Between Steps
+
+Parameters (introduced [earlier in this tutorial](#parameters)) are designed for exactly this use case. Update obstacle positions, target locations, or physical constants between iterations:
+
+```python
+while running:
+    # Get new state estimate from sensors
+    current_position = get_state_estimate()
+
+    # Update obstacle positions from perception system
+    for i, obs_pos in enumerate(detected_obstacles):
+        problem.parameters[f"obstacle_center_{i}"] = obs_pos
+
+    # Run one iteration with updated parameters
+    step_result = problem.step()
+
+    # Extract control to apply
+    control = problem.state.V_history[-1]  # Access current solution
+```
+
+Parameter updates take effect immediately on the next `step()` call without any recompilation.
+
+### Adjusting Solver Settings
+
+You can also adjust SCP weights at runtime to change solver behavior:
+
+```python
+# Increase cost weight as solution converges
+if step_result.J_vc < 1e-4:
+    problem.settings.scp.lam_cost *= 1.1
+
+# Tighten trust region if solution is oscillating
+problem.settings.scp.w_tr = 2.0
+```
+
+### Resetting the Problem
+
+To reset the solver state back to the initial guess (e.g., when starting a new trajectory or after a large disturbance):
+
+```python
+problem.reset()  # Clears V_history, resets to initial guess
+```
+
+### Example: Interactive Drone Racing
+
+For a complete real-time example with interactive 3D visualization, see [`examples/realtime/drone_racing_realtime.py`](https://github.com/OpenSCvx/OpenSCvx/blob/main/examples/realtime/drone_racing_realtime.py). This example demonstrates:
+
+- Continuous SCP iteration in a background thread
+- Draggable gates that update parameters in real-time
+- Live trajectory visualization as the solution evolves
+- Runtime adjustment of solver weights
+
+The visualization uses [viser](https://viser.studio/) for the interactive 3D interface. The OpenSCvx integration is straightforward, most of the complexity is in the GUI, not the optimization loop.
+For further information about visualization with viser see [Tutorial 05 Visualizing Results](05_visualization.md).
+
 ## Further Reading
 
 - [Complete 6-DOF Obstacle Avoidance Example](../Examples/drone/obstacle_avoidance.md)
 - [Complete Vmap Obstacle Avoidance Example](../Examples/drone/obstacle_avoidance_vmap.md)
+- [Real-Time Obstacle Avoidance Example](https://github.com/OpenSCvx/OpenSCvx/blob/main/examples/realtime/obstacle_avoidance_realtime.py)
+- [Real-Time Drone Racing Example](https://github.com/OpenSCvx/OpenSCvx/blob/main/examples/realtime/drone_racing_realtime.py)
 - [API Reference: Spatial Utilities](../Reference/symbolic/expr/spatial.md)
 - [API Reference: Parameters](../Reference/symbolic/expr/expr.md)
 - [Viewpoint Constraints: Custom Functions and Perception](04_viewpoint_constraints.md)
