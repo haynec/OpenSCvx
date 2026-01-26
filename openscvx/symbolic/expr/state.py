@@ -1,5 +1,6 @@
 import hashlib
 from enum import Enum
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -32,7 +33,7 @@ class BoundaryType(str, Enum):
     MAXIMIZE = "maximize"
 
 
-def Free(guess):
+def Free(guess: float) -> Tuple[str, float]:
     """Create a free boundary condition tuple.
 
     This is a convenience function that returns a tuple ("free", guess) which
@@ -61,7 +62,7 @@ def Free(guess):
     return ("free", guess)
 
 
-def Fixed(value):
+def Fixed(value: float) -> Tuple[str, float]:
     """Create a fixed boundary condition tuple.
 
     This is a convenience function that returns a tuple ("fixed", value) which
@@ -87,7 +88,7 @@ def Fixed(value):
     return ("fixed", value)
 
 
-def Minimize(guess):
+def Minimize(guess: float) -> Tuple[str, float]:
     """Create a minimize boundary condition tuple.
 
     This is a convenience function that returns a tuple ("minimize", guess) which
@@ -117,7 +118,7 @@ def Minimize(guess):
     return ("minimize", guess)
 
 
-def Maximize(guess):
+def Maximize(guess: float) -> Tuple[str, float]:
     """Create a maximize boundary condition tuple.
 
     This is a convenience function that returns a tuple ("maximize", guess) which
@@ -196,7 +197,7 @@ class State(Variable):
             pos.final = [10, ("free", 5), ("maximize", 150)]  # Maximize final altitude
     """
 
-    def __init__(self, name, shape):
+    def __init__(self, name: str, shape: Tuple[int, ...]):
         """Initialize a State object.
 
         Args:
@@ -232,7 +233,7 @@ class State(Variable):
             hasher.update(str(self.final_type.tolist()).encode())
 
     @property
-    def min(self):
+    def min(self) -> Optional[np.ndarray]:
         """Get the minimum bounds for the state variables.
 
         Returns:
@@ -275,7 +276,7 @@ class State(Variable):
         self._check_bounds_against_initial_final()
 
     @property
-    def max(self):
+    def max(self) -> Optional[np.ndarray]:
         """Get the maximum bounds for the state variables.
 
         Returns:
@@ -349,7 +350,7 @@ class State(Variable):
                     )
 
     @property
-    def initial(self):
+    def initial(self) -> Optional[np.ndarray]:
         """Get the initial state boundary condition values.
 
         Returns:
@@ -445,7 +446,7 @@ class State(Variable):
         self._check_bounds_against_initial_final()
 
     @property
-    def final(self):
+    def final(self) -> Optional[np.ndarray]:
         """Get the final state boundary condition values.
 
         Returns:
@@ -541,7 +542,7 @@ class State(Variable):
         self._check_bounds_against_initial_final()
 
     @property
-    def scaling_min(self):
+    def scaling_min(self) -> Optional[np.ndarray]:
         """Get the scaling minimum bounds for the state variables.
 
         Returns:
@@ -570,7 +571,7 @@ class State(Variable):
         self._scaling_min = val
 
     @property
-    def scaling_max(self):
+    def scaling_max(self) -> Optional[np.ndarray]:
         """Get the scaling maximum bounds for the state variables.
 
         Returns:
@@ -598,7 +599,7 @@ class State(Variable):
             )
         self._scaling_max = val
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """String representation of the State object.
 
         Returns:

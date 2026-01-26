@@ -79,10 +79,10 @@ class Problem:
         dynamics_prop: Optional[dict] = None,
         states_prop: Optional[List[State]] = None,
         algebraic_prop: Optional[dict] = None,
-        licq_min=0.0,
-        licq_max=1e-4,
-        time_dilation_factor_min=0.3,
-        time_dilation_factor_max=3.0,
+        licq_min: float = 0.0,
+        licq_max: float = 1e-4,
+        time_dilation_factor_min: float = 0.3,
+        time_dilation_factor_max: float = 3.0,
         byof: Optional[ByofSpec] = None,
     ):
         """The primary class in charge of compiling and exporting the solvers.
@@ -108,15 +108,15 @@ class Problem:
                 Only specify additional states beyond optimization states. Used with dynamics_prop.
             algebraic_prop (dict, optional): Dictionary mapping names to symbolic expressions
                 for outputs evaluated (not integrated) during propagation.
-            licq_min: Minimum LICQ constraint value
-            licq_max: Maximum LICQ constraint value
-            time_dilation_factor_min: Minimum time dilation factor
-            time_dilation_factor_max: Maximum time dilation factor
-            byof: Expert mode only. Raw JAX functions to bypass symbolic layer.
-                See :class:`openscvx.expert.ByofSpec` for detailed documentation.
-
-        Returns:
-            None
+            licq_min (float): Minimum LICQ constraint value. Defaults to 0.0.
+            licq_max (float): Maximum LICQ constraint value. Defaults to 1e-4.
+            time_dilation_factor_min (float): Minimum time dilation factor.
+                Defaults to 0.3.
+            time_dilation_factor_max (float): Maximum time dilation factor.
+                Defaults to 3.0.
+            byof (ByofSpec, optional): Expert mode only. Raw JAX functions to
+                bypass symbolic layer. See :class:`openscvx.expert.ByofSpec` for
+                detailed documentation.
 
         Note:
             There are two approaches for handling time:
@@ -236,7 +236,7 @@ class Problem:
         self._algorithm = PenalizedTrustRegion()
 
     @property
-    def parameters(self):
+    def parameters(self) -> ParameterDict:
         """Get the parameters dictionary.
 
         The returned dictionary automatically syncs to CVXPy when modified:
@@ -244,7 +244,7 @@ class Problem:
             problem.parameters.update({"gate_0_center": center})  # Also syncs
 
         Returns:
-            ParameterDict: Special dict that syncs to CVXPy on assignment
+            ParameterDict: Special dict that syncs to CVXPy on assignment.
         """
         return self._parameter_wrapper
 

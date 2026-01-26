@@ -63,7 +63,7 @@ def rk45_step(
     t: jnp.ndarray,
     y: jnp.ndarray,
     h: float,
-    *args
+    *args: Any
 ) -> jnp.ndarray:
     """
     Perform a single RK45 (Runge-Kutta-Fehlberg) integration step.
@@ -96,11 +96,11 @@ def solve_ivp_rk45(
     f: Callable[[jnp.ndarray, jnp.ndarray, Any], jnp.ndarray],
     tau_final: float,
     y_0: jnp.ndarray,
-    args,
+    args: tuple,
     tau_0: float = 0.0,
     num_substeps: int = 50,
     is_not_compiled: bool = False,
-):
+) -> jnp.ndarray:
     """
     Solve an initial-value ODE problem using fixed-step RK45 integration.
 
@@ -145,14 +145,14 @@ def solve_ivp_diffrax(
     f: Callable[[jnp.ndarray, jnp.ndarray, Any], jnp.ndarray],
     tau_final: float,
     y_0: jnp.ndarray,
-    args,
+    args: tuple,
     tau_0: float = 0.0,
     num_substeps: int = 50,
     solver_name: str = "Dopri8",
     rtol: float = 1e-3,
     atol: float = 1e-6,
-    extra_kwargs=None,
-):
+    extra_kwargs: dict = None,
+) -> jnp.ndarray:
     """
     Solve an initial-value ODE problem using a Diffrax adaptive solver.
 
@@ -207,16 +207,16 @@ def solve_ivp_diffrax_prop(
     f: Callable[[jnp.ndarray, jnp.ndarray, Any], jnp.ndarray],
     tau_final: float,
     y_0: jnp.ndarray,
-    args,
+    args: tuple,
     tau_0: float = 0.0,
     num_substeps: int = 50,
     solver_name: str = "Dopri8",
     rtol: float = 1e-3,
     atol: float = 1e-6,
-    extra_kwargs=None,
+    extra_kwargs: dict = None,
     save_time: jnp.ndarray = None,
     mask: jnp.ndarray = None,
-):
+) -> jnp.ndarray:
     """
     Solve an initial-value ODE problem using a Diffrax adaptive solver.
     This function is specifically designed for use in the context of

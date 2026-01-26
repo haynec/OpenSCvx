@@ -12,9 +12,10 @@ Note:
     SE3 tangent parameterization, so no reordering is needed during lowering.
 """
 
-from typing import Tuple
+from typing import Tuple, Union
 
 import jaxlie  # noqa: F401 - validates jaxlie is installed
+import numpy as np
 
 from ..expr import Expr, to_expr
 
@@ -70,7 +71,7 @@ class SE3Exp(Expr):
         - AdjointDual: For dynamics computations with twists
     """
 
-    def __init__(self, twist):
+    def __init__(self, twist: Union[Expr, float, int, np.ndarray]):
         """Initialize SE3 exponential map.
 
         Args:
@@ -99,7 +100,7 @@ class SE3Exp(Expr):
             raise ValueError(f"SE3Exp expects twist with shape (6,), got {twist_shape}")
         return (4, 4)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"SE3Exp({self.twist!r})"
 
 
@@ -139,7 +140,7 @@ class SE3Log(Expr):
         - SO3Log: Rotation-only logarithm map
     """
 
-    def __init__(self, transform):
+    def __init__(self, transform: Union[Expr, float, int, np.ndarray]):
         """Initialize SE3 logarithm map.
 
         Args:
@@ -168,5 +169,5 @@ class SE3Log(Expr):
             raise ValueError(f"SE3Log expects transform with shape (4, 4), got {transform_shape}")
         return (6,)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"SE3Log({self.transform!r})"

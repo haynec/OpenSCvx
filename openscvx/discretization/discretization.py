@@ -43,7 +43,13 @@ def dVdt(
         n_u (int): Number of controls.
         N (int): Number of nodes in trajectory.
         dis_type (str): Discretization type ("ZOH" or "FOH").
-        **params: Additional parameters passed to state_dot, A, and B.
+        S_x: State scaling matrix.
+        c_x: State offset vector.
+        S_u: Control scaling matrix.
+        c_u: Control offset vector.
+        inv_S_x: Inverse state scaling matrix.
+        inv_S_u: Inverse control scaling matrix.
+        params: Additional parameters passed to state_dot, A, and B.
 
     Returns:
         jnp.ndarray: Time derivative of augmented state vector.
@@ -117,14 +123,14 @@ def dVdt(
 
 
 def calculate_discretization(
-    x,
-    u,
+    x: np.ndarray,
+    u: np.ndarray,
     state_dot: callable,
     A: callable,
     B: callable,
     settings: Config,
     params: dict,
-):
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Calculate the discretized system matrices.
 
     This function computes the discretized system matrices (A_bar, B_bar, C_bar)
@@ -137,20 +143,15 @@ def calculate_discretization(
         A (callable): Function computing state Jacobian.
         B (callable): Function computing control Jacobian.
         settings: Configuration settings for OpenSCvx.
-        custom_integrator (bool): Whether to use custom RK45 integrator.
-        debug (bool): Whether to use debug mode.
-        solver (str): Name of the solver to use.
-        rtol (float): Relative tolerance for integration.
-        atol (float): Absolute tolerance for integration.
-        dis_type (str): Discretization type ("ZOH" or "FOH").
-        **kwargs: Additional parameters passed to state_dot, A, and B.
+        params: Additional parameters passed to state_dot, A, and B.
 
     Returns:
-        tuple: (A_bar, B_bar, C_bar, z_bar, Vmulti) where:
+        tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+            (A_bar, B_bar, C_bar, x_prop, Vmulti) where:
             - A_bar: Discretized state transition matrix
             - B_bar: Discretized control influence matrix
             - C_bar: Discretized control influence matrix for next node
-            - z_bar: Defect vector
+            - x_prop: Propagated state
             - Vmulti: Full augmented state trajectory
     """
     # Unpack settings
@@ -232,7 +233,7 @@ def calculate_discretization(
     return A_bar, B_bar, C_bar, x_prop, Vmulti
 
 
-def get_discretization_solver(dyn: Dynamics, settings: Config):
+def get_discretization_solver(dyn: Dynamics, settings: Config) -> callable:
     """Create a discretization solver function.
 
     This function creates a solver that computes the discretized system matrices
@@ -240,7 +241,7 @@ def get_discretization_solver(dyn: Dynamics, settings: Config):
 
     Args:
         dyn (Dynamics): System dynamics object.
-        settings: Configuration settings for discretization.
+        settings (Config): Configuration settings for discretization.
 
     Returns:
         callable: A function that computes the discretized system matrices.

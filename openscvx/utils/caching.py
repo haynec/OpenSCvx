@@ -207,7 +207,7 @@ def load_or_compile_propagation_solver(
 
 
 def prime_propagation_solver(
-    propagation_solver: callable, params: Dict[str, Any], settings
+    propagation_solver: callable, params: Dict[str, Any], settings: Any
 ) -> None:
     """Prime the propagation solver with a test call to ensure it works.
 

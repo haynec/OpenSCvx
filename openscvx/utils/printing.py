@@ -3,6 +3,7 @@ import sys
 import time
 import warnings
 from importlib.metadata import PackageNotFoundError, version
+from typing import Any
 
 import jax
 import numpy as np
@@ -59,7 +60,7 @@ def print_summary_box(lines, title="Summary"):
     print(f"{' ' * indent}╰{'─' * box_width}╯\n")
 
 
-def print_problem_summary(settings, lowered, solver):
+def print_problem_summary(settings: Any, lowered: Any, solver: Any) -> None:
     """
     Print the problem summary box.
 

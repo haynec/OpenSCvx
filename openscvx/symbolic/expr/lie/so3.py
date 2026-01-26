@@ -6,9 +6,10 @@ group, enabling axis-angle to rotation matrix conversions and vice versa.
 Requires jaxlie: pip install openscvx[lie]
 """
 
-from typing import Tuple
+from typing import Tuple, Union
 
 import jaxlie  # noqa: F401 - validates jaxlie is installed
+import numpy as np
 
 from ..expr import Expr, to_expr
 
@@ -47,7 +48,7 @@ class SO3Exp(Expr):
         - SE3Exp: Full rigid body transformation including translation
     """
 
-    def __init__(self, omega):
+    def __init__(self, omega: Union[Expr, float, int, np.ndarray]):
         """Initialize SO3 exponential map.
 
         Args:
@@ -76,7 +77,7 @@ class SO3Exp(Expr):
             raise ValueError(f"SO3Exp expects omega with shape (3,), got {omega_shape}")
         return (3, 3)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"SO3Exp({self.omega!r})"
 
 
@@ -105,7 +106,7 @@ class SO3Log(Expr):
         - SE3Log: Full rigid body transformation logarithm
     """
 
-    def __init__(self, rotation):
+    def __init__(self, rotation: Union[Expr, float, int, np.ndarray]):
         """Initialize SO3 logarithm map.
 
         Args:
@@ -134,5 +135,5 @@ class SO3Log(Expr):
             raise ValueError(f"SO3Log expects rotation with shape (3, 3), got {rotation_shape}")
         return (3,)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"SO3Log({self.rotation!r})"
