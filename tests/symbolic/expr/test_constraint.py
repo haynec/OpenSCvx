@@ -257,7 +257,7 @@ def test_equality_constraint_lowering():
     constraint = Equality(lhs, rhs)
 
     jl = JaxLowerer()
-    fn = jl._visit_constraint(constraint)
+    fn = jl.lower(constraint)
     residual = fn(x, u, None, None)
 
     # Residual should be lhs - rhs = x - 2*u
@@ -284,7 +284,7 @@ def test_inequality_constraint_lowering():
     constraint = Inequality(lhs, rhs)
 
     jl = JaxLowerer()
-    fn = jl._visit_constraint(constraint)  # Both use the same visitor
+    fn = jl.lower(constraint)
     residual = fn(x, None, None, None)
 
     # Residual should be lhs - rhs = x - 2.0

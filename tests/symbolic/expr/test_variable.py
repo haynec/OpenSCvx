@@ -372,7 +372,7 @@ def test_jax_lower_state_without_slice_raises():
     s = State("s", (3,))
     jl = JaxLowerer()
     with pytest.raises(ValueError):
-        jl._visit_state(s)
+        jl.lower(s)
 
 
 def test_jax_lower_control_without_slice_raises():
@@ -382,7 +382,7 @@ def test_jax_lower_control_without_slice_raises():
     c = Control("c", (2,))
     jl = JaxLowerer()
     with pytest.raises(ValueError):
-        jl._visit_control(c)
+        jl.lower(c)
 
 
 def test_jax_lower_state_with_slice():
@@ -395,7 +395,7 @@ def test_jax_lower_state_with_slice():
     s = State("s", (4,))
     s._slice = slice(2, 6)
     jl = JaxLowerer()
-    f = jl._visit_state(s)
+    f = jl.lower(s)
     out = f(x, None, None, None)
     assert isinstance(out, jnp.ndarray)
     assert out.shape == (4,)
@@ -412,7 +412,7 @@ def test_jax_lower_control_with_slice():
     c = Control("c", (3,))
     c._slice = slice(5, 8)
     jl = JaxLowerer()
-    f = jl._visit_control(c)
+    f = jl.lower(c)
     out = f(None, u, None, None)
     assert isinstance(out, jnp.ndarray)
     assert out.shape == (3,)
