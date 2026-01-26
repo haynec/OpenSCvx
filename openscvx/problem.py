@@ -314,11 +314,13 @@ class Problem:
         index into the unified x and u vectors.
 
         Returns:
-            dict[str, slice]: Dictionary mapping variable names to slice objects.
+            Dictionary mapping variable names to slice objects.
                 State variables map to slices in the x vector.
                 Control variables map to slices in the u vector.
 
         Example:
+            Usage with byof::
+
                 problem = ox.Problem(dynamics, states, controls, ...)
                 print(problem.slices)
                 # {'position': slice(0, 3), 'velocity': slice(3, 6), 'theta': slice(0, 1)}
