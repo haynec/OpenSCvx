@@ -606,9 +606,6 @@ def test_parameters():
     problem.settings.scp.w_tr = 1e0
     problem.settings.scp.lam_cost = 1e-1
     problem.settings.scp.lam_vc = 1e1
-    # problem.settings.scp.ep_tr = 1e-4
-    # problem.settings.scp.ep_vb = 1e-4
-    # problem.settings.scp.ep_vc = 1e-8
     problem.settings.scp.uniform_time_grid = True
     problem.settings.sim.save_compiled = False
 
@@ -616,10 +613,6 @@ def test_parameters():
     original_w_tr = problem.settings.scp.w_tr
     original_lam_cost = problem.settings.scp.lam_cost
     original_lam_vc = problem.settings.scp.lam_vc
-
-    original_ep_tr = problem.settings.scp.ep_tr
-    original_ep_vb = problem.settings.scp.ep_vb
-    original_ep_vc = problem.settings.scp.ep_vc
 
     # Disable printing for cleaner test output
     if hasattr(problem.settings, "dev"):
@@ -667,9 +660,6 @@ def test_parameters():
     problem.settings.scp.w_tr = original_w_tr
     problem.settings.scp.lam_cost = original_lam_cost
     problem.settings.scp.lam_vc = original_lam_vc
-    # problem.settings.scp.ep_tr = original_ep_tr
-    # problem.settings.scp.ep_vb = original_ep_vb
-    # problem.settings.scp.ep_vc = original_ep_vc
 
     # Solve again without re-initialization (parameters are updated)
     problem.solve()
