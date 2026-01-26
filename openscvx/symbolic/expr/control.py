@@ -1,3 +1,5 @@
+from typing import Optional, Tuple
+
 import numpy as np
 
 from .variable import Variable
@@ -57,7 +59,7 @@ class Control(Variable):
             steer.guess = np.linspace([0, 0], [0, 1], 50)  # Gradual acceleration
     """
 
-    def __init__(self, name, shape):
+    def __init__(self, name: str, shape: Tuple[int, ...]):
         """Initialize a Control object.
 
         Args:
@@ -69,7 +71,7 @@ class Control(Variable):
         self._scaling_max = None
 
     @property
-    def scaling_min(self):
+    def scaling_min(self) -> Optional[np.ndarray]:
         """Get the scaling minimum bounds for the control variables.
 
         Returns:
@@ -98,7 +100,7 @@ class Control(Variable):
         self._scaling_min = val
 
     @property
-    def scaling_max(self):
+    def scaling_max(self) -> Optional[np.ndarray]:
         """Get the scaling maximum bounds for the control variables.
 
         Returns:
@@ -126,7 +128,7 @@ class Control(Variable):
             )
         self._scaling_max = val
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """String representation of the Control object.
 
         Returns:

@@ -511,8 +511,5 @@ for state in problem.states:
 
 ## See Also
 
-- [Basic Problem Setup](../Usage/basic_problem_setup.md) - How to define problems
-- [API: State](../Usage/api_state.md) - State class documentation
-- [API: Control](../Usage/api_control.md) - Control class documentation
-- [API: Problem](../Usage/api_problem.md) - Main problem class
-- [Discretization](../Overview/discretization.md) - How discretization works in OpenSCvx
+- [Hello world tutorial](../UsersGuide/01_hello_world_brachistochrone.md) - How to define problems
+- [Discretization](../Foundations/discretization.md) - How discretization works in OpenSCvx

@@ -55,12 +55,9 @@ angular_rate.min = np.array([-5])
 angular_rate.max = np.array([5])
 angular_rate.guess = np.zeros((n, 1))
 
-# Define time state (needed for time-dependent constraints)
-time = ox.State("time", shape=(1,))
-time.max = np.array([10])
-time.min = np.array([0.0])
-time.initial = np.array([0.0])
-time.final = [ox.Minimize(total_time)]
+# Define time (needed for time-dependent constraints)
+# Time is a State subclass, so it can be used directly in expressions
+time = ox.Time(initial=0.0, final=("minimize", total_time), min=0.0, max=10.0)
 
 
 # Define list of all states and controls
@@ -83,36 +80,27 @@ dynamics = {
     "time": 1.0,
 }
 
-# Create symbolic expressions for waypoint predicates
-wp1_pred = wp1_radius - ox.linalg.Norm(position - wp1_center)
-wp2_pred = wp2_radius - ox.linalg.Norm(position - wp2_center)
-
-# Create symbolic OR expression using the new Or node
-visit_wp_or_expr = ox.stl.Or(wp1_pred, wp2_pred)
-
 # Generate box constraints for all states
 constraints = []
 for state in states:
     constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
+# Create symbolic expressions for waypoint predicates as constraints
+wp1_pred = ox.linalg.Norm(position - wp1_center) <= wp1_radius
+wp2_pred = ox.linalg.Norm(position - wp2_center) <= wp2_radius
+
 # Visit waypoint constraints using symbolic Or
-constraints.append(ox.ctcs(-visit_wp_or_expr <= 0.0).over((3, 5)))
+# Note: visit_wp_or_expr is already a constraint, so we can use .over() directly
+constraints.append(ox.stl.Or(wp1_pred, wp2_pred).over((3, 5)))
 
 # Build the problem
-time_config = ox.Time(
-    initial=0.0,
-    final=total_time,
-    min=0.0,
-    max=10,
-)
-
 constraints.append((time.at(5) - time.at(3) == 1.23).convex())
 
 problem = Problem(
     dynamics=dynamics,
     states=states,
     controls=controls,
-    time=time_config,
+    time=time,  # Time is already defined above as ox.Time
     constraints=constraints,
     N=n,
 )

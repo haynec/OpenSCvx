@@ -19,6 +19,7 @@ import pytest
 
 from openscvx.symbolic.expr import (
     Constant,
+    Control,
     Norm,
     Parameter,
     State,
@@ -65,7 +66,8 @@ def test_vmap_creation_with_numpy_array():
 
     assert isinstance(vmap_expr, Vmap)
     assert vmap_expr.axis == 0
-    assert not vmap_expr.is_parameter
+    assert vmap_expr.is_parameter == (False,)
+    assert vmap_expr.num_batches == 1
     assert isinstance(vmap_expr.batch, Constant)
     assert isinstance(vmap_expr.placeholder, _Placeholder)
     assert vmap_expr.placeholder.shape == (3,)  # Per-element shape
@@ -79,7 +81,7 @@ def test_vmap_creation_with_constant():
     vmap_expr = Vmap(lambda p: Norm(x - p), batch=data)
 
     assert isinstance(vmap_expr, Vmap)
-    assert not vmap_expr.is_parameter
+    assert vmap_expr.is_parameter == (False,)
     assert vmap_expr.batch is data
 
 
@@ -92,7 +94,7 @@ def test_vmap_creation_with_parameter():
     vmap_expr = Vmap(lambda p: Norm(x - p), batch=refs)
 
     assert isinstance(vmap_expr, Vmap)
-    assert vmap_expr.is_parameter
+    assert vmap_expr.is_parameter == (True,)
     assert vmap_expr.batch is refs
 
 
@@ -226,7 +228,7 @@ def test_vmap_canonicalize():
     # Should still be a Vmap with preserved properties
     assert isinstance(canonical, Vmap)
     assert canonical.axis == 0
-    assert canonical.is_parameter
+    assert canonical.is_parameter == (True,)
     assert canonical.placeholder is vmap_expr.placeholder
 
 
@@ -412,3 +414,358 @@ def test_vmap_hash():
     # Placeholders also have unique hashes
     p1, p2 = _Placeholder(shape=(3,)), _Placeholder(shape=(3,))
     assert p1.structural_hash() != p2.structural_hash()
+
+
+# =============================================================================
+# Vmap: Multi-Batch Support
+# =============================================================================
+
+
+def test_vmap_multi_batch_creation():
+    """Test Vmap creation with multiple batch arguments."""
+    x = Variable("x", shape=(3,))
+    centers = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
+    radii = np.array([0.5, 0.7, 0.9])
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c) - r,
+        batch=[centers, radii],
+    )
+
+    assert vmap_expr.num_batches == 2
+    assert vmap_expr.is_parameter == (False, False)
+    assert len(vmap_expr.placeholders) == 2
+    assert vmap_expr.placeholders[0].shape == (3,)  # center shape
+    assert vmap_expr.placeholders[1].shape == ()  # radius shape (scalar)
+
+
+def test_vmap_multi_batch_with_parameters():
+    """Test Vmap with multiple Parameter batches."""
+    x = Variable("x", shape=(3,))
+    centers_data = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    radii_data = np.array([0.5, 0.7])
+
+    centers = Parameter("centers", shape=(2, 3), value=centers_data)
+    radii = Parameter("radii", shape=(2,), value=radii_data)
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c) - r,
+        batch=[centers, radii],
+    )
+
+    assert vmap_expr.num_batches == 2
+    assert vmap_expr.is_parameter == (True, True)
+    assert vmap_expr.batches[0] is centers
+    assert vmap_expr.batches[1] is radii
+
+
+def test_vmap_multi_batch_mixed_types():
+    """Test Vmap with mixed Constant and Parameter batches."""
+    x = Variable("x", shape=(3,))
+    centers = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])  # Will become Constant
+    radii = Parameter("radii", shape=(2,), value=np.array([0.5, 0.7]))
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c) - r,
+        batch=[centers, radii],
+    )
+
+    assert vmap_expr.num_batches == 2
+    assert vmap_expr.is_parameter == (False, True)
+    assert isinstance(vmap_expr.batches[0], Constant)
+    assert vmap_expr.batches[1] is radii
+
+
+def test_vmap_multi_batch_shape():
+    """Test shape checking for multi-batch Vmap."""
+    x = Variable("x", shape=(3,))
+    centers = np.random.randn(10, 3)
+    radii = np.random.randn(10)
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c) - r,
+        batch=[centers, radii],
+    )
+
+    # Inner expression produces scalar, vmap over 10 -> (10,)
+    assert vmap_expr.check_shape() == (10,)
+
+
+def test_vmap_multi_batch_size_mismatch():
+    """Test that Vmap raises error when batch sizes don't match."""
+    x = Variable("x", shape=(3,))
+    centers = np.random.randn(10, 3)
+    radii = np.random.randn(5)  # Different size!
+
+    with pytest.raises(ValueError, match="Batch size mismatch"):
+        Vmap(lambda c, r: Norm(x - c) - r, batch=[centers, radii])
+
+
+def test_vmap_multi_batch_children():
+    """Test children() for multi-batch Vmap with mixed types."""
+    x = Variable("x", shape=(3,))
+    centers = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])  # Constant
+    radii = Parameter("radii", shape=(2,), value=np.array([0.5, 0.7]))
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c) - r,
+        batch=[centers, radii],
+    )
+
+    children = vmap_expr.children()
+
+    # Should include inner expr and Parameter (but not Constant)
+    assert len(children) == 2
+    assert children[1] is radii
+
+
+def test_vmap_multi_batch_repr():
+    """Test repr for multi-batch Vmap."""
+    x = Variable("x", shape=(3,))
+    centers = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]])
+    radii = Parameter("radii", shape=(2,), value=np.array([0.5, 0.7]))
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c) - r,
+        batch=[centers, radii],
+    )
+
+    repr_str = repr(vmap_expr)
+    assert "Vmap" in repr_str
+    assert "Constant" in repr_str
+    assert "Parameter" in repr_str
+    assert "radii" in repr_str
+
+
+# --- Multi-Batch JAX Lowering ---
+
+
+def test_vmap_multi_batch_jax_constants():
+    """Test JAX lowering of multi-batch Vmap with all Constants."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(3,))
+    x._slice = slice(0, 3)
+
+    centers = np.array([[0.0, 0.0, 0.0], [3.0, 4.0, 0.0]])
+    radii = np.array([0.0, 1.0])
+
+    # distance - radius (obstacle avoidance style)
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c, ord=2) - r,
+        batch=[centers, radii],
+    )
+
+    fn = lower_to_jax(vmap_expr)
+
+    x_val = jnp.array([0.0, 0.0, 0.0])
+    result = fn(x_val, None, None, {})
+
+    # At origin: dist to [0,0,0] is 0, minus 0 = 0
+    #            dist to [3,4,0] is 5, minus 1 = 4
+    expected = jnp.array([0.0, 4.0])
+    assert jnp.allclose(result, expected, atol=1e-12)
+
+
+def test_vmap_multi_batch_jax_parameters():
+    """Test JAX lowering of multi-batch Vmap with all Parameters."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(3,))
+    x._slice = slice(0, 3)
+
+    centers_data = np.array([[0.0, 0.0, 0.0], [3.0, 4.0, 0.0]])
+    radii_data = np.array([0.0, 1.0])
+
+    centers = Parameter("centers", shape=(2, 3), value=centers_data)
+    radii = Parameter("radii", shape=(2,), value=radii_data)
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c, ord=2) - r,
+        batch=[centers, radii],
+    )
+
+    fn = lower_to_jax(vmap_expr)
+
+    x_val = jnp.array([0.0, 0.0, 0.0])
+    params = {
+        "centers": jnp.array(centers_data),
+        "radii": jnp.array(radii_data),
+    }
+    result = fn(x_val, None, None, params)
+
+    expected = jnp.array([0.0, 4.0])
+    assert jnp.allclose(result, expected, atol=1e-12)
+
+    # Test runtime update
+    params2 = {
+        "centers": jnp.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]),
+        "radii": jnp.array([0.5, 0.5]),
+    }
+    result2 = fn(x_val, None, None, params2)
+
+    # dist to [1,0,0] is 1, minus 0.5 = 0.5
+    # dist to [0,1,0] is 1, minus 0.5 = 0.5
+    expected2 = jnp.array([0.5, 0.5])
+    assert jnp.allclose(result2, expected2, atol=1e-12)
+
+
+def test_vmap_multi_batch_jax_mixed():
+    """Test JAX lowering of multi-batch Vmap with mixed Constant/Parameter."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = State("x", shape=(3,))
+    x._slice = slice(0, 3)
+
+    # Centers are baked in (Constant), radii are runtime (Parameter)
+    centers = np.array([[0.0, 0.0, 0.0], [3.0, 4.0, 0.0]])
+    radii = Parameter("radii", shape=(2,), value=np.array([0.0, 1.0]))
+
+    vmap_expr = Vmap(
+        lambda c, r: Norm(x - c, ord=2) - r,
+        batch=[centers, radii],
+    )
+
+    fn = lower_to_jax(vmap_expr)
+
+    x_val = jnp.array([0.0, 0.0, 0.0])
+
+    # First call
+    params1 = {"radii": jnp.array([0.0, 1.0])}
+    result1 = fn(x_val, None, None, params1)
+    expected1 = jnp.array([0.0, 4.0])
+    assert jnp.allclose(result1, expected1, atol=1e-12)
+
+    # Update radii at runtime (centers stay baked)
+    params2 = {"radii": jnp.array([1.0, 2.0])}
+    result2 = fn(x_val, None, None, params2)
+    # dist to [0,0,0] is 0, minus 1 = -1
+    # dist to [3,4,0] is 5, minus 2 = 3
+    expected2 = jnp.array([-1.0, 3.0])
+    assert jnp.allclose(result2, expected2, atol=1e-12)
+
+
+# =============================================================================
+# Vmap: State/Control Batching Support
+# =============================================================================
+
+
+def test_vmap_state_batch():
+    """Test Vmap with State batch source: creation, properties, and canonicalization."""
+    positions = State("positions", shape=(5, 3))
+
+    vmap_expr = Vmap(lambda pos: Norm(pos), batch=positions)
+
+    # Creation and properties
+    assert vmap_expr.num_batches == 1
+    assert vmap_expr.is_state == (True,)
+    assert vmap_expr.is_parameter == (False,)
+    assert vmap_expr.is_control == (False,)
+    assert vmap_expr.batch is positions
+    assert vmap_expr.placeholder.shape == (3,)
+    assert vmap_expr.check_shape() == (5,)
+
+    # Children includes State
+    children = vmap_expr.children()
+    assert len(children) == 2
+    assert children[1] is positions
+
+    # Repr
+    assert "State" in repr(vmap_expr) and "positions" in repr(vmap_expr)
+
+    # Canonicalization preserves state info
+    canonical = vmap_expr.canonicalize()
+    assert canonical.is_state == (True,)
+    assert canonical.batch is positions
+
+
+def test_vmap_control_batch():
+    """Test Vmap with Control batch source: creation and properties."""
+    thrusters = Control("thrusters", shape=(4,))
+
+    vmap_expr = Vmap(lambda t: t * 2, batch=thrusters)
+
+    assert vmap_expr.num_batches == 1
+    assert vmap_expr.is_control == (True,)
+    assert vmap_expr.is_state == (False,)
+    assert vmap_expr.batch is thrusters
+    assert vmap_expr.placeholder.shape == ()
+    assert "Control" in repr(vmap_expr) and "thrusters" in repr(vmap_expr)
+
+
+def test_vmap_state_control_jax_lowering():
+    """Test JAX lowering with State, Control, and mixed batches."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.lower import lower_to_jax
+
+    # --- State batch ---
+    positions = State("positions", shape=(3, 2))
+    positions._slice = slice(0, 6)
+
+    vmap_state = Vmap(lambda pos: Norm(pos, ord=2), batch=positions)
+    fn_state = lower_to_jax(vmap_state)
+
+    x_val = jnp.array([1.0, 0.0, 0.0, 1.0, 3.0, 4.0])  # [1,0], [0,1], [3,4]
+    result = fn_state(x_val, None, None, {})
+    assert jnp.allclose(result, jnp.array([1.0, 1.0, 5.0]), atol=1e-12)
+
+    # --- Control batch ---
+    thrusters = Control("thrusters", shape=(4,))
+    thrusters._slice = slice(0, 4)
+
+    vmap_ctrl = Vmap(lambda t: t * 2.0, batch=thrusters)
+    fn_ctrl = lower_to_jax(vmap_ctrl)
+
+    u_val = jnp.array([1.0, 2.0, 3.0, 4.0])
+    result = fn_ctrl(None, u_val, None, {})
+    assert jnp.allclose(result, jnp.array([2.0, 4.0, 6.0, 8.0]), atol=1e-12)
+
+    # --- Mixed State + Parameter ---
+    max_dists = Parameter("max_dists", shape=(3,), value=np.array([2.0, 2.0, 10.0]))
+    vmap_mixed = Vmap(
+        lambda pos, max_d: max_d - Norm(pos, ord=2),
+        batch=[positions, max_dists],
+    )
+    assert vmap_mixed.is_state == (True, False)
+    assert vmap_mixed.is_parameter == (False, True)
+
+    fn_mixed = lower_to_jax(vmap_mixed)
+    params = {"max_dists": jnp.array([2.0, 2.0, 10.0])}
+    result = fn_mixed(x_val, None, None, params)
+    assert jnp.allclose(result, jnp.array([1.0, 1.0, 5.0]), atol=1e-12)
+
+
+def test_vmap_mixed_state_control_batch():
+    """Test Vmap with mixed State and Control batches."""
+    positions = State("positions", shape=(4, 3))
+    thrusts = Control("thrusts", shape=(4, 3))
+
+    vmap_expr = Vmap(
+        lambda pos, thrust: Norm(pos) + Norm(thrust),
+        batch=[positions, thrusts],
+    )
+
+    assert vmap_expr.num_batches == 2
+    assert vmap_expr.is_state == (True, False)
+    assert vmap_expr.is_control == (False, True)
+    assert vmap_expr.check_shape() == (4,)
+
+
+def test_vmap_state_no_slice_raises():
+    """Test that lowering State batch without slice assigned raises error."""
+    from openscvx.symbolic.lower import lower_to_jax
+
+    positions = State("positions", shape=(3, 2))
+    # Intentionally not setting _slice
+
+    vmap_expr = Vmap(lambda pos: Norm(pos), batch=positions)
+
+    with pytest.raises(ValueError, match="has no slice assigned"):
+        lower_to_jax(vmap_expr)

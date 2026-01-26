@@ -37,7 +37,7 @@ Example:
 
 import hashlib
 import struct
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -73,7 +73,7 @@ class Constraint(Expr):
         self.rhs = rhs
         self.is_convex = False
 
-    def children(self):
+    def children(self) -> List["Expr"]:
         return [self.lhs, self.rhs]
 
     def canonicalize(self) -> "Expr":
@@ -108,7 +108,7 @@ class Constraint(Expr):
             constraint_type = type(self).__name__
             raise ValueError(f"{constraint_type} not broadcastable: {L_shape} vs {R_shape}") from e
 
-    def at(self, nodes: Union[list, tuple]):
+    def at(self, nodes: Union[list, tuple]) -> "NodalConstraint":
         """Apply this constraint only at specific discrete nodes.
 
         Args:
@@ -127,7 +127,7 @@ class Constraint(Expr):
         penalty: str = "squared_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
-    ):
+    ) -> "CTCS":
         """Apply this constraint over a continuous interval using CTCS.
 
         Args:
@@ -164,7 +164,7 @@ class Equality(Constraint):
             constraint = x == 0  # Creates Equality(x, Constant(0))
     """
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.lhs!r} == {self.rhs!r}"
 
 
@@ -181,7 +181,7 @@ class Inequality(Constraint):
             constraint = x <= 10  # Creates Inequality(x, Constant(10))
     """
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.lhs!r} <= {self.rhs!r}"
 
 
@@ -266,7 +266,7 @@ class NodalConstraint(Expr):
         self.constraint = constraint
         self.nodes = converted_nodes
 
-    def children(self):
+    def children(self) -> List["Expr"]:
         """Return the wrapped constraint as the only child.
 
         Returns:
@@ -326,7 +326,7 @@ class NodalConstraint(Expr):
         # Hash the wrapped constraint
         self.constraint._hash_into(hasher)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """String representation of the NodalConstraint.
 
         Returns:
@@ -410,11 +410,11 @@ class CrossNodeConstraint(Expr):
         """
         return self.constraint.is_convex
 
-    def children(self):
+    def children(self) -> List["Expr"]:
         """Return the wrapped constraint as the only child.
 
         Returns:
-            list: Single-element list containing the wrapped constraint
+            Single-element list containing the wrapped constraint
         """
         return [self.constraint]
 
@@ -445,7 +445,7 @@ class CrossNodeConstraint(Expr):
         self.constraint.convex()
         return self
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """String representation of the CrossNodeConstraint.
 
         Returns:
@@ -588,7 +588,7 @@ class CTCS(Expr):
         # Whether to also enforce this constraint nodally for numerical stability
         self.check_nodally = check_nodally
 
-    def children(self):
+    def children(self) -> List[Expr]:
         """Return the wrapped constraint as the only child.
 
         Returns:
@@ -694,7 +694,7 @@ class CTCS(Expr):
             check_nodally=self.check_nodally,
         )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """String representation of the CTCS constraint.
 
         Returns:

@@ -118,22 +118,22 @@ def test_time_scaling_min_max():
     """Test setting scaling_min and scaling_max on Time."""
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
 
-    # Set scaling bounds
-    time.scaling_min = 1.0
-    time.scaling_max = 15.0
+    # Set scaling bounds (Time is a State with shape=(1,), so use arrays)
+    time.scaling_min = [1.0]
+    time.scaling_max = [15.0]
 
-    assert time.scaling_min == 1.0
-    assert time.scaling_max == 15.0
+    assert np.allclose(time.scaling_min, [1.0])
+    assert np.allclose(time.scaling_max, [15.0])
     # Original bounds should be unchanged
-    assert time.min == 0.0
-    assert time.max == 20.0
+    assert np.allclose(time.min, [0.0])
+    assert np.allclose(time.max, [20.0])
 
 
 def test_time_scaling_none():
     """Test that scaling_min/max can be set to None."""
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
-    time.scaling_min = 1.0
-    time.scaling_max = 15.0
+    time.scaling_min = [1.0]
+    time.scaling_max = [15.0]
 
     time.scaling_min = None
     time.scaling_max = None

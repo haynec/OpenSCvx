@@ -245,12 +245,10 @@ problem = Problem(
 
 problem.settings.prp.dt = 0.01
 
-problem.settings.scp.k_max = 50
 problem.settings.scp.w_tr = 2e0  # 2e0,  # Weight on the Trust Reigon
 problem.settings.scp.lam_cost = 2e-1  # 0e-1,  # Weight on the Minimal Time Objective
-problem.settings.scp.lam_vc = (
-    1e1  # 1e1,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
-)
+problem.settings.scp.lam_vc = 4e1  # Weight on the Virtual Control Objective
+
 problem.settings.scp.ep_tr = 1e-5  # Trust Region Tolerance
 problem.settings.scp.ep_vb = 1e-4  # Virtual Control Tolerance
 problem.settings.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS

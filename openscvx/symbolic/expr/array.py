@@ -87,7 +87,7 @@ Example:
 """
 
 import hashlib
-from typing import Tuple, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 
@@ -156,7 +156,7 @@ class Index(Expr):
         # Hash the base expression
         self.base._hash_into(hasher)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"{self.base!r}[{self.index!r}]"
 
 
@@ -209,7 +209,7 @@ class Concat(Expr):
             raise ValueError(f"Concat non-0 dims differ: {shapes}")
         return (sum(s[0] for s in shapes),) + shapes[0][1:]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         inner = ", ".join(repr(e) for e in self.exprs)
         return f"Concat({inner})"
 
@@ -237,7 +237,7 @@ class Stack(Expr):
             #                 [z[0], z[1], z[2]]]
     """
 
-    def __init__(self, rows):
+    def __init__(self, rows: List[Union[Expr, float, int, np.ndarray]]):
         """Initialize a stack operation.
 
         Args:
@@ -273,7 +273,7 @@ class Stack(Expr):
         # Result shape is (num_rows, *row_shape)
         return (len(self.rows),) + first_shape
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         rows_repr = ", ".join(repr(row) for row in self.rows)
         return f"Stack([{rows_repr}])"
 
@@ -306,7 +306,7 @@ class Hstack(Expr):
             C = Hstack([A, B])  # Result shape (3, 6)
     """
 
-    def __init__(self, arrays):
+    def __init__(self, arrays: List[Union[Expr, float, int, np.ndarray]]):
         """Initialize a horizontal stack operation.
 
         Args:
@@ -358,7 +358,7 @@ class Hstack(Expr):
         total_cols = sum(shape[1] for shape in array_shapes)
         return (first_shape[0], total_cols) + first_shape[2:]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         arrays_repr = ", ".join(repr(arr) for arr in self.arrays)
         return f"Hstack([{arrays_repr}])"
 
@@ -390,7 +390,7 @@ class Vstack(Expr):
             C = Vstack([A, B])  # Result shape (5, 4)
     """
 
-    def __init__(self, arrays):
+    def __init__(self, arrays: List[Union[Expr, float, int, np.ndarray]]):
         """Initialize a vertical stack operation.
 
         Args:
@@ -434,7 +434,7 @@ class Vstack(Expr):
         total_rows = sum(shape[0] for shape in array_shapes)
         return (total_rows,) + first_shape[1:]
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         arrays_repr = ", ".join(repr(arr) for arr in self.arrays)
         return f"Vstack([{arrays_repr}])"
 
@@ -496,7 +496,7 @@ class Block(Expr):
         - N-D tensors are supported for JAX lowering; CVXPy only supports 2D blocks
     """
 
-    def __init__(self, blocks):
+    def __init__(self, blocks: List[Union[Expr, float, int, np.ndarray, List]]):
         """Initialize a block matrix construction.
 
         Args:
@@ -623,7 +623,7 @@ class Block(Expr):
             return (total_rows, total_cols) + normalized_shapes[0][0][2:]
         return (total_rows, total_cols)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         rows_repr = []
         for row in self.blocks:
             blocks_repr = ", ".join(repr(block) for block in row)

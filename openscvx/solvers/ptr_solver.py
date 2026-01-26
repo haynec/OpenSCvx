@@ -594,13 +594,13 @@ def _build_optimal_control_problem(
         if settings.sim.x.final_type[i] == "Fix":
             constr += [x_nonscaled[-1][i] == x_term[i]]  # Final Boundary Conditions
         if settings.sim.x.initial_type[i] == "Minimize":
-            cost += lam_cost * x_nonscaled[0][i]
+            cost += lam_cost * x[0][i]
         if settings.sim.x.final_type[i] == "Minimize":
-            cost += lam_cost * x_nonscaled[-1][i]
+            cost += lam_cost * x[-1][i]
         if settings.sim.x.initial_type[i] == "Maximize":
-            cost -= lam_cost * x_nonscaled[0][i]
+            cost -= lam_cost * x[0][i]
         if settings.sim.x.final_type[i] == "Maximize":
-            cost -= lam_cost * x_nonscaled[-1][i]
+            cost -= lam_cost * x[-1][i]
 
     if settings.scp.uniform_time_grid:
         S_u_inv_td = inv_S_u[settings.sim.time_dilation_slice, settings.sim.time_dilation_slice]
@@ -626,9 +626,9 @@ def _build_optimal_control_problem(
             + B_d[i - 1] @ du_nonscaled[i - 1]
             + C_d[i - 1] @ du_nonscaled[i]
             + x_prop[i - 1]
-            + nu[i - 1]
             - c_x
         )
+        + nu[i - 1]
         for i in range(1, settings.scp.n)
     ]  # Dynamics Constraint
 

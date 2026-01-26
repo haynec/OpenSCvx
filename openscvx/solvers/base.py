@@ -30,7 +30,7 @@ must follow for use within successive convexification algorithms.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Any, List
 
 if TYPE_CHECKING:
     from openscvx.config import Config
@@ -197,7 +197,7 @@ class ConvexSolver(ABC):
         ...
 
     @abstractmethod
-    def solve(self):
+    def solve(self) -> Any:
         """Solve the convex subproblem and return results.
 
         Called at each SCP iteration after updating linearization and penalties.

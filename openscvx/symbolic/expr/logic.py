@@ -94,7 +94,7 @@ class All(Expr):
             pred.check_shape()
         return ()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return string representation."""
         if len(self.predicates) == 1:
             return f"All({self.predicates[0]!r})"
@@ -182,7 +182,7 @@ class Any(Expr):
             pred.check_shape()
         return ()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return string representation."""
         if len(self.predicates) == 1:
             return f"Any({self.predicates[0]!r})"
@@ -281,8 +281,8 @@ class Cond(Expr):
     def __init__(
         self,
         pred: Union[Inequality, List[Inequality], "All", "Any", None],
-        true_branch,
-        false_branch,
+        true_branch: Union[Expr, float, int, np.ndarray],
+        false_branch: Union[Expr, float, int, np.ndarray],
         node_ranges: Optional[List[Tuple[int, int]]] = None,
     ):
         """Initialize a conditional expression.
@@ -401,7 +401,7 @@ class Cond(Expr):
                 f"Cond branches have incompatible shapes: {true_shape} and {false_shape}"
             ) from e
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return string representation of the conditional."""
         pred_repr = "None" if self.predicate is None else repr(self.predicate)
         base = f"Cond({pred_repr}, {self.true_branch!r}, {self.false_branch!r}"

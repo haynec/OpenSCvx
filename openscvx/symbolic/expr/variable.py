@@ -1,4 +1,5 @@
 import hashlib
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -37,7 +38,7 @@ class Variable(Leaf):
             u = openscvx.Control("u", shape=(2,))
     """
 
-    def __init__(self, name, shape):
+    def __init__(self, name: str, shape: Tuple[int, ...]):
         """Initialize a Variable object.
 
         Args:
@@ -50,7 +51,7 @@ class Variable(Leaf):
         self._max = None
         self._guess = None
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Var({self.name!r})"
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
@@ -77,7 +78,7 @@ class Variable(Leaf):
             )
 
     @property
-    def min(self):
+    def min(self) -> Optional[np.ndarray]:
         """Get the minimum bounds (lower bounds) for the variable.
 
         Returns:
@@ -118,7 +119,7 @@ class Variable(Leaf):
         self._min = arr
 
     @property
-    def max(self):
+    def max(self) -> Optional[np.ndarray]:
         """Get the maximum bounds (upper bounds) for the variable.
 
         Returns:
@@ -159,7 +160,7 @@ class Variable(Leaf):
         self._max = arr
 
     @property
-    def slice(self):
+    def slice(self) -> Optional[slice]:
         """Get the slice indexing this variable in the unified state/control vector.
 
         After preprocessing, each variable is assigned a canonical position in the
@@ -186,7 +187,7 @@ class Variable(Leaf):
         return self._slice
 
     @property
-    def guess(self):
+    def guess(self) -> Optional[np.ndarray]:
         """Get the initial guess for the variable trajectory.
 
         The guess provides a starting point for the optimizer. A good initial guess
@@ -239,7 +240,14 @@ class Variable(Leaf):
             )
         self._guess = arr
 
-    def append(self, other=None, *, min=-np.inf, max=np.inf, guess=0.0):
+    def append(
+        self,
+        other: Optional["Variable"] = None,
+        *,
+        min: float = -np.inf,
+        max: float = np.inf,
+        guess: float = 0.0,
+    ) -> None:
         """Append a new dimension to this variable or merge with another variable.
 
         This method extends the variable's dimension by either:

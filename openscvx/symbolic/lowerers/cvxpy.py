@@ -177,12 +177,13 @@ from openscvx.symbolic.expr import (
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.linalg import Inv
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.time import Time
 
 _CVXPY_VISITORS: Dict[Type[Expr], Callable] = {}
 """Registry mapping expression types to their visitor functions."""
 
 
-def visitor(expr_cls: Type[Expr]):
+def visitor(expr_cls: Type[Expr]) -> Callable[[Callable], Callable]:
     """Decorator to register a visitor function for an expression type.
 
     This decorator registers a visitor method to handle a specific expression
@@ -220,7 +221,7 @@ def visitor(expr_cls: Type[Expr]):
     return register
 
 
-def dispatch(lowerer: "CvxpyLowerer", expr: Expr):
+def dispatch(lowerer: "CvxpyLowerer", expr: Expr) -> cp.Expression:
     """Dispatch an expression to its registered visitor function.
 
     Looks up the visitor function for the expression's type and calls it.
@@ -363,6 +364,7 @@ class CvxpyLowerer:
         """
         return cp.Constant(node.value)
 
+    @visitor(Time)
     @visitor(State)
     def _visit_state(self, node: State) -> cp.Expression:
         """Lower a state variable to a CVXPy expression.
@@ -372,7 +374,7 @@ class CvxpyLowerer:
         the variable_map.
 
         Args:
-            node: State expression node
+            node: State expression node (or Time, which is a State subclass)
 
         Returns:
             CVXPy expression representing the state slice: x[slice]

@@ -49,7 +49,7 @@ Example:
 """
 
 import hashlib
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy as np
 
@@ -78,7 +78,7 @@ class Transpose(Expr):
             v_T = Transpose(v)  # result shape (5,) - vectors unchanged
     """
 
-    def __init__(self, operand):
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
         """Initialize a transpose operation.
 
         Args:
@@ -117,7 +117,7 @@ class Transpose(Expr):
             # (..., m, n) -> (..., n, m)
             return operand_shape[:-2] + (operand_shape[-1], operand_shape[-2])
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"({self.operand!r}).T"
 
 
@@ -142,7 +142,7 @@ class Diag(Expr):
             D = Diag(v)  # Creates a (3, 3) diagonal matrix
     """
 
-    def __init__(self, operand):
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
         """Initialize a diagonal matrix operation.
 
         Args:
@@ -165,7 +165,7 @@ class Diag(Expr):
         n = operand_shape[0]
         return (n, n)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"diag({self.operand!r})"
 
 
@@ -185,7 +185,7 @@ class Sum(Expr):
             total = Sum(x)  # Creates Sum(x), result shape ()
     """
 
-    def __init__(self, operand):
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
         """Initialize a sum reduction operation.
 
         Args:
@@ -212,7 +212,7 @@ class Sum(Expr):
         # Sum always produces a scalar regardless of input shape
         return ()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"sum({self.operand!r})"
 
 
@@ -250,7 +250,7 @@ class Inv(Expr):
         Consider whether your problem can be reformulated to avoid the inverse.
     """
 
-    def __init__(self, operand):
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
         """Initialize a matrix inverse operation.
 
         Args:
@@ -291,7 +291,7 @@ class Inv(Expr):
 
         return operand_shape
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"inv({self.operand!r})"
 
 
@@ -320,7 +320,11 @@ class Norm(Expr):
             frobenius_norm = Norm(A)  # Frobenius norm, result is scalar
     """
 
-    def __init__(self, operand, ord="fro"):
+    def __init__(
+        self,
+        operand: Union[Expr, float, int, np.ndarray],
+        ord: Union[str, int, float] = "fro",
+    ):
         """Initialize a norm operation.
 
         Args:
@@ -357,5 +361,5 @@ class Norm(Expr):
         # Hash the operand
         self.operand._hash_into(hasher)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"norm({self.operand!r}, ord={self.ord!r})"

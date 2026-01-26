@@ -15,36 +15,33 @@ class OptimizationResults:
     storage for plotting and application-specific data.
 
     Attributes:
-        converged (bool): Whether the optimization successfully converged
-        t_final (float): Final time of the optimized trajectory
+        converged (bool): Whether the optimization successfully converged.
+        t_final (float): Final time of the optimized trajectory.
         x_guess (np.ndarray): Optimized state trajectory at discretization nodes,
-            shape (N, n_states)
+            shape (N, n_states).
         u_guess (np.ndarray): Optimized control trajectory at discretization nodes,
-            shape (N, n_controls)
-
-        # Dictionary-based Access
+            shape (N, n_controls).
         nodes (dict[str, np.ndarray]): Dictionary mapping state/control names to arrays
             at optimization nodes. Includes both user-defined and augmented variables.
         trajectory (dict[str, np.ndarray]): Dictionary mapping state/control names to arrays
             along the propagated trajectory. Added by post_process().
-
-        # SCP Iteration History (for convergence analysis)
-        x_history (list[np.ndarray]): State trajectories from each SCP iteration
-        u_history (list[np.ndarray]): Control trajectories from each SCP iteration
-        discretization_history (list[np.ndarray]): Time discretization from each iteration
-        J_tr_history (list[np.ndarray]): Trust region cost history
-        J_vb_history (list[np.ndarray]): Virtual buffer cost history
-        J_vc_history (list[np.ndarray]): Virtual control cost history
-
-        # Post-processing Results (added by propagate_trajectory_results)
-        t_full (Optional[np.ndarray]): Full time grid for interpolated trajectory
-        x_full (Optional[np.ndarray]): Interpolated state trajectory on full time grid
-        u_full (Optional[np.ndarray]): Interpolated control trajectory on full time grid
-        cost (Optional[float]): Total cost of the optimized trajectory
-        ctcs_violation (Optional[np.ndarray]): Continuous-time constraint violations
-
-        # User-defined Data
-        plotting_data (dict[str, Any]): Flexible storage for plotting and application data
+        x_history (list[np.ndarray]): State trajectories from each SCP iteration.
+        u_history (list[np.ndarray]): Control trajectories from each SCP iteration.
+        discretization_history (list[np.ndarray]): Time discretization from each iteration.
+        J_tr_history (list[np.ndarray]): Trust region cost history.
+        J_vb_history (list[np.ndarray]): Virtual buffer cost history.
+        J_vc_history (list[np.ndarray]): Virtual control cost history.
+        t_full (Optional[np.ndarray]): Full time grid for interpolated trajectory.
+            Added by propagate_trajectory_results.
+        x_full (Optional[np.ndarray]): Interpolated state trajectory on full time grid.
+            Added by propagate_trajectory_results.
+        u_full (Optional[np.ndarray]): Interpolated control trajectory on full time grid.
+            Added by propagate_trajectory_results.
+        cost (Optional[float]): Total cost of the optimized trajectory.
+            Added by propagate_trajectory_results.
+        ctcs_violation (Optional[np.ndarray]): Continuous-time constraint violations.
+            Added by propagate_trajectory_results.
+        plotting_data (dict[str, Any]): Flexible storage for plotting and application data.
     """
 
     # Core optimization results
@@ -111,7 +108,7 @@ class OptimizationResults:
         """Initialize the results object."""
         pass
 
-    def update_plotting_data(self, **kwargs):
+    def update_plotting_data(self, **kwargs: Any) -> None:
         """
         Update the plotting data with additional information.
 

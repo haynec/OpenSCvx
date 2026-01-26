@@ -4,7 +4,6 @@ import pytest
 
 from openscvx.symbolic.augmentation import (
     augment_dynamics_with_ctcs,
-    augment_with_time_state,
     decompose_vector_nodal_constraints,
     separate_constraints,
     sort_ctcs_constraints,
@@ -29,206 +28,6 @@ from openscvx.symbolic.expr import (
     ctcs,
 )
 from openscvx.symbolic.lower import lower_to_jax
-
-
-def test_augment_with_time_state_basic():
-    """Test basic time state augmentation."""
-    x = State("x", (2,))
-    x.initial = np.array([0.0, 0.0])
-    x.final = np.array([10.0, 5.0])
-
-    states = [x]
-    constraints = ConstraintSet()
-    N = 10
-
-    states_aug, constraints_aug = augment_with_time_state(
-        states,
-        constraints,
-        time_initial=0.0,
-        time_final=2.0,
-        time_min=0.0,
-        time_max=10.0,
-        N=N,
-    )
-
-    # Should have original state + time state
-    assert len(states_aug) == 2
-    assert states_aug[0] is x
-    assert states_aug[1].name == "time"
-    assert states_aug[1].shape == (1,)
-
-    # Check time state properties
-    time_state = states_aug[1]
-    # initial and final are numpy arrays
-    assert isinstance(time_state.initial, np.ndarray)
-    assert time_state.initial.shape == (1,)
-    assert time_state.initial[0] == 0.0
-
-    assert isinstance(time_state.final, np.ndarray)
-    assert time_state.final.shape == (1,)
-    assert time_state.final[0] == 2.0
-
-    assert np.allclose(time_state.min, np.array([0.0]))
-    assert np.allclose(time_state.max, np.array([10.0]))
-    assert time_state.guess.shape == (N, 1)
-    assert np.allclose(time_state.guess, np.linspace(0.0, 2.0, N).reshape(-1, 1))
-
-    # Should have added 2 CTCS constraints for time bounds
-    assert len(constraints_aug.unsorted) == 2
-
-
-def test_augment_with_time_state_scaling():
-    """Test that scaling_min/max from Time object is transferred to time State."""
-    x = State("x", (2,))
-    x.initial = np.array([0.0, 0.0])
-    x.final = np.array([10.0, 5.0])
-
-    states = [x]
-    constraints = ConstraintSet()
-    N = 10
-
-    states_aug, constraints_aug = augment_with_time_state(
-        states,
-        constraints,
-        time_initial=0.0,
-        time_final=2.0,
-        time_min=0.0,
-        time_max=10.0,
-        N=N,
-        time_scaling_min=1.0,
-        time_scaling_max=8.0,
-    )
-
-    # Check that time state has scaling set
-    time_state = states_aug[1]
-    assert time_state.name == "time"
-    assert np.allclose(time_state.scaling_min, np.array([1.0]))
-    assert np.allclose(time_state.scaling_max, np.array([8.0]))
-
-
-def test_augment_with_time_state_free_initial():
-    """Test time augmentation with free initial time."""
-    x = State("x", (1,))
-    x.initial = np.array([0.0])
-    x.final = np.array([1.0])
-
-    states = [x]
-    constraints = ConstraintSet()
-    N = 5
-
-    states_aug, constraints_aug = augment_with_time_state(
-        states,
-        constraints,
-        time_initial=("free", 1.0),
-        time_final=5.0,
-        time_min=0.0,
-        time_max=10.0,
-        N=N,
-    )
-
-    time_state = states_aug[1]
-    # Check initial - State extracts just the numeric value from ("free", 1.0)
-    assert isinstance(time_state.initial, np.ndarray)
-    assert time_state.initial.shape == (1,)
-    # Just check the numeric value, the "free" is handled elsewhere
-    assert time_state.initial[0] == 1.0
-    # Check final
-    assert isinstance(time_state.final, np.ndarray)
-    assert time_state.final.shape == (1,)
-    assert time_state.final[0] == 5.0
-    assert np.allclose(time_state.guess, np.linspace(1.0, 5.0, N).reshape(-1, 1))
-
-
-def test_augment_with_time_state_minimize_final():
-    """Test time augmentation with minimize final time."""
-    x = State("x", (3,))
-    x.initial = np.array([0.0, 0.0, 0.0])
-    x.final = np.array([1.0, 2.0, 3.0])
-
-    states = [x]
-    constraints = ConstraintSet()
-    N = 8
-
-    states_aug, constraints_aug = augment_with_time_state(
-        states,
-        constraints,
-        time_initial=0.0,
-        time_final=("minimize", 10.0),
-        time_min=0.0,
-        time_max=20.0,
-        N=N,
-    )
-
-    time_state = states_aug[1]
-    # Check initial
-    assert isinstance(time_state.initial, np.ndarray)
-    assert time_state.initial.shape == (1,)
-    assert time_state.initial[0] == 0.0
-    # Check final - State extracts just the numeric value from ("minimize", 10.0)
-    assert isinstance(time_state.final, np.ndarray)
-    assert time_state.final.shape == (1,)
-    # Just check the numeric value, the "minimize" is handled elsewhere
-    assert time_state.final[0] == 10.0
-    assert np.allclose(time_state.guess, np.linspace(0.0, 10.0, N).reshape(-1, 1))
-
-
-def test_augment_with_time_state_existing_constraints():
-    """Test that existing constraints are preserved."""
-    x = State("x", (2,))
-    x.initial = np.array([0.0, 0.0])
-    x.final = np.array([1.0, 1.0])
-
-    # Create some existing constraints
-    existing_constraint = ctcs(x[0] <= 1.0)
-
-    states = [x]
-    constraints = ConstraintSet(unsorted=[existing_constraint])
-    N = 5
-
-    states_aug, constraints_aug = augment_with_time_state(
-        states,
-        constraints,
-        time_initial=0.0,
-        time_final=1.0,
-        time_min=0.0,
-        time_max=2.0,
-        N=N,
-    )
-
-    # Should have original constraint + 2 time CTCS constraints
-    assert len(constraints_aug.unsorted) == 3
-    assert constraints_aug.unsorted[0] is existing_constraint
-
-
-def test_augment_with_time_state_multiple_states():
-    """Test time augmentation with multiple existing states."""
-    x1 = State("x1", (2,))
-    x1.initial = np.array([0.0, 0.0])
-    x1.final = np.array([1.0, 1.0])
-
-    x2 = State("x2", (3,))
-    x2.initial = np.array([0.0, 0.0, 0.0])
-    x2.final = np.array([2.0, 2.0, 2.0])
-
-    states = [x1, x2]
-    constraints = ConstraintSet()
-    N = 10
-
-    states_aug, constraints_aug = augment_with_time_state(
-        states,
-        constraints,
-        time_initial=0.0,
-        time_final=3.0,
-        time_min=0.0,
-        time_max=5.0,
-        N=N,
-    )
-
-    # Should have x1, x2, and time
-    assert len(states_aug) == 3
-    assert states_aug[0] is x1
-    assert states_aug[1] is x2
-    assert states_aug[2].name == "time"
 
 
 def test_separate_constraints_empty():
@@ -419,6 +218,7 @@ def test_augment_no_ctcs_constraints():
     states = [x, time]
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
@@ -449,6 +249,7 @@ def test_augment_single_ctcs_constraint():
     states = [x, time]
     controls = [u]
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     # CTCS constraint
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
@@ -486,6 +287,7 @@ def test_augment_multiple_ctcs_constraints():
     states = [x, time]
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     # Multiple CTCS constraints with different penalties
     c1 = ctcs(x[0] <= 1.0, penalty="squared_relu")
@@ -530,6 +332,7 @@ def test_augment_penalty_expression_structure():
     states = [time, x]  # time first since it was at index 0
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     # Create CTCS with squared_relu penalty
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
@@ -571,6 +374,7 @@ def test_augment_single_penalty_no_add():
     states = [time, x]  # time first since it was at index 0
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
@@ -600,6 +404,7 @@ def test_augment_multiple_penalties_create_add():
     states = [x, time]
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     c1 = ctcs(x[0] <= 1.0, penalty="squared_relu")
     c2 = ctcs(x[1] <= 2.0, penalty="huber")
@@ -627,6 +432,7 @@ def test_augment_empty_states_list():
     states = [time]
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     # CTCS constraint on a constant (unusual but valid)
     constraint = ctcs(Constant(1.0) <= 2.0)
@@ -660,6 +466,7 @@ def test_augment_with_different_penalties():
     states = [time, x]  # time first since it was at index 0
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     penalties = ["squared_relu", "huber", "smooth_relu"]
     constraints = [ctcs(x <= float(i), penalty=p) for i, p in enumerate(penalties)]
@@ -699,6 +506,7 @@ def test_augment_preserves_original_controls():
     states = [time, x]  # time first since it was at index 0
     controls = [u1, u2]
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
@@ -983,6 +791,7 @@ def test_augmented_state_bounds():
     states = [time, x]
     controls = []
     N = 5
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
@@ -1015,6 +824,7 @@ def test_time_dilation_control_bounds():
     states = [x, time]
     controls = []
     N = 3
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
 
@@ -1136,6 +946,7 @@ def test_ctcs_multiple_augmented_states():
     states = [x, time]
     controls = []
     N = 1
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     # Create constraints with different node intervals (different idx groups)
     c1 = ctcs(x[0] <= 1.0, nodes=(0, 5), idx=0)

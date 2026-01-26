@@ -60,7 +60,7 @@ jobs:
 
     - name: Build documentation (check only)
       if: ${{ !inputs.version }}
-      run: mkdocs build
+      run: mkdocs build --strict
 
     - name: Fetch gh-pages branch
       if: inputs.version

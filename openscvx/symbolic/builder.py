@@ -35,7 +35,6 @@ import numpy as np
 
 from openscvx.symbolic.augmentation import (
     augment_dynamics_with_ctcs,
-    augment_with_time_state,
     decompose_vector_nodal_constraints,
     separate_constraints,
     sort_ctcs_constraints,
@@ -57,7 +56,6 @@ from openscvx.symbolic.preprocessing import (
     validate_dynamics_dimension,
     validate_guesses,
     validate_shapes,
-    validate_time_parameters,
     validate_variable_names,
 )
 from openscvx.symbolic.problem import SymbolicProblem
@@ -200,31 +198,25 @@ def preprocess_symbolic_problem(
     # Validate that all user-provided variables have guesses
     validate_guesses(states + controls)
 
-    # ==================== PHASE 1: Time Handling & Validation ====================
+    # ==================== PHASE 1: Time Handling ====================
 
-    # Validate time handling approach and get processed parameters
-    (
-        has_time_state,
-        time_initial,
-        time_final,
-        time_derivative,
-        time_min,
-        time_max,
-    ) = validate_time_parameters(states, time)
+    # Check if time state already in states list
+    time_state = next((s for s in states if s.name == "time"), None)
 
-    # Augment states with time state if needed (auto-create approach)
-    if not has_time_state:
-        states, constraints = augment_with_time_state(
-            states,
-            constraints,
-            time_initial,
-            time_final,
-            time_min,
-            time_max,
-            N,
-            time_scaling_min=getattr(time, "scaling_min", None),
-            time_scaling_max=getattr(time, "scaling_max", None),
-        )
+    if time_state is None:
+        # Add the Time object to states (Time is a State subclass)
+        states = list(states) + [time]
+        time_state = time
+
+    # Fill in default guess if needed (for Time instances)
+    if isinstance(time_state, Time) and time_state.guess is None:
+        time_state.guess = time_state._generate_default_guess(N)
+
+    # Add CTCS constraints for time bounds
+    from openscvx.symbolic.expr import CTCS
+
+    constraints.unsorted.append(CTCS(time_state <= time_state.max))
+    constraints.unsorted.append(CTCS(time_state.min <= time_state))
 
     # Add time derivative to dynamics dict (if not already present)
     # Time derivative is always 1.0 when using Time object

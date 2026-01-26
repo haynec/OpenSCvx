@@ -1,36 +1,46 @@
 from typing import Union
 
+import numpy as np
 
-class Time:
-    """Time configuration for trajectory optimization problems.
+from openscvx.symbolic.expr.state import State
 
-    This class encapsulates time-related parameters for trajectory optimization.
-    The time derivative is internally assumed to be 1.0.
+
+class Time(State):
+    """Time state variable for trajectory optimization.
+
+    Time is a State representing physical time along the trajectory. Used for
+    time-optimal control and problems with time-dependent dynamics/constraints.
+
+    Since Time is a State, it can be:
+    - Used directly in constraint expressions (e.g., `time[0] <= 5.0`)
+    - Added to the states list, or auto-added via the `time=` argument
+
+    The constructor accepts scalar values for convenience, which are converted
+    to arrays internally to match State's API.
 
     Attributes:
-        initial (float or tuple): Initial time boundary condition.
-            Can be a float (fixed) or tuple like ("free", value), ("minimize", value),
-            or ("maximize", value).
-        final (float or tuple): Final time boundary condition.
-            Can be a float (fixed) or tuple like ("free", value), ("minimize", value),
-            or ("maximize", value).
-        min (float): Minimum bound for time variable (required).
-        max (float): Maximum bound for time variable (required).
+        derivative (float): Always 1.0 - time derivative in normalized coordinates.
 
     Example:
-        ```python
-        # Fixed initial and final time
-        time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+        Basic usage::
 
-        # Free final time
-        time = Time(initial=0.0, final=("free", 10.0), min=0.0, max=20.0)
+            time = ox.Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+            problem = Problem(..., time=time)
 
-        # Minimize final time
-        time = Time(initial=0.0, final=("minimize", 10.0), min=0.0, max=20.0)
+        Time-optimal (minimize final time)::
 
-        # Maximize initial time
-        time = Time(initial=("maximize", 0.0), final=10.0, min=0.0, max=20.0)
-        ```
+            time = ox.Time(
+                initial=0.0,
+                final=("minimize", 10.0),
+                min=0.0,
+                max=20.0,
+            )
+
+        Using time in constraints::
+
+            time = ox.Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+            states = [position, velocity, time]
+            constraint = ox.ctcs(time[0] <= 5.0)
     """
 
     def __init__(
@@ -40,77 +50,35 @@ class Time:
         min: float,
         max: float,
     ):
-        """Initialize a Time object.
+        """Initialize a Time state.
 
         Args:
-            initial: Initial time boundary condition (float or tuple).
-                Tuple format: ("free", value), ("minimize", value), or ("maximize", value).
-            final: Final time boundary condition (float or tuple).
-                Tuple format: ("free", value), ("minimize", value), or ("maximize", value).
-            min: Minimum bound for time variable (required).
-            max: Maximum bound for time variable (required).
-
-        Raises:
-            ValueError: If tuple format is invalid.
+            initial: Initial time. Either a float (fixed) or tuple like
+                ("free", value), ("minimize", value), ("maximize", value).
+            final: Final time. Same format as initial.
+            min: Minimum time bound.
+            max: Maximum time bound.
         """
-        # Validate tuple format if provided
-        for name, value in [("initial", initial), ("final", final)]:
-            if isinstance(value, tuple):
-                if len(value) != 2:
-                    raise ValueError(f"{name} tuple must have exactly 2 elements: (type, value)")
-                bc_type, bc_value = value
-                if bc_type not in ["free", "minimize", "maximize"]:
-                    raise ValueError(
-                        f"{name} boundary condition type must be 'free', "
-                        f"'minimize', or 'maximize', got '{bc_type}'"
-                    )
-                if not isinstance(bc_value, (int, float)):
-                    raise ValueError(
-                        f"{name} boundary condition value must be a number, "
-                        f"got {type(bc_value).__name__}"
-                    )
+        super().__init__("time", shape=(1,))
 
-        self.initial = initial
-        self.final = final
-        self.min = min
-        self.max = max
-        # Time derivative is always 1.0 internally
+        self.min = np.array([min])
+        self.max = np.array([max])
+        self.initial = [initial]  # State's setter handles tuple parsing
+        self.final = [final]
+
         self.derivative = 1.0
-        self._scaling_min = None
-        self._scaling_max = None
 
-    @property
-    def scaling_min(self):
-        """Get the scaling minimum bound for the time variable.
-
-        Returns:
-            Scaling minimum value, or None if not set.
-        """
-        return self._scaling_min
-
-    @scaling_min.setter
-    def scaling_min(self, val):
-        """Set the scaling minimum bound for the time variable.
+    def _generate_default_guess(self, N: int) -> np.ndarray:
+        """Generate linear interpolation guess from initial to final time.
 
         Args:
-            val: Scaling minimum value (float or None)
-        """
-        self._scaling_min = float(val) if val is not None else None
-
-    @property
-    def scaling_max(self):
-        """Get the scaling maximum bound for the time variable.
+            N: Number of discretization nodes.
 
         Returns:
-            Scaling maximum value, or None if not set.
+            Array of shape (N, 1) with linear interpolation.
         """
-        return self._scaling_max
+        # _initial and _final hold the numeric values (State parses tuples)
+        return np.linspace(self._initial[0], self._final[0], N).reshape(-1, 1)
 
-    @scaling_max.setter
-    def scaling_max(self, val):
-        """Set the scaling maximum bound for the time variable.
-
-        Args:
-            val: Scaling maximum value (float or None)
-        """
-        self._scaling_max = float(val) if val is not None else None
+    def __repr__(self):
+        return f"Time(initial={self._initial[0]}, final={self._final[0]})"

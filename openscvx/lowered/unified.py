@@ -161,7 +161,7 @@ class UnifiedState:
         initial=0.0,
         final=0.0,
         augmented=False,
-    ):
+    ) -> None:
         """Append another state or create a new state variable.
 
         This method allows dynamic extension of the unified state, either by appending
@@ -536,7 +536,7 @@ class UnifiedControl:
         max=np.inf,
         guess=0.0,
         augmented=False,
-    ):
+    ) -> None:
         """Append another control or create a new control variable.
 
         This method allows dynamic extension of the unified control, either by appending
