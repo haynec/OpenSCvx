@@ -124,7 +124,7 @@ def test_jax_lower_parameter_scalar():
 
     param = Parameter("alpha", (), value=5.0)
     jl = JaxLowerer()
-    f = jl._visit_parameter(param)
+    f = jl.lower(param)
     parameters = dict(alpha=5.0)
 
     # Test with scalar parameter
@@ -149,7 +149,7 @@ def test_jax_lower_parameter_vector():
 
     param = Parameter("weights", (3,), value=np.array([1.0, 2.0, 3.0]))
     jl = JaxLowerer()
-    f = jl._visit_parameter(param)
+    f = jl.lower(param)
 
     # Test with vector parameter
     weights_val = np.array([1.0, 2.0, 3.0])
@@ -173,7 +173,7 @@ def test_jax_lower_parameter_matrix():
 
     param = Parameter("transform", (2, 3), value=np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]))
     jl = JaxLowerer()
-    f = jl._visit_parameter(param)
+    f = jl.lower(param)
 
     # Test with matrix parameter
     matrix_val = np.array([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])

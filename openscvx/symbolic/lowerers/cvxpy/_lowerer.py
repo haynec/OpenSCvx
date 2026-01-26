@@ -58,6 +58,15 @@ class CvxpyLowerer:
         """
         self.variable_map = variable_map or {}
 
+    def register_variable(self, name: str, value: cp.Expression):
+        """Register a variable in the variable map.
+
+        Args:
+            name: Variable name (e.g., "x", "u", or parameter name)
+            value: CVXPy expression to associate with the name
+        """
+        self.variable_map[name] = value
+
     def lower(self, expr: Expr) -> cp.Expression:
         """Lower a symbolic expression to a CVXPy expression.
 
