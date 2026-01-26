@@ -234,6 +234,6 @@ print(f"Total cost: {result.cost:.3f}")
     - [03 Obstacle Avoidance](UsersGuide/03_obstacle_avoidance_vmap.md): 6-DOF dynamics, Parameters, and Vmap
     - [04 Viewpoint Constraints](UsersGuide/04_viewpoint_constraints.md): Custom functions and perception
     - [05 Visualization](UsersGuide/05_visualization.md): 2D plots and 3D interactive visualization
-- **[Examples](Examples/index.md)**: Complete problem implementations across domains
-- **[API Reference](Reference/index.md)**: Detailed documentation for all classes and functions
+- **[Examples](Examples/abstract/brachistochrone.md)**: Complete problem implementations across domains
+- **[API Reference](Reference/problem.md)**: Detailed documentation for all classes and functions
 - **[Citation](citation.md)**: Information for citing OpenSCvx in your research
