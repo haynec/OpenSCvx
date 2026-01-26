@@ -8,7 +8,7 @@ import mkdocs_gen_files
 nav = mkdocs_gen_files.Nav()
 
 root = Path(__file__).parent.parent
-examples_dir = root / "Examples"
+examples_dir = root / "examples"
 
 # Files to skip (utility modules, not examples)
 SKIP_FILES = {"plotting.py", "__init__.py"}
