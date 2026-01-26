@@ -27,7 +27,7 @@ from examples.plotting import plot_dubins_car, plot_velocity_vs_distance
 from openscvx import Problem
 
 n = 8
-total_time = 2.0  # Total simulation time
+total_time = 3.0  # Total simulation time
 
 # Define state components
 position = ox.State("position", shape=(2,))  # 2D position [x, y]
@@ -113,9 +113,7 @@ problem = Problem(
 
 # Set solver parameters
 problem.settings.scp.w_tr = 1e0
-problem.settings.scp.w_tr_adapt = 1.1
-problem.settings.scp.w_tr_max_scaling_factor = 1e2
-problem.settings.scp.lam_cost = 1e0
+problem.settings.scp.lam_cost = 1e-1
 problem.settings.scp.lam_vc = 1e3
 problem.settings.scp.uniform_time_grid = True
 

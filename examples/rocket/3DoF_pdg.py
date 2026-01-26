@@ -25,6 +25,8 @@ from examples.plotting_viser import (
     create_pdg_animated_plotting_server,
     create_scp_animated_plotting_server,
 )
+
+from openscvx.plotting import plot_scp_convergence_histories
 from openscvx import Problem
 from openscvx.plotting import plot_controls, plot_projections_2d, plot_states, plot_vector_norm
 
@@ -51,10 +53,9 @@ mass = ox.State("mass", shape=(1,))  # Vehicle mass
 mass.max = np.array([1905])
 mass.min = np.array([1505])
 mass.initial = np.array([1905])
-mass.final = [("maximize", 1700)]
-mass.scaling_min = np.array([1700])
-# mass.scaling_max = np.array([1700])
-mass.guess = np.linspace(mass.initial, 1690, n).reshape(-1, 1)
+mass.final = [ox.Maximize(1540)]
+mass.scaling_min = np.array([1540])
+mass.guess = np.linspace(mass.initial, mass.final, n).reshape(-1, 1)
 
 # Define control
 thrust = ox.Control("thrust", shape=(3,))  # Thrust force vector [Tx, Ty, Tz]
@@ -144,20 +145,13 @@ problem = Problem(
 )
 
 # Set solver parameters
-problem.settings.scp.k_max = 500
-problem.settings.scp.w_tr_adapt = 1.04
-problem.settings.scp.w_tr = 6e-1
-problem.settings.scp.lam_cost = 4e-1
-problem.settings.scp.lam_vc = 1.5e0
-
-# problem.settings.scp.uniform_time_grid = True
+problem.settings.scp.w_tr = 1e0
+problem.settings.scp.lam_cost = 1e0
+problem.settings.scp.lam_vc = 1e3
 
 problem.settings.dis.dis_type = "ZOH"
 
 problem.settings.dis.solver = "Dopri8"
-
-# problem.settings.cvx.solver = "QOCO"
-# problem.settings.cvx.solver_args = {"enforce_dpp": True}
 
 
 plotting_dict = {
@@ -172,10 +166,13 @@ if __name__ == "__main__":
     results = problem.post_process()
     results.update(plotting_dict)
 
-    plot_states(results, ["position", "velocity"]).show()
-    plot_controls(results, ["thrust"]).show()
+
+    plot_scp_convergence_histories(results).show()
+
+    # plot_states(results, ["position", "velocity"]).show()
+    # plot_controls(results, ["thrust"]).show()
     plot_vector_norm(results, "thrust", bounds=(rho_min, rho_max)).show()
-    plot_projections_2d(results, velocity_var_name="velocity").show()
+    # plot_projections_2d(results, velocity_var_name="velocity").show()
 
     # Create PDG trajectory visualization
     # scene_scale=100 brings 2000m scale down to ~20m for viser
