@@ -224,11 +224,16 @@ print(f"Total cost: {result.cost:.3f}")
 ```
 
 !!! note "Note"
-    This is a basic example. For more complex problems, see the [Examples](examples.md) section.
+    This is a basic example. For a more detailed introduction, see the [Users Guide](UsersGuide/00_introduction.md).
 
 ## Next Steps
 
-- **[Examples](examples.md)**: Explore the comprehensive set of example problems
-- **[Basic Problem Setup](UsersGuide/basic_problem_setup.md)**: Learn how to set up your first optimization problem
-- **[Advanced Problem Setup](UsersGuide/advanced_problem_setup.md)**: Learn how to set up a more complex optimization problem
+- **[Users Guide](UsersGuide/00_introduction.md)**: Progressive tutorials from basics to advanced topics
+    - [01 Hello Brachistochrone](UsersGuide/01_hello_world_brachistochrone.md): Core API fundamentals
+    - [02 Drone Racing](UsersGuide/02_drone_racing_constraints.md): Constraint types and 3D dynamics
+    - [03 Obstacle Avoidance](UsersGuide/03_obstacle_avoidance_vmap.md): 6-DOF dynamics, Parameters, and Vmap
+    - [04 Viewpoint Constraints](UsersGuide/04_viewpoint_constraints.md): Custom functions and perception
+    - [05 Visualization](UsersGuide/05_visualization.md): 2D plots and 3D interactive visualization
+- **[Examples](Examples/index.md)**: Complete problem implementations across domains
+- **[API Reference](Reference/index.md)**: Detailed documentation for all classes and functions
 - **[Citation](citation.md)**: Information for citing OpenSCvx in your research
