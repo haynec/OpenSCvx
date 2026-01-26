@@ -442,6 +442,6 @@ Copy this pattern, add or remove primitives as needed, and you have a custom vis
 
 ## Further Reading
 
-- [API Reference: Plotting](../Reference/plotting.md)
+- [API Reference: Plotting](../Reference/plotting/index.md)
 - [Viser Documentation](https://viser.studio/)
 - [Complete Drone Racing with Viewplanning Example](../Examples/drone/dr_vp.md)

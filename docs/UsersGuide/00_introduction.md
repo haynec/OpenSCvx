@@ -40,5 +40,5 @@ These notebooks let you run the examples without local setup and experiment with
 
 After completing the tutorials, explore:
 
-- [Examples](../Examples/index.md) — Complete problem implementations across domains
-- [API Reference](../Reference/index.md) — Detailed documentation for all classes and functions
+- [Examples](../Examples/abstract/brachistochrone.md) — Complete problem implementations across domains
+- [API Reference](../Reference/problem.md) — Detailed documentation for all classes and functions

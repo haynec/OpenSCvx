@@ -5,5 +5,5 @@
 
 ## Further Reading
 
-- [API Reference: Lie algebra](../Reference/symbolic/expr/lie.md)
+- [API Reference: Lie algebra](../Reference/symbolic/expr/lie/index.md)
 - [Three-link arm Example](../Examples/arm/three_link_arm.md)
