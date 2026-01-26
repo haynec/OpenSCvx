@@ -308,7 +308,7 @@ class PenalizedTrustRegion(Algorithm):
         # Calculate J_tr_vec using the JAX-compatible block diagonal matrix
         tr_mat = inv_block_diag @ np.hstack((x_new_guess - state.x, u_new_guess - state.u)).T
         J_tr_vec = la.norm(tr_mat, axis=0) ** 2
-        vc_mat = np.abs(result.nu)
+        vc_mat = np.abs(settings.sim.inv_S_x @ result.nu.T).T
         J_vc_vec = np.sum(vc_mat, axis=1)
 
         # Sum nodal constraint violations
