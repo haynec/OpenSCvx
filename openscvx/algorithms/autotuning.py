@@ -104,7 +104,7 @@ def update_scp_weights(state: "AlgorithmState", settings: Config, params: dict):
         # Update virtual control weight matrix
         ep = 0.5
         nu = abs(state.candidate.x[1:] - state.candidate.x_prop)
-        vc_max = 1E2
+        vc_max = 1E5
         eta_lambda = 1E0
         
         # Vectorized update: use mask to select between two update rules
@@ -113,7 +113,7 @@ def update_scp_weights(state: "AlgorithmState", settings: Config, params: dict):
         case2 = state.lam_vc + (nu**2) / ep * eta_lambda * (1 / (2 * state.w_tr))  # when abs(nu) <= ep
         vc_new = np.where(mask, case1, case2)
         vc_new = np.minimum(vc_max, vc_new)
-        # state.lam_vc_history.append(vc_new)
+        state.candidate.lam_vc = vc_new
 
     else:
         state.w_tr_history.append(w_tr_k)
