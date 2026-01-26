@@ -13,6 +13,8 @@ The tutorials are designed to be read in order. Each builds on concepts from the
 | [03 Obstacle Avoidance](03_obstacle_avoidance_vmap.md) | 6-DOF navigation | Quaternion dynamics, spatial utilities, `ox.Parameter`, `ox.Vmap` |
 | [04 Viewpoint Constraints](04_viewpoint_constraints.md) | Perception-constrained racing | Custom symbolic functions, Vmap with custom functions, attitude initialization |
 | [05 Visualization](05_visualization.md) | — | 2D plots with Plotly, 3D interactive visualization with viser, Plotly-in-viser |
+| [06 Dubin's Car](06_logic.md) | Conditional path planning | Conditional statements, signal temporal logic (STL) |
+| [07 Multi-Link Arms](07_lie.md) | Articulated robot control | Lie algebra, propagated states |
 
 ## Quick Start
 

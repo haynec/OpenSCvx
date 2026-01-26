@@ -173,6 +173,8 @@ nav:
       - 'UsersGuide/03_obstacle_avoidance_vmap.md'
       - 'UsersGuide/04_viewpoint_constraints.md'
       - 'UsersGuide/05_visualization.md'
+      - 'UsersGuide/06_logic.md'
+      - 'UsersGuide/07_lie.md'
       - 'UsersGuide/basic_problem_setup.md'
       - 'UsersGuide/advanced_problem_setup.md'
       - Tutorials:
