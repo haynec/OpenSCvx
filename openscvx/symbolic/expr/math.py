@@ -36,7 +36,7 @@ Example:
 
 import hashlib
 import struct
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy as np
 
@@ -59,7 +59,7 @@ class Sin(Expr):
             sin_theta = Sin(theta)
     """
 
-    def __init__(self, operand):
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
         """Initialize a sine operation.
 
         Args:
@@ -78,7 +78,7 @@ class Sin(Expr):
         """Sin preserves the shape of its operand."""
         return self.operand.check_shape()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"(sin({self.operand!r}))"
 
 
@@ -98,7 +98,7 @@ class Cos(Expr):
             cos_theta = Cos(theta)
     """
 
-    def __init__(self, operand):
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
         """Initialize a cosine operation.
 
         Args:
@@ -117,7 +117,7 @@ class Cos(Expr):
         """Cos preserves the shape of its operand."""
         return self.operand.check_shape()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"(cos({self.operand!r}))"
 
 
@@ -141,7 +141,7 @@ class Tan(Expr):
         NotImplementedError since tangent is not DCP-compliant.
     """
 
-    def __init__(self, operand):
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
         """Initialize a tangent operation.
 
         Args:
@@ -160,7 +160,7 @@ class Tan(Expr):
         """Tan preserves the shape of its operand."""
         return self.operand.check_shape()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"(tan({self.operand!r}))"
 
 
@@ -181,7 +181,7 @@ class Square(Expr):
             v_squared = Square(v)  # Equivalent to v ** 2
     """
 
-    def __init__(self, x):
+    def __init__(self, x: Union[Expr, float, int, np.ndarray]):
         """Initialize a square operation.
 
         Args:
@@ -200,7 +200,7 @@ class Square(Expr):
         """x^2 preserves the shape of x."""
         return self.x.check_shape()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"({self.x!r})^2"
 
 
@@ -220,7 +220,7 @@ class Sqrt(Expr):
             sqrt_x = Sqrt(x)
     """
 
-    def __init__(self, operand):
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
         """Initialize a square root operation.
 
         Args:
@@ -239,7 +239,7 @@ class Sqrt(Expr):
         """Sqrt preserves the shape of its operand."""
         return self.operand.check_shape()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"sqrt({self.operand!r})"
 
 
@@ -259,7 +259,7 @@ class Exp(Expr):
             exp_x = Exp(x)
     """
 
-    def __init__(self, operand):
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
         """Initialize an exponential operation.
 
         Args:
@@ -278,7 +278,7 @@ class Exp(Expr):
         """Exp preserves the shape of its operand."""
         return self.operand.check_shape()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"exp({self.operand!r})"
 
 
@@ -298,7 +298,7 @@ class Log(Expr):
             log_x = Log(x)
     """
 
-    def __init__(self, operand):
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
         """Initialize a natural logarithm operation.
 
         Args:
@@ -317,7 +317,7 @@ class Log(Expr):
         """Log preserves the shape of its operand."""
         return self.operand.check_shape()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"log({self.operand!r})"
 
 
@@ -338,7 +338,7 @@ class Abs(Expr):
             abs_x = Abs(x)  # Element-wise |x|
     """
 
-    def __init__(self, operand):
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
         """Initialize an absolute value operation.
 
         Args:
@@ -357,7 +357,7 @@ class Abs(Expr):
         """Abs preserves the shape of its operand."""
         return self.operand.check_shape()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"abs({self.operand!r})"
 
 
@@ -379,7 +379,7 @@ class Max(Expr):
             max_xy = Max(x, y, 0)  # Element-wise max(x, y, 0)
     """
 
-    def __init__(self, *args):
+    def __init__(self, *args: Union[Expr, float, int, np.ndarray]):
         """Initialize a maximum operation.
 
         Args:
@@ -430,7 +430,7 @@ class Max(Expr):
         except ValueError as e:
             raise ValueError(f"Max shapes not broadcastable: {shapes}") from e
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         inner = ", ".join(repr(op) for op in self.operands)
         return f"max({inner})"
 
@@ -454,7 +454,7 @@ class PositivePart(Expr):
             penalty = PositivePart(constraint_violation)  # Penalizes x > 10
     """
 
-    def __init__(self, x):
+    def __init__(self, x: Union[Expr, float, int, np.ndarray]):
         """Initialize a positive part operation.
 
         Args:
@@ -473,7 +473,7 @@ class PositivePart(Expr):
         """pos(x) = max(x, 0) preserves the shape of x."""
         return self.x.check_shape()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"pos({self.x!r})"
 
 
@@ -500,7 +500,7 @@ class Huber(Expr):
             penalty = Huber(residual, delta=0.5)
     """
 
-    def __init__(self, x, delta: float = 0.25):
+    def __init__(self, x: Union[Expr, float, int, np.ndarray], delta: float = 0.25):
         """Initialize a Huber penalty operation.
 
         Args:
@@ -534,7 +534,7 @@ class Huber(Expr):
         # Hash the operand
         self.x._hash_into(hasher)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"huber({self.x!r}, delta={self.delta})"
 
 
@@ -562,7 +562,7 @@ class SmoothReLU(Expr):
             penalty = SmoothReLU(constraint_violation, c=1e-6)
     """
 
-    def __init__(self, x, c: float = 1e-8):
+    def __init__(self, x: Union[Expr, float, int, np.ndarray], c: float = 1e-8):
         """Initialize a smooth ReLU operation.
 
         Args:
@@ -596,7 +596,7 @@ class SmoothReLU(Expr):
         # Hash the operand
         self.x._hash_into(hasher)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"smooth_relu({self.x!r}, c={self.c})"
 
 
@@ -640,7 +640,7 @@ class LogSumExp(Expr):
             relaxed_or = LogSumExp(phi1, phi2) >= 0
     """
 
-    def __init__(self, *args):
+    def __init__(self, *args: Union[Expr, float, int, np.ndarray]):
         """Initialize a log-sum-exp operation.
 
         Args:
@@ -694,7 +694,7 @@ class LogSumExp(Expr):
         except ValueError as e:
             raise ValueError(f"LogSumExp shapes not broadcastable: {shapes}") from e
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         inner = ", ".join(repr(op) for op in self.operands)
         return f"logsumexp({inner})"
 
@@ -736,7 +736,12 @@ class Linterp(Expr):
         - For query points outside [xp[0], xp[-1]], boundary values are returned
     """
 
-    def __init__(self, x, xp, fp):
+    def __init__(
+        self,
+        x: Union[Expr, float, int, np.ndarray],
+        xp: Union[Expr, float, int, np.ndarray],
+        fp: Union[Expr, float, int, np.ndarray],
+    ):
         """Initialize a 1D linear interpolation node.
 
         Args:
@@ -787,7 +792,7 @@ class Linterp(Expr):
 
         return self.x.check_shape()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"linterp({self.x!r}, {self.xp!r}, {self.fp!r})"
 
 
@@ -836,7 +841,14 @@ class Bilerp(Expr):
         - This node is only supported in JAX lowering (dynamics/cost), not CVXPy
     """
 
-    def __init__(self, x, y, xp, yp, fp):
+    def __init__(
+        self,
+        x: Union[Expr, float, int, np.ndarray],
+        y: Union[Expr, float, int, np.ndarray],
+        xp: Union[Expr, float, int, np.ndarray],
+        yp: Union[Expr, float, int, np.ndarray],
+        fp: Union[Expr, float, int, np.ndarray],
+    ):
         """Initialize a 2D bilinear interpolation node.
 
         Args:
@@ -897,5 +909,5 @@ class Bilerp(Expr):
 
         return ()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"bilerp({self.x!r}, {self.y!r}, {self.xp!r}, {self.yp!r}, {self.fp!r})"

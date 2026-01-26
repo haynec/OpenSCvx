@@ -13,7 +13,7 @@ def plot_scp_iterations(
     control_names: list[str] | None = None,
     cmap_name: str = "viridis",
     show_propagation: bool = True,
-):
+) -> go.Figure:
     """Plot all SCP iterations overlaid with colormap-based coloring.
 
     Shows the evolution of states and controls across SCP iterations. Early

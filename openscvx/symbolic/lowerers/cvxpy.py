@@ -183,7 +183,7 @@ _CVXPY_VISITORS: Dict[Type[Expr], Callable] = {}
 """Registry mapping expression types to their visitor functions."""
 
 
-def visitor(expr_cls: Type[Expr]):
+def visitor(expr_cls: Type[Expr]) -> Callable[[Callable], Callable]:
     """Decorator to register a visitor function for an expression type.
 
     This decorator registers a visitor method to handle a specific expression
@@ -221,7 +221,7 @@ def visitor(expr_cls: Type[Expr]):
     return register
 
 
-def dispatch(lowerer: "CvxpyLowerer", expr: Expr):
+def dispatch(lowerer: "CvxpyLowerer", expr: Expr) -> cp.Expression:
     """Dispatch an expression to its registered visitor function.
 
     Looks up the visitor function for the expression's type and calls it.

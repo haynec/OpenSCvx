@@ -16,7 +16,7 @@ def prop_aug_dy(
     state_dot: callable,
     dis_type: str,
     N: int,
-    params,
+    params: dict,
 ) -> np.ndarray:
     """Compute the augmented dynamics for propagation.
 
@@ -50,16 +50,15 @@ def prop_aug_dy(
     return u[:, idx_s] * state_dot(x, u[:, :-1], node, params).squeeze()
 
 
-def get_propagation_solver(state_dot: Dynamics, settings: Config):
+def get_propagation_solver(state_dot: Dynamics, settings: Config) -> callable:
     """Create a propagation solver function.
 
     This function creates a solver that propagates the system state using the
     specified dynamics and settings.
 
     Args:
-        state_dot (callable): Function computing state derivatives.
+        state_dot: Dynamics object containing state derivative function.
         settings: Configuration settings for propagation.
-        param_map (dict): Mapping of parameter names to values.
 
     Returns:
         callable: A function that solves the propagation problem.
@@ -97,7 +96,7 @@ def get_propagation_solver(state_dot: Dynamics, settings: Config):
     return propagation_solver
 
 
-def s_to_t(x: np.ndarray, u: np.ndarray, settings: Config):
+def s_to_t(x: np.ndarray, u: np.ndarray, settings: Config) -> list[float]:
     """Convert normalized time s to real time t.
 
     This function converts the normalized time variable s to real time t
@@ -109,7 +108,7 @@ def s_to_t(x: np.ndarray, u: np.ndarray, settings: Config):
         settings (Config): Configuration settings.
 
     Returns:
-        list: List of real time points.
+        list[float]: List of real time points.
     """
     t = [x[:, settings.sim.time_slice][0]]
     tau = np.linspace(0, 1, settings.scp.n)
@@ -123,7 +122,9 @@ def s_to_t(x: np.ndarray, u: np.ndarray, settings: Config):
     return t
 
 
-def t_to_tau(u: np.ndarray, t, t_nodal, settings: Config):
+def t_to_tau(
+    u: np.ndarray, t: np.ndarray, t_nodal: np.ndarray, settings: Config
+) -> tuple[np.ndarray, np.ndarray]:
     """Convert real time t to normalized time tau.
 
     This function converts real time t to normalized time tau and interpolates
@@ -136,7 +137,8 @@ def t_to_tau(u: np.ndarray, t, t_nodal, settings: Config):
         settings (Config): Configuration settings.
 
     Returns:
-        tuple: (tau, u_interp) where tau is normalized time and u_interp is interpolated controls.
+        tuple[np.ndarray, np.ndarray]: (tau, u_interp) where tau is normalized time and u_interp is
+            interpolated controls.
     """
     if settings.dis.dis_type == "ZOH":
         # Zero-Order Hold: step interpolation (hold previous value)
@@ -170,7 +172,15 @@ def t_to_tau(u: np.ndarray, t, t_nodal, settings: Config):
     return tau, u_interp
 
 
-def simulate_nonlinear_time(params, x, u, tau_vals, t, settings, propagation_solver):
+def simulate_nonlinear_time(
+    params: dict,
+    x: np.ndarray,
+    u: np.ndarray,
+    tau_vals: np.ndarray,
+    t: np.ndarray,
+    settings: Config,
+    propagation_solver: callable,
+) -> np.ndarray:
     """Simulate the nonlinear system dynamics over time.
 
     This function simulates the system dynamics using the optimal control sequence

@@ -22,7 +22,7 @@ See the :class:`Vmap` class documentation for usage examples.
 """
 
 import uuid
-from typing import TYPE_CHECKING, Callable, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Callable, List, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -396,7 +396,7 @@ class Vmap(Expr):
             return batch.shape
         return batch.value.shape
 
-    def children(self):
+    def children(self) -> List["Expr"]:
         """Return child expressions.
 
         Returns:
@@ -483,7 +483,7 @@ class Vmap(Expr):
 
         self._child._hash_into(hasher)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """String representation of the Vmap expression.
 
         Returns:

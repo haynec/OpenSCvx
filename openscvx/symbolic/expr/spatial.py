@@ -5,7 +5,9 @@ freedom) operations used in aerospace and robotics applications. These operation
 map to optimized JAX implementations for high-performance evaluation.
 """
 
-from typing import Tuple
+from typing import Tuple, Union
+
+import numpy as np
 
 from .expr import Expr, to_expr
 
@@ -38,7 +40,7 @@ class QDCM(Expr):
         automatically handles normalization during evaluation.
     """
 
-    def __init__(self, q):
+    def __init__(self, q: Union[Expr, float, int, np.ndarray]):
         """Initialize a quaternion to DCM conversion.
 
         Args:
@@ -67,7 +69,7 @@ class QDCM(Expr):
             raise ValueError(f"QDCM expects quaternion with shape (4,), got {q_shape}")
         return (3, 3)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"qdcm({self.q!r})"
 
 
@@ -105,7 +107,7 @@ class SSMP(Expr):
         SSM: 3x3 skew-symmetric matrix for cross product operations
     """
 
-    def __init__(self, w):
+    def __init__(self, w: Union[Expr, float, int, np.ndarray]):
         """Initialize an angular velocity to skew-symmetric matrix conversion.
 
         Args:
@@ -134,7 +136,7 @@ class SSMP(Expr):
             raise ValueError(f"SSMP expects angular velocity with shape (3,), got {w_shape}")
         return (4, 4)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"ssmp({self.w!r})"
 
 
@@ -176,7 +178,7 @@ class SSM(Expr):
         SSMP: 4x4 skew-symmetric matrix for quaternion dynamics
     """
 
-    def __init__(self, w):
+    def __init__(self, w: Union[Expr, float, int, np.ndarray]):
         """Initialize a vector to skew-symmetric matrix conversion.
 
         Args:
@@ -205,5 +207,5 @@ class SSM(Expr):
             raise ValueError(f"SSM expects angular velocity with shape (3,), got {w_shape}")
         return (3, 3)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"ssm({self.w!r})"

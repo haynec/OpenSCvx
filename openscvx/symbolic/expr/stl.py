@@ -9,12 +9,15 @@ STL operators accept Constraint objects (predicates) and extract robustness
 expressions which are lowered to STLJax during compilation.
 """
 
-from typing import Optional, Tuple, Union
+from typing import TYPE_CHECKING, Optional, Tuple, Union
 
 import numpy as np
 
 from .constraint import Constraint
 from .expr import Constant, Expr
+
+if TYPE_CHECKING:
+    from .constraint import CTCS, NodalConstraint
 
 
 class STLExpr(Expr):
@@ -56,7 +59,7 @@ class STLExpr(Expr):
         penalty: str = "squared_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
-    ):
+    ) -> "CTCS":
         """Apply this STL expression over a continuous interval using CTCS.
 
         Converts the STL expression to a constraint and wraps it in CTCS
@@ -69,7 +72,7 @@ class STLExpr(Expr):
             check_nodally: Whether to also enforce at discrete nodes
 
         Returns:
-            CTCS: Continuous-time constraint satisfaction wrapper
+            Continuous-time constraint satisfaction wrapper
 
         Example:
             Enforce STL expression over an interval:
@@ -89,7 +92,7 @@ class STLExpr(Expr):
             constraint, penalty=penalty, nodes=interval, idx=idx, check_nodally=check_nodally
         )
 
-    def at(self, nodes: Union[list, tuple]):
+    def at(self, nodes: Union[list, tuple]) -> "NodalConstraint":
         """Apply this STL expression only at specific nodes.
 
         Converts the STL expression to a constraint and wraps it in NodalConstraint.
@@ -98,7 +101,7 @@ class STLExpr(Expr):
             nodes: List of node indices where the constraint should be enforced
 
         Returns:
-            NodalConstraint: Nodal constraint wrapper
+            Nodal constraint wrapper
 
         Example:
             Enforce STL expression at specific nodes:
@@ -169,7 +172,7 @@ class Or(STLExpr):
         stljax.formula.Or: Underlying STLJax implementation used during lowering
     """
 
-    def __init__(self, *predicates):
+    def __init__(self, *predicates: Union[Constraint, "STLExpr"]):
         """Initialize a logical OR operation.
 
         Args:
@@ -245,6 +248,6 @@ class Or(STLExpr):
         # Or produces a scalar (STL robustness value)
         return ()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         predicates_repr = " | ".join(repr(p) for p in self.predicates)
         return f"Or({predicates_repr})"

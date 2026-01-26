@@ -211,14 +211,6 @@ class SimConfig:
             u (Control): Control object, must have .min and .max attributes for
                 bounds.
             total_time (float): The total simulation time.
-            idx_x_true (slice): Slice for true state indices.
-            idx_x_true_prop (slice): Slice for true propagation state indices.
-            idx_u_true (slice): Slice for true control indices.
-            idx_t (slice): Slice for time index.
-            idx_y (slice): Slice for constraint violation indices.
-            idx_y_prop (slice): Slice for propagation constraint violation
-                indices.
-            idx_s (slice): Slice for time dilation index.
             save_compiled (bool): If True, save and reuse compiled solver
                 functions. Defaults to False.
             ctcs_node_intervals (list, optional): Node intervals for CTCS

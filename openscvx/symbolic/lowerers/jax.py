@@ -184,7 +184,7 @@ _JAX_VISITORS: Dict[Type[Expr], Callable] = {}
 """Registry mapping expression types to their visitor functions."""
 
 
-def visitor(expr_cls: Type[Expr]):
+def visitor(expr_cls: Type[Expr]) -> Callable[[Callable], Callable]:
     """Decorator to register a visitor function for an expression type.
 
     This decorator registers a visitor method to handle a specific expression
@@ -222,7 +222,7 @@ def visitor(expr_cls: Type[Expr]):
     return register
 
 
-def dispatch(lowerer: Any, expr: Expr):
+def dispatch(lowerer: Any, expr: Expr) -> Callable:
     """Dispatch an expression to its registered visitor function.
 
     Looks up the visitor function for the expression's type and calls it.
@@ -264,8 +264,8 @@ class JaxLowerer:
     first, then composes them into a JAX operation. All lowered functions have
     a standardized signature (x, u, node, params) -> result.
 
-    Attributes:
-        None (stateless lowerer - all state is in the expression tree)
+    Note:
+        This is a stateless lowerer - all state is in the expression tree.
 
     Example:
         Set up the JaxLowerer and lower an expression to a JAX function:
@@ -281,7 +281,7 @@ class JaxLowerer:
         but they don't modify instance state.
     """
 
-    def lower(self, expr: Expr):
+    def lower(self, expr: Expr) -> Callable:
         """Lower a symbolic expression to a JAX function.
 
         Main entry point for lowering. Delegates to dispatch() which looks up

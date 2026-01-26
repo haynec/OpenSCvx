@@ -86,7 +86,7 @@ __all__ = [
 from openscvx.symbolic.unified import unify_controls, unify_states
 
 
-def lower(expr: Expr, lowerer: Any):
+def lower(expr: Expr, lowerer: Any) -> Any:
     """Dispatch an expression node to the appropriate lowerer backend.
 
     This is the main entry point for lowering a single symbolic expression to
@@ -134,7 +134,7 @@ def lower_to_jax(exprs: Union[Expr, Sequence[Expr]]) -> Union[callable, list[cal
 
     Returns:
         - If exprs is a single Expr: Returns a single callable with signature
-          (x, u, node, params) -> array
+            (x, u, node, params) -> array
         - If exprs is a sequence: Returns a list of callables with the same signature
 
     Example:

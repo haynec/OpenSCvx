@@ -347,7 +347,9 @@ def validate_and_normalize_constraint_nodes(exprs: Union[Expr, list[Expr]], n_no
                     raise ValueError(f"NodalConstraint node {node} is out of range [0, {n_nodes})")
 
 
-def validate_cross_node_constraint(cross_node_constraint, n_nodes: int) -> None:
+def validate_cross_node_constraint(
+    cross_node_constraint: CrossNodeConstraint, n_nodes: int
+) -> None:
     """Validate cross-node constraint bounds and variable consistency.
 
     This function performs two validations in a single tree traversal:
