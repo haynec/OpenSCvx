@@ -23,14 +23,14 @@ def update_scp_weights(state: "AlgorithmState", settings: Config, params: dict):
     # Update trust region weight in state
     # state.w_tr = min(state.w_tr * settings.scp.w_tr_adapt, settings.scp.w_tr_max)
 
-    J_nonlin_current = calculate_nonlinear_penalty(state.candidate.x_prop,
+    nonlinear_cost, nonlinear_penalty = calculate_nonlinear_penalty(state.candidate.x_prop,
                                                    state.candidate.x,
                                                    state.lam_vc,
                                                    state.lam_cost,
                                                    params,
                                                    settings)
 
-    state.candidate.J_nonlin = J_nonlin_current
+    state.candidate.J_nonlin = nonlinear_cost + nonlinear_penalty
 
     # Update cost relaxation parameter after cost_drop iterations
     if state.k > settings.scp.cost_drop:
@@ -38,48 +38,68 @@ def update_scp_weights(state: "AlgorithmState", settings: Config, params: dict):
     else:
         state.candidate.lam_cost = settings.scp.lam_cost
 
-    eta_1 = 0.1
-    eta_2 = 0.9
+    eta_0 = 1E-2
+    eta_1 = 1E-1
+    eta_2 = 0.8
 
     gamma_1 = 2.0
     gamma_2 = 0.5
 
     w_tr_min = 1E-3
-    w_tr_max = 2E4
+    w_tr_max = 2E5
 
     w_tr_k = deepcopy(state.w_tr)
 
     if state.k > 1:
-        J_nonlin_prev = calculate_nonlinear_penalty(state.x_prop(),
+        prev_nonlinear_cost, prev_nonlinear_penalty = calculate_nonlinear_penalty(state.x_prop(),
                                                     state.x,
                                                     state.lam_vc,
                                                     state.lam_cost,
                                                     params,
                                                     settings)
 
-        actual_reduction = state.J_nonlin_history[-1] - state.candidate.J_nonlin
-        predicted_reduction = state.J_nonlin_history[-1] - state.candidate.J_lin
+        J_nonlin_prev = prev_nonlinear_cost + prev_nonlinear_penalty
+
+        J_lin_current = calculate_linear_penalty(state.candidate.x,
+                                                 state.candidate.TR,
+                                                 state.candidate.VC,
+                                                 state.lam_cost,
+                                                 state.lam_vc,
+                                                 state.w_tr,
+                                                 settings)
+ 
+        actual_reduction = J_nonlin_prev - state.candidate.J_nonlin
+        predicted_reduction = J_nonlin_prev - state.candidate.J_lin
         rho = actual_reduction / predicted_reduction
 
         state.pred_reduction_history.append(predicted_reduction)
         state.actual_reduction_history.append(actual_reduction)
         state.acceptance_ratio_history.append(rho)
 
-        if state.acceptance_ratio_history[-1] >= eta_1:
-            if state.acceptance_ratio_history[-1] < eta_2:
-                # Accept Solution
-                w_tr_k1 = w_tr_k
-                state.w_tr_history.append(w_tr_k1)
-                state.accept_solution()
-            else:
-                # Accept Solution with higher weight
-                w_tr_k1 = max(w_tr_min, gamma_2 * w_tr_k)
-                state.w_tr_history.append(w_tr_k1)
-                state.accept_solution()
-        else:
-            # Reject Solution
+
+        if rho < eta_0:
+            # Reject Solution and higher weight
             w_tr_k1 = min(w_tr_max, gamma_1 * w_tr_k)
             state.w_tr_history.append(w_tr_k1)
+            adaptive_state = "Reject Higher"
+        elif rho >= eta_0 and rho < eta_1:
+            # Accept Solution with heigher weight
+            w_tr_k1 = min(w_tr_max, gamma_1 * w_tr_k)
+            state.w_tr_history.append(w_tr_k1)
+            state.accept_solution()
+            adaptive_state = "Accept Higher"
+        elif rho >= eta_1 and rho < eta_2:
+            # Accept Solution with constant weight
+            w_tr_k1 = w_tr_k
+            state.w_tr_history.append(w_tr_k1)
+            state.accept_solution()
+            adaptive_state = "Accept Constant"
+        else:
+            # Accept Solution with lower weight
+            w_tr_k1 = max(w_tr_min, gamma_2 * w_tr_k)
+            state.w_tr_history.append(w_tr_k1)
+            state.accept_solution()
+            adaptive_state = "Accept Lower"
 
         # Update virtual control weight matrix
         ep = 0.5
@@ -96,9 +116,12 @@ def update_scp_weights(state: "AlgorithmState", settings: Config, params: dict):
         # state.lam_vc_history.append(vc_new)
 
     else:
-        state.candidate.w_tr = w_tr_k
+        state.w_tr_history.append(w_tr_k)
         state.candidate.lam_vc = settings.scp.lam_vc
         state.accept_solution()
+        adaptive_state = "Initial"
+    
+    return adaptive_state
     
 
 
@@ -111,16 +134,17 @@ def calculate_cost_from_state(x, settings: Config):
     Returns:
         float: Computed cost
     """
+    scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:,None])).T
     cost = 0.0
     for i in range(settings.sim.n_states):
         if settings.sim.x.final_type[i] == "Minimize":
-            cost += x[-1, i]
+            cost += scaled_x[-1, i]
         if settings.sim.x.final_type[i] == "Maximize":
-            cost -= x[-1, i]
+            cost -= scaled_x[-1, i]
         if settings.sim.x.initial_type[i] == "Minimize":
-            cost += x[0, i]
+            cost += scaled_x[0, i]
         if settings.sim.x.initial_type[i] == "Maximize":
-            cost -= x[0, i]
+            cost -= scaled_x[0, i]
     return cost
 
 def calculate_nonlinear_penalty(x_prop: np.ndarray, 
@@ -146,9 +170,10 @@ def calculate_nonlinear_penalty(x_prop: np.ndarray,
     # TODO: Implement nonconvex nodal constraint violations
 
     cost = calculate_cost_from_state(x_bar, settings)
-    x_diff = x_bar[1:, :] - x_prop
+    x_diff = settings.sim.inv_S_x @ (x_bar[1:, :] - x_prop).T
 
-    return lam_cost * cost + np.sum(lam_vc * np.abs(x_diff))
+    return lam_cost * cost, np.sum(lam_vc * np.abs(x_diff.T))
+
 
 def calculate_linear_penalty(x_bar: np.ndarray,
                              TR_matrix: np.ndarray, 
@@ -166,4 +191,4 @@ def calculate_linear_penalty(x_bar: np.ndarray,
     """
     cost = calculate_cost_from_state(x_bar, settings)
     TR_matrix = np.linalg.norm(TR_matrix, axis=0) ** 2
-    return lam_cost * cost + np.sum(lam_vc * VC_matrix) + w_tr * np.sum(TR_matrix)
+    return lam_cost * cost + np.sum(lam_vc * (settings.sim.inv_S_x @ VC_matrix.T).T) + w_tr * np.linalg.norm(TR_matrix) ** 2

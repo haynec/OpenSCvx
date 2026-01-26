@@ -194,7 +194,7 @@ def header():
         )
     )
     print(
-        "{:^4} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^14}".format(
+        "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^14} │ {:^16}".format(
             "Iter",
             "Dis Time (ms)",
             "Solve Time (ms)",
@@ -210,6 +210,7 @@ def header():
             "w_tr",
             "Cost",
             "Solver Status",
+            "Adaptive State",
         )
     )
     print(
@@ -233,32 +234,35 @@ def intermediate(print_queue, params):
                 data["prob_stat"] = data["prob_stat"][0]
 
             iter_colored = colored("{:4d}".format(data["iter"]))
-            J_tot_colored = colored("{:.1e}".format(data["J_total"]))
+            J_tot_colored = colored("{: .1e}".format(data["J_total"]))
             J_tr_colored = colored(
-                "{:.1e}".format(data["J_tr"]),
+                "{: .1e}".format(data["J_tr"]),
                 col_pos if data["J_tr"] <= params.scp.ep_tr else col_neg,
             )
             J_vb_colored = colored(
-                "{:.1e}".format(data["J_vb"]),
+                "{: .1e}".format(data["J_vb"]),
                 col_pos if data["J_vb"] <= params.scp.ep_vb else col_neg,
             )
             J_vc_colored = colored(
-                "{:.1e}".format(data["J_vc"]),
+                "{: .1e}".format(data["J_vc"]),
                 col_pos if data["J_vc"] <= params.scp.ep_vc else col_neg,
             )
-            J_nonlin_colored = colored("{:.1e}".format(data.get("J_nonlin", 0.0)))
-            J_lin_colored = colored("{:.1e}".format(data.get("J_lin", 0.0)))
-            pred_reduction_colored = colored("{:.1e}".format(data.get("pred_reduction", 0.0)))
-            actual_reduction_colored = colored("{:.1e}".format(data.get("actual_reduction", 0.0)))
-            acceptance_ratio_colored = colored("{:.2f}".format(data.get("acceptance_ratio", 0.0)))
-            w_tr_colored = colored("{:.1e}".format(data.get("w_tr", 0.0)))
-            cost_colored = colored("{:.1e}".format(data["cost"]))
+            J_nonlin_colored = colored("{: .1e}".format(data.get("J_nonlin", 0.0)))
+            J_lin_colored = colored("{: .1e}".format(data.get("J_lin", 0.0)))
+            pred_reduction_colored = colored("{: .1e}".format(data.get("pred_reduction", 0.0)))
+            actual_reduction_colored = colored("{: .1e}".format(data.get("actual_reduction", 0.0)))
+            acceptance_ratio_colored = colored("{: .2e}".format(data.get("acceptance_ratio", 0.0)))
+            w_tr_colored = colored("{: .1e}".format(data.get("w_tr", 0.0)))
+            cost_colored = colored("{: .1e}".format(data["cost"]))
             prob_stat_colored = colored(
                 data["prob_stat"], col_pos if data["prob_stat"] == "optimal" else col_neg
             )
+            adaptive_state_colored = colored(
+                data.get("adaptive_state", "N/A"), col_pos if data.get("adaptive_state", "") in ["Accept Constant", "Accept Higher", "Accept Lower", "Initial"] else col_neg
+            )
 
             print(
-                "{:^4} │     {:^6.2f}    │      {:^6.2F}     │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^14}".format(
+                "{:^4} │     {:^6.2f}    │      {:^6.2F}     │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^14} │ {:^16}".format(
                     iter_colored,
                     data["dis_time"],
                     data["subprop_time"],
@@ -274,6 +278,7 @@ def intermediate(print_queue, params):
                     w_tr_colored,
                     cost_colored,
                     prob_stat_colored,
+                    adaptive_state_colored,
                 )
             )
 
@@ -283,7 +288,7 @@ def intermediate(print_queue, params):
                 )
             )
             print(
-                "{:^4} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^14}".format(
+                "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^14} │ {:^16}".format(
                     "Iter",
                     "Dis Time (ms)",
                     "Solve Time (ms)",
@@ -299,6 +304,7 @@ def intermediate(print_queue, params):
                     "w_tr",
                     "Cost",
                     "Solver Status",
+                    "Adaptive State",
                 )
             )
         except queue.Empty:

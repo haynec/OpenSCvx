@@ -184,7 +184,7 @@ class PenalizedTrustRegion(Algorithm):
         state.J_vc = np.sum(np.array(J_vc_vec))
 
         # Update weights in state
-        update_scp_weights(state, settings, params)
+        adaptive_state = update_scp_weights(state, settings, params)
 
         # Check if lists are empty
         if len(state.pred_reduction_history) == 0:
@@ -218,6 +218,7 @@ class PenalizedTrustRegion(Algorithm):
                 "acceptance_ratio": acceptance_ratio,
                 "w_tr": state.w_tr,
                 "prob_stat": prob_stat,
+                "adaptive_state": adaptive_state,
             }
         )
 
@@ -342,7 +343,7 @@ class PenalizedTrustRegion(Algorithm):
         # Calculate J_tr_vec using the JAX-compatible block diagonal matrix
         tr_mat = inv_block_diag @ np.hstack((x_new_guess - state.x, u_new_guess - state.u)).T
         J_tr_vec = la.norm(tr_mat, axis=0) ** 2
-        vc_mat = np.abs(result.nu)
+        vc_mat = np.abs(result.nu.T).T
         J_vc_vec = np.sum(vc_mat, axis=1)
 
         # Sum nodal constraint violations
