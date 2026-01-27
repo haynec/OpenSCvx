@@ -15,6 +15,7 @@ from openscvx.symbolic.preprocessing import (
     validate_dynamics_dict_dimensions,
     validate_dynamics_dimension,
     validate_guesses,
+    validate_input_types,
     validate_variable_names,
 )
 
@@ -976,3 +977,99 @@ def test_validate_guesses_raises_missing():
         match="Control 'thrust' is missing initial guess.*controls require explicit guesses",
     ):
         validate_guesses([u])
+
+
+# =============================================================================
+# validate_input_types Tests
+# =============================================================================
+
+
+@pytest.fixture
+def valid_inputs():
+    """Provide a minimal set of valid inputs for validate_input_types."""
+    from openscvx.symbolic.time import Time
+
+    x = State("x", shape=(3,))
+    u = Control("u", shape=(2,))
+    dynamics = {"x": x}
+    time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    return dynamics, [x], [u], 50, time
+
+
+def test_validate_input_types_passes(valid_inputs):
+    """Test that valid inputs pass validation."""
+    dynamics, states, controls, N, time = valid_inputs
+    validate_input_types(dynamics, states, controls, N, time)
+
+
+def test_validate_input_types_bare_control(valid_inputs):
+    """Test that passing a bare Control instead of a list raises TypeError with hint."""
+    dynamics, states, _, N, time = valid_inputs
+    u = Control("thrust", shape=(2,))
+
+    with pytest.raises(
+        TypeError, match=r"'controls' must be a list.*Control.*Hint.*controls=\[thrust\]"
+    ):
+        validate_input_types(dynamics, states, u, N, time)
+
+
+def test_validate_input_types_bare_state(valid_inputs):
+    """Test that passing a bare State instead of a list raises TypeError with hint."""
+    dynamics, _, controls, N, time = valid_inputs
+    x = State("position", shape=(3,))
+
+    with pytest.raises(
+        TypeError, match=r"'states' must be a list.*State.*Hint.*states=\[position\]"
+    ):
+        validate_input_types(dynamics, x, controls, N, time)
+
+
+def test_validate_input_types_wrong_element_in_states(valid_inputs):
+    """Test that a non-State element in the states list raises TypeError."""
+    dynamics, _, controls, N, time = valid_inputs
+
+    with pytest.raises(TypeError, match=r"states\[0\] must be a State, got str"):
+        validate_input_types(dynamics, ["not_a_state"], controls, N, time)
+
+
+def test_validate_input_types_wrong_element_in_controls(valid_inputs):
+    """Test that a non-Control element in the controls list raises TypeError."""
+    dynamics, states, _, N, time = valid_inputs
+
+    with pytest.raises(TypeError, match=r"controls\[0\] must be a Control, got int"):
+        validate_input_types(dynamics, states, [42], N, time)
+
+
+def test_validate_input_types_dynamics_not_dict(valid_inputs):
+    """Test that passing non-dict dynamics raises TypeError."""
+    _, states, controls, N, time = valid_inputs
+
+    with pytest.raises(TypeError, match="'dynamics' must be a dict"):
+        validate_input_types([1, 2, 3], states, controls, N, time)
+
+
+def test_validate_input_types_N_not_int(valid_inputs):
+    """Test that passing non-int N raises TypeError."""
+    dynamics, states, controls, _, time = valid_inputs
+
+    with pytest.raises(TypeError, match="'N' must be an integer, got float"):
+        validate_input_types(dynamics, states, controls, 50.0, time)
+
+
+def test_validate_input_types_N_not_positive(valid_inputs):
+    """Test that passing non-positive N raises ValueError."""
+    dynamics, states, controls, _, time = valid_inputs
+
+    with pytest.raises(ValueError, match="'N' must be positive, got 0"):
+        validate_input_types(dynamics, states, controls, 0, time)
+
+    with pytest.raises(ValueError, match="'N' must be positive, got -5"):
+        validate_input_types(dynamics, states, controls, -5, time)
+
+
+def test_validate_input_types_time_not_time(valid_inputs):
+    """Test that passing non-Time object raises TypeError."""
+    dynamics, states, controls, N, _ = valid_inputs
+
+    with pytest.raises(TypeError, match="'time' must be a Time object, got float"):
+        validate_input_types(dynamics, states, controls, N, 10.0)
