@@ -10,9 +10,10 @@ from openscvx.config import Config
 
 if TYPE_CHECKING:
     from .base import AlgorithmState
+    from openscvx.lowered import LoweredJaxConstraints
 
 
-def update_scp_weights(state: "AlgorithmState", settings: Config, params: dict):
+def update_scp_weights(state: "AlgorithmState", nodal_constraints: "LoweredJaxConstraints", settings: Config, params: dict):
     """Update SCP weights and cost parameters based on iteration number.
 
     Args:
@@ -23,14 +24,17 @@ def update_scp_weights(state: "AlgorithmState", settings: Config, params: dict):
     # Update trust region weight in state
     # state.w_tr = min(state.w_tr * settings.scp.w_tr_adapt, settings.scp.w_tr_max)
 
-    nonlinear_cost, nonlinear_penalty = calculate_nonlinear_penalty(state.candidate.x_prop,
+    nonlinear_cost, nonlinear_penalty, nodal_penalty = calculate_nonlinear_penalty(state.candidate.x_prop,
                                                    state.candidate.x,
+                                                   state.candidate.u,
                                                    state.lam_vc,
+                                                   state.lam_vb,
                                                    state.lam_cost,
+                                                   nodal_constraints,
                                                    params,
                                                    settings)
 
-    state.candidate.J_nonlin = nonlinear_cost + nonlinear_penalty
+    state.candidate.J_nonlin = nonlinear_cost + nonlinear_penalty + nodal_penalty
 
     # Update cost relaxation parameter after cost_drop iterations
     if state.k > settings.scp.cost_drop:
@@ -51,22 +55,17 @@ def update_scp_weights(state: "AlgorithmState", settings: Config, params: dict):
     w_tr_k = deepcopy(state.w_tr)
 
     if state.k > 1:
-        prev_nonlinear_cost, prev_nonlinear_penalty = calculate_nonlinear_penalty(state.x_prop(),
+        prev_nonlinear_cost, prev_nonlinear_penalty, prev_nodal_penalty = calculate_nonlinear_penalty(state.x_prop(),
                                                     state.x,
+                                                    state.u,
                                                     state.lam_vc,
+                                                    state.lam_vb,
                                                     state.lam_cost,
+                                                    nodal_constraints,
                                                     params,
                                                     settings)
 
-        J_nonlin_prev = prev_nonlinear_cost + prev_nonlinear_penalty
-
-        J_lin_current = calculate_linear_penalty(state.candidate.x,
-                                                 state.candidate.TR,
-                                                 state.candidate.VC,
-                                                 state.lam_cost,
-                                                 state.lam_vc,
-                                                 state.w_tr,
-                                                 settings)
+        J_nonlin_prev = prev_nonlinear_cost + prev_nonlinear_penalty + prev_nodal_penalty
  
         actual_reduction = J_nonlin_prev - state.candidate.J_nonlin
         predicted_reduction = J_nonlin_prev - state.candidate.J_lin
@@ -103,7 +102,7 @@ def update_scp_weights(state: "AlgorithmState", settings: Config, params: dict):
 
         # Update virtual control weight matrix
         ep = 0.5
-        nu = abs(state.candidate.x[1:] - state.candidate.x_prop)
+        nu = (settings.sim.inv_S_x @ abs(state.candidate.x[1:] - state.candidate.x_prop).T).T
         vc_max = 1E5
         eta_lambda = 1E0
         
@@ -114,10 +113,12 @@ def update_scp_weights(state: "AlgorithmState", settings: Config, params: dict):
         vc_new = np.where(mask, case1, case2)
         vc_new = np.minimum(vc_max, vc_new)
         state.candidate.lam_vc = vc_new
+        state.candidate.lam_vb = settings.scp.lam_vb
 
     else:
         state.w_tr_history.append(w_tr_k)
         state.candidate.lam_vc = settings.scp.lam_vc
+        state.candidate.lam_vb = settings.scp.lam_vb
         state.accept_solution()
         adaptive_state = "Initial"
     
@@ -149,8 +150,11 @@ def calculate_cost_from_state(x, settings: Config):
 
 def calculate_nonlinear_penalty(x_prop: np.ndarray, 
                                 x_bar: np.ndarray,
+                                u_bar: np.ndarray,
                                 lam_vc: np.ndarray, 
+                                lam_vb: float,
                                 lam_cost: float,
+                                nodal_constraints: "LoweredJaxConstraints",
                                 params: dict, 
                                 settings: Config):
     """Calculate nonlinear penalty
@@ -167,28 +171,33 @@ def calculate_nonlinear_penalty(x_prop: np.ndarray,
     Returns:
         float: Nonlinear penalty value
     """
-    # TODO: Implement nonconvex nodal constraint violations
+    nodal_penalty = 0.0
+    
+    # Evaluate nodal constraints
+    for constraint in nodal_constraints.nodal:
+        # Nodal constraint function is vmapped: func(x, u, node, params)
+        # When called with arrays, it evaluates at all nodes
+        g = constraint.func(x_bar, u_bar, 0, params)
+        # Only sum violations at nodes where constraint is enforced
+        if constraint.nodes is not None:
+            # Filter to only specified nodes
+            # Convert to numpy array for JAX compatibility
+            nodes_array = np.array(constraint.nodes)
+            g_filtered = g[nodes_array]
+        else:
+            # If no nodes specified, check all nodes
+            g_filtered = g
+        nodal_penalty += lam_vb * np.sum(np.maximum(0, g_filtered))
+    
+    # Evaluate cross-node constraints
+    for constraint in nodal_constraints.cross_node:
+        # Cross-node constraint function signature: func(X, U, params)
+        # No node argument - operates on full trajectory
+        g = constraint.func(x_bar, u_bar, params)
+        # Cross-node constraints return scalar or array, sum all violations
+        nodal_penalty += lam_vb * np.sum(np.maximum(0, g))
 
     cost = calculate_cost_from_state(x_bar, settings)
     x_diff = settings.sim.inv_S_x @ (x_bar[1:, :] - x_prop).T
 
-    return lam_cost * cost, np.sum(lam_vc * np.abs(x_diff.T))
-
-
-def calculate_linear_penalty(x_bar: np.ndarray,
-                             TR_matrix: np.ndarray, 
-                             VC_matrix: np.ndarray,
-                             lam_cost: float,
-                             lam_vc: np.ndarray,
-                             w_tr: float,
-                             settings: Config):
-    """Calculate linear penalty
-
-    Args:
-        TR_matrix: Trust region matrix
-        VC_matrix: Virtual control matrix
-        cost: Cost
-    """
-    cost = calculate_cost_from_state(x_bar, settings)
-    TR_matrix = np.linalg.norm(TR_matrix, axis=0) ** 2
-    return lam_cost * cost + np.sum(lam_vc * (settings.sim.inv_S_x @ VC_matrix.T).T) + w_tr * np.linalg.norm(TR_matrix) ** 2
+    return lam_cost * cost, np.sum(lam_vc * np.abs(x_diff.T)), nodal_penalty

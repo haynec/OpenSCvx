@@ -184,7 +184,7 @@ class PenalizedTrustRegion(Algorithm):
         state.J_vc = np.sum(np.array(J_vc_vec))
 
         # Update weights in state
-        adaptive_state = update_scp_weights(state, settings, params)
+        adaptive_state = update_scp_weights(state, self._jax_constraints, settings, params)
 
         # Check if lists are empty
         if len(state.pred_reduction_history) == 0:
