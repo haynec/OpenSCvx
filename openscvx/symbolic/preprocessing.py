@@ -752,6 +752,7 @@ def validate_input_types(
     dynamics: any,
     states: any,
     controls: any,
+    constraints: any,
     N: any,
     time: any,
 ) -> None:
@@ -761,25 +762,11 @@ def validate_input_types(
     instead of a list, or passing wrong types for dynamics, N, or time.
     Should be called before any other validation in the preprocessing pipeline.
 
-    Args:
-        dynamics: Should be a dict mapping state names to dynamics expressions
-        states: Should be a list of State objects
-        controls: Should be a list of Control objects
-        N: Should be a positive integer
-        time: Should be a Time object
-
     Raises:
         TypeError: If any input has the wrong type
         ValueError: If N is not positive
-
-    Example:
-            x = ox.State("x", shape=(3,))
-            u = ox.Control("u", shape=(2,))
-
-            # Wrong: passing bare Control instead of list
-            validate_input_types({"x": u}, [x], u, 50, time)
-            # Raises TypeError: 'controls' must be a list of Control objects ...
     """
+    from openscvx.symbolic.expr import CTCS, Constraint, CrossNodeConstraint, NodalConstraint
     from openscvx.symbolic.time import Time
 
     if not isinstance(dynamics, dict):
@@ -812,6 +799,19 @@ def validate_input_types(
         if not isinstance(c, Control):
             raise TypeError(f"controls[{i}] must be a Control, got {type(c).__name__}")
 
+    if not isinstance(constraints, list):
+        raise TypeError(
+            f"'constraints' must be a list of Constraint objects, got {type(constraints).__name__}"
+        )
+
+    valid_constraint_types = (Constraint, NodalConstraint, CrossNodeConstraint, CTCS)
+    for i, c in enumerate(constraints):
+        if not isinstance(c, valid_constraint_types):
+            raise TypeError(
+                f"constraints[{i}] must be a Constraint, NodalConstraint, "
+                f"CrossNodeConstraint, or CTCS, got {type(c).__name__}"
+            )
+
     if not isinstance(N, int):
         raise TypeError(f"'N' must be an integer, got {type(N).__name__}")
 
@@ -820,40 +820,6 @@ def validate_input_types(
 
     if not isinstance(time, Time):
         raise TypeError(f"'time' must be a Time object, got {type(time).__name__}")
-
-
-def validate_constraint_types(constraints: any) -> None:
-    """Validate that all elements in a ConstraintSet are valid constraint types.
-
-    Each element in constraints.unsorted must be a Constraint, NodalConstraint,
-    CrossNodeConstraint, or CTCS.
-
-    Args:
-        constraints: A ConstraintSet whose unsorted elements will be checked
-
-    Raises:
-        TypeError: If any element is not a valid constraint type
-
-    Example:
-            from openscvx.symbolic.constraint_set import ConstraintSet
-
-            x = ox.State("x", shape=(3,))
-            constraints = ConstraintSet(unsorted=[x <= 5])  # OK
-            validate_constraint_types(constraints)
-
-            bad = ConstraintSet(unsorted=[42])
-            validate_constraint_types(bad)
-            # Raises TypeError: constraints[0] must be a Constraint, ...
-    """
-    from openscvx.symbolic.expr import CTCS, Constraint, CrossNodeConstraint, NodalConstraint
-
-    valid_types = (Constraint, NodalConstraint, CrossNodeConstraint, CTCS)
-    for i, c in enumerate(constraints.unsorted):
-        if not isinstance(c, valid_types):
-            raise TypeError(
-                f"constraints[{i}] must be a Constraint, NodalConstraint, "
-                f"CrossNodeConstraint, or CTCS, got {type(c).__name__}"
-            )
 
 
 def validate_propagation_input_types(

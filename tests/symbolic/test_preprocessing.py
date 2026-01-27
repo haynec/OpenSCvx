@@ -9,7 +9,6 @@ from openscvx.symbolic.preprocessing import (
     fill_default_guesses,
     validate_boundary_conditions,
     validate_bounds,
-    validate_constraint_types,
     validate_constraints_at_root,
     validate_cross_node_constraint,
     validate_dynamics_dict,
@@ -994,135 +993,113 @@ def valid_inputs():
     x = State("x", shape=(3,))
     u = Control("u", shape=(2,))
     dynamics = {"x": x}
+    constraints = [x <= 5]
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
-    return dynamics, [x], [u], 50, time
+    return dynamics, [x], [u], constraints, 50, time
 
 
 def test_validate_input_types_passes(valid_inputs):
     """Test that valid inputs pass validation."""
-    dynamics, states, controls, N, time = valid_inputs
-    validate_input_types(dynamics, states, controls, N, time)
+    dynamics, states, controls, constraints, N, time = valid_inputs
+    validate_input_types(dynamics, states, controls, constraints, N, time)
 
 
 def test_validate_input_types_bare_control(valid_inputs):
     """Test that passing a bare Control instead of a list raises TypeError with hint."""
-    dynamics, states, _, N, time = valid_inputs
+    dynamics, states, _, constraints, N, time = valid_inputs
     u = Control("thrust", shape=(2,))
 
     with pytest.raises(
         TypeError, match=r"'controls' must be a list.*Control.*Hint.*controls=\[thrust\]"
     ):
-        validate_input_types(dynamics, states, u, N, time)
+        validate_input_types(dynamics, states, u, constraints, N, time)
 
 
 def test_validate_input_types_bare_state(valid_inputs):
     """Test that passing a bare State instead of a list raises TypeError with hint."""
-    dynamics, _, controls, N, time = valid_inputs
+    dynamics, _, controls, constraints, N, time = valid_inputs
     x = State("position", shape=(3,))
 
     with pytest.raises(
         TypeError, match=r"'states' must be a list.*State.*Hint.*states=\[position\]"
     ):
-        validate_input_types(dynamics, x, controls, N, time)
+        validate_input_types(dynamics, x, controls, constraints, N, time)
 
 
 def test_validate_input_types_wrong_element_in_states(valid_inputs):
     """Test that a non-State element in the states list raises TypeError."""
-    dynamics, _, controls, N, time = valid_inputs
+    dynamics, _, controls, constraints, N, time = valid_inputs
 
     with pytest.raises(TypeError, match=r"states\[0\] must be a State, got str"):
-        validate_input_types(dynamics, ["not_a_state"], controls, N, time)
+        validate_input_types(dynamics, ["not_a_state"], controls, constraints, N, time)
 
 
 def test_validate_input_types_wrong_element_in_controls(valid_inputs):
     """Test that a non-Control element in the controls list raises TypeError."""
-    dynamics, states, _, N, time = valid_inputs
+    dynamics, states, _, constraints, N, time = valid_inputs
 
     with pytest.raises(TypeError, match=r"controls\[0\] must be a Control, got int"):
-        validate_input_types(dynamics, states, [42], N, time)
+        validate_input_types(dynamics, states, [42], constraints, N, time)
 
 
 def test_validate_input_types_dynamics_not_dict(valid_inputs):
     """Test that passing non-dict dynamics raises TypeError."""
-    _, states, controls, N, time = valid_inputs
+    _, states, controls, constraints, N, time = valid_inputs
 
     with pytest.raises(TypeError, match="'dynamics' must be a dict"):
-        validate_input_types([1, 2, 3], states, controls, N, time)
+        validate_input_types([1, 2, 3], states, controls, constraints, N, time)
+
+
+def test_validate_input_types_constraints_not_list(valid_inputs):
+    """Test that passing a non-list constraints raises TypeError."""
+    dynamics, states, controls, _, N, time = valid_inputs
+
+    with pytest.raises(TypeError, match="'constraints' must be a list"):
+        validate_input_types(dynamics, states, controls, "not_a_list", N, time)
+
+
+def test_validate_input_types_constraints_invalid_element(valid_inputs):
+    """Test that non-constraint elements raise TypeError."""
+    dynamics, states, controls, _, N, time = valid_inputs
+
+    with pytest.raises(TypeError, match=r"constraints\[0\] must be a Constraint.*got int"):
+        validate_input_types(dynamics, states, controls, [42], N, time)
+
+
+def test_validate_input_types_constraints_mixed_valid_and_invalid(valid_inputs):
+    """Test that invalid element is caught even after valid ones."""
+    dynamics, states, controls, _, N, time = valid_inputs
+    x = State("x", shape=(3,))
+
+    with pytest.raises(TypeError, match=r"constraints\[1\] must be a Constraint.*got str"):
+        validate_input_types(dynamics, states, controls, [x <= 5, "bad"], N, time)
 
 
 def test_validate_input_types_N_not_int(valid_inputs):
     """Test that passing non-int N raises TypeError."""
-    dynamics, states, controls, _, time = valid_inputs
+    dynamics, states, controls, constraints, _, time = valid_inputs
 
     with pytest.raises(TypeError, match="'N' must be an integer, got float"):
-        validate_input_types(dynamics, states, controls, 50.0, time)
+        validate_input_types(dynamics, states, controls, constraints, 50.0, time)
 
 
 def test_validate_input_types_N_not_positive(valid_inputs):
     """Test that passing non-positive N raises ValueError."""
-    dynamics, states, controls, _, time = valid_inputs
+    dynamics, states, controls, constraints, _, time = valid_inputs
 
     with pytest.raises(ValueError, match="'N' must be positive, got 0"):
-        validate_input_types(dynamics, states, controls, 0, time)
+        validate_input_types(dynamics, states, controls, constraints, 0, time)
 
     with pytest.raises(ValueError, match="'N' must be positive, got -5"):
-        validate_input_types(dynamics, states, controls, -5, time)
+        validate_input_types(dynamics, states, controls, constraints, -5, time)
 
 
 def test_validate_input_types_time_not_time(valid_inputs):
     """Test that passing non-Time object raises TypeError."""
-    dynamics, states, controls, N, _ = valid_inputs
+    dynamics, states, controls, constraints, N, _ = valid_inputs
 
     with pytest.raises(TypeError, match="'time' must be a Time object, got float"):
-        validate_input_types(dynamics, states, controls, N, 10.0)
-
-
-# =============================================================================
-# validate_constraint_types Tests
-# =============================================================================
-
-
-def test_validate_constraint_types_passes():
-    """Test that valid constraint types pass validation."""
-    from openscvx.symbolic.constraint_set import ConstraintSet
-    from openscvx.symbolic.expr import CTCS, CrossNodeConstraint
-
-    x = State("x", shape=(3,))
-    cs = ConstraintSet(
-        unsorted=[
-            x <= 5,  # Constraint
-            (x <= 5).at([0, 10]),  # NodalConstraint
-            CrossNodeConstraint(x.at(0) == x.at(10)),  # CrossNodeConstraint
-            CTCS(x <= 5),  # CTCS
-        ]
-    )
-    validate_constraint_types(cs)
-
-
-def test_validate_constraint_types_empty():
-    """Test that empty constraint list passes validation."""
-    from openscvx.symbolic.constraint_set import ConstraintSet
-
-    validate_constraint_types(ConstraintSet(unsorted=[]))
-
-
-def test_validate_constraint_types_invalid_element():
-    """Test that non-constraint elements raise TypeError."""
-    from openscvx.symbolic.constraint_set import ConstraintSet
-
-    cs = ConstraintSet(unsorted=[42])
-    with pytest.raises(TypeError, match=r"constraints\[0\] must be a Constraint.*got int"):
-        validate_constraint_types(cs)
-
-
-def test_validate_constraint_types_mixed_valid_and_invalid():
-    """Test that invalid element is caught even after valid ones."""
-    from openscvx.symbolic.constraint_set import ConstraintSet
-
-    x = State("x", shape=(3,))
-    cs = ConstraintSet(unsorted=[x <= 5, "bad"])
-    with pytest.raises(TypeError, match=r"constraints\[1\] must be a Constraint.*got str"):
-        validate_constraint_types(cs)
+        validate_input_types(dynamics, states, controls, constraints, N, 10.0)
 
 
 # =============================================================================
