@@ -748,6 +748,142 @@ def validate_bounds(variables: List[Variable]) -> None:
             )
 
 
+def validate_input_types(
+    dynamics: any,
+    states: any,
+    controls: any,
+    constraints: any,
+    N: any,
+    time: any,
+) -> None:
+    """Validate that all user-facing inputs have correct types.
+
+    This catches common user errors like passing a single State or Control
+    instead of a list, or passing wrong types for dynamics, N, or time.
+    Should be called before any other validation in the preprocessing pipeline.
+
+    Raises:
+        TypeError: If any input has the wrong type
+        ValueError: If N is not positive
+    """
+    from openscvx.symbolic.expr import CTCS, Constraint, CrossNodeConstraint, NodalConstraint
+    from openscvx.symbolic.time import Time
+
+    if not isinstance(dynamics, dict):
+        raise TypeError(
+            f"'dynamics' must be a dict mapping state names to expressions, "
+            f"got {type(dynamics).__name__}"
+        )
+
+    if not isinstance(states, list):
+        hint = ""
+        if isinstance(states, State):
+            hint = f" Hint: use states=[{states.name}] instead of states={states.name}"
+        raise TypeError(
+            f"'states' must be a list of State objects, got {type(states).__name__}.{hint}"
+        )
+
+    for i, s in enumerate(states):
+        if not isinstance(s, State):
+            raise TypeError(f"states[{i}] must be a State, got {type(s).__name__}")
+
+    if not isinstance(controls, list):
+        hint = ""
+        if isinstance(controls, Control):
+            hint = f" Hint: use controls=[{controls.name}] instead of controls={controls.name}"
+        raise TypeError(
+            f"'controls' must be a list of Control objects, got {type(controls).__name__}.{hint}"
+        )
+
+    for i, c in enumerate(controls):
+        if not isinstance(c, Control):
+            raise TypeError(f"controls[{i}] must be a Control, got {type(c).__name__}")
+
+    if not isinstance(constraints, list):
+        raise TypeError(
+            f"'constraints' must be a list of Constraint objects, got {type(constraints).__name__}"
+        )
+
+    valid_constraint_types = (Constraint, NodalConstraint, CrossNodeConstraint, CTCS)
+    for i, c in enumerate(constraints):
+        if not isinstance(c, valid_constraint_types):
+            raise TypeError(
+                f"constraints[{i}] must be a Constraint, NodalConstraint, "
+                f"CrossNodeConstraint, or CTCS, got {type(c).__name__}"
+            )
+
+    if not isinstance(N, int):
+        raise TypeError(f"'N' must be an integer, got {type(N).__name__}")
+
+    if N < 1:
+        raise ValueError(f"'N' must be positive, got {N}")
+
+    if not isinstance(time, Time):
+        raise TypeError(f"'time' must be a Time object, got {type(time).__name__}")
+
+
+def validate_propagation_input_types(
+    dynamics_prop_extra: any,
+    states_prop_extra: any,
+) -> None:
+    """Validate types for optional propagation inputs.
+
+    These parameters must either both be None or both be provided.
+    When provided, dynamics_prop_extra must be a dict and states_prop_extra
+    must be a list of State objects.
+
+    Args:
+        dynamics_prop_extra: Should be None or a dict mapping state names to expressions
+        states_prop_extra: Should be None or a list of State objects
+
+    Raises:
+        TypeError: If either input has the wrong type
+        ValueError: If only one of the two is provided
+
+    Example:
+            distance = ox.State("distance", shape=(1,))
+
+            # Wrong: passing bare State instead of list
+            validate_propagation_input_types({"distance": expr}, distance)
+            # Raises TypeError: 'states_prop_extra' must be a list ...
+    """
+    both_none = dynamics_prop_extra is None and states_prop_extra is None
+    both_set = dynamics_prop_extra is not None and states_prop_extra is not None
+
+    if not both_none and not both_set:
+        provided = "dynamics_prop" if dynamics_prop_extra is not None else "states_prop"
+        missing = "states_prop" if dynamics_prop_extra is not None else "dynamics_prop"
+        raise ValueError(
+            f"'{provided}' was provided but '{missing}' was not. "
+            f"Both must be provided together, or both omitted."
+        )
+
+    if both_none:
+        return
+
+    if not isinstance(dynamics_prop_extra, dict):
+        raise TypeError(
+            f"'dynamics_prop' must be a dict mapping state names to expressions, "
+            f"got {type(dynamics_prop_extra).__name__}"
+        )
+
+    if not isinstance(states_prop_extra, list):
+        hint = ""
+        if isinstance(states_prop_extra, State):
+            hint = (
+                f" Hint: use states_prop=[{states_prop_extra.name}]"
+                f" instead of states_prop={states_prop_extra.name}"
+            )
+        raise TypeError(
+            f"'states_prop' must be a list of State objects, "
+            f"got {type(states_prop_extra).__name__}.{hint}"
+        )
+
+    for i, s in enumerate(states_prop_extra):
+        if not isinstance(s, State):
+            raise TypeError(f"states_prop[{i}] must be a State, got {type(s).__name__}")
+
+
 def validate_guesses(variables: List[Variable]) -> None:
     """Validate that all variables have initial guesses set.
 

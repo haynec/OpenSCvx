@@ -50,7 +50,6 @@ from openscvx.lowered.jax_constraints import (
 from openscvx.propagation import get_propagation_solver, propagate_trajectory_results
 from openscvx.solvers import PTRSolver
 from openscvx.symbolic.builder import preprocess_symbolic_problem
-from openscvx.symbolic.constraint_set import ConstraintSet
 from openscvx.symbolic.expr import CTCS, Constraint
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
@@ -128,7 +127,7 @@ class Problem:
         # Symbolic Preprocessing & Augmentation
         self.symbolic: SymbolicProblem = preprocess_symbolic_problem(
             dynamics=dynamics,
-            constraints=ConstraintSet(unsorted=list(constraints)),
+            constraints=constraints,
             states=states,
             controls=controls,
             N=N,
