@@ -9,6 +9,7 @@ from openscvx.symbolic.preprocessing import (
     fill_default_guesses,
     validate_boundary_conditions,
     validate_bounds,
+    validate_constraint_types,
     validate_constraints_at_root,
     validate_cross_node_constraint,
     validate_dynamics_dict,
@@ -1074,6 +1075,54 @@ def test_validate_input_types_time_not_time(valid_inputs):
 
     with pytest.raises(TypeError, match="'time' must be a Time object, got float"):
         validate_input_types(dynamics, states, controls, N, 10.0)
+
+
+# =============================================================================
+# validate_constraint_types Tests
+# =============================================================================
+
+
+def test_validate_constraint_types_passes():
+    """Test that valid constraint types pass validation."""
+    from openscvx.symbolic.constraint_set import ConstraintSet
+    from openscvx.symbolic.expr import CTCS, CrossNodeConstraint
+
+    x = State("x", shape=(3,))
+    cs = ConstraintSet(
+        unsorted=[
+            x <= 5,  # Constraint
+            (x <= 5).at([0, 10]),  # NodalConstraint
+            CrossNodeConstraint(x.at(0) == x.at(10)),  # CrossNodeConstraint
+            CTCS(x <= 5),  # CTCS
+        ]
+    )
+    validate_constraint_types(cs)
+
+
+def test_validate_constraint_types_empty():
+    """Test that empty constraint list passes validation."""
+    from openscvx.symbolic.constraint_set import ConstraintSet
+
+    validate_constraint_types(ConstraintSet(unsorted=[]))
+
+
+def test_validate_constraint_types_invalid_element():
+    """Test that non-constraint elements raise TypeError."""
+    from openscvx.symbolic.constraint_set import ConstraintSet
+
+    cs = ConstraintSet(unsorted=[42])
+    with pytest.raises(TypeError, match=r"constraints\[0\] must be a Constraint.*got int"):
+        validate_constraint_types(cs)
+
+
+def test_validate_constraint_types_mixed_valid_and_invalid():
+    """Test that invalid element is caught even after valid ones."""
+    from openscvx.symbolic.constraint_set import ConstraintSet
+
+    x = State("x", shape=(3,))
+    cs = ConstraintSet(unsorted=[x <= 5, "bad"])
+    with pytest.raises(TypeError, match=r"constraints\[1\] must be a Constraint.*got str"):
+        validate_constraint_types(cs)
 
 
 # =============================================================================

@@ -822,6 +822,40 @@ def validate_input_types(
         raise TypeError(f"'time' must be a Time object, got {type(time).__name__}")
 
 
+def validate_constraint_types(constraints: any) -> None:
+    """Validate that all elements in a ConstraintSet are valid constraint types.
+
+    Each element in constraints.unsorted must be a Constraint, NodalConstraint,
+    CrossNodeConstraint, or CTCS.
+
+    Args:
+        constraints: A ConstraintSet whose unsorted elements will be checked
+
+    Raises:
+        TypeError: If any element is not a valid constraint type
+
+    Example:
+            from openscvx.symbolic.constraint_set import ConstraintSet
+
+            x = ox.State("x", shape=(3,))
+            constraints = ConstraintSet(unsorted=[x <= 5])  # OK
+            validate_constraint_types(constraints)
+
+            bad = ConstraintSet(unsorted=[42])
+            validate_constraint_types(bad)
+            # Raises TypeError: constraints[0] must be a Constraint, ...
+    """
+    from openscvx.symbolic.expr import CTCS, Constraint, CrossNodeConstraint, NodalConstraint
+
+    valid_types = (Constraint, NodalConstraint, CrossNodeConstraint, CTCS)
+    for i, c in enumerate(constraints.unsorted):
+        if not isinstance(c, valid_types):
+            raise TypeError(
+                f"constraints[{i}] must be a Constraint, NodalConstraint, "
+                f"CrossNodeConstraint, or CTCS, got {type(c).__name__}"
+            )
+
+
 def validate_propagation_input_types(
     dynamics_prop_extra: any,
     states_prop_extra: any,
