@@ -3,9 +3,6 @@
 Visitors: Equality, Inequality, NodalConstraint, CrossNodeConstraint, CTCS
 """
 
-import jax.numpy as jnp
-from jax.lax import cond
-
 # Expression types to handle — uncomment as you paste visitors:
 from openscvx.symbolic.expr.constraint import (
     CTCS,
@@ -15,6 +12,7 @@ from openscvx.symbolic.expr.constraint import (
     Inequality,
     NodalConstraint,
 )
+from openscvx.symbolic.expr.logic import Cond
 from openscvx.symbolic.lowerers.jax._registry import visitor  # noqa: F401
 
 
@@ -106,17 +104,13 @@ def _visit_cross_node_constraint(lowerer, node: CrossNodeConstraint):
     return trajectory_constraint
 
 
-# TODO: (norrisg) CTCS is playing 2 roles here: both as a constraint wrapper and as the penalty
-# expression w/ conditional logic. Consider adding conditional logic as separate AST nodes.
-# Then, CTCS remains a wrapper and we just wrap the penalty expression with the conditional
-# logic when we lower it.
 @visitor(CTCS)
 def _visit_ctcs(lowerer, node: CTCS):
     """Lower CTCS (Continuous-Time Constraint Satisfaction) to JAX function.
 
     CTCS constraints use penalty methods to enforce constraints over continuous
-    time intervals. The lowered function includes conditional logic to activate
-    the penalty only within the specified node interval.
+    time intervals. When a node range is specified, the penalty expression is
+    wrapped in a Cond node to activate it only within that interval.
 
     Args:
         node: CTCS constraint node with penalty expression and optional node range
@@ -125,35 +119,20 @@ def _visit_ctcs(lowerer, node: CTCS):
         Function (x, u, current_node, params) -> penalty value or 0
 
     Note:
-        Uses jax.lax.cond for JAX-traceable conditional evaluation. The penalty
-        is active only when current_node is in [start_node, end_node).
+        The penalty is active only when current_node is in [start_node, end_node).
         If no node range is specified, the penalty is always active.
+        Conditional node-range logic is delegated to the Cond AST node.
 
     See Also:
         - CTCS: The symbolic CTCS constraint class
+        - Cond: Conditional AST node used for node-range gating
         - penalty functions: PositivePart, Huber, SmoothReLU
     """
-    # Lower the penalty expression (which includes the constraint residual)
-    penalty_expr_fn = lowerer.lower(node.penalty_expr())
+    penalty_expr = node.penalty_expr()
 
-    def ctcs_fn(x, u, current_node, params):
-        # Check if constraint is active at this node
-        if node.nodes is not None:
-            start_node, end_node = node.nodes
-            # Extract scalar value from current_node (which may be array or scalar)
-            # Keep as JAX array for tracing compatibility
-            node_scalar = jnp.atleast_1d(current_node)[0]
-            is_active = (start_node <= node_scalar) & (node_scalar < end_node)
-
-            # Use jax.lax.cond for conditional evaluation
-            return cond(
-                is_active,
-                lambda _: penalty_expr_fn(x, u, current_node, params),
-                lambda _: 0.0,
-                operand=None,
-            )
-        else:
-            # Always active if no node range specified
-            return penalty_expr_fn(x, u, current_node, params)
-
-    return ctcs_fn
+    if node.nodes is not None:
+        # Wrap penalty in a Cond node that gates on the node range
+        gated_expr = Cond(None, penalty_expr, 0.0, node_ranges=[node.nodes])
+        return lowerer.lower(gated_expr)
+    else:
+        return lowerer.lower(penalty_expr)
