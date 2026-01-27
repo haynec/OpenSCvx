@@ -206,7 +206,7 @@ def test_add_jax_lowering():
     expr_add = Add(a, b)
 
     jl = JaxLowerer()
-    f_res_add = jl._visit_add(expr_add)
+    f_res_add = jl.lower(expr_add)
     res_add = f_res_add(x, None, None, None)
 
     assert jnp.allclose(res_add, x[0:3] + x[3:6])
@@ -228,7 +228,7 @@ def test_sub_jax_lowering():
     expr_sub = Sub(a, b)
 
     jl = JaxLowerer()
-    f_res_sub = jl._visit_sub(expr_sub)
+    f_res_sub = jl.lower(expr_sub)
     res_sub = f_res_sub(x, u, None, None)
 
     assert jnp.allclose(res_sub, x[0:3] - u[0:3])
@@ -639,7 +639,7 @@ def test_mul_jax_lowering():
     expr_mul = Mul(a, b)
 
     jl = JaxLowerer()
-    f_res_mul = jl._visit_mul(expr_mul)
+    f_res_mul = jl.lower(expr_mul)
     res_mul = f_res_mul(x, None, None, None)
 
     assert jnp.allclose(res_mul, x[0:3] * x[3:6])
@@ -659,7 +659,7 @@ def test_div_jax_lowering():
     expr_div = Div(a, c)
 
     jl = JaxLowerer()
-    f_res_div = jl._visit_div(expr_div)
+    f_res_div = jl.lower(expr_div)
     res_div = f_res_div(x, None, None, None)
 
     assert jnp.allclose(res_div, x[0:3] / c.value)
@@ -777,7 +777,7 @@ def test_neg_jax_lowering():
     # expr = -((a + b) * c)
     expr = Neg(Mul(Add(a, b), c))
     jl = JaxLowerer()
-    f = jl._visit_neg(expr)
+    f = jl.lower(expr)
     out = f(x, u, None, None)
 
     expected = -((x[0:2] + u[0:2]) * jnp.array([1.0, 1.0]))
@@ -1077,7 +1077,7 @@ def test_matmul_jax_lowering():
     expr = MatMul(M, v)
 
     jl = JaxLowerer()
-    f = jl._visit_matmul(expr)
+    f = jl.lower(expr)
     out = f(None, None, None, None)
     assert isinstance(out, jnp.ndarray)
     assert out.shape == (2,)
