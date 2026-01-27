@@ -135,7 +135,7 @@ class PenalizedTrustRegion(Algorithm):
                 "PenalizedTrustRegion.step() called before initialize(). "
                 "Call initialize() first to set up compiled infrastructure."
             )
-        
+
         # Compute discretization before subproblem only for the first iteration
         if state.k == 1:
             t0 = time.time()
@@ -254,7 +254,7 @@ class PenalizedTrustRegion(Algorithm):
             Tuple containing solution data, costs, and timing information.
         """
         param_dict = params
-        
+
         # Update solver with dynamics linearization
         self._solver.update_dynamics_linearization(
             x_bar=state.x,

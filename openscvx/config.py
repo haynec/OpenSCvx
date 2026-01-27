@@ -381,7 +381,7 @@ class ScpConfig:
         # Initialize references first (before any setters that might use them)
         self._parent_config = None  # Will be set by Config.__post_init__
         self._n_states = None  # Will be set by Config.__post_init__ for easier access
-        
+
         self.n = n
         self.k_max = k_max
         self.w_tr = w_tr
@@ -406,7 +406,7 @@ class ScpConfig:
     @lam_vc.setter
     def lam_vc(self, value):
         """Setter for lam_vc that converts scalar to array if possible.
-        
+
         If a scalar is provided and both `n` and `n_states` (from parent config)
         are available, the scalar is converted to an array of shape (n-1, n_states).
         Otherwise, the scalar value is stored as-is.
@@ -415,16 +415,16 @@ class ScpConfig:
         if isinstance(value, np.ndarray):
             self._lam_vc = value
             return
-        
+
         # If it's a scalar, try to convert to array if we have the necessary info
         if isinstance(value, (int, float)):
             # Try to get n_states from direct reference first, then from parent config
             n_states = None
-            if hasattr(self, '_n_states') and self._n_states is not None:
+            if hasattr(self, "_n_states") and self._n_states is not None:
                 n_states = self._n_states
-            elif hasattr(self, '_parent_config') and self._parent_config is not None:
-                n_states = getattr(self._parent_config.sim, 'n_states', None)
-            
+            elif hasattr(self, "_parent_config") and self._parent_config is not None:
+                n_states = getattr(self._parent_config.sim, "n_states", None)
+
             if self.n is not None and n_states is not None:
                 self._lam_vc = np.ones((self.n - 1, n_states)) * value
                 return

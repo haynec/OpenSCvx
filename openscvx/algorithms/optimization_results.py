@@ -65,7 +65,7 @@ class OptimizationResults:
     J_vc_history: list[np.ndarray] = field(default_factory=list)
     TR_history: list[np.ndarray] = field(default_factory=list)
     VC_history: list[np.ndarray] = field(default_factory=list)
-    
+
     # Convergence histories
     w_tr_history: list[float] = field(default_factory=list)
     actual_reduction_history: list[float] = field(default_factory=list)

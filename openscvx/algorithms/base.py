@@ -231,7 +231,7 @@ class AlgorithmState:
             self.J_nonlin_history.append(cand.J_nonlin)
         if cand.J_lin is not None:
             self.J_lin_history.append(cand.J_lin)
-        
+
     def clear_candidate(self) -> None:
         """Clear the candidate data after accepting."""
         self.candidate.x = None

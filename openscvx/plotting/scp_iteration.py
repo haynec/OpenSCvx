@@ -428,7 +428,7 @@ def plot_scp_convergence_histories(result: OptimizationResults):
             row=3,
             col=1,
         )
-        
+
         # Add reference lines at typical thresholds (eta_1=1e-6, eta_2=0.9)
         fig.add_hline(
             y=1e-6,

@@ -49,15 +49,15 @@ def update_scp_weights(
     else:
         state.candidate.lam_cost = settings.scp.lam_cost
 
-    eta_0 = 1E-2
-    eta_1 = 1E-1
+    eta_0 = 1e-2
+    eta_1 = 1e-1
     eta_2 = 0.8
 
     gamma_1 = 2.0
     gamma_2 = 0.5
 
-    w_tr_min = 1E-3
-    w_tr_max = 2E5
+    w_tr_min = 1e-3
+    w_tr_max = 2e5
 
     w_tr_k = deepcopy(state.w_tr)
 
@@ -77,7 +77,7 @@ def update_scp_weights(
         )
 
         J_nonlin_prev = prev_nonlinear_cost + prev_nonlinear_penalty + prev_nodal_penalty
- 
+
         actual_reduction = J_nonlin_prev - state.candidate.J_nonlin
         predicted_reduction = J_nonlin_prev - state.candidate.J_lin
         rho = actual_reduction / predicted_reduction
@@ -85,7 +85,6 @@ def update_scp_weights(
         state.pred_reduction_history.append(predicted_reduction)
         state.actual_reduction_history.append(actual_reduction)
         state.acceptance_ratio_history.append(rho)
-
 
         if rho < eta_0:
             # Reject Solution and higher weight
@@ -114,9 +113,9 @@ def update_scp_weights(
         # Update virtual control weight matrix
         ep = 0.5
         nu = (settings.sim.inv_S_x @ abs(state.candidate.x[1:] - state.candidate.x_prop).T).T
-        vc_max = 1E5
-        eta_lambda = 1E0
-        
+        vc_max = 1e5
+        eta_lambda = 1e0
+
         # Vectorized update: use mask to select between two update rules
         mask = nu > ep
         case1 = state.lam_vc + nu * eta_lambda * (1 / (2 * state.w_tr))  # when abs(nu) > ep
@@ -133,9 +132,8 @@ def update_scp_weights(
         state.candidate.lam_vb = settings.scp.lam_vb
         state.accept_solution()
         adaptive_state = "Initial"
-    
+
     return adaptive_state
-    
 
 
 def calculate_cost_from_state(x, settings: Config):
@@ -147,7 +145,7 @@ def calculate_cost_from_state(x, settings: Config):
     Returns:
         float: Computed cost
     """
-    scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:,None])).T
+    scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
     cost = 0.0
     for i in range(settings.sim.n_states):
         if settings.sim.x.final_type[i] == "Minimize":
@@ -160,15 +158,18 @@ def calculate_cost_from_state(x, settings: Config):
             cost -= scaled_x[0, i]
     return cost
 
-def calculate_nonlinear_penalty(x_prop: np.ndarray, 
-                                x_bar: np.ndarray,
-                                u_bar: np.ndarray,
-                                lam_vc: np.ndarray, 
-                                lam_vb: float,
-                                lam_cost: float,
-                                nodal_constraints: "LoweredJaxConstraints",
-                                params: dict, 
-                                settings: Config):
+
+def calculate_nonlinear_penalty(
+    x_prop: np.ndarray,
+    x_bar: np.ndarray,
+    u_bar: np.ndarray,
+    lam_vc: np.ndarray,
+    lam_vb: float,
+    lam_cost: float,
+    nodal_constraints: "LoweredJaxConstraints",
+    params: dict,
+    settings: Config,
+):
     """Calculate nonlinear penalty
 
     Args:
@@ -184,7 +185,7 @@ def calculate_nonlinear_penalty(x_prop: np.ndarray,
         float: Nonlinear penalty value
     """
     nodal_penalty = 0.0
-    
+
     # Evaluate nodal constraints
     for constraint in nodal_constraints.nodal:
         # Nodal constraint function is vmapped: func(x, u, node, params)
@@ -200,7 +201,7 @@ def calculate_nonlinear_penalty(x_prop: np.ndarray,
             # If no nodes specified, check all nodes
             g_filtered = g
         nodal_penalty += lam_vb * np.sum(np.maximum(0, g_filtered))
-    
+
     # Evaluate cross-node constraints
     for constraint in nodal_constraints.cross_node:
         # Cross-node constraint function signature: func(X, U, params)
