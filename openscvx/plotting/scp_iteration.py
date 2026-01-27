@@ -300,7 +300,8 @@ def plot_scp_iterations(
 
 
 def plot_scp_convergence_histories(result: OptimizationResults):
-    """Plot SCP convergence histories: trust region weight, reduction histories, and acceptance ratio.
+    """Plot SCP convergence histories: trust region weight, reduction histories,
+    and acceptance ratio.
 
     Creates three separate plots:
     1. Trust region weight (w_tr) history

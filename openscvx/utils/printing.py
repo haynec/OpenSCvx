@@ -194,8 +194,13 @@ def header():
             "─────────────────────────────────────────────────────────────────────────────────────────────────────────"
         )
     )
+    header_format = (
+        "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
+        "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
+        "{:^14} │ {:^16}"
+    )
     print(
-        "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^14} │ {:^16}".format(
+        header_format.format(
             "Iter",
             "Dis Time (ms)",
             "Solve Time (ms)",
@@ -258,12 +263,25 @@ def intermediate(print_queue, params):
             prob_stat_colored = colored(
                 data["prob_stat"], col_pos if data["prob_stat"] == "optimal" else col_neg
             )
+            adaptive_state = data.get("adaptive_state", "")
+            is_acceptable = adaptive_state in [
+                "Accept Constant",
+                "Accept Higher",
+                "Accept Lower",
+                "Initial",
+            ]
             adaptive_state_colored = colored(
-                data.get("adaptive_state", "N/A"), col_pos if data.get("adaptive_state", "") in ["Accept Constant", "Accept Higher", "Accept Lower", "Initial"] else col_neg
+                data.get("adaptive_state", "N/A"),
+                col_pos if is_acceptable else col_neg,
             )
 
+            row_format = (
+                "{:^4} │     {:^6.2f}    │      {:^6.2F}     │ {:^8} │ "
+                "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
+                "{:^8} │ {:^8} │ {:^8} │ {:^14} │ {:^16}"
+            )
             print(
-                "{:^4} │     {:^6.2f}    │      {:^6.2F}     │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^14} │ {:^16}".format(
+                row_format.format(
                     iter_colored,
                     data["dis_time"],
                     data["subprop_time"],
@@ -288,8 +306,13 @@ def intermediate(print_queue, params):
                     "─────────────────────────────────────────────────────────────────────────────────────────────────────────"
                 )
             )
+            header_format = (
+                "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
+                "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
+                "{:^14} │ {:^16}"
+            )
             print(
-                "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^14} │ {:^16}".format(
+                header_format.format(
                     "Iter",
                     "Dis Time (ms)",
                     "Solve Time (ms)",

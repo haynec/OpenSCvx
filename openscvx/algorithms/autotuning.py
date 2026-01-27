@@ -1,19 +1,24 @@
 """Autotuning functions for SCP (Successive Convex Programming) parameters."""
 
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from copy import deepcopy
-
 from openscvx.config import Config
 
 if TYPE_CHECKING:
-    from .base import AlgorithmState
     from openscvx.lowered import LoweredJaxConstraints
 
+    from .base import AlgorithmState
 
-def update_scp_weights(state: "AlgorithmState", nodal_constraints: "LoweredJaxConstraints", settings: Config, params: dict):
+
+def update_scp_weights(
+    state: "AlgorithmState",
+    nodal_constraints: "LoweredJaxConstraints",
+    settings: Config,
+    params: dict,
+):
     """Update SCP weights and cost parameters based on iteration number.
 
     Args:
@@ -24,15 +29,17 @@ def update_scp_weights(state: "AlgorithmState", nodal_constraints: "LoweredJaxCo
     # Update trust region weight in state
     # state.w_tr = min(state.w_tr * settings.scp.w_tr_adapt, settings.scp.w_tr_max)
 
-    nonlinear_cost, nonlinear_penalty, nodal_penalty = calculate_nonlinear_penalty(state.candidate.x_prop,
-                                                   state.candidate.x,
-                                                   state.candidate.u,
-                                                   state.lam_vc,
-                                                   state.lam_vb,
-                                                   state.lam_cost,
-                                                   nodal_constraints,
-                                                   params,
-                                                   settings)
+    nonlinear_cost, nonlinear_penalty, nodal_penalty = calculate_nonlinear_penalty(
+        state.candidate.x_prop,
+        state.candidate.x,
+        state.candidate.u,
+        state.lam_vc,
+        state.lam_vb,
+        state.lam_cost,
+        nodal_constraints,
+        params,
+        settings,
+    )
 
     state.candidate.J_nonlin = nonlinear_cost + nonlinear_penalty + nodal_penalty
 
@@ -55,15 +62,19 @@ def update_scp_weights(state: "AlgorithmState", nodal_constraints: "LoweredJaxCo
     w_tr_k = deepcopy(state.w_tr)
 
     if state.k > 1:
-        prev_nonlinear_cost, prev_nonlinear_penalty, prev_nodal_penalty = calculate_nonlinear_penalty(state.x_prop(),
-                                                    state.x,
-                                                    state.u,
-                                                    state.lam_vc,
-                                                    state.lam_vb,
-                                                    state.lam_cost,
-                                                    nodal_constraints,
-                                                    params,
-                                                    settings)
+        prev_nonlinear_cost, prev_nonlinear_penalty, prev_nodal_penalty = (
+            calculate_nonlinear_penalty(
+                state.x_prop(),
+                state.x,
+                state.u,
+                state.lam_vc,
+                state.lam_vb,
+                state.lam_cost,
+                nodal_constraints,
+                params,
+                settings,
+            )
+        )
 
         J_nonlin_prev = prev_nonlinear_cost + prev_nonlinear_penalty + prev_nodal_penalty
  
@@ -109,7 +120,8 @@ def update_scp_weights(state: "AlgorithmState", nodal_constraints: "LoweredJaxCo
         # Vectorized update: use mask to select between two update rules
         mask = nu > ep
         case1 = state.lam_vc + nu * eta_lambda * (1 / (2 * state.w_tr))  # when abs(nu) > ep
-        case2 = state.lam_vc + (nu**2) / ep * eta_lambda * (1 / (2 * state.w_tr))  # when abs(nu) <= ep
+        # when abs(nu) <= ep
+        case2 = state.lam_vc + (nu**2) / ep * eta_lambda * (1 / (2 * state.w_tr))
         vc_new = np.where(mask, case1, case2)
         vc_new = np.minimum(vc_max, vc_new)
         state.candidate.lam_vc = vc_new
