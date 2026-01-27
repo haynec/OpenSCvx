@@ -27,6 +27,7 @@ from examples.plotting_viser import (
     create_animated_plotting_server,
     create_scp_animated_plotting_server,
 )
+from openscvx.plotting import plot_scp_convergence_histories
 from openscvx import Problem
 from openscvx.utils import gen_vertices, rot
 
@@ -260,6 +261,8 @@ if __name__ == "__main__":
     results = problem.post_process()
 
     results.update_plotting_data(**plotting_dict)
+
+    plot_scp_convergence_histories(results).show()
 
     # Create both visualization servers (viser auto-assigns ports)
     traj_server = create_animated_plotting_server(

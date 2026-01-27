@@ -661,6 +661,9 @@ def test_parameters():
     problem.settings.scp.lam_cost = original_lam_cost
     problem.settings.scp.lam_vc = original_lam_vc
 
+    # Reset solver state for second solve (parameters are updated)
+    problem.reset()
+
     # Solve again without re-initialization (parameters are updated)
     problem.solve()
     result2 = problem.post_process()

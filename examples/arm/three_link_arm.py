@@ -28,7 +28,7 @@ sys.path.append(grandparent_dir)
 
 import openscvx as ox
 from openscvx import Problem
-from openscvx.plotting import plot_scp_iterations
+from openscvx.plotting import plot_scp_iterations, plot_scp_convergence_histories
 
 # =============================================================================
 # Robot Parameters
@@ -206,7 +206,7 @@ problem = Problem(
 # Solver settings
 problem.settings.prp.dt = 0.01
 problem.settings.scp.w_tr = 1e0
-problem.settings.scp.lam_cost = 1e0
+problem.settings.scp.lam_cost = 1e-1
 problem.settings.scp.lam_vc = 1e1
 problem.settings.scp.lam_vb = 1e1
 
@@ -242,8 +242,8 @@ if __name__ == "__main__":
         T_final = T1 @ T2 @ T3 @ T_home
         return T_final[:3, 3]
 
-    plot_scp_iterations(results).show()
-
+    # plot_scp_iterations(results).show()
+    plot_scp_convergence_histories(results).show()
     tgt = target.value
     final_ee = compute_ee_position(final_q)
     error = np.linalg.norm(final_ee - tgt)
