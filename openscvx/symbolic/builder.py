@@ -56,6 +56,7 @@ from openscvx.symbolic.preprocessing import (
     validate_dynamics_dimension,
     validate_guesses,
     validate_input_types,
+    validate_propagation_input_types,
     validate_shapes,
     validate_variable_names,
 )
@@ -190,6 +191,7 @@ def preprocess_symbolic_problem(
 
     # Validate input types before anything else
     validate_input_types(dynamics, states, controls, N, time)
+    validate_propagation_input_types(dynamics_prop_extra, states_prop_extra)
 
     # Validate user-provided variables have required attributes
     validate_boundary_conditions(states)

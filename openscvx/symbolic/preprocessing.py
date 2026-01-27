@@ -822,6 +822,68 @@ def validate_input_types(
         raise TypeError(f"'time' must be a Time object, got {type(time).__name__}")
 
 
+def validate_propagation_input_types(
+    dynamics_prop_extra: any,
+    states_prop_extra: any,
+) -> None:
+    """Validate types for optional propagation inputs.
+
+    These parameters must either both be None or both be provided.
+    When provided, dynamics_prop_extra must be a dict and states_prop_extra
+    must be a list of State objects.
+
+    Args:
+        dynamics_prop_extra: Should be None or a dict mapping state names to expressions
+        states_prop_extra: Should be None or a list of State objects
+
+    Raises:
+        TypeError: If either input has the wrong type
+        ValueError: If only one of the two is provided
+
+    Example:
+            distance = ox.State("distance", shape=(1,))
+
+            # Wrong: passing bare State instead of list
+            validate_propagation_input_types({"distance": expr}, distance)
+            # Raises TypeError: 'states_prop_extra' must be a list ...
+    """
+    both_none = dynamics_prop_extra is None and states_prop_extra is None
+    both_set = dynamics_prop_extra is not None and states_prop_extra is not None
+
+    if not both_none and not both_set:
+        provided = "dynamics_prop" if dynamics_prop_extra is not None else "states_prop"
+        missing = "states_prop" if dynamics_prop_extra is not None else "dynamics_prop"
+        raise ValueError(
+            f"'{provided}' was provided but '{missing}' was not. "
+            f"Both must be provided together, or both omitted."
+        )
+
+    if both_none:
+        return
+
+    if not isinstance(dynamics_prop_extra, dict):
+        raise TypeError(
+            f"'dynamics_prop' must be a dict mapping state names to expressions, "
+            f"got {type(dynamics_prop_extra).__name__}"
+        )
+
+    if not isinstance(states_prop_extra, list):
+        hint = ""
+        if isinstance(states_prop_extra, State):
+            hint = (
+                f" Hint: use states_prop=[{states_prop_extra.name}]"
+                f" instead of states_prop={states_prop_extra.name}"
+            )
+        raise TypeError(
+            f"'states_prop' must be a list of State objects, "
+            f"got {type(states_prop_extra).__name__}.{hint}"
+        )
+
+    for i, s in enumerate(states_prop_extra):
+        if not isinstance(s, State):
+            raise TypeError(f"states_prop[{i}] must be a State, got {type(s).__name__}")
+
+
 def validate_guesses(variables: List[Variable]) -> None:
     """Validate that all variables have initial guesses set.
 

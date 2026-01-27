@@ -16,6 +16,7 @@ from openscvx.symbolic.preprocessing import (
     validate_dynamics_dimension,
     validate_guesses,
     validate_input_types,
+    validate_propagation_input_types,
     validate_variable_names,
 )
 
@@ -1073,3 +1074,54 @@ def test_validate_input_types_time_not_time(valid_inputs):
 
     with pytest.raises(TypeError, match="'time' must be a Time object, got float"):
         validate_input_types(dynamics, states, controls, N, 10.0)
+
+
+# =============================================================================
+# validate_propagation_input_types Tests
+# =============================================================================
+
+
+def test_validate_propagation_input_types_both_none():
+    """Test that both None passes validation."""
+    validate_propagation_input_types(None, None)
+
+
+def test_validate_propagation_input_types_both_valid():
+    """Test that valid dict + list passes validation."""
+    distance = State("distance", shape=(1,))
+    validate_propagation_input_types({"distance": distance}, [distance])
+
+
+def test_validate_propagation_input_types_only_dynamics():
+    """Test that providing dynamics_prop without states_prop raises ValueError."""
+    with pytest.raises(ValueError, match="'dynamics_prop' was provided but 'states_prop' was not"):
+        validate_propagation_input_types({"distance": 1.0}, None)
+
+
+def test_validate_propagation_input_types_only_states():
+    """Test that providing states_prop without dynamics_prop raises ValueError."""
+    distance = State("distance", shape=(1,))
+    with pytest.raises(ValueError, match="'states_prop' was provided but 'dynamics_prop' was not"):
+        validate_propagation_input_types(None, [distance])
+
+
+def test_validate_propagation_input_types_bare_state():
+    """Test that passing a bare State instead of a list raises TypeError with hint."""
+    distance = State("distance", shape=(1,))
+    with pytest.raises(
+        TypeError, match=r"'states_prop' must be a list.*Hint.*states_prop=\[distance\]"
+    ):
+        validate_propagation_input_types({"distance": distance}, distance)
+
+
+def test_validate_propagation_input_types_dynamics_not_dict():
+    """Test that passing non-dict dynamics_prop raises TypeError."""
+    distance = State("distance", shape=(1,))
+    with pytest.raises(TypeError, match="'dynamics_prop' must be a dict"):
+        validate_propagation_input_types([distance], [distance])
+
+
+def test_validate_propagation_input_types_wrong_element_in_states():
+    """Test that a non-State element in states_prop raises TypeError."""
+    with pytest.raises(TypeError, match=r"states_prop\[0\] must be a State, got str"):
+        validate_propagation_input_types({"x": 1.0}, ["not_a_state"])
