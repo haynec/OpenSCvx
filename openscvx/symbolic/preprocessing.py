@@ -748,6 +748,80 @@ def validate_bounds(variables: List[Variable]) -> None:
             )
 
 
+def validate_input_types(
+    dynamics: any,
+    states: any,
+    controls: any,
+    N: any,
+    time: any,
+) -> None:
+    """Validate that all user-facing inputs have correct types.
+
+    This catches common user errors like passing a single State or Control
+    instead of a list, or passing wrong types for dynamics, N, or time.
+    Should be called before any other validation in the preprocessing pipeline.
+
+    Args:
+        dynamics: Should be a dict mapping state names to dynamics expressions
+        states: Should be a list of State objects
+        controls: Should be a list of Control objects
+        N: Should be a positive integer
+        time: Should be a Time object
+
+    Raises:
+        TypeError: If any input has the wrong type
+        ValueError: If N is not positive
+
+    Example:
+            x = ox.State("x", shape=(3,))
+            u = ox.Control("u", shape=(2,))
+
+            # Wrong: passing bare Control instead of list
+            validate_input_types({"x": u}, [x], u, 50, time)
+            # Raises TypeError: 'controls' must be a list of Control objects ...
+    """
+    from openscvx.symbolic.time import Time
+
+    if not isinstance(dynamics, dict):
+        raise TypeError(
+            f"'dynamics' must be a dict mapping state names to expressions, "
+            f"got {type(dynamics).__name__}"
+        )
+
+    if not isinstance(states, list):
+        hint = ""
+        if isinstance(states, State):
+            hint = f" Hint: use states=[{states.name}] instead of states={states.name}"
+        raise TypeError(
+            f"'states' must be a list of State objects, got {type(states).__name__}.{hint}"
+        )
+
+    for i, s in enumerate(states):
+        if not isinstance(s, State):
+            raise TypeError(f"states[{i}] must be a State, got {type(s).__name__}")
+
+    if not isinstance(controls, list):
+        hint = ""
+        if isinstance(controls, Control):
+            hint = f" Hint: use controls=[{controls.name}] instead of controls={controls.name}"
+        raise TypeError(
+            f"'controls' must be a list of Control objects, got {type(controls).__name__}.{hint}"
+        )
+
+    for i, c in enumerate(controls):
+        if not isinstance(c, Control):
+            raise TypeError(f"controls[{i}] must be a Control, got {type(c).__name__}")
+
+    if not isinstance(N, int):
+        raise TypeError(f"'N' must be an integer, got {type(N).__name__}")
+
+    if N < 1:
+        raise ValueError(f"'N' must be positive, got {N}")
+
+    if not isinstance(time, Time):
+        raise TypeError(f"'time' must be a Time object, got {type(time).__name__}")
+
+
 def validate_guesses(variables: List[Variable]) -> None:
     """Validate that all variables have initial guesses set.
 

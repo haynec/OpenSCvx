@@ -55,6 +55,7 @@ from openscvx.symbolic.preprocessing import (
     validate_dynamics_dict_dimensions,
     validate_dynamics_dimension,
     validate_guesses,
+    validate_input_types,
     validate_shapes,
     validate_variable_names,
 )
@@ -186,6 +187,9 @@ def preprocess_symbolic_problem(
             # Propagation states include distance for post-solve simulation
             print([s.name for s in problem.states_prop])
     """
+
+    # Validate input types before anything else
+    validate_input_types(dynamics, states, controls, N, time)
 
     # Validate user-provided variables have required attributes
     validate_boundary_conditions(states)
