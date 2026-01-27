@@ -13,12 +13,14 @@ import numpy.linalg as la
 
 from openscvx.config import Config
 
-from .autotuning import update_scp_weights
+from .autotuning import get_autotuner
 from .base import Algorithm, AlgorithmState
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
     from openscvx.solvers import ConvexSolver
+    
+    from .autotuning import AutotuningBase
 
 warnings.filterwarnings("ignore")
 
@@ -61,6 +63,28 @@ class PenalizedTrustRegion(Algorithm):
         self._discretization_solver: callable = None
         self._jax_constraints: "LoweredJaxConstraints" = None
         self._emitter: callable = None
+        self._autotuner: "AutotuningBase" = None
+    
+    @property
+    def autotuner(self) -> "AutotuningBase":
+        """Access the autotuner instance for configuring parameters.
+        
+        For AugmentedLagrangian method, parameters can be modified via:
+            algorithm.autotuner.rho_max = 1e7
+            algorithm.autotuner.mu_max = 1e7
+            etc.
+        
+        Returns:
+            AutotuningBase: The autotuner instance
+            
+        Raises:
+            AttributeError: If algorithm has not been initialized yet
+        """
+        if self._autotuner is None:
+            raise AttributeError(
+                "Autotuner not yet initialized. Call initialize() first."
+            )
+        return self._autotuner
 
     def initialize(
         self,
@@ -89,6 +113,9 @@ class PenalizedTrustRegion(Algorithm):
         self._discretization_solver = discretization_solver
         self._jax_constraints = jax_constraints
         self._emitter = emitter
+        
+        # Initialize autotuner based on settings
+        self._autotuner = get_autotuner(settings)
 
         # Set boundary conditions
         self._solver.update_boundary_conditions(
@@ -183,8 +210,10 @@ class PenalizedTrustRegion(Algorithm):
         state.J_vb = np.sum(np.array(J_vb_vec))
         state.J_vc = np.sum(np.array(J_vc_vec))
 
-        # Update weights in state
-        adaptive_state = update_scp_weights(state, self._jax_constraints, settings, params)
+        # Update weights in state using configured autotuning method
+        adaptive_state = self._autotuner.update_weights(
+            state, self._jax_constraints, settings, params
+        )
 
         # Check if lists are empty
         if len(state.pred_reduction_history) == 0:

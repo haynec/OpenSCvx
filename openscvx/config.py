@@ -1,5 +1,8 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from openscvx.algorithms.autotuning import AutotuningBase
 
 import numpy as np
 
@@ -343,6 +346,7 @@ class ScpConfig:
         w_tr_adapt: float = 1.0,
         w_tr_max: Optional[float] = None,
         w_tr_max_scaling_factor: Optional[float] = None,
+        autotuner: Optional["AutotuningBase"] = None,
     ):
         """
         Configuration class for Sequential Convex Programming (SCP).
@@ -377,6 +381,20 @@ class ScpConfig:
                 Defaults to `None`.
             w_tr_max_scaling_factor (float): The scaling factor for the maximum
                 trust region weight. Defaults to `None`.
+            autotuner: Optional custom autotuner instance. If not provided, defaults
+                to ``AugmentedLagrangian()`` with default parameters. Useful for
+                customizing parameters:
+                
+                .. code-block:: python
+                
+                    auto_tuner = ox.AugmentedLagrangian()
+                    auto_tuner.rho_max = 1e7
+                    problem.settings.scp.autotuner = auto_tuner
+                
+        Note:
+            Autotuner parameters can be accessed and modified via the autotuner
+            instance (e.g., ``problem.algorithm.autotuner.rho_max``) after
+            initialization. Default values are set in the AugmentedLagrangian class.
         """
         # Initialize references first (before any setters that might use them)
         self._parent_config = None  # Will be set by Config.__post_init__
@@ -397,6 +415,7 @@ class ScpConfig:
         self.w_tr_adapt = w_tr_adapt
         self.w_tr_max = w_tr_max
         self.w_tr_max_scaling_factor = w_tr_max_scaling_factor
+        self.autotuner = autotuner
 
     @property
     def lam_vc(self):
