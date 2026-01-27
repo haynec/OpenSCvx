@@ -196,7 +196,7 @@ def test_monolithic():
 
     problem.settings.prp.dt = 0.01
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.w_tr = 1e1  # Weight on the Trust Region
+    problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
     problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
     problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
     problem.settings.scp.uniform_time_grid = True
@@ -325,7 +325,7 @@ def test_constraint_types(constraint_type):
 
     problem.settings.prp.dt = 0.01
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.w_tr = 1e1  # Weight on the Trust Region
+    problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
     problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
     problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
     problem.settings.scp.uniform_time_grid = True
@@ -469,7 +469,7 @@ def test_cross_nodal(test_case):
 
     problem.settings.prp.dt = 0.01
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.w_tr = 1e1  # Weight on the Trust Region
+    problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
     problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
     problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
     problem.settings.scp.uniform_time_grid = True
@@ -603,14 +603,14 @@ def test_parameters():
     )
 
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.w_tr = 1e0
+    problem.settings.scp.lam_prox = 1e0
     problem.settings.scp.lam_cost = 1e-1
     problem.settings.scp.lam_vc = 1e1
     problem.settings.scp.uniform_time_grid = True
     problem.settings.sim.save_compiled = False
 
     # Save original weight values for second problem setup
-    original_w_tr = problem.settings.scp.w_tr
+    original_lam_prox = problem.settings.scp.lam_prox
     original_lam_cost = problem.settings.scp.lam_cost
     original_lam_vc = problem.settings.scp.lam_vc
 
@@ -657,7 +657,7 @@ def test_parameters():
     theta.guess = np.linspace(5 * jnp.pi / 180, 100.5 * jnp.pi / 180, n).reshape(-1, 1)
 
     # Restore original weight values for second problem setup
-    problem.settings.scp.w_tr = original_w_tr
+    problem.settings.scp.lam_prox = original_lam_prox
     problem.settings.scp.lam_cost = original_lam_cost
     problem.settings.scp.lam_vc = original_lam_vc
 
@@ -812,7 +812,7 @@ def test_propagation():
 
     problem.settings.prp.dt = 0.01
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.w_tr = 1e1  # Weight on the Trust Region
+    problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
     problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
     problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
     problem.settings.scp.uniform_time_grid = True
@@ -1211,7 +1211,7 @@ def test_byof(byof_mode):
 
     problem.settings.prp.dt = 0.01
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.w_tr = 1e1
+    problem.settings.scp.lam_prox = 1e1
     problem.settings.scp.lam_cost = 1e0
     problem.settings.scp.lam_vc = 1e1
     problem.settings.scp.uniform_time_grid = True

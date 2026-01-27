@@ -88,7 +88,7 @@ problem = Problem(
 
 problem.settings.prp.dt = 0.01
 
-problem.settings.scp.w_tr = 1e1  # Weight on the Trust Reigon
+problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Reigon
 problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
 problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
 problem.settings.scp.uniform_time_grid = True

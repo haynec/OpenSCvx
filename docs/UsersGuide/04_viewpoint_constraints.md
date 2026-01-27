@@ -328,7 +328,7 @@ problem = ox.Problem(
 )
 
 # Tuning for this problem
-problem.settings.scp.w_tr = 2e0
+problem.settings.scp.lam_prox = 2e0
 problem.settings.scp.lam_cost = 1e-1
 problem.settings.scp.lam_vc = 1e2
 problem.settings.scp.cost_drop = 10

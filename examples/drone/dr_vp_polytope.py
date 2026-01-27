@@ -245,7 +245,7 @@ problem = Problem(
 
 problem.settings.prp.dt = 0.01
 
-problem.settings.scp.w_tr = 2e0  # 2e0,  # Weight on the Trust Reigon
+problem.settings.scp.lam_prox = 2e0  # 2e0,  # Weight on the Trust Reigon
 problem.settings.scp.lam_cost = 2e-1  # 0e-1,  # Weight on the Minimal Time Objective
 problem.settings.scp.lam_vc = 4e1  # Weight on the Virtual Control Objective
 
@@ -254,8 +254,8 @@ problem.settings.scp.ep_vb = 1e-4  # Virtual Control Tolerance
 problem.settings.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS
 problem.settings.scp.cost_drop = 10  # SCP iteration to relax minimal final time objective
 problem.settings.scp.cost_relax = 0.8  # Minimal Time Relaxation Factor
-problem.settings.scp.w_tr_adapt = 1.2  # Trust Region Adaptation Factor
-problem.settings.scp.w_tr_max_scaling_factor = 1e2  # Maximum Trust Region Weight
+problem.settings.scp.lam_prox_adapt = 1.2  # Trust Region Adaptation Factor
+problem.settings.scp.lam_prox_max_scaling_factor = 1e2  # Maximum Trust Region Weight
 plotting_dict = {
     "vertices": vertices,
     "n_subs": n_subs,

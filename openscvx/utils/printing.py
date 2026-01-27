@@ -91,7 +91,7 @@ def print_problem_summary(settings: Any, lowered: Any, solver: Any) -> None:
         lam_vc_str = f"λ_vc={settings.scp.lam_vc:4.1f}"
     weights_parts = [
         f"λ_cost={settings.scp.lam_cost:4.1f}",
-        f"λ_tr={settings.scp.w_tr:4.1f}",
+        f"λ_tr={settings.scp.lam_prox:4.1f}",
         lam_vc_str,
     ]
 
@@ -213,7 +213,7 @@ def header():
             "pred_red",
             "act_red",
             "acc_ratio",
-            "w_tr",
+            "lam_prox",
             "Cost",
             "Solver Status",
             "Adaptive State",
@@ -258,7 +258,7 @@ def intermediate(print_queue, params):
             pred_reduction_colored = colored("{: .1e}".format(data.get("pred_reduction", 0.0)))
             actual_reduction_colored = colored("{: .1e}".format(data.get("actual_reduction", 0.0)))
             acceptance_ratio_colored = colored("{: .2e}".format(data.get("acceptance_ratio", 0.0)))
-            w_tr_colored = colored("{: .1e}".format(data.get("w_tr", 0.0)))
+            lam_prox_colored = colored("{: .1e}".format(data.get("lam_prox", 0.0)))
             cost_colored = colored("{: .1e}".format(data["cost"]))
             prob_stat_colored = colored(
                 data["prob_stat"], col_pos if data["prob_stat"] == "optimal" else col_neg
@@ -294,7 +294,7 @@ def intermediate(print_queue, params):
                     pred_reduction_colored,
                     actual_reduction_colored,
                     acceptance_ratio_colored,
-                    w_tr_colored,
+                    lam_prox_colored,
                     cost_colored,
                     prob_stat_colored,
                     adaptive_state_colored,
@@ -325,7 +325,7 @@ def intermediate(print_queue, params):
                     "pred_red",
                     "act_red",
                     "acc_ratio",
-                    "w_tr",
+                    "lam_prox",
                     "Cost",
                     "Solver Status",
                     "Adaptive State",

@@ -79,7 +79,7 @@ class ConvexSolver(ABC):
                     ...
 
                 def update_penalties(self, **kwargs):
-                    # Set w_tr, lam_cost, lam_vc, lam_vb
+                    # Set lam_prox, lam_cost, lam_vc, lam_vb
                     ...
 
                 def solve(self):

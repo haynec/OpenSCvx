@@ -189,7 +189,7 @@ class Problem:
             ),
             scp=ScpConfig(
                 n=N,
-                w_tr_max_scaling_factor=1e2,  # Maximum Trust Region Weight
+                lam_prox_max_scaling_factor=1e2,  # Maximum Trust Region Weight
             ),
             dis=DiscretizationConfig(),
             dev=DevConfig(),
@@ -377,7 +377,7 @@ class Problem:
             J_vc_history=state.J_vc,
             TR_history=state.TR_history,
             VC_history=state.VC_history,
-            w_tr_history=state.w_tr_history.copy(),
+            lam_prox_history=state.lam_prox_history.copy(),
             actual_reduction_history=state.actual_reduction_history.copy(),
             pred_reduction_history=state.pred_reduction_history.copy(),
             acceptance_ratio_history=state.acceptance_ratio_history.copy(),

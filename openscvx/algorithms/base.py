@@ -142,7 +142,7 @@ class AlgorithmState:
         J_tr: Current trust region cost
         J_vb: Current virtual buffer cost
         J_vc: Current virtual control cost
-        w_tr: Current trust region weight (may adapt during solve)
+        lam_prox: Current trust region weight (may adapt during solve)
         lam_cost: Current cost weight (may relax during solve)
         lam_vc: Current virtual control penalty weight
         lam_vb: Current virtual buffer penalty weight
@@ -180,7 +180,7 @@ class AlgorithmState:
     lam_vc_history: List[Union[float, np.ndarray]] = field(default_factory=list)
     lam_cost_history: List[float] = field(default_factory=list)
     lam_vb_history: List[float] = field(default_factory=list)
-    w_tr_history: List[float] = field(default_factory=list)
+    lam_prox_history: List[float] = field(default_factory=list)
     x_full: List[np.ndarray] = field(default_factory=list)
     x_prop_full: List[np.ndarray] = field(default_factory=list)
 
@@ -396,15 +396,15 @@ class AlgorithmState:
         return V_final[:, i3:i4].reshape(self.N - 1, self.n_x, self.n_u)
 
     @property
-    def w_tr(self) -> float:
+    def lam_prox(self) -> float:
         """Get current trust region weight.
 
         Returns:
-            Current trust region weight (latest entry in w_tr_history)
+            Current trust region weight (latest entry in lam_prox_history)
         """
-        if not self.w_tr_history:
-            raise ValueError("w_tr_history is empty. Initialize state using from_settings().")
-        return self.w_tr_history[-1]
+        if not self.lam_prox_history:
+            raise ValueError("lam_prox_history is empty. Initialize state using from_settings().")
+        return self.lam_prox_history[-1]
 
     @property
     def lam_cost(self) -> float:
@@ -473,7 +473,7 @@ class AlgorithmState:
             lam_vc_history=[settings.scp.lam_vc],
             lam_cost_history=[settings.scp.lam_cost],
             lam_vb_history=[settings.scp.lam_vb],
-            w_tr_history=[settings.scp.w_tr],
+            lam_prox_history=[settings.scp.lam_prox],
         )
 
 

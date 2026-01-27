@@ -9,6 +9,7 @@ from unittest.mock import Mock
 from openscvx.algorithms.autotuning import (
     AutotuningBase,
     AugmentedLagrangian,
+    ConstantTrustRegion,
 )
 from openscvx.algorithms.base import AlgorithmState
 from openscvx.config import Config, SimConfig, ScpConfig, ConvexSolverConfig, DiscretizationConfig, PropagationConfig, DevConfig
@@ -70,7 +71,7 @@ def settings(mock_unified_state, mock_unified_control):
     
     scp_config = ScpConfig(
         n=3,
-        w_tr=1.0,
+        lam_prox=1.0,
         lam_vc=1.0,
         lam_vb=1.0,
         lam_cost=1.0,
@@ -111,7 +112,7 @@ def algorithm_state(settings):
         lam_vc_history=[np.array([1.0, 1.0])],  # Array for virtual control
         lam_cost_history=[1.0],
         lam_vb_history=[1.0],
-        w_tr_history=[1.0],
+        lam_prox_history=[1.0],
     )
     # Initialize candidate fields (inter_* attributes)
     state.inter_x = None
@@ -412,8 +413,8 @@ def test_update_scp_weights_initial_iteration(settings, algorithm_state, empty_n
     )
     
     assert adaptive_state == "Initial"
-    assert len(algorithm_state.w_tr_history) == 2  # Initial + new entry
-    assert algorithm_state.w_tr_history[-1] == algorithm_state.w_tr
+    assert len(algorithm_state.lam_prox_history) == 2  # Initial + new entry
+    assert algorithm_state.lam_prox_history[-1] == algorithm_state.lam_prox
     # Should accept solution
     assert len(algorithm_state.X) == initial_x_len + 1  # Original + accepted candidate
 
@@ -421,8 +422,8 @@ def test_update_scp_weights_initial_iteration(settings, algorithm_state, empty_n
 def test_update_scp_weights_reject_higher(settings, algorithm_state, empty_nodal_constraints):
     """Test weight update when rho < eta_0 (reject solution, higher weight)."""
     algorithm_state.k = 2
-    # Ensure w_tr_history has the current weight
-    algorithm_state.w_tr_history = [1.0]
+    # Ensure lam_prox_history has the current weight
+    algorithm_state.lam_prox_history = [1.0]
     
     # Set up previous iteration data
     algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
@@ -459,13 +460,13 @@ def test_update_scp_weights_reject_higher(settings, algorithm_state, empty_nodal
     # Should update weight (may accept or reject depending on rho)
     assert adaptive_state in ["Reject Higher", "Accept Higher", "Accept Constant", "Accept Lower"]
     # Weight should be updated
-    assert len(algorithm_state.w_tr_history) >= 2
+    assert len(algorithm_state.lam_prox_history) >= 2
 
 
 def test_update_scp_weights_accept_lower(settings, algorithm_state, empty_nodal_constraints):
     """Test weight update when rho >= eta_2 (accept solution, lower weight)."""
     algorithm_state.k = 2
-    algorithm_state.w_tr_history = [10.0]  # Start with higher weight
+    algorithm_state.lam_prox_history = [10.0]  # Start with higher weight
     
     # Set up previous iteration
     algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
@@ -510,7 +511,7 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
     
     algorithm_state.k = 4  # After cost_drop
     algorithm_state.lam_cost_history = [2.0]  # Current cost weight
-    algorithm_state.w_tr_history = [1.0]
+    algorithm_state.lam_prox_history = [1.0]
     
     # Set up previous iteration data for k > 1
     algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
@@ -569,7 +570,7 @@ def test_update_scp_weights_before_cost_drop(settings, algorithm_state, empty_no
 def test_update_scp_weights_virtual_control_update(settings, algorithm_state, empty_nodal_constraints):
     """Test that virtual control weights are updated based on nu."""
     algorithm_state.k = 2
-    algorithm_state.w_tr_history = [1.0]
+    algorithm_state.lam_prox_history = [1.0]
     algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
     
     # Set up previous iteration
@@ -652,7 +653,7 @@ def test_update_scp_weights_history_tracking(settings, algorithm_state, empty_no
 def test_update_scp_weights_weight_bounds(settings, algorithm_state, empty_nodal_constraints):
     """Test that trust region weights respect min/max bounds."""
     algorithm_state.k = 2
-    algorithm_state.w_tr_history = [1e5]  # Very high weight
+    algorithm_state.lam_prox_history = [1e5]  # Very high weight
     
     # Set up previous iteration
     algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
@@ -680,11 +681,11 @@ def test_update_scp_weights_weight_bounds(settings, algorithm_state, empty_nodal
     )
     
     # Weight should be bounded
-    w_tr_min = 1e-3
-    w_tr_max = 2e5
-    final_weight = algorithm_state.w_tr_history[-1]
-    assert final_weight >= w_tr_min
-    assert final_weight <= w_tr_max
+    lam_prox_min = 1e-3
+    lam_prox_max = 2e5
+    final_weight = algorithm_state.lam_prox_history[-1]
+    assert final_weight >= lam_prox_min
+    assert final_weight <= lam_prox_max
 
 
 # --- Tests for AugmentedLagrangianAutotuning ---------------------------------
@@ -718,7 +719,7 @@ def test_augmented_lagrangian_multiplier_update(settings, algorithm_state, nodal
     """Test that AugmentedLagrangian uses PTR method (no multiplier updates)."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
-    algorithm_state.w_tr_history = [1.0]
+    algorithm_state.lam_prox_history = [1.0]
     algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
     
     # Set up previous iteration
@@ -758,7 +759,7 @@ def test_augmented_lagrangian_penalty_increase(settings, algorithm_state, nodal_
     """Test that AugmentedLagrangian uses PTR method (no penalty parameters)."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
-    algorithm_state.w_tr_history = [1.0]
+    algorithm_state.lam_prox_history = [1.0]
     algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
     
     # Set up previous iteration
@@ -790,14 +791,14 @@ def test_augmented_lagrangian_penalty_increase(settings, algorithm_state, nodal_
     assert not hasattr(algorithm_state, 'rho')
     assert not hasattr(algorithm_state, 'mu')
     # Should update trust region weights based on acceptance ratio
-    assert len(algorithm_state.w_tr_history) >= 2
+    assert len(algorithm_state.lam_prox_history) >= 2
 
 
 def test_augmented_lagrangian_penalty_decrease(settings, algorithm_state, empty_nodal_constraints):
     """Test that AugmentedLagrangian uses PTR method (no penalty parameters)."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
-    algorithm_state.w_tr_history = [1.0]
+    algorithm_state.lam_prox_history = [1.0]
     algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
     
     # Set up previous iteration
@@ -829,14 +830,14 @@ def test_augmented_lagrangian_penalty_decrease(settings, algorithm_state, empty_
     assert not hasattr(algorithm_state, 'rho')
     assert not hasattr(algorithm_state, 'mu')
     # Should update trust region weights
-    assert len(algorithm_state.w_tr_history) >= 2
+    assert len(algorithm_state.lam_prox_history) >= 2
 
 
 def test_augmented_lagrangian_virtual_control_update(settings, algorithm_state, empty_nodal_constraints):
     """Test that virtual control weights are updated using PTR method."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
-    algorithm_state.w_tr_history = [1.0]
+    algorithm_state.lam_prox_history = [1.0]
     algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
     
     # Set up previous iteration
@@ -946,3 +947,149 @@ def test_augmented_lagrangian_exported():
     # Should be able to modify parameters
     auto_tuner.rho_max = 1e7
     assert auto_tuner.rho_max == 1e7
+
+
+# --- Tests for ConstantTrustRegion ---------------------------------------------
+
+
+def test_constant_trust_region_initial_iteration(settings, algorithm_state, empty_nodal_constraints):
+    """Test ConstantTrustRegion on first iteration (k=1)."""
+    autotuner = ConstantTrustRegion()
+    algorithm_state.k = 1
+    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
+    algorithm_state.candidate.J_lin = 10.0
+    
+    params = {}
+    initial_x_len = len(algorithm_state.X)
+    initial_lam_prox = algorithm_state.lam_prox
+    
+    adaptive_state = autotuner.update_weights(
+        algorithm_state, empty_nodal_constraints, settings, params
+    )
+    
+    assert adaptive_state == "Initial"
+    # Should accept solution
+    assert len(algorithm_state.X) == initial_x_len + 1
+    # Trust region weight should remain constant
+    assert len(algorithm_state.lam_prox_history) == 2  # Initial + appended
+    assert algorithm_state.lam_prox_history[-1] == initial_lam_prox
+
+
+def test_constant_trust_region_weight_constant(settings, algorithm_state, empty_nodal_constraints):
+    """Test that trust region weight stays constant across iterations."""
+    autotuner = ConstantTrustRegion()
+    algorithm_state.k = 2
+    algorithm_state.lam_prox_history = [1.0]
+    algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
+    
+    # Set up previous iteration
+    algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
+    algorithm_state.U.append(np.array([[0.0], [0.5], [1.0]]))
+    
+    # Create V_history entry
+    i4 = 2 + 4 + 4
+    flattened_size = (3 - 1) * i4
+    V_dummy = np.zeros((flattened_size, 5))
+    V_final = V_dummy[:, -1].reshape(-1, i4)
+    V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
+    V_dummy[:, -1] = V_final.flatten()
+    algorithm_state.V_history.append(V_dummy)
+    
+    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
+    algorithm_state.candidate.J_lin = 10.0
+    
+    params = {}
+    initial_lam_prox = algorithm_state.lam_prox
+    
+    adaptive_state = autotuner.update_weights(
+        algorithm_state, empty_nodal_constraints, settings, params
+    )
+    
+    # Trust region weight should remain constant
+    assert adaptive_state == "Accept"
+    assert len(algorithm_state.lam_prox_history) == 2
+    assert algorithm_state.lam_prox_history[-1] == initial_lam_prox
+    # Should still track history
+    assert len(algorithm_state.pred_reduction_history) == 1
+    assert len(algorithm_state.actual_reduction_history) == 1
+    assert len(algorithm_state.acceptance_ratio_history) == 1
+
+
+def test_constant_trust_region_virtual_control_update(settings, algorithm_state, empty_nodal_constraints):
+    """Test that virtual control weights are still updated."""
+    autotuner = ConstantTrustRegion()
+    algorithm_state.k = 2
+    algorithm_state.lam_prox_history = [1.0]
+    algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
+    
+    # Set up previous iteration
+    algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
+    algorithm_state.U.append(np.array([[0.0], [0.5], [1.0]]))
+    
+    # Create V_history entry
+    i4 = 2 + 4 + 4
+    flattened_size = (3 - 1) * i4
+    V_dummy = np.zeros((flattened_size, 5))
+    V_final = V_dummy[:, -1].reshape(-1, i4)
+    V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
+    V_dummy[:, -1] = V_final.flatten()
+    algorithm_state.V_history.append(V_dummy)
+    
+    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
+    algorithm_state.candidate.J_lin = 10.0
+    
+    params = {}
+    
+    adaptive_state = autotuner.update_weights(
+        algorithm_state, empty_nodal_constraints, settings, params
+    )
+    
+    # Virtual control should still be updated
+    assert algorithm_state.candidate.lam_vc is not None
+    assert isinstance(algorithm_state.candidate.lam_vc, np.ndarray)
+    assert algorithm_state.candidate.lam_vc.shape == (2, 2)
+
+
+def test_constant_trust_region_always_accepts(settings, algorithm_state, empty_nodal_constraints):
+    """Test that ConstantTrustRegion always accepts solutions (no rejection)."""
+    autotuner = ConstantTrustRegion()
+    algorithm_state.k = 2
+    algorithm_state.lam_prox_history = [1.0]
+    algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
+    
+    # Set up previous iteration
+    algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
+    algorithm_state.U.append(np.array([[0.0], [0.5], [1.0]]))
+    
+    # Create V_history entry
+    i4 = 2 + 4 + 4
+    flattened_size = (3 - 1) * i4
+    V_dummy = np.zeros((flattened_size, 5))
+    V_final = V_dummy[:, -1].reshape(-1, i4)
+    V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
+    V_dummy[:, -1] = V_final.flatten()
+    algorithm_state.V_history.append(V_dummy)
+    
+    # Set up candidate with poor performance (would be rejected in PTR)
+    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
+    algorithm_state.candidate.J_lin = 1.0  # Low predicted cost
+    # High actual cost (poor performance)
+    
+    params = {}
+    initial_x_len = len(algorithm_state.X)
+    
+    adaptive_state = autotuner.update_weights(
+        algorithm_state, empty_nodal_constraints, settings, params
+    )
+    
+    # Should always accept (no rejection)
+    assert adaptive_state == "Accept"
+    assert len(algorithm_state.X) == initial_x_len + 1

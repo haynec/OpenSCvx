@@ -245,7 +245,7 @@ class PenalizedTrustRegion(Algorithm):
                 "pred_reduction": pred_reduction,
                 "actual_reduction": actual_reduction,
                 "acceptance_ratio": acceptance_ratio,
-                "w_tr": state.w_tr,
+                "lam_prox": state.lam_prox,
                 "prob_stat": prob_stat,
                 "adaptive_state": adaptive_state,
             }
@@ -330,7 +330,7 @@ class PenalizedTrustRegion(Algorithm):
 
         # Update solver with penalty weights
         self._solver.update_penalties(
-            w_tr=state.w_tr,
+            lam_prox=state.lam_prox,
             lam_cost=state.lam_cost,
             lam_vc=state.lam_vc,
             lam_vb=state.lam_vb,

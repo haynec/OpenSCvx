@@ -112,7 +112,7 @@ problem = Problem(
 )
 
 # Set solver parameters
-problem.settings.scp.w_tr = 1e0
+problem.settings.scp.lam_prox = 1e0
 problem.settings.scp.lam_cost = 1e-1
 problem.settings.scp.lam_vc = 1e3
 problem.settings.scp.uniform_time_grid = True

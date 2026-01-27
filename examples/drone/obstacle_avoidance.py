@@ -156,8 +156,8 @@ problem = Problem(
 
 problem.settings.prp.dt = 0.001
 problem.settings.scp.lam_vb = 1e0
-problem.settings.scp.w_tr_adapt = 1.8
-problem.settings.scp.w_tr = 1e1
+problem.settings.scp.lam_prox_adapt = 1.8
+problem.settings.scp.lam_prox = 1e1
 problem.settings.scp.lam_cost = 1e1  # Weight on the Nonlinear Cost
 problem.settings.scp.lam_vc = 1e2  # Weight on the Virtual Control Objective
 problem.settings.scp.cost_drop = 4  # SCP iteration to relax minimal final time objective

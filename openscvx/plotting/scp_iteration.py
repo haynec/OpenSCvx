@@ -304,7 +304,7 @@ def plot_scp_convergence_histories(result: OptimizationResults):
     and acceptance ratio.
 
     Creates three separate plots:
-    1. Trust region weight (w_tr) history
+    1. Trust region weight (lam_prox) history
     2. Actual and predicted reduction histories (overlaid)
     3. Acceptance ratio history
 
@@ -335,21 +335,21 @@ def plot_scp_convergence_histories(result: OptimizationResults):
     )
 
     # Prepare iteration indices (0-indexed for plotting)
-    iterations_w_tr = np.arange(len(result.w_tr_history))
+    iterations_lam_prox = np.arange(len(result.lam_prox_history))
     iterations_reduction = np.arange(len(result.actual_reduction_history))
     iterations_ratio = np.arange(len(result.acceptance_ratio_history))
 
     # Plot 1: Trust region weight history
-    if len(result.w_tr_history) > 0:
+    if len(result.lam_prox_history) > 0:
         fig.add_trace(
             go.Scatter(
-                x=iterations_w_tr,
-                y=result.w_tr_history,
+                x=iterations_lam_prox,
+                y=result.lam_prox_history,
                 mode="lines+markers",
-                name="w_tr",
+                name="lam_prox",
                 line={"color": "cyan", "width": 2},
                 marker={"size": 6},
-                hovertemplate="Iteration: %{x}<br>w_tr: %{y:.3g}<extra></extra>",
+                hovertemplate="Iteration: %{x}<br>lam_prox: %{y:.3g}<extra></extra>",
             ),
             row=1,
             col=1,
@@ -477,7 +477,7 @@ def plot_scp_convergence_histories(result: OptimizationResults):
 
     # Update axes labels
     fig.update_xaxes(title_text="Iteration", row=1, col=1)
-    fig.update_yaxes(title_text="w_tr", type="log", row=1, col=1)
+    fig.update_yaxes(title_text="lam_prox", type="log", row=1, col=1)
 
     fig.update_xaxes(title_text="Iteration", row=2, col=1)
     fig.update_yaxes(title_text="Reduction", row=2, col=1)  # Linear scale

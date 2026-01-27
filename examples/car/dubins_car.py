@@ -101,8 +101,8 @@ problem = Problem(
 
 # Set solver parameters
 problem.settings.prp.dt = 0.01
-# problem.settings.scp.w_tr_adapt = 1.3
-problem.settings.scp.w_tr = 1e0
+# problem.settings.scp.lam_prox_adapt = 1.3
+problem.settings.scp.lam_prox = 1e0
 problem.settings.scp.lam_cost = 4e1
 problem.settings.scp.lam_vc = 1e3
 problem.settings.scp.uniform_time_grid = True
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     problem.parameters["obs_center"] = np.array([0.5, 0.0])
     total_time = 0.7  # Adjust total time for second run
     problem.settings.scp.lam_cost = 1e-1  # Disable minimal time objective for second run
-    problem.settings.scp.w_tr = 1e0
+    problem.settings.scp.lam_prox = 1e0
     problem.settings.scp.lam_vc = 1e2  # Adjust virtual control weight
     position.guess = np.linspace([0, -2], [0, 2], n)
     theta.guess = np.zeros((n, 1))

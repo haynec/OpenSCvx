@@ -333,7 +333,7 @@ class ScpConfig:
         self,
         n: Optional[int] = None,
         k_max: int = 200,
-        w_tr: float = 1.0,
+        lam_prox: float = 1.0,
         lam_vc: float = 1e1,
         ep_tr: float = 1e-4,
         ep_vb: float = 1e-4,
@@ -343,9 +343,9 @@ class ScpConfig:
         uniform_time_grid: bool = False,
         cost_drop: int = -1,
         cost_relax: float = 1.0,
-        w_tr_adapt: float = 1.0,
-        w_tr_max: Optional[float] = None,
-        w_tr_max_scaling_factor: Optional[float] = None,
+        lam_prox_adapt: float = 1.0,
+        lam_prox_max: Optional[float] = None,
+        lam_prox_max_scaling_factor: Optional[float] = None,
         autotuner: Optional["AutotuningBase"] = None,
     ):
         """
@@ -359,7 +359,7 @@ class ScpConfig:
         Attributes:
             n (int): The number of discretization nodes. Defaults to `None`.
             k_max (int): The maximum number of SCP iterations. Defaults to 200.
-            w_tr (float): The trust region weight. Defaults to 1.0.
+            lam_prox (float): The trust region weight. Defaults to 1.0.
             lam_vc (float): The penalty weight for virtual control. Defaults to 1.0.
             ep_tr (float): The trust region convergence tolerance. Defaults to 1e-4.
             ep_vb (float): The boundary constraint convergence tolerance.
@@ -375,11 +375,11 @@ class ScpConfig:
                 stagnation before termination. Defaults to -1 (disabled).
             cost_relax (float): The relaxation factor for cost reduction.
                 Defaults to 1.0.
-            w_tr_adapt (float): The adaptation factor for the trust region
+            lam_prox_adapt (float): The adaptation factor for the trust region
                 weight. Defaults to 1.0.
-            w_tr_max (float): The maximum allowable trust region weight.
+            lam_prox_max (float): The maximum allowable trust region weight.
                 Defaults to `None`.
-            w_tr_max_scaling_factor (float): The scaling factor for the maximum
+            lam_prox_max_scaling_factor (float): The scaling factor for the maximum
                 trust region weight. Defaults to `None`.
             autotuner: Optional custom autotuner instance. If not provided, defaults
                 to ``AugmentedLagrangian()`` with default parameters. Useful for
@@ -402,7 +402,7 @@ class ScpConfig:
 
         self.n = n
         self.k_max = k_max
-        self.w_tr = w_tr
+        self.lam_prox = lam_prox
         self.lam_vc = lam_vc  # Use setter to handle conversion
         self.ep_tr = ep_tr
         self.ep_vb = ep_vb
@@ -412,9 +412,9 @@ class ScpConfig:
         self.uniform_time_grid = uniform_time_grid
         self.cost_drop = cost_drop
         self.cost_relax = cost_relax
-        self.w_tr_adapt = w_tr_adapt
-        self.w_tr_max = w_tr_max
-        self.w_tr_max_scaling_factor = w_tr_max_scaling_factor
+        self.lam_prox_adapt = lam_prox_adapt
+        self.lam_prox_max = lam_prox_max
+        self.lam_prox_max_scaling_factor = lam_prox_max_scaling_factor
         self.autotuner = autotuner
 
     @property
@@ -454,7 +454,7 @@ class ScpConfig:
             self._lam_vc = value
 
     def __post_init__(self):
-        keys_to_scale = ["w_tr", "lam_vc", "lam_cost", "lam_vb"]
+        keys_to_scale = ["lam_prox", "lam_vc", "lam_cost", "lam_vb"]
         # Handle lam_vc which might be scalar or array
         scale_values = []
         for key in keys_to_scale:
@@ -471,8 +471,8 @@ class ScpConfig:
             else:
                 setattr(self, key, val / scale)
 
-        if self.w_tr_max_scaling_factor is not None and self.w_tr_max is None:
-            self.w_tr_max = self.w_tr_max_scaling_factor * self.w_tr
+        if self.lam_prox_max_scaling_factor is not None and self.lam_prox_max is None:
+            self.lam_prox_max = self.lam_prox_max_scaling_factor * self.lam_prox
 
 
 @dataclass

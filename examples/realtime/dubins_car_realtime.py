@@ -197,7 +197,7 @@ def on_lam_tr_changed(input_widget):
     try:
         # Convert the new value to a float
         lam_tr_value = float(new_value)
-        problem.settings.scp.w_tr = lam_tr_value
+        problem.settings.scp.lam_prox = lam_tr_value
         # Update the display with scientific notation
         input_widget.setText(f"{lam_tr_value:.2E}")
     except ValueError:
@@ -318,7 +318,7 @@ def plot_thread_func():
     # Lambda trust region input - Input on left, label on right
     lam_tr_layout = QHBoxLayout()
     lam_tr_input = QLineEdit()
-    lam_tr_input.setText(f"{problem.settings.scp.w_tr:.2E}")
+    lam_tr_input.setText(f"{problem.settings.scp.lam_prox:.2E}")
     lam_tr_input.setFixedWidth(80)
     lam_tr_input.returnPressed.connect(lambda: on_lam_tr_changed(lam_tr_input))
     lam_tr_label = QLabel("λ_tr:")

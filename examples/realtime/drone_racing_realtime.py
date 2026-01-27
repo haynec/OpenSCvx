@@ -196,8 +196,8 @@ def create_realtime_server(
             step=0.1,
         )
         lam_tr_input = server.gui.add_number(
-            "λ_tr (w_tr)",
-            initial_value=optimization_problem.settings.scp.w_tr,
+            "λ_tr (lam_prox)",
+            initial_value=optimization_problem.settings.scp.lam_prox,
             min=1e-6,
             max=1e6,
             step=0.1,
@@ -209,7 +209,7 @@ def create_realtime_server(
 
         @lam_tr_input.on_update
         def _(_) -> None:
-            optimization_problem.settings.scp.w_tr = lam_tr_input.value
+            optimization_problem.settings.scp.lam_prox = lam_tr_input.value
 
     # --- Problem Control ---
     with server.gui.add_folder("Problem Control"):

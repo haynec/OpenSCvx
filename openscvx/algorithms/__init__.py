@@ -47,7 +47,7 @@ Note:
         J_tr: float
         J_vb: float
         J_vc: float
-        w_tr: float
+        lam_prox: float
         lam_cost: float
         lam_vc: ...
         lam_vb: float

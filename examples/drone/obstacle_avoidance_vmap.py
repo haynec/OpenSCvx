@@ -194,7 +194,7 @@ problem = Problem(
 
 # SCP settings
 problem.settings.prp.dt = 0.01
-problem.settings.scp.w_tr = 5e0
+problem.settings.scp.lam_prox = 5e0
 problem.settings.scp.lam_cost = 1e0
 problem.settings.scp.lam_vc = 1e2
 problem.settings.scp.ep_tr = 1e-3
@@ -202,7 +202,7 @@ problem.settings.scp.ep_vb = 1e-4
 problem.settings.scp.ep_vc = 1e-8
 problem.settings.scp.cost_drop = 5
 problem.settings.scp.cost_relax = 0.7
-problem.settings.scp.w_tr_adapt = 1.5
+problem.settings.scp.lam_prox_adapt = 1.5
 
 # =============================================================================
 # Solve and Visualize

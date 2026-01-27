@@ -287,7 +287,7 @@ class PTRSolver(ConvexSolver):
         ocp_vars = self._ocp_vars
         jax_constraints = lowered.jax_constraints
 
-        w_tr = ocp_vars.w_tr
+        lam_prox = ocp_vars.lam_prox
         lam_cost = ocp_vars.lam_cost
         lam_vc = ocp_vars.lam_vc
         lam_vb = ocp_vars.lam_vb
@@ -314,7 +314,7 @@ class PTRSolver(ConvexSolver):
                 cost -= lam_cost * x[-1][i]
 
         # Trust Region Cost
-        cost += sum(w_tr * cp.sum_squares(cp.hstack((dx[i], du[i]))) for i in range(settings.scp.n))
+        cost += sum(lam_prox * cp.sum_squares(cp.hstack((dx[i], du[i]))) for i in range(settings.scp.n))
 
         # Virtual Control Slack
         cost += sum(cp.sum(lam_vc[i - 1] * cp.abs(nu[i - 1])) for i in range(1, settings.scp.n))
@@ -600,7 +600,7 @@ class PTRSolver(ConvexSolver):
 
     def update_penalties(
         self,
-        w_tr: float,
+        lam_prox: float,
         lam_cost: float,
         lam_vc: np.ndarray,
         lam_vb: float,
@@ -611,12 +611,12 @@ class PTRSolver(ConvexSolver):
         PTR convex subproblem.
 
         Args:
-            w_tr: Trust region weight (penalizes deviation from linearization point)
+            lam_prox: Trust region weight (penalizes deviation from linearization point)
             lam_cost: Cost function weight
             lam_vc: Virtual control penalty weights, shape (N-1, n_states)
             lam_vb: Virtual buffer penalty weight (for constraint violations)
         """
-        self._set_param("w_tr", w_tr)
+        self._set_param("lam_prox", lam_prox)
         self._set_param("lam_cost", lam_cost)
         self._set_param("lam_vc", lam_vc)
         self._set_param("lam_vb", lam_vb)

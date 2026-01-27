@@ -114,8 +114,8 @@ problem = Problem(
 )
 # Set solver parameters
 problem.settings.prp.dt = 0.01
-problem.settings.scp.w_tr_adapt = 1.1
-problem.settings.scp.w_tr = 1e0
+problem.settings.scp.lam_prox_adapt = 1.1
+problem.settings.scp.lam_prox = 1e0
 problem.settings.scp.lam_cost = 1e-1
 problem.settings.scp.lam_vc = 6e2
 problem.settings.scp.uniform_time_grid = True
