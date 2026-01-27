@@ -312,8 +312,8 @@ class AugmentedLagrangian(AutotuningBase):
         return adaptive_state
 
 
-class ConstantTrustRegion(AutotuningBase):
-    """Constant Trust Region autotuning method.
+class ConstantProximalWeight(AutotuningBase):
+    """Constant Proximal Weight method.
     
     This method keeps the trust region weight constant throughout the optimization,
     while still updating virtual control weights and handling cost relaxation.
@@ -338,94 +338,62 @@ class ConstantTrustRegion(AutotuningBase):
         Returns:
             str: Adaptive state string (e.g., "Accept", "Reject")
         """
-        # Calculate nonlinear penalty for current candidate
-        nonlinear_cost, nonlinear_penalty, nodal_penalty = (
-            self.calculate_nonlinear_penalty(
-                state.candidate.x_prop,
-                state.candidate.x,
-                state.candidate.u,
-                state.lam_vc,
-                state.lam_vb,
-                state.lam_cost,
-                nodal_constraints,
-                params,
-                settings,
-            )
-        )
-        
-        state.candidate.J_nonlin = nonlinear_cost + nonlinear_penalty + nodal_penalty
-        
         # Update cost relaxation parameter after cost_drop iterations
         if state.k > settings.scp.cost_drop:
             state.candidate.lam_cost = state.lam_cost * settings.scp.cost_relax
         else:
             state.candidate.lam_cost = settings.scp.lam_cost
         
-        # Keep trust region weight constant
-        lam_prox_k = deepcopy(state.lam_prox)
-        
-        if state.k > 1:
-            # Calculate nonlinear penalty for previous iteration
-            prev_nonlinear_cost, prev_nonlinear_penalty, prev_nodal_penalty = (
-                self.calculate_nonlinear_penalty(
-                    state.x_prop(),
-                    state.x,
-                    state.u,
-                    state.lam_vc,
-                    state.lam_vb,
-                    state.lam_cost,
-                    nodal_constraints,
-                    params,
-                    settings,
-                )
-            )
-            
-            J_nonlin_prev = prev_nonlinear_cost + prev_nonlinear_penalty + prev_nodal_penalty
-            
-            actual_reduction = J_nonlin_prev - state.candidate.J_nonlin
-            predicted_reduction = J_nonlin_prev - state.candidate.J_lin
-            
-            state.pred_reduction_history.append(predicted_reduction)
-            state.actual_reduction_history.append(actual_reduction)
-            
-            if predicted_reduction > 1e-10:
-                rho = actual_reduction / predicted_reduction
-                state.acceptance_ratio_history.append(rho)
-            else:
-                state.acceptance_ratio_history.append(0.0)
-            
-            # Keep trust region weight constant
-            state.lam_prox_history.append(lam_prox_k)
-            
-            # Update virtual control weight matrix
-            ep = 0.5
-            nu = (settings.sim.inv_S_x @ abs(state.candidate.x[1:] - state.candidate.x_prop).T).T
-            vc_max = 1e5
-            eta_lambda = 1e0
-            
-            # Vectorized update: use mask to select between two update rules
-            mask = nu > ep
-            case1 = state.lam_vc + nu * eta_lambda * (1 / (2 * state.lam_prox))  # when abs(nu) > ep
-            # when abs(nu) <= ep
-            case2 = state.lam_vc + (nu**2) / ep * eta_lambda * (1 / (2 * state.lam_prox))
-            vc_new = np.where(mask, case1, case2)
-            vc_new = np.minimum(vc_max, vc_new)
-            state.candidate.lam_vc = vc_new
-            state.candidate.lam_vb = settings.scp.lam_vb
-            
-            # Always accept solution (trust region doesn't change, so no rejection needed)
-            state.accept_solution()
-            adaptive_state = "Accept"
-            
-        else:
-            state.lam_prox_history.append(lam_prox_k)
-            state.candidate.lam_vc = settings.scp.lam_vc
-            state.candidate.lam_vb = settings.scp.lam_vb
-            state.accept_solution()
-            adaptive_state = "Initial"
-        
-        return adaptive_state
+        state.lam_prox_history.append(state.lam_prox)
+        state.accept_solution()
+        return "Accept Constant"
+    
+class RampProximalWeight(AutotuningBase):
+    """Ramp Proximal Weight method.
 
+    This method ramps the proximal weight up linearly over the first few iterations,
+    then keeps it constant.
+    """
+
+    def __init__(
+        self,
+        ramp_factor: float = 1.0,
+        lam_prox_max: float = 1e3,
+    ):
+        self.ramp_factor = ramp_factor
+        self.lam_prox_max = lam_prox_max
+
+    def update_weights(
+        self,
+        state: "AlgorithmState",
+        nodal_constraints: "LoweredJaxConstraints",
+        settings: Config,
+        params: dict,
+    ) -> str:
+        """Update SCP weights keeping trust region constant.
+        
+        Args:
+            state: Solver state containing current weight values (mutated in place)
+            nodal_constraints: Lowered JAX constraints
+            settings: Configuration object containing adaptation parameters
+            params: Dictionary of problem parameters
+            
+        Returns:
+            str: Adaptive state string (e.g., "Accept", "Reject")
+        """
+        # Update cost relaxation parameter after cost_drop iterations
+        if state.k > settings.scp.cost_drop:
+            state.candidate.lam_cost = state.lam_cost * settings.scp.cost_relax
+        else:
+            state.candidate.lam_cost = settings.scp.lam_cost
+        
+        state.lam_prox_history.append(min(state.lam_prox * self.ramp_factor, self.lam_prox_max))
+        if state.lam_prox == self.lam_prox_max:
+            state.accept_solution()
+            return "Accept Constant"
+        else:
+            state.accept_solution()
+            return "Accept Higher"
 
 def get_autotuner(settings: Config) -> AutotuningBase:
     """Factory function to get the appropriate autotuning instance.

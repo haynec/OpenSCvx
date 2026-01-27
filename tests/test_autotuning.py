@@ -9,7 +9,8 @@ from unittest.mock import Mock
 from openscvx.algorithms.autotuning import (
     AutotuningBase,
     AugmentedLagrangian,
-    ConstantTrustRegion,
+    ConstantProximalWeight,
+    RampProximalWeight,
 )
 from openscvx.algorithms.base import AlgorithmState
 from openscvx.config import Config, SimConfig, ScpConfig, ConvexSolverConfig, DiscretizationConfig, PropagationConfig, DevConfig
@@ -949,147 +950,96 @@ def test_augmented_lagrangian_exported():
     assert auto_tuner.rho_max == 1e7
 
 
-# --- Tests for ConstantTrustRegion ---------------------------------------------
+# --- Tests for ConstantProximalWeight ---------------------------------------------
 
 
-def test_constant_trust_region_initial_iteration(settings, algorithm_state, empty_nodal_constraints):
-    """Test ConstantTrustRegion on first iteration (k=1)."""
-    autotuner = ConstantTrustRegion()
+def test_constant_proximal_weight_appends_history_and_accepts(
+    settings, algorithm_state, empty_nodal_constraints
+):
+    """ConstantProximalWeight should append the current lam_prox and accept."""
+    autotuner = ConstantProximalWeight()
+    # Use first iteration (before cost_drop)
     algorithm_state.k = 1
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
-    
-    params = {}
+    algorithm_state.candidate.x = algorithm_state.x
+    algorithm_state.candidate.u = algorithm_state.u
+
     initial_x_len = len(algorithm_state.X)
+    initial_lam_prox_history_len = len(algorithm_state.lam_prox_history)
     initial_lam_prox = algorithm_state.lam_prox
-    
+    initial_lam_cost_history_len = len(algorithm_state.lam_cost_history)
+
     adaptive_state = autotuner.update_weights(
-        algorithm_state, empty_nodal_constraints, settings, params
+        algorithm_state, empty_nodal_constraints, settings, {}
     )
-    
-    assert adaptive_state == "Initial"
-    # Should accept solution
+
+    # Always accepts and reports constant behaviour
+    assert adaptive_state == "Accept Constant"
+    # Candidate should have been accepted into history
     assert len(algorithm_state.X) == initial_x_len + 1
-    # Trust region weight should remain constant
-    assert len(algorithm_state.lam_prox_history) == 2  # Initial + appended
-    assert algorithm_state.lam_prox_history[-1] == initial_lam_prox
+    # Proximal weight history should append the current value, but not change it
+    assert len(algorithm_state.lam_prox_history) == initial_lam_prox_history_len + 1
+    assert algorithm_state.lam_prox_history[-1] == pytest.approx(initial_lam_prox)
+    # Before cost_drop we use the configured lam_cost
+    assert len(algorithm_state.lam_cost_history) == initial_lam_cost_history_len + 1
+    assert algorithm_state.lam_cost_history[-1] == pytest.approx(settings.scp.lam_cost)
 
 
-def test_constant_trust_region_weight_constant(settings, algorithm_state, empty_nodal_constraints):
-    """Test that trust region weight stays constant across iterations."""
-    autotuner = ConstantTrustRegion()
-    algorithm_state.k = 2
-    algorithm_state.lam_prox_history = [1.0]
-    algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
-    
-    # Set up previous iteration
-    algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
-    algorithm_state.U.append(np.array([[0.0], [0.5], [1.0]]))
-    
-    # Create V_history entry
-    i4 = 2 + 4 + 4
-    flattened_size = (3 - 1) * i4
-    V_dummy = np.zeros((flattened_size, 5))
-    V_final = V_dummy[:, -1].reshape(-1, i4)
-    V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
-    V_dummy[:, -1] = V_final.flatten()
-    algorithm_state.V_history.append(V_dummy)
-    
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
-    
-    params = {}
-    initial_lam_prox = algorithm_state.lam_prox
-    
+def test_constant_proximal_weight_uses_relaxed_cost_after_cost_drop(
+    settings, algorithm_state, empty_nodal_constraints
+):
+    """After cost_drop, ConstantProximalWeight should use relaxed lam_cost."""
+    autotuner = ConstantProximalWeight()
+    algorithm_state.k = settings.scp.cost_drop + 1
+    algorithm_state.candidate.x = algorithm_state.x
+    algorithm_state.candidate.u = algorithm_state.u
+
+    initial_lam_cost = algorithm_state.lam_cost
+    initial_lam_cost_history_len = len(algorithm_state.lam_cost_history)
+
     adaptive_state = autotuner.update_weights(
-        algorithm_state, empty_nodal_constraints, settings, params
+        algorithm_state, empty_nodal_constraints, settings, {}
     )
-    
-    # Trust region weight should remain constant
-    assert adaptive_state == "Accept"
-    assert len(algorithm_state.lam_prox_history) == 2
-    assert algorithm_state.lam_prox_history[-1] == initial_lam_prox
-    # Should still track history
-    assert len(algorithm_state.pred_reduction_history) == 1
-    assert len(algorithm_state.actual_reduction_history) == 1
-    assert len(algorithm_state.acceptance_ratio_history) == 1
+
+    assert adaptive_state == "Accept Constant"
+    assert len(algorithm_state.lam_cost_history) == initial_lam_cost_history_len + 1
+    expected_relaxed = initial_lam_cost * settings.scp.cost_relax
+    assert algorithm_state.lam_cost_history[-1] == pytest.approx(expected_relaxed)
 
 
-def test_constant_trust_region_virtual_control_update(settings, algorithm_state, empty_nodal_constraints):
-    """Test that virtual control weights are still updated."""
-    autotuner = ConstantTrustRegion()
-    algorithm_state.k = 2
-    algorithm_state.lam_prox_history = [1.0]
-    algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
-    
-    # Set up previous iteration
-    algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
-    algorithm_state.U.append(np.array([[0.0], [0.5], [1.0]]))
-    
-    # Create V_history entry
-    i4 = 2 + 4 + 4
-    flattened_size = (3 - 1) * i4
-    V_dummy = np.zeros((flattened_size, 5))
-    V_final = V_dummy[:, -1].reshape(-1, i4)
-    V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
-    V_dummy[:, -1] = V_final.flatten()
-    algorithm_state.V_history.append(V_dummy)
-    
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
-    
-    params = {}
-    
-    adaptive_state = autotuner.update_weights(
-        algorithm_state, empty_nodal_constraints, settings, params
+# --- Tests for RampProximalWeight ---------------------------------------------
+
+
+def test_ramp_proximal_weight_increases_until_max(settings, algorithm_state, empty_nodal_constraints):
+    """RampProximalWeight should ramp lam_prox up to a maximum, then stay constant."""
+    autotuner = RampProximalWeight(ramp_factor=2.0, lam_prox_max=4.0)
+
+    # Helper to set a simple candidate each call
+    def set_candidate():
+        algorithm_state.candidate.x = algorithm_state.x
+        algorithm_state.candidate.u = algorithm_state.u
+
+    # Start from initial lam_prox = 1.0
+    set_candidate()
+    state_str = autotuner.update_weights(
+        algorithm_state, empty_nodal_constraints, settings, {}
     )
-    
-    # Virtual control should still be updated
-    assert algorithm_state.candidate.lam_vc is not None
-    assert isinstance(algorithm_state.candidate.lam_vc, np.ndarray)
-    assert algorithm_state.candidate.lam_vc.shape == (2, 2)
+    # 1.0 -> 2.0, still below max
+    assert state_str == "Accept Higher"
+    assert algorithm_state.lam_prox_history[-1] == pytest.approx(2.0)
 
-
-def test_constant_trust_region_always_accepts(settings, algorithm_state, empty_nodal_constraints):
-    """Test that ConstantTrustRegion always accepts solutions (no rejection)."""
-    autotuner = ConstantTrustRegion()
-    algorithm_state.k = 2
-    algorithm_state.lam_prox_history = [1.0]
-    algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
-    
-    # Set up previous iteration
-    algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
-    algorithm_state.U.append(np.array([[0.0], [0.5], [1.0]]))
-    
-    # Create V_history entry
-    i4 = 2 + 4 + 4
-    flattened_size = (3 - 1) * i4
-    V_dummy = np.zeros((flattened_size, 5))
-    V_final = V_dummy[:, -1].reshape(-1, i4)
-    V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
-    V_dummy[:, -1] = V_final.flatten()
-    algorithm_state.V_history.append(V_dummy)
-    
-    # Set up candidate with poor performance (would be rejected in PTR)
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 1.0  # Low predicted cost
-    # High actual cost (poor performance)
-    
-    params = {}
-    initial_x_len = len(algorithm_state.X)
-    
-    adaptive_state = autotuner.update_weights(
-        algorithm_state, empty_nodal_constraints, settings, params
+    # Next iteration: 2.0 -> 4.0 == max, still reported as higher
+    set_candidate()
+    state_str = autotuner.update_weights(
+        algorithm_state, empty_nodal_constraints, settings, {}
     )
-    
-    # Should always accept (no rejection)
-    assert adaptive_state == "Accept"
-    assert len(algorithm_state.X) == initial_x_len + 1
+    assert state_str == "Accept Higher"
+    assert algorithm_state.lam_prox_history[-1] == pytest.approx(4.0)
+
+    # Once lam_prox == lam_prox_max, it should stop increasing and report constant
+    set_candidate()
+    state_str = autotuner.update_weights(
+        algorithm_state, empty_nodal_constraints, settings, {}
+    )
+    assert state_str == "Accept Constant"
+    # Still at the maximum and not exceeded
+    assert algorithm_state.lam_prox_history[-1] == pytest.approx(4.0)
