@@ -143,10 +143,12 @@ def _visit_cond(lowerer, node: Cond):
 
         # If node_ranges is specified, check if current node is in range
         if node_ranges is not None:
-            # Check if node_arg is within any of the specified ranges [start, end)
+            # Extract scalar from node_arg (which may be array or scalar from vmap)
+            node_scalar = jnp.atleast_1d(node_arg)[0]
+            # Check if node_scalar is within any of the specified ranges [start, end)
             in_range = jnp.array(False)
             for start, end in node_ranges:
-                in_range = in_range | ((node_arg >= start) & (node_arg < end))
+                in_range = in_range | ((node_scalar >= start) & (node_scalar < end))
             # Combined predicate: must be in range AND predicate satisfied
             pred_bool = in_range & pred_bool
 
