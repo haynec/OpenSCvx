@@ -801,7 +801,13 @@ def test_augmented_lagrangian_penalty_increase(
 
     params = {}
 
-    autotuner.update_weights(algorithm_state, candidate, nodal_constraints_with_violations, settings, params)
+    autotuner.update_weights(
+        algorithm_state,
+        candidate,
+        nodal_constraints_with_violations,
+        settings,
+        params,
+    )
 
     # Should use PTR method (no penalty parameters)
     assert not hasattr(algorithm_state, "rho")
@@ -1037,20 +1043,38 @@ def test_ramp_proximal_weight_increases_until_max(
 
     # Start from initial lam_prox = 1.0
     candidate = set_candidate()
-    state_str = autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, {})
+    state_str = autotuner.update_weights(
+        algorithm_state,
+        candidate,
+        empty_nodal_constraints,
+        settings,
+        {},
+    )
     # 1.0 -> 2.0, still below max
     assert state_str == "Accept Higher"
     assert algorithm_state.lam_prox_history[-1] == pytest.approx(2.0)
 
     # Next iteration: 2.0 -> 4.0 == max, still reported as higher
     candidate = set_candidate()
-    state_str = autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, {})
+    state_str = autotuner.update_weights(
+        algorithm_state,
+        candidate,
+        empty_nodal_constraints,
+        settings,
+        {},
+    )
     assert state_str == "Accept Higher"
     assert algorithm_state.lam_prox_history[-1] == pytest.approx(4.0)
 
     # Once lam_prox == lam_prox_max, it should stop increasing and report constant
     candidate = set_candidate()
-    state_str = autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, {})
+    state_str = autotuner.update_weights(
+        algorithm_state,
+        candidate,
+        empty_nodal_constraints,
+        settings,
+        {},
+    )
     assert state_str == "Accept Constant"
     # Still at the maximum and not exceeded
     assert algorithm_state.lam_prox_history[-1] == pytest.approx(4.0)
