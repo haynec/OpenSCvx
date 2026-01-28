@@ -8,7 +8,6 @@ from openscvx.algorithms.autotuning import (
     AutotuningBase,
     ConstantProximalWeight,
     RampProximalWeight,
-    get_autotuner,
 )
 from openscvx.algorithms.base import AlgorithmState, CandidateIterate
 from openscvx.config import (
@@ -908,19 +907,19 @@ def test_augmented_lagrangian_base_class_methods(settings):
     assert hasattr(auglag_autotuner, "calculate_nonlinear_penalty")
 
 
-def test_get_autotuner_default(settings):
-    """Test that get_autotuner returns AugmentedLagrangian by default."""
+def test_scpconfig_autotuner_default(settings):
+    """ScpConfig.autotuner should default to AugmentedLagrangian."""
     # Default should be AugmentedLagrangian when no autotuner provided
     settings.scp.autotuner = None
-    autotuner = get_autotuner(settings)
+    autotuner = settings.scp.autotuner
     assert isinstance(autotuner, AugmentedLagrangian)
 
 
-def test_get_autotuner_augmented_lagrangian(settings):
-    """Test that get_autotuner returns AugmentedLagrangian by default."""
+def test_scpconfig_autotuner_augmented_lagrangian(settings):
+    """ScpConfig.autotuner default should be a configurable AugmentedLagrangian."""
     # When no autotuner provided, should default to AugmentedLagrangian
     settings.scp.autotuner = None
-    autotuner = get_autotuner(settings)
+    autotuner = settings.scp.autotuner
     assert isinstance(autotuner, AugmentedLagrangian)
 
     # Check that default parameters are set
@@ -935,7 +934,7 @@ def test_get_autotuner_augmented_lagrangian(settings):
 
 
 def test_custom_autotuner_instance(settings):
-    """Test that custom autotuner instance can be passed via ScpConfig."""
+    """Custom autotuner instance can be passed via ScpConfig."""
 
     # Create custom autotuner with modified parameters
     custom_autotuner = AugmentedLagrangian()
@@ -945,8 +944,8 @@ def test_custom_autotuner_instance(settings):
     # Pass it to ScpConfig
     settings.scp.autotuner = custom_autotuner
 
-    # get_autotuner should return the custom instance
-    autotuner = get_autotuner(settings)
+    # ScpConfig.autotuner should return the custom instance
+    autotuner = settings.scp.autotuner
     assert autotuner is custom_autotuner
     assert autotuner.rho_max == 1e7
     assert autotuner.mu_max == 1e7

@@ -395,7 +395,41 @@ class ScpConfig:
         self.lam_cost = lam_cost
         self.lam_vb = lam_vb
         self.uniform_time_grid = uniform_time_grid
+        # Store autotuner via property to support lazy default construction
         self.autotuner = autotuner
+
+        # Internal storage for autotuner instance (may be lazily created)
+        # Initialized here to ensure attribute exists even if setter logic changes
+        if not hasattr(self, "_autotuner"):
+            self._autotuner = None
+
+    @property
+    def autotuner(self) -> Optional["AutotuningBase"]:
+        """Return the configured autotuner, defaulting to AugmentedLagrangian.
+
+        If no custom autotuner instance has been provided, this property lazily
+        constructs a default :class:`AugmentedLagrangian` instance and caches it
+        on the config object. This keeps the configuration as the single source
+        of truth for the autotuning strategy while avoiding circular imports by
+        importing inside the method body.
+        """
+        if self._autotuner is None:
+            # Local import avoids circular dependency:
+            # - autotuning imports Config
+            # - Config should not eagerly import autotuning at module import time
+            from openscvx.algorithms.autotuning import AugmentedLagrangian
+
+            self._autotuner = AugmentedLagrangian()
+        return self._autotuner
+
+    @autotuner.setter
+    def autotuner(self, value: Optional["AutotuningBase"]) -> None:
+        """Set a custom autotuner instance or reset to default when None.
+
+        Passing ``None`` clears the cached autotuner so that the next access
+        will recreate the default :class:`AugmentedLagrangian` instance.
+        """
+        self._autotuner = value
 
     @property
     def lam_vc(self):

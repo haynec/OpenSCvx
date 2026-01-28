@@ -422,24 +422,3 @@ class RampProximalWeight(AutotuningBase):
         else:
             state.accept_solution(candidate)
             return "Accept Higher"
-
-
-def get_autotuner(settings: Config) -> AutotuningBase:
-    """Factory function to get the appropriate autotuning instance.
-
-    If a custom autotuner instance is provided in settings.scp.autotuner,
-    it will be used directly. Otherwise, defaults to AugmentedLagrangian()
-    with default parameters.
-
-    Args:
-        settings: Configuration object containing autotuner instance
-
-    Returns:
-        AutotuningBase: Instance of the autotuning method
-    """
-    # If custom autotuner provided, use it directly
-    if settings.scp.autotuner is not None:
-        return settings.scp.autotuner
-
-    # Default to AugmentedLagrangian with default parameters
-    return AugmentedLagrangian()

@@ -13,11 +13,7 @@ import numpy.linalg as la
 
 from openscvx.config import Config
 
-from .autotuning import (
-    ConstantProximalWeight,
-    RampProximalWeight,
-    get_autotuner,
-)
+from .autotuning import ConstantProximalWeight, RampProximalWeight
 from .base import Algorithm, AlgorithmState, CandidateIterate
 
 if TYPE_CHECKING:
@@ -117,7 +113,9 @@ class PenalizedTrustRegion(Algorithm):
         self._emitter = emitter
 
         # Initialize autotuner based on settings
-        self._autotuner = get_autotuner(settings)
+        # The autotuner is configured on ``settings.scp.autotuner`` with a default
+        # of :class:`AugmentedLagrangian` when no custom instance is provided.
+        self._autotuner = settings.scp.autotuner
 
         # Set boundary conditions
         self._solver.update_boundary_conditions(
