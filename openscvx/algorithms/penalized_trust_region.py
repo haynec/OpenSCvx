@@ -85,9 +85,7 @@ class PenalizedTrustRegion(Algorithm):
             AttributeError: If algorithm has not been initialized yet
         """
         if self._autotuner is None:
-            raise AttributeError(
-                "Autotuner not yet initialized. Call initialize() first."
-            )
+            raise AttributeError("Autotuner not yet initialized. Call initialize() first.")
         return self._autotuner
 
     def initialize(
@@ -318,12 +316,8 @@ class PenalizedTrustRegion(Algorithm):
             for constraint in self._jax_constraints.nodal:
                 # Evaluate constraint at all nodes (vmapped function returns shape (N,))
                 g_full = np.asarray(constraint.func(state.x, state.u, 0, param_dict))
-                grad_g_x_full = np.asarray(
-                    constraint.grad_g_x(state.x, state.u, 0, param_dict)
-                )
-                grad_g_u_full = np.asarray(
-                    constraint.grad_g_u(state.x, state.u, 0, param_dict)
-                )
+                grad_g_x_full = np.asarray(constraint.grad_g_x(state.x, state.u, 0, param_dict))
+                grad_g_u_full = np.asarray(constraint.grad_g_u(state.x, state.u, 0, param_dict))
 
                 # Ensure g is 1D with shape (N,) - squeeze any extra dimensions
                 # This handles cases where constraint might return shape (N, 1) or similar
@@ -379,12 +373,8 @@ class PenalizedTrustRegion(Algorithm):
                 cross_node_linearizations.append(
                     {
                         "g": np.asarray(constraint.func(state.x, state.u, param_dict)),
-                        "grad_g_X": np.asarray(
-                            constraint.grad_g_X(state.x, state.u, param_dict)
-                        ),
-                        "grad_g_U": np.asarray(
-                            constraint.grad_g_U(state.x, state.u, param_dict)
-                        ),
+                        "grad_g_X": np.asarray(constraint.grad_g_X(state.x, state.u, param_dict)),
+                        "grad_g_U": np.asarray(constraint.grad_g_U(state.x, state.u, param_dict)),
                     }
                 )
 
@@ -426,23 +416,17 @@ class PenalizedTrustRegion(Algorithm):
             [
                 [
                     settings.sim.inv_S_x,
-                    np.zeros(
-                        (settings.sim.inv_S_x.shape[0], settings.sim.inv_S_u.shape[1])
-                    ),
+                    np.zeros((settings.sim.inv_S_x.shape[0], settings.sim.inv_S_u.shape[1])),
                 ],
                 [
-                    np.zeros(
-                        (settings.sim.inv_S_u.shape[0], settings.sim.inv_S_x.shape[1])
-                    ),
+                    np.zeros((settings.sim.inv_S_u.shape[0], settings.sim.inv_S_x.shape[1])),
                     settings.sim.inv_S_u,
                 ],
             ]
         )
 
         # Calculate J_tr_vec using the JAX-compatible block diagonal matrix
-        tr_mat = (
-            inv_block_diag @ np.hstack((x_new_guess - state.x, u_new_guess - state.u)).T
-        )
+        tr_mat = inv_block_diag @ np.hstack((x_new_guess - state.x, u_new_guess - state.u)).T
         J_tr_vec = la.norm(tr_mat, axis=0) ** 2
         vc_mat = np.abs(settings.sim.inv_S_x @ result.nu.T).T
         J_vc_vec = np.sum(vc_mat, axis=1)
