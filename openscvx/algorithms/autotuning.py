@@ -403,8 +403,15 @@ class RampProximalWeight(AutotuningBase):
         else:
             state.candidate.lam_cost = settings.scp.lam_cost
         
-        state.lam_prox_history.append(min(state.lam_prox * self.ramp_factor, self.lam_prox_max))
-        if state.lam_prox == self.lam_prox_max:
+        # Check if we're already at max before updating
+        was_at_max = state.lam_prox >= self.lam_prox_max
+        
+        # Calculate and append new value
+        new_lam_prox = min(state.lam_prox * self.ramp_factor, self.lam_prox_max)
+        state.lam_prox_history.append(new_lam_prox)
+        
+        # If we were already at max, or if we just reached it and it's staying constant
+        if was_at_max:
             state.accept_solution()
             return "Accept Constant"
         else:

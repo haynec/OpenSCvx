@@ -76,8 +76,6 @@ def settings(mock_unified_state, mock_unified_control):
         lam_vc=1.0,
         lam_vb=1.0,
         lam_cost=1.0,
-        cost_drop=5,
-        cost_relax=0.9,
     )
     
     config = Config(
@@ -506,9 +504,10 @@ def test_update_scp_weights_accept_lower(settings, algorithm_state, empty_nodal_
 
 def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_constraints):
     """Test that cost relaxation happens after cost_drop iterations."""
-    settings.scp.cost_drop = 3
-    settings.scp.cost_relax = 0.8
     settings.scp.lam_cost = 2.0
+    
+    # Create autotuner with cost relaxation parameters
+    autotuner = AugmentedLagrangian(lam_cost_drop=3, lam_cost_relax=0.8)
     
     algorithm_state.k = 4  # After cost_drop
     algorithm_state.lam_cost_history = [2.0]  # Current cost weight
@@ -534,7 +533,6 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
     
     params = {}
     
-    autotuner = AugmentedLagrangian()
     autotuner.update_weights(
         algorithm_state, empty_nodal_constraints, settings, params
     )
@@ -546,9 +544,10 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
 
 def test_update_scp_weights_before_cost_drop(settings, algorithm_state, empty_nodal_constraints):
     """Test that cost relaxation does NOT happen before cost_drop iterations."""
-    settings.scp.cost_drop = 5
-    settings.scp.cost_relax = 0.8
     settings.scp.lam_cost = 2.0
+    
+    # Create autotuner with cost relaxation parameters
+    autotuner = AugmentedLagrangian(lam_cost_drop=5, lam_cost_relax=0.8)
     
     algorithm_state.k = 1  # Use k=1 to avoid needing previous iteration data
     algorithm_state.lam_cost_history = [2.0]
@@ -559,7 +558,6 @@ def test_update_scp_weights_before_cost_drop(settings, algorithm_state, empty_no
     
     params = {}
     
-    autotuner = AugmentedLagrangian()
     autotuner.update_weights(
         algorithm_state, empty_nodal_constraints, settings, params
     )
@@ -988,8 +986,9 @@ def test_constant_proximal_weight_uses_relaxed_cost_after_cost_drop(
     settings, algorithm_state, empty_nodal_constraints
 ):
     """After cost_drop, ConstantProximalWeight should use relaxed lam_cost."""
-    autotuner = ConstantProximalWeight()
-    algorithm_state.k = settings.scp.cost_drop + 1
+    # Create autotuner with cost relaxation parameters
+    autotuner = ConstantProximalWeight(lam_cost_drop=5, lam_cost_relax=0.9)
+    algorithm_state.k = autotuner.lam_cost_drop + 1
     algorithm_state.candidate.x = algorithm_state.x
     algorithm_state.candidate.u = algorithm_state.u
 
@@ -1002,7 +1001,7 @@ def test_constant_proximal_weight_uses_relaxed_cost_after_cost_drop(
 
     assert adaptive_state == "Accept Constant"
     assert len(algorithm_state.lam_cost_history) == initial_lam_cost_history_len + 1
-    expected_relaxed = initial_lam_cost * settings.scp.cost_relax
+    expected_relaxed = initial_lam_cost * autotuner.lam_cost_relax
     assert algorithm_state.lam_cost_history[-1] == pytest.approx(expected_relaxed)
 
 
