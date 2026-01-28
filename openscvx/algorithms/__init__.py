@@ -77,8 +77,13 @@ Current Implementations:
 - :class:`PenalizedTrustRegion`: Penalized Trust Region (PTR) algorithm
 """
 
+from .autotuning import (
+    AugmentedLagrangian,
+    AutotuningBase,
+    ConstantProximalWeight,
+    RampProximalWeight,
+)
 from .base import Algorithm, AlgorithmState
-from .autotuning import AutotuningBase, ConstantProximalWeight, RampProximalWeight, AugmentedLagrangian
 from .optimization_results import OptimizationResults
 from .penalized_trust_region import PenalizedTrustRegion
 

@@ -822,7 +822,7 @@ def test_augmented_lagrangian_penalty_decrease(settings, algorithm_state, empty_
     
     params = {}
     
-    adaptive_state = autotuner.update_weights(
+    autotuner.update_weights(
         algorithm_state, empty_nodal_constraints, settings, params
     )
     
@@ -833,7 +833,9 @@ def test_augmented_lagrangian_penalty_decrease(settings, algorithm_state, empty_
     assert len(algorithm_state.lam_prox_history) >= 2
 
 
-def test_augmented_lagrangian_virtual_control_update(settings, algorithm_state, empty_nodal_constraints):
+def test_augmented_lagrangian_virtual_control_update(
+    settings, algorithm_state, empty_nodal_constraints
+):
     """Test that virtual control weights are updated using PTR method."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2

@@ -145,4 +145,6 @@ __all__ = [
     "ByofSpec",
     # Autotuning
     "AugmentedLagrangian",
+    "ConstantProximalWeight",
+    "RampProximalWeight",
 ]
