@@ -262,6 +262,10 @@ class AugmentedLagrangian(AutotuningBase):
 
             actual_reduction = J_nonlin_prev - candidate.J_nonlin
             predicted_reduction = J_nonlin_prev - candidate.J_lin
+
+            if predicted_reduction == 0:
+                raise ValueError("Predicted reduction is 0.")
+                
             rho = actual_reduction / predicted_reduction
 
             state.pred_reduction_history.append(predicted_reduction)

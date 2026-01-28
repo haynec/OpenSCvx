@@ -106,11 +106,11 @@ class AlgorithmState:
     n_x: int
     n_u: int
     N: int
-    J_nonlin_history: float
-    J_lin_history: float
-    pred_reduction_history: float
-    actual_reduction_history: float
-    acceptance_ratio_history: float
+    J_nonlin_history: List[float]
+    J_lin_history: List[float]
+    pred_reduction_history: List[float]
+    actual_reduction_history: List[float]
+    acceptance_ratio_history: List[float]
     X: List[np.ndarray] = field(default_factory=list)
     U: List[np.ndarray] = field(default_factory=list)
     discretizations: List[DiscretizationResult] = field(default_factory=list)
