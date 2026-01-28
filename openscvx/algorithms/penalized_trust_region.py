@@ -13,7 +13,7 @@ import numpy.linalg as la
 
 from openscvx.config import Config
 
-from .autotuning import get_autotuner
+from .autotuning import ConstantProximalWeight, get_autotuner, RampProximalWeight
 from .base import Algorithm, AlgorithmState
 
 if TYPE_CHECKING:
@@ -215,41 +215,52 @@ class PenalizedTrustRegion(Algorithm):
             state, self._jax_constraints, settings, params
         )
 
-        # Check if lists are empty
-        if len(state.pred_reduction_history) == 0:
-            pred_reduction = 0.0
-        else:
-            pred_reduction = state.pred_reduction_history[-1]
-        if len(state.actual_reduction_history) == 0:
-            actual_reduction = 0.0
-        else:
-            actual_reduction = state.actual_reduction_history[-1]
-        if len(state.acceptance_ratio_history) == 0:
-            acceptance_ratio = 0.0
-        else:
-            acceptance_ratio = state.acceptance_ratio_history[-1]
-
-        # Emit data
-        self._emitter(
-            {
-                "iter": state.k,
-                "dis_time": dis_time * 1000.0,
-                "subprop_time": subprop_time * 1000.0,
-                "J_total": J_total,
-                "J_tr": state.J_tr,
-                "J_vb": state.J_vb,
-                "J_vc": state.J_vc,
-                "cost": cost[-1],
+        # Build emission data - only include nonlinear/reduction metrics when
+        # the autotuner actually uses them (constant/ramp methods don't)
+        use_full_metrics = not isinstance(
+            self._autotuner, (ConstantProximalWeight, RampProximalWeight)
+        )
+        
+        emission_data = {
+            "iter": state.k,
+            "dis_time": dis_time * 1000.0,
+            "subprop_time": subprop_time * 1000.0,
+            "J_total": J_total,
+            "J_tr": state.J_tr,
+            "J_vb": state.J_vb,
+            "J_vc": state.J_vc,
+            "cost": cost[-1],
+            "lam_prox": state.lam_prox,
+            "prob_stat": prob_stat,
+            "adaptive_state": adaptive_state,
+        }
+        
+        # Only include nonlinear/reduction metrics when autotuner uses them
+        # (constant/ramp methods don't compute these, so we don't emit them)
+        if use_full_metrics:
+            if len(state.pred_reduction_history) == 0:
+                pred_reduction = 0.0
+            else:
+                pred_reduction = state.pred_reduction_history[-1]
+            if len(state.actual_reduction_history) == 0:
+                actual_reduction = 0.0
+            else:
+                actual_reduction = state.actual_reduction_history[-1]
+            if len(state.acceptance_ratio_history) == 0:
+                acceptance_ratio = 0.0
+            else:
+                acceptance_ratio = state.acceptance_ratio_history[-1]
+            
+            emission_data.update({
                 "J_nonlin": state.candidate.J_nonlin,
                 "J_lin": state.candidate.J_lin,
                 "pred_reduction": pred_reduction,
                 "actual_reduction": actual_reduction,
                 "acceptance_ratio": acceptance_ratio,
-                "lam_prox": state.lam_prox,
-                "prob_stat": prob_stat,
-                "adaptive_state": adaptive_state,
-            }
-        )
+            })
+
+        # Emit data
+        self._emitter(emission_data)
 
         state.clear_candidate()
 

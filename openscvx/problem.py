@@ -28,6 +28,8 @@ from openscvx.algorithms import (
     AlgorithmState,
     OptimizationResults,
     PenalizedTrustRegion,
+    AutotuningBase,
+    AugmentedLagrangian,
 )
 from openscvx.config import (
     Config,
@@ -83,6 +85,7 @@ class Problem:
         licq_max: float = 1e-4,
         time_dilation_factor_min: float = 0.3,
         time_dilation_factor_max: float = 3.0,
+        autotuner: Optional[AutotuningBase] = AugmentedLagrangian(),
         byof: Optional[ByofSpec] = None,
     ):
         """The primary class in charge of compiling and exporting the solvers.
@@ -189,7 +192,7 @@ class Problem:
             ),
             scp=ScpConfig(
                 n=N,
-                lam_prox_max_scaling_factor=1e2,  # Maximum Trust Region Weight
+                autotuner=autotuner,
             ),
             dis=DiscretizationConfig(),
             dev=DevConfig(),
@@ -620,8 +623,8 @@ class Problem:
         pr = profiling.profiling_start(self.settings.dev.profiling)
 
         t_0_while = time.time()
-        # Print top header for solver results
-        printing.header()
+        # Print top header for solver results (adaptive to autotuner)
+        printing.header(self.settings)
 
         k_max = max_iters if max_iters is not None else self.settings.scp.k_max
 

@@ -138,6 +138,7 @@ class AutotuningBase(ABC):
         Returns:
             str: Adaptive state string describing the update action (e.g., "Accept Lower")
         """
+        
         pass
 
 
@@ -161,6 +162,8 @@ class AugmentedLagrangian(AutotuningBase):
         mu_max: float = 1e6,
         mu_increase: float = 2.0,
         mu_decrease: float = 0.5,
+        lam_cost_drop: int = -1,
+        lam_cost_relax: float = 1.0,
     ):
         """Initialize Augmented Lagrangian autotuning parameters.
         
@@ -187,6 +190,8 @@ class AugmentedLagrangian(AutotuningBase):
         self.mu_max = mu_max
         self.mu_increase = mu_increase
         self.mu_decrease = mu_decrease
+        self.lam_cost_drop = lam_cost_drop
+        self.lam_cost_relax = lam_cost_relax
     
     def update_weights(
         self,
@@ -220,8 +225,8 @@ class AugmentedLagrangian(AutotuningBase):
         state.candidate.J_nonlin = nonlinear_cost + nonlinear_penalty + nodal_penalty
         
         # Update cost relaxation parameter after cost_drop iterations
-        if state.k > settings.scp.cost_drop:
-            state.candidate.lam_cost = state.lam_cost * settings.scp.cost_relax
+        if state.k > self.lam_cost_drop:
+            state.candidate.lam_cost = state.lam_cost * self.lam_cost_relax
         else:
             state.candidate.lam_cost = settings.scp.lam_cost
         
@@ -319,6 +324,14 @@ class ConstantProximalWeight(AutotuningBase):
     while still updating virtual control weights and handling cost relaxation.
     Useful when you want a fixed trust region size without adaptation.
     """
+
+    def __init__(
+        self,
+        lam_cost_drop: int = -1,
+        lam_cost_relax: float = 1.0,
+    ):
+        self.lam_cost_drop = lam_cost_drop
+        self.lam_cost_relax = lam_cost_relax
     
     def update_weights(
         self,
@@ -339,8 +352,8 @@ class ConstantProximalWeight(AutotuningBase):
             str: Adaptive state string (e.g., "Accept", "Reject")
         """
         # Update cost relaxation parameter after cost_drop iterations
-        if state.k > settings.scp.cost_drop:
-            state.candidate.lam_cost = state.lam_cost * settings.scp.cost_relax
+        if state.k > self.lam_cost_drop:
+            state.candidate.lam_cost = state.lam_cost * self.lam_cost_relax
         else:
             state.candidate.lam_cost = settings.scp.lam_cost
         
@@ -359,10 +372,13 @@ class RampProximalWeight(AutotuningBase):
         self,
         ramp_factor: float = 1.0,
         lam_prox_max: float = 1e3,
+        lam_cost_drop: int = -1,
+        lam_cost_relax: float = 1.0,
     ):
         self.ramp_factor = ramp_factor
         self.lam_prox_max = lam_prox_max
-
+        self.lam_cost_drop = lam_cost_drop
+        self.lam_cost_relax = lam_cost_relax
     def update_weights(
         self,
         state: "AlgorithmState",
@@ -382,8 +398,8 @@ class RampProximalWeight(AutotuningBase):
             str: Adaptive state string (e.g., "Accept", "Reject")
         """
         # Update cost relaxation parameter after cost_drop iterations
-        if state.k > settings.scp.cost_drop:
-            state.candidate.lam_cost = state.lam_cost * settings.scp.cost_relax
+        if state.k > self.lam_cost_drop:
+            state.candidate.lam_cost = state.lam_cost * self.lam_cost_relax
         else:
             state.candidate.lam_cost = settings.scp.lam_cost
         

@@ -333,19 +333,14 @@ class ScpConfig:
         self,
         n: Optional[int] = None,
         k_max: int = 200,
-        lam_prox: float = 1.0,
+        lam_prox: float = 1e0,
         lam_vc: float = 1e1,
+        lam_cost: float = 1e-1,
+        lam_vb: float = 0.0,
         ep_tr: float = 1e-4,
         ep_vb: float = 1e-4,
         ep_vc: float = 1e-8,
-        lam_cost: float = 0.0,
-        lam_vb: float = 0.0,
         uniform_time_grid: bool = False,
-        cost_drop: int = -1,
-        cost_relax: float = 1.0,
-        lam_prox_adapt: float = 1.0,
-        lam_prox_max: Optional[float] = None,
-        lam_prox_max_scaling_factor: Optional[float] = None,
         autotuner: Optional["AutotuningBase"] = None,
     ):
         """
@@ -371,16 +366,6 @@ class ScpConfig:
                 there are nonconvex nodal constraints present. Defaults to 0.0.
             uniform_time_grid (bool): Whether to use a uniform time grid.
                 Defaults to `False`.
-            cost_drop (int): The number of iterations to allow for cost
-                stagnation before termination. Defaults to -1 (disabled).
-            cost_relax (float): The relaxation factor for cost reduction.
-                Defaults to 1.0.
-            lam_prox_adapt (float): The adaptation factor for the trust region
-                weight. Defaults to 1.0.
-            lam_prox_max (float): The maximum allowable trust region weight.
-                Defaults to `None`.
-            lam_prox_max_scaling_factor (float): The scaling factor for the maximum
-                trust region weight. Defaults to `None`.
             autotuner: Optional custom autotuner instance. If not provided, defaults
                 to ``AugmentedLagrangian()`` with default parameters. Useful for
                 customizing parameters:
@@ -410,11 +395,6 @@ class ScpConfig:
         self.lam_cost = lam_cost
         self.lam_vb = lam_vb
         self.uniform_time_grid = uniform_time_grid
-        self.cost_drop = cost_drop
-        self.cost_relax = cost_relax
-        self.lam_prox_adapt = lam_prox_adapt
-        self.lam_prox_max = lam_prox_max
-        self.lam_prox_max_scaling_factor = lam_prox_max_scaling_factor
         self.autotuner = autotuner
 
     @property
@@ -470,11 +450,7 @@ class ScpConfig:
                 setattr(self, key, val / scale)
             else:
                 setattr(self, key, val / scale)
-
-        if self.lam_prox_max_scaling_factor is not None and self.lam_prox_max is None:
-            self.lam_prox_max = self.lam_prox_max_scaling_factor * self.lam_prox
-
-
+                
 @dataclass
 class Config:
     sim: SimConfig

@@ -10,6 +10,7 @@ import numpy as np
 from termcolor import colored
 
 from openscvx.algorithms import OptimizationResults
+from openscvx.algorithms.autotuning import ConstantProximalWeight, RampProximalWeight
 
 warnings.filterwarnings("ignore")
 
@@ -18,6 +19,30 @@ warnings.filterwarnings("ignore")
 col_main = "blue"
 col_pos = "green"
 col_neg = "red"
+
+
+def _use_full_metrics(params: Any) -> bool:
+    """Return True if we should print full PTR diagnostics.
+
+    For simple proximal-weight strategies (e.g. constant or ramp), many of the
+    augmented Lagrangian diagnostics (J_nonlin, predicted/actual reduction,
+    acceptance ratio) are never populated. In those cases we show a reduced
+    header with only the quantities that are actually meaningful.
+    """
+    if params is None:
+        return True
+
+    scp = getattr(params, "scp", None)
+    autotuner = getattr(scp, "autotuner", None)
+
+    # Constant / ramp proximal weights do not compute nonlinear penalties or
+    # reduction statistics, so hide those columns.
+    if isinstance(autotuner, (ConstantProximalWeight, RampProximalWeight)):
+        return False
+
+    # Default (including AugmentedLagrangian and custom autotuners) keeps
+    # the full diagnostic table.
+    return True
 
 
 def get_version() -> str:
@@ -188,19 +213,28 @@ def intro():
     print(ascii_art)
 
 
-def header():
+def header(params: Any = None):
+    """Print the iteration table header.
+
+    The header adapts to the configured autotuning method:
+    - Augmented Lagrangian (default) uses the full set of diagnostics
+    - Constant / ramp proximal weights hide nonlinear/reduction metrics
+    """
+    use_full = _use_full_metrics(params)
+
     print(
         colored(
             "─────────────────────────────────────────────────────────────────────────────────────────────────────────"
         )
     )
-    header_format = (
-        "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
-        "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
-        "{:^14} │ {:^16}"
-    )
-    print(
-        header_format.format(
+
+    if use_full:
+        header_format = (
+            "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
+            "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
+            "{:^14} │ {:^16}"
+        )
+        header_values = [
             "Iter",
             "Dis Time (ms)",
             "Solve Time (ms)",
@@ -217,8 +251,29 @@ def header():
             "Cost",
             "Solver Status",
             "Adaptive State",
+        ]
+    else:
+        # Reduced header for constant / ramp proximal weight autotuners
+        header_format = (
+            "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
+            "{:^8} │ {:^8} │ {:^14} │ {:^16}"
         )
-    )
+        header_values = [
+            "Iter",
+            "Dis Time (ms)",
+            "Solve Time (ms)",
+            "J_total",
+            "J_tr",
+            "J_vb",
+            "J_vc",
+            "lam_prox",
+            "Cost",
+            "Solver Status",
+            "Adaptive State",
+        ]
+
+    print(header_format.format(*header_values))
+
     print(
         colored(
             "─────────────────────────────────────────────────────────────────────────────────────────────────────────"
@@ -228,6 +283,8 @@ def header():
 
 def intermediate(print_queue, params):
     hz = 30.0
+    use_full = _use_full_metrics(params)
+
     while True:
         t_start = time.time()
         try:
@@ -253,12 +310,23 @@ def intermediate(print_queue, params):
                 "{: .1e}".format(data["J_vc"]),
                 col_pos if data["J_vc"] <= params.scp.ep_vc else col_neg,
             )
-            J_nonlin_colored = colored("{: .1e}".format(data.get("J_nonlin", 0.0)))
-            J_lin_colored = colored("{: .1e}".format(data.get("J_lin", 0.0)))
-            pred_reduction_colored = colored("{: .1e}".format(data.get("pred_reduction", 0.0)))
-            actual_reduction_colored = colored("{: .1e}".format(data.get("actual_reduction", 0.0)))
-            acceptance_ratio_colored = colored("{: .2e}".format(data.get("acceptance_ratio", 0.0)))
-            lam_prox_colored = colored("{: .1e}".format(data.get("lam_prox", 0.0)))
+
+            if use_full:
+                # Nonlinear and model reduction diagnostics are only meaningful
+                # for augmented Lagrangian-style autotuning.
+                J_nonlin_val = data.get("J_nonlin", 0.0) or 0.0
+                J_lin_val = data.get("J_lin", 0.0) or 0.0
+                pred_red_val = data.get("pred_reduction", 0.0) or 0.0
+                act_red_val = data.get("actual_reduction", 0.0) or 0.0
+                acc_ratio_val = data.get("acceptance_ratio", 0.0) or 0.0
+
+                J_nonlin_colored = colored("{: .1e}".format(J_nonlin_val))
+                J_lin_colored = colored("{: .1e}".format(J_lin_val))
+                pred_reduction_colored = colored("{: .1e}".format(pred_red_val))
+                actual_reduction_colored = colored("{: .1e}".format(act_red_val))
+                acceptance_ratio_colored = colored("{: .2e}".format(acc_ratio_val))
+
+            lam_prox_colored = colored("{: .1e}".format(data.get("lam_prox", 0.0) or 0.0))
             cost_colored = colored("{: .1e}".format(data["cost"]))
             prob_stat_colored = colored(
                 data["prob_stat"], col_pos if data["prob_stat"] == "optimal" else col_neg
@@ -275,44 +343,67 @@ def intermediate(print_queue, params):
                 col_pos if is_acceptable else col_neg,
             )
 
-            row_format = (
-                "{:^4} │     {:^6.2f}    │      {:^6.2F}     │ {:^8} │ "
-                "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
-                "{:^8} │ {:^8} │ {:^8} │ {:^14} │ {:^16}"
-            )
-            print(
-                row_format.format(
-                    iter_colored,
-                    data["dis_time"],
-                    data["subprop_time"],
-                    J_tot_colored,
-                    J_tr_colored,
-                    J_vb_colored,
-                    J_vc_colored,
-                    J_nonlin_colored,
-                    J_lin_colored,
-                    pred_reduction_colored,
-                    actual_reduction_colored,
-                    acceptance_ratio_colored,
-                    lam_prox_colored,
-                    cost_colored,
-                    prob_stat_colored,
-                    adaptive_state_colored,
+            if use_full:
+                row_format = (
+                    "{:^4} │     {:^6.2f}    │      {:^6.2F}     │ {:^8} │ "
+                    "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
+                    "{:^8} │ {:^8} │ {:^8} │ {:^14} │ {:^16}"
                 )
-            )
+                print(
+                    row_format.format(
+                        iter_colored,
+                        data["dis_time"],
+                        data["subprop_time"],
+                        J_tot_colored,
+                        J_tr_colored,
+                        J_vb_colored,
+                        J_vc_colored,
+                        J_nonlin_colored,
+                        J_lin_colored,
+                        pred_reduction_colored,
+                        actual_reduction_colored,
+                        acceptance_ratio_colored,
+                        lam_prox_colored,
+                        cost_colored,
+                        prob_stat_colored,
+                        adaptive_state_colored,
+                    )
+                )
+            else:
+                # Reduced row for constant / ramp proximal weight autotuners
+                row_format = (
+                    "{:^4} │     {:^6.2f}    │      {:^6.2F}     │ {:^8} │ "
+                    "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^14} │ {:^16}"
+                )
+                print(
+                    row_format.format(
+                        iter_colored,
+                        data["dis_time"],
+                        data["subprop_time"],
+                        J_tot_colored,
+                        J_tr_colored,
+                        J_vb_colored,
+                        J_vc_colored,
+                        lam_prox_colored,
+                        cost_colored,
+                        prob_stat_colored,
+                        adaptive_state_colored,
+                    )
+                )
 
             print(
                 colored(
                     "─────────────────────────────────────────────────────────────────────────────────────────────────────────"
                 )
             )
-            header_format = (
-                "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
-                "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
-                "{:^14} │ {:^16}"
-            )
-            print(
-                header_format.format(
+
+            if use_full:
+                header_format = (
+                    "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
+                    "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
+                    "{:^14} │ {:^16}"
+                )
+                header_values = [
                     "Iter",
                     "Dis Time (ms)",
                     "Solve Time (ms)",
@@ -329,8 +420,27 @@ def intermediate(print_queue, params):
                     "Cost",
                     "Solver Status",
                     "Adaptive State",
+                ]
+            else:
+                header_format = (
+                    "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
+                    "{:^8} │ {:^8} │ {:^14} │ {:^16}"
                 )
-            )
+                header_values = [
+                    "Iter",
+                    "Dis Time (ms)",
+                    "Solve Time (ms)",
+                    "J_total",
+                    "J_tr",
+                    "J_vb",
+                    "J_vc",
+                    "lam_prox",
+                    "Cost",
+                    "Solver Status",
+                    "Adaptive State",
+                ]
+
+            print(header_format.format(*header_values))
         except queue.Empty:
             pass
         time.sleep(max(0.0, 1.0 / hz - (time.time() - t_start)))
