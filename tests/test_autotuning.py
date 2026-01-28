@@ -453,7 +453,9 @@ def test_update_scp_weights_reject_higher(settings, algorithm_state, empty_nodal
     V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])  # x_prop values
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.discretizations.append(
-        DiscretizationResult.from_V(V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N)
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
     )
 
     # Set up candidate with poor performance (low rho)
@@ -494,7 +496,9 @@ def test_update_scp_weights_accept_lower(settings, algorithm_state, empty_nodal_
     V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.discretizations.append(
-        DiscretizationResult.from_V(V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N)
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
     )
 
     # Set up candidate with excellent performance (high rho)
@@ -543,7 +547,9 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
     V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.discretizations.append(
-        DiscretizationResult.from_V(V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N)
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
     )
 
     candidate = CandidateIterate()
@@ -604,7 +610,9 @@ def test_update_scp_weights_virtual_control_update(
     V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.discretizations.append(
-        DiscretizationResult.from_V(V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N)
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
     )
 
     # Create large difference to trigger virtual control update
@@ -642,7 +650,9 @@ def test_update_scp_weights_history_tracking(settings, algorithm_state, empty_no
     V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.discretizations.append(
-        DiscretizationResult.from_V(V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N)
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
     )
 
     candidate = CandidateIterate()
@@ -688,7 +698,9 @@ def test_update_scp_weights_weight_bounds(settings, algorithm_state, empty_nodal
     V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.discretizations.append(
-        DiscretizationResult.from_V(V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N)
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
     )
 
     candidate = CandidateIterate()
@@ -759,7 +771,9 @@ def test_augmented_lagrangian_multiplier_update(
     V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.discretizations.append(
-        DiscretizationResult.from_V(V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N)
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
     )
 
     # Set up candidate with constraint violations
@@ -805,7 +819,9 @@ def test_augmented_lagrangian_penalty_increase(
     V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.discretizations.append(
-        DiscretizationResult.from_V(V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N)
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
     )
 
     # Set up candidate with violations
@@ -851,7 +867,9 @@ def test_augmented_lagrangian_penalty_decrease(settings, algorithm_state, empty_
     V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.discretizations.append(
-        DiscretizationResult.from_V(V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N)
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
     )
 
     # Set up candidate with no violations (good match)
@@ -893,7 +911,9 @@ def test_augmented_lagrangian_virtual_control_update(
     V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.discretizations.append(
-        DiscretizationResult.from_V(V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N)
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
     )
 
     candidate = CandidateIterate()
