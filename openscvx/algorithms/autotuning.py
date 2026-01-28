@@ -204,8 +204,9 @@ class AugmentedLagrangian(AutotuningBase):
 
         Args:
             state: Solver state containing current weight values (mutated in place)
+            nodal_constraints: Lowered JAX constraints
             settings: Configuration object containing adaptation parameters
-            scp_k: Current SCP iteration number
+            params: Dictionary of problem parameters
         """
         # Calculate nonlinear penalty for current candidate
         nonlinear_cost, nonlinear_penalty, nodal_penalty = self.calculate_nonlinear_penalty(

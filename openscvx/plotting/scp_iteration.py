@@ -299,7 +299,7 @@ def plot_scp_iterations(
     return fig
 
 
-def plot_scp_convergence_histories(result: OptimizationResults):
+def plot_scp_convergence_histories(result: OptimizationResults) -> go.Figure:
     """Plot SCP convergence histories: trust region weight, reduction histories,
     and acceptance ratio.
 
