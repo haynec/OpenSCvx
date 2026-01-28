@@ -671,7 +671,29 @@ class PTRSolver(ConvexSolver):
             ValueError: If the value is not real, with diagnostic information.
         """
         try:
-            self._problem.param_dict[name].value = value
+            param = self._problem.param_dict[name]
+            value_arr = np.asarray(value)
+            
+            # Ensure the value shape matches the parameter shape exactly
+            # This is critical for Python 3.11+ where NumPy/CVXPy are stricter about shapes
+            if hasattr(param, 'shape') and param.shape is not None:
+                expected_shape = param.shape
+                if value_arr.shape != expected_shape:
+                    # Try to reshape if sizes match
+                    if value_arr.size == np.prod(expected_shape):
+                        value_arr = value_arr.reshape(expected_shape)
+                    else:
+                        # If sizes don't match, try squeezing extra dimensions first
+                        value_arr = np.squeeze(value_arr)
+                        if value_arr.shape != expected_shape and value_arr.size == np.prod(expected_shape):
+                            value_arr = value_arr.reshape(expected_shape)
+                        elif value_arr.shape != expected_shape:
+                            raise ValueError(
+                                f"Parameter '{name}' shape mismatch: expected {expected_shape}, "
+                                f"got {value.shape} (after squeezing: {value_arr.shape})"
+                            )
+            
+            param.value = value_arr
         except ValueError as e:
             if "must be real" in str(e):
                 arr = np.asarray(value)

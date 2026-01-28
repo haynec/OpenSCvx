@@ -314,15 +314,55 @@ class PenalizedTrustRegion(Algorithm):
         nodal_linearizations = []
         if self._jax_constraints.nodal:
             for constraint in self._jax_constraints.nodal:
+                # Evaluate constraint at all nodes (vmapped function returns shape (N,))
+                g_full = np.asarray(constraint.func(state.x, state.u, 0, param_dict))
+                grad_g_x_full = np.asarray(
+                    constraint.grad_g_x(state.x, state.u, 0, param_dict)
+                )
+                grad_g_u_full = np.asarray(
+                    constraint.grad_g_u(state.x, state.u, 0, param_dict)
+                )
+                
+                # Ensure g is 1D with shape (N,) - squeeze any extra dimensions
+                # This handles cases where constraint might return shape (N, 1) or similar
+                g_full = np.squeeze(g_full)
+                if g_full.ndim == 0:
+                    # Scalar result - expand to (N,)
+                    g_full = np.broadcast_to(g_full, (state.x.shape[0],))
+                elif g_full.ndim > 1:
+                    # Multi-dimensional result - flatten to (N,)
+                    # This should not happen for properly decomposed constraints, but handle it gracefully
+                    g_full = g_full.reshape(g_full.shape[0], -1).sum(axis=1)
+                
+                # Ensure grad_g_x and grad_g_u have correct shapes
+                # grad_g_x should be (N, n_x), grad_g_u should be (N, n_u)
+                if grad_g_x_full.ndim == 1:
+                    # If 1D, it should be (n_x,) - broadcast to (N, n_x)
+                    grad_g_x_full = np.broadcast_to(grad_g_x_full, (state.x.shape[0], grad_g_x_full.shape[0]))
+                elif grad_g_x_full.ndim > 2:
+                    # Flatten extra dimensions
+                    grad_g_x_full = grad_g_x_full.reshape(grad_g_x_full.shape[0], -1)
+                    # Take only first n_x columns
+                    n_x = state.x.shape[1]
+                    if grad_g_x_full.shape[1] > n_x:
+                        grad_g_x_full = grad_g_x_full[:, :n_x]
+                
+                if grad_g_u_full.ndim == 1:
+                    # If 1D, it should be (n_u,) - broadcast to (N, n_u)
+                    grad_g_u_full = np.broadcast_to(grad_g_u_full, (state.u.shape[0], grad_g_u_full.shape[0]))
+                elif grad_g_u_full.ndim > 2:
+                    # Flatten extra dimensions
+                    grad_g_u_full = grad_g_u_full.reshape(grad_g_u_full.shape[0], -1)
+                    # Take only first n_u columns
+                    n_u = state.u.shape[1]
+                    if grad_g_u_full.shape[1] > n_u:
+                        grad_g_u_full = grad_g_u_full[:, :n_u]
+                
                 nodal_linearizations.append(
                     {
-                        "g": np.asarray(constraint.func(state.x, state.u, 0, param_dict)),
-                        "grad_g_x": np.asarray(
-                            constraint.grad_g_x(state.x, state.u, 0, param_dict)
-                        ),
-                        "grad_g_u": np.asarray(
-                            constraint.grad_g_u(state.x, state.u, 0, param_dict)
-                        ),
+                        "g": g_full,
+                        "grad_g_x": grad_g_x_full,
+                        "grad_g_u": grad_g_u_full,
                     }
                 )
 
