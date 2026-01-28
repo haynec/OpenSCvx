@@ -131,7 +131,7 @@ class PenalizedTrustRegion(Algorithm):
             init_state.x, init_state.u.astype(float), params
         )
 
-        init_state.V_history.append(V_multi_shoot.__array__())
+        init_state.add_discretization(V_multi_shoot.__array__())
         _ = self._subproblem(params, init_state, settings)
 
     def step(
@@ -171,7 +171,7 @@ class PenalizedTrustRegion(Algorithm):
             )
             dis_time = time.time() - t0
 
-            state.V_history.append(V_multi_shoot.__array__())
+            state.add_discretization(V_multi_shoot.__array__())
 
         # Run the subproblem
         (

@@ -83,7 +83,7 @@ from .autotuning import (
     ConstantProximalWeight,
     RampProximalWeight,
 )
-from .base import Algorithm, AlgorithmState
+from .base import Algorithm, AlgorithmState, DiscretizationResult
 from .optimization_results import OptimizationResults
 from .penalized_trust_region import PenalizedTrustRegion
 
@@ -91,6 +91,7 @@ __all__ = [
     # Base class
     "Algorithm",
     "AlgorithmState",
+    "DiscretizationResult",
     # Core results
     "OptimizationResults",
     # PTR algorithm
