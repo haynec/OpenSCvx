@@ -23,7 +23,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
-from examples.drone.obstacle_avoidance_realtime_base import (
+from examples.realtime.base_problems.obstacle_avoidance_realtime_base import (
     obstacle_centers,
     plotting_dict,
     problem,

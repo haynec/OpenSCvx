@@ -152,13 +152,10 @@ problem = Problem(
     constraints=constraints,
     N=n,
     time_dilation_factor_min=0.2,
+    autotuner=ox.ConstantProximalWeight(),
 )
 
-problem.settings.scp.lam_prox_adapt = 1
-problem.settings.scp.lam_prox = 4e0
-problem.settings.scp.lam_cost = 4e-2  # Weight on the Nonlinear Cost
-problem.settings.scp.lam_vc = 1e2  # Weight on the Virtual Control Objective
-problem.settings.prp.dt = 0.01
+problem.settings.scp.lam_cost = 1e0  # Weight on the Nonlinear Cost
 
 plotting_dict = {
     "obstacles_centers": obstacle_center_positions,

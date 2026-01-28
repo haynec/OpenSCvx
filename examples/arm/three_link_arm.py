@@ -205,9 +205,6 @@ problem = Problem(
 
 # Solver settings
 problem.settings.prp.dt = 0.01
-problem.settings.scp.lam_prox = 1e0
-problem.settings.scp.lam_cost = 1e-1
-problem.settings.scp.lam_vc = 1e1
 problem.settings.scp.lam_vb = 1e1
 
 if __name__ == "__main__":

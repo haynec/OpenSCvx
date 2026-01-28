@@ -136,11 +136,6 @@ constraints.extend(
 # =============================================================================
 # Obstacle Avoidance
 # =============================================================================
-# Two approaches are shown below for benchmarking. Comment/uncomment to toggle.
-
-# --- APPROACH 1: Vmap (single constraint, vectorized) ---
-# - Single CTCS constraint with vectorized evaluation
-# - Vmap computes distance to all obstacles in parallel
 
 obstacle_avoidance = ox.ctcs(
     obstacle_radii
@@ -150,18 +145,6 @@ obstacle_avoidance = ox.ctcs(
     )
 )
 constraints.append(obstacle_avoidance)
-
-# --- APPROACH 2: Individual constraints (loop, no vmap) ---
-# - Creates n_obstacles separate CTCS constraints
-# - Each constraint is lowered and traced independently
-
-# for i in range(n_obstacles):
-#     obs_center = obstacle_centers[i]
-#     radius = obstacle_radii[i]
-#     obstacle_constraint = ox.ctcs(
-#         radius <= ox.linalg.Norm(position - obs_center)
-#     )
-#     constraints.append(obstacle_constraint)
 
 # =============================================================================
 # Initial Guesses
@@ -192,17 +175,7 @@ problem = Problem(
     N=n,
 )
 
-# SCP settings
-problem.settings.prp.dt = 0.01
-problem.settings.scp.lam_prox = 5e0
-problem.settings.scp.lam_cost = 1e0
-problem.settings.scp.lam_vc = 1e2
 problem.settings.scp.ep_tr = 1e-3
-problem.settings.scp.ep_vb = 1e-4
-problem.settings.scp.ep_vc = 1e-8
-problem.settings.scp.cost_drop = 5
-problem.settings.scp.cost_relax = 0.7
-problem.settings.scp.lam_prox_adapt = 1.5
 
 # =============================================================================
 # Solve and Visualize

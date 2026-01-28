@@ -130,11 +130,6 @@ problem = Problem(
 
 # Solver settings (FOH is default, no need to set explicitly)
 problem.settings.dis.dis_type = "ZOH"
-problem.settings.scp.k_max = 100
-problem.settings.scp.lam_prox = 1e0
-problem.settings.scp.lam_prox_adapt = 1.2
-problem.settings.scp.lam_cost = 1e-1
-problem.settings.scp.lam_vc = 1e1
 problem.settings.scp.lam_vb = 1e0
 
 # Plotting metadata

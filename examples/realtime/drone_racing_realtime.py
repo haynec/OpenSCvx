@@ -23,7 +23,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
-from examples.drone.drone_racing import (
+from examples.realtime.base_problems.drone_racing_realtime_base import (
     gate_center_params,
     initial_gate_centers,
     problem,

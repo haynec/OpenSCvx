@@ -1,13 +1,12 @@
-"""Drone racing with continuous viewpoint constraints.
+"""6-DOF quadrotor racing through sequential gates.
 
-This example combines drone racing through gates with camera viewpoint constraints
-to maintain visual contact with reference targets. The problem includes:
+This example demonstrates time-optimal trajectory planning for a quadrotor
+racing through a series of gates in a specified order. The problem includes:
 
 - 6-DOF rigid body dynamics (position, velocity, attitude quaternion, angular velocity)
-- Sequential gate passage constraints
-- Attitude planning for simultaneous gate navigation and visual tracking
-- _Continuous_ sensor visibility constraints to keep targets in FOV
+- Nodal constraints enforcing gate traversal at sequential nodes
 - Minimal time objective
+- Loop closure (start equals end position)
 """
 
 import os
@@ -15,7 +14,6 @@ import sys
 
 import jax.numpy as jnp
 import numpy as np
-import numpy.linalg as la
 
 # Add grandparent directory to path to import examples.plotting
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -30,12 +28,12 @@ from examples.plotting_viser import (
 from openscvx import Problem
 from openscvx.utils import gen_vertices, rot
 
-n = 33  # Number of Nodes
-total_time = 40.0  # Total time for the simulation
+n = 22  # Number of Nodes
+total_time = 24.0  # Total time for the simulation
 
 # Define state components
 position = ox.State("position", shape=(3,))  # 3D position [x, y, z]
-position.max = np.array([200.0, 100, 50])
+position.max = np.array([200.0, 100, 200])
 position.min = np.array([-200.0, -100, 15])
 position.initial = np.array([10.0, 0, 20])
 position.final = [10.0, 0, 20]
@@ -50,7 +48,7 @@ attitude = ox.State("attitude", shape=(4,))  # Quaternion [qw, qx, qy, qz]
 attitude.max = np.array([1, 1, 1, 1])
 attitude.min = np.array([-1, -1, -1, -1])
 attitude.initial = [("free", 1.0), ("free", 0), ("free", 0), ("free", 0)]
-attitude.final = [("free", 1.0), ("free", 0), ("free", 0), ("free", 0)]
+attitude.final = [("free", 1), ("free", 0), ("free", 0), ("free", 0)]
 
 angular_velocity = ox.State("angular_velocity", shape=(3,))  # Angular velocity [wx, wy, wz]
 angular_velocity.max = np.array([10, 10, 10])
@@ -70,26 +68,17 @@ torque.min = np.array([-18.665, -18.665, -0.55562])
 torque.guess = np.zeros((n, 3))
 
 
-### Sensor Params ###
-alpha_x = 6.0  # Angle for the x-axis of Sensor Cone
-alpha_y = 6.0  # Angle for the y-axis of Sensor Cone
-A_cone = np.diag(
-    [
-        1 / np.tan(np.pi / alpha_x),
-        1 / np.tan(np.pi / alpha_y),
-        0,
-    ]
-)  # Conic Matrix in Sensor Frame
-c = jnp.array([0, 0, 1])  # Boresight Vector in Sensor Frame
-norm_type = 2  # Norm Type
-R_sb = jnp.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]])
-### End Sensor Params ###
+m = 1.0  # Mass of the drone
+g_const = -9.18
+J_b = jnp.array([1.0, 1.0, 1.0])  # Moment of Inertia of the drone
 
 
 ### Gate Parameters ###
 n_gates = 10
-gate_centers = [
-    np.array([59.436, 0.0000, 20.0000]),
+
+# Initialize gate centers
+initial_gate_centers = [
+    np.array([59.436, 0.000, 20.0000]),
     np.array([92.964, -23.750, 25.5240]),
     np.array([92.964, -29.274, 20.0000]),
     np.array([92.964, -23.750, 20.0000]),
@@ -101,86 +90,68 @@ gate_centers = [
     np.array([22.250, -42.672, 20.0000]),
 ]
 
+# Set initial values for gate center parameters and A_gate_c_params
 radii = np.array([2.5, 1e-4, 2.5])
 A_gate = rot @ np.diag(1 / radii) @ rot.T
-A_gate_cen = []
-for center in gate_centers:
-    center[0] = center[0] + 2.5
-    center[2] = center[2] + 2.5
-    A_gate_cen.append(A_gate @ center)
-nodes_per_gate = 3
+
+# Create modified centers (matching original behavior exactly)
+modified_centers = []
+for center in initial_gate_centers:
+    modified_center = center.copy()
+    modified_center[0] = modified_center[0] + 2.5
+    modified_center[2] = modified_center[2] + 2.5
+    modified_centers.append(modified_center)
+
+# Create symbolic parameters for each gate center with initial values
+A_gate_const = A_gate
+gate_center_params = []
+for i, modified_center in enumerate(modified_centers):
+    # Create a Parameter with initial value
+    param = ox.Parameter(f"gate_{i}_center", shape=(3,), value=modified_center)
+    gate_center_params.append(param)
+
+nodes_per_gate = 2
 gate_nodes = np.arange(nodes_per_gate, n, nodes_per_gate)
 vertices = []
-for center in gate_centers:
-    vertices.append(gen_vertices(center, radii))
+for modified_center in modified_centers:  # Use modified centers for vertices
+    vertices.append(gen_vertices(modified_center, radii))
 ### End Gate Parameters ###
-
-n_subs = 10
-np.random.seed(0)
-init_poses = np.array(
-    [
-        [100.0 + np.random.random() * 20.0, -60.0 + np.random.random() * 20.0, 20.0]
-        for _ in range(n_subs)
-    ]
-)  # Shape: (n_subs, 3)
 
 
 # Define list of all states (needed for Problem and constraints)
 states = [position, velocity, attitude, angular_velocity]
 controls = [thrust_force, torque]
 
-
-# Symbolic sensor visibility constraint function
-def g_vp(p_s_I, x_pos, x_quat):
-    p_s_s = R_sb @ ox.spatial.QDCM(x_quat).T @ (p_s_I - x_pos)
-    return ox.linalg.Norm(A_cone @ p_s_s, ord=norm_type) - (c.T @ p_s_s)
-
-
 # Generate box constraints for all states
 constraints = []
 for state in states:
     constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
-# Add visibility constraints using Vmap for parallel evaluation
-# Single CTCS constraint with vectorized evaluation over all target poses
-visibility_constraint = ox.ctcs(
-    ox.Vmap(
-        lambda pose: g_vp(pose, position, attitude),
-        batch=init_poses,
-    )
-    <= 0.0
-)
-constraints.append(visibility_constraint)
-
-# Add gate constraints using symbolic expressions
-for node, cen in zip(gate_nodes, A_gate_cen):
-    A_gate_const = A_gate
-    cen_const = cen
-
-    # Gate constraint: ||A @ pos - c||_inf <= 1
+# Add gate constraints
+for node, gate_center_param in zip(gate_nodes, gate_center_params):
+    # Symbolically compute A_gate @ position - A_gate @ gate_center
     gate_constraint = (
-        (ox.linalg.Norm(A_gate_const @ position - cen_const, ord="inf") <= 1.0).convex().at([node])
+        (
+            ox.linalg.Norm(A_gate_const @ position - A_gate_const @ gate_center_param, ord="inf")
+            <= 1.0
+        )
+        .convex()
+        .at([node])
     )
     constraints.append(gate_constraint)
 
-
 # Create symbolic dynamics
-m = 1.0  # Mass of the drone
-g_const = -9.18
-J_b = jnp.array([1.0, 1.0, 1.0])  # Moment of Inertia of the drone
-
 # Normalize quaternion for dynamics
 q_norm = ox.linalg.Norm(attitude)
 attitude_normalized = attitude / q_norm
 
-# Define dynamics as dictionary mapping state names to their derivatives
 J_b_inv = 1.0 / J_b
 J_b_diag = ox.linalg.Diag(J_b)
 
 dynamics = {
     "position": velocity,
     "velocity": (1.0 / m) * ox.spatial.QDCM(attitude_normalized) @ thrust_force
-    + np.array([0, 0, g_const], dtype=np.float64),
+    + ox.Constant(np.array([0, 0, g_const], dtype=np.float64)),
     "attitude": 0.5 * ox.spatial.SSMP(angular_velocity) @ attitude_normalized,
     "angular_velocity": ox.linalg.Diag(J_b_inv)
     @ (torque - ox.spatial.SSM(angular_velocity) @ J_b_diag @ angular_velocity),
@@ -188,27 +159,10 @@ dynamics = {
 
 
 # Generate initial guess for position trajectory through gates
-position_bar = ox.init.linspace(
-    keyframes=[position.initial] + gate_centers + [position.final],
+position.guess = ox.init.linspace(
+    keyframes=[position.initial] + modified_centers + [position.final],
     nodes=[0] + list(gate_nodes) + [n - 1],
 )
-
-# Generate attitude guess to point sensor at mean target position
-b = R_sb @ np.array([0, 1, 0])
-mean_target = np.mean(init_poses, axis=0)
-attitude_bar = np.zeros((n, 4))
-for k in range(n):
-    a = mean_target - position_bar[k]
-    # Determine the direction cosine matrix that aligns the z-axis of the sensor frame with the
-    # relative position vector
-    q_xyz = np.cross(b, a)
-    q_w = np.sqrt(la.norm(a) ** 2 + la.norm(b) ** 2) + np.dot(a, b)
-    q_no_norm = np.hstack((q_w, q_xyz))
-    attitude_bar[k] = q_no_norm / la.norm(q_no_norm)
-
-# Set guesses
-position.guess = position_bar
-attitude.guess = attitude_bar
 
 time = ox.Time(
     initial=0.0,
@@ -224,18 +178,17 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
+    autotuner=ox.ConstantProximalWeight(),
 )
 
 problem.settings.scp.ep_tr = 1e-3  # Trust Region Tolerance
 
+problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
 plotting_dict = {
     "vertices": vertices,
-    "n_subs": n_subs,
-    "alpha_x": alpha_x,
-    "alpha_y": alpha_y,
-    "R_sb": R_sb,
-    "init_poses": init_poses,
-    "norm_type": norm_type,
+    "gate_centers": modified_centers,
+    "A_gate": A_gate_const,
+    "A_gate_c_params": [A_gate @ center for center in modified_centers],
 }
 
 if __name__ == "__main__":
