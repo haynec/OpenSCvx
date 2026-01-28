@@ -331,14 +331,17 @@ class PenalizedTrustRegion(Algorithm):
                     g_full = np.broadcast_to(g_full, (state.x.shape[0],))
                 elif g_full.ndim > 1:
                     # Multi-dimensional result - flatten to (N,)
-                    # This should not happen for properly decomposed constraints, but handle it gracefully
+                    # This should not happen for properly decomposed constraints,
+                    # but handle it gracefully
                     g_full = g_full.reshape(g_full.shape[0], -1).sum(axis=1)
                 
                 # Ensure grad_g_x and grad_g_u have correct shapes
                 # grad_g_x should be (N, n_x), grad_g_u should be (N, n_u)
                 if grad_g_x_full.ndim == 1:
                     # If 1D, it should be (n_x,) - broadcast to (N, n_x)
-                    grad_g_x_full = np.broadcast_to(grad_g_x_full, (state.x.shape[0], grad_g_x_full.shape[0]))
+                    grad_g_x_full = np.broadcast_to(
+                        grad_g_x_full, (state.x.shape[0], grad_g_x_full.shape[0])
+                    )
                 elif grad_g_x_full.ndim > 2:
                     # Flatten extra dimensions
                     grad_g_x_full = grad_g_x_full.reshape(grad_g_x_full.shape[0], -1)
@@ -349,7 +352,9 @@ class PenalizedTrustRegion(Algorithm):
                 
                 if grad_g_u_full.ndim == 1:
                     # If 1D, it should be (n_u,) - broadcast to (N, n_u)
-                    grad_g_u_full = np.broadcast_to(grad_g_u_full, (state.u.shape[0], grad_g_u_full.shape[0]))
+                    grad_g_u_full = np.broadcast_to(
+                        grad_g_u_full, (state.u.shape[0], grad_g_u_full.shape[0])
+                    )
                 elif grad_g_u_full.ndim > 2:
                     # Flatten extra dimensions
                     grad_g_u_full = grad_g_u_full.reshape(grad_g_u_full.shape[0], -1)

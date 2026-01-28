@@ -685,7 +685,10 @@ class PTRSolver(ConvexSolver):
                     else:
                         # If sizes don't match, try squeezing extra dimensions first
                         value_arr = np.squeeze(value_arr)
-                        if value_arr.shape != expected_shape and value_arr.size == np.prod(expected_shape):
+                        if (
+                            value_arr.shape != expected_shape
+                            and value_arr.size == np.prod(expected_shape)
+                        ):
                             value_arr = value_arr.reshape(expected_shape)
                         elif value_arr.shape != expected_shape:
                             raise ValueError(
