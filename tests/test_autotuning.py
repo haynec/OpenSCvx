@@ -11,6 +11,7 @@ from openscvx.algorithms.autotuning import (
     AugmentedLagrangian,
     ConstantProximalWeight,
     RampProximalWeight,
+    get_autotuner,
 )
 from openscvx.algorithms.base import AlgorithmState
 from openscvx.config import Config, SimConfig, ScpConfig, ConvexSolverConfig, DiscretizationConfig, PropagationConfig, DevConfig
@@ -859,7 +860,7 @@ def test_augmented_lagrangian_virtual_control_update(settings, algorithm_state, 
     
     params = {}
     
-    adaptive_state = autotuner.update_weights(
+    autotuner.update_weights(
         algorithm_state, empty_nodal_constraints, settings, params
     )
     
@@ -887,8 +888,6 @@ def test_augmented_lagrangian_base_class_methods(settings):
 
 def test_get_autotuner_default(settings):
     """Test that get_autotuner returns AugmentedLagrangian by default."""
-    from openscvx.algorithms.autotuning import get_autotuner
-    
     # Default should be AugmentedLagrangian when no autotuner provided
     settings.scp.autotuner = None
     autotuner = get_autotuner(settings)
@@ -897,8 +896,6 @@ def test_get_autotuner_default(settings):
 
 def test_get_autotuner_augmented_lagrangian(settings):
     """Test that get_autotuner returns AugmentedLagrangian by default."""
-    from openscvx.algorithms.autotuning import get_autotuner
-    
     # When no autotuner provided, should default to AugmentedLagrangian
     settings.scp.autotuner = None
     autotuner = get_autotuner(settings)
@@ -917,7 +914,6 @@ def test_get_autotuner_augmented_lagrangian(settings):
 
 def test_custom_autotuner_instance(settings):
     """Test that custom autotuner instance can be passed via ScpConfig."""
-    from openscvx.algorithms.autotuning import get_autotuner, AugmentedLagrangian
     
     # Create custom autotuner with modified parameters
     custom_autotuner = AugmentedLagrangian()
@@ -1008,7 +1004,9 @@ def test_constant_proximal_weight_uses_relaxed_cost_after_cost_drop(
 # --- Tests for RampProximalWeight ---------------------------------------------
 
 
-def test_ramp_proximal_weight_increases_until_max(settings, algorithm_state, empty_nodal_constraints):
+def test_ramp_proximal_weight_increases_until_max(
+    settings, algorithm_state, empty_nodal_constraints
+):
     """RampProximalWeight should ramp lam_prox up to a maximum, then stay constant."""
     autotuner = RampProximalWeight(ramp_factor=2.0, lam_prox_max=4.0)
 
