@@ -265,7 +265,7 @@ class AugmentedLagrangian(AutotuningBase):
 
             if predicted_reduction == 0:
                 raise ValueError("Predicted reduction is 0.")
-                
+
             rho = actual_reduction / predicted_reduction
 
             state.pred_reduction_history.append(predicted_reduction)
