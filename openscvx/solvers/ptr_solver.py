@@ -238,16 +238,23 @@ class PTRSolver(ConvexSolver):
                 )
             # Check to see if solver directory exists
             if not os.path.exists("solver"):
-                cpg.generate_code(prob, solver=settings.cvx.solver, code_dir="solver", wrapper=True)
+                cpg.generate_code(
+                    prob, solver=settings.cvx.solver, code_dir="solver", wrapper=True
+                )
             else:
                 # Prompt the use to indicate if they wish to overwrite the solver
                 # directory or use the existing compiled solver
                 if settings.cvx.cvxpygen_override:
                     cpg.generate_code(
-                        prob, solver=settings.cvx.solver, code_dir="solver", wrapper=True
+                        prob,
+                        solver=settings.cvx.solver,
+                        code_dir="solver",
+                        wrapper=True,
                     )
                 else:
-                    overwrite = input("Solver directory already exists. Overwrite? (y/n): ")
+                    overwrite = input(
+                        "Solver directory already exists. Overwrite? (y/n): "
+                    )
                     if overwrite.lower() == "y":
                         cpg.generate_code(
                             prob,
@@ -303,7 +310,9 @@ class PTRSolver(ConvexSolver):
 
         # Boundary condition cost terms (use scaled x for numerical conditioning)
         x = ocp_vars.x
-        for i in range(settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop):
+        for i in range(
+            settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop
+        ):
             if settings.sim.x.initial_type[i] == "Minimize":
                 cost += lam_cost * x[0][i]
             if settings.sim.x.final_type[i] == "Minimize":
@@ -315,11 +324,14 @@ class PTRSolver(ConvexSolver):
 
         # Trust Region Cost
         cost += sum(
-            lam_prox * cp.sum_squares(cp.hstack((dx[i], du[i]))) for i in range(settings.scp.n)
+            lam_prox * cp.sum_squares(cp.hstack((dx[i], du[i])))
+            for i in range(settings.scp.n)
         )
 
         # Virtual Control Slack
-        cost += sum(cp.sum(lam_vc[i - 1] * cp.abs(nu[i - 1])) for i in range(1, settings.scp.n))
+        cost += sum(
+            cp.sum(lam_vc[i - 1] * cp.abs(nu[i - 1])) for i in range(1, settings.scp.n)
+        )
 
         # Virtual buffer penalty for nodal constraints
         idx_ncvx = 0
@@ -441,26 +453,35 @@ class PTRSolver(ConvexSolver):
             constr += cvxpy_constraints.constraints
 
         # Boundary conditions (Fix)
-        for i in range(settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop):
+        for i in range(
+            settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop
+        ):
             if settings.sim.x.initial_type[i] == "Fix":
-                constr += [x_nonscaled[0][i] == x_init[i]]  # Initial Boundary Conditions
+                constr += [
+                    x_nonscaled[0][i] == x_init[i]
+                ]  # Initial Boundary Conditions
             if settings.sim.x.final_type[i] == "Fix":
                 constr += [x_nonscaled[-1][i] == x_term[i]]  # Final Boundary Conditions
 
         if settings.scp.uniform_time_grid:
-            S_u_inv_td = inv_S_u[settings.sim.time_dilation_slice, settings.sim.time_dilation_slice]
+            S_u_inv_td = inv_S_u[
+                settings.sim.time_dilation_slice, settings.sim.time_dilation_slice
+            ]
             c_u_td = c_u[settings.sim.time_dilation_slice]
             constr += [
                 S_u_inv_td @ (u_nonscaled[i][settings.sim.time_dilation_slice] - c_u_td)
-                == S_u_inv_td @ (u_nonscaled[i - 1][settings.sim.time_dilation_slice] - c_u_td)
+                == S_u_inv_td
+                @ (u_nonscaled[i - 1][settings.sim.time_dilation_slice] - c_u_td)
                 for i in range(1, settings.scp.n)
             ]
 
         constr += [
-            (x[i] - inv_S_x @ (x_bar[i] - c_x) - dx[i]) == 0 for i in range(settings.scp.n)
+            (x[i] - inv_S_x @ (x_bar[i] - c_x) - dx[i]) == 0
+            for i in range(settings.scp.n)
         ]  # State Error
         constr += [
-            (u[i] - inv_S_u @ (u_bar[i] - c_u) - du[i]) == 0 for i in range(settings.scp.n)
+            (u[i] - inv_S_u @ (u_bar[i] - c_u) - du[i]) == 0
+            for i in range(settings.scp.n)
         ]  # Control Error
 
         constr += [
@@ -502,7 +523,8 @@ class PTRSolver(ConvexSolver):
         ):
             start_idx = 1 if nodes[0] == 0 else nodes[0]
             constr += [
-                cp.abs(x_nonscaled[i][idx] - x_nonscaled[i - 1][idx]) <= settings.sim.x.max[idx]
+                cp.abs(x_nonscaled[i][idx] - x_nonscaled[i - 1][idx])
+                <= settings.sim.x.max[idx]
                 for i in range(start_idx, nodes[1])
             ]
             constr += [x_nonscaled[0][idx] == 0]
@@ -528,7 +550,9 @@ class PTRSolver(ConvexSolver):
                     pickle.load(f)
                 self._problem.register_solve("CPG", cpg_solve)
                 solver_args = settings.cvx.solver_args
-                self._solve_fn = lambda: self._problem.solve(method="CPG", **solver_args)
+                self._solve_fn = lambda: self._problem.solve(
+                    method="CPG", **solver_args
+                )
             except ImportError:
                 raise ImportError(
                     "cvxpygen solver not found. Make sure cvxpygen is installed and code "
@@ -657,7 +681,9 @@ class PTRSolver(ConvexSolver):
         return {
             "n_variables": sum(var.size for var in self._problem.variables()),
             "n_parameters": sum(param.size for param in self._problem.parameters()),
-            "n_constraints": sum(constraint.size for constraint in self._problem.constraints),
+            "n_constraints": sum(
+                constraint.size for constraint in self._problem.constraints
+            ),
         }
 
     def _set_param(self, name: str, value: np.ndarray) -> None:
@@ -673,10 +699,10 @@ class PTRSolver(ConvexSolver):
         try:
             param = self._problem.param_dict[name]
             value_arr = np.asarray(value)
-            
+
             # Ensure the value shape matches the parameter shape exactly
             # This is critical for Python 3.11+ where NumPy/CVXPy are stricter about shapes
-            if hasattr(param, 'shape') and param.shape is not None:
+            if hasattr(param, "shape") and param.shape is not None:
                 expected_shape = param.shape
                 if value_arr.shape != expected_shape:
                     # Try to reshape if sizes match
@@ -695,7 +721,7 @@ class PTRSolver(ConvexSolver):
                                 f"Parameter '{name}' shape mismatch: expected {expected_shape}, "
                                 f"got {value.shape} (after squeezing: {value_arr.shape})"
                             )
-            
+
             param.value = value_arr
         except ValueError as e:
             if "must be real" in str(e):
@@ -710,7 +736,9 @@ class PTRSolver(ConvexSolver):
                 if len(nan_indices) > 20:
                     index_value_strs.append(f"  ... and {len(nan_indices) - 20} more")
 
-                arr_str = np.array2string(arr, threshold=200, edgeitems=3, max_line_width=120)
+                arr_str = np.array2string(
+                    arr, threshold=200, edgeitems=3, max_line_width=120
+                )
                 msg = (
                     f"Parameter '{name}' with shape {arr.shape} contains "
                     f"{len(nan_indices)} non-real value(s):\n"
