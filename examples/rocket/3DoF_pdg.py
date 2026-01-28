@@ -148,9 +148,9 @@ problem.settings.scp.autotuner.ramp_factor = 1.04
 problem.settings.scp.autotuner.lam_prox_max = 1e2
 
 # Set solver parameters
-problem.settings.scp.lam_cost = 6e-1
+problem.settings.scp.lam_cost = 5e-1
 problem.settings.scp.lam_vc = 1.5e0
-problem.settings.scp.lam_prox = 6e-1
+problem.settings.scp.lam_prox = 2e-1
 
 problem.settings.dis.dis_type = "ZOH"
 
@@ -169,26 +169,26 @@ if __name__ == "__main__":
     results = problem.post_process()
     results.update(plotting_dict)
 
-    # plot_states(results, ["position", "velocity"]).show()
-    # plot_controls(results, ["thrust"]).show()
+    plot_states(results, ["position", "velocity"]).show()
+    plot_controls(results, ["thrust"]).show()
     plot_vector_norm(results, "thrust", bounds=(rho_min, rho_max)).show()
-    # plot_projections_2d(results, velocity_var_name="velocity").show()
+    plot_projections_2d(results, velocity_var_name="velocity").show()
 
     # Create PDG trajectory visualization
-    # scene_scale=100 brings 2km scale down to ~20m for viser
-    # traj_server = create_pdg_animated_plotting_server(
-    #     results,
-    #     thrust_key="thrust",
-    #     glideslope_angle_deg=86.0,
-    #     scene_scale=1.0,
-    # )
+    scene_scale=100
+    traj_server = create_pdg_animated_plotting_server(
+        results,
+        thrust_key="thrust",
+        glideslope_angle_deg=86.0,
+        scene_scale=1.0,
+    )
 
-    # # Create SCP iteration visualization
-    # scp_server = create_scp_animated_plotting_server(
-    #     results,
-    #     frame_duration_ms=200,
-    #     scene_scale=100.0,
-    # )
+    # Create SCP iteration visualization
+    scp_server = create_scp_animated_plotting_server(
+        results,
+        frame_duration_ms=200,
+        scene_scale=100.0,
+    )
 
-    # # Keep servers running
-    # traj_server.sleep_forever()
+    # Keep servers running
+    traj_server.sleep_forever()
