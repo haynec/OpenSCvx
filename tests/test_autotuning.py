@@ -10,7 +10,7 @@ from openscvx.algorithms.autotuning import (
     RampProximalWeight,
     get_autotuner,
 )
-from openscvx.algorithms.base import AlgorithmState
+from openscvx.algorithms.base import AlgorithmState, CandidateIterate
 from openscvx.config import (
     Config,
     ConvexSolverConfig,
@@ -124,10 +124,6 @@ def algorithm_state(settings):
         lam_vb_history=[1.0],
         lam_prox_history=[1.0],
     )
-    # Initialize candidate fields (inter_* attributes)
-    state.inter_x = None
-    state.inter_u = None
-    state.inter_x_prop = None
     return state
 
 
@@ -414,16 +410,17 @@ def test_update_scp_weights_initial_iteration(settings, algorithm_state, empty_n
     """Test weight update on first iteration (k=1)."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 1
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 10.0
 
     params = {}
     initial_x_len = len(algorithm_state.X)
 
     adaptive_state = autotuner.update_weights(
-        algorithm_state, empty_nodal_constraints, settings, params
+        algorithm_state, candidate, empty_nodal_constraints, settings, params
     )
 
     assert adaptive_state == "Initial"
@@ -459,16 +456,17 @@ def test_update_scp_weights_reject_higher(settings, algorithm_state, empty_nodal
 
     # Set up candidate with poor performance (low rho)
     # Make J_lin low (good prediction) but J_nonlin high (bad actual)
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 1.0  # Low predicted cost (good prediction)
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 1.0  # Low predicted cost (good prediction)
 
     params = {}
 
     autotuner = AugmentedLagrangian()
     adaptive_state = autotuner.update_weights(
-        algorithm_state, empty_nodal_constraints, settings, params
+        algorithm_state, candidate, empty_nodal_constraints, settings, params
     )
 
     # Should update weight (may accept or reject depending on rho)
@@ -497,17 +495,18 @@ def test_update_scp_weights_accept_lower(settings, algorithm_state, empty_nodal_
 
     # Set up candidate with excellent performance (high rho)
     # Make x_prop match x closely to reduce virtual control penalty
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.0, 0.0], [1.0, 1.0]])  # Good match
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 1.0  # Low predicted cost
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.0, 0.0], [1.0, 1.0]])  # Good match
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 1.0  # Low predicted cost
 
     params = {}
     initial_x_len = len(algorithm_state.X)
 
     autotuner = AugmentedLagrangian()
     adaptive_state = autotuner.update_weights(
-        algorithm_state, empty_nodal_constraints, settings, params
+        algorithm_state, candidate, empty_nodal_constraints, settings, params
     )
 
     # Should accept and potentially lower weight (depending on rho)
@@ -541,18 +540,19 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.V_history.append(V_dummy)
 
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 10.0
 
     params = {}
 
-    autotuner.update_weights(algorithm_state, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
 
     # Cost should be relaxed when k > cost_drop
     expected_lam_cost = 2.0 * 0.8
-    assert algorithm_state.candidate.lam_cost == pytest.approx(expected_lam_cost, rel=1e-6)
+    assert candidate.lam_cost == pytest.approx(expected_lam_cost, rel=1e-6)
 
 
 def test_update_scp_weights_before_cost_drop(settings, algorithm_state, empty_nodal_constraints):
@@ -564,17 +564,18 @@ def test_update_scp_weights_before_cost_drop(settings, algorithm_state, empty_no
 
     algorithm_state.k = 1  # Use k=1 to avoid needing previous iteration data
     algorithm_state.lam_cost_history = [2.0]
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])  # Must set x_prop
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])  # Must set x_prop
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 10.0
 
     params = {}
 
-    autotuner.update_weights(algorithm_state, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
 
     # Cost should remain at initial value (k=1 uses initial settings, not relaxed)
-    assert algorithm_state.candidate.lam_cost == settings.scp.lam_cost
+    assert candidate.lam_cost == settings.scp.lam_cost
 
 
 def test_update_scp_weights_virtual_control_update(
@@ -599,21 +600,22 @@ def test_update_scp_weights_virtual_control_update(
     algorithm_state.V_history.append(V_dummy)
 
     # Create large difference to trigger virtual control update
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [5.0, 5.0]])  # Large difference
-    algorithm_state.candidate.x_prop = np.array([[0.0, 0.0], [1.0, 1.0]])  # Small propagated
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [5.0, 5.0]])  # Large difference
+    candidate.x_prop = np.array([[0.0, 0.0], [1.0, 1.0]])  # Small propagated
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 10.0
 
     params = {}
 
     autotuner = AugmentedLagrangian()
-    autotuner.update_weights(algorithm_state, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
 
     # Virtual control should be updated (increased due to large nu)
-    assert algorithm_state.candidate.lam_vc is not None
+    assert candidate.lam_vc is not None
     # Should be array with shape (N-1, n_x) = (2, 2) due to broadcasting
-    assert isinstance(algorithm_state.candidate.lam_vc, np.ndarray)
-    assert algorithm_state.candidate.lam_vc.shape == (2, 2)  # (N-1, n_x)
+    assert isinstance(candidate.lam_vc, np.ndarray)
+    assert candidate.lam_vc.shape == (2, 2)  # (N-1, n_x)
 
 
 def test_update_scp_weights_history_tracking(settings, algorithm_state, empty_nodal_constraints):
@@ -633,10 +635,11 @@ def test_update_scp_weights_history_tracking(settings, algorithm_state, empty_no
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.V_history.append(V_dummy)
 
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 10.0
 
     params = {}
 
@@ -645,7 +648,7 @@ def test_update_scp_weights_history_tracking(settings, algorithm_state, empty_no
     initial_rho_len = len(algorithm_state.acceptance_ratio_history)
 
     autotuner = AugmentedLagrangian()
-    autotuner.update_weights(algorithm_state, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
 
     # History should be updated
     assert len(algorithm_state.pred_reduction_history) == initial_pred_len + 1
@@ -676,15 +679,16 @@ def test_update_scp_weights_weight_bounds(settings, algorithm_state, empty_nodal
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.V_history.append(V_dummy)
 
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 10.0
 
     params = {}
 
     autotuner = AugmentedLagrangian()
-    autotuner.update_weights(algorithm_state, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
 
     # Weight should be bounded
     lam_prox_min = 1e-3
@@ -701,24 +705,25 @@ def test_augmented_lagrangian_initial_iteration(settings, algorithm_state, empty
     """Test AugmentedLagrangian (PTR method) on first iteration (k=1)."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 1
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 10.0
 
     params = {}
     initial_x_len = len(algorithm_state.X)
 
     adaptive_state = autotuner.update_weights(
-        algorithm_state, empty_nodal_constraints, settings, params
+        algorithm_state, candidate, empty_nodal_constraints, settings, params
     )
 
     assert adaptive_state == "Initial"
     # Should accept solution
     assert len(algorithm_state.X) == initial_x_len + 1
     # Should set initial weights
-    assert algorithm_state.candidate.lam_vc is not None
-    assert algorithm_state.candidate.lam_vb == settings.scp.lam_vb
+    assert candidate.lam_vc is not None
+    assert candidate.lam_vb == settings.scp.lam_vb
 
 
 def test_augmented_lagrangian_multiplier_update(
@@ -745,15 +750,16 @@ def test_augmented_lagrangian_multiplier_update(
 
     # Set up candidate with constraint violations
     # x[0] = 2.0 > 1.5, violation
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 10.0
 
     params = {}
 
     adaptive_state = autotuner.update_weights(
-        algorithm_state, nodal_constraints_with_violations, settings, params
+        algorithm_state, candidate, nodal_constraints_with_violations, settings, params
     )
 
     # Should use PTR method (no multiplier attributes)
@@ -787,14 +793,15 @@ def test_augmented_lagrangian_penalty_increase(
     algorithm_state.V_history.append(V_dummy)
 
     # Set up candidate with violations
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])  # Violation
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])  # Violation
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 10.0
 
     params = {}
 
-    autotuner.update_weights(algorithm_state, nodal_constraints_with_violations, settings, params)
+    autotuner.update_weights(algorithm_state, candidate, nodal_constraints_with_violations, settings, params)
 
     # Should use PTR method (no penalty parameters)
     assert not hasattr(algorithm_state, "rho")
@@ -824,14 +831,15 @@ def test_augmented_lagrangian_penalty_decrease(settings, algorithm_state, empty_
     algorithm_state.V_history.append(V_dummy)
 
     # Set up candidate with no violations (good match)
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.0, 0.0], [1.0, 1.0]])  # Good match
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.0, 0.0], [1.0, 1.0]])  # Good match
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 10.0
 
     params = {}
 
-    autotuner.update_weights(algorithm_state, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
 
     # Should use PTR method (no penalty parameters)
     assert not hasattr(algorithm_state, "rho")
@@ -862,20 +870,21 @@ def test_augmented_lagrangian_virtual_control_update(
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.V_history.append(V_dummy)
 
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
-    algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
-    algorithm_state.candidate.J_lin = 10.0
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 10.0
 
     params = {}
 
-    autotuner.update_weights(algorithm_state, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
 
     # Virtual control should be updated based on nu (PTR method)
-    assert algorithm_state.candidate.lam_vc is not None
-    assert isinstance(algorithm_state.candidate.lam_vc, np.ndarray)
+    assert candidate.lam_vc is not None
+    assert isinstance(candidate.lam_vc, np.ndarray)
     # Should have shape (N-1, n_x) = (2, 2)
-    assert algorithm_state.candidate.lam_vc.shape == (2, 2)
+    assert candidate.lam_vc.shape == (2, 2)
 
 
 def test_augmented_lagrangian_base_class_methods(settings):
@@ -961,8 +970,9 @@ def test_constant_proximal_weight_appends_history_and_accepts(
     autotuner = ConstantProximalWeight()
     # Use first iteration (before cost_drop)
     algorithm_state.k = 1
-    algorithm_state.candidate.x = algorithm_state.x
-    algorithm_state.candidate.u = algorithm_state.u
+    candidate = CandidateIterate()
+    candidate.x = algorithm_state.x
+    candidate.u = algorithm_state.u
 
     initial_x_len = len(algorithm_state.X)
     initial_lam_prox_history_len = len(algorithm_state.lam_prox_history)
@@ -970,7 +980,7 @@ def test_constant_proximal_weight_appends_history_and_accepts(
     initial_lam_cost_history_len = len(algorithm_state.lam_cost_history)
 
     adaptive_state = autotuner.update_weights(
-        algorithm_state, empty_nodal_constraints, settings, {}
+        algorithm_state, candidate, empty_nodal_constraints, settings, {}
     )
 
     # Always accepts and reports constant behaviour
@@ -992,14 +1002,15 @@ def test_constant_proximal_weight_uses_relaxed_cost_after_cost_drop(
     # Create autotuner with cost relaxation parameters
     autotuner = ConstantProximalWeight(lam_cost_drop=5, lam_cost_relax=0.9)
     algorithm_state.k = autotuner.lam_cost_drop + 1
-    algorithm_state.candidate.x = algorithm_state.x
-    algorithm_state.candidate.u = algorithm_state.u
+    candidate = CandidateIterate()
+    candidate.x = algorithm_state.x
+    candidate.u = algorithm_state.u
 
     initial_lam_cost = algorithm_state.lam_cost
     initial_lam_cost_history_len = len(algorithm_state.lam_cost_history)
 
     adaptive_state = autotuner.update_weights(
-        algorithm_state, empty_nodal_constraints, settings, {}
+        algorithm_state, candidate, empty_nodal_constraints, settings, {}
     )
 
     assert adaptive_state == "Accept Constant"
@@ -1019,25 +1030,27 @@ def test_ramp_proximal_weight_increases_until_max(
 
     # Helper to set a simple candidate each call
     def set_candidate():
-        algorithm_state.candidate.x = algorithm_state.x
-        algorithm_state.candidate.u = algorithm_state.u
+        candidate = CandidateIterate()
+        candidate.x = algorithm_state.x
+        candidate.u = algorithm_state.u
+        return candidate
 
     # Start from initial lam_prox = 1.0
-    set_candidate()
-    state_str = autotuner.update_weights(algorithm_state, empty_nodal_constraints, settings, {})
+    candidate = set_candidate()
+    state_str = autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, {})
     # 1.0 -> 2.0, still below max
     assert state_str == "Accept Higher"
     assert algorithm_state.lam_prox_history[-1] == pytest.approx(2.0)
 
     # Next iteration: 2.0 -> 4.0 == max, still reported as higher
-    set_candidate()
-    state_str = autotuner.update_weights(algorithm_state, empty_nodal_constraints, settings, {})
+    candidate = set_candidate()
+    state_str = autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, {})
     assert state_str == "Accept Higher"
     assert algorithm_state.lam_prox_history[-1] == pytest.approx(4.0)
 
     # Once lam_prox == lam_prox_max, it should stop increasing and report constant
-    set_candidate()
-    state_str = autotuner.update_weights(algorithm_state, empty_nodal_constraints, settings, {})
+    candidate = set_candidate()
+    state_str = autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, {})
     assert state_str == "Accept Constant"
     # Still at the maximum and not exceeded
     assert algorithm_state.lam_prox_history[-1] == pytest.approx(4.0)
