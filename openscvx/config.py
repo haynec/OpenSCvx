@@ -369,13 +369,13 @@ class ScpConfig:
             autotuner: Optional custom autotuner instance. If not provided, defaults
                 to ``AugmentedLagrangian()`` with default parameters. Useful for
                 customizing parameters:
-                
+
                 .. code-block:: python
-                
+
                     auto_tuner = ox.AugmentedLagrangian()
                     auto_tuner.rho_max = 1e7
                     problem.settings.scp.autotuner = auto_tuner
-                
+
         Note:
             Autotuner parameters can be accessed and modified via the autotuner
             instance (e.g., ``problem.algorithm.autotuner.rho_max``) after
@@ -450,7 +450,8 @@ class ScpConfig:
                 setattr(self, key, val / scale)
             else:
                 setattr(self, key, val / scale)
-                
+
+
 @dataclass
 class Config:
     sim: SimConfig

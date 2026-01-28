@@ -315,8 +315,7 @@ class PTRSolver(ConvexSolver):
 
         # Trust Region Cost
         cost += sum(
-            lam_prox * cp.sum_squares(cp.hstack((dx[i], du[i])))
-            for i in range(settings.scp.n)
+            lam_prox * cp.sum_squares(cp.hstack((dx[i], du[i]))) for i in range(settings.scp.n)
         )
 
         # Virtual Control Slack

@@ -23,7 +23,7 @@ from .base import Algorithm, AlgorithmState
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
     from openscvx.solvers import ConvexSolver
-    
+
     from .autotuning import AutotuningBase
 
 warnings.filterwarnings("ignore")
@@ -68,26 +68,24 @@ class PenalizedTrustRegion(Algorithm):
         self._jax_constraints: "LoweredJaxConstraints" = None
         self._emitter: callable = None
         self._autotuner: "AutotuningBase" = None
-    
+
     @property
     def autotuner(self) -> "AutotuningBase":
         """Access the autotuner instance for configuring parameters.
-        
+
         For AugmentedLagrangian method, parameters can be modified via:
             algorithm.autotuner.rho_max = 1e7
             algorithm.autotuner.mu_max = 1e7
             etc.
-        
+
         Returns:
             AutotuningBase: The autotuner instance
-            
+
         Raises:
             AttributeError: If algorithm has not been initialized yet
         """
         if self._autotuner is None:
-            raise AttributeError(
-                "Autotuner not yet initialized. Call initialize() first."
-            )
+            raise AttributeError("Autotuner not yet initialized. Call initialize() first.")
         return self._autotuner
 
     def initialize(
@@ -117,7 +115,7 @@ class PenalizedTrustRegion(Algorithm):
         self._discretization_solver = discretization_solver
         self._jax_constraints = jax_constraints
         self._emitter = emitter
-        
+
         # Initialize autotuner based on settings
         self._autotuner = get_autotuner(settings)
 
@@ -224,7 +222,7 @@ class PenalizedTrustRegion(Algorithm):
         use_full_metrics = not isinstance(
             self._autotuner, (ConstantProximalWeight, RampProximalWeight)
         )
-        
+
         emission_data = {
             "iter": state.k,
             "dis_time": dis_time * 1000.0,
@@ -238,7 +236,7 @@ class PenalizedTrustRegion(Algorithm):
             "prob_stat": prob_stat,
             "adaptive_state": adaptive_state,
         }
-        
+
         # Only include nonlinear/reduction metrics when autotuner uses them
         # (constant/ramp methods don't compute these, so we don't emit them)
         if use_full_metrics:
@@ -254,14 +252,16 @@ class PenalizedTrustRegion(Algorithm):
                 acceptance_ratio = 0.0
             else:
                 acceptance_ratio = state.acceptance_ratio_history[-1]
-            
-            emission_data.update({
-                "J_nonlin": state.candidate.J_nonlin,
-                "J_lin": state.candidate.J_lin,
-                "pred_reduction": pred_reduction,
-                "actual_reduction": actual_reduction,
-                "acceptance_ratio": acceptance_ratio,
-            })
+
+            emission_data.update(
+                {
+                    "J_nonlin": state.candidate.J_nonlin,
+                    "J_lin": state.candidate.J_lin,
+                    "pred_reduction": pred_reduction,
+                    "actual_reduction": actual_reduction,
+                    "acceptance_ratio": acceptance_ratio,
+                }
+            )
 
         # Emit data
         self._emitter(emission_data)
