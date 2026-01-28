@@ -2,21 +2,29 @@
 
 import numpy as np
 import pytest
-from dataclasses import dataclass, field
-from typing import List, Optional, Callable
-from unittest.mock import Mock
 
 from openscvx.algorithms.autotuning import (
-    AutotuningBase,
     AugmentedLagrangian,
+    AutotuningBase,
     ConstantProximalWeight,
     RampProximalWeight,
     get_autotuner,
 )
 from openscvx.algorithms.base import AlgorithmState
-from openscvx.config import Config, SimConfig, ScpConfig, ConvexSolverConfig, DiscretizationConfig, PropagationConfig, DevConfig
-from openscvx.lowered.jax_constraints import LoweredJaxConstraints, LoweredNodalConstraint, LoweredCrossNodeConstraint
-
+from openscvx.config import (
+    Config,
+    ConvexSolverConfig,
+    DevConfig,
+    DiscretizationConfig,
+    PropagationConfig,
+    ScpConfig,
+    SimConfig,
+)
+from openscvx.lowered.jax_constraints import (
+    LoweredCrossNodeConstraint,
+    LoweredJaxConstraints,
+    LoweredNodalConstraint,
+)
 
 # --- Test Fixtures ---------------------------------------------------------
 
@@ -567,7 +575,9 @@ def test_update_scp_weights_before_cost_drop(settings, algorithm_state, empty_no
     assert algorithm_state.candidate.lam_cost == settings.scp.lam_cost
 
 
-def test_update_scp_weights_virtual_control_update(settings, algorithm_state, empty_nodal_constraints):
+def test_update_scp_weights_virtual_control_update(
+    settings, algorithm_state, empty_nodal_constraints
+):
     """Test that virtual control weights are updated based on nu."""
     algorithm_state.k = 2
     algorithm_state.lam_prox_history = [1.0]
@@ -715,7 +725,9 @@ def test_augmented_lagrangian_initial_iteration(settings, algorithm_state, empty
     assert algorithm_state.candidate.lam_vb == settings.scp.lam_vb
 
 
-def test_augmented_lagrangian_multiplier_update(settings, algorithm_state, nodal_constraints_with_violations):
+def test_augmented_lagrangian_multiplier_update(
+    settings, algorithm_state, nodal_constraints_with_violations
+):
     """Test that AugmentedLagrangian uses PTR method (no multiplier updates)."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
@@ -736,7 +748,8 @@ def test_augmented_lagrangian_multiplier_update(settings, algorithm_state, nodal
     algorithm_state.V_history.append(V_dummy)
     
     # Set up candidate with constraint violations
-    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])  # x[0] = 2.0 > 1.5, violation
+    # x[0] = 2.0 > 1.5, violation
+    algorithm_state.candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
     algorithm_state.candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
     algorithm_state.candidate.u = np.array([[0.0], [0.5], [1.0]])
     algorithm_state.candidate.J_lin = 10.0
@@ -755,7 +768,9 @@ def test_augmented_lagrangian_multiplier_update(settings, algorithm_state, nodal
     assert adaptive_state in ["Reject Higher", "Accept Higher", "Accept Constant", "Accept Lower"]
 
 
-def test_augmented_lagrangian_penalty_increase(settings, algorithm_state, nodal_constraints_with_violations):
+def test_augmented_lagrangian_penalty_increase(
+    settings, algorithm_state, nodal_constraints_with_violations
+):
     """Test that AugmentedLagrangian uses PTR method (no penalty parameters)."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
@@ -783,7 +798,7 @@ def test_augmented_lagrangian_penalty_increase(settings, algorithm_state, nodal_
     
     params = {}
     
-    adaptive_state = autotuner.update_weights(
+    autotuner.update_weights(
         algorithm_state, nodal_constraints_with_violations, settings, params
     )
     

@@ -13,7 +13,11 @@ import numpy.linalg as la
 
 from openscvx.config import Config
 
-from .autotuning import ConstantProximalWeight, get_autotuner, RampProximalWeight
+from .autotuning import (
+    ConstantProximalWeight,
+    RampProximalWeight,
+    get_autotuner,
+)
 from .base import Algorithm, AlgorithmState
 
 if TYPE_CHECKING:

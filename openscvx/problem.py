@@ -26,10 +26,10 @@ os.environ["EQX_ON_ERROR"] = "nan"
 
 from openscvx.algorithms import (
     AlgorithmState,
+    AugmentedLagrangian,
+    AutotuningBase,
     OptimizationResults,
     PenalizedTrustRegion,
-    AutotuningBase,
-    AugmentedLagrangian,
 )
 from openscvx.config import (
     Config,
