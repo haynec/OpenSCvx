@@ -18,7 +18,7 @@ from .autotuning import (
     RampProximalWeight,
     get_autotuner,
 )
-from .base import Algorithm, AlgorithmState
+from .base import Algorithm, AlgorithmState, CandidateIterate
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
@@ -190,23 +190,24 @@ class PenalizedTrustRegion(Algorithm):
             tr_mat,
         ) = self._subproblem(params, state, settings)
 
-        state.candidate.x = x_sol
-        state.candidate.u = u_sol
-        state.candidate.J_lin = J_total
+        candidate = CandidateIterate()
+        candidate.x = x_sol
+        candidate.u = u_sol
+        candidate.J_lin = J_total
 
         t0 = time.time()
         _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
-            state.candidate.x, state.candidate.u.astype(float), params
+            candidate.x, candidate.u.astype(float), params
         )
         dis_time = time.time() - t0
 
-        state.candidate.V = V_multi_shoot.__array__()
-        state.candidate.x_prop = x_prop.__array__()
+        candidate.V = V_multi_shoot.__array__()
+        candidate.x_prop = x_prop.__array__()
 
         # Update state in place by appending to history
         # The x_guess/u_guess properties will automatically return the latest entry
-        state.candidate.VC = vc_mat
-        state.candidate.TR = tr_mat
+        candidate.VC = vc_mat
+        candidate.TR = tr_mat
 
         state.J_tr = np.sum(np.array(J_tr_vec))
         state.J_vb = np.sum(np.array(J_vb_vec))
@@ -214,7 +215,7 @@ class PenalizedTrustRegion(Algorithm):
 
         # Update weights in state using configured autotuning method
         adaptive_state = self._autotuner.update_weights(
-            state, self._jax_constraints, settings, params
+            state, candidate, self._jax_constraints, settings, params
         )
 
         # Build emission data - only include nonlinear/reduction metrics when
@@ -255,8 +256,8 @@ class PenalizedTrustRegion(Algorithm):
 
             emission_data.update(
                 {
-                    "J_nonlin": state.candidate.J_nonlin,
-                    "J_lin": state.candidate.J_lin,
+                    "J_nonlin": candidate.J_nonlin,
+                    "J_lin": candidate.J_lin,
                     "pred_reduction": pred_reduction,
                     "actual_reduction": actual_reduction,
                     "acceptance_ratio": acceptance_ratio,
@@ -265,8 +266,6 @@ class PenalizedTrustRegion(Algorithm):
 
         # Emit data
         self._emitter(emission_data)
-
-        state.clear_candidate()
 
         # Increment iteration counter
         state.k += 1

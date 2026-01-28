@@ -11,7 +11,7 @@ from openscvx.config import Config
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
-    from .base import AlgorithmState
+    from .base import AlgorithmState, CandidateIterate
 
 
 class AutotuningBase(ABC):
@@ -120,6 +120,7 @@ class AutotuningBase(ABC):
     def update_weights(
         self,
         state: "AlgorithmState",
+        candidate: "CandidateIterate",
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
@@ -196,6 +197,7 @@ class AugmentedLagrangian(AutotuningBase):
     def update_weights(
         self,
         state: "AlgorithmState",
+        candidate: "CandidateIterate",
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
@@ -210,9 +212,9 @@ class AugmentedLagrangian(AutotuningBase):
         """
         # Calculate nonlinear penalty for current candidate
         nonlinear_cost, nonlinear_penalty, nodal_penalty = self.calculate_nonlinear_penalty(
-            state.candidate.x_prop,
-            state.candidate.x,
-            state.candidate.u,
+            candidate.x_prop,
+            candidate.x,
+            candidate.u,
             state.lam_vc,
             state.lam_vb,
             state.lam_cost,
@@ -221,13 +223,13 @@ class AugmentedLagrangian(AutotuningBase):
             settings,
         )
 
-        state.candidate.J_nonlin = nonlinear_cost + nonlinear_penalty + nodal_penalty
+        candidate.J_nonlin = nonlinear_cost + nonlinear_penalty + nodal_penalty
 
         # Update cost relaxation parameter after cost_drop iterations
         if state.k > self.lam_cost_drop:
-            state.candidate.lam_cost = state.lam_cost * self.lam_cost_relax
+            candidate.lam_cost = state.lam_cost * self.lam_cost_relax
         else:
-            state.candidate.lam_cost = settings.scp.lam_cost
+            candidate.lam_cost = settings.scp.lam_cost
 
         eta_0 = 1e-2
         eta_1 = 1e-1
@@ -258,8 +260,8 @@ class AugmentedLagrangian(AutotuningBase):
 
             J_nonlin_prev = prev_nonlinear_cost + prev_nonlinear_penalty + prev_nodal_penalty
 
-            actual_reduction = J_nonlin_prev - state.candidate.J_nonlin
-            predicted_reduction = J_nonlin_prev - state.candidate.J_lin
+            actual_reduction = J_nonlin_prev - candidate.J_nonlin
+            predicted_reduction = J_nonlin_prev - candidate.J_lin
             rho = actual_reduction / predicted_reduction
 
             state.pred_reduction_history.append(predicted_reduction)
@@ -275,24 +277,24 @@ class AugmentedLagrangian(AutotuningBase):
                 # Accept Solution with heigher weight
                 lam_prox_k1 = min(lam_prox_max, gamma_1 * lam_prox_k)
                 state.lam_prox_history.append(lam_prox_k1)
-                state.accept_solution()
+                state.accept_solution(candidate)
                 adaptive_state = "Accept Higher"
             elif rho >= eta_1 and rho < eta_2:
                 # Accept Solution with constant weight
                 lam_prox_k1 = lam_prox_k
                 state.lam_prox_history.append(lam_prox_k1)
-                state.accept_solution()
+                state.accept_solution(candidate)
                 adaptive_state = "Accept Constant"
             else:
                 # Accept Solution with lower weight
                 lam_prox_k1 = max(lam_prox_min, gamma_2 * lam_prox_k)
                 state.lam_prox_history.append(lam_prox_k1)
-                state.accept_solution()
+                state.accept_solution(candidate)
                 adaptive_state = "Accept Lower"
 
             # Update virtual control weight matrix
             ep = 0.5
-            nu = (settings.sim.inv_S_x @ abs(state.candidate.x[1:] - state.candidate.x_prop).T).T
+            nu = (settings.sim.inv_S_x @ abs(candidate.x[1:] - candidate.x_prop).T).T
             vc_max = 1e5
             eta_lambda = 1e0
 
@@ -303,14 +305,14 @@ class AugmentedLagrangian(AutotuningBase):
             case2 = state.lam_vc + (nu**2) / ep * eta_lambda * (1 / (2 * state.lam_prox))
             vc_new = np.where(mask, case1, case2)
             vc_new = np.minimum(vc_max, vc_new)
-            state.candidate.lam_vc = vc_new
-            state.candidate.lam_vb = settings.scp.lam_vb
+            candidate.lam_vc = vc_new
+            candidate.lam_vb = settings.scp.lam_vb
 
         else:
             state.lam_prox_history.append(lam_prox_k)
-            state.candidate.lam_vc = settings.scp.lam_vc
-            state.candidate.lam_vb = settings.scp.lam_vb
-            state.accept_solution()
+            candidate.lam_vc = settings.scp.lam_vc
+            candidate.lam_vb = settings.scp.lam_vb
+            state.accept_solution(candidate)
             adaptive_state = "Initial"
 
         return adaptive_state
@@ -335,6 +337,7 @@ class ConstantProximalWeight(AutotuningBase):
     def update_weights(
         self,
         state: "AlgorithmState",
+        candidate: "CandidateIterate",
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
@@ -352,12 +355,12 @@ class ConstantProximalWeight(AutotuningBase):
         """
         # Update cost relaxation parameter after cost_drop iterations
         if state.k > self.lam_cost_drop:
-            state.candidate.lam_cost = state.lam_cost * self.lam_cost_relax
+            candidate.lam_cost = state.lam_cost * self.lam_cost_relax
         else:
-            state.candidate.lam_cost = settings.scp.lam_cost
+            candidate.lam_cost = settings.scp.lam_cost
 
         state.lam_prox_history.append(state.lam_prox)
-        state.accept_solution()
+        state.accept_solution(candidate)
         return "Accept Constant"
 
 
@@ -383,6 +386,7 @@ class RampProximalWeight(AutotuningBase):
     def update_weights(
         self,
         state: "AlgorithmState",
+        candidate: "CandidateIterate",
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
@@ -400,9 +404,9 @@ class RampProximalWeight(AutotuningBase):
         """
         # Update cost relaxation parameter after cost_drop iterations
         if state.k > self.lam_cost_drop:
-            state.candidate.lam_cost = state.lam_cost * self.lam_cost_relax
+            candidate.lam_cost = state.lam_cost * self.lam_cost_relax
         else:
-            state.candidate.lam_cost = settings.scp.lam_cost
+            candidate.lam_cost = settings.scp.lam_cost
 
         # Check if we're already at max before updating
         was_at_max = state.lam_prox >= self.lam_prox_max
@@ -413,10 +417,10 @@ class RampProximalWeight(AutotuningBase):
 
         # If we were already at max, or if we just reached it and it's staying constant
         if was_at_max:
-            state.accept_solution()
+            state.accept_solution(candidate)
             return "Accept Constant"
         else:
-            state.accept_solution()
+            state.accept_solution(candidate)
             return "Accept Higher"
 
 
