@@ -1345,10 +1345,6 @@
       
         
       
-        
-      
-        
-      
     
     
     
@@ -1411,34 +1407,6 @@
     
   
     Cinema Vp
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../../Examples/drone/cinema_vp_realtime_base/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Cinema Vp Realtime Base
   
 
     
@@ -1655,34 +1623,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../../Examples/drone/obstacle_avoidance_realtime_base/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Obstacle Avoidance Realtime Base
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../../../Examples/drone/obstacle_avoidance_vmap/" class="md-nav__link">
         
   
@@ -1720,6 +1660,8 @@
   
     
     
+      
+        
       
         
       
@@ -1775,6 +1717,160 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_5_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_4_5_1" id="__nav_4_5_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Base Problems
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_5_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_5_1">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Base Problems
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Examples/realtime/base_problems/cinema_vp_realtime_base/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cinema Vp Realtime Base
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Examples/realtime/base_problems/drone_racing_realtime_base/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Drone Racing Realtime Base
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Examples/realtime/base_problems/obstacle_avoidance_realtime_base/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Obstacle Avoidance Realtime Base
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
             
               
                 
@@ -6252,7 +6348,7 @@ untyped dictionary approach with a typed, self-documenting structure.</p>
       </thead>
       <tbody>
           <tr class="doc-section-item">
-            <td><code><span title="openscvx.lowered.cvxpy_variables.CVXPyVariables.w_tr">w_tr</span></code></td>
+            <td><code><span title="openscvx.lowered.cvxpy_variables.CVXPyVariables.lam_prox">lam_prox</span></code></td>
             <td>
                   <code><span title="cvxpy.Parameter">Parameter</span></code>
             </td>
@@ -6779,7 +6875,7 @@ untyped dictionary approach with a typed, self-documenting structure.</p>
 </span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28"></a><span class="sd">        - Scaled expressions: CVXPy expressions for scaled state/control at each node</span>
 </span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29"></a>
 </span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30"></a><span class="sd">    Attributes:</span>
-</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31"></a><span class="sd">        w_tr: Trust region weight parameter (scalar, nonneg)</span>
+</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31"></a><span class="sd">        lam_prox: Trust region weight parameter (scalar, nonneg)</span>
 </span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32"></a><span class="sd">        lam_cost: Cost function weight parameter (scalar, nonneg)</span>
 </span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33"></a><span class="sd">        lam_vc: Virtual control penalty weights (N-1 x n_states, nonneg)</span>
 </span><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34"></a><span class="sd">        lam_vb: Virtual buffer penalty weight (scalar, nonneg)</span>
@@ -6824,7 +6920,7 @@ untyped dictionary approach with a typed, self-documenting structure.</p>
 </span><span id="__span-0-73"><a id="__codelineno-0-73" name="__codelineno-0-73"></a><span class="sd">    &quot;&quot;&quot;</span>
 </span><span id="__span-0-74"><a id="__codelineno-0-74" name="__codelineno-0-74"></a>
 </span><span id="__span-0-75"><a id="__codelineno-0-75" name="__codelineno-0-75"></a>    <span class="c1"># SCP weight parameters</span>
-</span><span id="__span-0-76"><a id="__codelineno-0-76" name="__codelineno-0-76"></a>    <span class="n">w_tr</span><span class="p">:</span> <span class="s2">&quot;cp.Parameter&quot;</span>
+</span><span id="__span-0-76"><a id="__codelineno-0-76" name="__codelineno-0-76"></a>    <span class="n">lam_prox</span><span class="p">:</span> <span class="s2">&quot;cp.Parameter&quot;</span>
 </span><span id="__span-0-77"><a id="__codelineno-0-77" name="__codelineno-0-77"></a>    <span class="n">lam_cost</span><span class="p">:</span> <span class="s2">&quot;cp.Parameter&quot;</span>
 </span><span id="__span-0-78"><a id="__codelineno-0-78" name="__codelineno-0-78"></a>    <span class="n">lam_vc</span><span class="p">:</span> <span class="s2">&quot;cp.Parameter&quot;</span>
 </span><span id="__span-0-79"><a id="__codelineno-0-79" name="__codelineno-0-79"></a>    <span class="n">lam_vb</span><span class="p">:</span> <span class="s2">&quot;cp.Parameter&quot;</span>
