@@ -239,7 +239,7 @@ if __name__ == "__main__":
         T_final = T1 @ T2 @ T3 @ T_home
         return T_final[:3, 3]
 
-    # plot_scp_iterations(results).show()
+    plot_scp_iterations(results).show()
     plot_scp_convergence_histories(results).show()
     tgt = target.value
     final_ee = compute_ee_position(final_q)
