@@ -625,7 +625,7 @@ class Problem:
 
         t_0_while = time.time()
         # Print top header for solver results (adaptive to autotuner)
-        printing.header(self.settings)
+        printing.header()
 
         k_max = max_iters if max_iters is not None else self.settings.scp.k_max
 

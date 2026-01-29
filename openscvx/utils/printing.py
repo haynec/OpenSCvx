@@ -2,15 +2,16 @@ import queue
 import sys
 import time
 import warnings
+from dataclasses import dataclass
+from enum import IntEnum
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any
+from typing import Any, Callable, Optional
 
 import jax
 import numpy as np
 from termcolor import colored
 
 from openscvx.algorithms import OptimizationResults
-from openscvx.algorithms.autotuning import ConstantProximalWeight, RampProximalWeight
 
 warnings.filterwarnings("ignore")
 
@@ -21,28 +22,186 @@ col_pos = "green"
 col_neg = "red"
 
 
-def _use_full_metrics(params: Any) -> bool:
-    """Return True if we should print full PTR diagnostics.
+class Verbosity(IntEnum):
+    """Verbosity levels for iteration table output."""
 
-    For simple proximal-weight strategies (e.g. constant or ramp), many of the
-    augmented Lagrangian diagnostics (J_nonlin, predicted/actual reduction,
-    acceptance ratio) are never populated. In those cases we show a reduced
-    header with only the quantities that are actually meaningful.
-    """
+    MINIMAL = 1  # Core metrics only (iter, cost, status)
+    STANDARD = 2  # + timing, penalty terms
+    FULL = 3  # + autotuning diagnostics (J_nonlin, reductions, etc.)
+
+
+@dataclass
+class Column:
+    """Specification for a single column in the iteration table."""
+
+    key: str  # Key in emission data dict
+    header: str  # Column header text
+    width: int  # Column width
+    fmt: str  # Format string for values
+    color_fn: Optional[Callable[[Any, Any, dict], Optional[str]]] = None
+
+
+def _color_J_tr(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color J_tr green if within tolerance, red otherwise."""
     if params is None:
-        return True
+        return None
+    return col_pos if value <= params.scp.ep_tr else col_neg
 
-    scp = getattr(params, "scp", None)
-    autotuner = getattr(scp, "autotuner", None)
 
-    # Constant / ramp proximal weights do not compute nonlinear penalties or
-    # reduction statistics, so hide those columns.
-    if isinstance(autotuner, (ConstantProximalWeight, RampProximalWeight)):
-        return False
+def _color_J_vb(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color J_vb green if within tolerance, red otherwise."""
+    if params is None:
+        return None
+    return col_pos if value <= params.scp.ep_vb else col_neg
 
-    # Default (including AugmentedLagrangian and custom autotuners) keeps
-    # the full diagnostic table.
-    return True
+
+def _color_J_vc(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color J_vc green if within tolerance, red otherwise."""
+    if params is None:
+        return None
+    return col_pos if value <= params.scp.ep_vc else col_neg
+
+
+def _color_prob_stat(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color solver status green if optimal, red otherwise."""
+    return col_pos if value == "optimal" else col_neg
+
+
+def _color_adaptive_state(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color adaptive state green if acceptable, red otherwise."""
+    acceptable_states = ["Accept Constant", "Accept Higher", "Accept Lower", "Initial"]
+    return col_pos if value in acceptable_states else col_neg
+
+
+def _color_acceptance_ratio(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color acceptance ratio based on success level.
+
+    <= 0.1: red (unsuccessful)
+    0.1 < ratio <= 0.8: yellow/orange (somewhat successful)
+    0.8 < ratio <= 1.5: green (very successful)
+    > 1.5: blue (overly successful)
+    """
+    if value <= 0.1:
+        return "red"
+    elif value <= 0.8:
+        return "green"
+    elif value <= 1.5:
+        return "blue"
+    else:
+        return "purple"
+
+
+def _color_J_lin(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color J_lin green if positive, red otherwise."""
+    return "green" if value > 0 else "red"
+
+
+# All possible columns in display order
+COLUMNS = [
+    Column("iter", "Iter", 4, "{:4d}"),
+    Column("dis_time", "Dis (ms)", 8, "{:6.2f}"),
+    Column("subprop_time", "Solve (ms)", 10, "{:6.2f}"),
+    Column("J_total", "J_total", 8, "{: .1e}"),
+    Column("J_tr", "J_tr", 8, "{: .1e}", _color_J_tr),
+    Column("J_vb", "J_vb", 8, "{: .1e}", _color_J_vb),
+    Column("J_vc", "J_vc", 8, "{: .1e}", _color_J_vc),
+    Column("J_nonlin", "J_nonlin", 8, "{: .1e}", _color_J_lin),
+    Column("J_lin", "J_lin", 8, "{: .1e}", _color_J_lin),
+    Column("pred_reduction", "pred_red", 8, "{: .1e}"),
+    Column("actual_reduction", "act_red", 8, "{: .1e}"),
+    Column("acceptance_ratio", "acc_ratio", 8, "{: .2e}", _color_acceptance_ratio),
+    Column("lam_prox", "lam_prox", 8, "{: .1e}"),
+    Column("cost", "Cost", 8, "{: .1e}"),
+    Column("prob_stat", "Status", 14, "{}", _color_prob_stat),
+    Column("adaptive_state", "Adaptive", 16, "{}", _color_adaptive_state),
+]
+
+# Map column keys to Column objects for quick lookup
+_COLUMN_MAP = {col.key: col for col in COLUMNS}
+
+# Keys to exclude at each verbosity level
+VERBOSITY_EXCLUDE: dict[int, set[str]] = {
+    Verbosity.MINIMAL: {
+        "dis_time",
+        "subprop_time",
+        "J_total",
+        "J_tr",
+        "J_vb",
+        "J_vc",
+        "J_nonlin",
+        "J_lin",
+        "pred_reduction",
+        "actual_reduction",
+        "acceptance_ratio",
+        "lam_prox",
+        "adaptive_state",
+    },
+    Verbosity.STANDARD: {
+        "J_total",
+        "pred_reduction",
+        "actual_reduction",
+        "adaptive_state",
+        "lam_prox",
+    },
+    Verbosity.FULL: set(),
+}
+
+
+def get_active_columns(data: dict, verbosity: int) -> list[Column]:
+    """Return columns where key exists in data and isn't excluded by verbosity."""
+    excluded = VERBOSITY_EXCLUDE.get(verbosity, set())
+    return [col for col in COLUMNS if col.key in data and col.key not in excluded]
+
+
+def build_separator(columns: list[Column]) -> str:
+    """Generate separator line matching the total width of active columns."""
+    total_width = sum(col.width for col in columns) + 3 * (len(columns) - 1)
+    return "─" * total_width
+
+
+def build_header_format(columns: list[Column]) -> str:
+    """Generate header format string from active columns."""
+    return " │ ".join(f"{{:^{col.width}}}" for col in columns)
+
+
+def build_row_format(columns: list[Column]) -> str:
+    """Generate row format string from active columns."""
+    return " │ ".join(f"{{:^{col.width}}}" for col in columns)
+
+
+def format_value(col: Column, value: Any, params: Any, data: dict) -> str:
+    """Format a single value and apply coloring if needed."""
+    # Handle None values
+    if value is None:
+        value = 0.0
+
+    # Format the value
+    formatted = col.fmt.format(value)
+
+    # Apply coloring if a color function is defined
+    if col.color_fn is not None:
+        color = col.color_fn(value, params, data)
+        if color is not None:
+            formatted = colored(formatted, color)
+
+    return formatted
+
+
+def print_header(columns: list[Column]) -> None:
+    """Print the table header for the given columns."""
+    separator = build_separator(columns)
+    header_fmt = build_header_format(columns)
+
+    print(colored(separator))
+    print(header_fmt.format(*[col.header for col in columns]))
+    print(colored(separator))
+
+
+def print_row(columns: list[Column], data: dict, params: Any) -> None:
+    """Print a single data row for the given columns."""
+    row_fmt = build_row_format(columns)
+    values = [format_value(col, data.get(col.key), params, data) for col in columns]
+    print(row_fmt.format(*values))
 
 
 def get_version() -> str:
@@ -213,242 +372,82 @@ def intro():
     print(ascii_art)
 
 
-def header(params: Any = None):
+def header(verbosity: int = Verbosity.STANDARD):
     """Print the iteration table header.
 
-    The header adapts to the configured autotuning method:
-    - Augmented Lagrangian (default) uses the full set of diagnostics
-    - Constant / ramp proximal weights hide nonlinear/reduction metrics
+    Args:
+        verbosity: Verbosity level (MINIMAL=1, STANDARD=2, FULL=3)
+
+    Note: This prints a preliminary header. The actual columns shown may differ
+    once data arrives, as columns are determined by what keys are present in
+    the emitted data. The intermediate() function will reprint the header
+    with the correct columns on the first iteration.
     """
-    use_full = _use_full_metrics(params)
-
-    print(
-        colored(
-            "─────────────────────────────────────────────────────────────────────────────────────────────────────────"
-        )
-    )
-
-    if use_full:
-        header_format = (
-            "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
-            "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
-            "{:^14} │ {:^16}"
-        )
-        header_values = [
-            "Iter",
-            "Dis Time (ms)",
-            "Solve Time (ms)",
-            "J_total",
-            "J_tr",
-            "J_vb",
-            "J_vc",
-            "J_nonlin",
-            "J_lin",
-            "pred_red",
-            "act_red",
-            "acc_ratio",
-            "lam_prox",
-            "Cost",
-            "Solver Status",
-            "Adaptive State",
-        ]
-    else:
-        # Reduced header for constant / ramp proximal weight autotuners
-        header_format = (
-            "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
-            "{:^8} │ {:^8} │ {:^14} │ {:^16}"
-        )
-        header_values = [
-            "Iter",
-            "Dis Time (ms)",
-            "Solve Time (ms)",
-            "J_total",
-            "J_tr",
-            "J_vb",
-            "J_vc",
-            "lam_prox",
-            "Cost",
-            "Solver Status",
-            "Adaptive State",
-        ]
-
-    print(header_format.format(*header_values))
-
-    print(
-        colored(
-            "─────────────────────────────────────────────────────────────────────────────────────────────────────────"
-        )
-    )
+    excluded = VERBOSITY_EXCLUDE.get(verbosity, set())
+    # Use all non-excluded columns for initial header
+    columns = [col for col in COLUMNS if col.key not in excluded]
+    print_header(columns)
 
 
-def intermediate(print_queue, params):
+def intermediate(print_queue, params, verbosity: int = Verbosity.STANDARD):
+    """Process and print iteration data from the queue.
+
+    This function runs in a loop, reading data from the print queue and
+    displaying formatted iteration rows. The columns shown are determined
+    by both the verbosity level and what keys are present in the data.
+
+    Args:
+        print_queue: Queue containing iteration data dicts
+        params: Settings object (used for color threshold comparisons)
+        verbosity: Verbosity level (MINIMAL=1, STANDARD=2, FULL=3)
+    """
     hz = 30.0
-    use_full = _use_full_metrics(params)
+    active_columns: Optional[list[Column]] = None
+    separator: Optional[str] = None
 
     while True:
         t_start = time.time()
         try:
             data = print_queue.get(timeout=1.0 / hz)
-            # remove bottom labels and line
-            if data["iter"] != 1:
-                sys.stdout.write("\x1b[1A\x1b[2K\x1b[1A\x1b[2K")
-            if data["prob_stat"][3] == "f":
-                # Only show the first element of the string
+
+            # Truncate prob_stat if it's a longer string (e.g., "infeasible" -> "i")
+            if len(data.get("prob_stat", "")) > 3 and data["prob_stat"][3] == "f":
                 data["prob_stat"] = data["prob_stat"][0]
 
-            iter_colored = colored("{:4d}".format(data["iter"]))
-            J_tot_colored = colored("{: .1e}".format(data["J_total"]))
-            J_tr_colored = colored(
-                "{: .1e}".format(data["J_tr"]),
-                col_pos if data["J_tr"] <= params.scp.ep_tr else col_neg,
-            )
-            J_vb_colored = colored(
-                "{: .1e}".format(data["J_vb"]),
-                col_pos if data["J_vb"] <= params.scp.ep_vb else col_neg,
-            )
-            J_vc_colored = colored(
-                "{: .1e}".format(data["J_vc"]),
-                col_pos if data["J_vc"] <= params.scp.ep_vc else col_neg,
-            )
+            # Determine active columns on first data received
+            if active_columns is None:
+                active_columns = get_active_columns(data, verbosity)
+                separator = build_separator(active_columns)
 
-            if use_full:
-                # Nonlinear and model reduction diagnostics are only meaningful
-                # for augmented Lagrangian-style autotuning.
-                J_nonlin_val = data.get("J_nonlin", 0.0) or 0.0
-                J_lin_val = data.get("J_lin", 0.0) or 0.0
-                pred_red_val = data.get("pred_reduction", 0.0) or 0.0
-                act_red_val = data.get("actual_reduction", 0.0) or 0.0
-                acc_ratio_val = data.get("acceptance_ratio", 0.0) or 0.0
+            # Remove bottom separator and header (2 lines)
+            if data["iter"] != 1:
+                sys.stdout.write("\x1b[1A\x1b[2K\x1b[1A\x1b[2K")
 
-                J_nonlin_colored = colored("{: .1e}".format(J_nonlin_val))
-                J_lin_colored = colored("{: .1e}".format(J_lin_val))
-                pred_reduction_colored = colored("{: .1e}".format(pred_red_val))
-                actual_reduction_colored = colored("{: .1e}".format(act_red_val))
-                acceptance_ratio_colored = colored("{: .2e}".format(acc_ratio_val))
+            # Print the data row
+            print_row(active_columns, data, params)
 
-            lam_prox_colored = colored("{: .1e}".format(data.get("lam_prox", 0.0) or 0.0))
-            cost_colored = colored("{: .1e}".format(data["cost"]))
-            prob_stat_colored = colored(
-                data["prob_stat"], col_pos if data["prob_stat"] == "optimal" else col_neg
-            )
-            adaptive_state = data.get("adaptive_state", "")
-            is_acceptable = adaptive_state in [
-                "Accept Constant",
-                "Accept Higher",
-                "Accept Lower",
-                "Initial",
-            ]
-            adaptive_state_colored = colored(
-                data.get("adaptive_state", "N/A"),
-                col_pos if is_acceptable else col_neg,
-            )
+            # Print separator and header (footer() will add closing separator)
+            print(colored(separator))
+            header_fmt = build_header_format(active_columns)
+            print(header_fmt.format(*[col.header for col in active_columns]))
 
-            if use_full:
-                row_format = (
-                    "{:^4} │     {:^6.2f}    │      {:^6.2F}     │ {:^8} │ "
-                    "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
-                    "{:^8} │ {:^8} │ {:^8} │ {:^14} │ {:^16}"
-                )
-                print(
-                    row_format.format(
-                        iter_colored,
-                        data["dis_time"],
-                        data["subprop_time"],
-                        J_tot_colored,
-                        J_tr_colored,
-                        J_vb_colored,
-                        J_vc_colored,
-                        J_nonlin_colored,
-                        J_lin_colored,
-                        pred_reduction_colored,
-                        actual_reduction_colored,
-                        acceptance_ratio_colored,
-                        lam_prox_colored,
-                        cost_colored,
-                        prob_stat_colored,
-                        adaptive_state_colored,
-                    )
-                )
-            else:
-                # Reduced row for constant / ramp proximal weight autotuners
-                row_format = (
-                    "{:^4} │     {:^6.2f}    │      {:^6.2F}     │ {:^8} │ "
-                    "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^14} │ {:^16}"
-                )
-                print(
-                    row_format.format(
-                        iter_colored,
-                        data["dis_time"],
-                        data["subprop_time"],
-                        J_tot_colored,
-                        J_tr_colored,
-                        J_vb_colored,
-                        J_vc_colored,
-                        lam_prox_colored,
-                        cost_colored,
-                        prob_stat_colored,
-                        adaptive_state_colored,
-                    )
-                )
-
-            print(
-                colored(
-                    "─────────────────────────────────────────────────────────────────────────────────────────────────────────"
-                )
-            )
-
-            if use_full:
-                header_format = (
-                    "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
-                    "{:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
-                    "{:^14} │ {:^16}"
-                )
-                header_values = [
-                    "Iter",
-                    "Dis Time (ms)",
-                    "Solve Time (ms)",
-                    "J_total",
-                    "J_tr",
-                    "J_vb",
-                    "J_vc",
-                    "J_nonlin",
-                    "J_lin",
-                    "pred_red",
-                    "act_red",
-                    "acc_ratio",
-                    "lam_prox",
-                    "Cost",
-                    "Solver Status",
-                    "Adaptive State",
-                ]
-            else:
-                header_format = (
-                    "{:^4} │ {:^13} │ {:^14} │ {:^8} │ {:^8} │ {:^8} │ {:^8} │ "
-                    "{:^8} │ {:^8} │ {:^14} │ {:^16}"
-                )
-                header_values = [
-                    "Iter",
-                    "Dis Time (ms)",
-                    "Solve Time (ms)",
-                    "J_total",
-                    "J_tr",
-                    "J_vb",
-                    "J_vc",
-                    "lam_prox",
-                    "Cost",
-                    "Solver Status",
-                    "Adaptive State",
-                ]
-
-            print(header_format.format(*header_values))
         except queue.Empty:
             pass
         time.sleep(max(0.0, 1.0 / hz - (time.time() - t_start)))
 
 
-def footer():
-    print(
-        colored(
-            "─────────────────────────────────────────────────────────────────────────────────────────────────────────"
-        )
-    )
+def footer(verbosity: int = Verbosity.STANDARD, columns: Optional[list[Column]] = None):
+    """Print the table footer.
+
+    Args:
+        verbosity: Verbosity level (MINIMAL=1, STANDARD=2, FULL=3)
+        columns: Explicit list of columns to match width (if known)
+    """
+    if columns is not None:
+        separator = build_separator(columns)
+    else:
+        excluded = VERBOSITY_EXCLUDE.get(verbosity, set())
+        cols = [col for col in COLUMNS if col.key not in excluded]
+        separator = build_separator(cols)
+
+    print(colored(separator))
