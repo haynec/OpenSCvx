@@ -115,11 +115,12 @@ problem = Problem(
     licq_max=1e-8,
     time_dilation_factor_min=0.02,
     byof=byof,  # Pass byof specification
+    autotuner=ox.ConstantProximalWeight()
 )
 
 # Set solver parameters
 problem.settings.prp.dt = 0.01
-problem.settings.scp.w_tr = 0e0
+problem.settings.scp.lam_prox = 0e0
 problem.settings.scp.lam_cost = 1e-1
 problem.settings.scp.lam_vc = 1e3
 problem.settings.scp.uniform_time_grid = True
