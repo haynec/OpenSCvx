@@ -2,11 +2,18 @@
 
 from abc import ABC, abstractmethod
 from copy import deepcopy
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING, List, Tuple
 
 import numpy as np
 
 from openscvx.config import Config
+from openscvx.utils.printing import (
+    Column,
+    Verbosity,
+    color_acceptance_ratio,
+    color_adaptive_state,
+    color_J_nonlin,
+)
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
@@ -23,7 +30,13 @@ class AutotuningBase(ABC):
 
     Subclasses should implement the `update_weights` method to define their specific
     weight update strategy.
+
+    Class Attributes:
+        COLUMNS: List of Column specs for autotuner-specific metrics to display.
+            Subclasses override this to add their own columns.
     """
+
+    COLUMNS: List[Column] = []
 
     @staticmethod
     def calculate_cost_from_state(x: np.ndarray, settings: Config) -> float:
@@ -152,6 +165,23 @@ class AugmentedLagrangian(AutotuningBase):
     - Increases penalty parameters when constraints are violated
     - Decreases penalty parameters when constraints are satisfied
     """
+
+    COLUMNS: List[Column] = [
+        Column("J_nonlin", "J_nonlin", 8, "{: .1e}", color_J_nonlin, Verbosity.STANDARD),
+        Column("J_lin", "J_lin", 8, "{: .1e}", color_J_nonlin, Verbosity.STANDARD),
+        Column("pred_reduction", "pred_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL),
+        Column("actual_reduction", "act_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL),
+        Column(
+            "acceptance_ratio",
+            "acc_ratio",
+            9,
+            "{: .2e}",
+            color_acceptance_ratio,
+            Verbosity.STANDARD,
+        ),
+        Column("lam_prox", "lam_prox", 8, "{: .1e}", min_verbosity=Verbosity.FULL),
+        Column("adaptive_state", "Adaptive", 16, "{}", color_adaptive_state, Verbosity.FULL),
+    ]
 
     def __init__(
         self,

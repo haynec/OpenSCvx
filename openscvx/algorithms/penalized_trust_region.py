@@ -12,6 +12,14 @@ import numpy as np
 import numpy.linalg as la
 
 from openscvx.config import Config
+from openscvx.utils.printing import (
+    Column,
+    Verbosity,
+    color_J_tr,
+    color_J_vb,
+    color_J_vc,
+    color_prob_stat,
+)
 
 from .autotuning import ConstantProximalWeight, RampProximalWeight
 from .base import Algorithm, AlgorithmState, CandidateIterate
@@ -54,6 +62,22 @@ class PenalizedTrustRegion(Algorithm):
             result = problem.solve()
     """
 
+    # Base columns emitted by PTR algorithm (before autotuner columns)
+    BASE_COLUMNS: List[Column] = [
+        Column("iter", "Iter", 4, "{:4d}"),
+        Column("dis_time", "Dis (ms)", 8, "{:6.2f}", min_verbosity=Verbosity.STANDARD),
+        Column("subprop_time", "Solve (ms)", 10, "{:6.2f}", min_verbosity=Verbosity.STANDARD),
+        Column("cost", "Cost", 8, "{: .1e}"),
+        Column("J_tr", "J_tr", 8, "{: .1e}", color_J_tr, Verbosity.STANDARD),
+        Column("J_vb", "J_vb", 8, "{: .1e}", color_J_vb, Verbosity.STANDARD),
+        Column("J_vc", "J_vc", 8, "{: .1e}", color_J_vc, Verbosity.STANDARD),
+    ]
+
+    # Columns that always appear last (after autotuner columns)
+    TAIL_COLUMNS: List[Column] = [
+        Column("prob_stat", "Cvx Status", 11, "{}", color_prob_stat),
+    ]
+
     def __init__(self):
         """Initialize PTR with unset infrastructure.
 
@@ -83,6 +107,30 @@ class PenalizedTrustRegion(Algorithm):
         if self._autotuner is None:
             raise AttributeError("Autotuner not yet initialized. Call initialize() first.")
         return self._autotuner
+
+    def get_columns(self, verbosity: int = Verbosity.STANDARD) -> List[Column]:
+        """Get the columns to display for iteration output.
+
+        Combines base PTR columns with autotuner-specific columns,
+        filtered by the requested verbosity level.
+
+        Args:
+            verbosity: Minimum verbosity level for columns to include.
+                MINIMAL (1): Core metrics only (iter, cost, status)
+                STANDARD (2): + timing, penalty terms
+                FULL (3): + autotuning diagnostics
+
+        Returns:
+            List of Column specs filtered by verbosity level.
+
+        Raises:
+            AttributeError: If algorithm has not been initialized yet.
+        """
+        if self._autotuner is None:
+            raise AttributeError("Autotuner not yet initialized. Call initialize() first.")
+
+        all_columns = self.BASE_COLUMNS + self._autotuner.COLUMNS + self.TAIL_COLUMNS
+        return [col for col in all_columns if col.min_verbosity <= verbosity]
 
     def initialize(
         self,

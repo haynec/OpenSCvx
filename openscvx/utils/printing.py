@@ -2,16 +2,17 @@ import queue
 import sys
 import time
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import IntEnum
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import jax
 import numpy as np
 from termcolor import colored
 
-from openscvx.algorithms import OptimizationResults
+if TYPE_CHECKING:
+    from openscvx.algorithms import OptimizationResults
 
 warnings.filterwarnings("ignore")
 
@@ -39,47 +40,48 @@ class Column:
     width: int  # Column width
     fmt: str  # Format string for values
     color_fn: Optional[Callable[[Any, Any, dict], Optional[str]]] = None
+    min_verbosity: int = field(default=Verbosity.MINIMAL)  # Minimum verbosity to show
 
 
-def _color_J_tr(value: Any, params: Any, data: dict) -> Optional[str]:
+def color_J_tr(value: Any, params: Any, data: dict) -> Optional[str]:
     """Color J_tr green if within tolerance, red otherwise."""
     if params is None:
         return None
     return col_pos if value <= params.scp.ep_tr else col_neg
 
 
-def _color_J_vb(value: Any, params: Any, data: dict) -> Optional[str]:
+def color_J_vb(value: Any, params: Any, data: dict) -> Optional[str]:
     """Color J_vb green if within tolerance, red otherwise."""
     if params is None:
         return None
     return col_pos if value <= params.scp.ep_vb else col_neg
 
 
-def _color_J_vc(value: Any, params: Any, data: dict) -> Optional[str]:
+def color_J_vc(value: Any, params: Any, data: dict) -> Optional[str]:
     """Color J_vc green if within tolerance, red otherwise."""
     if params is None:
         return None
     return col_pos if value <= params.scp.ep_vc else col_neg
 
 
-def _color_prob_stat(value: Any, params: Any, data: dict) -> Optional[str]:
+def color_prob_stat(value: Any, params: Any, data: dict) -> Optional[str]:
     """Color solver status green if optimal, red otherwise."""
     return col_pos if value == "optimal" else col_neg
 
 
-def _color_adaptive_state(value: Any, params: Any, data: dict) -> Optional[str]:
+def color_adaptive_state(value: Any, params: Any, data: dict) -> Optional[str]:
     """Color adaptive state green if acceptable, red otherwise."""
     acceptable_states = ["Accept Constant", "Accept Higher", "Accept Lower", "Initial"]
     return col_pos if value in acceptable_states else col_neg
 
 
-def _color_acceptance_ratio(value: Any, params: Any, data: dict) -> Optional[str]:
+def color_acceptance_ratio(value: Any, params: Any, data: dict) -> Optional[str]:
     """Color acceptance ratio based on success level.
 
     <= 0.1: red (unsuccessful)
-    0.1 < ratio <= 0.8: yellow/orange (somewhat successful)
-    0.8 < ratio <= 1.5: green (very successful)
-    > 1.5: blue (overly successful)
+    0.1 < ratio <= 0.8: somewhat successful (green)
+    0.8 < ratio <= 1.5: very successful (blue)
+    > 1.5: overly successful (magenta)
     """
     if value <= 0.1:
         return "red"
@@ -88,69 +90,12 @@ def _color_acceptance_ratio(value: Any, params: Any, data: dict) -> Optional[str
     elif value <= 1.5:
         return "blue"
     else:
-        return "purple"
+        return "magenta"
 
 
-def _color_J_lin(value: Any, params: Any, data: dict) -> Optional[str]:
-    """Color J_lin green if positive, red otherwise."""
+def color_J_nonlin(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color J_nonlin green if positive, red otherwise."""
     return "green" if value > 0 else "red"
-
-
-# All possible columns in display order
-COLUMNS = [
-    Column("iter", "Iter", 4, "{:4d}"),
-    Column("dis_time", "Dis (ms)", 8, "{:6.2f}"),
-    Column("subprop_time", "Solve (ms)", 10, "{:6.2f}"),
-    Column("J_total", "J_total", 8, "{: .1e}"),
-    Column("J_tr", "J_tr", 8, "{: .1e}", _color_J_tr),
-    Column("J_vb", "J_vb", 8, "{: .1e}", _color_J_vb),
-    Column("J_vc", "J_vc", 8, "{: .1e}", _color_J_vc),
-    Column("J_nonlin", "J_nonlin", 8, "{: .1e}", _color_J_lin),
-    Column("J_lin", "J_lin", 8, "{: .1e}", _color_J_lin),
-    Column("pred_reduction", "pred_red", 8, "{: .1e}"),
-    Column("actual_reduction", "act_red", 8, "{: .1e}"),
-    Column("acceptance_ratio", "acc_ratio", 8, "{: .2e}", _color_acceptance_ratio),
-    Column("lam_prox", "lam_prox", 8, "{: .1e}"),
-    Column("cost", "Cost", 8, "{: .1e}"),
-    Column("prob_stat", "Cvx Status", 14, "{}", _color_prob_stat),
-    Column("adaptive_state", "Adaptive", 16, "{}", _color_adaptive_state),
-]
-
-# Map column keys to Column objects for quick lookup
-_COLUMN_MAP = {col.key: col for col in COLUMNS}
-
-# Keys to exclude at each verbosity level
-VERBOSITY_EXCLUDE: dict[int, set[str]] = {
-    Verbosity.MINIMAL: {
-        "dis_time",
-        "subprop_time",
-        "J_total",
-        "J_tr",
-        "J_vb",
-        "J_vc",
-        "J_nonlin",
-        "J_lin",
-        "pred_reduction",
-        "actual_reduction",
-        "acceptance_ratio",
-        "lam_prox",
-        "adaptive_state",
-    },
-    Verbosity.STANDARD: {
-        "J_total",
-        "pred_reduction",
-        "actual_reduction",
-        "adaptive_state",
-        "lam_prox",
-    },
-    Verbosity.FULL: set(),
-}
-
-
-def get_active_columns(data: dict, verbosity: int) -> list[Column]:
-    """Return columns where key exists in data and isn't excluded by verbosity."""
-    excluded = VERBOSITY_EXCLUDE.get(verbosity, set())
-    return [col for col in COLUMNS if col.key in data and col.key not in excluded]
 
 
 def build_separator(columns: list[Column]) -> str:
@@ -185,7 +130,7 @@ def format_value(col: Column, value: Any, params: Any, data: dict) -> str:
     return formatted
 
 
-def print_header(columns: list[Column]) -> None:
+def header(columns: list[Column]) -> None:
     """Print the table header for the given columns."""
     separator = build_separator(columns)
     header_fmt = build_header_format(columns)
@@ -301,7 +246,7 @@ def print_problem_summary(settings: Any, lowered: Any, solver: Any) -> None:
     print_summary_box(lines, "Problem Summary")
 
 
-def print_results_summary(result: OptimizationResults, timing_post, timing_init, timing_solve):
+def print_results_summary(result: "OptimizationResults", timing_post, timing_init, timing_solve):
     """
     Print the results summary box.
 
@@ -369,38 +314,19 @@ def intro():
     print(ascii_art)
 
 
-def header(verbosity: int = Verbosity.STANDARD):
-    """Print the iteration table header.
-
-    Args:
-        verbosity: Verbosity level (MINIMAL=1, STANDARD=2, FULL=3)
-
-    Note: This prints a preliminary header. The actual columns shown may differ
-    once data arrives, as columns are determined by what keys are present in
-    the emitted data. The intermediate() function will reprint the header
-    with the correct columns on the first iteration.
-    """
-    excluded = VERBOSITY_EXCLUDE.get(verbosity, set())
-    # Use all non-excluded columns for initial header
-    columns = [col for col in COLUMNS if col.key not in excluded]
-    print_header(columns)
-
-
-def intermediate(print_queue, params, verbosity: int = Verbosity.STANDARD):
+def intermediate(print_queue, params, columns: list[Column]):
     """Process and print iteration data from the queue.
 
     This function runs in a loop, reading data from the print queue and
-    displaying formatted iteration rows. The columns shown are determined
-    by both the verbosity level and what keys are present in the data.
+    displaying formatted iteration rows.
 
     Args:
         print_queue: Queue containing iteration data dicts
         params: Settings object (used for color threshold comparisons)
-        verbosity: Verbosity level (MINIMAL=1, STANDARD=2, FULL=3)
+        columns: List of Column specs defining the table structure
     """
     hz = 30.0
-    active_columns: Optional[list[Column]] = None
-    separator: Optional[str] = None
+    separator = build_separator(columns)
 
     while True:
         t_start = time.time()
@@ -408,43 +334,32 @@ def intermediate(print_queue, params, verbosity: int = Verbosity.STANDARD):
             data = print_queue.get(timeout=1.0 / hz)
 
             # Truncate prob_stat if it's a longer string (e.g., "infeasible" -> "i")
-            if len(data.get("prob_stat", "")) > 3 and data["prob_stat"][3] == "f":
-                data["prob_stat"] = data["prob_stat"][0]
-
-            # Determine active columns on first data received
-            if active_columns is None:
-                active_columns = get_active_columns(data, verbosity)
-                separator = build_separator(active_columns)
+            prob_stat = data.get("prob_stat", "")
+            if prob_stat.startswith("inf"):
+                data["prob_stat"] = "i"
 
             # Remove bottom separator and header (2 lines)
             if data["iter"] != 1:
                 sys.stdout.write("\x1b[1A\x1b[2K\x1b[1A\x1b[2K")
 
             # Print the data row
-            print_row(active_columns, data, params)
+            print_row(columns, data, params)
 
             # Print separator and header (footer() will add closing separator)
             print(colored(separator))
-            header_fmt = build_header_format(active_columns)
-            print(header_fmt.format(*[col.header for col in active_columns]))
+            header_fmt = build_header_format(columns)
+            print(header_fmt.format(*[col.header for col in columns]))
 
         except queue.Empty:
             pass
         time.sleep(max(0.0, 1.0 / hz - (time.time() - t_start)))
 
 
-def footer(verbosity: int = Verbosity.STANDARD, columns: Optional[list[Column]] = None):
+def footer(columns: list[Column]) -> None:
     """Print the table footer.
 
     Args:
-        verbosity: Verbosity level (MINIMAL=1, STANDARD=2, FULL=3)
-        columns: Explicit list of columns to match width (if known)
+        columns: List of Column specs defining the table structure
     """
-    if columns is not None:
-        separator = build_separator(columns)
-    else:
-        excluded = VERBOSITY_EXCLUDE.get(verbosity, set())
-        cols = [col for col in COLUMNS if col.key not in excluded]
-        separator = build_separator(cols)
-
+    separator = build_separator(columns)
     print(colored(separator))

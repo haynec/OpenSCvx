@@ -67,7 +67,13 @@ class DiscretizationConfig:
 
 @dataclass
 class DevConfig:
-    def __init__(self, profiling: bool = False, debug: bool = False, printing: bool = True):
+    def __init__(
+        self,
+        profiling: bool = False,
+        debug: bool = False,
+        printing: bool = True,
+        verbosity: int = 2,
+    ):
         """
         Configuration class for development settings.
 
@@ -84,10 +90,15 @@ class DevConfig:
                 breakpoints and inspect values. Defaults to False.
             printing (bool): Whether to enable printing during development.
                 Defaults to True.
+            verbosity (int): Verbosity level for iteration output.
+                1 (MINIMAL): Core metrics only (iter, cost, status)
+                2 (STANDARD): + timing, penalty terms (default)
+                3 (FULL): + autotuning diagnostics
         """
         self.profiling = profiling
         self.debug = debug
         self.printing = printing
+        self.verbosity = verbosity
 
 
 @dataclass
