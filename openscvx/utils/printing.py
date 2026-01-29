@@ -112,7 +112,7 @@ COLUMNS = [
     Column("acceptance_ratio", "acc_ratio", 8, "{: .2e}", _color_acceptance_ratio),
     Column("lam_prox", "lam_prox", 8, "{: .1e}"),
     Column("cost", "Cost", 8, "{: .1e}"),
-    Column("prob_stat", "Status", 14, "{}", _color_prob_stat),
+    Column("prob_stat", "Cvx Status", 14, "{}", _color_prob_stat),
     Column("adaptive_state", "Adaptive", 16, "{}", _color_adaptive_state),
 ]
 
@@ -164,11 +164,6 @@ def build_header_format(columns: list[Column]) -> str:
     return " │ ".join(f"{{:^{col.width}}}" for col in columns)
 
 
-def build_row_format(columns: list[Column]) -> str:
-    """Generate row format string from active columns."""
-    return " │ ".join(f"{{:^{col.width}}}" for col in columns)
-
-
 def format_value(col: Column, value: Any, params: Any, data: dict) -> str:
     """Format a single value and apply coloring if needed."""
     # Handle None values
@@ -177,6 +172,9 @@ def format_value(col: Column, value: Any, params: Any, data: dict) -> str:
 
     # Format the value
     formatted = col.fmt.format(value)
+
+    # Pad to column width BEFORE applying color (ANSI codes break alignment)
+    formatted = f"{formatted:^{col.width}}"
 
     # Apply coloring if a color function is defined
     if col.color_fn is not None:
@@ -199,9 +197,8 @@ def print_header(columns: list[Column]) -> None:
 
 def print_row(columns: list[Column], data: dict, params: Any) -> None:
     """Print a single data row for the given columns."""
-    row_fmt = build_row_format(columns)
     values = [format_value(col, data.get(col.key), params, data) for col in columns]
-    print(row_fmt.format(*values))
+    print(" │ ".join(values))
 
 
 def get_version() -> str:
