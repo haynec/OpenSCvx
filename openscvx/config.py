@@ -459,7 +459,6 @@ class ScpConfig:
 
         raise ValueError(f"Invalid value for lam_vc: {value}")
 
-
     def __post_init__(self):
         keys_to_scale = ["lam_prox", "lam_vc", "lam_cost", "lam_vb"]
         # Handle lam_vc which might be scalar or array
