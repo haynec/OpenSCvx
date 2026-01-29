@@ -522,6 +522,9 @@ class Problem:
                 daemon=True,
             )
             self.print_thread.start()
+        else:
+            # Printing was disabled after __init__, disable emitter to avoid queue buildup
+            self.emitter_function = lambda data: None
 
         # Create fresh solver state
         self._state = AlgorithmState.from_settings(self.settings)
@@ -648,8 +651,8 @@ class Problem:
         t_f_while = time.time()
         self.timing_solve = t_f_while - t_0_while
 
-        # Wait for print queue to drain
-        if self.print_queue is not None:
+        # Wait for print queue to drain (only if thread is running)
+        if self.print_thread is not None and self.print_thread.is_alive():
             while self.print_queue.qsize() > 0:
                 time.sleep(0.1)
 
