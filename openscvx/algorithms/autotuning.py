@@ -187,12 +187,16 @@ class AugmentedLagrangian(AutotuningBase):
         self,
         rho_init: float = 1.0,
         rho_max: float = 1e6,
-        rho_increase: float = 2.0,
-        rho_decrease: float = 0.5,
-        mu_init: float = 1.0,
-        mu_max: float = 1e6,
-        mu_increase: float = 2.0,
-        mu_decrease: float = 0.5,
+        gamma_1: float = 2.0,
+        gamma_2: float = 0.5,
+        eta_0: float = 1e-2,
+        eta_1: float = 1e-1,
+        eta_2: float = 0.8,
+        ep: float = 0.5,
+        eta_lambda: float = 1e0,
+        lam_vc_max: float = 1e5,
+        lam_prox_min: float = 1e-3,
+        lam_prox_max: float = 2e5,
         lam_cost_drop: int = -1,
         lam_cost_relax: float = 1.0,
     ):
@@ -215,12 +219,16 @@ class AugmentedLagrangian(AutotuningBase):
         """
         self.rho_init = rho_init
         self.rho_max = rho_max
-        self.rho_increase = rho_increase
-        self.rho_decrease = rho_decrease
-        self.mu_init = mu_init
-        self.mu_max = mu_max
-        self.mu_increase = mu_increase
-        self.mu_decrease = mu_decrease
+        self.gamma_1 = gamma_1
+        self.gamma_2 = gamma_2
+        self.eta_0 = eta_0
+        self.eta_1 = eta_1
+        self.eta_2 = eta_2
+        self.ep = ep
+        self.eta_lambda = eta_lambda
+        self.lam_vc_max = lam_vc_max
+        self.lam_prox_min = lam_prox_min
+        self.lam_prox_max = lam_prox_max
         self.lam_cost_drop = lam_cost_drop
         self.lam_cost_relax = lam_cost_relax
 
@@ -261,16 +269,6 @@ class AugmentedLagrangian(AutotuningBase):
         else:
             candidate.lam_cost = settings.scp.lam_cost
 
-        eta_0 = 1e-2
-        eta_1 = 1e-1
-        eta_2 = 0.8
-
-        gamma_1 = 2.0
-        gamma_2 = 0.5
-
-        lam_prox_min = 1e-3
-        lam_prox_max = 2e5
-
         lam_prox_k = deepcopy(state.lam_prox)
 
         if state.k > 1:
@@ -302,18 +300,18 @@ class AugmentedLagrangian(AutotuningBase):
             state.actual_reduction_history.append(actual_reduction)
             state.acceptance_ratio_history.append(rho)
 
-            if rho < eta_0:
+            if rho < self.eta_0:
                 # Reject Solution and higher weight
-                lam_prox_k1 = min(lam_prox_max, gamma_1 * lam_prox_k)
+                lam_prox_k1 = min(self.lam_prox_max, self.gamma_1 * lam_prox_k)
                 state.lam_prox_history.append(lam_prox_k1)
                 adaptive_state = "Reject Higher"
-            elif rho >= eta_0 and rho < eta_1:
+            elif rho >= self.eta_0 and rho < self.eta_1:
                 # Accept Solution with heigher weight
-                lam_prox_k1 = min(lam_prox_max, gamma_1 * lam_prox_k)
+                lam_prox_k1 = min(self.lam_prox_max, self.gamma_1 * lam_prox_k)
                 state.lam_prox_history.append(lam_prox_k1)
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Higher"
-            elif rho >= eta_1 and rho < eta_2:
+            elif rho >= self.eta_1 and rho < self.eta_2:
                 # Accept Solution with constant weight
                 lam_prox_k1 = lam_prox_k
                 state.lam_prox_history.append(lam_prox_k1)
@@ -321,24 +319,21 @@ class AugmentedLagrangian(AutotuningBase):
                 adaptive_state = "Accept Constant"
             else:
                 # Accept Solution with lower weight
-                lam_prox_k1 = max(lam_prox_min, gamma_2 * lam_prox_k)
+                lam_prox_k1 = max(self.lam_prox_min, self.gamma_2 * lam_prox_k)
                 state.lam_prox_history.append(lam_prox_k1)
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Lower"
 
             # Update virtual control weight matrix
-            ep = 0.5
             nu = (settings.sim.inv_S_x @ abs(candidate.x[1:] - candidate.x_prop).T).T
-            vc_max = 1e5
-            eta_lambda = 1e0
 
             # Vectorized update: use mask to select between two update rules
-            mask = nu > ep
-            case1 = state.lam_vc + nu * eta_lambda * (1 / (2 * state.lam_prox))  # when abs(nu) > ep
+            mask = nu > self.ep
+            case1 = state.lam_vc + nu * self.eta_lambda * (1 / (2 * state.lam_prox))  # when abs(nu) > ep
             # when abs(nu) <= ep
-            case2 = state.lam_vc + (nu**2) / ep * eta_lambda * (1 / (2 * state.lam_prox))
+            case2 = state.lam_vc + (nu**2) / self.ep * self.eta_lambda * (1 / (2 * state.lam_prox))
             vc_new = np.where(mask, case1, case2)
-            vc_new = np.minimum(vc_max, vc_new)
+            vc_new = np.minimum(self.lam_vc_max, vc_new)
             candidate.lam_vc = vc_new
             candidate.lam_vb = settings.scp.lam_vb
 
