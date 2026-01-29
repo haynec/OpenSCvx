@@ -332,6 +332,7 @@ class ScpConfig:
     def __init__(
         self,
         n: Optional[int] = None,
+        n_states: Optional[int] = None,
         k_max: int = 200,
         lam_prox: float = 1e0,
         lam_vc: float = 1e1,
@@ -383,12 +384,13 @@ class ScpConfig:
         """
         # Initialize references first (before any setters that might use them)
         self._parent_config = None  # Will be set by Config.__post_init__
-        self._n_states = None  # Will be set by Config.__post_init__ for easier access
+        self._n_states = n_states
 
         self.n = n
         self.k_max = k_max
         self.lam_prox = lam_prox
-        self.lam_vc = lam_vc  # Use setter to handle conversion
+        # Store raw lam_vc; convert to array later once n_states is known
+        self._lam_vc = lam_vc
         self.ep_tr = ep_tr
         self.ep_vb = ep_vb
         self.ep_vc = ep_vc
@@ -442,30 +444,21 @@ class ScpConfig:
 
         If a scalar is provided and both `n` and `n_states` (from parent config)
         are available, the scalar is converted to an array of shape (n-1, n_states).
-        Otherwise, the scalar value is stored as-is.
+        This setter assumes it is called only after `n_states` is available.
         """
         # If it's already an array, store it directly
         if isinstance(value, np.ndarray):
             self._lam_vc = value
             return
 
-        # If it's a scalar, try to convert to array if we have the necessary info
+        # If it's a scalar, require dimensions to be available
         if isinstance(value, (int, float)):
-            # Try to get n_states from direct reference first, then from parent config
-            n_states = None
-            if hasattr(self, "_n_states") and self._n_states is not None:
-                n_states = self._n_states
-            elif hasattr(self, "_parent_config") and self._parent_config is not None:
-                n_states = getattr(self._parent_config.sim, "n_states", None)
+            # Both dimensions available, convert to array
+            self._lam_vc = np.ones((self.n - 1, self._n_states)) * value
+            return
 
-            if self.n is not None and n_states is not None:
-                self._lam_vc = np.ones((self.n - 1, n_states)) * value
-                return
-            # Otherwise, store as scalar
-            self._lam_vc = value
-        else:
-            # For any other type, store as-is
-            self._lam_vc = value
+        raise ValueError(f"Invalid value for lam_vc: {value}")
+
 
     def __post_init__(self):
         keys_to_scale = ["lam_prox", "lam_vc", "lam_cost", "lam_vb"]
@@ -496,6 +489,5 @@ class Config:
     dev: DevConfig
 
     def __post_init__(self):
-        # Set parent config reference and n_states in scp so lam_vc setter can access sim.n_states
+        # Set parent config reference in scp
         self.scp._parent_config = self
-        self.scp._n_states = self.sim.n_states

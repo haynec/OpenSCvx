@@ -192,6 +192,7 @@ class Problem:
             ),
             scp=ScpConfig(
                 n=N,
+                n_states=self._lowered.x_unified.shape[0],
                 autotuner=autotuner,
             ),
             dis=DiscretizationConfig(),
