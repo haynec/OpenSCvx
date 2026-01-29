@@ -329,9 +329,11 @@ class AugmentedLagrangian(AutotuningBase):
 
             # Vectorized update: use mask to select between two update rules
             mask = nu > self.ep
-            case1 = state.lam_vc + nu * self.eta_lambda * (1 / (2 * state.lam_prox))  # when abs(nu) > ep
+            # when abs(nu) > ep
+            scale = self.eta_lambda * (1 / (2 * state.lam_prox))
+            case1 = state.lam_vc + nu * scale
             # when abs(nu) <= ep
-            case2 = state.lam_vc + (nu**2) / self.ep * self.eta_lambda * (1 / (2 * state.lam_prox))
+            case2 = state.lam_vc + (nu**2) / self.ep * scale
             vc_new = np.where(mask, case1, case2)
             vc_new = np.minimum(self.lam_vc_max, vc_new)
             candidate.lam_vc = vc_new
