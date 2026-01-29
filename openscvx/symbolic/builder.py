@@ -55,6 +55,8 @@ from openscvx.symbolic.preprocessing import (
     validate_dynamics_dict_dimensions,
     validate_dynamics_dimension,
     validate_guesses,
+    validate_input_types,
+    validate_propagation_input_types,
     validate_shapes,
     validate_variable_names,
 )
@@ -64,7 +66,7 @@ from openscvx.symbolic.time import Time
 
 def preprocess_symbolic_problem(
     dynamics: dict,
-    constraints: ConstraintSet,
+    constraints: list,
     states: List[State],
     controls: List[Control],
     N: int,
@@ -99,8 +101,8 @@ def preprocess_symbolic_problem(
     Args:
         dynamics: Dictionary mapping state names to dynamics expressions.
             Example: {"x": v, "v": u}
-        constraints: ConstraintSet with raw constraints in `unsorted` field.
-            Create with: ConstraintSet(unsorted=[c1, c2, c3])
+        constraints: List of constraint objects (Constraint, NodalConstraint,
+            CrossNodeConstraint, or CTCS).
         states: List of user-defined State objects (should NOT include time or CTCS states)
         controls: List of user-defined Control objects (should NOT include time dilation)
         N: Number of discretization nodes in the trajectory
@@ -140,16 +142,13 @@ def preprocess_symbolic_problem(
         Basic usage with CTCS constraint::
 
             import openscvx as ox
-            from openscvx.symbolic.constraint_set import ConstraintSet
 
             x = ox.State("x", shape=(2,))
             v = ox.State("v", shape=(2,))
             u = ox.Control("u", shape=(2,))
 
             dynamics = {"x": v, "v": u}
-            constraints = ConstraintSet(unsorted=[
-                (ox.Norm(x) <= 5.0).over((0, 50))
-            ])
+            constraints = [(ox.Norm(x) <= 5.0).over((0, 50))]
 
             problem = preprocess_symbolic_problem(
                 dynamics=dynamics,
@@ -186,6 +185,13 @@ def preprocess_symbolic_problem(
             # Propagation states include distance for post-solve simulation
             print([s.name for s in problem.states_prop])
     """
+
+    # Validate input types before anything else
+    validate_input_types(dynamics, states, controls, constraints, N, time)
+    validate_propagation_input_types(dynamics_prop_extra, states_prop_extra)
+
+    # Wrap validated constraints into a ConstraintSet
+    constraints = ConstraintSet(unsorted=list(constraints))
 
     # Validate user-provided variables have required attributes
     validate_boundary_conditions(states)

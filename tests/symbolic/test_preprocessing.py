@@ -15,6 +15,8 @@ from openscvx.symbolic.preprocessing import (
     validate_dynamics_dict_dimensions,
     validate_dynamics_dimension,
     validate_guesses,
+    validate_input_types,
+    validate_propagation_input_types,
     validate_variable_names,
 )
 
@@ -976,3 +978,176 @@ def test_validate_guesses_raises_missing():
         match="Control 'thrust' is missing initial guess.*controls require explicit guesses",
     ):
         validate_guesses([u])
+
+
+# =============================================================================
+# validate_input_types Tests
+# =============================================================================
+
+
+@pytest.fixture
+def valid_inputs():
+    """Provide a minimal set of valid inputs for validate_input_types."""
+    from openscvx.symbolic.time import Time
+
+    x = State("x", shape=(3,))
+    u = Control("u", shape=(2,))
+    dynamics = {"x": x}
+    constraints = [x <= 5]
+    time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    return dynamics, [x], [u], constraints, 50, time
+
+
+def test_validate_input_types_passes(valid_inputs):
+    """Test that valid inputs pass validation."""
+    dynamics, states, controls, constraints, N, time = valid_inputs
+    validate_input_types(dynamics, states, controls, constraints, N, time)
+
+
+def test_validate_input_types_bare_control(valid_inputs):
+    """Test that passing a bare Control instead of a list raises TypeError with hint."""
+    dynamics, states, _, constraints, N, time = valid_inputs
+    u = Control("thrust", shape=(2,))
+
+    with pytest.raises(
+        TypeError, match=r"'controls' must be a list.*Control.*Hint.*controls=\[thrust\]"
+    ):
+        validate_input_types(dynamics, states, u, constraints, N, time)
+
+
+def test_validate_input_types_bare_state(valid_inputs):
+    """Test that passing a bare State instead of a list raises TypeError with hint."""
+    dynamics, _, controls, constraints, N, time = valid_inputs
+    x = State("position", shape=(3,))
+
+    with pytest.raises(
+        TypeError, match=r"'states' must be a list.*State.*Hint.*states=\[position\]"
+    ):
+        validate_input_types(dynamics, x, controls, constraints, N, time)
+
+
+def test_validate_input_types_wrong_element_in_states(valid_inputs):
+    """Test that a non-State element in the states list raises TypeError."""
+    dynamics, _, controls, constraints, N, time = valid_inputs
+
+    with pytest.raises(TypeError, match=r"states\[0\] must be a State, got str"):
+        validate_input_types(dynamics, ["not_a_state"], controls, constraints, N, time)
+
+
+def test_validate_input_types_wrong_element_in_controls(valid_inputs):
+    """Test that a non-Control element in the controls list raises TypeError."""
+    dynamics, states, _, constraints, N, time = valid_inputs
+
+    with pytest.raises(TypeError, match=r"controls\[0\] must be a Control, got int"):
+        validate_input_types(dynamics, states, [42], constraints, N, time)
+
+
+def test_validate_input_types_dynamics_not_dict(valid_inputs):
+    """Test that passing non-dict dynamics raises TypeError."""
+    _, states, controls, constraints, N, time = valid_inputs
+
+    with pytest.raises(TypeError, match="'dynamics' must be a dict"):
+        validate_input_types([1, 2, 3], states, controls, constraints, N, time)
+
+
+def test_validate_input_types_constraints_not_list(valid_inputs):
+    """Test that passing a non-list constraints raises TypeError."""
+    dynamics, states, controls, _, N, time = valid_inputs
+
+    with pytest.raises(TypeError, match="'constraints' must be a list"):
+        validate_input_types(dynamics, states, controls, "not_a_list", N, time)
+
+
+def test_validate_input_types_constraints_invalid_element(valid_inputs):
+    """Test that non-constraint elements raise TypeError."""
+    dynamics, states, controls, _, N, time = valid_inputs
+
+    with pytest.raises(TypeError, match=r"constraints\[0\] must be a Constraint.*got int"):
+        validate_input_types(dynamics, states, controls, [42], N, time)
+
+
+def test_validate_input_types_constraints_mixed_valid_and_invalid(valid_inputs):
+    """Test that invalid element is caught even after valid ones."""
+    dynamics, states, controls, _, N, time = valid_inputs
+    x = State("x", shape=(3,))
+
+    with pytest.raises(TypeError, match=r"constraints\[1\] must be a Constraint.*got str"):
+        validate_input_types(dynamics, states, controls, [x <= 5, "bad"], N, time)
+
+
+def test_validate_input_types_N_not_int(valid_inputs):
+    """Test that passing non-int N raises TypeError."""
+    dynamics, states, controls, constraints, _, time = valid_inputs
+
+    with pytest.raises(TypeError, match="'N' must be an integer, got float"):
+        validate_input_types(dynamics, states, controls, constraints, 50.0, time)
+
+
+def test_validate_input_types_N_not_positive(valid_inputs):
+    """Test that passing non-positive N raises ValueError."""
+    dynamics, states, controls, constraints, _, time = valid_inputs
+
+    with pytest.raises(ValueError, match="'N' must be positive, got 0"):
+        validate_input_types(dynamics, states, controls, constraints, 0, time)
+
+    with pytest.raises(ValueError, match="'N' must be positive, got -5"):
+        validate_input_types(dynamics, states, controls, constraints, -5, time)
+
+
+def test_validate_input_types_time_not_time(valid_inputs):
+    """Test that passing non-Time object raises TypeError."""
+    dynamics, states, controls, constraints, N, _ = valid_inputs
+
+    with pytest.raises(TypeError, match="'time' must be a Time object, got float"):
+        validate_input_types(dynamics, states, controls, constraints, N, 10.0)
+
+
+# =============================================================================
+# validate_propagation_input_types Tests
+# =============================================================================
+
+
+def test_validate_propagation_input_types_both_none():
+    """Test that both None passes validation."""
+    validate_propagation_input_types(None, None)
+
+
+def test_validate_propagation_input_types_both_valid():
+    """Test that valid dict + list passes validation."""
+    distance = State("distance", shape=(1,))
+    validate_propagation_input_types({"distance": distance}, [distance])
+
+
+def test_validate_propagation_input_types_only_dynamics():
+    """Test that providing dynamics_prop without states_prop raises ValueError."""
+    with pytest.raises(ValueError, match="'dynamics_prop' was provided but 'states_prop' was not"):
+        validate_propagation_input_types({"distance": 1.0}, None)
+
+
+def test_validate_propagation_input_types_only_states():
+    """Test that providing states_prop without dynamics_prop raises ValueError."""
+    distance = State("distance", shape=(1,))
+    with pytest.raises(ValueError, match="'states_prop' was provided but 'dynamics_prop' was not"):
+        validate_propagation_input_types(None, [distance])
+
+
+def test_validate_propagation_input_types_bare_state():
+    """Test that passing a bare State instead of a list raises TypeError with hint."""
+    distance = State("distance", shape=(1,))
+    with pytest.raises(
+        TypeError, match=r"'states_prop' must be a list.*Hint.*states_prop=\[distance\]"
+    ):
+        validate_propagation_input_types({"distance": distance}, distance)
+
+
+def test_validate_propagation_input_types_dynamics_not_dict():
+    """Test that passing non-dict dynamics_prop raises TypeError."""
+    distance = State("distance", shape=(1,))
+    with pytest.raises(TypeError, match="'dynamics_prop' must be a dict"):
+        validate_propagation_input_types([distance], [distance])
+
+
+def test_validate_propagation_input_types_wrong_element_in_states():
+    """Test that a non-State element in states_prop raises TypeError."""
+    with pytest.raises(TypeError, match=r"states_prop\[0\] must be a State, got str"):
+        validate_propagation_input_types({"x": 1.0}, ["not_a_state"])
