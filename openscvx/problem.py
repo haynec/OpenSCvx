@@ -26,6 +26,8 @@ os.environ["EQX_ON_ERROR"] = "nan"
 
 from openscvx.algorithms import (
     AlgorithmState,
+    AugmentedLagrangian,
+    AutotuningBase,
     OptimizationResults,
     PenalizedTrustRegion,
 )
@@ -82,6 +84,7 @@ class Problem:
         licq_max: float = 1e-4,
         time_dilation_factor_min: float = 0.3,
         time_dilation_factor_max: float = 3.0,
+        autotuner: Optional[AutotuningBase] = AugmentedLagrangian(),
         byof: Optional[ByofSpec] = None,
     ):
         """The primary class in charge of compiling and exporting the solvers.
@@ -188,7 +191,8 @@ class Problem:
             ),
             scp=ScpConfig(
                 n=N,
-                w_tr_max_scaling_factor=1e2,  # Maximum Trust Region Weight
+                n_states=self._lowered.x_unified.shape[0],
+                autotuner=autotuner,
             ),
             dis=DiscretizationConfig(),
             dev=DevConfig(),
@@ -200,19 +204,19 @@ class Problem:
         # settings (like uniform_time_grid) between __init__ and initialize()
         self._discretization_solver: callable = None
 
-        # Set up emitter & thread only if printing is enabled
+        # Set up emitter & queue (thread started in initialize() after columns are known)
         if self.settings.dev.printing:
             self.print_queue = queue.Queue()
             self.emitter_function = lambda data: self.print_queue.put(data)
-            self.print_thread = threading.Thread(
-                target=printing.intermediate,
-                args=(self.print_queue, self.settings),
-                daemon=True,
-            )
-            self.print_thread.start()
+            self.print_thread = None  # Started in initialize()
         else:
             # no-op emitter; nothing ever gets queued or printed
+            self.print_queue = None
             self.emitter_function = lambda data: None
+            self.print_thread = None
+
+        # Columns for printing (set in initialize() based on algorithm + autotuner)
+        self._columns = None
 
         self.timing_init = None
         self.timing_solve = None
@@ -376,6 +380,10 @@ class Problem:
             J_vc_history=state.J_vc,
             TR_history=state.TR_history,
             VC_history=state.VC_history,
+            lam_prox_history=state.lam_prox_history.copy(),
+            actual_reduction_history=state.actual_reduction_history.copy(),
+            pred_reduction_history=state.pred_reduction_history.copy(),
+            acceptance_ratio_history=state.acceptance_ratio_history.copy(),
         )
 
     def initialize(self):
@@ -504,6 +512,19 @@ class Problem:
         )
         print("✓ SCvx Subproblem Solver initialized")
 
+        # Get columns from algorithm (now that autotuner is set) and start print thread
+        if self.settings.dev.printing:
+            self._columns = self._algorithm.get_columns(self.settings.dev.verbosity)
+            self.print_thread = threading.Thread(
+                target=printing.intermediate,
+                args=(self.print_queue, self.settings, self._columns),
+                daemon=True,
+            )
+            self.print_thread.start()
+        else:
+            # Printing was disabled after __init__, disable emitter to avoid queue buildup
+            self.emitter_function = lambda data: None
+
         # Create fresh solver state
         self._state = AlgorithmState.from_settings(self.settings)
 
@@ -616,7 +637,8 @@ class Problem:
 
         t_0_while = time.time()
         # Print top header for solver results
-        printing.header()
+        if self.settings.dev.printing:
+            printing.header(self._columns)
 
         k_max = max_iters if max_iters is not None else self.settings.scp.k_max
 
@@ -628,11 +650,14 @@ class Problem:
         t_f_while = time.time()
         self.timing_solve = t_f_while - t_0_while
 
-        while self.print_queue.qsize() > 0:
-            time.sleep(0.1)
+        # Wait for print queue to drain (only if thread is running)
+        if self.print_thread is not None and self.print_thread.is_alive():
+            while self.print_queue.qsize() > 0:
+                time.sleep(0.1)
 
-        # Print bottom footer for solver results as well as total computation time
-        printing.footer()
+        # Print bottom footer for solver results
+        if self.settings.dev.printing:
+            printing.footer(self._columns)
 
         profiling.profiling_end(pr, "solve")
 

@@ -152,10 +152,7 @@ problem = Problem(
     N=n,
 )
 
-problem.settings.prp.dt = 0.01
 problem.settings.scp.lam_vb = 1e0
-problem.settings.scp.cost_drop = 4  # SCP iteration to relax minimal final time objective
-problem.settings.scp.cost_relax = 0.5  # Minimal Time Relaxation Factor
 
 plotting_dict = {
     "obstacles_centers": obstacle_center_positions,

@@ -1,5 +1,8 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from openscvx.algorithms.autotuning import AutotuningBase
 
 import numpy as np
 
@@ -64,7 +67,13 @@ class DiscretizationConfig:
 
 @dataclass
 class DevConfig:
-    def __init__(self, profiling: bool = False, debug: bool = False, printing: bool = True):
+    def __init__(
+        self,
+        profiling: bool = False,
+        debug: bool = False,
+        printing: bool = True,
+        verbosity: int = 2,
+    ):
         """
         Configuration class for development settings.
 
@@ -81,10 +90,15 @@ class DevConfig:
                 breakpoints and inspect values. Defaults to False.
             printing (bool): Whether to enable printing during development.
                 Defaults to True.
+            verbosity (int): Verbosity level for iteration output.
+                1 (MINIMAL): Core metrics only (iter, cost, status)
+                2 (STANDARD): + timing, penalty terms (default)
+                3 (FULL): + autotuning diagnostics
         """
         self.profiling = profiling
         self.debug = debug
         self.printing = printing
+        self.verbosity = verbosity
 
 
 @dataclass
@@ -329,20 +343,17 @@ class ScpConfig:
     def __init__(
         self,
         n: Optional[int] = None,
+        n_states: Optional[int] = None,
         k_max: int = 200,
-        w_tr: float = 1.0,
-        lam_vc: float = 1.0,
+        lam_prox: float = 1e0,
+        lam_vc: float = 1e1,
+        lam_cost: float = 1e-1,
+        lam_vb: float = 0.0,
         ep_tr: float = 1e-4,
         ep_vb: float = 1e-4,
         ep_vc: float = 1e-8,
-        lam_cost: float = 0.0,
-        lam_vb: float = 0.0,
         uniform_time_grid: bool = False,
-        cost_drop: int = -1,
-        cost_relax: float = 1.0,
-        w_tr_adapt: float = 1.0,
-        w_tr_max: Optional[float] = None,
-        w_tr_max_scaling_factor: Optional[float] = None,
+        autotuner: Optional["AutotuningBase"] = None,
     ):
         """
         Configuration class for Sequential Convex Programming (SCP).
@@ -355,7 +366,7 @@ class ScpConfig:
         Attributes:
             n (int): The number of discretization nodes. Defaults to `None`.
             k_max (int): The maximum number of SCP iterations. Defaults to 200.
-            w_tr (float): The trust region weight. Defaults to 1.0.
+            lam_prox (float): The trust region weight. Defaults to 1.0.
             lam_vc (float): The penalty weight for virtual control. Defaults to 1.0.
             ep_tr (float): The trust region convergence tolerance. Defaults to 1e-4.
             ep_vb (float): The boundary constraint convergence tolerance.
@@ -367,35 +378,100 @@ class ScpConfig:
                 there are nonconvex nodal constraints present. Defaults to 0.0.
             uniform_time_grid (bool): Whether to use a uniform time grid.
                 Defaults to `False`.
-            cost_drop (int): The number of iterations to allow for cost
-                stagnation before termination. Defaults to -1 (disabled).
-            cost_relax (float): The relaxation factor for cost reduction.
-                Defaults to 1.0.
-            w_tr_adapt (float): The adaptation factor for the trust region
-                weight. Defaults to 1.0.
-            w_tr_max (float): The maximum allowable trust region weight.
-                Defaults to `None`.
-            w_tr_max_scaling_factor (float): The scaling factor for the maximum
-                trust region weight. Defaults to `None`.
+            autotuner: Optional custom autotuner instance. If not provided, defaults
+                to ``AugmentedLagrangian()`` with default parameters. Useful for
+                customizing parameters:
+
+                .. code-block:: python
+
+                    auto_tuner = ox.AugmentedLagrangian()
+                    auto_tuner.rho_max = 1e7
+                    problem.settings.scp.autotuner = auto_tuner
+
+        Note:
+            Autotuner parameters can be accessed and modified via the autotuner
+            instance (e.g., ``problem.algorithm.autotuner.rho_max``) after
+            initialization. Default values are set in the AugmentedLagrangian class.
         """
+        # Initialize references first (before any setters that might use them)
+        self._parent_config = None  # Will be set by Config.__post_init__
+        self._n_states = n_states
+
         self.n = n
         self.k_max = k_max
-        self.w_tr = w_tr
-        self.lam_vc = lam_vc
+        self.lam_prox = lam_prox
+        # Store raw lam_vc; convert to array later once n_states is known
+        self._lam_vc = lam_vc
         self.ep_tr = ep_tr
         self.ep_vb = ep_vb
         self.ep_vc = ep_vc
         self.lam_cost = lam_cost
         self.lam_vb = lam_vb
         self.uniform_time_grid = uniform_time_grid
-        self.cost_drop = cost_drop
-        self.cost_relax = cost_relax
-        self.w_tr_adapt = w_tr_adapt
-        self.w_tr_max = w_tr_max
-        self.w_tr_max_scaling_factor = w_tr_max_scaling_factor
+        # Store autotuner via property to support lazy default construction
+        self.autotuner = autotuner
+
+        # Internal storage for autotuner instance (may be lazily created)
+        # Initialized here to ensure attribute exists even if setter logic changes
+        if not hasattr(self, "_autotuner"):
+            self._autotuner = None
+
+    @property
+    def autotuner(self) -> Optional["AutotuningBase"]:
+        """Return the configured autotuner, defaulting to AugmentedLagrangian.
+
+        If no custom autotuner instance has been provided, this property lazily
+        constructs a default :class:`AugmentedLagrangian` instance and caches it
+        on the config object. This keeps the configuration as the single source
+        of truth for the autotuning strategy while avoiding circular imports by
+        importing inside the method body.
+        """
+        if self._autotuner is None:
+            # Local import avoids circular dependency:
+            # - autotuning imports Config
+            # - Config should not eagerly import autotuning at module import time
+            from openscvx.algorithms.autotuning import AugmentedLagrangian
+
+            self._autotuner = AugmentedLagrangian()
+        return self._autotuner
+
+    @autotuner.setter
+    def autotuner(self, value: Optional["AutotuningBase"]) -> None:
+        """Set a custom autotuner instance or reset to default when None.
+
+        Passing ``None`` clears the cached autotuner so that the next access
+        will recreate the default :class:`AugmentedLagrangian` instance.
+        """
+        self._autotuner = value
+
+    @property
+    def lam_vc(self):
+        """Getter for lam_vc."""
+        return self._lam_vc
+
+    @lam_vc.setter
+    def lam_vc(self, value):
+        """Setter for lam_vc that converts scalar to array if possible.
+
+        If a scalar is provided and both `n` and `n_states` (from parent config)
+        are available, the scalar is converted to an array of shape (n-1, n_states).
+        This setter assumes it is called only after `n_states` is available.
+        """
+        # If it's already an array, store it directly
+        if isinstance(value, np.ndarray):
+            self._lam_vc = value
+            return
+
+        # If it's a scalar, require dimensions to be available
+        if isinstance(value, (int, float)):
+            # Both dimensions available, convert to array
+            self._lam_vc = np.ones((self.n - 1, self._n_states)) * value
+            return
+
+        raise ValueError(f"Invalid value for lam_vc: {value}")
 
     def __post_init__(self):
-        keys_to_scale = ["w_tr", "lam_vc", "lam_cost", "lam_vb"]
+        keys_to_scale = ["lam_prox", "lam_vc", "lam_cost", "lam_vb"]
         # Handle lam_vc which might be scalar or array
         scale_values = []
         for key in keys_to_scale:
@@ -412,9 +488,6 @@ class ScpConfig:
             else:
                 setattr(self, key, val / scale)
 
-        if self.w_tr_max_scaling_factor is not None and self.w_tr_max is None:
-            self.w_tr_max = self.w_tr_max_scaling_factor * self.w_tr
-
 
 @dataclass
 class Config:
@@ -426,4 +499,5 @@ class Config:
     dev: DevConfig
 
     def __post_init__(self):
-        pass
+        # Set parent config reference in scp
+        self.scp._parent_config = self

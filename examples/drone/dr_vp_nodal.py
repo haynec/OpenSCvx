@@ -28,6 +28,7 @@ from examples.plotting_viser import (
     create_scp_animated_plotting_server,
 )
 from openscvx import Problem
+from openscvx.plotting import plot_scp_convergence_histories
 from openscvx.utils import gen_vertices, rot
 
 n = 33  # Number of Nodes
@@ -226,23 +227,12 @@ problem = Problem(
     N=n,
 )
 
-problem.settings.prp.dt = 0.1
 
-problem.settings.scp.w_tr = 8e1  # Weight on the Trust Reigon
+problem.settings.scp.lam_prox = 8e1  # Weight on the Trust Reigon
 problem.settings.scp.lam_cost = 2e1  # Weight on the Minimal Time Objective
-problem.settings.scp.lam_vc = (
-    1e2  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
-)
-problem.settings.scp.lam_vb = (
-    4e0  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
-)
+problem.settings.scp.lam_vc = 1e2  # Weight on the Virtual Control Objective
+problem.settings.scp.lam_vb = 4e0  # Weight on the Virtual Buffer Objective
 problem.settings.scp.ep_tr = 1e-3  # Trust Region Tolerance
-problem.settings.scp.ep_vb = 1e-4  # Virtual Control Tolerance
-problem.settings.scp.ep_vc = 1e-8  # Virtual Control Tolerance
-problem.settings.scp.cost_drop = 10  # SCP iteration to relax minimal final time objective
-problem.settings.scp.cost_relax = 0.8  # Minimal Time Relaxation Factor
-problem.settings.scp.w_tr_adapt = 1.05  # Trust Region Adaptation Factor
-problem.settings.scp.w_tr_max_scaling_factor = 1e2  # Maximum Trust Region Weight
 
 plotting_dict = {
     "vertices": vertices,
@@ -260,6 +250,8 @@ if __name__ == "__main__":
     results = problem.post_process()
 
     results.update_plotting_data(**plotting_dict)
+
+    plot_scp_convergence_histories(results).show()
 
     # Create both visualization servers (viser auto-assigns ports)
     traj_server = create_animated_plotting_server(

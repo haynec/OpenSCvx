@@ -258,11 +258,14 @@ problem = ox.Problem(
 The SCP algorithm has several tuning parameters that affect convergence. For this obstacle avoidance problem:
 
 ```python
-problem.settings.scp.w_tr = 1e1        # Trust region weight
+problem.settings.scp.lam_prox = 1e1        # Trust region weight
 problem.settings.scp.lam_cost = 1e1    # Cost objective weight
 problem.settings.scp.lam_vc = 1e2      # Virtual control weight
-problem.settings.scp.cost_drop = 4     # Iteration to start relaxing cost
-problem.settings.scp.cost_relax = 0.5  # Cost relaxation factor
+# Configure cost relaxation via autotuner
+problem.settings.scp.autotuner = ox.AugmentedLagrangian(
+    lam_cost_drop=4,     # Iteration to start relaxing cost
+    lam_cost_relax=0.5  # Cost relaxation factor
+)
 ```
 
 ### Solution
@@ -389,7 +392,7 @@ if step_result.J_vc < 1e-4:
     problem.settings.scp.lam_cost *= 1.1
 
 # Tighten trust region if solution is oscillating
-problem.settings.scp.w_tr = 2.0
+problem.settings.scp.lam_prox = 2.0
 ```
 
 ### Resetting the Problem

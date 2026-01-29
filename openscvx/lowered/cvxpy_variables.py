@@ -28,7 +28,7 @@ class CVXPyVariables:
         - Scaled expressions: CVXPy expressions for scaled state/control at each node
 
     Attributes:
-        w_tr: Trust region weight parameter (scalar, nonneg)
+        lam_prox: Trust region weight parameter (scalar, nonneg)
         lam_cost: Cost function weight parameter (scalar, nonneg)
         lam_vc: Virtual control penalty weights (N-1 x n_states, nonneg)
         lam_vb: Virtual buffer penalty weight (scalar, nonneg)
@@ -73,7 +73,7 @@ class CVXPyVariables:
     """
 
     # SCP weight parameters
-    w_tr: "cp.Parameter"
+    lam_prox: "cp.Parameter"
     lam_cost: "cp.Parameter"
     lam_vc: "cp.Parameter"
     lam_vb: "cp.Parameter"

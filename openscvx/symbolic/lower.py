@@ -200,7 +200,7 @@ def create_cvxpy_variables(
     inv_S_u = np.linalg.inv(S_u)
 
     # Parameters
-    w_tr = cp.Parameter(nonneg=True, name="w_tr")
+    lam_prox = cp.Parameter(nonneg=True, name="lam_prox")
     lam_cost = cp.Parameter(nonneg=True, name="lam_cost")
     lam_vc = cp.Parameter((N - 1, n_states), nonneg=True, name="lam_vc")
     lam_vb = cp.Parameter(nonneg=True, name="lam_vb")
@@ -263,7 +263,7 @@ def create_cvxpy_variables(
         du_nonscaled.append(S_u @ du[k])
 
     return CVXPyVariables(
-        w_tr=w_tr,
+        lam_prox=lam_prox,
         lam_cost=lam_cost,
         lam_vc=lam_vc,
         lam_vb=lam_vb,

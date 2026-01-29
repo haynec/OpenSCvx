@@ -2,14 +2,17 @@ import queue
 import sys
 import time
 import warnings
+from dataclasses import dataclass, field
+from enum import IntEnum
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import jax
 import numpy as np
 from termcolor import colored
 
-from openscvx.algorithms import OptimizationResults
+if TYPE_CHECKING:
+    from openscvx.algorithms import OptimizationResults
 
 warnings.filterwarnings("ignore")
 
@@ -18,6 +21,129 @@ warnings.filterwarnings("ignore")
 col_main = "blue"
 col_pos = "green"
 col_neg = "red"
+
+
+class Verbosity(IntEnum):
+    """Verbosity levels for iteration table output."""
+
+    MINIMAL = 1  # Core metrics only (iter, cost, status)
+    STANDARD = 2  # + timing, penalty terms
+    FULL = 3  # + autotuning diagnostics (J_nonlin, reductions, etc.)
+
+
+@dataclass
+class Column:
+    """Specification for a single column in the iteration table."""
+
+    key: str  # Key in emission data dict
+    header: str  # Column header text
+    width: int  # Column width
+    fmt: str  # Format string for values
+    color_fn: Optional[Callable[[Any, Any, dict], Optional[str]]] = None
+    min_verbosity: int = field(default=Verbosity.MINIMAL)  # Minimum verbosity to show
+
+
+def color_J_tr(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color J_tr green if within tolerance, red otherwise."""
+    if params is None:
+        return None
+    return col_pos if value <= params.scp.ep_tr else col_neg
+
+
+def color_J_vb(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color J_vb green if within tolerance, red otherwise."""
+    if params is None:
+        return None
+    return col_pos if value <= params.scp.ep_vb else col_neg
+
+
+def color_J_vc(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color J_vc green if within tolerance, red otherwise."""
+    if params is None:
+        return None
+    return col_pos if value <= params.scp.ep_vc else col_neg
+
+
+def color_prob_stat(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color solver status green if optimal, red otherwise."""
+    return col_pos if value == "optimal" else col_neg
+
+
+def color_adaptive_state(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color adaptive state green if acceptable, red otherwise."""
+    acceptable_states = ["Accept Constant", "Accept Higher", "Accept Lower", "Initial"]
+    return col_pos if value in acceptable_states else col_neg
+
+
+def color_acceptance_ratio(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color acceptance ratio based on success level.
+
+    <= 0.1: red (unsuccessful)
+    0.1 < ratio <= 0.8: somewhat successful (green)
+    0.8 < ratio <= 1.5: very successful (blue)
+    > 1.5: overly successful (magenta)
+    """
+    if value <= 0.1:
+        return "red"
+    elif value <= 0.8:
+        return "green"
+    elif value <= 1.5:
+        return "blue"
+    else:
+        return "magenta"
+
+
+def color_J_nonlin(value: Any, params: Any, data: dict) -> Optional[str]:
+    """Color J_nonlin green if positive, red otherwise."""
+    return "green" if value > 0 else "red"
+
+
+def build_separator(columns: list[Column]) -> str:
+    """Generate separator line matching the total width of active columns."""
+    total_width = sum(col.width for col in columns) + 3 * (len(columns) - 1)
+    return "─" * total_width
+
+
+def build_header_format(columns: list[Column]) -> str:
+    """Generate header format string from active columns."""
+    return " │ ".join(f"{{:^{col.width}}}" for col in columns)
+
+
+def format_value(col: Column, value: Any, params: Any, data: dict) -> str:
+    """Format a single value and apply coloring if needed."""
+    # Handle None values
+    if value is None:
+        value = 0.0
+
+    # Format the value
+    formatted = col.fmt.format(value)
+
+    # Pad to column width BEFORE applying color (ANSI codes break alignment)
+    formatted = f"{formatted:^{col.width}}"
+
+    # Apply coloring if a color function is defined
+    if col.color_fn is not None:
+        color = col.color_fn(value, params, data)
+        if color is not None:
+            formatted = colored(formatted, color)
+
+    return formatted
+
+
+def header(columns: list[Column]) -> None:
+    """Print the table header for the given columns."""
+    separator = build_separator(columns)
+    header_fmt = build_header_format(columns)
+
+    print(colored(separator))
+    print(header_fmt.format(*[col.header for col in columns]))
+    print(colored(separator))
+
+
+def print_row(columns: list[Column], data: dict, params: Any) -> None:
+    """Print a single data row for the given columns."""
+    values = [format_value(col, data.get(col.key), params, data) for col in columns]
+    print(" │ ".join(values))
 
 
 def get_version() -> str:
@@ -91,7 +217,7 @@ def print_problem_summary(settings: Any, lowered: Any, solver: Any) -> None:
         lam_vc_str = f"λ_vc={settings.scp.lam_vc:4.1f}"
     weights_parts = [
         f"λ_cost={settings.scp.lam_cost:4.1f}",
-        f"λ_tr={settings.scp.w_tr:4.1f}",
+        f"λ_tr={settings.scp.lam_prox:4.1f}",
         lam_vc_str,
     ]
 
@@ -120,7 +246,7 @@ def print_problem_summary(settings: Any, lowered: Any, solver: Any) -> None:
     print_summary_box(lines, "Problem Summary")
 
 
-def print_results_summary(result: OptimizationResults, timing_post, timing_init, timing_solve):
+def print_results_summary(result: "OptimizationResults", timing_post, timing_init, timing_solve):
     """
     Print the results summary box.
 
@@ -188,105 +314,52 @@ def intro():
     print(ascii_art)
 
 
-def header():
-    print(
-        colored(
-            "─────────────────────────────────────────────────────────────────────────────────────────────────────────"
-        )
-    )
-    print(
-        "{:^4} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │  {:^7} │ {:^14}".format(
-            "Iter",
-            "Dis Time (ms)",
-            "Solve Time (ms)",
-            "J_total",
-            "J_tr",
-            "J_vb",
-            "J_vc",
-            "Cost",
-            "Solver Status",
-        )
-    )
-    print(
-        colored(
-            "─────────────────────────────────────────────────────────────────────────────────────────────────────────"
-        )
-    )
+def intermediate(print_queue: queue.Queue, params: Any, columns: list[Column]) -> None:
+    """Process and print iteration data from the queue.
 
+    This function runs in a loop, reading data from the print queue and
+    displaying formatted iteration rows.
 
-def intermediate(print_queue, params):
+    Args:
+        print_queue: Queue containing iteration data dicts
+        params: Settings object (used for color threshold comparisons)
+        columns: List of Column specs defining the table structure
+    """
     hz = 30.0
+    separator = build_separator(columns)
+
     while True:
         t_start = time.time()
         try:
             data = print_queue.get(timeout=1.0 / hz)
-            # remove bottom labels and line
+
+            # Truncate prob_stat if it's a longer string (e.g., "infeasible" -> "i")
+            prob_stat = data.get("prob_stat", "")
+            if prob_stat.startswith("inf"):
+                data["prob_stat"] = "i"
+
+            # Remove bottom separator and header (2 lines)
             if data["iter"] != 1:
                 sys.stdout.write("\x1b[1A\x1b[2K\x1b[1A\x1b[2K")
-            if data["prob_stat"][3] == "f":
-                # Only show the first element of the string
-                data["prob_stat"] = data["prob_stat"][0]
 
-            iter_colored = colored("{:4d}".format(data["iter"]))
-            J_tot_colored = colored("{:.1e}".format(data["J_total"]))
-            J_tr_colored = colored(
-                "{:.1e}".format(data["J_tr"]),
-                col_pos if data["J_tr"] <= params.scp.ep_tr else col_neg,
-            )
-            J_vb_colored = colored(
-                "{:.1e}".format(data["J_vb"]),
-                col_pos if data["J_vb"] <= params.scp.ep_vb else col_neg,
-            )
-            J_vc_colored = colored(
-                "{:.1e}".format(data["J_vc"]),
-                col_pos if data["J_vc"] <= params.scp.ep_vc else col_neg,
-            )
-            cost_colored = colored("{:.1e}".format(data["cost"]))
-            prob_stat_colored = colored(
-                data["prob_stat"], col_pos if data["prob_stat"] == "optimal" else col_neg
-            )
+            # Print the data row
+            print_row(columns, data, params)
 
-            print(
-                "{:^4} │     {:^6.2f}    │      {:^6.2F}     │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ "
-                " {:^7} │ {:^14}".format(
-                    iter_colored,
-                    data["dis_time"],
-                    data["subprop_time"],
-                    J_tot_colored,
-                    J_tr_colored,
-                    J_vb_colored,
-                    J_vc_colored,
-                    cost_colored,
-                    prob_stat_colored,
-                )
-            )
+            # Print separator and header (footer() will add closing separator)
+            print(colored(separator))
+            header_fmt = build_header_format(columns)
+            print(header_fmt.format(*[col.header for col in columns]))
 
-            print(
-                colored(
-                    "─────────────────────────────────────────────────────────────────────────────────────────────────────────"
-                )
-            )
-            print(
-                "{:^4} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │ {:^7} │  {:^7} │ {:^14}".format(
-                    "Iter",
-                    "Dis Time (ms)",
-                    "Solve Time (ms)",
-                    "J_total",
-                    "J_tr",
-                    "J_vb",
-                    "J_vc",
-                    "Cost",
-                    "Solver Status",
-                )
-            )
         except queue.Empty:
             pass
         time.sleep(max(0.0, 1.0 / hz - (time.time() - t_start)))
 
 
-def footer():
-    print(
-        colored(
-            "─────────────────────────────────────────────────────────────────────────────────────────────────────────"
-        )
-    )
+def footer(columns: list[Column]) -> None:
+    """Print the table footer.
+
+    Args:
+        columns: List of Column specs defining the table structure
+    """
+    separator = build_separator(columns)
+    print(colored(separator))
