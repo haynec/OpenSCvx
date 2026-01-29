@@ -963,11 +963,14 @@ def test_scpconfig_autotuner_augmented_lagrangian(settings):
     autotuner = settings.scp.autotuner
     assert isinstance(autotuner, AugmentedLagrangian)
 
-    # Check that default parameters are set
+    # Check that default parameters are set (AugmentedLagrangian constructor args)
     assert hasattr(autotuner, "rho_init")
     assert hasattr(autotuner, "rho_max")
-    assert hasattr(autotuner, "mu_init")
-    assert hasattr(autotuner, "mu_max")
+    assert hasattr(autotuner, "lam_prox_min")
+    assert hasattr(autotuner, "lam_prox_max")
+    assert hasattr(autotuner, "lam_vc_max")
+    assert hasattr(autotuner, "lam_cost_drop")
+    assert hasattr(autotuner, "lam_cost_relax")
 
     # Check that parameters can be modified
     autotuner.rho_max = 1e7
@@ -980,7 +983,8 @@ def test_custom_autotuner_instance(settings):
     # Create custom autotuner with modified parameters
     custom_autotuner = AugmentedLagrangian()
     custom_autotuner.rho_max = 1e7
-    custom_autotuner.mu_max = 1e7
+    custom_autotuner.lam_prox_max = 1e6
+    custom_autotuner.lam_vc_max = 1e6
 
     # Pass it to ScpConfig
     settings.scp.autotuner = custom_autotuner
@@ -989,7 +993,8 @@ def test_custom_autotuner_instance(settings):
     autotuner = settings.scp.autotuner
     assert autotuner is custom_autotuner
     assert autotuner.rho_max == 1e7
-    assert autotuner.mu_max == 1e7
+    assert autotuner.lam_prox_max == 1e6
+    assert autotuner.lam_vc_max == 1e6
 
 
 def test_augmented_lagrangian_exported():
@@ -999,11 +1004,14 @@ def test_augmented_lagrangian_exported():
     # Should be able to import directly
     auto_tuner = ox.AugmentedLagrangian()
     assert hasattr(auto_tuner, "rho_max")
-    assert hasattr(auto_tuner, "mu_max")
+    assert hasattr(auto_tuner, "lam_prox_max")
+    assert hasattr(auto_tuner, "lam_vc_max")
 
     # Should be able to modify parameters
     auto_tuner.rho_max = 1e7
+    auto_tuner.lam_prox_max = 1e6
     assert auto_tuner.rho_max == 1e7
+    assert auto_tuner.lam_prox_max == 1e6
 
 
 # --- Tests for ConstantProximalWeight ---------------------------------------------
