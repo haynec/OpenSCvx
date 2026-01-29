@@ -175,7 +175,7 @@ if __name__ == "__main__":
     plot_projections_2d(results, velocity_var_name="velocity").show()
 
     # Create PDG trajectory visualization
-    scene_scale=100
+    scene_scale = 100
     traj_server = create_pdg_animated_plotting_server(
         results,
         thrust_key="thrust",

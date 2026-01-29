@@ -238,7 +238,7 @@ problem = Problem(
 )
 
 
-problem.settings.scp.lam_prox = 4e0   # Weight on the Trust Reigon
+problem.settings.scp.lam_prox = 4e0  # Weight on the Trust Reigon
 problem.settings.scp.ep_tr = 1e-6  # Trust Region Tolerance
 
 plotting_dict = {

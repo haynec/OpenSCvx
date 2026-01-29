@@ -28,7 +28,7 @@ sys.path.append(grandparent_dir)
 
 import openscvx as ox
 from openscvx import Problem
-from openscvx.plotting import plot_scp_iterations, plot_scp_convergence_histories
+from openscvx.plotting import plot_scp_convergence_histories, plot_scp_iterations
 
 # =============================================================================
 # Robot Parameters

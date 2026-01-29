@@ -23,17 +23,17 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
-from examples.realtime.base_problems.drone_racing_realtime_base import (
-    gate_center_params,
-    initial_gate_centers,
-    problem,
-)
 from examples.plotting_viser import (
     build_scp_step_results,
     compute_velocity_colors_realtime,
     extract_multishoot_trajectory,
     format_metrics_markdown,
     get_print_queue_data,
+)
+from examples.realtime.base_problems.drone_racing_realtime_base import (
+    gate_center_params,
+    initial_gate_centers,
+    problem,
 )
 from openscvx.utils import gen_vertices
 

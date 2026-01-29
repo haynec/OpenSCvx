@@ -94,8 +94,6 @@ problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
 problem.settings.scp.uniform_time_grid = True
 
 
-
-
 plotting_dict = {}
 
 if __name__ == "__main__":
