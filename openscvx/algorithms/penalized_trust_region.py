@@ -274,7 +274,6 @@ class PenalizedTrustRegion(Algorithm):
             "iter": state.k,
             "dis_time": dis_time * 1000.0,
             "subprop_time": subprop_time * 1000.0,
-            "J_total": J_total,
             "J_tr": state.J_tr,
             "J_vb": state.J_vb,
             "J_vc": state.J_vc,
