@@ -208,14 +208,26 @@ class AugmentedLagrangian(AutotuningBase):
         Args:
             rho_init: Initial penalty parameter for constraints. Defaults to 1.0.
             rho_max: Maximum penalty parameter. Defaults to 1e6.
-            rho_increase: Factor to increase penalty when constraints violated.
+            gamma_1: Factor to increase trust region weight when ratio is low.
                 Defaults to 2.0.
-            rho_decrease: Factor to decrease penalty when constraints satisfied.
+            gamma_2: Factor to decrease trust region weight when ratio is high.
                 Defaults to 0.5.
-            mu_init: Initial penalty parameter for virtual control. Defaults to 1.0.
-            mu_max: Maximum penalty parameter for virtual control. Defaults to 1e6.
-            mu_increase: Factor to increase mu when dynamics violated. Defaults to 2.0.
-            mu_decrease: Factor to decrease mu when dynamics satisfied. Defaults to 0.5.
+            eta_0: Acceptance ratio threshold below which solution is rejected.
+                Defaults to 1e-2.
+            eta_1: Threshold above which solution is accepted with constant weight.
+                Defaults to 1e-1.
+            eta_2: Threshold above which solution is accepted with lower weight.
+                Defaults to 0.8.
+            ep: Threshold for virtual control weight update (nu > ep vs nu <= ep).
+                Defaults to 0.5.
+            eta_lambda: Step size for virtual control weight update. Defaults to 1e0.
+            lam_vc_max: Maximum virtual control penalty weight. Defaults to 1e5.
+            lam_prox_min: Minimum trust region (proximal) weight. Defaults to 1e-3.
+            lam_prox_max: Maximum trust region (proximal) weight. Defaults to 2e5.
+            lam_cost_drop: Iteration after which cost relaxation applies (-1 = never).
+                Defaults to -1.
+            lam_cost_relax: Factor applied to lam_cost after lam_cost_drop.
+                Defaults to 1.0.
         """
         self.rho_init = rho_init
         self.rho_max = rho_max
