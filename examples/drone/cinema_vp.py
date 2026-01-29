@@ -64,12 +64,9 @@ fuel.min = np.array([0])
 fuel.initial = np.array([0])
 fuel.final = [("minimize", 0)]
 
-# Define time state (needed for time-dependent constraints)
-time = ox.State("time", shape=(1,))
-time.max = np.array([total_time])
-time.min = np.array([0.0])
-time.initial = np.array([0.0])
-time.final = np.array([total_time])
+# Define time (needed for time-dependent constraints)
+# Time is a State subclass, so it can be used directly in expressions
+time = ox.Time(initial=0.0, final=total_time, min=0.0, max=total_time)
 
 # Define control components
 thrust_force = ox.Control("thrust_force", shape=(3,))  # Thrust forces [fx, fy, fz]
@@ -230,33 +227,19 @@ attitude.guess = attitude_bar
 angular_velocity.guess = angular_velocity_bar
 fuel.guess = fuel_bar
 
-time_config = ox.Time(
-    initial=0.0,
-    final=total_time,
-    min=0.0,
-    max=total_time,
-)
-
 problem = Problem(
     dynamics=dynamics,
     states=states,
     controls=controls,
-    time=time_config,
+    time=time,  # Time is already defined above as ox.Time
     constraints=constraints,
     N=n,
     licq_max=1e-8,
 )
 
 
-problem.settings.scp.w_tr = 4e0  # Weight on the Trust Reigon
-problem.settings.scp.lam_cost = 1e-2  # Weight on the Minimal Fuel Objective
-problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
-
+problem.settings.scp.lam_prox = 4e0  # Weight on the Trust Reigon
 problem.settings.scp.ep_tr = 1e-6  # Trust Region Tolerance
-problem.settings.scp.ep_vb = 1e-4  # Virtual Control Tolerance
-problem.settings.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS
-problem.settings.scp.w_tr_adapt = 1.3  # Trust Region Adaptation Factor
-problem.settings.scp.w_tr_max_scaling_factor = 1e3  # Maximum Trust Region Weight
 
 plotting_dict = {
     "n_subs": n_subs,

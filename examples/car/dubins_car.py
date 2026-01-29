@@ -100,21 +100,9 @@ problem = Problem(
 )
 
 # Set solver parameters
-problem.settings.prp.dt = 0.01
-# problem.settings.scp.w_tr_adapt = 1.3
-problem.settings.scp.w_tr = 1e0
 problem.settings.scp.lam_cost = 4e1
 problem.settings.scp.lam_vc = 1e3
 problem.settings.scp.uniform_time_grid = True
-
-# Enable CLI printing for optimization iterations
-problem.settings.dev.printing = True
-
-# problem.settings.cvx.cvxpygen = True
-# problem.settings.cvx.solver = "qocogen"
-problem.settings.cvx.solver_args = {}
-# problem.settings.cvx.cvxpygen_override = True
-
 
 plotting_dict = {
     "obs_radius": problem.parameters["obs_radius"],
@@ -130,10 +118,9 @@ if __name__ == "__main__":
     plot_dubins_car(results, problem.settings).show()
 
     # Second run with different parameters
+    problem.reset()
     problem.parameters["obs_center"] = np.array([0.5, 0.0])
     total_time = 0.7  # Adjust total time for second run
-    problem.settings.scp.lam_cost = 1e-1  # Disable minimal time objective for second run
-    problem.settings.scp.w_tr = 1e0
     problem.settings.scp.lam_vc = 1e2  # Adjust virtual control weight
     position.guess = np.linspace([0, -2], [0, 2], n)
     theta.guess = np.zeros((n, 1))

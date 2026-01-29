@@ -13,7 +13,9 @@ The module uses the following conventions:
       is angular momentum
 """
 
-from typing import Tuple
+from typing import Tuple, Union
+
+import numpy as np
 
 from ..expr import Expr, to_expr
 
@@ -64,7 +66,11 @@ class AdjointDual(Expr):
         SSM: 3x3 skew-symmetric matrix for cross products
     """
 
-    def __init__(self, twist, momentum):
+    def __init__(
+        self,
+        twist: Union[Expr, float, int, np.ndarray],
+        momentum: Union[Expr, float, int, np.ndarray],
+    ):
         """Initialize a coadjoint operator.
 
         Args:
@@ -101,7 +107,7 @@ class AdjointDual(Expr):
 
         return (6,)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"ad_dual({self.twist!r}, {self.momentum!r})"
 
 
@@ -151,7 +157,11 @@ class Adjoint(Expr):
         AdjointDual: The coadjoint operator for momentum dynamics
     """
 
-    def __init__(self, twist1, twist2):
+    def __init__(
+        self,
+        twist1: Union[Expr, float, int, np.ndarray],
+        twist2: Union[Expr, float, int, np.ndarray],
+    ):
         """Initialize an adjoint operator.
 
         Args:
@@ -188,7 +198,7 @@ class Adjoint(Expr):
 
         return (6,)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"ad({self.twist1!r}, {self.twist2!r})"
 
 
@@ -242,7 +252,7 @@ class SE3Adjoint(Expr):
         - Adjoint: The small adjoint (Lie bracket) for twist-on-twist action
     """
 
-    def __init__(self, transform):
+    def __init__(self, transform: Union[Expr, float, int, np.ndarray]):
         """Initialize SE3 Adjoint operator.
 
         Args:
@@ -273,7 +283,7 @@ class SE3Adjoint(Expr):
             )
         return (6, 6)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Ad({self.transform!r})"
 
 
@@ -322,7 +332,7 @@ class SE3AdjointDual(Expr):
         - AdjointDual: The small coadjoint for Coriolis/centrifugal forces
     """
 
-    def __init__(self, transform):
+    def __init__(self, transform: Union[Expr, float, int, np.ndarray]):
         """Initialize SE3 coadjoint operator.
 
         Args:
@@ -353,5 +363,5 @@ class SE3AdjointDual(Expr):
             )
         return (6, 6)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"Ad_dual({self.transform!r})"

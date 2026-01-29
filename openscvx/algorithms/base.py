@@ -7,7 +7,7 @@ during SCP iterations.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Union
+from typing import TYPE_CHECKING, List, Optional, Union
 
 import numpy as np
 
@@ -15,6 +15,52 @@ if TYPE_CHECKING:
     from openscvx.config import Config
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
     from openscvx.solvers import ConvexSolver
+
+
+@dataclass
+class CandidateIterate:
+    x: Optional[np.ndarray] = None
+    u: Optional[np.ndarray] = None
+    V: Optional[np.ndarray] = None
+    x_prop: Optional[np.ndarray] = None
+    VC: Optional[np.ndarray] = None
+    TR: Optional[np.ndarray] = None
+    lam_vc: Optional[Union[float, np.ndarray]] = None
+    lam_cost: Optional[float] = None
+    lam_vb: Optional[float] = None
+    J_lin: Optional[float] = None
+    J_nonlin: Optional[float] = None
+
+
+@dataclass(frozen=True, slots=True)
+class DiscretizationResult:
+    """Unpacked discretization data from a multi-shot discretization matrix.
+
+    The discretization solver returns a matrix ``V`` that stores multiple blocks
+    (propagated state and linearization matrices) across nodes/time. Historically,
+    we stored the raw ``V`` matrices and re-unpacked them repeatedly via slicing.
+    This dataclass unpacks once and makes access trivial.
+    """
+
+    V: np.ndarray  # raw V matrix, shape: (flattened_size, n_timesteps)
+    x_prop: np.ndarray  # (N-1, n_x)
+    A_d: np.ndarray  # (N-1, n_x, n_x)
+    B_d: np.ndarray  # (N-1, n_x, n_u)
+    C_d: np.ndarray  # (N-1, n_x, n_u)
+
+    @classmethod
+    def from_V(cls, V: np.ndarray, n_x: int, n_u: int, N: int) -> "DiscretizationResult":
+        """Unpack the final timestep of a raw discretization matrix ``V``."""
+        i1, i2 = n_x, n_x + n_x * n_x
+        i3, i4 = i2 + n_x * n_u, i2 + 2 * n_x * n_u
+        V_final = V[:, -1].reshape(-1, i4)
+        return cls(
+            V=np.asarray(V),
+            x_prop=V_final[:, :i1],
+            A_d=V_final[:, i1:i2].reshape(N - 1, n_x, n_x),
+            B_d=V_final[:, i2:i3].reshape(N - 1, n_x, n_u),
+            C_d=V_final[:, i3:i4].reshape(N - 1, n_x, n_u),
+        )
 
 
 @dataclass
@@ -35,7 +81,7 @@ class AlgorithmState:
         J_tr: Current trust region cost
         J_vb: Current virtual buffer cost
         J_vc: Current virtual control cost
-        w_tr: Current trust region weight (may adapt during solve)
+        lam_prox: Current trust region weight (may adapt during solve)
         lam_cost: Current cost weight (may relax during solve)
         lam_vc: Current virtual control penalty weight
         lam_vb: Current virtual buffer penalty weight
@@ -44,25 +90,71 @@ class AlgorithmState:
         N: Number of trajectory nodes (for unpacking V vectors)
         X: List of state trajectory iterates
         U: List of control trajectory iterates
-        V_history: List of discretization history
+        discretizations: List of unpacked discretization results
+        VC_history: List of virtual control history
+        TR_history: List of trust region history
+        A_bar_history: List of state transition matrices
+        B_bar_history: List of control influence matrices
+        C_bar_history: List of control influence matrices for next node
+        x_prop_history: List of propagated states
     """
 
     k: int
     J_tr: float
     J_vb: float
     J_vc: float
-    w_tr: float
-    lam_cost: float
-    lam_vc: Union[float, np.ndarray]
-    lam_vb: float
     n_x: int
     n_u: int
     N: int
+    J_nonlin_history: List[float]
+    J_lin_history: List[float]
+    pred_reduction_history: List[float]
+    actual_reduction_history: List[float]
+    acceptance_ratio_history: List[float]
     X: List[np.ndarray] = field(default_factory=list)
     U: List[np.ndarray] = field(default_factory=list)
-    V_history: List[np.ndarray] = field(default_factory=list)
+    discretizations: List[DiscretizationResult] = field(default_factory=list)
     VC_history: List[np.ndarray] = field(default_factory=list)
     TR_history: List[np.ndarray] = field(default_factory=list)
+    lam_vc_history: List[Union[float, np.ndarray]] = field(default_factory=list)
+    lam_cost_history: List[float] = field(default_factory=list)
+    lam_vb_history: List[float] = field(default_factory=list)
+    lam_prox_history: List[float] = field(default_factory=list)
+    x_full: List[np.ndarray] = field(default_factory=list)
+    x_prop_full: List[np.ndarray] = field(default_factory=list)
+
+    def accept_solution(self, cand: CandidateIterate) -> None:
+        """Accept the given candidate iterate by updating the state in place."""
+
+        if cand.x is None or cand.u is None:
+            raise ValueError(
+                "No candidate iterate to accept. Expected algorithm to set "
+                "`cand.x` and `cand.u` before calling accept_solution()."
+            )
+
+        self.X.append(cand.x)
+        self.U.append(cand.u)
+
+        if cand.V is not None:
+            self.discretizations.append(
+                DiscretizationResult.from_V(cand.V, n_x=self.n_x, n_u=self.n_u, N=self.N)
+            )
+        if cand.VC is not None:
+            self.VC_history.append(cand.VC)
+        if cand.TR is not None:
+            self.TR_history.append(cand.TR)
+
+        if cand.lam_vc is not None:
+            self.lam_vc_history.append(cand.lam_vc)
+        if cand.lam_cost is not None:
+            self.lam_cost_history.append(cand.lam_cost)
+        if cand.lam_vb is not None:
+            self.lam_vb_history.append(cand.lam_vb)
+
+        if cand.J_nonlin is not None:
+            self.J_nonlin_history.append(cand.J_nonlin)
+        if cand.J_lin is not None:
+            self.J_lin_history.append(cand.J_lin)
 
     @property
     def x(self) -> np.ndarray:
@@ -82,9 +174,27 @@ class AlgorithmState:
         """
         return self.U[-1]
 
+    def add_discretization(self, V: np.ndarray) -> None:
+        """Append a raw discretization matrix as an unpacked result."""
+        self.discretizations.append(
+            DiscretizationResult.from_V(V, n_x=self.n_x, n_u=self.n_u, N=self.N)
+        )
+
     @property
-    def x_prop(self) -> np.ndarray:
-        """Extract propagated state trajectory from latest V.
+    def V_history(self) -> List[np.ndarray]:
+        """Backward-compatible view of raw discretization matrices.
+
+        Note:
+            This is a read-only view. Internal code should prefer
+            ``state.discretizations``.
+        """
+        return [d.V for d in self.discretizations]
+
+    def x_prop(self, index: int = -1) -> np.ndarray:
+        """Extract propagated state trajectory from the discretization history.
+
+        Args:
+            index: Index into V_history (default: -1 for latest entry)
 
         Returns:
             Propagated state trajectory x_prop with shape (N-1, n_x), or None if no V_history
@@ -93,25 +203,18 @@ class AlgorithmState:
             After running an iteration, access the propagated states::
 
                 problem.step()
-                x_prop = problem.state.x_prop  # Shape (N-1, n_x)
+                x_prop = problem.state.x_prop()  # Shape (N-1, n_x), latest
+                x_prop_prev = problem.state.x_prop(-2)  # Previous iteration
         """
-        if not self.V_history:
+        if not self.discretizations:
             return None
+        return self.discretizations[index].x_prop
 
-        # V_history contains Vmulti from discretization
-        # Shape: (flattened_size, n_timesteps) where flattened_size = (N-1) * i4
-        V = self.V_history[-1]
+    def A_d(self, index: int = -1) -> np.ndarray:
+        """Extract discretized state transition matrix from discretizations.
 
-        # Take final timestep and reshape to (N-1, i4)
-        i4 = self.n_x + self.n_x * self.n_x + 2 * self.n_x * self.n_u
-        V_final = V[:, -1].reshape(-1, i4)
-
-        # Extract propagated state (first n_x elements of each row)
-        return V_final[:, : self.n_x]
-
-    @property
-    def A_d(self) -> np.ndarray:
-        """Extract discretized state transition matrix from latest V.
+        Args:
+            index: Index into V_history (default: -1 for latest entry)
 
         Returns:
             Discretized state Jacobian A_d with shape (N-1, n_x, n_x), or None if no V_history
@@ -120,86 +223,96 @@ class AlgorithmState:
             After running an iteration, access linearization matrices::
 
                 problem.step()
-                A_d = problem.state.A_d  # Shape (N-1, n_x, n_x)
+                A_d = problem.state.A_d()  # Shape (N-1, n_x, n_x), latest
+                A_d_prev = problem.state.A_d(-2)  # Previous iteration
         """
-        if not self.V_history:
+        if not self.discretizations:
             return None
+        return self.discretizations[index].A_d
 
-        # Extract indices for unpacking V vector
-        i1 = self.n_x
-        i2 = i1 + self.n_x * self.n_x
+    def B_d(self, index: int = -1) -> np.ndarray:
+        """Extract discretized control influence matrix (current node).
 
-        # V_history contains Vmulti from discretization
-        # Shape: (flattened_size, n_timesteps) where flattened_size = (N-1) * i4
-        V = self.V_history[-1]
-
-        # Take final timestep and reshape to (N-1, i4)
-        i4 = self.n_x + self.n_x * self.n_x + 2 * self.n_x * self.n_u
-        V_final = V[:, -1].reshape(-1, i4)
-
-        # Extract and reshape A_d matrix
-        return V_final[:, i1:i2].reshape(self.N - 1, self.n_x, self.n_x)
-
-    @property
-    def B_d(self) -> np.ndarray:
-        """Extract discretized control influence matrix (current node) from latest V.
+        Args:
+            index: Index into discretization history (default: -1 for latest entry)
 
         Returns:
-            Discretized control Jacobian B_d with shape (N-1, n_x, n_u), or None if no V_history
+            Discretized control Jacobian B_d with shape (N-1, n_x, n_u), or None if empty.
 
         Example:
             After running an iteration, access linearization matrices::
 
                 problem.step()
-                B_d = problem.state.B_d  # Shape (N-1, n_x, n_u)
+                B_d = problem.state.B_d()  # Shape (N-1, n_x, n_u), latest
+                B_d_prev = problem.state.B_d(-2)  # Previous iteration
         """
-        if not self.V_history:
+        if not self.discretizations:
             return None
+        return self.discretizations[index].B_d
 
-        # Extract indices for unpacking V vector
-        i1 = self.n_x
-        i2 = i1 + self.n_x * self.n_x
-        i3 = i2 + self.n_x * self.n_u
+    def C_d(self, index: int = -1) -> np.ndarray:
+        """Extract discretized control influence matrix (next node).
 
-        # V_history contains Vmulti from discretization
-        V = self.V_history[-1]
-
-        # Take final timestep and reshape to (N-1, i4)
-        i4 = self.n_x + self.n_x * self.n_x + 2 * self.n_x * self.n_u
-        V_final = V[:, -1].reshape(-1, i4)
-
-        # Extract and reshape B_d matrix
-        return V_final[:, i2:i3].reshape(self.N - 1, self.n_x, self.n_u)
-
-    @property
-    def C_d(self) -> np.ndarray:
-        """Extract discretized control influence matrix (next node) from latest V.
+        Args:
+            index: Index into discretization history (default: -1 for latest entry)
 
         Returns:
-            Discretized control Jacobian C_d with shape (N-1, n_x, n_u), or None if no V_history
+            Discretized control Jacobian C_d with shape (N-1, n_x, n_u), or None if empty.
 
         Example:
             After running an iteration, access linearization matrices::
 
                 problem.step()
-                C_d = problem.state.C_d  # Shape (N-1, n_x, n_u)
+                C_d = problem.state.C_d()  # Shape (N-1, n_x, n_u), latest
+                C_d_prev = problem.state.C_d(-2)  # Previous iteration
         """
-        if not self.V_history:
+        if not self.discretizations:
             return None
+        return self.discretizations[index].C_d
 
-        # Extract indices for unpacking V vector
-        i2 = self.n_x + self.n_x * self.n_x
-        i3 = i2 + self.n_x * self.n_u
-        i4 = i3 + self.n_x * self.n_u
+    @property
+    def lam_prox(self) -> float:
+        """Get current trust region weight.
 
-        # V_history contains Vmulti from discretization
-        V = self.V_history[-1]
+        Returns:
+            Current trust region weight (latest entry in lam_prox_history)
+        """
+        if not self.lam_prox_history:
+            raise ValueError("lam_prox_history is empty. Initialize state using from_settings().")
+        return self.lam_prox_history[-1]
 
-        # Take final timestep and reshape to (N-1, i4)
-        V_final = V[:, -1].reshape(-1, i4)
+    @property
+    def lam_cost(self) -> float:
+        """Get current cost weight.
 
-        # Extract and reshape C_d matrix
-        return V_final[:, i3:i4].reshape(self.N - 1, self.n_x, self.n_u)
+        Returns:
+            Current cost weight (latest entry in lam_cost_history)
+        """
+        if not self.lam_cost_history:
+            raise ValueError("lam_cost_history is empty. Initialize state using from_settings().")
+        return self.lam_cost_history[-1]
+
+    @property
+    def lam_vc(self) -> Union[float, np.ndarray]:
+        """Get current virtual control penalty weight.
+
+        Returns:
+            Current virtual control penalty weight (latest entry in lam_vc_history)
+        """
+        if not self.lam_vc_history:
+            raise ValueError("lam_vc_history is empty. Initialize state using from_settings().")
+        return self.lam_vc_history[-1]
+
+    @property
+    def lam_vb(self) -> float:
+        """Get current virtual buffer penalty weight.
+
+        Returns:
+            Current virtual buffer penalty weight (latest entry in lam_vb_history)
+        """
+        if not self.lam_vb_history:
+            raise ValueError("lam_vb_history is empty. Initialize state using from_settings().")
+        return self.lam_vb_history[-1]
 
     @classmethod
     def from_settings(cls, settings: "Config") -> "AlgorithmState":
@@ -219,18 +332,23 @@ class AlgorithmState:
             J_tr=1e2,
             J_vb=1e2,
             J_vc=1e2,
-            w_tr=settings.scp.w_tr,
-            lam_cost=settings.scp.lam_cost,
-            lam_vc=settings.scp.lam_vc,
-            lam_vb=settings.scp.lam_vb,
             n_x=settings.sim.n_states,
             n_u=settings.sim.n_controls,
             N=settings.scp.n,
+            J_nonlin_history=[],
+            J_lin_history=[],
+            pred_reduction_history=[],
+            actual_reduction_history=[],
+            acceptance_ratio_history=[],
             X=[settings.sim.x.guess.copy()],
             U=[settings.sim.u.guess.copy()],
-            V_history=[],
+            discretizations=[],
             VC_history=[],
             TR_history=[],
+            lam_vc_history=[settings.scp.lam_vc],
+            lam_cost_history=[settings.scp.lam_cost],
+            lam_vb_history=[settings.scp.lam_vb],
+            lam_prox_history=[settings.scp.lam_prox],
         )
 
 

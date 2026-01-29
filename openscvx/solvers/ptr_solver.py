@@ -73,6 +73,16 @@ class PTRSolver(ConvexSolver):
     CVXPy Parameters for values that change each iteration. The ``solve()``
     method then solves and returns a structured ``PTRSolveResult``.
 
+    The cost and constraint formulations are defined in the ``cost()`` and
+    ``constraints()`` methods, which can be overridden in subclasses to
+    customize the convex subproblem. For example::
+
+        class MyPTRSolver(PTRSolver):
+            def cost(self, settings, lowered):
+                c = super().cost(settings, lowered)
+                c += my_extra_term(self._ocp_vars)
+                return c
+
     !!! note "Future Backend Support"
 
         When adding a new backend (QPAX, COCO, etc.), this class should be
@@ -191,9 +201,9 @@ class PTRSolver(ConvexSolver):
     ) -> None:
         """Build the CVXPy optimal control problem.
 
-        Constructs the complete optimization problem with all constraints,
-        using CVXPy Parameters for values that change each SCP iteration
-        (linearization matrices, constraint gradients, penalty weights, etc.).
+        Constructs the complete optimization problem by calling ``cost()`` and
+        ``constraints()`` to build the objective and constraint formulations,
+        then assembles them into a CVXPy Problem.
 
         If cvxpygen is enabled in settings, generates compiled solver code
         for improved performance.
@@ -215,8 +225,297 @@ class PTRSolver(ConvexSolver):
                 "PTRSolver.initialize() called before create_variables(). "
                 "Call create_variables() first to create optimization variables."
             )
-        self._problem = _build_optimal_control_problem(settings, lowered, self._ocp_vars)
+
+        objective = self.cost(settings, lowered)
+        constr = self.constraints(settings, lowered)
+        prob = cp.Problem(cp.Minimize(objective), constr)
+
+        if settings.cvx.cvxpygen:
+            if not CVXPYGEN_AVAILABLE:
+                raise ImportError(
+                    "cvxpygen is required for code generation but not installed. "
+                    "Install it with: pip install openscvx[cvxpygen] or pip install cvxpygen"
+                )
+            # Check to see if solver directory exists
+            if not os.path.exists("solver"):
+                cpg.generate_code(prob, solver=settings.cvx.solver, code_dir="solver", wrapper=True)
+            else:
+                # Prompt the use to indicate if they wish to overwrite the solver
+                # directory or use the existing compiled solver
+                if settings.cvx.cvxpygen_override:
+                    cpg.generate_code(
+                        prob,
+                        solver=settings.cvx.solver,
+                        code_dir="solver",
+                        wrapper=True,
+                    )
+                else:
+                    overwrite = input("Solver directory already exists. Overwrite? (y/n): ")
+                    if overwrite.lower() == "y":
+                        cpg.generate_code(
+                            prob,
+                            solver=settings.cvx.solver,
+                            code_dir="solver",
+                            wrapper=True,
+                        )
+
+        self._problem = prob
         self._setup_solve_function(settings)
+
+    def cost(
+        self,
+        settings: "Config",
+        lowered: "LoweredProblem",
+    ) -> cp.Expression:
+        """Build the cost expression for the convex subproblem.
+
+        Constructs the PTR objective function including:
+
+        - Boundary condition costs (Minimize/Maximize state components)
+        - Trust region penalty (deviation from linearization point)
+        - Virtual control penalty (dynamics defect relaxation)
+        - Virtual buffer penalty (nonconvex constraint violation relaxation)
+
+        Override this method in subclasses to customize the cost formulation.
+        Use ``super().cost(settings, lowered)`` to include the standard PTR
+        cost terms and add to them.
+
+        Args:
+            settings: Configuration object with solver settings
+            lowered: Lowered problem containing constraint structure
+
+        Returns:
+            CVXPy expression representing the total cost to minimize.
+        """
+        ocp_vars = self._ocp_vars
+        jax_constraints = lowered.jax_constraints
+
+        lam_prox = ocp_vars.lam_prox
+        lam_cost = ocp_vars.lam_cost
+        lam_vc = ocp_vars.lam_vc
+        lam_vb = ocp_vars.lam_vb
+        _ = ocp_vars.x_nonscaled
+        dx = ocp_vars.dx
+        du = ocp_vars.du
+        nu = ocp_vars.nu
+        nu_vb = ocp_vars.nu_vb
+        nu_vb_cross = ocp_vars.nu_vb_cross
+
+        cost = lam_cost * 0
+        cost += lam_vb * 0
+
+        # Boundary condition cost terms (use scaled x for numerical conditioning)
+        x = ocp_vars.x
+        for i in range(settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop):
+            if settings.sim.x.initial_type[i] == "Minimize":
+                cost += lam_cost * x[0][i]
+            if settings.sim.x.final_type[i] == "Minimize":
+                cost += lam_cost * x[-1][i]
+            if settings.sim.x.initial_type[i] == "Maximize":
+                cost -= lam_cost * x[0][i]
+            if settings.sim.x.final_type[i] == "Maximize":
+                cost -= lam_cost * x[-1][i]
+
+        # Trust Region Cost
+        cost += sum(
+            lam_prox * cp.sum_squares(cp.hstack((dx[i], du[i]))) for i in range(settings.scp.n)
+        )
+
+        # Virtual Control Slack
+        cost += sum(cp.sum(lam_vc[i - 1] * cp.abs(nu[i - 1])) for i in range(1, settings.scp.n))
+
+        # Virtual buffer penalty for nodal constraints
+        idx_ncvx = 0
+        if jax_constraints.nodal:
+            for constraint in jax_constraints.nodal:
+                cost += lam_vb * cp.sum(cp.pos(nu_vb[idx_ncvx]))
+                idx_ncvx += 1
+
+        # Virtual slack penalty for cross-node constraints
+        idx_cross = 0
+        if jax_constraints.cross_node:
+            for constraint in jax_constraints.cross_node:
+                cost += lam_vb * cp.pos(nu_vb_cross[idx_cross])
+                idx_cross += 1
+
+        # BYOF convex costs (user-provided convex cost terms)
+        if lowered.byof:
+            for fn in lowered.byof.get("convex_costs", []):
+                cost += fn(ocp_vars, settings, lowered.parameters)
+
+        return cost
+
+    def constraints(
+        self,
+        settings: "Config",
+        lowered: "LoweredProblem",
+    ) -> list:
+        """Build the constraint list for the convex subproblem.
+
+        Constructs all PTR constraints including:
+
+        - Linearized nodal constraints (from JAX-lowered nonconvex constraints)
+        - Linearized cross-node constraints
+        - Convex constraints (already lowered to CVXPy)
+        - Boundary conditions (fixed initial/terminal states)
+        - Uniform time grid constraints
+        - State and control deviation definitions
+        - Linearized dynamics
+        - State and control box constraints
+        - CTCS constraints
+
+        Override this method in subclasses to customize the constraint
+        formulation. Use ``super().constraints(settings, lowered)`` to include
+        the standard PTR constraints and extend them.
+
+        Args:
+            settings: Configuration object with solver settings
+            lowered: Lowered problem containing lowered constraints
+
+        Returns:
+            List of CVXPy constraints.
+        """
+        ocp_vars = self._ocp_vars
+        jax_constraints = lowered.jax_constraints
+        cvxpy_constraints = lowered.cvxpy_constraints
+
+        x = ocp_vars.x
+        dx = ocp_vars.dx
+        x_bar = ocp_vars.x_bar
+        x_init = ocp_vars.x_init
+        x_term = ocp_vars.x_term
+        u = ocp_vars.u
+        du = ocp_vars.du
+        u_bar = ocp_vars.u_bar
+        A_d = ocp_vars.A_d
+        B_d = ocp_vars.B_d
+        C_d = ocp_vars.C_d
+        x_prop = ocp_vars.x_prop
+        nu = ocp_vars.nu
+        g = ocp_vars.g
+        grad_g_x = ocp_vars.grad_g_x
+        grad_g_u = ocp_vars.grad_g_u
+        nu_vb = ocp_vars.nu_vb
+        g_cross = ocp_vars.g_cross
+        grad_g_X_cross = ocp_vars.grad_g_X_cross
+        grad_g_U_cross = ocp_vars.grad_g_U_cross
+        nu_vb_cross = ocp_vars.nu_vb_cross
+        inv_S_x = ocp_vars.inv_S_x
+        c_x = ocp_vars.c_x
+        inv_S_u = ocp_vars.inv_S_u
+        c_u = ocp_vars.c_u
+        x_nonscaled = ocp_vars.x_nonscaled
+        u_nonscaled = ocp_vars.u_nonscaled
+        dx_nonscaled = ocp_vars.dx_nonscaled
+        du_nonscaled = ocp_vars.du_nonscaled
+
+        constr = []
+
+        # Linearized nodal constraints (from JAX-lowered non-convex)
+        idx_ncvx = 0
+        if jax_constraints.nodal:
+            for constraint in jax_constraints.nodal:
+                # nodes should already be validated and normalized in preprocessing
+                nodes = constraint.nodes
+                constr += [
+                    (
+                        g[idx_ncvx][node]
+                        + grad_g_x[idx_ncvx][node] @ dx[node]
+                        + grad_g_u[idx_ncvx][node] @ du[node]
+                    )
+                    == nu_vb[idx_ncvx][node]
+                    for node in nodes
+                ]
+                idx_ncvx += 1
+
+        # Linearized cross-node constraints (from JAX-lowered non-convex)
+        idx_cross = 0
+        if jax_constraints.cross_node:
+            for constraint in jax_constraints.cross_node:
+                # Linearization: g(X_bar, U_bar) + ∇g_X @ dX + ∇g_U @ dU == nu_vb
+                # Sum over all trajectory nodes to couple multiple nodes
+                residual = g_cross[idx_cross]
+                for k in range(settings.scp.n):
+                    # Contribution from state at node k
+                    residual += grad_g_X_cross[idx_cross][k, :] @ dx[k]
+                    # Contribution from control at node k
+                    residual += grad_g_U_cross[idx_cross][k, :] @ du[k]
+                # Add constraint: residual == slack variable
+                constr += [residual == nu_vb_cross[idx_cross]]
+                idx_cross += 1
+
+        # Convex constraints (already lowered to CVXPy)
+        if cvxpy_constraints.constraints:
+            constr += cvxpy_constraints.constraints
+
+        # Boundary conditions (Fix)
+        for i in range(settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop):
+            if settings.sim.x.initial_type[i] == "Fix":
+                constr += [x_nonscaled[0][i] == x_init[i]]  # Initial Boundary Conditions
+            if settings.sim.x.final_type[i] == "Fix":
+                constr += [x_nonscaled[-1][i] == x_term[i]]  # Final Boundary Conditions
+
+        if settings.scp.uniform_time_grid:
+            S_u_inv_td = inv_S_u[settings.sim.time_dilation_slice, settings.sim.time_dilation_slice]
+            c_u_td = c_u[settings.sim.time_dilation_slice]
+            constr += [
+                S_u_inv_td @ (u_nonscaled[i][settings.sim.time_dilation_slice] - c_u_td)
+                == S_u_inv_td @ (u_nonscaled[i - 1][settings.sim.time_dilation_slice] - c_u_td)
+                for i in range(1, settings.scp.n)
+            ]
+
+        constr += [
+            (x[i] - inv_S_x @ (x_bar[i] - c_x) - dx[i]) == 0 for i in range(settings.scp.n)
+        ]  # State Error
+        constr += [
+            (u[i] - inv_S_u @ (u_bar[i] - c_u) - du[i]) == 0 for i in range(settings.scp.n)
+        ]  # Control Error
+
+        constr += [
+            inv_S_x @ (x_nonscaled[i] - c_x)
+            == inv_S_x
+            @ (
+                A_d[i - 1] @ dx_nonscaled[i - 1]
+                + B_d[i - 1] @ du_nonscaled[i - 1]
+                + C_d[i - 1] @ du_nonscaled[i]
+                + x_prop[i - 1]
+                - c_x
+            )
+            + nu[i - 1]
+            for i in range(1, settings.scp.n)
+        ]  # Dynamics Constraint
+
+        constr += [
+            inv_S_u @ (u_nonscaled[i] - c_u) <= inv_S_u @ (settings.sim.u.max - c_u)
+            for i in range(settings.scp.n)
+        ]
+        constr += [
+            inv_S_u @ (u_nonscaled[i] - c_u) >= inv_S_u @ (settings.sim.u.min - c_u)
+            for i in range(settings.scp.n)
+        ]  # Control Constraints
+
+        # TODO: (norrisg) formalize this
+        constr += [
+            inv_S_x @ (x_nonscaled[i][:] - c_x) <= inv_S_x @ (settings.sim.x.max - c_x)
+            for i in range(settings.scp.n)
+        ]
+        constr += [
+            inv_S_x @ (x_nonscaled[i][:] - c_x) >= inv_S_x @ (settings.sim.x.min - c_x)
+            for i in range(settings.scp.n)
+        ]  # State Constraints (Also implemented in CTCS but included for numerical stability)
+
+        for idx, nodes in zip(
+            np.arange(settings.sim.ctcs_slice.start, settings.sim.ctcs_slice.stop),
+            settings.sim.ctcs_node_intervals,
+        ):
+            start_idx = 1 if nodes[0] == 0 else nodes[0]
+            constr += [
+                cp.abs(x_nonscaled[i][idx] - x_nonscaled[i - 1][idx]) <= settings.sim.x.max[idx]
+                for i in range(start_idx, nodes[1])
+            ]
+            constr += [x_nonscaled[0][idx] == 0]
+
+        return constr
 
     def _setup_solve_function(self, settings: "Config") -> None:
         """Configure the solve function based on settings.
@@ -311,7 +610,7 @@ class PTRSolver(ConvexSolver):
 
     def update_penalties(
         self,
-        w_tr: float,
+        lam_prox: float,
         lam_cost: float,
         lam_vc: np.ndarray,
         lam_vb: float,
@@ -322,12 +621,12 @@ class PTRSolver(ConvexSolver):
         PTR convex subproblem.
 
         Args:
-            w_tr: Trust region weight (penalizes deviation from linearization point)
+            lam_prox: Trust region weight (penalizes deviation from linearization point)
             lam_cost: Cost function weight
             lam_vc: Virtual control penalty weights, shape (N-1, n_states)
             lam_vb: Virtual buffer penalty weight (for constraint violations)
         """
-        self._set_param("w_tr", w_tr)
+        self._set_param("lam_prox", lam_prox)
         self._set_param("lam_cost", lam_cost)
         self._set_param("lam_vc", lam_vc)
         self._set_param("lam_vb", lam_vb)
@@ -380,7 +679,31 @@ class PTRSolver(ConvexSolver):
             ValueError: If the value is not real, with diagnostic information.
         """
         try:
-            self._problem.param_dict[name].value = value
+            param = self._problem.param_dict[name]
+            value_arr = np.asarray(value)
+
+            # Ensure the value shape matches the parameter shape exactly
+            # This is critical for Python 3.11+ where NumPy/CVXPy are stricter about shapes
+            if hasattr(param, "shape") and param.shape is not None:
+                expected_shape = param.shape
+                if value_arr.shape != expected_shape:
+                    # Try to reshape if sizes match
+                    if value_arr.size == np.prod(expected_shape):
+                        value_arr = value_arr.reshape(expected_shape)
+                    else:
+                        # If sizes don't match, try squeezing extra dimensions first
+                        value_arr = np.squeeze(value_arr)
+                        if value_arr.shape != expected_shape and value_arr.size == np.prod(
+                            expected_shape
+                        ):
+                            value_arr = value_arr.reshape(expected_shape)
+                        elif value_arr.shape != expected_shape:
+                            raise ValueError(
+                                f"Parameter '{name}' shape mismatch: expected {expected_shape}, "
+                                f"got {value.shape} (after squeezing: {value_arr.shape})"
+                            )
+
+            param.value = value_arr
         except ValueError as e:
             if "must be real" in str(e):
                 arr = np.asarray(value)
@@ -505,7 +828,7 @@ def _build_optimal_control_problem(
     """
 
     # Extract variables from the dataclass for easier access
-    w_tr = ocp_vars.w_tr
+    lam_prox = ocp_vars.lam_prox
     lam_cost = ocp_vars.lam_cost
     lam_vc = ocp_vars.lam_vc
     lam_vb = ocp_vars.lam_vb
@@ -656,7 +979,7 @@ def _build_optimal_control_problem(
     ########
 
     cost += sum(
-        w_tr * cp.sum_squares(cp.hstack((dx[i], du[i]))) for i in range(settings.scp.n)
+        lam_prox * cp.sum_squares(cp.hstack((dx[i], du[i]))) for i in range(settings.scp.n)
     )  # Trust Region Cost
     cost += sum(
         cp.sum(lam_vc[i - 1] * cp.abs(nu[i - 1])) for i in range(1, settings.scp.n)
@@ -675,6 +998,11 @@ def _build_optimal_control_problem(
             cost += lam_vb * cp.pos(nu_vb_cross[idx_cross])
             idx_cross += 1
 
+    # BYOF convex costs (user-provided convex cost terms)
+    if lowered.byof:
+        for fn in lowered.byof.get("convex_costs", []):
+            cost += fn(ocp_vars, settings, lowered.parameters)
+
     for idx, nodes in zip(
         np.arange(settings.sim.ctcs_slice.start, settings.sim.ctcs_slice.stop),
         settings.sim.ctcs_node_intervals,
@@ -685,26 +1013,6 @@ def _build_optimal_control_problem(
             for i in range(start_idx, nodes[1])
         ]
         constr += [x_nonscaled[0][idx] == 0]
-
-    ########
-    # BYOF CONVEX COSTS
-    ########
-    # Add user-defined convex costs from byof interface
-    if lowered.byof is not None:
-        convex_costs = lowered.byof.get("convex_costs", [])
-        # Use parameter values from lowered.parameters (contains all parameters from symbolic problem)
-        # This ensures all parameters are accessible, even if they're not used in constraints
-        params_dict = dict(lowered.parameters) if lowered.parameters else {}
-        # Update with current CVXPy parameter values (in case they were modified after initialization)
-        # Note: Parameters accessed via params_dict are fixed at problem build time.
-        # For updateable parameters during solve, access via ocp_vars.cvxpy_params[name].value
-        if lowered.cvxpy_params is not None:
-            for name, param in lowered.cvxpy_params.items():
-                if param.value is not None:
-                    params_dict[name] = param.value
-        for cost_fn in convex_costs:
-            cost_expr = cost_fn(ocp_vars, settings, params_dict)
-            cost += cost_expr
 
     #########
     # PROBLEM

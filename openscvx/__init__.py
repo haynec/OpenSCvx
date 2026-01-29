@@ -10,6 +10,11 @@ import openscvx.symbolic.expr.lie as lie
 import openscvx.symbolic.expr.linalg as linalg
 import openscvx.symbolic.expr.spatial as spatial
 import openscvx.symbolic.expr.stl as stl
+from openscvx.algorithms.autotuning import (
+    AugmentedLagrangian,
+    ConstantProximalWeight,
+    RampProximalWeight,
+)
 from openscvx.expert import ByofSpec
 from openscvx.problem import Problem
 from openscvx.symbolic.expr import (
@@ -138,4 +143,8 @@ __all__ = [
     "lie",
     # Expert mode types
     "ByofSpec",
+    # Autotuning
+    "AugmentedLagrangian",
+    "ConstantProximalWeight",
+    "RampProximalWeight",
 ]

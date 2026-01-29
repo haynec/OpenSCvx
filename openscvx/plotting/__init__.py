@@ -45,7 +45,7 @@ from .plotting import (
     plot_vector_norm,
     plot_virtual_control_heatmap,
 )
-from .scp_iteration import plot_scp_iterations
+from .scp_iteration import plot_scp_convergence_histories, plot_scp_iterations
 
 __all__ = [
     # 2D plotting functions (plotly)
@@ -58,6 +58,7 @@ __all__ = [
     "plot_trust_region_heatmap",
     "plot_virtual_control_heatmap",
     "plot_scp_iterations",
+    "plot_scp_convergence_histories",
     # 3D visualization submodule (viser)
     "viser",
 ]

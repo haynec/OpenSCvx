@@ -37,10 +37,7 @@ Example:
             print(f"Validation error: {e}")
 """
 
-from typing import TYPE_CHECKING, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
-
-if TYPE_CHECKING:
-    from openscvx.symbolic.time import Time
+from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
@@ -350,7 +347,9 @@ def validate_and_normalize_constraint_nodes(exprs: Union[Expr, list[Expr]], n_no
                     raise ValueError(f"NodalConstraint node {node} is out of range [0, {n_nodes})")
 
 
-def validate_cross_node_constraint(cross_node_constraint, n_nodes: int) -> None:
+def validate_cross_node_constraint(
+    cross_node_constraint: CrossNodeConstraint, n_nodes: int
+) -> None:
     """Validate cross-node constraint bounds and variable consistency.
 
     This function performs two validations in a single tree traversal:
@@ -635,80 +634,6 @@ def validate_dynamics_dict_dimensions(dynamics: Dict[str, Expr], states: List[St
                 f"Dynamics for state '{state.name}' has shape {actual_shape}, "
                 f"but state has shape {expected_shape}"
             )
-
-
-def validate_time_parameters(
-    states: List[State],
-    time: "Time",
-) -> Tuple[
-    bool,
-    Union[float, tuple, None],
-    Union[float, tuple, None],
-    float,
-    Union[float, None],
-    Union[float, None],
-]:
-    """Validate time parameter usage and configuration.
-
-    There are two valid approaches for handling time in trajectory optimization:
-
-    1. Auto-create time (recommended): Don't include "time" in states, provide Time object.
-       The time state is automatically created and managed.
-
-    2. User-provided time (advanced): Include a "time" State in states. The Time object
-       is ignored and the user has full control over time dynamics.
-
-    Args:
-        states: List of State objects
-        time: Time configuration object (required, but ignored if time state exists)
-
-    Returns:
-        Tuple of (has_time_state, time_initial, time_final, time_derivative, time_min, time_max):
-            - has_time_state: True if user provided a time state
-            - time_initial: Initial time value (None if user-provided time)
-            - time_final: Final time value (None if user-provided time)
-            - time_derivative: Always 1.0 for auto-created time (None if user-provided)
-            - time_min: Minimum time bound (None if user-provided)
-            - time_max: Maximum time bound (None if user-provided)
-
-    Raises:
-        ValueError: If Time object is not provided or has invalid type
-
-    Example:
-            # Approach 1: Auto-create time
-            x = ox.State("x", shape=(3,))
-            time_obj = ox.Time(initial=0.0, final=10.0)
-            validate_time_parameters([x], time_obj)
-        (False, 0.0, 10.0, 1.0, None, None)
-
-            # Approach 2: User-provided time
-            x = ox.State("x", shape=(3,))
-            time_state = ox.State("time", shape=())
-            validate_time_parameters([x, time_state], time_obj)
-        (True, None, None, None, None, None)
-    """
-    from openscvx.symbolic.time import Time
-
-    if not isinstance(time, Time):
-        raise ValueError(f"Expected Time object, but got {type(time).__name__}")
-
-    has_time_state = any(state.name == "time" for state in states)
-
-    if has_time_state:
-        # Approach 2: User-provided time state
-        # Time object is provided but ignored - user handles everything via State
-        # Return None for all time parameters since user handles everything
-        return True, None, None, None, None, None
-    else:
-        # Approach 1: Auto-create time state
-        # Extract values from Time object
-        time_initial = time.initial
-        time_final = time.final
-        time_derivative = 1.0  # Always 1.0 when using Time object
-        time_min = time.min
-        time_max = time.max
-
-        return False, time_initial, time_final, time_derivative, time_min, time_max
 
 
 def convert_dynamics_dict_to_expr(

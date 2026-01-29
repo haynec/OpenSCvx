@@ -473,7 +473,7 @@ def plot_projections_2d(
     var_name: str = "position",
     velocity_var_name: str | None = None,
     cmap: str = "viridis",
-):
+) -> go.Figure:
     """Plot XY, XZ, YZ projections of a 3D variable.
 
     Useful for visualizing 3D trajectories in 2D plane views.
@@ -628,7 +628,7 @@ def plot_vector_norm(
     result: OptimizationResults,
     var_name: str,
     bounds: tuple[float, float] | None = None,
-):
+) -> go.Figure:
     """Plot the 2-norm of a vector variable over time.
 
     Useful for visualizing thrust magnitude, velocity magnitude, etc.

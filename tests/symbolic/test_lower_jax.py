@@ -66,7 +66,7 @@ def test_top_level_lower_raises_for_unregistered_expr():
 def test_jax_lower_constant():
     const = Constant(np.array([[1.0, 2.0], [3.0, 4.0]]))
     jl = JaxLowerer()
-    f = jl._visit_constant(const)
+    f = jl.lower(const)
     out = f(None, None, None, None)
     assert isinstance(out, jnp.ndarray)
     assert out.shape == (2, 2)
@@ -190,7 +190,7 @@ def test_normalized_constants_lower_correctly():
     scalar_squeezed = Constant(np.array([[5.0]]))  # (1,1) -> () after squeeze
     assert scalar_squeezed.value.shape == ()  # Verify normalization happened
 
-    fn_scalar = jl._visit_constant(scalar_squeezed)
+    fn_scalar = jl.lower(scalar_squeezed)
     result_scalar = fn_scalar(None, None, None, None)
 
     assert isinstance(result_scalar, jnp.ndarray)
@@ -201,7 +201,7 @@ def test_normalized_constants_lower_correctly():
     vector_squeezed = Constant(np.array([[1.0, 2.0, 3.0]]))  # (1,3) -> (3,) after squeeze
     assert vector_squeezed.value.shape == (3,)  # Verify normalization happened
 
-    fn_vector = jl._visit_constant(vector_squeezed)
+    fn_vector = jl.lower(vector_squeezed)
     result_vector = fn_vector(None, None, None, None)
 
     assert isinstance(result_vector, jnp.ndarray)
@@ -214,7 +214,7 @@ def test_normalized_constants_lower_correctly():
     )  # (1,2,1,2) -> (2,2) after squeeze
     assert matrix_squeezed.value.shape == (2, 2)  # Verify normalization happened
 
-    fn_matrix = jl._visit_constant(matrix_squeezed)
+    fn_matrix = jl.lower(matrix_squeezed)
     result_matrix = fn_matrix(None, None, None, None)
 
     assert isinstance(result_matrix, jnp.ndarray)
@@ -271,8 +271,8 @@ def test_normalized_constants_preserve_dtype_in_lowering():
     assert float32_const.value.dtype == np.float32
 
     # Test lowering
-    fn_int = jl._visit_constant(int32_const)
-    fn_float = jl._visit_constant(float32_const)
+    fn_int = jl.lower(int32_const)
+    fn_float = jl.lower(float32_const)
 
     result_int = fn_int(None, None, None, None)
     result_float = fn_float(None, None, None, None)

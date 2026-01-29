@@ -166,30 +166,24 @@ nav:
       -  'getting-started.md'
       - 'examples.md'
       - 'citation.md'
-    - Usage:
-      - 'Usage/basic_problem_setup.md'
-      - 'Usage/advanced_problem_setup.md'
-      - API:
-          - State: 'Usage/api_state.md'
-          - Control: 'Usage/api_control.md'
-          - Variable: 'Usage/api_variable.md'
-          - Dynamics: 'Usage/api_dynamics.md'
-          - Constraints: 'Usage/api_constraints.md'
-          - Integrators: 'Usage/api_integrators.md'
-          - Problem: 'Usage/api_problem.md'
-          - OptimizationResults: 'Usage/api_results.md'
-      - Tutorials:
-          - 'Usage/tutorial_6dof_obstacle_avoidance.md'
-          - 'Usage/tutorial_6dof_los_guidance.md'
-    - Examples: examples/
-    - Code Reference: reference/
+    - Users Guide:
+      - 'UsersGuide/00_introduction.md'
+      - 'UsersGuide/01_hello_world_brachistochrone.md'
+      - 'UsersGuide/02_drone_racing_constraints.md'
+      - 'UsersGuide/03_obstacle_avoidance_vmap.md'
+      - 'UsersGuide/04_viewpoint_constraints.md'
+      - 'UsersGuide/05_visualization.md'
+      - 'UsersGuide/06_logic.md'
+      - 'UsersGuide/07_lie.md'
+    - Examples: Examples/
+    - Reference: Reference/
     - Foundations:
-      - 'Overview/scvx.md'
-      - 'Overview/ocp.md'
-      - 'Overview/constraint_reformulation.md'
-      - 'Overview/control_parameterization.md'
-      - 'Overview/time_dilation.md'
-      - 'Overview/discretization.md'
+      - 'Foundations/scvx.md'
+      - 'Foundations/ocp.md'
+      - 'Foundations/constraint_reformulation.md'
+      - 'Foundations/control_parameterization.md'
+      - 'Foundations/time_dilation.md'
+      - 'Foundations/discretization.md'
     - Under the Hood:
       - 'UnderTheHood/vectorization_and_vmapping.md'
       - 'UnderTheHood/lowering_architecture.md'

@@ -65,7 +65,10 @@ Example:
 
 import hashlib
 import struct
-from typing import Callable, Tuple, Union
+from typing import TYPE_CHECKING, Callable, List, Tuple, Union
+
+if TYPE_CHECKING:
+    from .linalg import Transpose
 
 import numpy as np
 
@@ -204,7 +207,7 @@ class Expr:
         return Index(self, idx)
 
     @property
-    def T(self):
+    def T(self) -> "Transpose":
         """Transpose property for matrix expressions.
 
         Returns:
@@ -229,7 +232,7 @@ class Expr:
 
         Args:
             k: Absolute node index (integer) in the trajectory.
-               Can be positive (0, 1, 2, ...) or negative (-1 for last node).
+                Can be positive (0, 1, 2, ...) or negative (-1 for last node).
 
         Returns:
             NodeReference: An expression representing this expression at node k
@@ -262,7 +265,7 @@ class Expr:
         """
         return NodeReference(self, k)
 
-    def children(self):
+    def children(self) -> List["Expr"]:
         """Return the child expressions of this node.
 
         Returns:
@@ -313,7 +316,7 @@ class Expr:
         """
         raise NotImplementedError(f"check_shape() not implemented for {self.__class__.__name__}")
 
-    def pretty(self, indent=0):
+    def pretty(self, indent: int = 0) -> str:
         """Generate a pretty-printed string representation of the expression tree.
 
         Creates an indented, hierarchical view of the expression tree structure,
@@ -401,7 +404,7 @@ class Leaf(Expr):
         self._shape = shape
 
     @property
-    def shape(self):
+    def shape(self) -> Tuple[int, ...]:
         """Get the shape of the leaf node.
 
         Returns:
@@ -409,11 +412,11 @@ class Leaf(Expr):
         """
         return self._shape
 
-    def children(self):
+    def children(self) -> List["Expr"]:
         """Leaf nodes have no children.
 
         Returns:
-            list: Empty list since leaf nodes are terminal
+            Empty list since leaf nodes are terminal
         """
         return []
 
@@ -446,7 +449,7 @@ class Leaf(Expr):
         hasher.update(self.__class__.__name__.encode())
         hasher.update(str(self._shape).encode())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """String representation of the leaf node.
 
         Returns:
@@ -467,12 +470,17 @@ class Parameter(Leaf):
         # Later: problem.parameters["obs_center"] = new_value
     """
 
-    def __init__(self, name: str, shape: tuple = (), value=None):
+    def __init__(
+        self,
+        name: str,
+        shape: tuple = (),
+        value: Union[float, int, np.ndarray, None] = None,
+    ):
         """Initialize a Parameter node.
 
         Args:
-            name (str): Name identifier for the parameter
-            shape (tuple): Shape of the parameter (default: scalar)
+            name: Name identifier for the parameter
+            shape: Shape of the parameter (default: scalar)
             value: Initial value for the parameter (required)
         """
         super().__init__(name, shape)
@@ -593,7 +601,7 @@ class Constant(Expr):
         hasher.update(str(self.value.shape).encode())
         hasher.update(self.value.tobytes())
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         # Show clean representation - always show as Python values, not numpy arrays
         if self.value.ndim == 0:
             # Scalar: show as plain number
@@ -671,7 +679,7 @@ class NodeReference(Expr):
         self.node_idx = node_idx
         self.base = base
 
-    def children(self):
+    def children(self) -> List["Expr"]:
         """Return the base expression as the only child.
 
         Returns:
@@ -711,7 +719,7 @@ class NodeReference(Expr):
         # Hash the base expression
         self.base._hash_into(hasher)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """String representation of the NodeReference.
 
         Returns:

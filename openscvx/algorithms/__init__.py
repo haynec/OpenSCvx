@@ -47,7 +47,7 @@ Note:
         J_tr: float
         J_vb: float
         J_vc: float
-        w_tr: float
+        lam_prox: float
         lam_cost: float
         lam_vc: ...
         lam_vb: float
@@ -77,7 +77,13 @@ Current Implementations:
 - :class:`PenalizedTrustRegion`: Penalized Trust Region (PTR) algorithm
 """
 
-from .base import Algorithm, AlgorithmState
+from .autotuning import (
+    AugmentedLagrangian,
+    AutotuningBase,
+    ConstantProximalWeight,
+    RampProximalWeight,
+)
+from .base import Algorithm, AlgorithmState, DiscretizationResult
 from .optimization_results import OptimizationResults
 from .penalized_trust_region import PenalizedTrustRegion
 
@@ -85,8 +91,13 @@ __all__ = [
     # Base class
     "Algorithm",
     "AlgorithmState",
+    "DiscretizationResult",
     # Core results
     "OptimizationResults",
     # PTR algorithm
     "PenalizedTrustRegion",
+    "AutotuningBase",
+    "AugmentedLagrangian",
+    "ConstantProximalWeight",
+    "RampProximalWeight",
 ]

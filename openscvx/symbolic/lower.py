@@ -86,7 +86,7 @@ __all__ = [
 from openscvx.symbolic.unified import unify_controls, unify_states
 
 
-def lower(expr: Expr, lowerer: Any):
+def lower(expr: Expr, lowerer: Any) -> Any:
     """Dispatch an expression node to the appropriate lowerer backend.
 
     This is the main entry point for lowering a single symbolic expression to
@@ -134,7 +134,7 @@ def lower_to_jax(exprs: Union[Expr, Sequence[Expr]]) -> Union[callable, list[cal
 
     Returns:
         - If exprs is a single Expr: Returns a single callable with signature
-          (x, u, node, params) -> array
+            (x, u, node, params) -> array
         - If exprs is a sequence: Returns a list of callables with the same signature
 
     Example:
@@ -200,7 +200,7 @@ def create_cvxpy_variables(
     inv_S_u = np.linalg.inv(S_u)
 
     # Parameters
-    w_tr = cp.Parameter(nonneg=True, name="w_tr")
+    lam_prox = cp.Parameter(nonneg=True, name="lam_prox")
     lam_cost = cp.Parameter(nonneg=True, name="lam_cost")
     lam_vc = cp.Parameter((N - 1, n_states), nonneg=True, name="lam_vc")
     lam_vb = cp.Parameter(nonneg=True, name="lam_vb")
@@ -263,7 +263,7 @@ def create_cvxpy_variables(
         du_nonscaled.append(S_u @ du[k])
 
     return CVXPyVariables(
-        w_tr=w_tr,
+        lam_prox=lam_prox,
         lam_cost=lam_cost,
         lam_vc=lam_vc,
         lam_vb=lam_vb,

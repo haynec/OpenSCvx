@@ -23,17 +23,17 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
-from examples.drone.cinema_vp_realtime_base import (
-    kp_pose,
-    plotting_dict,
-    problem,
-)
 from examples.plotting_viser import (
     build_scp_step_results,
     compute_velocity_colors_realtime,
     extract_multishoot_trajectory,
     format_metrics_markdown,
     get_print_queue_data,
+)
+from examples.realtime.base_problems.cinema_vp_realtime_base import (
+    kp_pose,
+    plotting_dict,
+    problem,
 )
 
 # Initialize the problem
@@ -276,8 +276,8 @@ def create_realtime_server(
             step=0.01,
         )
         lam_tr_input = server.gui.add_number(
-            "lambda_tr (w_tr)",
-            initial_value=optimization_problem.settings.scp.w_tr,
+            "lambda_tr (lam_prox)",
+            initial_value=optimization_problem.settings.scp.lam_prox,
             min=1e-6,
             max=1e6,
             step=0.1,
@@ -289,7 +289,7 @@ def create_realtime_server(
 
         @lam_tr_input.on_update
         def _(_) -> None:
-            optimization_problem.settings.scp.w_tr = lam_tr_input.value
+            optimization_problem.settings.scp.lam_prox = lam_tr_input.value
 
     # --- Problem Control ---
     with server.gui.add_folder("Problem Control"):

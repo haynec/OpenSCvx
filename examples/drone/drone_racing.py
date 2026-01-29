@@ -140,85 +140,11 @@ for node, gate_center_param in zip(gate_nodes, gate_center_params):
     )
     constraints.append(gate_constraint)
 
-
-# Define symbolic utility functions
-def symbolic_qdcm(q):
-    """Quaternion to Direction Cosine Matrix conversion using symbolic expressions"""
-    # Normalize quaternion
-    q_norm = ox.Sqrt(ox.Sum(q * q))
-    q_normalized = q / q_norm
-
-    w, x, y, z = q_normalized[0], q_normalized[1], q_normalized[2], q_normalized[3]
-
-    # Create DCM elements and assemble into 3x3 matrix
-    return ox.Block(
-        [
-            [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y - z * w), 2.0 * (x * z + y * w)],
-            [2.0 * (x * y + z * w), 1.0 - 2.0 * (x * x + z * z), 2.0 * (y * z - x * w)],
-            [2.0 * (x * z - y * w), 2.0 * (y * z + x * w), 1.0 - 2.0 * (x * x + y * y)],
-        ]
-    )
-
-
-def symbolic_ssmp(w):
-    """Angular rate to 4x4 skew symmetric matrix for quaternion dynamics"""
-    x, y, z = w[0], w[1], w[2]
-
-    return ox.Block(
-        [
-            [0.0, -x, -y, -z],
-            [x, 0.0, z, -y],
-            [y, -z, 0.0, x],
-            [z, y, -x, 0.0],
-        ]
-    )
-
-
-def symbolic_ssm(w):
-    """Angular rate to 3x3 skew symmetric matrix"""
-    x, y, z = w[0], w[1], w[2]
-
-    return ox.Block(
-        [
-            [0.0, -z, y],
-            [z, 0.0, -x],
-            [-y, x, 0.0],
-        ]
-    )
-
-
-def symbolic_diag(v):
-    """Create diagonal matrix from vector"""
-    if len(v) == 3:
-        return ox.Block(
-            [
-                [v[0], 0.0, 0.0],
-                [0.0, v[1], 0.0],
-                [0.0, 0.0, v[2]],
-            ]
-        )
-    else:
-        raise NotImplementedError("Only 3x3 diagonal matrices supported")
-
-
 # Create symbolic dynamics
 # Normalize quaternion for dynamics
 q_norm = ox.linalg.Norm(attitude)
 attitude_normalized = attitude / q_norm
 
-# Option 1: Full symbolic dynamics (more flexible but potentially slower)
-# r_dot = velocity
-# v_dot = (Constant(1.0 / m)) * symbolic_qdcm(attitude) @ thrust_force + Constant(
-#     np.array([0, 0, g_const], dtype=np.float64)
-# )
-# q_dot = Constant(0.5) * symbolic_ssmp(angular_velocity) @ attitude
-# J_b_inv = Constant(1.0 / J_b)
-# J_b_diag = symbolic_diag([Constant(J_b[0]), Constant(J_b[1]), Constant(J_b[2])])
-# w_dot = symbolic_diag([J_b_inv[0], J_b_inv[1], J_b_inv[2]]) @ (
-#     torque - symbolic_ssm(angular_velocity) @ J_b_diag @ angular_velocity
-# )
-
-# Option 2: Efficient dynamics using direct JAX lowering (better performance)
 J_b_inv = 1.0 / J_b
 J_b_diag = ox.linalg.Diag(J_b)
 
@@ -255,21 +181,9 @@ problem = Problem(
     # licq_max=1E-8
 )
 
-problem.settings.prp.dt = 0.01
-
-problem.settings.scp.w_tr = 2e0  # Weight on the Trust Reigon
-problem.settings.scp.lam_cost = 1e-1  # 0e-1,  # Weight on the Minimal Time Objective
-problem.settings.scp.lam_vc = (
-    1e1  # 1e1,  # Weight on the Virtual Control Objective (not including CTCS Augmentation)
-)
 problem.settings.scp.ep_tr = 1e-3  # Trust Region Tolerance
-problem.settings.scp.ep_vb = 1e-4  # Virtual Control Tolerance
-problem.settings.scp.ep_vc = 1e-8  # Virtual Control Tolerance for CTCS
-# problem.settings.scp.cost_drop = 10  # SCP iteration to relax minimal final time objective
-# problem.settings.scp.cost_relax = 0.8  # Minimal Time Relaxation Factor
-problem.settings.scp.w_tr_adapt = 1.4  # Trust Region Adaptation Factor
-problem.settings.scp.w_tr_max_scaling_factor = 1e2  # Maximum Trust Region Weight
 
+problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
 plotting_dict = {
     "vertices": vertices,
     "gate_centers": modified_centers,

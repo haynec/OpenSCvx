@@ -14,7 +14,7 @@ The state, constrol and additional parameters are defined as follows:
 
 ```python
 
-w_tr = cp.Parameter(nonneg = True, name='w_tr')       # Weight on the Trust Region
+lam_prox = cp.Parameter(nonneg = True, name='lam_prox')       # Weight on the Trust Region
 lam_cost = cp.Parameter(nonneg=True, name='lam_cost') # Weight on the Nonlinear Cost
 
 x = cp.Variable((params.scp.n, params.sim.n_states), name='x')   # State
@@ -97,7 +97,7 @@ def OptimalControlProblem(params: Config):
     ########################
 
     # Parameters
-    w_tr = cp.Parameter(nonneg = True, name='w_tr')
+    lam_prox = cp.Parameter(nonneg = True, name='lam_prox')
     lam_cost = cp.Parameter(nonneg=True, name='lam_cost')
 
     # State
@@ -206,7 +206,7 @@ def OptimalControlProblem(params: Config):
     ########
     
     inv = block([[inv_S_x, np.zeros((S_x.shape[0], S_u.shape[1]))], [np.zeros((S_u.shape[0], S_x.shape[1])), inv_S_u]])
-    cost += sum(w_tr * cp.sum_squares(inv @ cp.hstack((dx[i], du[i]))) for i in range(params.scp.n))  # Trust Region Cost
+    cost += sum(lam_prox * cp.sum_squares(inv @ cp.hstack((dx[i], du[i]))) for i in range(params.scp.n))  # Trust Region Cost
     cost += sum(params.scp.lam_vc * cp.sum(cp.abs(nu[i-1])) for i in range(1, params.scp.n)) # Virtual Control Slack
     
     idx_ncvx = 0

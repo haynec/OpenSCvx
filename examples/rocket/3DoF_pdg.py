@@ -141,23 +141,20 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
+    autotuner=ox.RampProximalWeight(),
 )
 
-# Set solver parameters
-problem.settings.scp.k_max = 500
-problem.settings.scp.w_tr_adapt = 1.04
-problem.settings.scp.w_tr = 6e-1
-problem.settings.scp.lam_cost = 4e-1
-problem.settings.scp.lam_vc = 1.5e0
+problem.settings.scp.autotuner.ramp_factor = 1.04
+problem.settings.scp.autotuner.lam_prox_max = 1e2
 
-# problem.settings.scp.uniform_time_grid = True
+# Set solver parameters
+problem.settings.scp.lam_cost = 5e-1
+problem.settings.scp.lam_vc = 1.5e0
+problem.settings.scp.lam_prox = 2e-1
 
 problem.settings.dis.dis_type = "ZOH"
 
 problem.settings.dis.solver = "Dopri8"
-
-# problem.settings.cvx.solver = "QOCO"
-# problem.settings.cvx.solver_args = {"enforce_dpp": True}
 
 
 plotting_dict = {
@@ -178,12 +175,12 @@ if __name__ == "__main__":
     plot_projections_2d(results, velocity_var_name="velocity").show()
 
     # Create PDG trajectory visualization
-    # scene_scale=100 brings 2000m scale down to ~20m for viser
+    scene_scale = 100
     traj_server = create_pdg_animated_plotting_server(
         results,
         thrust_key="thrust",
         glideslope_angle_deg=86.0,
-        scene_scale=100.0,
+        scene_scale=1.0,
     )
 
     # Create SCP iteration visualization

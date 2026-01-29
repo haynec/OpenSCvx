@@ -32,7 +32,7 @@ Example:
         b = A @ x           # Creates MatMul(A, x)
 """
 
-from typing import Tuple
+from typing import Tuple, Union
 
 import numpy as np
 
@@ -56,7 +56,7 @@ class Add(Expr):
             z = x + y + 5  # Creates Add(x, y, Constant(5))
     """
 
-    def __init__(self, *args):
+    def __init__(self, *args: Union[Expr, float, int, np.ndarray]):
         """Initialize an addition operation.
 
         Args:
@@ -117,7 +117,7 @@ class Add(Expr):
         except ValueError as e:
             raise ValueError(f"Add shapes not broadcastable: {shapes}") from e
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         inner = " + ".join(repr(e) for e in self.terms)
         return f"({inner})"
 
@@ -140,7 +140,11 @@ class Sub(Expr):
             z = x - y  # Creates Sub(x, y)
     """
 
-    def __init__(self, left, right):
+    def __init__(
+        self,
+        left: Union[Expr, float, int, np.ndarray],
+        right: Union[Expr, float, int, np.ndarray],
+    ):
         """Initialize a subtraction operation.
 
         Args:
@@ -180,7 +184,7 @@ class Sub(Expr):
         except ValueError as e:
             raise ValueError(f"Sub shapes not broadcastable: {shapes}") from e
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"({self.left!r} - {self.right!r})"
 
 
@@ -202,7 +206,7 @@ class Mul(Expr):
             z = x * y * 2  # Creates Mul(x, y, Constant(2))
     """
 
-    def __init__(self, *args):
+    def __init__(self, *args: Union[Expr, float, int, np.ndarray]):
         """Initialize an element-wise multiplication operation.
 
         Args:
@@ -275,7 +279,7 @@ class Mul(Expr):
         except ValueError as e:
             raise ValueError(f"Mul shapes not broadcastable: {shapes}") from e
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         inner = " * ".join(repr(e) for e in self.factors)
         return f"({inner})"
 
@@ -298,7 +302,11 @@ class Div(Expr):
             z = x / y  # Creates Div(x, y)
     """
 
-    def __init__(self, left, right):
+    def __init__(
+        self,
+        left: Union[Expr, float, int, np.ndarray],
+        right: Union[Expr, float, int, np.ndarray],
+    ):
         """Initialize a division operation.
 
         Args:
@@ -338,7 +346,7 @@ class Div(Expr):
         except ValueError as e:
             raise ValueError(f"Div shapes not broadcastable: {shapes}") from e
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"({self.left!r} / {self.right!r})"
 
 
@@ -364,7 +372,11 @@ class MatMul(Expr):
             y = A @ x  # Creates MatMul(A, x), result shape (3,)
     """
 
-    def __init__(self, left, right):
+    def __init__(
+        self,
+        left: Union[Expr, float, int, np.ndarray],
+        right: Union[Expr, float, int, np.ndarray],
+    ):
         """Initialize a matrix multiplication operation.
 
         Args:
@@ -416,7 +428,7 @@ class MatMul(Expr):
                 raise ValueError(f"MatMul incompatible: {L} @ {R}")
             return L[:-1] + (R[-1],)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"({self.left!r} * {self.right!r})"
 
 
@@ -436,7 +448,7 @@ class Neg(Expr):
             y = -x  # Creates Neg(x)
     """
 
-    def __init__(self, operand):
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
         """Initialize a negation operation.
 
         Args:
@@ -462,7 +474,7 @@ class Neg(Expr):
         """Negation preserves the shape of its operand."""
         return self.operand.check_shape()
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"(-{self.operand!r})"
 
 
@@ -483,7 +495,11 @@ class Power(Expr):
             y = x ** 2  # Creates Power(x, Constant(2))
     """
 
-    def __init__(self, base, exponent):
+    def __init__(
+        self,
+        base: Union[Expr, float, int, np.ndarray],
+        exponent: Union[Expr, float, int, np.ndarray],
+    ):
         """Initialize a power operation.
 
         Args:
@@ -513,5 +529,5 @@ class Power(Expr):
         except ValueError as e:
             raise ValueError(f"Power shapes not broadcastable: {shapes}") from e
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"({self.base!r})**({self.exponent!r})"
