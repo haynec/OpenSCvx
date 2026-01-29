@@ -314,7 +314,7 @@ def intro():
     print(ascii_art)
 
 
-def intermediate(print_queue, params, columns: list[Column]):
+def intermediate(print_queue: queue.Queue, params: Any, columns: list[Column]) -> None:
     """Process and print iteration data from the queue.
 
     This function runs in a loop, reading data from the print queue and
