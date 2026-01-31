@@ -76,9 +76,7 @@ from openscvx.symbolic.expr.state import State
 def _check_nonconvex_equality(constraint: Constraint, context: str) -> None:
     """Raise a helpful error if constraint is a non-convex equality.
 
-    Non-convex equality constraints are not supported because SCP linearizes
-    non-convex constraints, and linearized equalities cannot use slack/penalty
-    relaxation like inequalities can.
+    Non-convex equality constraints are not supported.
 
     Args:
         constraint: The constraint to check
