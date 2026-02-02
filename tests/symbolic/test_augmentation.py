@@ -15,6 +15,7 @@ from openscvx.symbolic.expr import (
     Concat,
     Constant,
     Control,
+    Equality,
     Huber,
     Index,
     Inequality,
@@ -1208,3 +1209,120 @@ def test_regular_convex_constraint_without_node_reference_accepted():
     assert len(result.cross_node) == 0
     assert len(result.cross_node_convex) == 0
     assert len(result.ctcs) == 0
+
+
+# =============================================================================
+# Non-convex equality constraint validation tests
+# =============================================================================
+
+
+def test_nonconvex_cross_node_equality_rejected():
+    """Test that non-convex cross-node equality constraints are rejected with helpful error."""
+    n_nodes = 10
+    velocity = State("vel", shape=(3,))
+
+    # Create a non-convex cross-node equality (periodic boundary condition without .convex())
+    cross_node_equality = velocity.at(0) == velocity.at(9)
+
+    # Verify it's an Equality and not marked convex
+    assert isinstance(cross_node_equality, Equality)
+    assert not cross_node_equality.is_convex
+
+    # Should raise a helpful error
+    constraint_set = ConstraintSet(unsorted=[cross_node_equality])
+    with pytest.raises(ValueError) as exc_info:
+        separate_constraints(constraint_set, n_nodes=n_nodes)
+
+    # Check error message is helpful
+    msg = str(exc_info.value)
+    assert "Non-convex equality constraint" in msg
+    assert ".convex()" in msg
+    assert "cross-node" in msg
+
+
+def test_convex_cross_node_equality_accepted():
+    """Test that convex cross-node equality constraints are accepted."""
+    n_nodes = 10
+    velocity = State("vel", shape=(3,))
+
+    # Create a convex cross-node equality (marked with .convex())
+    cross_node_equality = (velocity.at(0) == velocity.at(9)).convex()
+
+    # Verify it's marked convex
+    assert cross_node_equality.is_convex
+
+    # Should NOT raise error
+    constraint_set = ConstraintSet(unsorted=[cross_node_equality])
+    result = separate_constraints(constraint_set, n_nodes=n_nodes)
+
+    # Should be in convex cross-node constraints
+    assert len(result.cross_node_convex) == 1
+    assert len(result.cross_node) == 0
+
+
+def test_nonconvex_nodal_equality_rejected():
+    """Test that non-convex nodal equality constraints are rejected with helpful error."""
+    n_nodes = 10
+    position = State("pos", shape=(3,))
+
+    # Create a non-convex nodal equality (without .convex())
+    nodal_equality = (position == np.zeros(3)).at([0, 5, 9])
+
+    # Verify it's an Equality and not marked convex
+    assert isinstance(nodal_equality.constraint, Equality)
+    assert not nodal_equality.constraint.is_convex
+
+    # Should raise a helpful error
+    constraint_set = ConstraintSet(unsorted=[nodal_equality])
+    with pytest.raises(ValueError) as exc_info:
+        separate_constraints(constraint_set, n_nodes=n_nodes)
+
+    # Check error message is helpful
+    msg = str(exc_info.value)
+    assert "Non-convex equality constraint" in msg
+    assert ".convex()" in msg
+    assert "nodal" in msg
+
+
+def test_ctcs_equality_rejected():
+    """Test that CTCS constraints with equality are rejected."""
+    n_nodes = 10
+    position = State("pos", shape=(3,))
+
+    # Create a CTCS constraint with equality (not valid for CTCS)
+    ctcs_equality = (position == np.zeros(3)).over((0, 10))
+
+    # Verify the inner constraint is an Equality
+    assert isinstance(ctcs_equality.constraint, Equality)
+
+    # Should raise a helpful error
+    constraint_set = ConstraintSet(unsorted=[ctcs_equality])
+    with pytest.raises(ValueError) as exc_info:
+        separate_constraints(constraint_set, n_nodes=n_nodes)
+
+    # Check error message is helpful
+    msg = str(exc_info.value)
+    assert "CTCS constraints cannot be equality" in msg
+
+
+def test_nonconvex_inequality_still_accepted():
+    """Regression test: non-convex inequality constraints should still work."""
+    n_nodes = 10
+    position = State("pos", shape=(3,))
+
+    # Import linalg for Norm
+    from openscvx.symbolic.expr import linalg
+
+    # Create a non-convex inequality (norm constraint)
+    nonconvex_inequality = linalg.Norm(position, ord=2) <= 10.0
+
+    # Verify it's not marked convex
+    assert not nonconvex_inequality.is_convex
+
+    # Should NOT raise error - inequalities are fine
+    constraint_set = ConstraintSet(unsorted=[nonconvex_inequality])
+    result = separate_constraints(constraint_set, n_nodes=n_nodes)
+
+    # Should be in non-convex nodal constraints
+    assert len(result.nodal) == 1
+    assert len(result.nodal_convex) == 0

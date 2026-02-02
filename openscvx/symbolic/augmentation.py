@@ -64,12 +64,37 @@ from openscvx.symbolic.expr import (
     Concat,
     Constraint,
     CrossNodeConstraint,
+    Equality,
     Expr,
     Index,
     NodalConstraint,
 )
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
+
+
+def _check_nonconvex_equality(constraint: Constraint, context: str) -> None:
+    """Raise a helpful error if constraint is a non-convex equality.
+
+    Non-convex equality constraints are not supported.
+
+    Args:
+        constraint: The constraint to check
+        context: Description of where this constraint appears (for error message)
+
+    Raises:
+        ValueError: If constraint is an Equality and not marked as convex
+    """
+    if isinstance(constraint, Equality) and not constraint.is_convex:
+        raise ValueError(
+            f"Non-convex equality constraint in {context}. "
+            f"Equality constraints must be affine (linear) and marked as convex "
+            f"using .convex(). For example:\n"
+            f"    (velocity.at(0) == velocity.at(n-1)).convex()\n"
+            f"If your equality constraint is nonlinear, consider reformulating it "
+            f"as two inequality constraints or using a different approach.\n"
+            f"Constraint: {constraint}"
+        )
 
 
 def sort_ctcs_constraints(
@@ -212,6 +237,16 @@ def separate_constraints(constraint_set: ConstraintSet, n_nodes: int) -> Constra
                     "Cross-node constraints should be specified as bare Constraint objects. "
                     f"Constraint: {c.constraint}"
                 )
+            # Validate that CTCS constraints are not equality constraints
+            # CTCS penalty functions (squared_relu, huber, smooth_relu) are designed
+            # for inequality constraints only
+            if isinstance(c.constraint, Equality):
+                raise ValueError(
+                    f"CTCS constraints cannot be equality constraints. "
+                    f"CTCS uses penalty functions designed for inequality constraints. "
+                    f"For equality constraints, use nodal constraints with .convex() instead.\n"
+                    f"Constraint: {c.constraint}"
+                )
             # Normalize None to full horizon
             c.nodes = c.nodes or (0, n_nodes)
             constraint_set.ctcs.append(c)
@@ -228,6 +263,9 @@ def separate_constraints(constraint_set: ConstraintSet, n_nodes: int) -> Constra
                     f"Constraint: {c.constraint}"
                 )
 
+            # Check for non-convex equality constraints
+            _check_nonconvex_equality(c.constraint, "nodal constraint")
+
             # Regular nodal constraint - categorize by convexity
             if c.constraint.is_convex:
                 constraint_set.nodal_convex.append(c)
@@ -237,6 +275,9 @@ def separate_constraints(constraint_set: ConstraintSet, n_nodes: int) -> Constra
         elif isinstance(c, Constraint):
             # Bare constraint - check if it's a cross-node constraint
             if _contains_node_reference(c):
+                # Check for non-convex equality constraints
+                _check_nonconvex_equality(c, "cross-node constraint")
+
                 # Cross-node constraint: wrap in CrossNodeConstraint
                 cross_node = CrossNodeConstraint(c)
                 if c.is_convex:
@@ -244,6 +285,9 @@ def separate_constraints(constraint_set: ConstraintSet, n_nodes: int) -> Constra
                 else:
                     constraint_set.cross_node.append(cross_node)
             else:
+                # Check for non-convex equality constraints
+                _check_nonconvex_equality(c, "nodal constraint")
+
                 # Regular constraint: apply at all nodes
                 all_nodes = list(range(n_nodes))
                 nodal_constraint = NodalConstraint(c, all_nodes)
@@ -264,6 +308,9 @@ def separate_constraints(constraint_set: ConstraintSet, n_nodes: int) -> Constra
     # Add nodal constraints from CTCS constraints that have check_nodally=True
     ctcs_nodal_constraints = get_nodal_constraints_from_ctcs(constraint_set.ctcs)
     for constraint, interval in ctcs_nodal_constraints:
+        # Check for non-convex equality constraints
+        _check_nonconvex_equality(constraint, "CTCS check_nodally constraint")
+
         # CTCS check_nodally constraints cannot have NodeReferences (validated above)
         # Convert CTCS interval (start, end) to list of nodes [start, start+1, ..., end-1]
         interval_nodes = list(range(interval[0], interval[1]))
