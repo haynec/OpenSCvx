@@ -2,582 +2,582 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/citation/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/examples/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/getting-started/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/SUMMARY/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/abstract/brachistochrone/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/arm/three_link_arm/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/car/dubins_car/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/car/dubins_car_conditional/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/car/dubins_car_disjoint/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/car/dubins_car_stljax/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/drone/cinema_vp/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/drone/dr_double_integrator/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/drone/dr_vp/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/drone/dr_vp_nodal/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/drone/dr_vp_polytope/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/drone/drone_racing/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/drone/obstacle_avoidance/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/drone/obstacle_avoidance_nodal/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/drone/obstacle_avoidance_vmap/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/realtime/cinema_vp_realtime/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/realtime/drone_racing_realtime/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/realtime/dubins_car_realtime/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/realtime/obstacle_avoidance_realtime/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/realtime/base_problems/cinema_vp_realtime_base/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/realtime/base_problems/drone_racing_realtime_base/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/realtime/base_problems/obstacle_avoidance_realtime_base/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/rocket/3DoF_pdg/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/spacecraft/proxops_cw/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Foundations/constraint_reformulation/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Foundations/control_parameterization/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Foundations/discretization/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Foundations/ocp/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Foundations/scvx/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Foundations/time_dilation/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/SUMMARY/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/config/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/problem/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/autotuning/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/base/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/optimization_results/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/penalized_trust_region/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/discretization/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/discretization/discretization/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/expert/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/expert/byof/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/expert/lowering/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/expert/validation/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/init/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/init/interpolation/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/integrators/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/integrators/runge_kutta/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/lowered/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/lowered/cvxpy_constraints/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/lowered/cvxpy_variables/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/lowered/dynamics/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/lowered/jax_constraints/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/lowered/parameters/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/lowered/problem/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/lowered/unified/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/plotting/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/plotting/plotting/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/plotting/scp_iteration/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/plotting/viser/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/plotting/viser/animated/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/plotting/viser/plotly_integration/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/plotting/viser/primitives/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/plotting/viser/scp/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/plotting/viser/server/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/propagation/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/propagation/post_processing/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/propagation/propagation/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/solvers/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/solvers/base/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/solvers/ptr_solver/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/augmentation/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/builder/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/constraint_set/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/hashing/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lower/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/preprocessing/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/problem/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/time/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/unified/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/arithmetic/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/array/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/constraint/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/control/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/expr/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/linalg/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/logic/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/math/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/spatial/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/state/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/stl/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/variable/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/vmap/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/lie/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/lie/adjoint/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/lie/se3/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/lie/so3/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/cvxpy/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/cvxpy/arithmetic/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/cvxpy/array/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/cvxpy/constraint/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/cvxpy/control/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/cvxpy/expr/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/cvxpy/linalg/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/cvxpy/logic/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/cvxpy/math/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/cvxpy/state/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/arithmetic/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/array/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/constraint/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/control/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/expr/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/lie/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/linalg/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/logic/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/math/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/spatial/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/state/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/stl/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/vmap/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/utils/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/utils/cache/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/utils/caching/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/utils/printing/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/utils/profiling/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/utils/utils/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/UnderTheHood/lowering_architecture/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/UnderTheHood/vectorization_and_vmapping/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/UsersGuide/00_introduction/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/UsersGuide/01_hello_world_brachistochrone/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/UsersGuide/02_drone_racing_constraints/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/UsersGuide/03_obstacle_avoidance_vmap/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/UsersGuide/04_viewpoint_constraints/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/UsersGuide/05_visualization/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/UsersGuide/06_logic/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/UsersGuide/07_lie/</loc>
-         <lastmod>2026-01-29</lastmod>
+         <lastmod>2026-02-02</lastmod>
     </url>
 </urlset>
