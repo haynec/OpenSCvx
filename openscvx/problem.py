@@ -295,6 +295,29 @@ class Problem:
                 x_term=self._lowered.x_unified.final,
             )
 
+    def _sync_guesses(self):
+        """Sync trajectory guesses from State/Control objects to lowered representation.
+
+        This method reads the current `.guess` values from the original State and
+        Control objects and updates the unified representations. This enables MPC
+        warm-starting workflows where the initial trajectory guess is updated
+        between solves (e.g., shifting the previous solution).
+
+        Note:
+            This only updates the unified representation. The AlgorithmState is
+            created from these values in reset() or initialize(), so this must
+            be called before those methods to take effect.
+        """
+        # Sync state guesses
+        for state in self.symbolic.states:
+            if state.guess is not None:
+                self._lowered.x_unified.guess[:, state._slice] = state.guess
+
+        # Sync control guesses
+        for control in self.symbolic.controls:
+            if control.guess is not None:
+                self._lowered.u_unified.guess[:, control._slice] = control.guess
+
     def sync(self):
         """Sync parameters and boundary conditions to the solver.
 
@@ -598,6 +621,10 @@ class Problem:
         Creates fresh AlgorithmState while preserving compiled dynamics and solvers.
         Use this to run multiple optimizations without re-initializing.
 
+        This method automatically syncs:
+            - Trajectory guesses from State/Control `.guess` attributes
+            - Boundary conditions from State `.initial` and `.final` attributes
+
         Raises:
             ValueError: If initialize() has not been called yet.
 
@@ -609,11 +636,26 @@ class Problem:
                 result1 = problem.step()
                 problem.reset()
                 result2 = problem.solve()  # Fresh run with same setup
+
+            MPC with warm-starting from previous solution::
+
+                for measured_state in measurements:
+                    # Update initial condition
+                    pos.initial = measured_state[:3]
+
+                    # Warm-start: shift previous solution as new guess
+                    pos.guess = np.roll(prev_result.nodes["pos"], -1, axis=0)
+
+                    problem.reset()  # Syncs guesses and boundary conditions
+                    result = problem.solve()
         """
         if self._compiled_dynamics is None:
             raise ValueError("Problem has not been initialized. Call initialize() first")
 
-        # Sync boundary conditions from State objects
+        # Sync guesses from State/Control objects (must happen before AlgorithmState creation)
+        self._sync_guesses()
+
+        # Sync boundary conditions from State objects (for MPC workflows)
         self._sync_boundary_conditions()
 
         # Create fresh solver state from settings
