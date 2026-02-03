@@ -295,6 +295,35 @@ class Problem:
                 x_term=self._lowered.x_unified.final,
             )
 
+    def sync(self):
+        """Sync parameters and boundary conditions to the solver.
+
+        Call this after modifying State.initial/final or parameters when using
+        step() without reset(). This allows warm-starting from the previous
+        solution while updating problem data.
+
+        Note:
+            This is automatically called by solve() and reset(). Only needed
+            when using step() directly with modified parameters or boundary
+            conditions between iterations.
+
+        Example:
+            MPC with warm-starting::
+
+                problem.initialize()
+                while running:
+                    # Update initial condition from measurement
+                    pos.initial = measured_state
+                    problem.sync()  # Sync without resetting algorithm state
+
+                    # Continue from previous solution (warm-start)
+                    for _ in range(max_iters):
+                        if problem.step()["converged"]:
+                            break
+        """
+        self._sync_parameters()
+        self._sync_boundary_conditions()
+
     @property
     def state(self) -> Optional[AlgorithmState]:
         """Access the current solver state.
