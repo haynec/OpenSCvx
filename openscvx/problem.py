@@ -264,37 +264,47 @@ class Problem:
 
     def _sync_parameters(self):
         """Sync all parameter values to CVXPy parameters."""
+        if self._lowered is None:
+            return
+
         if self._lowered.cvxpy_params is not None:
             for name, value in self._parameter_wrapper.items():
                 if name in self._lowered.cvxpy_params:
                     self._lowered.cvxpy_params[name].value = value
 
     def _sync_boundary_conditions(self):
-        """Sync boundary condition values from State objects to lowered representation.
+        """Sync boundary conditions from State objects to lowered representation.
 
-        This method reads the current `.initial` and `.final` values from the
-        original State objects and updates both the unified state representation
-        and the CVXPy solver parameters. This enables MPC workflows where initial
-        conditions change between solves.
+        This method reads the current `.initial` and `.final` values and types
+        from the original State objects and updates both the unified state
+        representation and the CVXPy solver parameters. This enables workflows
+        where initial conditions change between solves.
 
         Note:
-            Only syncs if the solver has been initialized. Safe to call before
-            initialize() - it will simply do nothing.
+            Safe to call before initialize() - it will simply do nothing.
         """
-        # Sync initial/final values from State objects to optimization unified representation
+        if self._lowered is None:
+            return
+
+        # Sync initial/final values and types from State objects to optimization unified
+        # representation
         for state in self.symbolic.states:
             if state.initial is not None:
                 self._lowered.x_unified.initial[state._slice] = state.initial
+                self._lowered.x_unified.initial_type[state._slice] = state.initial_type
             if state.final is not None:
                 self._lowered.x_unified.final[state._slice] = state.final
+                self._lowered.x_unified.final_type[state._slice] = state.final_type
 
-        # Sync initial/final values to propagation unified representation
+        # Sync initial/final values and types to propagation unified representation
         # (states_prop includes optimization states, so we sync those too)
         for state in self.symbolic.states_prop:
             if state.initial is not None:
                 self._lowered.x_prop_unified.initial[state._slice] = state.initial
+                self._lowered.x_prop_unified.initial_type[state._slice] = state.initial_type
             if state.final is not None:
                 self._lowered.x_prop_unified.final[state._slice] = state.final
+                self._lowered.x_prop_unified.final_type[state._slice] = state.final_type
 
         # Update CVXPy solver parameters (only if solver is initialized)
         if self._solver._problem is not None:
@@ -307,15 +317,18 @@ class Problem:
         """Sync trajectory guesses from State/Control objects to lowered representation.
 
         This method reads the current `.guess` values from the original State and
-        Control objects and updates the unified representations. This enables MPC
-        warm-starting workflows where the initial trajectory guess is updated
-        between solves (e.g., shifting the previous solution).
+        Control objects and updates the unified representations. This enables warm-starting
+        workflows where the initial trajectory guess is updated between solves (e.g., shifting
+        the previous solution).
 
         Note:
             This only updates the unified representation. The AlgorithmState is
             created from these values in reset() or initialize(), so this must
             be called before those methods to take effect.
         """
+        if self._lowered is None:
+            return
+
         # Sync optimization state guesses
         for state in self.symbolic.states:
             if state.guess is not None:
@@ -668,7 +681,7 @@ class Problem:
         # Sync guesses from State/Control objects (must happen before AlgorithmState creation)
         self._sync_guesses()
 
-        # Sync boundary conditions from State objects (for MPC workflows)
+        # Sync boundary conditions from State objects
         self._sync_boundary_conditions()
 
         # Create fresh solver state from settings
