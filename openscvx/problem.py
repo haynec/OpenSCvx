@@ -269,6 +269,32 @@ class Problem:
                 if name in self._lowered.cvxpy_params:
                     self._lowered.cvxpy_params[name].value = value
 
+    def _sync_boundary_conditions(self):
+        """Sync boundary condition values from State objects to lowered representation.
+
+        This method reads the current `.initial` and `.final` values from the
+        original State objects and updates both the unified state representation
+        and the CVXPy solver parameters. This enables MPC workflows where initial
+        conditions change between solves.
+
+        Note:
+            Only syncs if the solver has been initialized. Safe to call before
+            initialize() - it will simply do nothing.
+        """
+        # Sync initial values from State objects to unified representation
+        for state in self.symbolic.states:
+            if state.initial is not None:
+                self._lowered.x_unified.initial[state._slice] = state.initial
+            if state.final is not None:
+                self._lowered.x_unified.final[state._slice] = state.final
+
+        # Update CVXPy solver parameters (only if solver is initialized)
+        if self._solver._problem is not None:
+            self._solver.update_boundary_conditions(
+                x_init=self._lowered.x_unified.initial,
+                x_term=self._lowered.x_unified.final,
+            )
+
     @property
     def state(self) -> Optional[AlgorithmState]:
         """Access the current solver state.
@@ -558,6 +584,9 @@ class Problem:
         if self._compiled_dynamics is None:
             raise ValueError("Problem has not been initialized. Call initialize() first")
 
+        # Sync boundary conditions from State objects
+        self._sync_boundary_conditions()
+
         # Create fresh solver state from settings
         self._state = AlgorithmState.from_settings(self.settings)
 
@@ -619,8 +648,9 @@ class Problem:
             OptimizationResults with trajectory and convergence info
                 (call post_process() for full propagation)
         """
-        # Sync parameters before solving
+        # Sync parameters and boundary conditions before solving
         self._sync_parameters()
+        self._sync_boundary_conditions()
 
         required = [
             self._compiled_dynamics,
