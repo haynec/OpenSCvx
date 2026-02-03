@@ -264,10 +264,114 @@ class Problem:
 
     def _sync_parameters(self):
         """Sync all parameter values to CVXPy parameters."""
+        if self._lowered is None:
+            return
+
         if self._lowered.cvxpy_params is not None:
             for name, value in self._parameter_wrapper.items():
                 if name in self._lowered.cvxpy_params:
                     self._lowered.cvxpy_params[name].value = value
+
+    def _sync_boundary_conditions(self):
+        """Sync boundary conditions from State objects to lowered representation.
+
+        This method reads the current `.initial` and `.final` values and types
+        from the original State objects and updates both the unified state
+        representation and the CVXPy solver parameters. This enables workflows
+        where initial conditions change between solves.
+
+        Note:
+            Safe to call before initialize() - it will simply do nothing.
+        """
+        if self._lowered is None:
+            return
+
+        # Sync initial/final values and types from State objects to optimization unified
+        # representation
+        for state in self.symbolic.states:
+            if state.initial is not None:
+                self._lowered.x_unified.initial[state._slice] = state.initial
+                self._lowered.x_unified.initial_type[state._slice] = state.initial_type
+            if state.final is not None:
+                self._lowered.x_unified.final[state._slice] = state.final
+                self._lowered.x_unified.final_type[state._slice] = state.final_type
+
+        # Sync initial/final values and types to propagation unified representation
+        # (states_prop includes optimization states, so we sync those too)
+        for state in self.symbolic.states_prop:
+            if state.initial is not None:
+                self._lowered.x_prop_unified.initial[state._slice] = state.initial
+                self._lowered.x_prop_unified.initial_type[state._slice] = state.initial_type
+            if state.final is not None:
+                self._lowered.x_prop_unified.final[state._slice] = state.final
+                self._lowered.x_prop_unified.final_type[state._slice] = state.final_type
+
+        # Update CVXPy solver parameters (only if solver is initialized)
+        if self._solver._problem is not None:
+            self._solver.update_boundary_conditions(
+                x_init=self._lowered.x_unified.initial,
+                x_term=self._lowered.x_unified.final,
+            )
+
+    def _sync_guesses(self):
+        """Sync trajectory guesses from State/Control objects to lowered representation.
+
+        This method reads the current `.guess` values from the original State and
+        Control objects and updates the unified representations. This enables warm-starting
+        workflows where the initial trajectory guess is updated between solves (e.g., shifting
+        the previous solution).
+
+        Note:
+            This only updates the unified representation. The AlgorithmState is
+            created from these values in reset() or initialize(), so this must
+            be called before those methods to take effect.
+        """
+        if self._lowered is None:
+            return
+
+        # Sync optimization state guesses
+        for state in self.symbolic.states:
+            if state.guess is not None:
+                self._lowered.x_unified.guess[:, state._slice] = state.guess
+
+        # Sync propagation state guesses (includes optimization states)
+        for state in self.symbolic.states_prop:
+            if state.guess is not None:
+                self._lowered.x_prop_unified.guess[:, state._slice] = state.guess
+
+        # Sync control guesses
+        for control in self.symbolic.controls:
+            if control.guess is not None:
+                self._lowered.u_unified.guess[:, control._slice] = control.guess
+
+    def sync(self):
+        """Sync parameters and boundary conditions to the solver.
+
+        Call this after modifying State.initial/final or parameters when using
+        step() without reset(). This allows warm-starting from the previous
+        solution while updating problem data.
+
+        Note:
+            This is automatically called by solve() and reset(). Only needed
+            when using step() directly with modified parameters or boundary
+            conditions between iterations.
+
+        Example:
+            MPC with warm-starting::
+
+                problem.initialize()
+                while running:
+                    # Update initial condition from measurement
+                    pos.initial = measured_state
+                    problem.sync()  # Sync without resetting algorithm state
+
+                    # Continue from previous solution (warm-start)
+                    for _ in range(max_iters):
+                        if problem.step()["converged"]:
+                            break
+        """
+        self._sync_parameters()
+        self._sync_boundary_conditions()
 
     @property
     def state(self) -> Optional[AlgorithmState]:
@@ -543,6 +647,10 @@ class Problem:
         Creates fresh AlgorithmState while preserving compiled dynamics and solvers.
         Use this to run multiple optimizations without re-initializing.
 
+        This method automatically syncs:
+            - Trajectory guesses from State/Control `.guess` attributes
+            - Boundary conditions from State `.initial` and `.final` attributes
+
         Raises:
             ValueError: If initialize() has not been called yet.
 
@@ -554,9 +662,27 @@ class Problem:
                 result1 = problem.step()
                 problem.reset()
                 result2 = problem.solve()  # Fresh run with same setup
+
+            MPC with warm-starting from previous solution::
+
+                for measured_state in measurements:
+                    # Update initial condition
+                    pos.initial = measured_state[:3]
+
+                    # Warm-start: shift previous solution as new guess
+                    pos.guess = np.roll(prev_result.nodes["pos"], -1, axis=0)
+
+                    problem.reset()  # Syncs guesses and boundary conditions
+                    result = problem.solve()
         """
         if self._compiled_dynamics is None:
             raise ValueError("Problem has not been initialized. Call initialize() first")
+
+        # Sync guesses from State/Control objects (must happen before AlgorithmState creation)
+        self._sync_guesses()
+
+        # Sync boundary conditions from State objects
+        self._sync_boundary_conditions()
 
         # Create fresh solver state from settings
         self._state = AlgorithmState.from_settings(self.settings)
@@ -619,8 +745,9 @@ class Problem:
             OptimizationResults with trajectory and convergence info
                 (call post_process() for full propagation)
         """
-        # Sync parameters before solving
+        # Sync parameters and boundary conditions before solving
         self._sync_parameters()
+        self._sync_boundary_conditions()
 
         required = [
             self._compiled_dynamics,
