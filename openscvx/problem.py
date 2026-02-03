@@ -281,12 +281,20 @@ class Problem:
             Only syncs if the solver has been initialized. Safe to call before
             initialize() - it will simply do nothing.
         """
-        # Sync initial values from State objects to unified representation
+        # Sync initial/final values from State objects to optimization unified representation
         for state in self.symbolic.states:
             if state.initial is not None:
                 self._lowered.x_unified.initial[state._slice] = state.initial
             if state.final is not None:
                 self._lowered.x_unified.final[state._slice] = state.final
+
+        # Sync initial/final values to propagation unified representation
+        # (states_prop includes optimization states, so we sync those too)
+        for state in self.symbolic.states_prop:
+            if state.initial is not None:
+                self._lowered.x_prop_unified.initial[state._slice] = state.initial
+            if state.final is not None:
+                self._lowered.x_prop_unified.final[state._slice] = state.final
 
         # Update CVXPy solver parameters (only if solver is initialized)
         if self._solver._problem is not None:
@@ -308,10 +316,15 @@ class Problem:
             created from these values in reset() or initialize(), so this must
             be called before those methods to take effect.
         """
-        # Sync state guesses
+        # Sync optimization state guesses
         for state in self.symbolic.states:
             if state.guess is not None:
                 self._lowered.x_unified.guess[:, state._slice] = state.guess
+
+        # Sync propagation state guesses (includes optimization states)
+        for state in self.symbolic.states_prop:
+            if state.guess is not None:
+                self._lowered.x_prop_unified.guess[:, state._slice] = state.guess
 
         # Sync control guesses
         for control in self.symbolic.controls:
