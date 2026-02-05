@@ -484,6 +484,7 @@ class UnifiedControl:
     time_dilation_slice: Optional[slice] = None  # Slice for time dilation control
     scaling_min: Optional[np.ndarray] = None  # Scaling minimum bounds for unified control
     scaling_max: Optional[np.ndarray] = None  # Scaling maximum bounds for unified control
+    is_impulsive: Optional[bool] = False  # Default toggle for 'impulsivity' of the unified control
 
     def __post_init__(self):
         """Initialize slices after dataclass creation."""
@@ -534,6 +535,7 @@ class UnifiedControl:
         *,
         min=-np.inf,
         max=np.inf,
+        is_impulsive=False,
         guess=0.0,
         augmented=False,
     ) -> None:
@@ -645,6 +647,8 @@ class UnifiedControl:
                 self.scaling_min = np.concatenate([self.scaling_min, np.array([min])])
             if self.scaling_max is not None:
                 self.scaling_max = np.concatenate([self.scaling_max, np.array([max])])
+            if self.is_impulsive is not None:
+                self.is_impulsive = np.concatenate([self.is_impulsive, np.array([is_impulsive])])
 
             # Update dimensions
             self.shape = new_shape

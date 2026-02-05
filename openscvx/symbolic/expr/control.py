@@ -1,6 +1,7 @@
 from typing import Optional, Tuple
 
 import numpy as np
+from numpy.typing import NDArray
 
 from .variable import Variable
 
@@ -66,6 +67,7 @@ class Control(Variable):
         *,
         min: Optional[np.ndarray] = None,
         max: Optional[np.ndarray] = None,
+        impulsive: bool = False,
     ):
         """Initialize a Control object.
 
@@ -74,10 +76,12 @@ class Control(Variable):
             shape: Shape of the control vector (typically 1D tuple like (3,))
             min: Optional minimum bounds array (keyword-only)
             max: Optional maximum bounds array (keyword-only)
+            impulsive: Whether this control is treated as impulsive
         """
         super().__init__(name, shape)
         self._scaling_min = None
         self._scaling_max = None
+        self._is_impulsive = np.repeat(impulsive, shape[0])
 
         if min is not None:
             self.min = min
@@ -152,10 +156,26 @@ class Control(Variable):
             )
         self._scaling_max = val
 
+    @property
+    def is_impulsive(self) -> Optional[bool]:
+        return self._is_impulsive
+
+    @is_impulsive.setter
+    def is_impulsive(self, val):
+        if val is None:
+            self._is_impulsive = np.repeat(False, self.shape)
+            return
+        val = np.repeat(val, self.shape)
+        if val.shape != self.shape:
+            raise ValueError(
+                f"Impulsive controls toggles shape {val.shape} does not match Control shape {self.shape}"
+            )
+        self._is_impulsive = val
+
     def __repr__(self) -> str:
         """String representation of the Control object.
 
         Returns:
-            Concise string showing the control name and shape.
+            Concise string showing the control name, shape and type.
         """
-        return f"Control('{self.name}', shape={self.shape})"
+        return f"Control('{self.name}', shape={self.shape}, impulsive={self._is_impulsive})"

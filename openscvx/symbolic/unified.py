@@ -372,11 +372,15 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     # Build full arrays using scaling where available, min/max otherwise
     unified_scaling_min = None
     unified_scaling_max = None
+    unified_is_impulsive = np.full(control.shape[0], False)
 
     # Check if any control has scaling
     has_any_scaling = any(
         control.scaling_min is not None or control.scaling_max is not None
         for control in sorted_controls
+    )
+    has_any_impulsive = any(
+        control.is_impulsive is not None for control in sorted_controls
     )
 
     if has_any_scaling:
@@ -405,6 +409,18 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         unified_scaling_min = np.concatenate(scaling_min_list)
         unified_scaling_max = np.concatenate(scaling_max_list)
 
+    if has_any_impulsive:
+        # Build full scaling arrays
+        is_impulsive_list = []
+        for control in sorted_controls:
+
+            if control.is_impulsive is not None:
+                is_impulsive_list.append(control.is_impulsive)
+            else:
+                is_impulsive_list.append(np.full(control.shape[0], False))
+
+        unified_is_impulsive = np.concatenate(is_impulsive_list)
+
     return UnifiedControl(
         name=name,
         shape=(total_shape,),
@@ -417,4 +433,5 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         time_dilation_slice=time_dilation_slice,
         scaling_min=unified_scaling_min,
         scaling_max=unified_scaling_max,
+        is_impulsive=unified_is_impulsive
     )
