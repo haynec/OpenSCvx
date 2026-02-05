@@ -6,16 +6,29 @@ import viser
 from viser.theme import TitlebarButton, TitlebarConfig, TitlebarImage
 
 
-def compute_velocity_colors(vel: np.ndarray, cmap_name: str = "viridis") -> np.ndarray:
+def compute_velocity_colors(
+    vel: np.ndarray | None,
+    cmap_name: str = "viridis",
+    fallback_length: int | None = None,
+) -> np.ndarray:
     """Compute RGB colors based on velocity magnitude.
 
     Args:
-        vel: Velocity array of shape (N, 3)
+        vel: Velocity array of shape (N, 3), or None if velocity is not available
         cmap_name: Matplotlib colormap name
+        fallback_length: When vel is None, number of points for default color array.
+            Required when vel is None.
 
     Returns:
         Array of RGB colors with shape (N, 3), values in [0, 255]
     """
+    if vel is None:
+        if fallback_length is None:
+            raise ValueError("fallback_length is required when vel is None")
+        # Single default color (viridis mid) for all points
+        cmap = plt.get_cmap(cmap_name)
+        default_rgb = np.array([int(c * 255) for c in cmap(0.5)[:3]], dtype=np.uint8)
+        return np.broadcast_to(default_rgb, (fallback_length, 3)).copy()
     vel_norms = np.linalg.norm(vel, axis=1)
     vel_range = vel_norms.max() - vel_norms.min()
     if vel_range < 1e-8:
@@ -28,30 +41,37 @@ def compute_velocity_colors(vel: np.ndarray, cmap_name: str = "viridis") -> np.n
     return colors
 
 
-def compute_grid_size(pos: np.ndarray, padding: float = 1.2) -> float:
+def compute_grid_size(
+    pos: np.ndarray | None,
+    padding: float = 1.2,
+    default_size: float = 10.0,
+) -> float:
     """Compute grid size based on trajectory extent.
 
     Args:
-        pos: Position array of shape (N, 3)
+        pos: Position array of shape (N, 3), or None if position is not available
         padding: Padding factor (1.2 = 20% padding)
+        default_size: Grid size when pos is None
 
     Returns:
         Grid size (width and height)
     """
+    if pos is None:
+        return default_size
     max_x = np.abs(pos[:, 0]).max()
     max_y = np.abs(pos[:, 1]).max()
     return max(max_x, max_y) * 2 * padding
 
 
 def create_server(
-    pos: np.ndarray,
+    pos: np.ndarray | None,
     dark_mode: bool = True,
     show_grid: bool = True,
 ) -> viser.ViserServer:
     """Create a viser server with basic scene setup.
 
     Args:
-        pos: Position array for computing grid size
+        pos: Position array for computing grid size, or None to use default grid size
         dark_mode: Whether to use dark theme
         show_grid: Whether to show the grid (default True)
 
