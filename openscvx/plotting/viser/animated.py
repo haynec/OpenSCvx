@@ -136,10 +136,9 @@ def add_target_marker(
         n_points = len(target_pos)
         if n_points > 1:
             # Create pairs of consecutive points: [point_i, point_{i+1}]
-            line_segments = np.array([
-                [target_pos[i], target_pos[i + 1]]
-                for i in range(n_points - 1)
-            ], dtype=np.float32)
+            line_segments = np.array(
+                [[target_pos[i], target_pos[i + 1]] for i in range(n_points - 1)], dtype=np.float32
+            )
             server.scene.add_line_segments(
                 f"/targets/{name}/trail",
                 points=line_segments,

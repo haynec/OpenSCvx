@@ -165,8 +165,8 @@ def _visit_srelu(lowerer, node):
     f = lowerer.lower(node.x)
     c = node.c
     # smooth_relu(pos(x)) = sqrt(pos(x)^2 + c^2) - c ; here f already includes pos inside node
-    return (
-        lambda x, u, node, params: jnp.sqrt(jnp.maximum(f(x, u, node, params), 0.0) ** 2 + c**2) - c
+    return lambda x, u, node, params: (
+        jnp.sqrt(jnp.maximum(f(x, u, node, params), 0.0) ** 2 + c**2) - c
     )
 
 
