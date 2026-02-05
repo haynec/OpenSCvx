@@ -1,3 +1,12 @@
+"""6-DOF quadrotor tracing out the Autonomous Controls Laboratory Logo
+
+This example demonstrates trajectory planning for a quadrotor tracing out the Autonomous Controls Laboratory Logo. The problem includes:
+
+- 6-DOF rigid body dynamics (position, velocity, attitude quaternion, angular velocity)
+- Utilizes the BYOF framework to model the angle between the boresight vector and the vector to the target.
+"""
+
+
 import os
 import sys
 

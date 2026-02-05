@@ -149,7 +149,7 @@ def create_animated_plotting_server(
 
     # Precompute colors (fallback when velocity key is missing, e.g. logo example)
     n_points = len(pos) if pos is not None else len(np.asarray(traj_time).reshape(-1))
-    colors = compute_velocity_colors(vel, fallback_length=n_points)
+    colors = compute_velocity_colors(vel)
 
     # Create server
     server = create_server(pos, show_grid=show_grid)

@@ -132,20 +132,12 @@ def add_target_marker(
     if is_moving and show_trail:
         if trail_color is None:
             trail_color = tuple(int(c * 0.5) for c in color)
-        # Create line segments connecting consecutive points
-        n_points = len(target_pos)
-        if n_points > 1:
-            # Create pairs of consecutive points: [point_i, point_{i+1}]
-            line_segments = np.array([
-                [target_pos[i], target_pos[i + 1]]
-                for i in range(n_points - 1)
-            ], dtype=np.float32)
-            server.scene.add_line_segments(
-                f"/targets/{name}/trail",
-                points=line_segments,
-                colors=trail_color,
-                line_width=2.0,
-            )
+        server.scene.add_point_cloud(
+            f"/targets/{name}/trail",
+            points=target_pos,
+            colors=trail_color,
+            point_size=0.1,
+        )
 
     if not is_moving:
         # Static target - no update needed
@@ -250,14 +242,9 @@ def add_thrust_vector(
     if thrust is None:
         return None, None
 
-    # Use first 3 components for visualization when control has more (e.g. force + moments)
-    thrust_3d = np.asarray(thrust, dtype=np.float64)
-    if thrust_3d.ndim >= 2 and thrust_3d.shape[-1] > 3:
-        thrust_3d = thrust_3d[:, :3]
-
     def get_thrust_world(frame_idx: int) -> np.ndarray:
         """Get thrust vector in world frame."""
-        thrust_body = thrust_3d[frame_idx]
+        thrust_body = thrust[frame_idx]
         if attitude is not None:
             return _rotate_vector_by_quaternion(thrust_body, attitude[frame_idx])
         return thrust_body
