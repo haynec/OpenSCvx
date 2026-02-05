@@ -9,9 +9,7 @@ For real-time examples, see examples/realtime/*.py.
 
 from __future__ import annotations
 
-# Matplotlib is optional; we only use it for colormaps in a few places.
-# Import lazily to avoid hard dependency (and avoid import-time failures).
-plt = None
+import matplotlib.pyplot as plt
 import numpy as np
 import viser
 
@@ -140,15 +138,7 @@ def create_animated_plotting_server(
     # Viewplanning target positions
     init_poses = results.get("init_poses")
 
-    # "Logo" / moving-target support (used by examples like examples/drone/logo.py)
-    moving_subject = bool(results.get("moving_subject", False))
-    get_kp_pose = results.get("get_kp_pose")
-    total_time = results.get("total_time")
-    relative_vector = bool(results.get("relative_vector", False))
-    extend_boresight = bool(results.get("extend_boresight", False))
-
-    # Precompute colors (fallback when velocity key is missing, e.g. logo example)
-    n_points = len(pos) if pos is not None else len(np.asarray(traj_time).reshape(-1))
+    # Precompute colors
     colors = compute_velocity_colors(vel)
 
     # Create server
