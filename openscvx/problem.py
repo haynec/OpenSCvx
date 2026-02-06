@@ -140,10 +140,11 @@ class Problem:
         # jax_enable_x64=True means float64, jax_enable_x64=False means float32.
         enable_x64 = float_dtype.lower() in ("float64", "f64", "double")
         jax.config.update("jax_enable_x64", enable_x64)
-        
+
         # Also set the dtype in the JAX lowerer module so it's available during lowering
         # This ensures conditionals use the correct dtype even if JAX config doesn't take effect
         from openscvx.symbolic.lowerers.jax.logic import set_default_float_dtype
+
         set_default_float_dtype(float_dtype)
 
         # Symbolic Preprocessing & Augmentation

@@ -48,6 +48,7 @@ FLOAT_DATA_TYPES = {
     "drone_logo": "float64",
 }
 
+
 def discover_examples():
     """Discover all runnable examples in the examples/ directory."""
     examples_dir = Path(__file__).parent.parent / "examples"

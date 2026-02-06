@@ -17,9 +17,9 @@ _DEFAULT_FLOAT_DTYPE = jnp.float32
 
 def set_default_float_dtype(dtype: str) -> None:
     """Set the default float dtype for conditional branches.
-    
+
     This is called by Problem.__init__ to configure the dtype used in jax.lax.cond branches.
-    
+
     Args:
         dtype: String like "float32" or "float64"
     """
