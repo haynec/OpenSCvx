@@ -3,7 +3,6 @@
 Visitors: All, Any, Cond
 """
 
-import jax
 import jax.numpy as jnp
 from jax.lax import cond
 
