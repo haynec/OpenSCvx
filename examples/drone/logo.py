@@ -10,9 +10,6 @@ This example demonstrates trajectory planning for a quadrotor tracing out the Au
 import os
 import sys
 
-import jax
-jax.config.update("jax_enable_x64", True)
-
 import jax.numpy as jnp
 import numpy as np
 import numpy.linalg as la
@@ -347,6 +344,7 @@ problem = Problem(
     time_dilation_factor_min=0.001,
     time_dilation_factor_max=3.0,
     autotuner=ox.RampProximalWeight(),
+    float_dtype="float64",
 )
 
 # problem.settings.scp.ep_tr = 1.6e-3

@@ -3,12 +3,38 @@
 Visitors: All, Any, Cond
 """
 
+import jax
 import jax.numpy as jnp
 from jax.lax import cond
 
 # Expression types to handle — uncomment as you paste visitors:
 from openscvx.symbolic.expr.logic import All, Any, Cond
 from openscvx.symbolic.lowerers.jax._registry import visitor  # noqa: F401
+
+# Module-level default dtype for conditional branches
+# This is set by Problem.__init__ and used to ensure both branches of cond have the same dtype
+_DEFAULT_FLOAT_DTYPE = jnp.float32
+
+
+def set_default_float_dtype(dtype: str) -> None:
+    """Set the default float dtype for conditional branches.
+    
+    This is called by Problem.__init__ to configure the dtype used in jax.lax.cond branches.
+    
+    Args:
+        dtype: String like "float32" or "float64"
+    """
+    global _DEFAULT_FLOAT_DTYPE
+    dtype_lower = dtype.lower()
+    if dtype_lower in ("float64", "f64", "double"):
+        _DEFAULT_FLOAT_DTYPE = jnp.float64
+    else:
+        _DEFAULT_FLOAT_DTYPE = jnp.float32
+
+
+def get_default_float_dtype():
+    """Get the current default float dtype for conditional branches."""
+    return _DEFAULT_FLOAT_DTYPE
 
 
 @visitor(All)
@@ -152,11 +178,22 @@ def _visit_cond(lowerer, node: Cond):
             # Combined predicate: must be in range AND predicate satisfied
             pred_bool = in_range & pred_bool
 
-        # Use jax.lax.cond for conditional evaluation
+        # Use jax.lax.cond for conditional evaluation, and ensure that both
+        # branches return the same floating-point dtype by casting to the
+        # configured default dtype. This avoids JAX dtype-mismatch errors when
+        # tracing conditionals.
+        default_dtype = get_default_float_dtype()
+
+        def _true_branch(_):
+            return jnp.asarray(true_fn(x, u, node_arg, params), dtype=default_dtype)
+
+        def _false_branch(_):
+            return jnp.asarray(false_fn(x, u, node_arg, params), dtype=default_dtype)
+
         return cond(
             pred_bool,
-            lambda _: true_fn(x, u, node_arg, params),
-            lambda _: false_fn(x, u, node_arg, params),
+            _true_branch,
+            _false_branch,
             operand=None,
         )
 
