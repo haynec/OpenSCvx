@@ -138,6 +138,13 @@ def create_animated_plotting_server(
     # Viewplanning target positions
     init_poses = results.get("init_poses")
 
+    # Logo/moving subject parameters
+    extend_boresight = results.get("extend_boresight", False)
+    moving_subject = results.get("moving_subject", False)
+    get_kp_pose = results.get("get_kp_pose")
+    total_time = results.get("total_time")
+    relative_vector = results.get("relative_vector", False)
+
     # Precompute colors
     colors = compute_velocity_colors(vel)
 
