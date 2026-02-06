@@ -21,14 +21,22 @@ sys.path.append(grandparent_dir)
 import openscvx as ox
 from openscvx import ByofSpec, Free, Minimize, Problem
 from examples.plotting_viser import create_animated_plotting_server
-from examples.drone.svg_path_utils import get_svg_path_function
+
+# Prompt the user to instal svgpathtools if not already installed via pip
+try:
+    import svgpathtools
+except ImportError:
+    print("svgpathtools not found. Please install it with: pip install svgpathtools")
+    sys.exit(1)
+
+from examples.drone.logo_utils.svg_path_utils import get_svg_path_function
 
 # -----------------------------------------------------------------------------
 # SVG path utilities
 # -----------------------------------------------------------------------------
 
 # Load the SVG path function, using only Path 0 (the logo, no border)
-svg_path_function = get_svg_path_function("examples/drone/logo.svg", path_indices=[0])
+svg_path_function = get_svg_path_function("examples/drone/logo_utils/acl_logo.svg", path_indices=[0])
 
 
 # -----------------------------------------------------------------------------
@@ -353,7 +361,6 @@ problem.settings.scp.autotuner.lam_prox_max = 1e3
 
 problem.settings.scp.lam_vc = 1e3
 problem.settings.scp.lam_cost = 6e0
-problem.settings.cvx.solver = "CLARABEL"
 problem.settings.cvx.solver_args = {"canon_backend": "COO", "enforce_dpp": True}
 
 
