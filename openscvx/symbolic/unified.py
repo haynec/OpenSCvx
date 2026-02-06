@@ -412,14 +412,19 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     if has_any_impulsive:
         # Build full scaling arrays
         is_impulsive_list = []
+        allocation_matrix_list = []
         for control in sorted_controls:
 
-            if control.is_impulsive is not None:
+            if np.all(control.is_impulsive):
                 is_impulsive_list.append(control.is_impulsive)
+                if control.allocation_matrix is None:
+                    raise ValueError("Provided impulsive control without field 'Allocation Matrix'")
+                allocation_matrix_list.append(control.allocation_matrix)
             else:
                 is_impulsive_list.append(np.full(control.shape[0], False))
 
         unified_is_impulsive = np.concatenate(is_impulsive_list)
+        unified_allocation_matrix = np.hstack(allocation_matrix_list)
 
     return UnifiedControl(
         name=name,
@@ -433,5 +438,6 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         time_dilation_slice=time_dilation_slice,
         scaling_min=unified_scaling_min,
         scaling_max=unified_scaling_max,
-        is_impulsive=unified_is_impulsive
+        is_impulsive=unified_is_impulsive,
+        allocation_matrix=unified_allocation_matrix
     )

@@ -68,6 +68,7 @@ class Control(Variable):
         min: Optional[np.ndarray] = None,
         max: Optional[np.ndarray] = None,
         impulsive: bool = False,
+        allocation_matrix: np.ndarray = None,
     ):
         """Initialize a Control object.
 
@@ -82,6 +83,13 @@ class Control(Variable):
         self._scaling_min = None
         self._scaling_max = None
         self._is_impulsive = np.repeat(impulsive, shape[0])
+        ## TODO: (fabio) maybe this check could be moved to ''builder.py''
+        if impulsive == True:
+            if allocation_matrix.shape[1] != shape[0]:
+                raise ValueError(
+                    "Allocation matrix dimensions not consistent with control dimensions. Number of rows shall be equal to control dimension."
+                )
+        self._allocation_matrix = allocation_matrix
 
         if min is not None:
             self.min = min
@@ -172,10 +180,20 @@ class Control(Variable):
             )
         self._is_impulsive = val
 
+    @property
+    def allocation_matrix(self) -> Optional[np.ndarray]:
+        return self._allocation_matrix
+
+    @allocation_matrix.setter
+    def allocation_matrix(self, val):
+        if val.shape[1] != self.shape:
+            raise ValueError("Allocation matrix dimensions not consistent with control dimensions.")
+        self._allocation_matrix = val
+
     def __repr__(self) -> str:
         """String representation of the Control object.
 
         Returns:
             Concise string showing the control name, shape and type.
         """
-        return f"Control('{self.name}', shape={self.shape}, impulsive={self._is_impulsive})"
+        return f"Control('{self.name}', shape={self.shape}, impulsive={self._is_impulsive}, allocation_matrix={self._allocation_matrix})"
