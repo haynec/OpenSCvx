@@ -55,6 +55,7 @@ test = [
     "pytest",
     "scipy",
     "jaxlie",
+    "svgpathtools"
 ]
 
 [tool.setuptools.packages.find]
