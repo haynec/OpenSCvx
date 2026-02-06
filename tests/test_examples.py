@@ -44,6 +44,9 @@ TIMING_BOUNDS = {
     },
 }
 
+FLOAT_DATA_TYPES = {
+    "drone_logo": "float64",
+}
 
 def discover_examples():
     """Discover all runnable examples in the examples/ directory."""
@@ -110,6 +113,11 @@ def test_example(name, metadata):
     5. Check timing bounds (if specified for this example)
     """
     problem = metadata["problem"]
+    if name in FLOAT_DATA_TYPES:
+        if "float64" == FLOAT_DATA_TYPES[name]:
+            jax.config.update("jax_enable_x64", True)
+        else:
+            jax.config.update("jax_enable_x64", False)
 
     # Disable printing for cleaner test output
     if hasattr(problem.settings, "dev"):
