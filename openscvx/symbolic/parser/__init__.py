@@ -34,6 +34,7 @@ Example (YAML)::
 from openscvx.symbolic.parser import (
     array,  # noqa: F401
     linalg,  # noqa: F401
+    logic,  # noqa: F401
     math,  # noqa: F401
     spatial,  # noqa: F401
     stl,  # noqa: F401
