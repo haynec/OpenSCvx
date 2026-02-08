@@ -34,6 +34,26 @@ _PREC_POWER = 40
 _PREC_UNARY = 50
 _PREC_POSTFIX = 60
 
+# ---------------------------------------------------------------------------
+# Infix rule table:  TokenType → (precedence, associativity, constructor)
+#
+# The constructor is called as ``constructor(left, right)`` where *left*
+# and *right* are already-parsed ``Expr`` nodes.
+# ---------------------------------------------------------------------------
+_INFIX_RULES: Dict[TokenType, Tuple[int, str, Any]] = {
+    # arithmetic
+    TokenType.PLUS: (_PREC_ADD, "left", Add),
+    TokenType.MINUS: (_PREC_ADD, "left", Sub),
+    TokenType.STAR: (_PREC_MUL, "left", Mul),
+    TokenType.SLASH: (_PREC_MUL, "left", Div),
+    TokenType.AT: (_PREC_MUL, "left", MatMul),
+    TokenType.DOUBLESTAR: (_PREC_POWER, "right", Power),
+    # comparison → constraint nodes
+    TokenType.LE: (_PREC_COMPARISON, "left", Inequality),
+    TokenType.GE: (_PREC_COMPARISON, "left", lambda left, right: Inequality(right, left)),
+    TokenType.EQEQ: (_PREC_COMPARISON, "left", Equality),
+}
+
 
 class ParseError(Exception):
     """Raised when the parser encounters a syntactic or semantic error."""
@@ -113,49 +133,22 @@ class ExprParser:
         while True:
             tok = self._peek()
 
-            # --- infix arithmetic ---
-            if tok.type == TokenType.PLUS and _PREC_ADD >= min_prec:
+            # --- table-driven infix operators ---
+            rule = _INFIX_RULES.get(tok.type)
+            if rule is not None:
+                prec, assoc, constructor = rule
+                if prec < min_prec:
+                    break
                 self._advance()
-                left = Add(left, self._parse_expr(_PREC_ADD + 1))
-            elif tok.type == TokenType.MINUS and _PREC_ADD >= min_prec:
-                self._advance()
-                left = Sub(left, self._parse_expr(_PREC_ADD + 1))
-            elif tok.type == TokenType.STAR and _PREC_MUL >= min_prec:
-                self._advance()
-                left = Mul(left, self._parse_expr(_PREC_MUL + 1))
-            elif tok.type == TokenType.SLASH and _PREC_MUL >= min_prec:
-                self._advance()
-                left = Div(left, self._parse_expr(_PREC_MUL + 1))
-            elif tok.type == TokenType.AT and _PREC_MUL >= min_prec:
-                self._advance()
-                left = MatMul(left, self._parse_expr(_PREC_MUL + 1))
-            elif tok.type == TokenType.DOUBLESTAR and _PREC_POWER >= min_prec:
-                self._advance()
-                # Right-associative: use _PREC_POWER (not +1)
-                left = Power(left, self._parse_expr(_PREC_POWER))
-
-            # --- comparison (produces Constraint) ---
-            elif tok.type == TokenType.LE and _PREC_COMPARISON >= min_prec:
-                self._advance()
-                right = self._parse_expr(_PREC_COMPARISON + 1)
-                left = Inequality(left, right)
-            elif tok.type == TokenType.GE and _PREC_COMPARISON >= min_prec:
-                self._advance()
-                right = self._parse_expr(_PREC_COMPARISON + 1)
-                left = Inequality(right, left)  # a >= b  ⟹  b <= a
-            elif tok.type == TokenType.EQEQ and _PREC_COMPARISON >= min_prec:
-                self._advance()
-                right = self._parse_expr(_PREC_COMPARISON + 1)
-                left = Equality(left, right)
+                right_prec = prec if assoc == "right" else prec + 1
+                left = constructor(left, self._parse_expr(right_prec))
+                continue
 
             # --- postfix: indexing ---
-            elif tok.type == TokenType.LBRACKET and _PREC_POSTFIX >= min_prec:
+            if tok.type == TokenType.LBRACKET and _PREC_POSTFIX >= min_prec:
                 left = self._parse_index(left)
-
-            # --- postfix: dot (property / method) ---
             elif tok.type == TokenType.DOT and _PREC_POSTFIX >= min_prec:
                 left = self._parse_dot(left)
-
             else:
                 break
 

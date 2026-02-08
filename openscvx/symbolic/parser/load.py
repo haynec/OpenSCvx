@@ -55,7 +55,6 @@ from openscvx.symbolic.expr.state import State
 from openscvx.symbolic.parser.parser import ExprParser
 from openscvx.symbolic.time import Time
 
-
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
