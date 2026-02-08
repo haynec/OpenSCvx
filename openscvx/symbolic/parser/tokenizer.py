@@ -41,6 +41,7 @@ class TokenType(Enum):
     COMMA = auto()
     COLON = auto()
     DOT = auto()
+    ARROW = auto()  # ->
 
     # Sentinel
     EOF = auto()
@@ -141,6 +142,10 @@ def tokenize(source: str) -> List[Token]:
                 continue
             if two == "==":
                 tokens.append(Token(TokenType.EQEQ, two, i))
+                i += 2
+                continue
+            if two == "->":
+                tokens.append(Token(TokenType.ARROW, two, i))
                 i += 2
                 continue
 

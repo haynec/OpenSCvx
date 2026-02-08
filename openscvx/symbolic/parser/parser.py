@@ -212,6 +212,9 @@ class ExprParser:
     # ------------------------------------------------------------------
 
     def _parse_function_call(self, name: str) -> Expr:
+        if name == "Vmap":
+            return self._parse_vmap_call()
+
         self._expect(TokenType.LPAREN)
         args, kwargs = self._parse_call_args()
         self._expect(TokenType.RPAREN)
@@ -417,6 +420,135 @@ class ExprParser:
             idx=idx,
             check_nodally=check_nodally,
         )
+
+    # ------------------------------------------------------------------
+    # Vmap:  Vmap(name: source, ... -> body_expr)
+    # ------------------------------------------------------------------
+
+    def _parse_vmap_call(self) -> Expr:
+        """Parse ``Vmap(name: source, ... [, axis=N] -> body)``.
+
+        Bindings (``name: source``) map placeholder names to batch sources
+        in the symbol table.  The optional ``axis=N`` keyword sets the vmap
+        axis (default 0).  Everything after ``->`` is the body expression,
+        parsed with the placeholders temporarily added to the symbol table.
+        """
+        from openscvx.symbolic.expr.control import Control
+        from openscvx.symbolic.expr.expr import Parameter
+        from openscvx.symbolic.expr.state import State
+        from openscvx.symbolic.expr.vmap import Vmap, _Placeholder
+
+        self._expect(TokenType.LPAREN)
+
+        # -- Parse bindings and kwargs before '->' -----------------------
+        bindings: List[Tuple[str, str]] = []  # (placeholder_name, source_name)
+        axis = 0
+
+        while True:
+            if self._peek().type == TokenType.ARROW:
+                self._advance()
+                break
+
+            name_tok = self._expect(TokenType.IDENT)
+            next_tok = self._peek()
+
+            if next_tok.type == TokenType.COLON:
+                # Binding: name : source
+                self._advance()  # consume ':'
+                source_tok = self._expect(TokenType.IDENT)
+                bindings.append((name_tok.value, source_tok.value))
+            elif next_tok.type == TokenType.EQ:
+                # Keyword arg: axis = N
+                self._advance()  # consume '='
+                val = self._parse_arg_value()
+                if name_tok.value == "axis":
+                    axis = self._arg_to_int(val) if not isinstance(val, int) else val
+                else:
+                    raise ParseError(f"Unknown Vmap keyword {name_tok.value!r} (expected 'axis')")
+            else:
+                raise ParseError(f"Expected ':' or '=' after {name_tok.value!r} in Vmap bindings")
+
+            if self._peek().type == TokenType.COMMA:
+                self._advance()
+
+        if not bindings:
+            raise ParseError("Vmap requires at least one binding (name: source)")
+
+        # -- Resolve batch sources and create placeholders ---------------
+        batches = []
+        is_parameter = []
+        is_state = []
+        is_control = []
+        placeholders = []
+        saved_symbols: Dict[str, Expr] = {}
+
+        for ph_name, source_name in bindings:
+            source = self.symbols.get(source_name)
+            if source is None:
+                raise ParseError(f"Unknown batch source {source_name!r}")
+            if isinstance(source, np.ndarray):
+                source = Constant(source)
+            elif not isinstance(source, (Constant, Parameter, State, Control)):
+                raise ParseError(
+                    f"Batch source {source_name!r} must be a Parameter, State, Control, or Constant"
+                )
+
+            is_p = isinstance(source, Parameter)
+            is_s = isinstance(source, State)
+            is_c = isinstance(source, Control)
+            batches.append(source)
+            is_parameter.append(is_p)
+            is_state.append(is_s)
+            is_control.append(is_c)
+
+            shape = Vmap._get_batch_shape(source, is_p, is_s, is_c)
+            if axis < 0 or axis >= len(shape):
+                raise ParseError(
+                    f"Vmap axis {axis} out of bounds for {source_name!r} with shape {shape}"
+                )
+            per_elem_shape = tuple(s for i, s in enumerate(shape) if i != axis)
+            ph = _Placeholder(shape=per_elem_shape)
+            placeholders.append(ph)
+
+            # Temporarily shadow any existing symbol
+            if ph_name in self.symbols:
+                saved_symbols[ph_name] = self.symbols[ph_name]
+            self.symbols[ph_name] = ph
+
+        # Validate batch sizes match along the vmap axis
+        first_shape = Vmap._get_batch_shape(batches[0], is_parameter[0], is_state[0], is_control[0])
+        batch_size = first_shape[axis]
+        for i, (b, is_p, is_s, is_c) in enumerate(zip(batches, is_parameter, is_state, is_control)):
+            s = Vmap._get_batch_shape(b, is_p, is_s, is_c)[axis]
+            if s != batch_size:
+                raise ParseError(
+                    f"Batch size mismatch: binding 0 has size {batch_size} "
+                    f"along axis {axis}, but binding {i} has size {s}"
+                )
+
+        # -- Parse body expression ---------------------------------------
+        try:
+            body = self._parse_expr(0)
+        finally:
+            # Restore symbol table (even on parse errors)
+            for ph_name, _ in bindings:
+                if ph_name in saved_symbols:
+                    self.symbols[ph_name] = saved_symbols[ph_name]
+                else:
+                    del self.symbols[ph_name]
+
+        self._expect(TokenType.RPAREN)
+
+        # -- Construct Vmap (bypass __init__ like canonicalize does) ------
+        vmap = Vmap.__new__(Vmap)
+        vmap._batches = tuple(batches)
+        vmap._axis = axis
+        vmap._placeholders = tuple(placeholders)
+        vmap._child = body
+        vmap._is_parameter = tuple(is_parameter)
+        vmap._is_state = tuple(is_state)
+        vmap._is_control = tuple(is_control)
+        return vmap
 
     # -- helpers -------------------------------------------------------
 
