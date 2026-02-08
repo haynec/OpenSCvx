@@ -33,6 +33,7 @@ Example (YAML)::
 # Each module populates _PARSE_FUNCTIONS as a side effect of import.
 from openscvx.symbolic.parser import (
     array,  # noqa: F401
+    constraint,  # noqa: F401
     linalg,  # noqa: F401
     logic,  # noqa: F401
     math,  # noqa: F401

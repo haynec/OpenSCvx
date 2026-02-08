@@ -1,25 +1,14 @@
-"""Tests for constraint parsing.
+"""Tests for parser constraint handlers.
 
-This module tests parsing of constraints including:
-- Comparison operators (<=, >=, ==)
-- .at() for NodalConstraint / NodeReference
-- .over() for CTCS
-- .convex()
+This module tests parsing of constraint operations:
+CrossNodeConstraint, NodalConstraint, ctcs
 """
 
-import numpy as np
 import pytest
 
-from openscvx.symbolic.expr import (
-    CTCS,
-    Constant,
-    Equality,
-    Inequality,
-    NodalConstraint,
-    State,
-)
-from openscvx.symbolic.expr.expr import NodeReference
-from openscvx.symbolic.parser import ExprParser, ParseError
+from openscvx.symbolic.expr import State
+from openscvx.symbolic.expr.constraint import CTCS, CrossNodeConstraint, NodalConstraint
+from openscvx.symbolic.parser import ExprParser
 
 # =============================================================================
 # Helper
@@ -27,159 +16,154 @@ from openscvx.symbolic.parser import ExprParser, ParseError
 
 
 def _parser(**extra):
-    x = State("x", shape=(3,))
-    symbols = {"x": x}
+    pos = State("pos", shape=(3,))
+    vel = State("vel", shape=(3,))
+    symbols = {"pos": pos, "vel": vel}
     symbols.update(extra)
     return ExprParser(symbols)
 
 
 # =============================================================================
-# Comparison Operators
+# CrossNodeConstraint
 # =============================================================================
 
 
-def test_parse_less_equal():
-    expr = _parser().parse("x <= [1, 2, 3]")
-    assert isinstance(expr, Inequality)
-    assert isinstance(expr.lhs, State)
-    assert isinstance(expr.rhs, Constant)
+def test_parse_cross_node_constraint():
+    expr = _parser().parse("CrossNodeConstraint(pos.at(5) - pos.at(4) <= 0.1)")
+    assert isinstance(expr, CrossNodeConstraint)
 
 
-def test_parse_greater_equal():
-    expr = _parser().parse("x >= [0, 0, 0]")
-    # >= flips operands: Inequality(rhs, lhs)
-    assert isinstance(expr, Inequality)
-    assert isinstance(expr.lhs, Constant)
-    assert isinstance(expr.rhs, State)
+def test_cross_node_constraint_preserves_inner():
+    expr = _parser().parse("CrossNodeConstraint(pos.at(1)[0] - pos.at(0)[0] <= 1.0)")
+    assert isinstance(expr, CrossNodeConstraint)
+    assert hasattr(expr, "constraint")
 
 
-def test_parse_equality():
-    expr = _parser().parse("x == [1, 2, 3]")
-    assert isinstance(expr, Equality)
+def test_cross_node_constraint_wrong_arg_count():
+    with pytest.raises(ValueError, match="exactly 1"):
+        _parser().parse("CrossNodeConstraint(pos[0] <= 1.0, pos[1] <= 2.0)")
 
 
-def test_parse_scalar_constraint():
-    expr = _parser().parse("x[0] <= 5.0")
-    assert isinstance(expr, Inequality)
+def test_cross_node_constraint_requires_constraint():
+    with pytest.raises(ValueError, match="must be a Constraint"):
+        _parser().parse("CrossNodeConstraint(pos)")
 
 
 # =============================================================================
-# .at() — NodalConstraint
+# NodalConstraint
 # =============================================================================
 
 
-def test_parse_constraint_at_single():
-    expr = _parser().parse("(x <= [1, 2, 3]).at(0, 10)")
+def test_parse_nodal_constraint():
+    expr = _parser().parse("NodalConstraint(pos[0] <= 5.0, 0, 10, 20)")
     assert isinstance(expr, NodalConstraint)
-    assert expr.nodes == [0, 10]
+    assert expr.nodes == [0, 10, 20]
 
 
-def test_parse_constraint_at_multiple():
-    expr = _parser().parse("(x[0] <= 5.0).at(0, 5, 10, 20)")
+def test_nodal_constraint_single_node():
+    expr = _parser().parse("NodalConstraint(vel[2] >= 0.0, 0)")
     assert isinstance(expr, NodalConstraint)
-    assert expr.nodes == [0, 5, 10, 20]
+    assert expr.nodes == [0]
+
+
+def test_nodal_constraint_equality():
+    expr = _parser().parse("NodalConstraint(pos[0] == 0.0, 0)")
+    assert isinstance(expr, NodalConstraint)
+    assert expr.nodes == [0]
+
+
+def test_nodal_constraint_wrong_arg_count():
+    with pytest.raises(ValueError, match="at least 2"):
+        _parser().parse("NodalConstraint(pos[0] <= 1.0)")
+
+
+def test_nodal_constraint_requires_constraint():
+    with pytest.raises(ValueError, match="must be a Constraint"):
+        _parser().parse("NodalConstraint(pos, 0)")
 
 
 # =============================================================================
-# .at() — NodeReference (on plain Expr)
+# ctcs — defaults
 # =============================================================================
 
 
-def test_parse_expr_at():
-    expr = _parser().parse("x.at(5)")
-    assert isinstance(expr, NodeReference)
-
-
-def test_parse_expr_at_in_constraint():
-    expr = _parser().parse("x.at(5) - x.at(4) <= [0, 0, 0]")
-    assert isinstance(expr, Inequality)
-
-
-# =============================================================================
-# .over() — CTCS
-# =============================================================================
-
-
-def test_parse_over_basic():
-    expr = _parser().parse("(x[0] <= 5.0).over(0, 10)")
+def test_parse_ctcs_default():
+    expr = _parser().parse("ctcs(pos[2] >= 0.0)")
     assert isinstance(expr, CTCS)
-    assert expr.nodes == (0, 10)
-    assert expr.penalty == "squared_relu"  # default
+    assert expr.penalty == "squared_relu"
+    assert expr.nodes is None
+    assert expr.idx is None
+    assert expr.check_nodally is False
 
 
-def test_parse_over_with_penalty():
-    expr = _parser().parse("(x[0] <= 5.0).over(0, 10, penalty='huber')")
+# =============================================================================
+# ctcs — penalty kwarg
+# =============================================================================
+
+
+def test_ctcs_huber_penalty():
+    expr = _parser().parse('ctcs(pos[2] >= 0.0, penalty="huber")')
     assert isinstance(expr, CTCS)
     assert expr.penalty == "huber"
 
 
-def test_parse_over_with_check_nodally():
-    expr = _parser().parse("(x[0] <= 5.0).over(0, 10, check_nodally=True)")
+def test_ctcs_smooth_relu_penalty():
+    expr = _parser().parse('ctcs(vel[0] <= 10.0, penalty="smooth_relu")')
+    assert isinstance(expr, CTCS)
+    assert expr.penalty == "smooth_relu"
+
+
+# =============================================================================
+# ctcs — check_nodally kwarg
+# =============================================================================
+
+
+def test_ctcs_check_nodally():
+    expr = _parser().parse("ctcs(pos[2] >= 0.0, check_nodally=True)")
     assert isinstance(expr, CTCS)
     assert expr.check_nodally is True
 
 
-def test_over_requires_constraint():
-    with pytest.raises(ParseError, match="only be called on a Constraint"):
-        _parser().parse("x.over(0, 10)")
-
-
-def test_over_requires_two_positional_args():
-    with pytest.raises(ParseError, match="at least 2"):
-        _parser().parse("(x[0] <= 5.0).over(0)")
+def test_ctcs_check_nodally_false():
+    expr = _parser().parse("ctcs(pos[2] >= 0.0, check_nodally=False)")
+    assert isinstance(expr, CTCS)
+    assert expr.check_nodally is False
 
 
 # =============================================================================
-# .convex()
+# ctcs — idx kwarg
 # =============================================================================
 
 
-def test_parse_convex_on_inequality():
-    expr = _parser().parse("(x <= [1, 2, 3]).convex()")
-    assert isinstance(expr, Inequality)
-    assert expr.is_convex is True
-
-
-def test_parse_convex_on_equality():
-    expr = _parser().parse("(x == [1, 2, 3]).convex()")
-    assert isinstance(expr, Equality)
-    assert expr.is_convex is True
-
-
-def test_convex_on_non_constraint_raises():
-    with pytest.raises(ParseError, match="only be called on a Constraint"):
-        _parser().parse("x.convex()")
+def test_ctcs_idx():
+    expr = _parser().parse("ctcs(pos[2] >= 0.0, idx=3)")
+    assert isinstance(expr, CTCS)
+    assert expr.idx == 3
 
 
 # =============================================================================
-# Chained Dot Methods
+# ctcs — combined kwargs
 # =============================================================================
 
 
-def test_parse_at_then_convex():
-    expr = _parser().parse("(x <= [1, 2, 3]).at(0, 10).convex()")
-    assert isinstance(expr, NodalConstraint)
-    assert expr.constraint.is_convex is True
-
-
-def test_parse_convex_then_at():
-    expr = _parser().parse("(x <= [1, 2, 3]).convex().at(0, 10)")
-    assert isinstance(expr, NodalConstraint)
-    assert expr.constraint.is_convex is True
+def test_ctcs_all_kwargs():
+    expr = _parser().parse('ctcs(vel[0] <= 5.0, penalty="huber", idx=1, check_nodally=True)')
+    assert isinstance(expr, CTCS)
+    assert expr.penalty == "huber"
+    assert expr.idx == 1
+    assert expr.check_nodally is True
 
 
 # =============================================================================
-# Realistic Constraint Expressions
+# ctcs — error cases
 # =============================================================================
 
 
-def test_parse_norm_constraint():
-    from openscvx.symbolic.expr import Norm
+def test_ctcs_no_args():
+    with pytest.raises(ValueError, match="at least 1"):
+        _parser().parse("ctcs()")
 
-    obs = Constant(np.array([1.0, 2.0, 3.0]))
-    p = _parser(obs=obs)
-    expr = p.parse("Norm(x - obs) >= 2.0")
-    assert isinstance(expr, Inequality)
-    # >= flips: Inequality(Const(2.0), Norm(...))
-    assert isinstance(expr.lhs, Constant)
-    assert isinstance(expr.rhs, Norm)
+
+def test_ctcs_requires_constraint():
+    with pytest.raises(ValueError, match="must be a Constraint"):
+        _parser().parse("ctcs(pos)")
