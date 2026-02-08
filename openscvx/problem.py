@@ -86,6 +86,7 @@ class Problem:
         time_dilation_factor_max: float = 3.0,
         autotuner: Optional[AutotuningBase] = AugmentedLagrangian(),
         byof: Optional[ByofSpec] = None,
+        float_dtype: str = "float32",
     ):
         """The primary class in charge of compiling and exporting the solvers.
 
@@ -119,6 +120,12 @@ class Problem:
             byof (ByofSpec, optional): Expert mode only. Raw JAX functions to
                 bypass symbolic layer. See :class:`openscvx.expert.ByofSpec` for
                 detailed documentation.
+            float_dtype (str): Default floating-point dtype for JAX lowering.
+                Must be ``\"float32\"`` or ``\"float64\"``. This sets JAX's
+                ``jax_enable_x64`` config flag (True for float64, False for float32),
+                which controls the dtype used in all lowered JAX functions (including
+                both branches of ``jax.lax.cond``) to avoid dtype-mismatch errors
+                during integration.
 
         Note:
             There are two approaches for handling time:
@@ -126,6 +133,19 @@ class Problem:
             2. User-provided (for time-dependent constraints): Include "time" State in states and
                in dynamics dict, don't provide Time object
         """
+
+        # Configure JAX's default dtype (float32 vs float64) via jax_enable_x64.
+        # This must happen before lowering so that all JAX-based lowerers
+        # (including conditionals) produce tensors with a consistent dtype.
+        # jax_enable_x64=True means float64, jax_enable_x64=False means float32.
+        enable_x64 = float_dtype.lower() in ("float64", "f64", "double")
+        jax.config.update("jax_enable_x64", enable_x64)
+
+        # Also set the dtype in the JAX lowerer module so it's available during lowering
+        # This ensures conditionals use the correct dtype even if JAX config doesn't take effect
+        from openscvx.symbolic.lowerers.jax.logic import set_default_float_dtype
+
+        set_default_float_dtype(float_dtype)
 
         # Symbolic Preprocessing & Augmentation
         self.symbolic: SymbolicProblem = preprocess_symbolic_problem(
