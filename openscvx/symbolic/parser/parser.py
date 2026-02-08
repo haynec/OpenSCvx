@@ -471,6 +471,9 @@ class ExprParser:
         if not elements:
             return Constant(np.array([]))
 
+        # Fold Neg(Constant(scalar)) so that [1, -2, 3] becomes a single Constant
+        elements = [self._fold_neg_constant(e) for e in elements]
+
         # All-constant  →  fold into a single Constant
         if all(isinstance(e, Constant) for e in elements):
             return Constant(
@@ -479,3 +482,14 @@ class ExprParser:
 
         # Mixed  →  Concat (each element treated as at-least-1D)
         return Concat(*elements)
+
+    @staticmethod
+    def _fold_neg_constant(expr: Expr) -> Expr:
+        """Fold ``Neg(Constant(scalar))`` into ``Constant(-scalar)``."""
+        if (
+            isinstance(expr, Neg)
+            and isinstance(expr.operand, Constant)
+            and expr.operand.value.ndim == 0
+        ):
+            return Constant(-expr.operand.value)
+        return expr
