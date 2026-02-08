@@ -5,17 +5,14 @@ dictionary into Problem constructor keyword arguments.
 """
 
 import numpy as np
-import pytest
 
 from openscvx.symbolic.expr import (
-    Constant,
     Equality,
     Inequality,
     Norm,
     State,
 )
 from openscvx.symbolic.expr.control import Control
-from openscvx.symbolic.expr.expr import Parameter
 from openscvx.symbolic.parser.load import load_dict
 
 # =============================================================================

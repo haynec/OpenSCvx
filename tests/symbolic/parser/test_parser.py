@@ -27,7 +27,6 @@ from openscvx.symbolic.expr import (
 )
 from openscvx.symbolic.expr.array import Index
 from openscvx.symbolic.expr.control import Control
-from openscvx.symbolic.expr.expr import Parameter
 from openscvx.symbolic.parser import ExprParser, ParseError
 
 # =============================================================================
@@ -237,12 +236,10 @@ def test_parse_constant_array():
 
 
 def test_parse_constant_array_with_negative():
-    from openscvx.symbolic.expr.array import Concat
-
     p = _parser()
     expr = p.parse("[1, -2, 3]")
-    # Unary minus produces Neg(Constant(2)), so the array is mixed → Concat
-    assert isinstance(expr, Concat)
+    assert isinstance(expr, Constant)
+    assert np.array_equal(expr.value, np.array([1.0, -2.0, 3.0]))
 
 
 def test_parse_mixed_array_produces_concat():

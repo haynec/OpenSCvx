@@ -16,7 +16,7 @@ from openscvx.symbolic.expr import (
     Sum,
     Transpose,
 )
-from openscvx.symbolic.parser import ExprParser, ParseError
+from openscvx.symbolic.parser import ExprParser
 
 # =============================================================================
 # Helper

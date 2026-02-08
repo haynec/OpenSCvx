@@ -27,7 +27,7 @@ from openscvx.symbolic.expr import (
     State,
     Tan,
 )
-from openscvx.symbolic.parser import ExprParser, ParseError
+from openscvx.symbolic.parser import ExprParser
 
 # =============================================================================
 # Helper

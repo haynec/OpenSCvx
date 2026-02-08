@@ -6,7 +6,7 @@ Concat, Stack, Hstack, Vstack, Block
 
 import pytest
 
-from openscvx.symbolic.expr import Constant, State
+from openscvx.symbolic.expr import State
 from openscvx.symbolic.expr.array import Block, Concat, Hstack, Stack, Vstack
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.parser import ExprParser

@@ -6,7 +6,7 @@ Or
 
 import pytest
 
-from openscvx.symbolic.expr import Inequality, State
+from openscvx.symbolic.expr import State
 from openscvx.symbolic.expr.stl import Or
 from openscvx.symbolic.parser import ExprParser
 
