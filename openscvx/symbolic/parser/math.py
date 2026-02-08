@@ -110,6 +110,8 @@ def _parse_huber(args, kwargs):
     delta = kwargs.get("delta", 0.25)
     if len(args) > 1:
         delta = _as_float(args[1])
+    elif "delta" in kwargs:
+        delta = _as_float(kwargs["delta"])
     return Huber(x, delta=float(delta))
 
 
@@ -121,6 +123,8 @@ def _parse_smooth_relu(args, kwargs):
     c = kwargs.get("c", 1e-8)
     if len(args) > 1:
         c = _as_float(args[1])
+    elif "c" in kwargs:
+        c = _as_float(kwargs["c"])
     return SmoothReLU(x, c=float(c))
 
 

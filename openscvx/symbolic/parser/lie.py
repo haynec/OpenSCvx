@@ -33,16 +33,16 @@ def _parse_adjoint(args, kwargs):
 
 @function("SE3Adjoint")
 def _parse_se3_adjoint(args, kwargs):
-    if len(args) != 2:
-        raise ValueError("SE3Adjoint() takes exactly 2 arguments (T, vector)")
-    return SE3Adjoint(args[0], args[1])
+    if len(args) != 1:
+        raise ValueError("SE3Adjoint() takes exactly 1 argument (transform)")
+    return SE3Adjoint(args[0])
 
 
 @function("SE3AdjointDual")
 def _parse_se3_adjoint_dual(args, kwargs):
-    if len(args) != 2:
-        raise ValueError("SE3AdjointDual() takes exactly 2 arguments (T, vector)")
-    return SE3AdjointDual(args[0], args[1])
+    if len(args) != 1:
+        raise ValueError("SE3AdjointDual() takes exactly 1 argument (transform)")
+    return SE3AdjointDual(args[0])
 
 
 @function("SO3Exp")
