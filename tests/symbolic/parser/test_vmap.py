@@ -7,8 +7,7 @@ import numpy as np
 import pytest
 
 from openscvx.symbolic.expr import Control, Parameter, State
-from openscvx.symbolic.expr.linalg import Norm
-from openscvx.symbolic.expr.vmap import Vmap, _Placeholder
+from openscvx.symbolic.expr.vmap import Vmap
 from openscvx.symbolic.parser import ExprParser
 from openscvx.symbolic.parser.parser import ParseError
 
