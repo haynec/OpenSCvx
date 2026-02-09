@@ -15,8 +15,11 @@ from openscvx.algorithms.autotuning import (
     ConstantProximalWeight,
     RampProximalWeight,
 )
+from openscvx.algorithms.optimization_results import OptimizationResults
 from openscvx.expert import ByofSpec
 from openscvx.problem import Problem
+
+load_results = OptimizationResults.load
 from openscvx.symbolic.expr import (
     CTCS,
     Abs,
@@ -73,6 +76,9 @@ from openscvx.utils.cache import clear_cache, get_cache_dir, get_cache_size
 __all__ = [
     # Main Trajectory Optimization Entrypoint
     "Problem",
+    # Results I/O
+    "OptimizationResults",
+    "load_results",
     # Cache management
     "get_cache_dir",
     "clear_cache",

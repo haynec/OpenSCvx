@@ -11,6 +11,7 @@ def main():
         description="Solve a trajectory optimization problem from a YAML/JSON config file.",
     )
     parser.add_argument("config", type=Path, help="Path to a YAML or JSON problem definition file")
+    parser.add_argument("-o", "--output", type=Path, help="Save results to a .npz file")
     args = parser.parse_args()
 
     path: Path = args.config
@@ -28,7 +29,10 @@ def main():
 
         kwargs = load_json(path)
     else:
-        print(f"Error: unsupported file type {suffix!r} (expected .yaml, .yml, or .json)", file=sys.stderr)
+        print(
+            f"Error: unsupported file type {suffix!r} (expected .yaml, .yml, or .json)",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     from openscvx.problem import Problem
@@ -37,6 +41,10 @@ def main():
     problem.initialize()
     result = problem.solve()
     result = problem.post_process()
+
+    if args.output:
+        result.save(args.output)
+        print(f"Results saved to {args.output}")
 
 
 if __name__ == "__main__":
