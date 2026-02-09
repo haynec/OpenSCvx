@@ -28,7 +28,11 @@ dependencies = [
     "flatbuffers",
     "viser",
     "matplotlib",
+    "pyyaml",
 ]
+
+[project.scripts]
+openscvx = "openscvx.__main__:main"
 
 [project.urls]
 Homepage = "https://openscvx.github.io/openscvx/"

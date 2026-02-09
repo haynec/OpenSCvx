@@ -1,0 +1,49 @@
+# Brachistochrone problem definition for YAML loader integration test.
+#
+# Curve of fastest descent under gravity from (0, 10) to (10, 5).
+# Analytical optimal time ≈ 1.808 seconds (cycloid curve).
+
+N: 2
+
+time:
+  initial: 0.0
+  final: [minimize, 2.0]
+  min: 0.0
+  max: 2.0
+
+states:
+  - name: position
+    shape: [2]
+    min: [0.0, 0.0]
+    max: [10.0, 10.0]
+    initial: [0.0, 10.0]
+    final: [10.0, 5.0]
+
+  - name: velocity
+    shape: [1]
+    min: [0.0]
+    max: [10.0]
+    initial: [0.0]
+    final: [[free, 10.0]]
+
+controls:
+  - name: theta
+    shape: [1]
+    min: [0.0]
+    max: [1.755]
+    guess: [[0.0873], [1.7541]]
+
+parameters:
+  - name: g
+    shape: []
+    value: 9.81
+
+dynamics:
+  position: "concat(velocity[0] * sin(theta[0]), -velocity[0] * cos(theta[0]))"
+  velocity: "g * cos(theta[0])"
+
+constraints:
+  - "ctcs(position <= [10.0, 10.0])"
+  - "ctcs([0.0, 0.0] <= position)"
+  - "ctcs(velocity <= [10.0])"
+  - "ctcs([0.0] <= velocity)"

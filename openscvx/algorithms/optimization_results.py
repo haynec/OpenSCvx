@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any, Optional, Union
 
 import numpy as np
 
@@ -42,35 +43,64 @@ class OptimizationResults:
         ctcs_violation (Optional[np.ndarray]): Continuous-time constraint violations.
             Added by propagate_trajectory_results.
         plotting_data (dict[str, Any]): Flexible storage for plotting and application data.
+
+
+    !!! note "For Developers"
+        The ``metadata={"npz": ...}`` parameter on each field below is a built-in feature of
+        `dataclasses.field`.  It attaches a read-only mapping to the **field definition**,
+        *not* to instances. Instances still only have the normal attributes (``result.X``,
+        ``result.converged``, etc.).
+
+        The ``save()`` / ``load()`` methods iterate over field metadata to
+        determine how to serialize each field, so adding a new field only
+        requires tagging it here, no separate field-name lists to maintain.
+
+        Fields *without* an ``"npz"`` metadata entry are skipped during
+        serialization (e.g. ``_states``, ``_controls``).
     """
 
+    _SCALAR = "scalar"
+    _ARRAY_LIST = "array_list"
+    _FLOAT_LIST = "float_list"
+    _DICT = "dict"
+    _OPT_ARRAY = "optional_array"
+    _OPT_SCALAR = "optional_scalar"
+
     # Core optimization results
-    converged: bool
-    t_final: float
+    converged: bool = field(metadata={"npz": "scalar"})
+    t_final: float = field(metadata={"npz": "scalar"})
 
     # Dictionary-based access to states and controls
-    nodes: dict[str, np.ndarray] = field(default_factory=dict)
-    trajectory: dict[str, np.ndarray] = field(default_factory=dict)
+    nodes: dict[str, np.ndarray] = field(default_factory=dict, metadata={"npz": "dict"})
+    trajectory: dict[str, np.ndarray] = field(default_factory=dict, metadata={"npz": "dict"})
 
-    # Internal metadata for dictionary construction
+    # Internal metadata for dictionary construction (not serialized)
     _states: list = field(default_factory=list, repr=False)
     _controls: list = field(default_factory=list, repr=False)
 
     # History of SCP iterations (single source of truth)
-    X: list[np.ndarray] = field(default_factory=list)
-    U: list[np.ndarray] = field(default_factory=list)
-    discretization_history: list[np.ndarray] = field(default_factory=list)
-    J_tr_history: list[np.ndarray] = field(default_factory=list)
-    J_vb_history: list[np.ndarray] = field(default_factory=list)
-    J_vc_history: list[np.ndarray] = field(default_factory=list)
-    TR_history: list[np.ndarray] = field(default_factory=list)
-    VC_history: list[np.ndarray] = field(default_factory=list)
+    X: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
+    U: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
+    discretization_history: list[np.ndarray] = field(
+        default_factory=list, metadata={"npz": "array_list"}
+    )
+    J_tr_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
+    J_vb_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
+    J_vc_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
+    TR_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
+    VC_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
 
     # Convergence histories
-    lam_prox_history: list[float] = field(default_factory=list)
-    actual_reduction_history: list[float] = field(default_factory=list)
-    pred_reduction_history: list[float] = field(default_factory=list)
-    acceptance_ratio_history: list[float] = field(default_factory=list)
+    lam_prox_history: list[float] = field(default_factory=list, metadata={"npz": "float_list"})
+    actual_reduction_history: list[float] = field(
+        default_factory=list, metadata={"npz": "float_list"}
+    )
+    pred_reduction_history: list[float] = field(
+        default_factory=list, metadata={"npz": "float_list"}
+    )
+    acceptance_ratio_history: list[float] = field(
+        default_factory=list, metadata={"npz": "float_list"}
+    )
 
     @property
     def x(self) -> np.ndarray:
@@ -95,14 +125,14 @@ class OptimizationResults:
         return self.U[-1]
 
     # Post-processing results (added by propagate_trajectory_results)
-    t_full: Optional[np.ndarray] = None
-    x_full: Optional[np.ndarray] = None
-    u_full: Optional[np.ndarray] = None
-    cost: Optional[float] = None
-    ctcs_violation: Optional[np.ndarray] = None
+    t_full: Optional[np.ndarray] = field(default=None, metadata={"npz": "optional_array"})
+    x_full: Optional[np.ndarray] = field(default=None, metadata={"npz": "optional_array"})
+    u_full: Optional[np.ndarray] = field(default=None, metadata={"npz": "optional_array"})
+    cost: Optional[float] = field(default=None, metadata={"npz": "optional_scalar"})
+    ctcs_violation: Optional[np.ndarray] = field(default=None, metadata={"npz": "optional_array"})
 
     # Additional plotting/application data (added by user)
-    plotting_data: dict[str, Any] = field(default_factory=dict)
+    plotting_data: dict[str, Any] = field(default_factory=dict, metadata={"npz": "dict"})
 
     def __post_init__(self):
         """Initialize the results object."""
@@ -216,3 +246,113 @@ class OptimizationResults:
         result_dict.update(self.plotting_data)
 
         return result_dict
+
+    # ------------------------------------------------------------------
+    # Serialization
+    # ------------------------------------------------------------------
+
+    def save(self, path: Union[str, Path]) -> None:
+        """Save results to a compressed ``.npz`` file.
+
+        Serialization behaviour is driven by the ``"npz"`` key in each
+        dataclass field's ``metadata``.  Fields without that key are
+        skipped.
+
+        Args:
+            path: Output file path.  ``.npz`` is appended automatically
+                by numpy if not already present.
+        """
+        data: dict[str, np.ndarray] = {}
+
+        for name, f in self.__dataclass_fields__.items():
+            tag = f.metadata.get("npz")
+            if tag is None:
+                continue
+            val = getattr(self, name)
+
+            if tag == self._SCALAR:
+                data[name] = np.array(val)
+
+            elif tag == self._ARRAY_LIST:
+                data[name] = np.stack([np.asarray(a) for a in val]) if val else np.array([])
+
+            elif tag == self._FLOAT_LIST:
+                data[name] = np.array(val, dtype=float)
+
+            elif tag == self._DICT:
+                for k, v in val.items():
+                    try:
+                        arr = np.asarray(v)
+                        if arr.dtype.kind != "O":
+                            data[f"{name}/{k}"] = arr
+                    except (TypeError, ValueError):
+                        pass
+
+            elif tag == self._OPT_ARRAY:
+                if val is not None:
+                    data[name] = np.asarray(val)
+
+            elif tag == self._OPT_SCALAR:
+                if val is not None:
+                    data[name] = np.array(val)
+
+        np.savez_compressed(str(path), **data)
+
+    @classmethod
+    def load(cls, path: Union[str, Path]) -> "OptimizationResults":
+        """Load results from a ``.npz`` file previously created by :meth:`save`.
+
+        Args:
+            path: Path to the ``.npz`` file.  If the path has no suffix,
+                ``.npz`` is appended automatically.
+
+        Returns:
+            Reconstructed :class:`OptimizationResults`.
+        """
+        path = Path(path)
+        if not path.suffix:
+            path = path.with_suffix(".npz")
+
+        archive = np.load(str(path), allow_pickle=False)
+        keys = set(archive.files)
+
+        def _unstack(name: str) -> list:
+            if name not in keys:
+                return []
+            arr = archive[name]
+            return [arr[i] for i in range(arr.shape[0])] if arr.size else []
+
+        def _prefixed_dict(prefix: str) -> dict:
+            p = prefix + "/"
+            return {k[len(p) :]: archive[k] for k in keys if k.startswith(p)}
+
+        kwargs: dict[str, Any] = {}
+        deferred: dict[str, tuple] = {}  # fields to set after construction
+
+        for name, f in cls.__dataclass_fields__.items():
+            tag = f.metadata.get("npz")
+            if tag is None:
+                continue
+
+            if tag == cls._SCALAR:
+                kwargs[name] = archive[name].item()
+
+            elif tag == cls._ARRAY_LIST:
+                kwargs[name] = _unstack(name)
+
+            elif tag == cls._FLOAT_LIST:
+                kwargs[name] = archive[name].tolist() if name in keys else []
+
+            elif tag == cls._DICT:
+                kwargs[name] = _prefixed_dict(name)
+
+            elif tag == cls._OPT_ARRAY:
+                deferred[name] = archive[name] if name in keys else None
+
+            elif tag == cls._OPT_SCALAR:
+                deferred[name] = float(archive[name]) if name in keys else None
+
+        result = cls(**kwargs)
+        for name, val in deferred.items():
+            setattr(result, name, val)
+        return result
