@@ -43,14 +43,15 @@ v.initial   = np.array([0.0])
 v.final     = np.array([0.0])
 v.guess     = np.linspace(v.initial, v.final, n).reshape(-1, 1)
 
-a           = ox.Control("acceleration", shape=(1,))
+## TODO: (fabio) check about allocation components
+a           = ox.Control("acceleration", shape=(1,), impulsive=True, allocation_matrix=np.array([[0], [1]]) )
 a.max       = np.array([10.0])
 a.min       = np.array([-10.0])
-a.guess     = np.linspace(0, 0, n).reshape(-1, 1)
+a.guess     = np.linspace(a.max , a.min , n)
 
 dynamics    = {
     "position": v,
-    "velocity": a
+    "velocity": 0,
 }
 
 states      = [p, v]
@@ -59,6 +60,9 @@ controls    = [a]
 constraints = []
 for state in states:
     constraints.extend([ ox.ctcs( state<=state.max ), ox.ctcs(state.min <= state) ]) 
+# for i in range(n):
+#     if i != 0 and i != n-1:
+#         constraints.append((a.at(i) == 0).convex())
 
 time = ox.Time( 
     initial = 0.0,
@@ -79,6 +83,7 @@ problem = Problem(
 problem.settings.scp.lam_prox = 1e0  # Weight on the Trust Reigon
 problem.settings.scp.lam_cost = 1e-1  # Weight on the Minimal Time Objective
 problem.settings.scp.uniform_time_grid = False
+problem.settings.scp.k_max = 100
 
 plotting_dict = {}
 
