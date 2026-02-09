@@ -2,10 +2,10 @@
 Integration tests for YAML/JSON problem loading.
 
 These tests mirror a subset of test_brachistochrone.py but define the
-problem via YAML files and ``load_dict`` instead of the Python API.
-This validates the full pipeline: YAML → parser → Problem → solve.
+problem via YAML/JSON files and ``load_dict`` instead of the Python API.
+This validates the full pipeline: config file → parser → Problem → solve.
 
-Tests that cannot be expressed in YAML (byof, runtime parameter
+Tests that cannot be expressed in config files (byof, runtime parameter
 modification, idempotency) are intentionally excluded.
 """
 
@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from openscvx import Problem
-from openscvx.symbolic.parser import load_dict, load_yaml
+from openscvx.symbolic.parser import load_dict, load_json, load_yaml
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
 from tests.test_brachistochrone import (
     _assert_brachistochrone_accuracy,
@@ -128,16 +128,23 @@ def _base_dict():
 
 
 # =============================================================================
-# Core YAML test — proves the full load_yaml → Problem → solve pipeline
+# Core file loading test — proves the full load → Problem → solve pipeline
 # =============================================================================
 
+_LOADERS = {
+    "yaml": (load_yaml, "brachistochrone.yaml"),
+    "json": (load_json, "brachistochrone.json"),
+}
 
-def test_yaml():
-    """Load brachistochrone from YAML, solve, and validate against analytical."""
-    kwargs = load_yaml(FIXTURE_DIR / "brachistochrone.yaml")
+
+@pytest.mark.parametrize("fmt", ["yaml", "json"])
+def test_load_file(fmt):
+    """Load brachistochrone from a config file, solve, and validate against analytical."""
+    loader, filename = _LOADERS[fmt]
+    kwargs = loader(FIXTURE_DIR / filename)
     problem = Problem(**kwargs)
     result = _configure_and_solve(problem)
-    _validate_result(result, problem, "Brachistochrone YAML")
+    _validate_result(result, problem, f"Brachistochrone {fmt.upper()}")
     jax.clear_caches()
 
 
