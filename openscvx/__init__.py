@@ -18,8 +18,6 @@ from openscvx.algorithms.autotuning import (
 from openscvx.algorithms.optimization_results import OptimizationResults
 from openscvx.expert import ByofSpec
 from openscvx.problem import Problem
-
-load_results = OptimizationResults.load
 from openscvx.symbolic.expr import (
     CTCS,
     Abs,
@@ -72,6 +70,8 @@ from openscvx.symbolic.expr import (
 )
 from openscvx.symbolic.time import Time
 from openscvx.utils.cache import clear_cache, get_cache_dir, get_cache_size
+
+load_results = OptimizationResults.load
 
 __all__ = [
     # Main Trajectory Optimization Entrypoint
