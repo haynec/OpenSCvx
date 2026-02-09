@@ -60,6 +60,23 @@ class TokenizeError(Exception):
     """Raised when the tokenizer encounters an invalid character sequence."""
 
 
+_SINGLE: dict[str, TokenType] = {
+    "+": TokenType.PLUS,
+    "-": TokenType.MINUS,
+    "*": TokenType.STAR,
+    "/": TokenType.SLASH,
+    "@": TokenType.AT,
+    "(": TokenType.LPAREN,
+    ")": TokenType.RPAREN,
+    "[": TokenType.LBRACKET,
+    "]": TokenType.RBRACKET,
+    ",": TokenType.COMMA,
+    ":": TokenType.COLON,
+    ".": TokenType.DOT,
+    "=": TokenType.EQ,
+}
+
+
 def tokenize(source: str) -> List[Token]:
     """Tokenize an expression string into a list of tokens.
 
@@ -150,22 +167,6 @@ def tokenize(source: str) -> List[Token]:
                 continue
 
         # Single-character operators and delimiters
-        _SINGLE: dict[str, TokenType] = {
-            "+": TokenType.PLUS,
-            "-": TokenType.MINUS,
-            "*": TokenType.STAR,
-            "/": TokenType.SLASH,
-            "@": TokenType.AT,
-            "(": TokenType.LPAREN,
-            ")": TokenType.RPAREN,
-            "[": TokenType.LBRACKET,
-            "]": TokenType.RBRACKET,
-            ",": TokenType.COMMA,
-            ":": TokenType.COLON,
-            ".": TokenType.DOT,
-            "=": TokenType.EQ,
-        }
-
         if c in _SINGLE:
             tokens.append(Token(_SINGLE[c], c, i))
             i += 1
