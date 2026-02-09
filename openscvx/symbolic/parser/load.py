@@ -52,6 +52,7 @@ import numpy as np
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.expr import Expr, Parameter
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.parser._registry import _PARSE_FUNCTIONS
 from openscvx.symbolic.parser.parser import ExprParser
 from openscvx.symbolic.time import Time
 
@@ -173,6 +174,14 @@ def load_dict(data: dict) -> dict:
         symbols[c.name] = c
     for p in parameters:
         symbols[p.name] = p
+
+    # Validate no symbol names collide with built-in function names
+    for name in symbols:
+        if name.lower() in _PARSE_FUNCTIONS:
+            raise ValueError(
+                f"Symbol name {name!r} conflicts with built-in function "
+                f"{name.lower()!r}; please rename it"
+            )
 
     parser = ExprParser(symbols)
 

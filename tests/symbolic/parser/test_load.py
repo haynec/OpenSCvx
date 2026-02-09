@@ -287,3 +287,36 @@ def test_multiple_states():
     names = [s.name for s in result["states"]]
     assert "pos" in names
     assert "vel" in names
+
+
+# =============================================================================
+# Symbol Name Collision Detection
+# =============================================================================
+
+
+def test_symbol_name_collides_with_builtin():
+    import pytest
+
+    data = _minimal_data()
+    data["states"][0]["name"] = "norm"
+    data["dynamics"] = {"norm": "thrust"}
+    with pytest.raises(ValueError, match="conflicts with built-in function"):
+        load_dict(data)
+
+
+def test_symbol_name_collision_case_insensitive():
+    import pytest
+
+    data = _minimal_data()
+    data["parameters"] = [{"name": "Sum", "shape": [], "value": 0.0}]
+    with pytest.raises(ValueError, match="conflicts with built-in function"):
+        load_dict(data)
+
+
+def test_lowercase_expressions_in_dynamics():
+    data = _minimal_data()
+    data["dynamics"]["pos"] = "sin(thrust[0]) + cos(thrust[1]) + thrust[2]"
+    result = load_dict(data)
+    from openscvx.symbolic.expr import Add
+
+    assert isinstance(result["dynamics"]["pos"], Add)

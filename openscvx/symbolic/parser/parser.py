@@ -245,17 +245,17 @@ class ExprParser:
     # ------------------------------------------------------------------
 
     def _parse_function_call(self, name: str, pos: int = 0) -> Expr:
-        if name == "Vmap":
+        if name.lower() == "vmap":
             return self._parse_vmap_call()
 
         self._expect(TokenType.LPAREN)
         args, kwargs = self._parse_call_args()
         self._expect(TokenType.RPAREN)
 
-        handler = lookup(name)
+        handler = lookup(name)  # case-insensitive
         if handler is None:
             msg = f"Unknown function {name!r} at position {pos}"
-            hint = _suggest(name, _PARSE_FUNCTIONS)
+            hint = _suggest(name.lower(), _PARSE_FUNCTIONS)
             if hint:
                 msg += f"; did you mean {hint!r}?"
             raise ParseError(msg)

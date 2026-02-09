@@ -191,7 +191,7 @@ def test_unknown_function_raises():
 def test_unknown_function_suggests_close_match():
     """Typo in a function name should produce a 'did you mean?' hint."""
     p = _parser()
-    with pytest.raises(ParseError, match="did you mean 'Norm'"):
+    with pytest.raises(ParseError, match="did you mean 'norm'"):
         p.parse("Nrom(x)")
 
 
@@ -441,3 +441,47 @@ def test_missing_closing_bracket_raises():
     p = _parser()
     with pytest.raises(ParseError, match="Expected RBRACKET"):
         p.parse("x[0:2")
+
+
+# =============================================================================
+# Case-Insensitive Function Calls
+# =============================================================================
+
+
+def test_lowercase_function_call():
+    from openscvx.symbolic.expr import Sin
+
+    expr = _parser().parse("sin(x)")
+    assert isinstance(expr, Sin)
+
+
+def test_uppercase_function_call():
+    from openscvx.symbolic.expr import Cos
+
+    expr = _parser().parse("Cos(x)")
+    assert isinstance(expr, Cos)
+
+
+def test_mixed_case_function_call():
+    from openscvx.symbolic.expr import Norm
+
+    expr = _parser().parse("norm(x)")
+    assert isinstance(expr, Norm)
+
+
+def test_lowercase_nested():
+    from openscvx.symbolic.expr import Norm, Sub
+
+    expr = _parser().parse("norm(x - [1, 2, 3])")
+    assert isinstance(expr, Norm)
+    assert isinstance(expr.operand, Sub)
+
+
+def test_lowercase_vmap():
+    from openscvx.symbolic.expr import Parameter
+    from openscvx.symbolic.expr.vmap import Vmap
+
+    obs = Parameter("obs", shape=(3, 2), value=np.zeros((3, 2)))
+    p = _parser(obs=obs)
+    expr = p.parse("vmap(o: obs -> norm(x - o))")
+    assert isinstance(expr, Vmap)
