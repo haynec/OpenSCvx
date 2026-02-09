@@ -237,7 +237,16 @@ def _parse_boundary(arr: list) -> list:
 
     Plain numbers stay as-is (→ fixed).  Two-element lists like
     ``[free, 5.0]`` are converted to tuples ``("free", 5.0)``.
+
+    A bare ``[tag, value]`` pair (e.g. ``[free, 5.0]`` for a shape-[1]
+    state) is auto-wrapped so that both ``[free, 5.0]`` and
+    ``[[free, 5.0]]`` produce the same result.  A bare string is never
+    a valid boundary element, so this detection is unambiguous.
     """
+    # Bare [tag, value] pair — wrap so the element-wise loop handles it
+    if len(arr) == 2 and isinstance(arr[0], str) and not isinstance(arr[1], list):
+        arr = [arr]
+
     result: list = []
     for item in arr:
         if isinstance(item, list) and len(item) == 2 and isinstance(item[0], str):
