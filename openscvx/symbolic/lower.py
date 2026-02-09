@@ -245,7 +245,7 @@ def create_cvxpy_variables(
 
     inv_S_x = np.linalg.inv(S_x)
     inv_S_u = np.linalg.inv(S_u)
-    inv_S_u_d = np.linalg.inv(S_u_d)
+    inv_S_u_d = np.linalg.inv(S_u_d) if S_u_d.size else S_u_d
 
     # Parameters
     lam_prox = cp.Parameter(nonneg=True, name="lam_prox")
@@ -265,16 +265,21 @@ def create_cvxpy_variables(
     du = cp.Variable((N, n_controls), name="du")  # Control Error
     u_bar = cp.Parameter((N, n_controls), name="u_bar")  # Previous SCP Control
 
-    # Discrete Control
-    u_d = cp.Variable((N, n_controls_d), name="u_d")  # Current Control
-    du_d = cp.Variable((N, n_controls_d), name="du_d")  # Control Error
-    u_d_bar = cp.Parameter((N, n_controls_d), name="u_d_bar")  # Previous SCP Control
+    # Discrete Control (optional if no impulsive controls)
+    if n_controls_d > 0:
+        u_d = cp.Variable((N, n_controls_d), name="u_d")  # Current Control
+        du_d = cp.Variable((N, n_controls_d), name="du_d")  # Control Error
+        u_d_bar = cp.Parameter((N, n_controls_d), name="u_d_bar")  # Previous SCP Control
+    else:
+        u_d = None
+        du_d = None
+        u_d_bar = None
 
     # Discretized Augmented Dynamics Constraints
     A_d = cp.Parameter((N - 1, n_states, n_states), name="A_d", sparsity=A_d_sparsity)
     B_d = cp.Parameter((N - 1, n_states, n_controls), name="B_d", sparsity=B_d_sparsity)
     C_d = cp.Parameter((N - 1, n_states, n_controls), name="C_d", sparsity=C_d_sparsity)
-    D_d = cp.Parameter((n_states, n_controls_d), name="D_d")
+    D_d = cp.Parameter((n_states, n_controls_d), name="D_d") if n_controls_d > 0 else None
     x_prop = cp.Parameter((N - 1, n_states), name="x_prop")
     nu = cp.Variable((N - 1, n_states), name="nu")  # Virtual Control
 
@@ -298,7 +303,8 @@ def create_cvxpy_variables(
         grad_g_u.append(
             cp.Parameter((N, n_controls), name="grad_g_u_" + str(idx_ncvx), sparsity=g_u_sp)
         )
-        grad_g_u_d.append(cp.Parameter((N, n_controls_d), name="grad_g_u_d_" + str(idx_ncvx)))
+        if n_controls_d > 0:
+            grad_g_u_d.append(cp.Parameter((N, n_controls_d), name="grad_g_u_d_" + str(idx_ncvx)))
         nu_vb.append(cp.Variable(N, name="nu_vb_" + str(idx_ncvx)))  # Virtual Control for VB
 
     # Linearized Cross-Node Constraints
@@ -314,9 +320,10 @@ def create_cvxpy_variables(
         grad_g_U_cross.append(
             cp.Parameter((N, n_controls), name="grad_g_U_cross_" + str(idx_cross))
         )
-        grad_g_U_d_cross.append(
-            cp.Parameter((N, n_controls_d), name="grad_g_U_d_cross_" + str(idx_cross))
-        )
+        if n_controls_d > 0:
+            grad_g_U_d_cross.append(
+                cp.Parameter((N, n_controls_d), name="grad_g_U_d_cross_" + str(idx_cross))
+            )
         nu_vb_cross.append(
             cp.Variable(name="nu_vb_cross_" + str(idx_cross))
         )  # Virtual Control for VB
@@ -331,10 +338,12 @@ def create_cvxpy_variables(
     for k in range(N):
         x_nonscaled.append(S_x @ x[k] + c_x)
         u_nonscaled.append(S_u @ u[k] + c_u)
-        u_d_nonscaled.append(S_u_d @ u_d[k] + c_u_d)
+        if n_controls_d > 0:
+            u_d_nonscaled.append(S_u_d @ u_d[k] + c_u_d)
         dx_nonscaled.append(S_x @ dx[k])
         du_nonscaled.append(S_u @ du[k])
-        du_d_nonscaled.append(S_u_d @ du_d[k])
+        if n_controls_d > 0:
+            du_d_nonscaled.append(S_u_d @ du_d[k])
 
     return CVXPyVariables(
         lam_prox=lam_prox,

@@ -424,7 +424,10 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
                 is_impulsive_list.append(np.full(control.shape[0], False))
 
         unified_is_impulsive = np.concatenate(is_impulsive_list)
-        unified_allocation_matrix = np.hstack(allocation_matrix_list)
+        if not allocation_matrix_list:
+            unified_allocation_matrix = None
+        else:
+            unified_allocation_matrix = np.hstack(allocation_matrix_list)
 
     return UnifiedControl(
         name=name,

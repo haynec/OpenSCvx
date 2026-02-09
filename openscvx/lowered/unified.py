@@ -709,7 +709,10 @@ class UnifiedControl:
             new_true_dim = max(0, min(stop, self._true_dim) - max(start, 0))
 
             # Retrieve allocation matrix
-            new_allocation = self.allocation_matrix[idx]
+            if np.any( self.is_impulsive ):
+                new_allocation = self.allocation_matrix[idx]
+            else:
+                new_allocation = None
 
             return UnifiedControl(
                 name=new_name,

@@ -195,6 +195,7 @@ class PTRSolver(ConvexSolver):
 
         ## TODO: (fabio) this step works to convert vectors of booleas to slices, but the UnifiedControl class requires a single slice and does not accept list of slices
         mask = np.asarray(u_unified.is_impulsive, dtype=bool)
+        has_impulsive = mask.size > 0 and np.any(mask)
 
         # Find starts/ends of True blocks
         d = np.diff(mask.astype(np.int8))
@@ -208,7 +209,10 @@ class PTRSolver(ConvexSolver):
             ends = np.r_[ends, mask.size]
 
         # List of slices covering all True segments
-        slices_impulsive_true = [slice(s, e) for s, e in zip(starts, ends)]
+        if np.concatenate((starts, ends)).size > 0:
+            slices_impulsive_true = [slice(s, e) for s, e in zip(starts, ends)]
+        else:
+            slices_impulsive_true = [slice(0, 0)]
 
         # Flip mask vector
         mask = mask == False
@@ -227,10 +231,23 @@ class PTRSolver(ConvexSolver):
         # List of slices covering all false segments
         slices_impulsive_false = [slice(s, e) for s, e in zip(starts, ends)]
 
-        u_unified_cont = u_unified[slices_impulsive_false[0]]
-        u_unified_discr = u_unified[slices_impulsive_true[0]]
+        if has_impulsive:
+            u_unified_cont = u_unified[slices_impulsive_false[0]]
+            u_unified_discr = u_unified[slices_impulsive_true[0]]
+        else:
+            u_unified_cont = u_unified
+            u_unified_discr = None
         n_controls = len(u_unified_cont.max)
-        n_controls_d = len(u_unified_discr.max)
+        n_controls_d = len(u_unified_discr.max) if u_unified_discr is not None else 0
+
+        # Temporary compatibility patch:
+        # while controls are split here but symbolic sparsity is computed on the
+        # full unified control, sparsity indices can go out of bounds. Disable
+        # sparsity hints in this mixed mode and keep dense parameters.
+        # Easy to remove once control separation is completed upstream.
+        if has_impulsive:
+            dynamics_sparsity = None
+            constraint_sparsity = None
 
         # Compute scaling matrices from unified object bounds
         if x_unified.scaling_min is not None:
@@ -264,17 +281,21 @@ class PTRSolver(ConvexSolver):
             A_d_sp = _tile_sparsity(A_d_pat, N - 1)
             B_d_sp = _tile_sparsity(B_d_pat, N - 1)
             C_d_sp = _tile_sparsity(C_d_pat, N - 1)
-        if u_unified_discr.scaling_min is not None:
-            lower_u_d = np.array(u_unified_discr.scaling_min, dtype=float)
+        if n_controls_d == 0:
+            S_u_d = np.zeros((0, 0))
+            c_u_d = np.zeros((0,))
         else:
-            lower_u_d = np.array(u_unified_discr.min, dtype=float)
+            if u_unified_discr.scaling_min is not None:
+                lower_u_d = np.array(u_unified_discr.scaling_min, dtype=float)
+            else:
+                lower_u_d = np.array(u_unified_discr.min, dtype=float)
 
-        if u_unified_discr.scaling_max is not None:
-            upper_u_d = np.array(u_unified_discr.scaling_max, dtype=float)
-        else:
-            upper_u_d = np.array(u_unified_discr.max, dtype=float)
+            if u_unified_discr.scaling_max is not None:
+                upper_u_d = np.array(u_unified_discr.scaling_max, dtype=float)
+            else:
+                upper_u_d = np.array(u_unified_discr.max, dtype=float)
 
-        S_u_d, c_u_d = get_affine_scaling_matrices(n_controls_d, lower_u_d, upper_u_d)
+            S_u_d, c_u_d = get_affine_scaling_matrices(n_controls_d, lower_u_d, upper_u_d)
 
         # Create all CVXPy variables for the OCP
         self._ocp_vars = create_cvxpy_variables(
@@ -420,10 +441,15 @@ class PTRSolver(ConvexSolver):
                 cost -= lam_cost[i] * x[-1][i]
 
         # Trust Region Cost
-        cost += sum(
-            lam_prox * cp.sum_squares(cp.hstack((dx[i], du[i], du_d[i])))
-            for i in range(settings.sim.n)
-        )
+        if du_d is not None:
+            cost += sum(
+                lam_prox * cp.sum_squares(cp.hstack((dx[i], du[i], du_d[i])))
+                for i in range(settings.sim.n)
+            )
+        else:
+            cost += sum(
+                lam_prox * cp.sum_squares(cp.hstack((dx[i], du[i]))) for i in range(settings.sim.n)
+            )
 
         # Virtual Control Slack
         cost += sum(cp.sum(lam_vc[i - 1] * cp.abs(nu[i - 1])) for i in range(1, settings.sim.n))
@@ -494,8 +520,7 @@ class PTRSolver(ConvexSolver):
         A_d = ocp_vars.A_d
         B_d = ocp_vars.B_d
         C_d = ocp_vars.C_d
-        D_d_base = settings.sim.u.allocation_matrix
-        D_d = np.vstack((D_d_base, np.zeros((2, D_d_base.shape[1]))))
+        D_d = None
         x_prop = ocp_vars.x_prop
         nu = ocp_vars.nu
         g = ocp_vars.g
@@ -521,6 +546,11 @@ class PTRSolver(ConvexSolver):
         du_nonscaled = ocp_vars.du_nonscaled
         du_d_nonscaled = ocp_vars.du_d_nonscaled
 
+        has_u_d = u_d is not None
+        if has_u_d:
+            D_d_base = settings.sim.u.allocation_matrix
+            D_d = np.vstack((D_d_base, np.zeros((2, D_d_base.shape[1]))))
+
         constr = []
 
         # Linearized nodal constraints (from JAX-lowered non-convex)
@@ -529,16 +559,15 @@ class PTRSolver(ConvexSolver):
             for constraint in jax_constraints.nodal:
                 # nodes should already be validated and normalized in preprocessing
                 nodes = constraint.nodes
-                constr += [
-                    (
+                for node in nodes:
+                    residual = (
                         g[idx_ncvx][node]
                         + grad_g_x[idx_ncvx][node] @ dx[node]
                         + grad_g_u[idx_ncvx][node] @ du[node]
-                        + grad_g_u_d[idx_ncvx][node] @ du_d[node]
                     )
-                    == nu_vb[idx_ncvx][node]
-                    for node in nodes
-                ]
+                    if has_u_d and grad_g_u_d:
+                        residual += grad_g_u_d[idx_ncvx][node] @ du_d[node]
+                    constr += [residual == nu_vb[idx_ncvx][node]]
                 idx_ncvx += 1
 
         # Linearized cross-node constraints (from JAX-lowered non-convex)
@@ -553,8 +582,9 @@ class PTRSolver(ConvexSolver):
                     residual += grad_g_X_cross[idx_cross][k, :] @ dx[k]
                     # Contribution from control at node k
                     residual += grad_g_U_cross[idx_cross][k, :] @ du[k]
-                    # Contribution from control at node k
-                    residual += grad_g_U_d_cross[idx_cross][k, :] @ du_d[k]
+                    # Contribution from discrete control at node k (if present)
+                    if has_u_d and grad_g_U_d_cross:
+                        residual += grad_g_U_d_cross[idx_cross][k, :] @ du_d[k]
                 # Add constraint: residual == slack variable
                 constr += [residual == nu_vb_cross[idx_cross]]
                 idx_cross += 1
@@ -585,10 +615,11 @@ class PTRSolver(ConvexSolver):
         constr += [
             (u[i] - inv_S_u @ (u_bar[i] - c_u) - du[i]) == 0 for i in range(settings.sim.n)
         ]  # Control Error
-        constr += [
-            (u_d[i] - inv_S_u_d @ (u_d_bar[i] - c_u_d) - du_d[i]) == 0
-            for i in range(settings.scp.n)
-        ]  # Discrete Control Error
+        if has_u_d:
+            constr += [
+                (u_d[i] - inv_S_u_d @ (u_d_bar[i] - c_u_d) - du_d[i]) == 0
+                for i in range(settings.sim.n)
+            ]  # Discrete Control Error
 
         constr += [
             inv_S_x @ (x_nonscaled[i] - c_x)
@@ -597,7 +628,7 @@ class PTRSolver(ConvexSolver):
                 A_d[i - 1] @ dx_nonscaled[i - 1]
                 + B_d[i - 1] @ du_nonscaled[i - 1]
                 + C_d[i - 1] @ du_nonscaled[i]
-                + D_d @ du_d_nonscaled[i]
+                + (D_d @ du_d_nonscaled[i] if has_u_d else 0)
                 + x_prop[i - 1]
                 - c_x
             )
@@ -607,59 +638,63 @@ class PTRSolver(ConvexSolver):
 
         ## TODO: (fabio) add a method in he unified control to retrieve the impuslvie and the continuous controls
 
-        mask = np.asarray(settings.sim.u.is_impulsive, dtype=bool)
+        if has_u_d:
+            mask = np.asarray(settings.sim.u.is_impulsive, dtype=bool)
 
-        # Find starts/ends of True blocks
-        d = np.diff(mask.astype(np.int8))
-        starts = np.flatnonzero(d == 1) + 1
-        ends = np.flatnonzero(d == -1) + 1
+            # Find starts/ends of True blocks
+            d = np.diff(mask.astype(np.int8))
+            starts = np.flatnonzero(d == 1) + 1
+            ends = np.flatnonzero(d == -1) + 1
 
-        # Handle if mask starts/ends with True
-        if mask.size and mask[0]:
-            starts = np.r_[0, starts]
-        if mask.size and mask[-1]:
-            ends = np.r_[ends, mask.size]
+            # Handle if mask starts/ends with True
+            if mask.size and mask[0]:
+                starts = np.r_[0, starts]
+            if mask.size and mask[-1]:
+                ends = np.r_[ends, mask.size]
 
-        # List of slices covering all True segments
-        slices_impulsive_true = [slice(s, e) for s, e in zip(starts, ends)]
+            # List of slices covering all True segments
+            slices_impulsive_true = [slice(s, e) for s, e in zip(starts, ends)]
 
-        # Flip mask vector
-        mask = mask == False
+            # Flip mask vector
+            mask = mask == False
 
-        # Find starts/ends of True blocks
-        d = np.diff(mask.astype(np.int8))
-        starts = np.flatnonzero(d == 1) + 1
-        ends = np.flatnonzero(d == -1) + 1
+            # Find starts/ends of True blocks
+            d = np.diff(mask.astype(np.int8))
+            starts = np.flatnonzero(d == 1) + 1
+            ends = np.flatnonzero(d == -1) + 1
 
-        # Handle if mask starts/ends with True
-        if mask.size and mask[0]:
-            starts = np.r_[0, starts]
-        if mask.size and mask[-1]:
-            ends = np.r_[ends, mask.size]
+            # Handle if mask starts/ends with True
+            if mask.size and mask[0]:
+                starts = np.r_[0, starts]
+            if mask.size and mask[-1]:
+                ends = np.r_[ends, mask.size]
 
-        # List of slices covering all false segments
-        slices_impulsive_false = [slice(s, e) for s, e in zip(starts, ends)]
+            # List of slices covering all false segments
+            slices_impulsive_false = [slice(s, e) for s, e in zip(starts, ends)]
 
-        u_unified_cont = settings.sim.u[slices_impulsive_false[0]]
-        u_unified_discr = settings.sim.u[slices_impulsive_true[0]]
+            u_unified_cont = settings.sim.u[slices_impulsive_false[0]]
+            u_unified_discr = settings.sim.u[slices_impulsive_true[0]]
+        else:
+            u_unified_cont = settings.sim.u
 
         constr += [
-            inv_S_u @ (u_nonscaled[i] - c_u) <= inv_S_u @ (settings.sim.u.max - c_u)
+            inv_S_u @ (u_nonscaled[i] - c_u) <= inv_S_u @ (u_unified_cont.max - c_u)
             for i in range(settings.sim.n)
         ]
         constr += [
-            inv_S_u @ (u_nonscaled[i] - c_u) >= inv_S_u @ (settings.sim.u.min - c_u)
+            inv_S_u @ (u_nonscaled[i] - c_u) >= inv_S_u @ (u_unified_cont.min - c_u)
             for i in range(settings.sim.n)
         ]  # Control Constraints
 
-        constr += [
-            inv_S_u_d @ (u_d_nonscaled[i] - c_u_d) <= inv_S_u_d @ (u_unified_discr.max - c_u_d)
-            for i in range(settings.scp.n)
-        ]
-        constr += [
-            inv_S_u_d @ (u_d_nonscaled[i] - c_u_d) >= inv_S_u_d @ (u_unified_discr.min - c_u_d)
-            for i in range(settings.scp.n)
-        ]  # Discrete Control Constraints
+        if has_u_d:
+            constr += [
+                inv_S_u_d @ (u_d_nonscaled[i] - c_u_d) <= inv_S_u_d @ (u_unified_discr.max - c_u_d)
+                for i in range(settings.sim.n)
+            ]
+            constr += [
+                inv_S_u_d @ (u_d_nonscaled[i] - c_u_d) >= inv_S_u_d @ (u_unified_discr.min - c_u_d)
+                for i in range(settings.sim.n)
+            ]  # Discrete Control Constraints
 
         # TODO: (norrisg) formalize this
         constr += [
@@ -736,7 +771,8 @@ class PTRSolver(ConvexSolver):
         """
         self._set_param("x_bar", x_bar)
         self._set_param("u_bar", u_bar)
-        self._set_param("u_d_bar", u_d_bar)
+        if "u_d_bar" in self._problem.param_dict:
+            self._set_param("u_d_bar", u_d_bar)
         self._set_param("A_d", A_d)
         self._set_param("B_d", B_d)
         self._set_param("C_d", C_d)
@@ -767,14 +803,22 @@ class PTRSolver(ConvexSolver):
                 self._set_param(f"g_{g_id}", constraint_data["g"])
                 self._set_param(f"grad_g_x_{g_id}", constraint_data["grad_g_x"])
                 self._set_param(f"grad_g_u_{g_id}", constraint_data["grad_g_u"])
-                self._set_param(f"grad_g_u_d_{g_id}", constraint_data["grad_g_u_d"])
+                if (
+                    "grad_g_u_d" in constraint_data
+                    and f"grad_g_u_d_{g_id}" in self._problem.param_dict
+                ):
+                    self._set_param(f"grad_g_u_d_{g_id}", constraint_data["grad_g_u_d"])
 
         if cross_node:
             for g_id, constraint_data in enumerate(cross_node):
                 self._set_param(f"g_cross_{g_id}", constraint_data["g"])
                 self._set_param(f"grad_g_X_cross_{g_id}", constraint_data["grad_g_X"])
                 self._set_param(f"grad_g_U_cross_{g_id}", constraint_data["grad_g_U"])
-                self._set_param(f"grad_g_U_d_cross_{g_id}", constraint_data["grad_g_U_d"])
+                if (
+                    "grad_g_U_d" in constraint_data
+                    and f"grad_g_U_d_cross_{g_id}" in self._problem.param_dict
+                ):
+                    self._set_param(f"grad_g_U_d_cross_{g_id}", constraint_data["grad_g_U_d"])
 
     def update_penalties(
         self,
@@ -928,10 +972,13 @@ class PTRSolver(ConvexSolver):
         # Unscale state and control trajectories
         x_scaled = self._problem.var_dict["x"].value  # (N, n_states)
         u_scaled = self._problem.var_dict["u"].value  # (N, n_controls)
-        u_d_scaled = self._problem.var_dict["u_d"].value  # (N, n_controls)
         x = (S_x @ x_scaled.T + np.expand_dims(c_x, axis=1)).T
         u = (S_u @ u_scaled.T + np.expand_dims(c_u, axis=1)).T
-        u_d = (S_u_d @ u_d_scaled.T + np.expand_dims(c_u_d, axis=1)).T
+        if self._ocp_vars.u_d is not None and "u_d" in self._problem.var_dict:
+            u_d_scaled = self._problem.var_dict["u_d"].value  # (N, n_controls_d)
+            u_d = (S_u_d @ u_d_scaled.T + np.expand_dims(c_u_d, axis=1)).T
+        else:
+            u_d = np.zeros((x_scaled.shape[0], 0))
 
         # Get virtual control slack
         nu = self._problem.var_dict["nu"].value

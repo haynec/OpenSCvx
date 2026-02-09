@@ -90,16 +90,16 @@ class CVXPyVariables:
     du: "cp.Variable"
     u_bar: "cp.Parameter"
 
-    # Control variables and parameters
-    u_d: "cp.Variable"
-    du_d: "cp.Variable"
-    u_d_bar: "cp.Parameter"
+    # Discrete control variables and parameters
+    u_d: "cp.Variable | None"
+    du_d: "cp.Variable | None"
+    u_d_bar: "cp.Parameter | None"
 
     # Dynamics discretization parameters
     A_d: "cp.Parameter"
     B_d: "cp.Parameter"
     C_d: "cp.Parameter"
-    D_d: "cp.Parameter"
+    D_d: "cp.Parameter | None"
     x_prop: "cp.Parameter"
     nu: "cp.Variable"
 
