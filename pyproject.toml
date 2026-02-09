@@ -17,7 +17,7 @@ classifiers = [
     "License :: OSI Approved :: Apache Software License",
 ]
 dependencies = [
-    "cvxpy==1.7.5",
+    "cvxpy>=1.8.1",
     "qoco",
     "numpy",
     "jax",
@@ -55,6 +55,7 @@ test = [
     "pytest",
     "scipy",
     "jaxlie",
+    "svgpathtools"
 ]
 
 [tool.setuptools.packages.find]
