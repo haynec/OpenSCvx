@@ -399,6 +399,7 @@ def lower_cvxpy_constraints(
     constraints: ConstraintSet,
     x_cvxpy: List,
     u_cvxpy: List,
+    u_d_cvxpy: List,
     parameters: dict = None,
 ) -> Tuple[List, dict]:
     """Lower symbolic convex constraints to CVXPy constraints.
@@ -412,8 +413,10 @@ def lower_cvxpy_constraints(
         constraints: ConstraintSet containing nodal_convex and cross_node_convex
         x_cvxpy: List of CVXPy expressions for state at each node (length N).
             Typically the x_nonscaled list from create_cvxpy_variables().
-        u_cvxpy: List of CVXPy expressions for control at each node (length N).
+        u_cvxpy: List of CVXPy expressions for continuous controls at each node (length N).
             Typically the u_nonscaled list from create_cvxpy_variables().
+        u_d_cvxpy: List of CVXPy expressions for discrete/impulsive controls at each node (length N).
+            Typically the u_d_nonscaled list from create_cvxpy_variables(). May be empty.
         parameters: Optional dict of parameter values to use for any Parameter
             expressions in the constraints. If None, uses Parameter default values.
 
@@ -430,6 +433,7 @@ def lower_cvxpy_constraints(
                 constraint_set,
                 ocp_vars.x_nonscaled,
                 ocp_vars.u_nonscaled,
+                ocp_vars.u_d_nonscaled,
                 parameters,
             )
 
@@ -439,6 +443,7 @@ def lower_cvxpy_constraints(
         lower_symbolic_expressions() and handled via linearization in the SCP.
     """
     import cvxpy as cp
+    import numpy as np
 
     from openscvx.symbolic.expr import Parameter, traverse
     from openscvx.symbolic.expr.control import Control
@@ -471,6 +476,12 @@ def lower_cvxpy_constraints(
 
     cvxpy_constraints = []
 
+    def _control_is_impulsive(control: Control) -> bool:
+        is_imp = getattr(control, "is_impulsive", False)
+        if isinstance(is_imp, np.ndarray):
+            return bool(np.any(is_imp))
+        return bool(is_imp)
+
     # Process nodal constraints
     for constraint in constraints.nodal_convex:
         # nodes should already be validated and normalized in preprocessing
@@ -479,12 +490,16 @@ def lower_cvxpy_constraints(
         # Collect all State and Control variables referenced in the constraint
         state_vars = {}
         control_vars = {}
-
+        control_vars_discrete = {}
+        
         def collect_vars(expr):
             if isinstance(expr, State):
                 state_vars[expr.name] = expr
             elif isinstance(expr, Control):
-                control_vars[expr.name] = expr
+                if _control_is_impulsive(expr):
+                    control_vars_discrete[expr.name] = expr
+                else:
+                    control_vars[expr.name] = expr
 
         traverse(constraint.constraint, collect_vars)
 
@@ -498,6 +513,14 @@ def lower_cvxpy_constraints(
 
             if control_vars:
                 variable_map["u"] = u_cvxpy[node]
+
+            if control_vars_discrete:
+                if u_d_cvxpy is None or len(u_d_cvxpy) == 0:
+                    raise ValueError(
+                        "Constraint references impulsive controls but u_d_cvxpy is empty. "
+                        "Ensure discrete controls are enabled and u_d variables are created."
+                    )
+                variable_map["u_d"] = u_d_cvxpy[node]
 
             # Add all CVXPy Parameter objects to the variable map
             variable_map.update(all_params)
@@ -516,6 +539,12 @@ def lower_cvxpy_constraints(
                         f"Control variable '{control_name}' has no slice assigned. "
                         f"This indicates a bug in the preprocessing pipeline."
                     )
+            for control_name, control_var in control_vars_discrete.items():
+                if control_var._slice is None:
+                    raise ValueError(
+                        f"Control variable '{control_name}' has no slice assigned. "
+                        f"This indicates a bug in the preprocessing pipeline."
+                    )
 
             # Lower the constraint to CVXPy
             cvxpy_constraint = lower_to_cvxpy(constraint.constraint, variable_map)
@@ -526,12 +555,16 @@ def lower_cvxpy_constraints(
         # Collect all State and Control variables referenced in the constraint
         state_vars = {}
         control_vars = {}
+        control_vars_discrete = {}
 
         def collect_vars(expr):
             if isinstance(expr, State):
                 state_vars[expr.name] = expr
             elif isinstance(expr, Control):
-                control_vars[expr.name] = expr
+                if _control_is_impulsive(expr):
+                    control_vars_discrete[expr.name] = expr
+                else:
+                    control_vars[expr.name] = expr
 
         traverse(constraint.constraint, collect_vars)
 
@@ -545,6 +578,14 @@ def lower_cvxpy_constraints(
         if control_vars:
             variable_map["u"] = cp.vstack(u_cvxpy)
 
+        if control_vars_discrete:
+            if u_d_cvxpy is None or len(u_d_cvxpy) == 0:
+                raise ValueError(
+                    "Cross-node constraint references impulsive controls but u_d_cvxpy is empty. "
+                    "Ensure discrete controls are enabled and u_d variables are created."
+                )
+            variable_map["u_d"] = cp.vstack(u_d_cvxpy)
+
         # Add all CVXPy Parameter objects to the variable map
         variable_map.update(all_params)
 
@@ -557,6 +598,12 @@ def lower_cvxpy_constraints(
                 )
 
         for control_name, control_var in control_vars.items():
+            if control_var._slice is None:
+                raise ValueError(
+                    f"Control variable '{control_name}' has no slice assigned. "
+                    f"This indicates a bug in the preprocessing pipeline."
+                )
+        for control_name, control_var in control_vars_discrete.items():
             if control_var._slice is None:
                 raise ValueError(
                     f"Control variable '{control_name}' has no slice assigned. "
@@ -792,6 +839,7 @@ def lower_symbolic_problem(
         problem.constraints,
         solver.ocp_vars.x_nonscaled,
         solver.ocp_vars.u_nonscaled,
+        solver.ocp_vars.u_d_nonscaled,
         problem.parameters,
     )
     cvxpy_constraints = LoweredCvxpyConstraints(
