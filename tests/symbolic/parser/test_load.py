@@ -6,6 +6,7 @@ dictionary into Problem constructor keyword arguments.
 
 import numpy as np
 
+from openscvx.loader import load_dict
 from openscvx.symbolic.expr import (
     Equality,
     Inequality,
@@ -13,7 +14,6 @@ from openscvx.symbolic.expr import (
     State,
 )
 from openscvx.symbolic.expr.control import Control
-from openscvx.symbolic.parser.load import load_dict
 
 # =============================================================================
 # Minimal Valid Problem

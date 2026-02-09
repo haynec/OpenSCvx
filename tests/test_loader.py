@@ -16,7 +16,7 @@ import numpy as np
 import pytest
 
 from openscvx import Problem
-from openscvx.symbolic.parser import load_dict, load_json, load_yaml
+from openscvx.loader import load_dict, load_json, load_yaml
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
 from tests.test_brachistochrone import (
     _assert_brachistochrone_accuracy,

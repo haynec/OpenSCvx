@@ -21,11 +21,11 @@ def main():
 
     suffix = path.suffix.lower()
     if suffix in (".yaml", ".yml"):
-        from openscvx.symbolic.parser import load_yaml
+        from openscvx.loader import load_yaml
 
         kwargs = load_yaml(path)
     elif suffix == ".json":
-        from openscvx.symbolic.parser import load_json
+        from openscvx.loader import load_json
 
         kwargs = load_json(path)
     else:

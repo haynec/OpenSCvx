@@ -17,6 +17,7 @@ from openscvx.algorithms.autotuning import (
 )
 from openscvx.algorithms.optimization_results import OptimizationResults
 from openscvx.expert import ByofSpec
+from openscvx.loader import load_dict, load_json, load_yaml
 from openscvx.problem import Problem
 from openscvx.symbolic.expr import (
     CTCS,
@@ -76,6 +77,10 @@ load_results = OptimizationResults.load
 __all__ = [
     # Main Trajectory Optimization Entrypoint
     "Problem",
+    # Config file loading
+    "load_yaml",
+    "load_json",
+    "load_dict",
     # Results I/O
     "OptimizationResults",
     "load_results",
