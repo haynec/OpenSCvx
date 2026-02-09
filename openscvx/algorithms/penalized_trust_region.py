@@ -463,14 +463,18 @@ class PenalizedTrustRegion(Algorithm):
             Tuple containing solution data, costs, and timing information.
         """
         param_dict = params
+    
+        idx_impulsive_controls  = settings.sim.u.is_impulsive
+        idx_continuous_controls = ~settings.sim.u.is_impulsive
 
         # Update solver with dynamics linearization
         self._solver.update_dynamics_linearization(
             x_bar=state.x,
-            u_bar=state.u,
+            u_bar=state.u[:, idx_continuous_controls],
+            u_d_bar=state.u[:, idx_impulsive_controls],
             A_d=state.A_d(),
-            B_d=state.B_d(),
-            C_d=state.C_d(),
+            B_d=state.B_d()[:, :, idx_continuous_controls],
+            C_d=state.C_d()[:, :, idx_continuous_controls],
             x_prop=state.x_prop(),
         )
 
@@ -564,7 +568,16 @@ class PenalizedTrustRegion(Algorithm):
 
         # Extract unscaled trajectories from result
         x_new_guess = result.x
-        u_new_guess = result.u
+        # Reconstruct full control vector (continuous + impulsive) in unified order
+        mask = np.asarray(settings.sim.u.is_impulsive, dtype=bool)
+        if mask.size == 0:
+            u_new_guess = result.u
+        else:
+            u_new_guess = np.zeros((result.u.shape[0], mask.size), dtype=result.u.dtype)
+            if np.any(~mask):
+                u_new_guess[:, ~mask] = result.u
+            if np.any(mask):
+                u_new_guess[:, mask] = result.u_d
 
         # Calculate costs from boundary conditions using utility function
         # Note: The original code only considered final_type, but the utility handles both
