@@ -157,6 +157,10 @@
          <lastmod>2026-02-09</lastmod>
     </url>
     <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/loader/</loc>
+         <lastmod>2026-02-09</lastmod>
+    </url>
+    <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/problem/</loc>
          <lastmod>2026-02-09</lastmod>
     </url>
@@ -522,6 +526,50 @@
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/vmap/</loc>
+         <lastmod>2026-02-09</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/parser/</loc>
+         <lastmod>2026-02-09</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/parser/array/</loc>
+         <lastmod>2026-02-09</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/parser/constraint/</loc>
+         <lastmod>2026-02-09</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/parser/lie/</loc>
+         <lastmod>2026-02-09</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/parser/linalg/</loc>
+         <lastmod>2026-02-09</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/parser/logic/</loc>
+         <lastmod>2026-02-09</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/parser/math/</loc>
+         <lastmod>2026-02-09</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/parser/parser/</loc>
+         <lastmod>2026-02-09</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/parser/spatial/</loc>
+         <lastmod>2026-02-09</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/parser/stl/</loc>
+         <lastmod>2026-02-09</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/parser/tokenizer/</loc>
          <lastmod>2026-02-09</lastmod>
     </url>
     <url>
