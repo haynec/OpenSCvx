@@ -39,8 +39,8 @@ parameters:
     value: 9.81
 
 dynamics:
-  position: "Concat(velocity[0] * Sin(theta[0]), -velocity[0] * Cos(theta[0]))"
-  velocity: "g * Cos(theta[0])"
+  position: "concat(velocity[0] * sin(theta[0]), -velocity[0] * cos(theta[0]))"
+  velocity: "g * cos(theta[0])"
 
 constraints:
   - "ctcs(position <= [10.0, 10.0])"
