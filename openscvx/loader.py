@@ -42,6 +42,21 @@ Expected schema
     constraints:
       - "Norm(pos[:2] - obs_center) >= 2.0"
       - "(vel[0] <= 3.0).at(0, 10, 20)"
+
+    autotuner:                       # optional
+      type: RampProximalWeight
+      ramp_factor: 1.04
+      lam_prox_max: 100.0
+
+    settings:                        # optional, applied after Problem()
+      scp:
+        ep_tr: 1.0e-3
+        lam_cost: 5.0e-1
+      cvx:
+        solver_args: {abstol: 1.0e-6, reltol: 1.0e-9}
+      dis:
+        dis_type: ZOH
+        solver: Dopri8
 """
 
 from pathlib import Path
@@ -49,6 +64,7 @@ from typing import Any, Dict, List, Union
 
 import numpy as np
 
+from openscvx.config import _resolve_autotuner
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.expr import Expr, Parameter
 from openscvx.symbolic.expr.state import State
@@ -105,8 +121,11 @@ def load_dict(data: dict) -> dict:
 
     Returns:
         Dict with keys ``dynamics``, ``constraints``, ``states``,
-        ``controls``, ``N``, ``time``, and optionally ``dynamics_prop``,
-        ``states_prop``, ``algebraic_prop``.
+        ``controls``, ``N``, ``time``, and optionally ``autotuner``,
+        ``dynamics_prop``, ``states_prop``, ``algebraic_prop``, and
+        ``settings`` (a raw dict to be applied via
+        :meth:`Config.apply_dict() <openscvx.config.Config.apply_dict>`
+        after construction).
     """
     # ---- states --------------------------------------------------------
     states: List[State] = []
@@ -195,6 +214,11 @@ def load_dict(data: dict) -> dict:
     for constraint_str in data.get("constraints", []):
         constraints.append(parser.parse(str(constraint_str)))
 
+    # ---- autotuner (optional, top-level) --------------------------------
+    autotuner = None
+    if "autotuner" in data:
+        autotuner = _resolve_autotuner(data["autotuner"])
+
     result: Dict[str, Any] = {
         "dynamics": dynamics,
         "constraints": constraints,
@@ -203,6 +227,9 @@ def load_dict(data: dict) -> dict:
         "N": N,
         "time": time,
     }
+
+    if autotuner is not None:
+        result["autotuner"] = autotuner
 
     # ---- optional: propagation states ----------------------------------
     if "states_prop" in data:
@@ -232,6 +259,10 @@ def load_dict(data: dict) -> dict:
         for name, expr_str in data["algebraic_prop"].items():
             algebraic_prop[name] = parser.parse(str(expr_str))
         result["algebraic_prop"] = algebraic_prop
+
+    # ---- optional: settings (applied after Problem construction) -------
+    if "settings" in data:
+        result["settings"] = data["settings"]
 
     return result
 

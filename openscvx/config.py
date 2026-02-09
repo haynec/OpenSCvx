@@ -1,5 +1,5 @@
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from dataclasses import dataclass, fields
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:
     from openscvx.algorithms.autotuning import AutotuningBase
@@ -338,6 +338,65 @@ class SimConfig:
         return self.u._true_slice
 
 
+# ---------------------------------------------------------------------------
+# Autotuner resolver (used by the loader)
+# ---------------------------------------------------------------------------
+
+_AUTOTUNER_MAP: Dict[str, type] = {}
+
+
+def _resolve_autotuner(val: Any) -> Any:
+    """Resolve an autotuner specification into an instance.
+
+    Accepted forms:
+
+    * **string** — class name only, default parameters::
+
+          "RampProximalWeight"
+
+    * **dict** — class name + parameter overrides::
+
+          {"type": "RampProximalWeight", "ramp_factor": 1.04}
+
+    * **instance** — already-constructed autotuner (pass-through for
+      ``load_dict`` called from Python).
+    """
+    if not isinstance(val, (str, dict)):
+        return val
+
+    if isinstance(val, str):
+        name = val
+        params: dict = {}
+    else:
+        params = dict(val)  # copy to avoid mutating the input
+        name = params.pop("type", None)
+        if name is None:
+            raise ValueError(
+                "autotuner dict must include a 'type' key (e.g. type: RampProximalWeight)"
+            )
+
+    if not _AUTOTUNER_MAP:
+        from openscvx.algorithms.autotuning import (
+            AugmentedLagrangian,
+            ConstantProximalWeight,
+            RampProximalWeight,
+        )
+
+        for cls in (AugmentedLagrangian, ConstantProximalWeight, RampProximalWeight):
+            _AUTOTUNER_MAP[cls.__name__] = cls
+
+    cls = _AUTOTUNER_MAP.get(name)
+    if cls is None:
+        raise ValueError(f"Unknown autotuner {name!r}; expected one of {sorted(_AUTOTUNER_MAP)}")
+
+    instance = cls()
+    for key, value in params.items():
+        if not hasattr(instance, key):
+            raise ValueError(f"Unknown autotuner parameter {key!r} for {name}")
+        setattr(instance, key, value)
+    return instance
+
+
 @dataclass
 class ScpConfig:
     def __init__(
@@ -498,6 +557,64 @@ class Config:
     prp: PropagationConfig
     dev: DevConfig
 
+    # Subsections derived from the lowered problem — not user-configurable.
+    _INTERNAL_FIELDS = frozenset({"sim"})
+
     def __post_init__(self):
         # Set parent config reference in scp
         self.scp._parent_config = self
+
+    def apply_dict(self, settings: dict) -> None:
+        """Apply a nested settings dict to this :class:`Config`.
+
+        Valid subsection names are discovered automatically from the
+        dataclass fields (minus internal ones like ``sim``).
+
+        Example::
+
+            config.apply_dict({
+                "scp": {"ep_tr": 1e-3, "autotuner": {"ramp_factor": 1.04}},
+                "dis": {"dis_type": "ZOH"},
+            })
+
+        Dict values are handled contextually:
+
+        * If the target attribute is itself a ``dict`` (e.g.
+          ``solver_args``), the incoming dict **replaces** it.
+        * Otherwise the incoming dict **recurses** into the sub-object.
+
+        Args:
+            settings: ``{section: {key: value, ...}, ...}``
+
+        Raises:
+            ValueError: On unknown section names or attribute names.
+        """
+        configurable = {f.name for f in fields(self)} - self._INTERNAL_FIELDS
+
+        for section, values in settings.items():
+            if section not in configurable:
+                raise ValueError(
+                    f"Unknown settings section {section!r}; expected one of {sorted(configurable)}"
+                )
+            if not isinstance(values, dict):
+                raise ValueError(
+                    f"Expected a mapping for settings.{section}, got {type(values).__name__}"
+                )
+            _apply_dict_to(getattr(self, section), values, prefix=section)
+
+
+def _apply_dict_to(obj: object, values: dict, prefix: str) -> None:
+    """Recursively apply *values* as attributes on *obj*.
+
+    * Plain values → ``setattr``.
+    * Dict values where the current attribute is a ``dict`` → ``setattr``
+      (replacement, e.g. ``solver_args``).
+    * Dict values where the current attribute is an object → recurse.
+    """
+    for key, val in values.items():
+        if not hasattr(obj, key):
+            raise ValueError(f"Unknown setting '{prefix}.{key}'")
+        if isinstance(val, dict) and not isinstance(getattr(obj, key), dict):
+            _apply_dict_to(getattr(obj, key), val, prefix=f"{prefix}.{key}")
+        else:
+            setattr(obj, key, val)

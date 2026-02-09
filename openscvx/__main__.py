@@ -37,7 +37,10 @@ def main():
 
     from openscvx.problem import Problem
 
+    settings = kwargs.pop("settings", None)
     problem = Problem(**kwargs)
+    if settings:
+        problem.settings.apply_dict(settings)
     problem.initialize()
     result = problem.solve()
     result = problem.post_process()
