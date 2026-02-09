@@ -165,10 +165,40 @@ def test_unknown_identifier_raises():
         p.parse("unknown_var")
 
 
+def test_unknown_identifier_suggests_close_match():
+    """Typo in a symbol name should produce a 'did you mean?' hint."""
+    from openscvx.symbolic.expr import Parameter
+
+    obs = Parameter("obs_center", shape=(3,), value=[0, 0, 0])
+    p = _parser(obs_center=obs)
+    with pytest.raises(ParseError, match="did you mean 'obs_center'"):
+        p.parse("obs_centr")
+
+
+def test_unknown_identifier_no_suggestion_when_distant():
+    p = _parser()
+    with pytest.raises(ParseError, match="Unknown identifier") as exc_info:
+        p.parse("zzzzzzz")
+    assert "did you mean" not in str(exc_info.value)
+
+
 def test_unknown_function_raises():
     p = _parser()
     with pytest.raises(ParseError, match="Unknown function"):
         p.parse("NotAFunction(x)")
+
+
+def test_unknown_function_suggests_close_match():
+    """Typo in a function name should produce a 'did you mean?' hint."""
+    p = _parser()
+    with pytest.raises(ParseError, match="did you mean 'Norm'"):
+        p.parse("Nrom(x)")
+
+
+def test_unknown_function_includes_position():
+    p = _parser()
+    with pytest.raises(ParseError, match="at position"):
+        p.parse("Nrom(x)")
 
 
 # =============================================================================

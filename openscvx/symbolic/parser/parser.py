@@ -6,7 +6,7 @@ delegates function-call syntax (``Name(args...)``) to handlers registered
 in :mod:`openscvx.symbolic.parser._registry`.
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -21,8 +21,37 @@ from openscvx.symbolic.expr.constraint import (
 )
 from openscvx.symbolic.expr.expr import Constant, Expr, NodeReference
 from openscvx.symbolic.expr.linalg import Transpose
-from openscvx.symbolic.parser._registry import lookup
+from openscvx.symbolic.parser._registry import _PARSE_FUNCTIONS, lookup
 from openscvx.symbolic.parser.tokenizer import Token, TokenType, tokenize
+
+# ---------------------------------------------------------------------------
+# "Did you mean?" helper
+# ---------------------------------------------------------------------------
+
+
+def _edit_distance(a: str, b: str) -> int:
+    """Levenshtein distance between two strings."""
+    m, n = len(a), len(b)
+    prev = list(range(n + 1))
+    curr = [0] * (n + 1)
+    for i in range(1, m + 1):
+        curr[0] = i
+        for j in range(1, n + 1):
+            cost = 0 if a[i - 1] == b[j - 1] else 1
+            curr[j] = min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost)
+        prev, curr = curr, prev
+    return prev[n]
+
+
+def _suggest(name: str, candidates: Iterable[str], max_distance: int = 3) -> Optional[str]:
+    """Return the closest candidate within *max_distance*, or ``None``."""
+    best, best_dist = None, max_distance + 1
+    for c in candidates:
+        d = _edit_distance(name, c)
+        if d < best_dist:
+            best, best_dist = c, d
+    return best
+
 
 # ---------------------------------------------------------------------------
 # Precedence levels (higher binds tighter)
@@ -189,7 +218,7 @@ class ExprParser:
 
             # Function call: Name(...)
             if self._peek().type == TokenType.LPAREN:
-                return self._parse_function_call(name)
+                return self._parse_function_call(name, tok.pos)
 
             # Built-in constants
             if name == "True":
@@ -203,7 +232,11 @@ class ExprParser:
             if name in self.symbols:
                 return self.symbols[name]
 
-            raise ParseError(f"Unknown identifier {name!r} at position {tok.pos}")
+            msg = f"Unknown identifier {name!r} at position {tok.pos}"
+            hint = _suggest(name, self.symbols)
+            if hint:
+                msg += f"; did you mean {hint!r}?"
+            raise ParseError(msg)
 
         raise ParseError(f"Unexpected token {tok.type.name} ({tok.value!r}) at position {tok.pos}")
 
@@ -211,7 +244,7 @@ class ExprParser:
     # Function calls:  Name(arg, ..., key=val, ...)
     # ------------------------------------------------------------------
 
-    def _parse_function_call(self, name: str) -> Expr:
+    def _parse_function_call(self, name: str, pos: int = 0) -> Expr:
         if name == "Vmap":
             return self._parse_vmap_call()
 
@@ -221,7 +254,11 @@ class ExprParser:
 
         handler = lookup(name)
         if handler is None:
-            raise ParseError(f"Unknown function {name!r}")
+            msg = f"Unknown function {name!r} at position {pos}"
+            hint = _suggest(name, _PARSE_FUNCTIONS)
+            if hint:
+                msg += f"; did you mean {hint!r}?"
+            raise ParseError(msg)
         return handler(args, kwargs)
 
     def _parse_call_args(self) -> Tuple[list, dict]:
