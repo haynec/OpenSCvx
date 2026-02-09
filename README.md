@@ -239,17 +239,6 @@ Check out the problem definitions inside `examples/` to see how to define your o
 ## Code Structure
 <img src="figures/oscvx_structure_full_dark.svg" width="1200"/>
 
-## ToDos
-
-- [X] Standardized Vehicle and Constraint classes
-- [X] Implement QOCOGen with CVPYGEN
-- [X] Non-Dilated Time Propagation
-- [X] Save and reload the compiled JAX code
-- [x] Unified Mathematical Interface
-- [ ] Auto-SCvx Weight Tuning
-- [ ] Compiled at the subproblem level with JAX
-- [ ] Single Shot propagation
-
 ## What is implemented
 
 This repo has the following features:
