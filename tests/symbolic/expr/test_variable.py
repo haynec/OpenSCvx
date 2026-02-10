@@ -11,6 +11,7 @@ Tests are organized by node type, with each section containing:
 """
 
 import pytest
+import numpy as np
 
 # =============================================================================
 # Variable (Base Class)
@@ -358,13 +359,22 @@ def test_control_creation():
     """Test basic Control creation and properties."""
     from openscvx.symbolic.expr import Control
 
-    c = Control("thrust", shape=(3,))
+    c = Control("thrust", shape=(2,))
     assert c.name == "thrust"
-    assert c.shape == (3,)
-    assert repr(c) == "Control('thrust', shape=(3,))"
+    assert c.shape == (2,)
+    assert repr(c) == "Control('thrust', shape=(2,), impulsive=[False False], allocation_matrix=None, impulsive_nodes=None)"
     assert c._min is None
     assert c._max is None
     assert c._guess is None
+
+    with pytest.raises(ValueError, match="Allocation matrix dimensions not consistent"):
+        Control(
+            "delta_v",
+            shape=(2,),
+            impulsive=True,
+            allocation_matrix=np.array([[0], [1]]),
+            impulsive_nodes=[1],
+        )
 
 
 def test_control_creation_with_kwargs():
