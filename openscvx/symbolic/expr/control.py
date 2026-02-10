@@ -91,10 +91,13 @@ class Control(Variable):
         else:
             self._impulsive_nodes = None
         ## TODO: (fabio) maybe this check could be moved to ''builder.py''
-        if impulsive == True:
+        if impulsive:
             if allocation_matrix.shape[1] != shape[0]:
                 raise ValueError(
-                    "Allocation matrix dimensions not consistent with control dimensions. Number of rows shall be equal to control dimension."
+                    (
+                        "Allocation matrix dimensions not consistent with control dimensions.",
+                        "Number of rows shall be equal to control dimension.",
+                    )
                 )
         self._allocation_matrix = allocation_matrix
 
@@ -183,7 +186,10 @@ class Control(Variable):
         val = np.repeat(val, self.shape)
         if val.shape != self.shape:
             raise ValueError(
-                f"Impulsive controls toggles shape {val.shape} does not match Control shape {self.shape}"
+                (
+                    f"Impulsive controls toggles shape {val.shape} ",
+                    f" does not match Control shape {self.shape}",
+                )
             )
         self._is_impulsive = val
 

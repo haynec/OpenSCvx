@@ -10,8 +10,8 @@ Tests are organized by node type, with each section containing:
 5. CVXPY lowering tests
 """
 
-import pytest
 import numpy as np
+import pytest
 
 # =============================================================================
 # Variable (Base Class)
@@ -362,7 +362,11 @@ def test_control_creation():
     c = Control("thrust", shape=(2,))
     assert c.name == "thrust"
     assert c.shape == (2,)
-    assert repr(c) == "Control('thrust', shape=(2,), impulsive=[False False], allocation_matrix=None, impulsive_nodes=None)"
+    expected = (
+        "Control('thrust', shape=(2,), impulsive=[False False], "
+        "allocation_matrix=None, impulsive_nodes=None)"
+    )
+    assert repr(c) == expected
     assert c._min is None
     assert c._max is None
     assert c._guess is None

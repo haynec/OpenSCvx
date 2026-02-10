@@ -463,8 +463,8 @@ class PenalizedTrustRegion(Algorithm):
             Tuple containing solution data, costs, and timing information.
         """
         param_dict = params
-    
-        idx_impulsive_controls  = settings.sim.u.is_impulsive
+
+        idx_impulsive_controls = settings.sim.u.is_impulsive
         idx_continuous_controls = ~settings.sim.u.is_impulsive
 
         D_d = None
@@ -473,11 +473,12 @@ class PenalizedTrustRegion(Algorithm):
         if has_u_d:
             D_d_base = settings.sim.u.allocation_matrix
             D_d = np.vstack((D_d_base, np.zeros((2, D_d_base.shape[1]))))
-        
+
         # Update solver with dynamics linearization
         self._solver.update_dynamics_linearization(
             x_bar=state.x
-            - (np.vstack(
+            - (
+                np.vstack(
                     (
                         D_d @ state.u[0, idx_impulsive_controls],
                         np.zeros((state.x.shape[0] - 1, state.x.shape[1])),
@@ -491,7 +492,8 @@ class PenalizedTrustRegion(Algorithm):
             A_d=state.A_d(),
             B_d=state.B_d()[:, :, idx_continuous_controls],
             C_d=state.C_d()[:, :, idx_continuous_controls],
-            x_prop=state.x_prop() + (np.einsum("ij,nj->ni", D_d, state.u[1:, idx_impulsive_controls]) if has_u_d else 0),
+            x_prop=state.x_prop()
+            + (np.einsum("ij,nj->ni", D_d, state.u[1:, idx_impulsive_controls]) if has_u_d else 0),
         )
 
         # Build constraint linearization data

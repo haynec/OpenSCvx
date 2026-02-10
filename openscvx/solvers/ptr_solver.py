@@ -193,7 +193,8 @@ class PTRSolver(ConvexSolver):
 
         n_states = len(x_unified.max)
 
-        ## TODO: (fabio) this step works to convert vectors of booleas to slices, but the UnifiedControl class requires a single slice and does not accept list of slices
+        ## TODO: (fabio) this step works to convert vectors of booleas to slices,
+        # but the UnifiedControl class requires a single slice and does not accept list of slices
         mask = np.asarray(u_unified.is_impulsive, dtype=bool)
         has_impulsive = mask.size > 0 and np.any(mask)
 
@@ -215,7 +216,7 @@ class PTRSolver(ConvexSolver):
             slices_impulsive_true = [slice(0, 0)]
 
         # Flip mask vector
-        mask = mask == False
+        mask = ~mask
 
         # Find starts/ends of True blocks
         d = np.diff(mask.astype(np.int8))
@@ -629,7 +630,7 @@ class PTRSolver(ConvexSolver):
                 + B_d[i - 1] @ du_nonscaled[i - 1]
                 + C_d[i - 1] @ du_nonscaled[i]
                 + (D_d @ du_d_nonscaled[i] if has_u_d else 0)
-                + (A_d[i - 1] @ D_d @ du_d_nonscaled[i-1] if (has_u_d and i == 1) else 0)
+                + (A_d[i - 1] @ D_d @ du_d_nonscaled[i - 1] if (has_u_d and i == 1) else 0)
                 + x_prop[i - 1]
                 - c_x
             )
@@ -637,7 +638,8 @@ class PTRSolver(ConvexSolver):
             for i in range(1, settings.sim.n)
         ]  # Dynamics Constraint
 
-        ## TODO: (fabio) add a method in he unified control to retrieve the impuslvie and the continuous controls
+        ## TODO: (fabio) add a method in he unified control to
+        # retrieve the impuslvie and the continuous controls
 
         if has_u_d:
             mask = np.asarray(settings.sim.u.is_impulsive, dtype=bool)
@@ -657,7 +659,7 @@ class PTRSolver(ConvexSolver):
             slices_impulsive_true = [slice(s, e) for s, e in zip(starts, ends)]
 
             # Flip mask vector
-            mask = mask == False
+            mask = ~mask
 
             # Find starts/ends of True blocks
             d = np.diff(mask.astype(np.int8))

@@ -485,7 +485,7 @@ class UnifiedControl:
     scaling_min: Optional[np.ndarray] = None  # Scaling minimum bounds for unified control
     scaling_max: Optional[np.ndarray] = None  # Scaling maximum bounds for unified control
     is_impulsive: Optional[bool] = False  # Default toggle for 'impulsivity' of the unified control
-    allocation_matrix: Optional[np.ndarray] = None 
+    allocation_matrix: Optional[np.ndarray] = None
     impulsive_nodes: Optional[dict[str, list[int]]] = None
 
     def __post_init__(self):
@@ -654,7 +654,7 @@ class UnifiedControl:
                 self.is_impulsive = np.concatenate([self.is_impulsive, np.array([is_impulsive])])
             if self.allocation_matrix is not None:
                 self.allocation_matrix = np.hstack((self.allocation_matrix, allocation_matrix))
-        
+
             # Update dimensions
             self.shape = new_shape
             if not augmented:
@@ -710,7 +710,7 @@ class UnifiedControl:
             new_true_dim = max(0, min(stop, self._true_dim) - max(start, 0))
 
             # Retrieve allocation matrix
-            if np.any( self.is_impulsive ):
+            if np.any(self.is_impulsive):
                 new_allocation = self.allocation_matrix[idx]
             else:
                 new_allocation = None
@@ -724,7 +724,7 @@ class UnifiedControl:
                 _true_dim=new_true_dim,
                 _true_slice=slice(0, new_true_dim),
                 _augmented_slice=slice(new_true_dim, new_shape[0]),
-                allocation_matrix=new_allocation
+                allocation_matrix=new_allocation,
             )
         else:
             raise NotImplementedError("Only slice indexing is supported")

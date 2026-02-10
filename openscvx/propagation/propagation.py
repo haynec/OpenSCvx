@@ -214,7 +214,7 @@ def simulate_nonlinear_time(
     u_interp = np.stack([np.interp(t, t, u[:, i]) for i in range(u.shape[1])], axis=-1)
     bool_impulsive = settings.sim.u.is_impulsive
     D_d = None
-    has_u_d = np.any( settings.sim.u.is_impulsive )
+    has_u_d = np.any(settings.sim.u.is_impulsive)
     if has_u_d:
         D_d_base = settings.sim.u.allocation_matrix
         D_d = np.vstack((D_d_base, np.zeros((2, D_d_base.shape[1]))))
@@ -227,9 +227,9 @@ def simulate_nonlinear_time(
     out_idx = 0
 
     for k in range(n_segments):
-        controls_current    = u_interp[k][None, :]
-        controls_next       = u_interp[k + 1][None, :]
-        controls_imp        = u[k, bool_impulsive]
+        controls_current = u_interp[k][None, :]
+        controls_next = u_interp[k + 1][None, :]
+        controls_imp = u[k, bool_impulsive]
 
         # Mask for tau_vals in current segment
         mask = (tau_inds >= k) & (tau_inds < k + 1)

@@ -379,9 +379,7 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         control.scaling_min is not None or control.scaling_max is not None
         for control in sorted_controls
     )
-    has_any_impulsive = any(
-        control.is_impulsive is not None for control in sorted_controls
-    )
+    has_any_impulsive = any(control.is_impulsive is not None for control in sorted_controls)
 
     if has_any_scaling:
         # Build full scaling arrays
@@ -416,7 +414,6 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         allocation_matrix_list = []
         impulsive_nodes = {}
         for control in sorted_controls:
-
             if np.all(control.is_impulsive):
                 is_impulsive_list.append(control.is_impulsive)
                 if control.allocation_matrix is None:

@@ -447,7 +447,8 @@ def lower_cvxpy_constraints(
             Typically the x_nonscaled list from create_cvxpy_variables().
         u_cvxpy: List of CVXPy expressions for continuous controls at each node (length N).
             Typically the u_nonscaled list from create_cvxpy_variables().
-        u_d_cvxpy: List of CVXPy expressions for discrete/impulsive controls at each node (length N).
+        u_d_cvxpy: List of CVXPy expressions for discrete/impulsive controls at each node
+                                                                                        (length N).
             Typically the u_d_nonscaled list from create_cvxpy_variables(). May be empty.
         parameters: Optional dict of parameter values to use for any Parameter
             expressions in the constraints. If None, uses Parameter default values.
