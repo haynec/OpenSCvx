@@ -609,7 +609,10 @@ def augment_dynamics_with_ctcs(
     for control in controls_augmented:
         if control.allocation_matrix is not None:
             # The +1 is for the time state
-            control.allocation_matrix = np.vstack((control.allocation_matrix, np.zeros((num_augmented_states + 1, control.allocation_matrix.shape[1]))))
+            control.allocation_matrix = np.vstack(
+                (control.allocation_matrix, 
+                np.zeros((num_augmented_states + 1, 
+                control.allocation_matrix.shape[1]))))
 
 
     return xdot_aug, states_augmented, controls_augmented
