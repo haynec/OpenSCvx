@@ -549,8 +549,8 @@ class PTRSolver(ConvexSolver):
 
         has_u_d = u_d is not None
         if has_u_d:
-            D_d_base = settings.sim.u.allocation_matrix
-            D_d = np.vstack((D_d_base, np.zeros((2, D_d_base.shape[1]))))
+            D_d = settings.sim.u.allocation_matrix
+
 
         constr = []
 

@@ -199,8 +199,7 @@ class Control(Variable):
 
     @allocation_matrix.setter
     def allocation_matrix(self, val):
-        if val.shape[1] != self.shape:
-            raise ValueError("Allocation matrix dimensions not consistent with control dimensions.")
+        # TODO @haynec find a better way to check shape including augmentation
         self._allocation_matrix = val
 
     @property

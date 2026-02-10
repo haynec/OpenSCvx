@@ -213,11 +213,10 @@ def simulate_nonlinear_time(
     # Precompute control interpolation
     u_interp = np.stack([np.interp(t, t, u[:, i]) for i in range(u.shape[1])], axis=-1)
     bool_impulsive = settings.sim.u.is_impulsive
-    D_d = None
+    
     has_u_d = np.any(settings.sim.u.is_impulsive)
     if has_u_d:
-        D_d_base = settings.sim.u.allocation_matrix
-        D_d = np.vstack((D_d_base, np.zeros((2, D_d_base.shape[1]))))
+        D_d = settings.sim.u.allocation_matrix
 
     # Bin tau_vals into segments of tau
     tau_inds = np.digitize(tau_vals, tau) - 1
