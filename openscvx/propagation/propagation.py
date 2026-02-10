@@ -213,7 +213,7 @@ def simulate_nonlinear_time(
     # Precompute control interpolation
     u_interp = np.stack([np.interp(t, t, u[:, i]) for i in range(u.shape[1])], axis=-1)
     bool_impulsive = settings.sim.u.is_impulsive
-    
+
     has_u_d = np.any(settings.sim.u.is_impulsive)
     if has_u_d:
         D_d = settings.sim.u.allocation_matrix

@@ -551,7 +551,6 @@ class PTRSolver(ConvexSolver):
         if has_u_d:
             D_d = settings.sim.u.allocation_matrix
 
-
         constr = []
 
         # Linearized nodal constraints (from JAX-lowered non-convex)
