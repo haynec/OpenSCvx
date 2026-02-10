@@ -41,7 +41,13 @@ v.initial = np.array([0.0])
 v.final = np.array([0.0])
 v.guess = np.linspace(v.initial, v.final, n).reshape(-1, 1)
 
-dv = ox.Control("delta_v", shape=(1,), impulsive=True, allocation_matrix=np.array([[0], [1]]))
+dv = ox.Control(
+    "delta_v",
+    shape=(1,),
+    impulsive=True,
+    allocation_matrix=np.array([[0], [1]]),
+    impulsive_nodes=[1, n - 1],
+)
 dv.max = np.array([1.0])
 dv.min = np.array([-1.0])
 dv.guess = np.linspace(np.array([0]), np.array([0]), n)
@@ -66,9 +72,6 @@ controls = [dv, a]
 constraints = []
 for state in states:
     constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
-for i in range(n):
-    if i != 1 and i != n - 1:
-        constraints.append((dv == 0.0).convex().at([i]))
 
 time = ox.Time(initial=0.0, final=ox.Minimize(10.0), min=0.0, max=20.0)
 
@@ -82,7 +85,7 @@ problem = Problem(
 )
 
 problem.algorithm.lam_prox = 1e-2  # Weight on the Trust Reigon
-problem.algorithm.lam_vc = 1e1  # Weight on the Trust Reigon
+problem.algorithm.lam_vc = 5e1  # Weight on the Trust Reigon
 problem.algorithm.lam_cost = 1e0  # Weight on the Minimal Time Objective
 problem.algorithm.k_max = 100
 
