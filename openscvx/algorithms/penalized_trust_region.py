@@ -476,13 +476,22 @@ class PenalizedTrustRegion(Algorithm):
         
         # Update solver with dynamics linearization
         self._solver.update_dynamics_linearization(
-            x_bar=state.x,
+            x_bar=state.x
+            - (np.vstack(
+                    (
+                        D_d @ state.u[0, idx_impulsive_controls],
+                        np.zeros((state.x.shape[0] - 1, state.x.shape[1])),
+                    )
+                )
+                if has_u_d
+                else 0
+            ),
             u_bar=state.u[:, idx_continuous_controls],
             u_d_bar=state.u[:, idx_impulsive_controls],
             A_d=state.A_d(),
             B_d=state.B_d()[:, :, idx_continuous_controls],
             C_d=state.C_d()[:, :, idx_continuous_controls],
-            x_prop=state.x_prop()+ (np.einsum("ij,nj->ni", D_d, state.u[1:, idx_impulsive_controls]) if has_u_d else 0),
+            x_prop=state.x_prop() + (np.einsum("ij,nj->ni", D_d, state.u[1:, idx_impulsive_controls]) if has_u_d else 0),
         )
 
         # Build constraint linearization data

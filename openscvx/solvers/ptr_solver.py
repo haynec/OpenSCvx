@@ -629,6 +629,7 @@ class PTRSolver(ConvexSolver):
                 + B_d[i - 1] @ du_nonscaled[i - 1]
                 + C_d[i - 1] @ du_nonscaled[i]
                 + (D_d @ du_d_nonscaled[i] if has_u_d else 0)
+                + (A_d[i - 1] @ D_d @ du_d_nonscaled[i-1] if (has_u_d and i == 1) else 0)
                 + x_prop[i - 1]
                 - c_x
             )
