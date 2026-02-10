@@ -1,13 +1,11 @@
-"""Brachistochrone problem: finding the fastest descent path.
+"""Impulsive control example with mixed continuous/impulsive inputs.
 
-This classic calculus of variations problem finds the curve of fastest descent
-between two points under gravity. The solution demonstrates time-optimal
-trajectory generation with:
+This example demonstrates a simple 1D position/velocity system with:
 
-- 2D position dynamics
-- Speed dynamics under gravitational acceleration
-- Angle control subject to bounds
-- Minimal time objective
+- Continuous acceleration control
+- Impulsive delta-v control applied only at selected nodes
+- Time-dilation for minimum-time objective
+- CTCS bounds on states
 """
 
 import os

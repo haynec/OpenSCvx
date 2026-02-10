@@ -35,6 +35,14 @@ def _is_impulsive_control(result: OptimizationResults, control_name: str) -> boo
         return bool(is_imp)
 
 
+def _has_impulsive_controls(result: OptimizationResults) -> bool:
+    """Return True if any control is marked as impulsive."""
+    for control in result._controls:
+        if _is_impulsive_control(result, control.name):
+            return True
+    return False
+
+
 def _add_component_traces(
     fig: go.Figure,
     result: OptimizationResults,
@@ -47,6 +55,7 @@ def _add_component_traces(
     max_val: float | None = None,
     impulsive: bool = False,
     plot_trajectory: bool = True,
+    split_nodes: bool = False,
 ):
     """Add traces for a single component of a variable to a subplot.
 
@@ -89,19 +98,48 @@ def _add_component_traces(
     if var_name in result.nodes:
         data = result.nodes[var_name]
         y = data if data.ndim == 1 else data[:, component_idx]
-        fig.add_trace(
-            go.Scatter(
-                x=t_nodes,
-                y=y,
-                mode="markers",
-                name="Nodes",
-                showlegend=show_legend,
-                legendgroup="nodes",
-                marker={"color": "cyan", "size": 6, "symbol": "circle"},
-            ),
-            row=row,
-            col=col,
-        )
+        if split_nodes and len(t_nodes) > 0:
+            fig.add_trace(
+                go.Scatter(
+                    x=t_nodes[:1],
+                    y=y[:1],
+                    mode="markers",
+                    name="Prior state",
+                    showlegend=show_legend,
+                    legendgroup="nodes_prior",
+                    marker={"color": "#D98B8B", "size": 7, "symbol": "diamond"},
+                ),
+                row=row,
+                col=col,
+            )
+            if len(t_nodes) > 1:
+                fig.add_trace(
+                    go.Scatter(
+                        x=t_nodes[1:],
+                        y=y[1:],
+                        mode="markers",
+                        name="Posterior state",
+                        showlegend=show_legend,
+                        legendgroup="nodes_posterior",
+                        marker={"color": "cyan", "size": 6, "symbol": "circle"},
+                    ),
+                    row=row,
+                    col=col,
+                )
+        else:
+            fig.add_trace(
+                go.Scatter(
+                    x=t_nodes,
+                    y=y,
+                    mode="markers",
+                    name="Nodes",
+                    showlegend=show_legend,
+                    legendgroup="nodes",
+                    marker={"color": "cyan", "size": 6, "symbol": "circle"},
+                ),
+                row=row,
+                col=col,
+            )
 
         if impulsive:
             x_imp = []
@@ -202,15 +240,36 @@ def plot_state_component(
     if state_name in result.nodes:
         data = result.nodes[state_name]
         y = data if data.ndim == 1 else data[:, component]
-        fig.add_trace(
-            go.Scatter(
-                x=t_nodes,
-                y=y,
-                mode="markers",
-                name="Nodes",
-                marker={"color": "cyan", "size": 6},
+        if _has_impulsive_controls(result) and len(t_nodes) > 0:
+            fig.add_trace(
+                go.Scatter(
+                    x=t_nodes[:1],
+                    y=y[:1],
+                    mode="markers",
+                    name="Prior state",
+                    marker={"color": "#D98B8B", "size": 7, "symbol": "diamond"},
+                )
             )
-        )
+            if len(t_nodes) > 1:
+                fig.add_trace(
+                    go.Scatter(
+                        x=t_nodes[1:],
+                        y=y[1:],
+                        mode="markers",
+                        name="Posterior state",
+                        marker={"color": "cyan", "size": 6, "symbol": "circle"},
+                    )
+                )
+        else:
+            fig.add_trace(
+                go.Scatter(
+                    x=t_nodes,
+                    y=y,
+                    mode="markers",
+                    name="Nodes",
+                    marker={"color": "cyan", "size": 6},
+                )
+            )
 
     fig.update_xaxes(title_text="Time (s)")
     fig.update_yaxes(title_text=label)
@@ -278,6 +337,8 @@ def plot_states(
     fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[c[0] for c in components])
     fig.update_layout(title_text="State Trajectories", template="plotly_dark")
 
+    has_impulsive_controls = _has_impulsive_controls(result)
+
     for idx, (_, var_name, comp_idx) in enumerate(components):
         row = (idx // n_cols) + 1
         col = (idx % n_cols) + 1
@@ -296,6 +357,7 @@ def plot_states(
             show_legend=(idx == 0),
             min_val=min_val,
             max_val=max_val,
+            split_nodes=has_impulsive_controls,
         )
 
     # Add x-axis labels to bottom row
