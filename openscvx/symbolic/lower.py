@@ -200,6 +200,38 @@ def _tile_sparsity_2d(mask_1d: np.ndarray, K: int):
     )
 
 
+def _augment_impulsive_constraints(
+    constraints: ConstraintSet,
+    controls: list,
+    n_nodes: int,
+) -> None:
+    if not controls:
+        return
+    added = []
+    for control in controls:
+        is_imp = getattr(control, "is_impulsive", False)
+        is_impulsive = bool(is_imp.any()) if hasattr(is_imp, "any") else bool(is_imp)
+        if not is_impulsive:
+            continue
+        impulse_nodes = getattr(control, "impulsive_nodes", None)
+        if impulse_nodes is None:
+            allowed = set()
+        else:
+            allowed = {int(idx) for idx in impulse_nodes}
+        for idx in allowed:
+            if idx < 0 or idx >= n_nodes:
+                raise ValueError(
+                    f"Impulsive node index {idx} for control '{control.name}' "
+                    f"is out of range [0, {n_nodes})"
+                )
+        nodes = [i for i in range(n_nodes) if i not in allowed]
+        if not nodes:
+            continue
+        added.append((control == 0.0).convex().at(nodes))
+    if added:
+        constraints.nodal_convex.extend(added)
+
+
 def create_cvxpy_variables(
     N: int,
     n_states: int,
@@ -491,7 +523,7 @@ def lower_cvxpy_constraints(
         state_vars = {}
         control_vars = {}
         control_vars_discrete = {}
-        
+
         def collect_vars(expr):
             if isinstance(expr, State):
                 state_vars[expr.name] = expr
@@ -833,6 +865,8 @@ def lower_symbolic_problem(
         dynamics_sparsity=dynamics_sparsity,
         constraint_sparsity=constraint_sparsity,
     )
+
+    _augment_impulsive_constraints(problem.constraints, problem.controls, problem.N)
 
     # Lower convex constraints using solver's variables
     lowered_cvxpy_constraint_list, cvxpy_params = lower_cvxpy_constraints(
