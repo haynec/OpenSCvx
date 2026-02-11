@@ -14,6 +14,11 @@ import pytest
 
 IGNORED_FILES = ["__init__.py", "plotting.py"]
 
+# Examples excluded from CI (e.g. exceeds runner memory)
+EXCLUDED_EXAMPLES = {
+    "drone/logo.py",
+}
+
 # Timing bounds for specific examples (in seconds)
 # Format: "relative/path/to/example.py": {"init": max_init, "solve": max_solve, "post": max_post}
 TIMING_BOUNDS = {
@@ -66,6 +71,11 @@ def discover_examples():
 
         # Get relative path for naming
         rel_path = py_file.relative_to(examples_dir)
+
+        # Skip explicitly excluded examples
+        if str(rel_path) in EXCLUDED_EXAMPLES:
+            continue
+
         module_name = str(rel_path.with_suffix("")).replace("/", ".")
 
         try:
