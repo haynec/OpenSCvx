@@ -16,6 +16,8 @@
 <!-- PROJECT LOGO -->
 <br />
 
+OpenSCvx is a general python-based successive convexification implementation which uses a JAX backend.
+
 <!-- GETTING STARTED -->
 ## Getting Started
 
