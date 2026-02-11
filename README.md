@@ -18,173 +18,98 @@
 
 OpenSCvx is a general python-based successive convexification implementation which uses a JAX backend.
 
-<!-- GETTING STARTED -->
-## Getting Started
+## Installation
 
-### Installation
+OpenSCvx is available on [PyPI](https://pypi.org/project/openscvx/) and can be trivially installed with pip.
 
-<details>
-<summary>Stable</summary>
+It is recommended to install OpenSCvx inside a virtual environment (venv, conda, uv, *etc.*). If you don't already have one set up:
 
-To grab the latest stable release simply run
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
 
-```sh
+### Using pip
+
+```bash
 pip install openscvx
 ```
 
-to install OpenSCVx in your python environment.
+> [!TIP]
+> **Optional Dependencies**
+>
+> For GUI support or CVXPYGen code generation:
+> ```bash
+> pip install openscvx[gui,cvxpygen]
+> ```
 
-Or using uv:
+> [!TIP]
+> **Nightly Builds**
+>
+> To install the latest development version (nightly), use the `--pre` flag:
+> ```bash
+> pip install --pre openscvx
+> ```
 
-```sh
+### Using uv
+
+If you have [uv installed](https://docs.astral.sh/uv/getting-started/installation/) you can prefix the commands with `uv` for faster installation:
+
+```bash
 uv pip install openscvx
 ```
 
-For optional dependencies:
+## Installing From Source
 
-```sh
-pip install openscvx[gui,cvxpygen]
-# or with uv
-uv pip install openscvx[gui,cvxpygen]
-```
-</details>
+### Using pip
 
-<details>
-<summary>Nightly</summary>
-
-To install the latest development version (nightly):
-
-```sh
-pip install --pre openscvx
-```
-
-With optional dependencies:
-
-```sh
-pip install --pre openscvx[gui,cvxpygen]
-```
-
-Or using uv:
-
-```sh
-uv pip install --pre openscvx
-# With optional dependencies
-uv pip install --pre openscvx[gui,cvxpygen]
-```
-
-**Note:** The `--pre` flag tells pip/uv to install pre-release versions (e.g., `1.2.4.dev3`) from PyPI.
-
-Alternatively, for local development with the latest source:
-
-```sh
-# Clone the repo
+```bash
 git clone https://github.com/OpenSCvx/OpenSCvx.git
 cd OpenSCvx
 
-# Install in editable/development mode
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
-# or with uv
+```
+
+### Using uv
+
+```bash
+git clone https://github.com/OpenSCvx/OpenSCvx.git
+cd OpenSCvx
+
+uv venv
+source .venv/bin/activate
 uv pip install -e .
 ```
 
-</details>
+## Getting Started
 
-### Local Development
+Check out the OpenSCvx documentation to help you get started
 
-This git repository can be installed using https
+- [Getting Started Docs](https://openscvx.github.io/OpenSCvx/latest/getting-started/)
+- [Users Guide](https://openscvx.github.io/OpenSCvx/latest/UsersGuide/00_introduction/)
+- [API Reference](https://openscvx.github.io/OpenSCvx/latest/Reference/problem/)
 
-```sh
-git clone https://github.com/OpenSCvx/OpenSCvx.git
-```
+### Running the Examples
 
-or ssh
+We also have a selection of problems in the `examples/` folder as well as on the [Examples page](https://openscvx.github.io/OpenSCvx/latest/Examples/abstract/brachistochrone/) of the documentation. The example trajectory optimization problems are grouped by application and represent some of the problem types that can be solved by OpenSCvx.
 
-```sh
-git clone git@github.com:OpenSCvx/OpenSCvx.git
-```
+> [!Note]
+> To run the examples, you'll need to clone this repository and install OpenSCvx in editable mode (`pip install -e .`). See the [Installing From Source](#installing-from-source) section above for detailed installation instructions.
 
-Dependencies can then be installed using Conda or Pip
-
-<details>
-<summary>Via Conda</summary>
-
-1. Clone the repo using https or ssh
-2. Create a conda environment with Python:
-   ```sh
-   conda create -n openscvx python>=3.9
-   ```
-3. Activate the environment:
-   ```sh
-   conda activate openscvx
-   ```
-4. Install the package with dependencies:
-   ```sh
-   pip install -e .
-   ```
-
-   Or install with optional dependencies:
-   ```sh
-   pip install -e ".[gui,cvxpygen]"
-   ```
-</details>
-
-<details>
-<summary>Via uv</summary>
-
-1. Prerequisites
-   - Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-2. Clone the repo using https or ssh
-3. Create virtual environment and install the package:
-   ```sh
-   uv venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   uv pip install -e .
-   ```
-
-   Or install with optional dependencies:
-   ```sh
-   uv pip install -e ".[gui,cvxpygen]"
-   ```
-</details>
-
-<details>
-<summary>Via pip</summary>
-
-1. Prerequisites
-   Python >= 3.9
-2. Clone the repo using https or ssh
-3. Create virtual environment (called `venv` here) and source it
-   ```sh
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-4. Install the package with dependencies:
-   ```sh
-   pip install -e .
-   ```
-
-   Or install with optional dependencies:
-   ```sh
-   pip install -e ".[gui,cvxpygen]"
-   ```
-</details>
-
-### Running Trajectory Optimization
-
-See `examples/` folder for several example trajectory optimization problems grouped by application.
 To run a problem simply run any of the examples directly, for example:
 
 ```sh
 python3 examples/abstract/brachistochrone.py
 ```
 
-> **Note:** To run the examples, you'll need to clone this repository and install OpenSCvx in editable mode (`pip install -e .`). See the [Local Development](#local-development) section above for detailed installation instructions.
-
 and adjust the plotting as needed.
 
 Check out the problem definitions inside `examples/` to see how to define your own problems.
 
 ## Code Structure
+
 <img src="figures/oscvx_structure_full_dark.svg" width="1200"/>
 
 ## What is implemented
