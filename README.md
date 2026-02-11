@@ -25,7 +25,7 @@ OpenSCvx provides a clean symbolic interface for problem definition which should
 
 OpenSCvx makes heavy use of [JAX](https://github.com/jax-ml/jax) to efficiently perform calculations in the successive convex programming loop through automatic differentiation, ahead-of-time (AOT) compilation, vectorization, and GPU acceleration. Behind this is a [CVXPY](https://github.com/cvxpy/cvxpy/)-based backend to solve the convex subproblems.
 
-This is a research project and is under active development. Try it out, let us know what you think, and help contribute.
+This is an open project and is under active development. Try it out, give us feedback, and help contribute.
 
 ```python
 import openscvx as ox
