@@ -1,6 +1,7 @@
-import numpy as np
 import jax.numpy as jnp
-from svgpathtools import svg2paths, svg2paths2
+import numpy as np
+from svgpathtools import svg2paths2
+
 
 def print_svg_path_attributes(svg_file_path):
     """
@@ -9,6 +10,7 @@ def print_svg_path_attributes(svg_file_path):
     paths, attributes, svg_attr = svg2paths2(svg_file_path)
     for i, attr in enumerate(attributes):
         print(f"Path {i}: {attr}")
+
 
 def extract_svg_path(svg_file_path, n_points=2000, flip_y=True, path_indices=None):
     """
@@ -39,11 +41,14 @@ def extract_svg_path(svg_file_path, n_points=2000, flip_y=True, path_indices=Non
     sampled_points = all_points[idxs]
     # Convert to JAX array for JAX-compatible indexing
     sampled_points_jax = jnp.array(sampled_points)
+
     def path_function(t):
         t = jnp.clip(t, 0, 1)
         idx = jnp.clip(jnp.floor(t * (n_points - 1)), 0, n_points - 1).astype(int)
         return sampled_points_jax[idx]
+
     return path_function
 
+
 def get_svg_path_function(svg_file_path, path_indices=None):
-    return extract_svg_path(svg_file_path, n_points=2000, flip_y=True, path_indices=path_indices) 
+    return extract_svg_path(svg_file_path, n_points=2000, flip_y=True, path_indices=path_indices)

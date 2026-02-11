@@ -1,11 +1,12 @@
 """6-DOF quadrotor tracing out the Autonomous Controls Laboratory Logo
 
-This example demonstrates trajectory planning for a quadrotor tracing out the Autonomous Controls Laboratory Logo. The problem includes:
+This example demonstrates trajectory planning for a quadrotor tracing out the Autonomous Controls
+Laboratory Logo. The problem includes:
 
 - 6-DOF rigid body dynamics (position, velocity, attitude quaternion, angular velocity)
-- Utilizes the BYOF framework to model the angle between the boresight vector and the vector to the target.
+- Utilizes the BYOF framework to model the angle between the boresight vector and the vector to the
+    target.
 """
-
 
 import os
 import sys
@@ -19,12 +20,12 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 import openscvx as ox
-from openscvx import ByofSpec, Free, Minimize, Problem
 from examples.plotting_viser import create_animated_plotting_server
+from openscvx import ByofSpec, Free, Minimize, Problem
 
 # Prompt the user to instal svgpathtools if not already installed via pip
 try:
-    import svgpathtools
+    import svgpathtools  # noqa: F401
 except ImportError:
     print("svgpathtools not found. Please install it with: pip install svgpathtools")
     sys.exit(1)
@@ -36,12 +37,15 @@ from examples.drone.logo_utils.svg_path_utils import get_svg_path_function
 # -----------------------------------------------------------------------------
 
 # Load the SVG path function, using only Path 0 (the logo, no border)
-svg_path_function = get_svg_path_function("examples/drone/logo_utils/acl_logo.svg", path_indices=[0])
+svg_path_function = get_svg_path_function(
+    "examples/drone/logo_utils/acl_logo.svg", path_indices=[0]
+)
 
 
 # -----------------------------------------------------------------------------
 # JAX helpers (numeric versions of spatial utilities)
 # -----------------------------------------------------------------------------
+
 
 def qdcm(q: jnp.ndarray) -> jnp.ndarray:
     """Quaternion to DCM using [w, x, y, z] convention."""
@@ -145,7 +149,9 @@ boresight_body = jnp.array([1.0, 0.0, 0.0])
 
 def get_kp_pose(t_normalized):
     """
-    Get the target position along the SVG path at normalized time t, applying rotations about y and x axes.
+    Get the target position along the SVG path at normalized time t, applying rotations about y and
+    x axes.
+
     Args:
         t_normalized: Normalized time in [0, 1] (scalar or array)
     Returns:
@@ -159,20 +165,12 @@ def get_kp_pose(t_normalized):
     theta_y = jnp.pi / 2
     cos_y = jnp.cos(theta_y)
     sin_y = jnp.sin(theta_y)
-    R_y = jnp.array([
-        [cos_y, 0, sin_y],
-        [0, 1, 0],
-        [-sin_y, 0, cos_y]
-    ])
+    R_y = jnp.array([[cos_y, 0, sin_y], [0, 1, 0], [-sin_y, 0, cos_y]])
 
     theta_x = jnp.pi / 2
     cos_x = jnp.cos(theta_x)
     sin_x = jnp.sin(theta_x)
-    R_x = jnp.array([
-        [1, 0, 0],
-        [0, cos_x, -sin_x],
-        [0, sin_x, cos_x]
-    ])
+    R_x = jnp.array([[1, 0, 0], [0, cos_x, -sin_x], [0, sin_x, cos_x]])
 
     rotated_pos = R_x @ (R_y @ scaled_pos)
     return rotated_pos + path_offset
@@ -181,6 +179,7 @@ def get_kp_pose(t_normalized):
 # -----------------------------------------------------------------------------
 # BYOF: angle_metric derivative (uses get_kp_pose, not easily symbolic)
 # -----------------------------------------------------------------------------
+
 
 def angle_to_target_components(pos: jnp.ndarray, att: jnp.ndarray, t_val: float) -> jnp.ndarray:
     """Compute angle between boresight and vector to target from position, attitude, and time."""
@@ -192,11 +191,12 @@ def angle_to_target_components(pos: jnp.ndarray, att: jnp.ndarray, t_val: float)
 
     to_target_norm = jnp.linalg.norm(to_target_inertial)
     boresight_norm = jnp.linalg.norm(boresight_inertial)
-    
+
     lhs = jnp.dot(to_target_inertial, boresight_inertial) / (to_target_norm * boresight_norm)
 
     angle = jnp.arccos(lhs)
     return angle
+
 
 def dynamics_angle_metric(x, u, node, params):
     """BYOF dynamics for angle_metric: derivative = time-weighted angle to target."""
@@ -240,7 +240,11 @@ import examples.plotting
 
 def patched_full_subject_traj_time(results, params):
     t_full = results.t_full
-    t_nodes = results.nodes["time"].flatten() if "time" in results.nodes else np.linspace(0, total_time, n)
+    t_nodes = (
+        results.nodes["time"].flatten()
+        if "time" in results.nodes
+        else np.linspace(0, total_time, n)
+    )
 
     subs_traj = []
     subs_traj_node = []
@@ -426,7 +430,13 @@ if __name__ == "__main__":
     results["logo_plane_point"] = plane_point
     results["logo_plane_normal"] = plane_normal
 
-    from openscvx.plotting import plot_states, plot_controls, plot_virtual_control_heatmap, plot_trust_region_heatmap
+    from openscvx.plotting import (
+        plot_controls,
+        plot_states,
+        plot_trust_region_heatmap,
+        plot_virtual_control_heatmap,
+    )
+
     plot_states(results).show()
     plot_controls(results).show()
     plot_virtual_control_heatmap(results).show()
