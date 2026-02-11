@@ -16,7 +16,61 @@
 <!-- PROJECT LOGO -->
 <br />
 
+## What is OpenSCvx
+
 OpenSCvx is a general python-based successive convexification implementation which uses a JAX backend.
+It is designed to be easy to use for anyone and fast enough for everyone, all while being open and modular for contributors.
+
+OpenSCvx provides a clean symbolic interface for problem definition which should be intuitive to users of NumPy, JAX, and CVXPY. This allows us to hide a lot of the under-the-hood magic away from the user while also providing a modular architecture, enabling contributors to focus on the algorithms without worrying about interface design.
+
+OpenSCvx makes heavy use of [JAX](https://github.com/jax-ml/jax) to efficiently perform calculations in the successive convex programming loop through automatic differentiation, ahead-of-time (AOT) compilation, vectorization, and GPU acceleration. Behind this is a [CVXPY](https://github.com/cvxpy/cvxpy/)-based backend to solve the convex subproblems.
+
+This is a research project and is under active development. Try it out, let us know what you think, and help contribute.
+
+```python
+import openscvx as ox
+
+g = 9.81
+
+# Define states
+position = ox.State("position", shape=(2,))
+position.min = [0.0, 0.0]
+position.max = [10.0, 10.0]
+position.initial = [0.0, 10.0]
+position.final = [10.0, 5.0]
+
+velocity = ox.State("velocity", shape=(1,))
+velocity.min = [0.0]
+velocity.max = [10.0]
+velocity.initial = [0.0]
+
+# Define control (angle from vertical)
+theta = ox.Control("theta", shape=(1,))
+theta.min = [0.0]
+theta.max = [1.755]
+theta.guess = [[0.09], [1.755]]
+
+# Define dynamics
+dynamics = {
+    "position": ox.Concat(
+        velocity[0] * ox.Sin(theta[0]),
+        -velocity[0] * ox.Cos(theta[0]),
+    ),
+    "velocity": g * ox.Cos(theta[0]),
+}
+
+# Build and solve
+problem = ox.Problem(
+    dynamics=dynamics,
+    states=[position, velocity],
+    controls=[theta],
+    time=ox.Time(initial=0.0, final=ox.Minimize(2.0), min=0.0, max=2.0),
+    N=2,
+)
+problem.initialize()
+results = problem.solve()
+results = problem.post_process()
+```
 
 ## Installation
 
@@ -35,6 +89,14 @@ source .venv/bin/activate
 pip install openscvx
 ```
 
+### Using uv
+
+If you have [uv installed](https://docs.astral.sh/uv/getting-started/installation/) you can prefix the commands with `uv` for faster installation:
+
+```bash
+uv pip install openscvx
+```
+
 > [!TIP]
 > **Optional Dependencies**
 >
@@ -50,14 +112,6 @@ pip install openscvx
 > ```bash
 > pip install --pre openscvx
 > ```
-
-### Using uv
-
-If you have [uv installed](https://docs.astral.sh/uv/getting-started/installation/) you can prefix the commands with `uv` for faster installation:
-
-```bash
-uv pip install openscvx
-```
 
 ## Installing From Source
 
