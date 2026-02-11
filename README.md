@@ -43,6 +43,7 @@ velocity = ox.State("velocity", shape=(1,))
 velocity.min = [0.0]
 velocity.max = [10.0]
 velocity.initial = [0.0]
+velocity.final = [ox.Free(10.0)]
 
 # Define control (angle from vertical)
 theta = ox.Control("theta", shape=(1,))
@@ -53,20 +54,28 @@ theta.guess = [[0.09], [1.755]]
 # Define dynamics
 dynamics = {
     "position": ox.Concat(
-        velocity[0] * ox.Sin(theta[0]),
-        -velocity[0] * ox.Cos(theta[0]),
+        velocity * ox.Sin(theta),
+        -velocity * ox.Cos(theta),
     ),
-    "velocity": g * ox.Cos(theta[0]),
+    "velocity": g * ox.Cos(theta),
 }
+
+constraints = []
+for state in [position, velocity]:
+    constraints.append(ox.ctcs(state <= state.max))
+    constraints.append(ox.ctcs(state.min <= state))
 
 # Build and solve
 problem = ox.Problem(
     dynamics=dynamics,
+    constraints=constraints,
     states=[position, velocity],
     controls=[theta],
     time=ox.Time(initial=0.0, final=ox.Minimize(2.0), min=0.0, max=2.0),
     N=2,
 )
+
+
 problem.initialize()
 results = problem.solve()
 results = problem.post_process()
