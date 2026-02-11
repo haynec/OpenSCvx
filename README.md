@@ -87,60 +87,6 @@ uv pip install -e .
 
 </details>
 
-### Dependencies
-
-The main packages are:
-
-- `cvxpy` - is used to formulate and solve the convex subproblems
-- `jax` - is used for determining the Jacobians using automatic differentiation, vectorization, and ahead-of-time (AOT) compilation of the dynamics and their Jacobians 
-- `numpy` - is used for numerical operations
-- `diffrax` - is used for the numerical integration of the dynamics
-- `termcolor` - is used for pretty command line output
-- `plotly` - is used for all visualizations
-
-These will be installed automatically, but can be installed via conda or pip if you are building from source.
-
-#### GUI Dependencies (Optional)
-
-For interactive 3D plotting and real-time visualization, additional packages are required:
-
-- `pyqtgraph` - is used for interactive 3D plotting and real-time visualization
-- `PyQt5` - provides the Qt5 GUI framework for pyqtgraph
-- `scipy` - is used for spatial transformations in plotting functions
-- `PyOpenGL` - provides OpenGL bindings for Python, required for 3D plotting
-- `PyOpenGL_accelerate` - (optional) speeds up PyOpenGL
-
-
-For local development:
-
-```sh
-pip install -e ".[gui]"
-```
-
-#### CVXPYGen Dependencies (Optional)
-
-For code generation and faster solver performance, CVXPYGen can be installed:
-
-- `cvxpygen` - enables code generation for faster solver performance
-- `qocogen` - custom solver backend for CVXPYGen (included with cvxpygen extras)
-
-To install with CVXPYGen support:
-
-```sh
-pip install openscvx[cvxpygen]
-```
-
-Or for both GUI and CVXPYGen:
-
-```sh
-pip install openscvx[gui,cvxpygen]
-```
-
-CVXPYGen features include:
-- Automatic C++ code generation for optimization problems
-- Faster solver performance through compiled code
-- Support for custom solver backends like QOCOGen
-
 ### Local Development
 
 This git repository can be installed using https
