@@ -44,6 +44,12 @@ class Discretizer(ABC):
     - The callable is invoked with a reference trajectory and parameters,
       returning discretized matrices (A_d, B_d, C_d, x_prop)
 
+    !!! tip "Configuration"
+        Discretization settings (tolerances, integrator choice, interpolation
+        type, etc.) are currently accessed via ``settings.dis.*`` which is
+        passed to ``get_solver()``. In the future, these may become class
+        attributes on individual ``Discretizer`` subclasses instead.
+
     Example:
         Implementing a custom discretizer::
 

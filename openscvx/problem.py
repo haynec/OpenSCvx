@@ -40,7 +40,7 @@ from openscvx.config import (
     ScpConfig,
     SimConfig,
 )
-from openscvx.discretization import MultiShootDiscretizer
+from openscvx.discretization import LinearizeDiscretize
 from openscvx.expert import ByofSpec
 from openscvx.lowered import LoweredProblem, ParameterDict
 from openscvx.lowered.dynamics import Dynamics
@@ -243,7 +243,7 @@ class Problem:
         self.timing_post = None
 
         # Discretizer (handles linearization + discretization)
-        self._discretizer = MultiShootDiscretizer()
+        self._discretizer = LinearizeDiscretize()
 
         # Compiled dynamics (vmapped versions, set in initialize())
         self._compiled_dynamics_prop: Optional[Dynamics] = None

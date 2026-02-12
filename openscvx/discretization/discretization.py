@@ -235,12 +235,13 @@ def calculate_discretization(
     return A_bar, B_bar, C_bar, x_prop, Vmulti
 
 
-class MultiShootDiscretizer(Discretizer):
+class LinearizeDiscretize(Discretizer):
     """Linearize-then-discretize via augmented ODE integration.
 
     Computes continuous-time Jacobians (df/dx, df/du) via JAX forward-mode
     autodiff, then integrates them alongside the nonlinear dynamics through
-    an augmented state vector to produce discrete-time matrices.
+    an augmented state vector using a multi-shooting approach to produce
+    discrete-time matrices.
 
     Supports ZOH (zero-order hold) and FOH (first-order hold) control
     interpolation between nodes, configurable via ``settings.dis.dis_type``.
@@ -287,7 +288,7 @@ def get_discretization_solver(dyn: Dynamics, settings: Config) -> callable:
     """Create a discretization solver function.
 
     .. deprecated::
-        Use :class:`MultiShootDiscretizer` instead. This function is kept
+        Use :class:`LinearizeDiscretize` instead. This function is kept
         for backward compatibility.
 
     Args:

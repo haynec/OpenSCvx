@@ -11,14 +11,14 @@ intermediate types, but the input (continuous nonlinear dynamics + reference
 trajectory) and output (discrete-time linear matrices A_d, B_d, C_d) are
 always consistent.
 
-The default implementation is :class:`MultiShootDiscretizer`, which computes
+The default implementation is :class:`LinearizeDiscretize`, which computes
 continuous-time Jacobians via JAX autodiff and integrates them alongside the
 nonlinear dynamics through an augmented state vector.
 """
 
 from .base import Discretizer
 from .discretization import (
-    MultiShootDiscretizer,
+    LinearizeDiscretize,
     calculate_discretization,
     dVdt,
     get_discretization_solver,
@@ -26,7 +26,7 @@ from .discretization import (
 
 __all__ = [
     "Discretizer",
-    "MultiShootDiscretizer",
+    "LinearizeDiscretize",
     "calculate_discretization",
     "get_discretization_solver",
     "dVdt",
