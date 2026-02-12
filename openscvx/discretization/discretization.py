@@ -30,33 +30,48 @@ def _dVdt(
     inv_S_u: np.ndarray,
     params: dict,
 ) -> jnp.ndarray:
-    """Compute the time derivative of the augmented state vector.
+    """Time derivative of the augmented state vector for variational integration.
 
-    This function computes the time derivative of the augmented state vector V,
-    which includes the state, state transition matrix, and control influence matrix.
+    The augmented state ``V`` packs four blocks per segment:
+
+    - ``V[0:n_x]``          — state x
+    - ``V[n_x:n_x+n_x²]``  — state transition matrix Φ (flattened)
+    - ``V[...:+n_x·n_u]``   — control influence B_d for current node (flattened)
+    - ``V[...:+n_x·n_u]``   — control influence C_d for next node (flattened)
+
+    Their derivatives follow from the variational equations:
+
+    - ``dx/dτ     = s · f(x, u)``
+    - ``dΦ/dτ     = s · A(x, u) · Φ``
+    - ``dB_d/dτ   = s · A(x, u) · B_d  +  α · s · B(x, u)``
+    - ``dC_d/dτ   = s · A(x, u) · C_d  +  β · s · B(x, u)``
+
+    where ``s`` is the time-dilation factor (last column of ``u``),
+    ``A = ∂f/∂x``, ``B = ∂f/∂u``, and ``α, β`` are interpolation weights
+    determined by the hold type (ZOH: α=1, β=0; FOH: linear blend).
 
     Args:
-        tau (float): Current normalized time in [0,1].
-        V (jnp.ndarray): Augmented state vector.
-        u_cur (np.ndarray): Control input at current node.
-        u_next (np.ndarray): Control input at next node.
-        state_dot (callable): Function computing state derivatives.
-        A (callable): Function computing state Jacobian.
-        B (callable): Function computing control Jacobian.
-        n_x (int): Number of states.
-        n_u (int): Number of controls.
-        N (int): Number of nodes in trajectory.
-        dis_type (str): Discretization type ("ZOH" or "FOH").
-        S_x: State scaling matrix.
-        c_x: State offset vector.
-        S_u: Control scaling matrix.
-        c_u: Control offset vector.
-        inv_S_x: Inverse state scaling matrix.
-        inv_S_u: Inverse control scaling matrix.
-        params: Additional parameters passed to state_dot, A, and B.
+        tau: Normalized time in [0, 1] within the current segment.
+        V: Flattened augmented state vector, shape ``((N-1) * aug_dim,)``.
+        u_cur: Control at current node, shape ``(N-1, n_u+1)``.
+        u_next: Control at next node, shape ``(N-1, n_u+1)``.
+        state_dot: Vmapped dynamics ``f(x, u, node, params) -> x_dot``.
+        A: Vmapped state Jacobian ``∂f/∂x(x, u, node, params)``.
+        B: Vmapped control Jacobian ``∂f/∂u(x, u, node, params)``.
+        n_x: Number of states.
+        n_u: Number of controls (excluding time-dilation slack).
+        N: Number of trajectory nodes.
+        dis_type: ``"ZOH"`` (zero-order hold) or ``"FOH"`` (first-order hold).
+        S_x: State scaling matrix (unused, reserved for future scaling).
+        c_x: State offset vector (unused, reserved for future scaling).
+        S_u: Control scaling matrix (unused, reserved for future scaling).
+        c_u: Control offset vector (unused, reserved for future scaling).
+        inv_S_x: Inverse state scaling matrix (unused, reserved for future scaling).
+        inv_S_u: Inverse control scaling matrix (unused, reserved for future scaling).
+        params: Parameters forwarded to ``state_dot``, ``A``, and ``B``.
 
     Returns:
-        jnp.ndarray: Time derivative of augmented state vector.
+        Flattened time derivative of the augmented state, same shape as ``V``.
     """
 
     # TODO Implement scaling of V vector
@@ -135,28 +150,31 @@ def _calculate_discretization(
     settings: Config,
     params: dict,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-    """Calculate the discretized system matrices.
+    """Integrate the augmented variational equations to produce discrete-time matrices.
 
-    This function computes the discretized system matrices (A_bar, B_bar, C_bar)
-    and defect vector (z_bar) using numerical integration.
+    Initializes the augmented state vector (state + identity Φ + zero B_d/C_d)
+    at each segment, then integrates ``_dVdt`` from node k to node k+1 using the
+    configured ODE solver. The final values of the augmented state yield the
+    discretized linearization matrices.
 
     Args:
-        x: State trajectory.
-        u: Control trajectory.
-        state_dot (callable): Function computing state derivatives.
-        A (callable): Function computing state Jacobian.
-        B (callable): Function computing control Jacobian.
-        settings: Configuration settings for OpenSCvx.
-        params: Additional parameters passed to state_dot, A, and B.
+        x: Reference state trajectory, shape ``(N, n_x)``.
+        u: Reference control trajectory, shape ``(N, n_u+1)`` (includes
+            time-dilation slack as last column).
+        state_dot: Vmapped dynamics ``f(x, u, node, params) -> x_dot``.
+        A: Vmapped state Jacobian ``∂f/∂x``.
+        B: Vmapped control Jacobian ``∂f/∂u``.
+        settings: Configuration (integrator choice, tolerances, hold type, etc.).
+        params: Parameters forwarded to ``state_dot``, ``A``, and ``B``.
 
     Returns:
-        tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
-            (A_bar, B_bar, C_bar, x_prop, Vmulti) where:
-            - A_bar: Discretized state transition matrix
-            - B_bar: Discretized control influence matrix
-            - C_bar: Discretized control influence matrix for next node
-            - x_prop: Propagated state
-            - Vmulti: Full augmented state trajectory
+        Tuple ``(A_d, B_d, C_d, x_prop, V)`` where:
+
+        - ``A_d``: ``(N-1, n_x, n_x)`` discretized state transition matrix
+        - ``B_d``: ``(N-1, n_x, n_u)`` control influence (current node)
+        - ``C_d``: ``(N-1, n_x, n_u)`` control influence (next node)
+        - ``x_prop``: ``(N-1, n_x)`` nonlinearly propagated state
+        - ``V``: full augmented state trajectory from the integrator
     """
     # Unpack settings
     n_x = settings.sim.n_states
