@@ -3,7 +3,8 @@ import jax.numpy as jnp
 import pytest
 from jax import export
 
-from openscvx.discretization import dVdt, get_discretization_solver
+from openscvx.discretization import LinearizeDiscretize
+from openscvx.discretization.discretization import _dVdt
 
 # --- fixtures for dummy params, state_dot, A, B  ------------------
 
@@ -56,16 +57,10 @@ def B(x, u, node, params):
     return jnp.broadcast_to(ones, (batch, 2, 1))
 
 
-class Dynamics:
-    pass
-
-
 @pytest.fixture
 def dynamics():
     d = Dummy()
     d.f = state_dot
-    d.A = A
-    d.B = B
     return d
 
 
@@ -73,8 +68,9 @@ def dynamics():
 
 
 def test_discretization_shapes(settings, dynamics):
-    # build solver
-    solver = get_discretization_solver(dynamics, settings)
+    # build solver via LinearizeDiscretize
+    discretizer = LinearizeDiscretize()
+    solver = discretizer.get_solver(dynamics, settings)
 
     # dummy x,u
     x = jnp.ones((settings.scp.n, settings.sim.n_states))
@@ -105,7 +101,7 @@ def test_jit_dVdt_compiles(settings):
 
     # bind out the Python callables & settings
     def wrapped(tau_, V_):
-        return dVdt(
+        return _dVdt(
             tau_,
             V_,
             u_cur,
@@ -141,8 +137,9 @@ def test_jit_discretization_solver_compiles(settings, dynamics, integrator):
     elif integrator == "diffrax":
         settings.dis.custom_integrator = False
 
-    # build the solver (captures only hashable primitives)
-    solver = get_discretization_solver(dynamics, settings)
+    # build the solver via LinearizeDiscretize
+    discretizer = LinearizeDiscretize()
+    solver = discretizer.get_solver(dynamics, settings)
 
     # dummy x,u (including slack column)
     x = jnp.ones((settings.scp.n, settings.sim.n_states))

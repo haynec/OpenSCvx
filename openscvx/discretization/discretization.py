@@ -8,7 +8,7 @@ from openscvx.integrators import solve_ivp_diffrax, solve_ivp_rk45
 from openscvx.lowered import Dynamics
 
 
-def dVdt(
+def _dVdt(
     tau: float,
     V: jnp.ndarray,
     u_cur: np.ndarray,
@@ -124,7 +124,7 @@ def dVdt(
     return dVdt.reshape(-1)
 
 
-def calculate_discretization(
+def _calculate_discretization(
     x: np.ndarray,
     u: np.ndarray,
     state_dot: callable,
@@ -199,7 +199,7 @@ def calculate_discretization(
 
     # Define dVdt wrapper using named arguments
     def dVdt_wrapped(t, y):
-        return dVdt(t, y, **integrator_args)
+        return _dVdt(t, y, **integrator_args)
 
     # Choose integrator
     if settings.dis.custom_integrator:
@@ -273,7 +273,7 @@ class LinearizeDiscretize(Discretizer):
         A_vmapped = jax.vmap(A_fn, in_axes=(0, 0, 0, None))
         B_vmapped = jax.vmap(B_fn, in_axes=(0, 0, 0, None))
 
-        return lambda x, u, params: calculate_discretization(
+        return lambda x, u, params: _calculate_discretization(
             x=x,
             u=u,
             state_dot=f_vmapped,
@@ -282,28 +282,3 @@ class LinearizeDiscretize(Discretizer):
             settings=settings,
             params=params,
         )
-
-
-def get_discretization_solver(dyn: Dynamics, settings: Config) -> callable:
-    """Create a discretization solver function.
-
-    .. deprecated::
-        Use :class:`LinearizeDiscretize` instead. This function is kept
-        for backward compatibility.
-
-    Args:
-        dyn (Dynamics): System dynamics object (must have f, A, B).
-        settings (Config): Configuration settings for discretization.
-
-    Returns:
-        callable: A function that computes the discretized system matrices.
-    """
-    return lambda x, u, params: calculate_discretization(
-        x=x,
-        u=u,
-        state_dot=dyn.f,
-        A=dyn.A,
-        B=dyn.B,
-        settings=settings,
-        params=params,
-    )
