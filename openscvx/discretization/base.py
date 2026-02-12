@@ -98,7 +98,7 @@ class Discretizer(ABC):
             - ``V``: raw integration data (implementation-specific, used for
                 diagnostics and history tracking)
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def citation(self) -> List[str]:
@@ -110,4 +110,4 @@ class Discretizer(ABC):
         Returns:
             List of BibTeX citation strings.
         """
-        ...
+        raise NotImplementedError

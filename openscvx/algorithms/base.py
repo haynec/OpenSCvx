@@ -418,7 +418,7 @@ class Algorithm(ABC):
             params: Problem parameters dictionary (for warm-start only)
             settings: Configuration object (for warm-start only)
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def step(
@@ -443,7 +443,7 @@ class Algorithm(ABC):
         Returns:
             True if convergence criteria are satisfied, False otherwise.
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def citation(self) -> List[str]:
@@ -462,4 +462,4 @@ class Algorithm(ABC):
                 for bibtex in algorithm.citation():
                     print(bibtex)
         """
-        ...
+        raise NotImplementedError

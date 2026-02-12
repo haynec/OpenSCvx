@@ -110,7 +110,7 @@ class ConvexSolver(ABC):
             u_unified: Unified control interface with dimensions and scaling bounds
             jax_constraints: Lowered JAX constraints (for sizing linearization params)
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def initialize(
@@ -134,7 +134,7 @@ class ConvexSolver(ABC):
                 - ``x_unified``, ``u_unified``: State/control interfaces
             settings: Configuration object with solver settings
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def update_dynamics_linearization(self, **kwargs) -> None:
@@ -146,7 +146,7 @@ class ConvexSolver(ABC):
         The specific parameters depend on the solver implementation.
         See concrete solver classes for expected arguments.
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def update_constraint_linearizations(self, **kwargs) -> None:
@@ -158,7 +158,7 @@ class ConvexSolver(ABC):
         The specific parameters depend on the solver implementation.
         See concrete solver classes for expected arguments.
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def update_penalties(self, **kwargs) -> None:
@@ -170,7 +170,7 @@ class ConvexSolver(ABC):
         The specific parameters depend on the solver implementation.
         See concrete solver classes for expected arguments.
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def update_boundary_conditions(self, **kwargs) -> None:
@@ -182,7 +182,7 @@ class ConvexSolver(ABC):
         The specific parameters depend on the solver implementation.
         See concrete solver classes for expected arguments.
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def get_stats(self) -> dict:
@@ -194,7 +194,7 @@ class ConvexSolver(ABC):
                 - ``n_parameters``: Total number of parameters
                 - ``n_constraints``: Total number of constraints
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def solve(self) -> Any:
@@ -206,7 +206,7 @@ class ConvexSolver(ABC):
         Returns:
             Solver-specific result object (e.g., ``PTRSolveResult`` for PTR).
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def citation(self) -> List[str]:
@@ -218,4 +218,4 @@ class ConvexSolver(ABC):
         Returns:
             List of BibTeX citation strings.
         """
-        ...
+        raise NotImplementedError
