@@ -169,7 +169,15 @@
          <lastmod>2026-02-12</lastmod>
     </url>
     <url>
-         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/autotuning/</loc>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/AugmentedLagrangian/</loc>
+         <lastmod>2026-02-12</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/ConstantProximalWeight/</loc>
+         <lastmod>2026-02-12</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/RampProximalWeight/</loc>
          <lastmod>2026-02-12</lastmod>
     </url>
     <url>
@@ -189,7 +197,11 @@
          <lastmod>2026-02-12</lastmod>
     </url>
     <url>
-         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/discretization/discretization/</loc>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/discretization/base/</loc>
+         <lastmod>2026-02-12</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/discretization/linearize_discretize/</loc>
          <lastmod>2026-02-12</lastmod>
     </url>
     <url>
