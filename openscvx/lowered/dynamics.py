@@ -27,6 +27,12 @@ class Dynamics:
             Jacobian of ``f`` w.r.t. ``x``.
         B (Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]]):
             Jacobian of ``f`` w.r.t. ``u``.
+
+    !!! note
+        The ``A`` and ``B`` fields are kept for convenience but may be
+        deprecated in the future. Jacobian computation is now handled by
+        the :class:`~openscvx.discretization.base.Discretizer`, so these
+        fields are no longer set during lowering or used internally.
     """
 
     f: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]

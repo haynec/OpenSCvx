@@ -304,7 +304,7 @@ class LinearizeDiscretize(Discretizer):
         )
 
     def citation(self) -> List[str]:
-        """Return BibTeX citations for the linearize-then-discretize algorithm.
+        """Return BibTeX citations for the linearize-then-discretize discretization method.
 
         Returns:
             List containing the BibTeX entries

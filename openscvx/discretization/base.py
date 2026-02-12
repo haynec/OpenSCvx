@@ -96,10 +96,11 @@ class Discretizer(ABC):
             - ``C_d``: (N-1, n_x, n_u) control influence matrix (next node)
             - ``x_prop``: (N-1, n_x) propagated state
             - ``V``: raw integration data (implementation-specific, used for
-              diagnostics and history tracking)
+                diagnostics and history tracking)
         """
         ...
 
+    @abstractmethod
     def citation(self) -> List[str]:
         """Return BibTeX citations for this discretization method.
 
@@ -109,4 +110,4 @@ class Discretizer(ABC):
         Returns:
             List of BibTeX citation strings.
         """
-        return []
+        ...
