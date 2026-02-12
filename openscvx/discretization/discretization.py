@@ -1,7 +1,9 @@
+import jax
 import jax.numpy as jnp
 import numpy as np
 
 from openscvx.config import Config
+from openscvx.discretization.base import Discretizer
 from openscvx.integrators import solve_ivp_diffrax, solve_ivp_rk45
 from openscvx.lowered import Dynamics
 
@@ -233,14 +235,63 @@ def calculate_discretization(
     return A_bar, B_bar, C_bar, x_prop, Vmulti
 
 
+class MultiShootDiscretizer(Discretizer):
+    """Linearize-then-discretize via augmented ODE integration.
+
+    Computes continuous-time Jacobians (df/dx, df/du) via JAX forward-mode
+    autodiff, then integrates them alongside the nonlinear dynamics through
+    an augmented state vector to produce discrete-time matrices.
+
+    Supports ZOH (zero-order hold) and FOH (first-order hold) control
+    interpolation between nodes, configurable via ``settings.dis.dis_type``.
+
+    This is the default discretization scheme in OpenSCvx.
+    """
+
+    def get_solver(self, dynamics: Dynamics, settings: Config) -> callable:
+        """Create a multi-shoot discretization solver.
+
+        Computes Jacobians of ``dynamics.f`` via ``jax.jacfwd``, vmaps all
+        functions for batch evaluation across nodes, and returns a callable
+        that integrates the augmented variational equations.
+
+        Args:
+            dynamics: System dynamics. Only ``dynamics.f`` is used; Jacobians
+                are computed internally via JAX autodiff.
+            settings: Problem configuration.
+
+        Returns:
+            Callable ``(x, u, params) -> (A_d, B_d, C_d, x_prop, V)``.
+        """
+        # Compute continuous-time Jacobians from dynamics.f
+        A_fn = jax.jacfwd(dynamics.f, argnums=0)
+        B_fn = jax.jacfwd(dynamics.f, argnums=1)
+
+        # Vmap for batch evaluation across nodes
+        f_vmapped = jax.vmap(dynamics.f, in_axes=(0, 0, 0, None))
+        A_vmapped = jax.vmap(A_fn, in_axes=(0, 0, 0, None))
+        B_vmapped = jax.vmap(B_fn, in_axes=(0, 0, 0, None))
+
+        return lambda x, u, params: calculate_discretization(
+            x=x,
+            u=u,
+            state_dot=f_vmapped,
+            A=A_vmapped,
+            B=B_vmapped,
+            settings=settings,
+            params=params,
+        )
+
+
 def get_discretization_solver(dyn: Dynamics, settings: Config) -> callable:
     """Create a discretization solver function.
 
-    This function creates a solver that computes the discretized system matrices
-    using the specified dynamics and settings.
+    .. deprecated::
+        Use :class:`MultiShootDiscretizer` instead. This function is kept
+        for backward compatibility.
 
     Args:
-        dyn (Dynamics): System dynamics object.
+        dyn (Dynamics): System dynamics object (must have f, A, B).
         settings (Config): Configuration settings for discretization.
 
     Returns:
@@ -253,5 +304,5 @@ def get_discretization_solver(dyn: Dynamics, settings: Config) -> callable:
         A=dyn.A,
         B=dyn.B,
         settings=settings,
-        params=params,  # Pass as single dict
+        params=params,
     )
