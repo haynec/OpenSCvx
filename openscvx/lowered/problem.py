@@ -44,7 +44,6 @@ class LoweredProblem:
 
             # Access components
             dx_dt = lowered.dynamics.f(x, u, node, params)
-            jacobian_A = lowered.dynamics.A(x, u, node, params)
 
             # Solver owns CVXPy variables
             ocp_vars = solver.ocp_vars

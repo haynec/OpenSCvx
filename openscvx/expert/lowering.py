@@ -109,22 +109,15 @@ def apply_byof(
             return composite_f
 
         # Create composite optimization dynamics
+        # Jacobians are computed by the discretizer, not here.
         composite_f = _make_composite_dynamics(dynamics.f, byof_dynamics, state_slices)
-        dynamics = Dynamics(
-            f=composite_f,
-            A=jacfwd(composite_f, argnums=0),
-            B=jacfwd(composite_f, argnums=1),
-        )
+        dynamics = Dynamics(f=composite_f)
 
         # Create composite propagation dynamics
         composite_f_prop = _make_composite_dynamics(
             dynamics_prop.f, byof_dynamics, state_slices_prop
         )
-        dynamics_prop = Dynamics(
-            f=composite_f_prop,
-            A=jacfwd(composite_f_prop, argnums=0),
-            B=jacfwd(composite_f_prop, argnums=1),
-        )
+        dynamics_prop = Dynamics(f=composite_f_prop)
 
     # Handle nodal constraints
     # Note: Validation happens earlier in Problem.__init__ via validate_byof
@@ -311,13 +304,9 @@ def apply_byof(
                 return modified_f
 
             # Modify both optimization and propagation dynamics
+            # Jacobians are computed by the discretizer, not here.
             dynamics.f = _make_ctcs_addition(dynamics.f, penalty_fns, aug_slice)
-            dynamics.A = jacfwd(dynamics.f, argnums=0)
-            dynamics.B = jacfwd(dynamics.f, argnums=1)
-
             dynamics_prop.f = _make_ctcs_addition(dynamics_prop.f, penalty_fns, aug_slice)
-            dynamics_prop.A = jacfwd(dynamics_prop.f, argnums=0)
-            dynamics_prop.B = jacfwd(dynamics_prop.f, argnums=1)
 
         else:
             # New idx - create new augmented state
@@ -349,20 +338,13 @@ def apply_byof(
                 return augmented_f
 
             # Augment optimization dynamics
+            # Jacobians are computed by the discretizer, not here.
             aug_f = _make_ctcs_new_state(dynamics.f, penalty_fns)
-            dynamics = Dynamics(
-                f=aug_f,
-                A=jacfwd(aug_f, argnums=0),
-                B=jacfwd(aug_f, argnums=1),
-            )
+            dynamics = Dynamics(f=aug_f)
 
             # Augment propagation dynamics
             aug_f_prop = _make_ctcs_new_state(dynamics_prop.f, penalty_fns)
-            dynamics_prop = Dynamics(
-                f=aug_f_prop,
-                A=jacfwd(aug_f_prop, argnums=0),
-                B=jacfwd(aug_f_prop, argnums=1),
-            )
+            dynamics_prop = Dynamics(f=aug_f_prop)
 
             # Create State objects for the new augmented states
             # This is necessary for CVXPy variable creation and other bookkeeping

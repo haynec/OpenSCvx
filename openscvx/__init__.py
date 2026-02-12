@@ -10,7 +10,7 @@ import openscvx.symbolic.expr.lie as lie
 import openscvx.symbolic.expr.linalg as linalg
 import openscvx.symbolic.expr.spatial as spatial
 import openscvx.symbolic.expr.stl as stl
-from openscvx.algorithms.autotuning import (
+from openscvx.algorithms import (
     AugmentedLagrangian,
     ConstantProximalWeight,
     RampProximalWeight,

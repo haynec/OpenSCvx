@@ -21,14 +21,15 @@ from openscvx.utils.printing import (
     color_prob_stat,
 )
 
-from .autotuning import ConstantProximalWeight, RampProximalWeight
 from .base import Algorithm, AlgorithmState, CandidateIterate
+from .ConstantProximalWeight import ConstantProximalWeight
+from .RampProximalWeight import RampProximalWeight
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
     from openscvx.solvers import ConvexSolver
 
-    from .autotuning import AutotuningBase
+    from .base import AutotuningBase
 
 warnings.filterwarnings("ignore")
 

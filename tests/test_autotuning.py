@@ -1,15 +1,17 @@
-"""Unit tests for autotuning functions in openscvx.algorithms.autotuning."""
+"""Unit tests for autotuning functions in openscvx.algorithms."""
 
 import numpy as np
 import pytest
 
-from openscvx.algorithms.autotuning import (
-    AugmentedLagrangian,
+from openscvx.algorithms.AugmentedLagrangian import AugmentedLagrangian
+from openscvx.algorithms.base import (
+    AlgorithmState,
     AutotuningBase,
-    ConstantProximalWeight,
-    RampProximalWeight,
+    CandidateIterate,
+    DiscretizationResult,
 )
-from openscvx.algorithms.base import AlgorithmState, CandidateIterate, DiscretizationResult
+from openscvx.algorithms.ConstantProximalWeight import ConstantProximalWeight
+from openscvx.algorithms.RampProximalWeight import RampProximalWeight
 from openscvx.config import (
     Config,
     ConvexSolverConfig,
@@ -428,6 +430,10 @@ def test_update_scp_weights_initial_iteration(settings, algorithm_state, empty_n
     assert algorithm_state.lam_prox_history[-1] == algorithm_state.lam_prox
     # Should accept solution
     assert len(algorithm_state.X) == initial_x_len + 1  # Original + accepted candidate
+
+    # Should set initial weights
+    assert candidate.lam_vc is not None
+    assert candidate.lam_vb == settings.scp.lam_vb
 
 
 def test_update_scp_weights_reject_higher(settings, algorithm_state, empty_nodal_constraints):

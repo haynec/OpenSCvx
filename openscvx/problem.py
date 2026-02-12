@@ -40,7 +40,7 @@ from openscvx.config import (
     ScpConfig,
     SimConfig,
 )
-from openscvx.discretization import get_discretization_solver
+from openscvx.discretization import LinearizeDiscretize
 from openscvx.expert import ByofSpec
 from openscvx.lowered import LoweredProblem, ParameterDict
 from openscvx.lowered.dynamics import Dynamics
@@ -242,8 +242,10 @@ class Problem:
         self.timing_solve = None
         self.timing_post = None
 
+        # Discretizer (handles linearization + discretization)
+        self._discretizer = LinearizeDiscretize()
+
         # Compiled dynamics (vmapped versions, set in initialize())
-        self._compiled_dynamics: Optional[Dynamics] = None
         self._compiled_dynamics_prop: Optional[Dynamics] = None
 
         # Compiled constraints (JIT-compiled versions, set in initialize())
@@ -533,14 +535,8 @@ class Problem:
         self.settings.scp.__post_init__()
         self.settings.sim.__post_init__()
 
-        # Create compiled (vmapped) dynamics as new instances
+        # Create compiled (vmapped) propagation dynamics
         # This preserves the original un-vmapped versions in _lowered
-        self._compiled_dynamics = Dynamics(
-            f=jax.vmap(self._lowered.dynamics.f, in_axes=(0, 0, 0, None)),
-            A=jax.vmap(self._lowered.dynamics.A, in_axes=(0, 0, 0, None)),
-            B=jax.vmap(self._lowered.dynamics.B, in_axes=(0, 0, 0, None)),
-        )
-
         self._compiled_dynamics_prop = Dynamics(
             f=jax.vmap(self._lowered.dynamics_prop.f, in_axes=(0, 0, 0, None)),
         )
@@ -573,9 +569,9 @@ class Problem:
             ctcs=self._lowered.jax_constraints.ctcs,  # CTCS aren't JIT-compiled here
         )
 
-        # Generate solvers using compiled (vmapped) dynamics
-        self._discretization_solver = get_discretization_solver(
-            self._compiled_dynamics, self.settings
+        # Generate discretization solver via the discretizer (handles Jacobians + vmapping)
+        self._discretization_solver = self._discretizer.get_solver(
+            self._lowered.dynamics, self.settings
         )
         self._propagation_solver = get_propagation_solver(
             self._compiled_dynamics_prop.f, self.settings
@@ -695,7 +691,7 @@ class Problem:
                     problem.reset()  # Syncs guesses and boundary conditions
                     result = problem.solve()
         """
-        if self._compiled_dynamics is None:
+        if self._compiled_dynamics_prop is None:
             raise ValueError("Problem has not been initialized. Call initialize() first")
 
         # Sync guesses from State/Control objects (must happen before AlgorithmState creation)
@@ -770,7 +766,7 @@ class Problem:
         self._sync_boundary_conditions()
 
         required = [
-            self._compiled_dynamics,
+            self._compiled_dynamics_prop,
             self._compiled_constraints,
             self._solver,
             self._discretization_solver,
@@ -894,7 +890,13 @@ class Problem:
             citations = "\n".join(solver_citations)
             sections.append(f"{header}\n\n{citations}")
 
-        # Future: add citations from discretization, constraint formulations, etc.
+        # Discretization citations
+        dis_citations = self._discretizer.citation()
+        if dis_citations:
+            dis_name = type(self._discretizer).__name__
+            header = f"% Discretization: {dis_name}"
+            citations = "\n".join(dis_citations)
+            sections.append(f"{header}\n\n{citations}")
 
         sections.append(r"% --- END AUTO-GENERATED CITATIONS")
 
