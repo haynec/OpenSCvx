@@ -10,6 +10,75 @@ from openscvx.integrators import solve_ivp_diffrax, solve_ivp_rk45
 from openscvx.lowered import Dynamics
 
 
+class LinearizeDiscretize(Discretizer):
+    """Linearize-then-discretize via augmented ODE integration.
+
+    Computes continuous-time Jacobians (df/dx, df/du) via JAX forward-mode
+    autodiff, then integrates them alongside the nonlinear dynamics through
+    an augmented state vector using a multi-shooting approach to produce
+    discrete-time matrices.
+
+    Supports ZOH (zero-order hold) and FOH (first-order hold) control
+    interpolation between nodes, configurable via ``settings.dis.dis_type``.
+
+    This is the default discretization scheme in OpenSCvx.
+    """
+
+    def get_solver(self, dynamics: Dynamics, settings: Config) -> callable:
+        """Create a multi-shoot discretization solver.
+
+        Computes Jacobians of ``dynamics.f`` via ``jax.jacfwd``, vmaps all
+        functions for batch evaluation across nodes, and returns a callable
+        that integrates the augmented variational equations.
+
+        Args:
+            dynamics: System dynamics. Only ``dynamics.f`` is used; Jacobians
+                are computed internally via JAX autodiff.
+            settings: Problem configuration.
+
+        Returns:
+            Callable ``(x, u, params) -> (A_d, B_d, C_d, x_prop, V)``.
+        """
+        # Compute continuous-time Jacobians from dynamics.f
+        A_fn = jax.jacfwd(dynamics.f, argnums=0)
+        B_fn = jax.jacfwd(dynamics.f, argnums=1)
+
+        # Vmap for batch evaluation across nodes
+        f_vmapped = jax.vmap(dynamics.f, in_axes=(0, 0, 0, None))
+        A_vmapped = jax.vmap(A_fn, in_axes=(0, 0, 0, None))
+        B_vmapped = jax.vmap(B_fn, in_axes=(0, 0, 0, None))
+
+        return lambda x, u, params: _calculate_discretization(
+            x=x,
+            u=u,
+            state_dot=f_vmapped,
+            A=A_vmapped,
+            B=B_vmapped,
+            settings=settings,
+            params=params,
+        )
+
+    def citation(self) -> List[str]:
+        """Return BibTeX citations for the linearize-then-discretize discretization method.
+
+        Returns:
+            List containing the BibTeX entries
+        """
+        return [
+            r"""@article{kamath2023real,
+  title={Real-time sequential conic optimization for multi-phase rocket landing guidance},
+  author={Kamath, Abhinav G and Elango, Purnanand and Yu, Yue and Mceowen, Skye and Chari, Govind M
+    and Carson III, John M and A{\c{c}}{\i}kme{\c{s}}e, Beh{\c{c}}et},
+  journal={IFAC-PapersOnLine},
+  volume={56},
+  number={2},
+  pages={3118--3125},
+  year={2023},
+  publisher={Elsevier}
+}""",
+        ]
+
+
 def _dVdt(
     tau: float,
     V: jnp.ndarray,
@@ -253,72 +322,3 @@ def _calculate_discretization(
     C_bar = Vend[:, i3:i4].reshape(N - 1, n_x, n_u)
 
     return A_bar, B_bar, C_bar, x_prop, Vmulti
-
-
-class LinearizeDiscretize(Discretizer):
-    """Linearize-then-discretize via augmented ODE integration.
-
-    Computes continuous-time Jacobians (df/dx, df/du) via JAX forward-mode
-    autodiff, then integrates them alongside the nonlinear dynamics through
-    an augmented state vector using a multi-shooting approach to produce
-    discrete-time matrices.
-
-    Supports ZOH (zero-order hold) and FOH (first-order hold) control
-    interpolation between nodes, configurable via ``settings.dis.dis_type``.
-
-    This is the default discretization scheme in OpenSCvx.
-    """
-
-    def get_solver(self, dynamics: Dynamics, settings: Config) -> callable:
-        """Create a multi-shoot discretization solver.
-
-        Computes Jacobians of ``dynamics.f`` via ``jax.jacfwd``, vmaps all
-        functions for batch evaluation across nodes, and returns a callable
-        that integrates the augmented variational equations.
-
-        Args:
-            dynamics: System dynamics. Only ``dynamics.f`` is used; Jacobians
-                are computed internally via JAX autodiff.
-            settings: Problem configuration.
-
-        Returns:
-            Callable ``(x, u, params) -> (A_d, B_d, C_d, x_prop, V)``.
-        """
-        # Compute continuous-time Jacobians from dynamics.f
-        A_fn = jax.jacfwd(dynamics.f, argnums=0)
-        B_fn = jax.jacfwd(dynamics.f, argnums=1)
-
-        # Vmap for batch evaluation across nodes
-        f_vmapped = jax.vmap(dynamics.f, in_axes=(0, 0, 0, None))
-        A_vmapped = jax.vmap(A_fn, in_axes=(0, 0, 0, None))
-        B_vmapped = jax.vmap(B_fn, in_axes=(0, 0, 0, None))
-
-        return lambda x, u, params: _calculate_discretization(
-            x=x,
-            u=u,
-            state_dot=f_vmapped,
-            A=A_vmapped,
-            B=B_vmapped,
-            settings=settings,
-            params=params,
-        )
-
-    def citation(self) -> List[str]:
-        """Return BibTeX citations for the linearize-then-discretize discretization method.
-
-        Returns:
-            List containing the BibTeX entries
-        """
-        return [
-            r"""@article{kamath2023real,
-  title={Real-time sequential conic optimization for multi-phase rocket landing guidance},
-  author={Kamath, Abhinav G and Elango, Purnanand and Yu, Yue and Mceowen, Skye and Chari, Govind M
-    and Carson III, John M and A{\c{c}}{\i}kme{\c{s}}e, Beh{\c{c}}et},
-  journal={IFAC-PapersOnLine},
-  volume={56},
-  number={2},
-  pages={3118--3125},
-  year={2023},
-  publisher={Elsevier}
-}""",
-        ]
