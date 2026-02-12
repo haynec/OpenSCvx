@@ -17,7 +17,7 @@ nonlinear dynamics through an augmented state vector.
 """
 
 from .base import Discretizer
-from .discretization import LinearizeDiscretize
+from .linearize_discretize import LinearizeDiscretize
 
 __all__ = [
     "Discretizer",

@@ -4,7 +4,7 @@ import pytest
 from jax import export
 
 from openscvx.discretization import LinearizeDiscretize
-from openscvx.discretization.discretization import _dVdt
+from openscvx.discretization.linearize_discretize import _dVdt
 
 # --- fixtures for dummy params, state_dot, A, B  ------------------
 
