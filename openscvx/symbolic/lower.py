@@ -477,23 +477,19 @@ def lower_cvxpy_constraints(
 
 
 def _lower_dynamics(dynamics_expr) -> Dynamics:
-    """Lower symbolic dynamics to JAX function with Jacobians.
+    """Lower symbolic dynamics to a JAX function.
 
-    Converts a symbolic dynamics expression to a JAX function and computes
-    Jacobians via automatic differentiation.
+    Converts a symbolic dynamics expression to a JAX function. Jacobians
+    (df/dx, df/du) are computed by the discretizer, not here.
 
     Args:
         dynamics_expr: Symbolic dynamics expression (dx/dt = f(x, u))
 
     Returns:
-        Dynamics object with f, A (df/dx), B (df/du)
+        Dynamics object with f.
     """
     dyn_fn = lower_to_jax(dynamics_expr)
-    return Dynamics(
-        f=dyn_fn,
-        A=jacfwd(dyn_fn, argnums=0),  # df/dx
-        B=jacfwd(dyn_fn, argnums=1),  # df/du
-    )
+    return Dynamics(f=dyn_fn)
 
 
 def _lower_jax_constraints(
