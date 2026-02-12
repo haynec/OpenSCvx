@@ -2,7 +2,7 @@ from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
 if TYPE_CHECKING:
-    from openscvx.algorithms.autotuning import AutotuningBase
+    from openscvx.algorithms.base import AutotuningBase
 
 import numpy as np
 
@@ -376,11 +376,9 @@ def _resolve_autotuner(val: Any) -> Any:
             )
 
     if not _AUTOTUNER_MAP:
-        from openscvx.algorithms.autotuning import (
-            AugmentedLagrangian,
-            ConstantProximalWeight,
-            RampProximalWeight,
-        )
+        from openscvx.algorithms.AugmentedLagrangian import AugmentedLagrangian
+        from openscvx.algorithms.ConstantProximalWeight import ConstantProximalWeight
+        from openscvx.algorithms.RampProximalWeight import RampProximalWeight
 
         for cls in (AugmentedLagrangian, ConstantProximalWeight, RampProximalWeight):
             _AUTOTUNER_MAP[cls.__name__] = cls
@@ -489,7 +487,7 @@ class ScpConfig:
             # Local import avoids circular dependency:
             # - autotuning imports Config
             # - Config should not eagerly import autotuning at module import time
-            from openscvx.algorithms.autotuning import AugmentedLagrangian
+            from openscvx.algorithms.AugmentedLagrangian import AugmentedLagrangian
 
             self._autotuner = AugmentedLagrangian()
         return self._autotuner

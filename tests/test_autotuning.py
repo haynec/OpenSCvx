@@ -1,14 +1,12 @@
-"""Unit tests for autotuning functions in openscvx.algorithms.autotuning."""
+"""Unit tests for autotuning functions in openscvx.algorithms."""
 
 import numpy as np
 import pytest
 
-from openscvx.algorithms.autotuning import (
-    AugmentedLagrangian,
-    AutotuningBase,
-    ConstantProximalWeight,
-    RampProximalWeight,
-)
+from openscvx.algorithms.AugmentedLagrangian import AugmentedLagrangian
+from openscvx.algorithms.base import AutotuningBase
+from openscvx.algorithms.ConstantProximalWeight import ConstantProximalWeight
+from openscvx.algorithms.RampProximalWeight import RampProximalWeight
 from openscvx.algorithms.base import AlgorithmState, CandidateIterate, DiscretizationResult
 from openscvx.config import (
     Config,

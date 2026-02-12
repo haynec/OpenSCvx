@@ -7,7 +7,7 @@ during SCP iterations.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -16,6 +16,9 @@ if TYPE_CHECKING:
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
     from openscvx.solvers import ConvexSolver
 
+from openscvx.utils.printing import (
+    Column,
+)
 
 @dataclass
 class CandidateIterate:
@@ -62,6 +65,140 @@ class DiscretizationResult:
             C_d=V_final[:, i3:i4].reshape(N - 1, n_x, n_u),
         )
 
+
+class AutotuningBase(ABC):
+    """Base class for autotuning methods in SCP algorithms.
+
+    This class provides common functionality for calculating costs and penalties
+    that are shared across different autotuning strategies (e.g., Penalized Trust
+    Region, Augmented Lagrangian).
+
+    Subclasses should implement the `update_weights` method to define their specific
+    weight update strategy.
+
+    Class Attributes:
+        COLUMNS: List of Column specs for autotuner-specific metrics to display.
+            Subclasses override this to add their own columns.
+    """
+
+    COLUMNS: List[Column] = []
+
+    @staticmethod
+    def calculate_cost_from_state(x: np.ndarray, settings: "Config") -> float:
+        """Calculate cost from state vector based on final_type and initial_type.
+
+        Args:
+            x: State trajectory array (n_nodes, n_states)
+            settings: Configuration object containing state types
+
+        Returns:
+            float: Computed cost
+        """
+        scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
+        cost = 0.0
+        for i in range(settings.sim.n_states):
+            if settings.sim.x.final_type[i] == "Minimize":
+                cost += scaled_x[-1, i]
+            if settings.sim.x.final_type[i] == "Maximize":
+                cost -= scaled_x[-1, i]
+            if settings.sim.x.initial_type[i] == "Minimize":
+                cost += scaled_x[0, i]
+            if settings.sim.x.initial_type[i] == "Maximize":
+                cost -= scaled_x[0, i]
+        return cost
+
+    @staticmethod
+    def calculate_nonlinear_penalty(
+        x_prop: np.ndarray,
+        x_bar: np.ndarray,
+        u_bar: np.ndarray,
+        lam_vc: np.ndarray,
+        lam_vb: float,
+        lam_cost: float,
+        nodal_constraints: "LoweredJaxConstraints",
+        params: dict,
+        settings: "Config",
+    ) -> Tuple[float, float, float]:
+        """Calculate nonlinear penalty components.
+
+        This method computes three penalty components:
+        1. Cost penalty: weighted original cost
+        2. Virtual control penalty: penalty for dynamics violations
+        3. Nodal penalty: penalty for constraint violations
+
+        Args:
+            x_prop: Propagated state (n_nodes-1, n_states)
+            x_bar: Previous iteration state (n_nodes, n_states)
+            u_bar: Solution control (n_nodes, n_controls)
+            lam_vc: Virtual control weight (scalar or matrix)
+            lam_vb: Virtual buffer penalty weight (scalar)
+            lam_cost: Cost relaxation parameter (scalar)
+            nodal_constraints: Lowered JAX constraints
+            params: Dictionary of problem parameters
+            settings: Configuration object
+
+        Returns:
+            Tuple of (nonlinear_cost, nonlinear_penalty, nodal_penalty):
+                - nonlinear_cost: Weighted cost component
+                - nonlinear_penalty: Virtual control penalty
+                - nodal_penalty: Constraint violation penalty
+        """
+        nodal_penalty = 0.0
+
+        # Evaluate nodal constraints
+        for constraint in nodal_constraints.nodal:
+            # Nodal constraint function is vmapped: func(x, u, node, params)
+            # When called with arrays, it evaluates at all nodes
+            g = constraint.func(x_bar, u_bar, 0, params)
+            # Only sum violations at nodes where constraint is enforced
+            if constraint.nodes is not None:
+                # Filter to only specified nodes
+                # Convert to numpy array for JAX compatibility
+                nodes_array = np.array(constraint.nodes)
+                g_filtered = g[nodes_array]
+            else:
+                # If no nodes specified, check all nodes
+                g_filtered = g
+            nodal_penalty += lam_vb * np.sum(np.maximum(0, g_filtered))
+
+        # Evaluate cross-node constraints
+        for constraint in nodal_constraints.cross_node:
+            # Cross-node constraint function signature: func(X, U, params)
+            # No node argument - operates on full trajectory
+            g = constraint.func(x_bar, u_bar, params)
+            # Cross-node constraints return scalar or array, sum all violations
+            nodal_penalty += lam_vb * np.sum(np.maximum(0, g))
+
+        cost = AutotuningBase.calculate_cost_from_state(x_bar, settings)
+        x_diff = settings.sim.inv_S_x @ (x_bar[1:, :] - x_prop).T
+
+        return lam_cost * cost, np.sum(lam_vc * np.abs(x_diff.T)), nodal_penalty
+
+    @abstractmethod
+    def update_weights(
+        self,
+        state: "AlgorithmState",
+        candidate: "CandidateIterate",
+        nodal_constraints: "LoweredJaxConstraints",
+        settings: "Config",
+        params: dict,
+    ) -> str:
+        """Update SCP weights and cost parameters based on iteration state.
+
+        This method is called each iteration to adapt weights based on the
+        current solution quality and constraint satisfaction.
+
+        Args:
+            state: Solver state containing current weight values (mutated in place)
+            nodal_constraints: Lowered JAX constraints
+            settings: Configuration object containing adaptation parameters
+            params: Dictionary of problem parameters
+
+        Returns:
+            str: Adaptive state string describing the update action (e.g., "Accept Lower")
+        """
+
+        pass
 
 @dataclass
 class AlgorithmState:
