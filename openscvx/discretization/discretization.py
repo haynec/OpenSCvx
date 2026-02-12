@@ -1,3 +1,5 @@
+from typing import List
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -282,3 +284,23 @@ class LinearizeDiscretize(Discretizer):
             settings=settings,
             params=params,
         )
+
+    def citation(self) -> List[str]:
+        """Return BibTeX citations for the linearize-then-discretize algorithm.
+
+        Returns:
+            List containing the BibTeX entries
+        """
+        return [
+            r"""@article{kamath2023real,
+  title={Real-time sequential conic optimization for multi-phase rocket landing guidance},
+  author={Kamath, Abhinav G and Elango, Purnanand and Yu, Yue and Mceowen, Skye and Chari, Govind M
+    and Carson III, John M and A{\c{c}}{\i}kme{\c{s}}e, Beh{\c{c}}et},
+  journal={IFAC-PapersOnLine},
+  volume={56},
+  number={2},
+  pages={3118--3125},
+  year={2023},
+  publisher={Elsevier}
+}""",
+        ]

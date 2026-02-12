@@ -890,7 +890,13 @@ class Problem:
             citations = "\n".join(solver_citations)
             sections.append(f"{header}\n\n{citations}")
 
-        # Future: add citations from discretization, constraint formulations, etc.
+        # Discretization citations
+        dis_citations = self._discretizer.citation()
+        if dis_citations:
+            dis_name = type(self._discretizer).__name__
+            header = f"% Discretization: {dis_name}"
+            citations = "\n".join(dis_citations)
+            sections.append(f"{header}\n\n{citations}")
 
         sections.append(r"% --- END AUTO-GENERATED CITATIONS")
 
