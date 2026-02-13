@@ -19,6 +19,7 @@ def validate_byof(
     n_x: int,
     n_u: int,
     N: int = None,
+    parameters: dict = None,
 ) -> None:
     """Validate byof function signatures and shapes.
 
@@ -54,7 +55,7 @@ def validate_byof(
     dummy_x = jnp.zeros(n_x)
     dummy_u = jnp.zeros(n_u)
     dummy_node = 0
-    dummy_params = {}
+    dummy_params = dict(parameters) if parameters else {}
 
     # Validate dynamics functions
     byof_dynamics = byof.get("dynamics", {})

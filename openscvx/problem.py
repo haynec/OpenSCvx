@@ -180,7 +180,7 @@ class Problem:
                 for control in self.symbolic.controls
             )
 
-            validate_byof(byof, self.symbolic.states, n_x, n_u, N)
+            validate_byof(byof, self.symbolic.states, n_x, n_u, N, self.symbolic.parameters)
 
         # Store byof for cache hashing
         self._byof = byof
