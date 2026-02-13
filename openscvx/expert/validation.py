@@ -46,10 +46,23 @@ def validate_byof(
     import jax.numpy as jnp
 
     # Validate byof keys
-    valid_keys = {"dynamics", "nodal_constraints", "cross_nodal_constraints", "ctcs_constraints"}
+    valid_keys = {
+        "parameters",
+        "dynamics",
+        "nodal_constraints",
+        "cross_nodal_constraints",
+        "ctcs_constraints",
+    }
     invalid_keys = set(byof.keys()) - valid_keys
     if invalid_keys:
         raise ValueError(f"Unknown byof keys: {invalid_keys}. Valid keys: {valid_keys}")
+
+    # Validate byof parameters
+    from openscvx.symbolic.expr.expr import Parameter
+
+    for i, param in enumerate(byof.get("parameters", [])):
+        if not isinstance(param, Parameter):
+            raise TypeError(f"byof parameters[{i}] must be a Parameter object, got {type(param)}")
 
     # Create dummy inputs for testing
     dummy_x = jnp.zeros(n_x)

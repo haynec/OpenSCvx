@@ -92,6 +92,8 @@ from typing import TYPE_CHECKING, Any, Callable, List, Literal, Tuple, TypedDict
 
 if TYPE_CHECKING:
     from jax import Array as JaxArray
+
+    from openscvx.symbolic.expr.expr import Parameter
 else:
     JaxArray = Any
 
@@ -252,6 +254,10 @@ class ByofSpec(TypedDict, total=False):
         state/control vectors.
 
     Attributes:
+        parameters: List of :class:`~openscvx.symbolic.expr.expr.Parameter` objects that
+            are only used inside byof functions (not in any symbolic expression). Parameters
+            already referenced in symbolic dynamics or constraints are collected automatically
+            and do not need to be listed here. Duplicates are ignored.
         dynamics: Raw JAX functions for state derivatives. Maps state names to functions
             with signature ``(x, u, node, params) -> xdot_component``. States here should
             NOT appear in symbolic dynamics dict. You can mix: some states symbolic,
@@ -283,12 +289,16 @@ class ByofSpec(TypedDict, total=False):
             velocity = ox.State("velocity", shape=(1,))
             theta = ox.Control("theta", shape=(1,))
 
+            # Parameters used by byof functions
+            g = ox.Parameter("g", shape=(), value=9.81)
+
             # Custom dynamics for one state using .slice property
             def custom_velocity_dynamics(x, u, node, params):
                 # Use .slice property for clean indexing
                 return params["g"] * jnp.cos(u[theta.slice][0])
 
             byof: ByofSpec = {
+                "parameters": [g],
                 "dynamics": {
                     "velocity": custom_velocity_dynamics,
                 },
@@ -320,6 +330,7 @@ class ByofSpec(TypedDict, total=False):
             }
     """
 
+    parameters: List["Parameter"]
     dynamics: dict[str, DynamicsFunction]
     nodal_constraints: List[NodalConstraintSpec]
     cross_nodal_constraints: List[CrossNodalConstraintFunction]

@@ -281,6 +281,12 @@ def preprocess_symbolic_problem(
     for constraint in constraints.unsorted:
         traverse(constraint, collect_param_values)
 
+    # Collect from byof parameters
+    if byof is not None:
+        for param in byof.get("parameters", []):
+            if param.name not in parameters:
+                parameters[param.name] = param.value
+
     # ==================== PHASE 4: Constraint Separation & Augmentation ====================
 
     # Sort and separate constraints by type (drains unsorted -> fills categories)
