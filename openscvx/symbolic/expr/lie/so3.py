@@ -8,7 +8,6 @@ Requires jaxlie: pip install openscvx[lie]
 
 from typing import Tuple, Union
 
-import jaxlie  # noqa: F401 - validates jaxlie is installed
 import numpy as np
 
 from ..expr import Expr, to_expr
