@@ -4,7 +4,7 @@ This module tests mathematical function nodes:
 
 - Trigonometric: Sin, Cos, Tan
 - Exponential: Exp, Log, Sqrt
-- Nonlinear: Square, PositivePart, Huber, SmoothReLU, Max
+- Nonlinear: Square, PositivePart, Huber, SmoothReLU, Max, Min
 - Absolute value: Abs
 - Smooth maximum: LogSumExp
 
@@ -1441,6 +1441,331 @@ def test_max_with_zero_relu_pattern():
 
 
 # --- Max: CVXPy Lowering --- TODO: (norrisg)
+
+
+# =============================================================================
+# Min
+# =============================================================================
+
+
+def test_min_creation():
+    """Test Min node creation and properties."""
+    from openscvx.symbolic.expr import Min
+
+    x = Variable("x", shape=(3,))
+    y = Variable("y", shape=(3,))
+
+    min_xy = Min(x, y)
+    assert repr(min_xy) == "min(Var('x'), Var('y'))"
+    assert min_xy.children() == [x, y]
+
+
+def test_min_creation_with_multiple_operands():
+    """Test Min node creation with more than two operands."""
+    from openscvx.symbolic.expr import Constant, Min
+
+    x = Variable("x", shape=(1,))
+    y = Variable("y", shape=(1,))
+    z = Constant(10.0)
+
+    min_xyz = Min(x, y, z)
+    assert len(min_xyz.children()) == 3
+    assert repr(min_xyz) == "min(Var('x'), Var('y'), Const(10.0))"
+
+
+def test_min_requires_at_least_two_operands():
+    """Test that Min raises ValueError with fewer than two operands."""
+    from openscvx.symbolic.expr import Min
+
+    x = Variable("x", shape=(1,))
+
+    with pytest.raises(ValueError, match="Min requires two or more operands"):
+        Min(x)
+
+
+# --- Min: Shape Checking ---
+
+
+def test_min_shape_with_same_shapes():
+    """Test Min shape when all operands have the same shape."""
+    from openscvx.symbolic.expr import Min
+
+    x = Variable("x", shape=(3,))
+    y = Variable("y", shape=(3,))
+    z = Variable("z", shape=(3,))
+
+    min_xyz = Min(x, y, z)
+    assert min_xyz.check_shape() == (3,)
+
+
+def test_min_shape_with_broadcasting():
+    """Test Min shape with broadcasting."""
+    from openscvx.symbolic.expr import Constant, Min
+
+    x = Variable("x", shape=(3, 4))
+    y = Constant(np.array([1.0, 2.0, 3.0, 4.0]))  # shape (4,)
+
+    min_xy = Min(x, y)
+    assert min_xy.check_shape() == (3, 4)
+
+
+def test_min_shape_with_scalar_broadcast():
+    """Test Min shape with scalar broadcasting."""
+    from openscvx.symbolic.expr import Constant, Min
+
+    x = Variable("x", shape=(5, 5))
+    scalar = Constant(10.0)  # scalar
+
+    min_x = Min(x, scalar)
+    assert min_x.check_shape() == (5, 5)
+
+
+def test_min_shape_incompatible_raises_error():
+    """Test that Min raises ValueError for incompatible shapes."""
+    from openscvx.symbolic.expr import Min
+
+    x = Variable("x", shape=(3,))
+    y = Variable("y", shape=(4,))
+
+    min_xy = Min(x, y)
+    with pytest.raises(ValueError, match="Min shapes not broadcastable"):
+        min_xy.check_shape()
+
+
+# --- Min: Canonicalization ---
+
+
+def test_min_canonicalize_flattens_nested_min():
+    """Test that Min canonicalization flattens nested Min operations."""
+    from openscvx.symbolic.expr import Min
+
+    x = Variable("x", shape=(3,))
+    y = Variable("y", shape=(3,))
+    z = Variable("z", shape=(3,))
+
+    # Min(x, Min(y, z)) should flatten to Min(x, y, z)
+    nested = Min(x, Min(y, z))
+    canonical = nested.canonicalize()
+
+    assert isinstance(canonical, Min)
+    assert len(canonical.operands) == 3
+    assert x in canonical.operands
+    assert y in canonical.operands
+    assert z in canonical.operands
+
+
+def test_min_canonicalize_folds_constants():
+    """Test that Min canonicalization folds constant values."""
+    from openscvx.symbolic.expr import Constant, Min
+
+    x = Variable("x", shape=(3,))
+    c1 = Constant(np.array([1.0, 2.0, 3.0]))
+    c2 = Constant(np.array([2.0, 1.0, 4.0]))
+
+    # Min(x, c1, c2) should fold c1 and c2 into a single constant
+    expr = Min(x, c1, c2)
+    canonical = expr.canonicalize()
+
+    assert isinstance(canonical, Min)
+    assert len(canonical.operands) == 2
+    # One should be x, one should be the folded constant
+    non_const = [op for op in canonical.operands if not isinstance(op, Constant)]
+    consts = [op for op in canonical.operands if isinstance(op, Constant)]
+    assert len(non_const) == 1
+    assert non_const[0] == x
+    assert len(consts) == 1
+    # Check that the constant is the element-wise min
+    expected = np.minimum(np.array([1.0, 2.0, 3.0]), np.array([2.0, 1.0, 4.0]))
+    assert np.allclose(consts[0].value, expected)
+
+
+def test_min_canonicalize_single_operand_collapses():
+    """Test that Min with single operand after canonicalization returns that operand."""
+    from openscvx.symbolic.expr import Constant, Min
+
+    # Min with only constants should fold to a single constant
+    c1 = Constant(np.array([1.0, 2.0]))
+    c2 = Constant(np.array([0.5, 3.0]))
+
+    expr = Min(c1, c2)
+    canonical = expr.canonicalize()
+
+    # Should collapse to just a constant
+    assert isinstance(canonical, Constant)
+    expected = np.minimum(np.array([1.0, 2.0]), np.array([0.5, 3.0]))
+    assert np.allclose(canonical.value, expected)
+
+
+def test_min_canonicalize_recursively():
+    """Test that Min canonicalization recurses into operands."""
+    from openscvx.symbolic.expr import Add, Constant, Min
+
+    x = Variable("x", shape=(3,))
+    y = Variable("y", shape=(3,))
+
+    # Min(x + 0, y + 0) should canonicalize to Min(x, y)
+    expr = Min(Add(x, Constant(0.0)), Add(y, Constant(0.0)))
+    canonical = expr.canonicalize()
+
+    assert isinstance(canonical, Min)
+    assert len(canonical.operands) == 2
+    assert x in canonical.operands
+    assert y in canonical.operands
+
+
+# --- Min: JAX Lowering ---
+
+
+def test_min_constant():
+    """Test Min with constant values."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Constant, Min
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = np.array([1.0, 5.0, 2.0])
+    y = np.array([3.0, 2.0, 4.0])
+
+    expr = Min(Constant(x), Constant(y))
+
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    expected = jnp.minimum(x, y)
+    assert jnp.allclose(result, expected)
+
+
+def test_min_state_variables():
+    """Test Min with state variables."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Min, State
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x_val = jnp.array([1.0, 2.0, 3.0])
+    y_val = jnp.array([2.0, 1.5, 3.5])
+
+    x = State("x", (3,))
+    x._slice = slice(0, 3)
+    y = State("y", (3,))
+    y._slice = slice(3, 6)
+
+    expr = Min(x, y)
+
+    state_vec = jnp.concatenate([x_val, y_val])
+    fn = lower_to_jax(expr)
+    result = fn(state_vec, None, None, None)
+
+    expected = jnp.minimum(x_val, y_val)
+    assert jnp.allclose(result, expected)
+
+
+def test_min_multiple_operands():
+    """Test Min with more than two operands."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Constant, Min
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = np.array([1.0, 5.0, 2.0])
+    y = np.array([3.0, 2.0, 4.0])
+    z = np.array([2.0, 6.0, 1.0])
+
+    expr = Min(Constant(x), Constant(y), Constant(z))
+
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    expected = jnp.minimum(jnp.minimum(x, y), z)
+    assert jnp.allclose(result, expected)
+
+
+def test_min_with_clipping_pattern():
+    """Test Min(x, max_value) which implements clipping/saturation."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Constant, Min, State
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = jnp.array([20.0, 50.0, 80.0, 100.0, 120.0])
+
+    state = State("s", (5,))
+    state._slice = slice(0, 5)
+
+    # Min(x, 100) clips values above 100
+    expr = Min(state, Constant(100.0))
+
+    fn = lower_to_jax(expr)
+    result = fn(x, None, None, None)
+
+    expected = jnp.minimum(x, 100.0)
+    assert jnp.allclose(result, expected)
+
+
+def test_min_max_combination():
+    """Test combining Min and Max for clamping values to a range."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Constant, Max, Min, State
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = jnp.array([-10.0, 0.0, 50.0, 100.0, 150.0])
+
+    state = State("s", (5,))
+    state._slice = slice(0, 5)
+
+    # Clamp to range [0, 100]: Min(Max(x, 0), 100)
+    expr = Min(Max(state, Constant(0.0)), Constant(100.0))
+
+    fn = lower_to_jax(expr)
+    result = fn(x, None, None, None)
+
+    # Expected: clip to [0, 100]
+    expected = jnp.clip(x, 0.0, 100.0)
+    assert jnp.allclose(result, expected)
+
+
+# --- Min: CVXPy Lowering ---
+
+
+def test_cvxpy_min():
+    """Test Min function with CVXPy."""
+    import cvxpy as cp
+
+    from openscvx.symbolic.expr import Min, State
+    from openscvx.symbolic.lowerers.cvxpy import CvxpyLowerer
+
+    x_cvx = cp.Variable((10, 3), name="x")
+    y_cvx = cp.Variable((10, 3), name="y")
+    variable_map = {"x": x_cvx, "y": y_cvx}
+    lowerer = CvxpyLowerer(variable_map)
+
+    x = State("x", shape=(3,))
+    y = State("y", shape=(3,))
+    expr = Min(x, y)
+
+    result = lowerer.lower(expr)
+    assert isinstance(result, cp.Expression)
+
+
+def test_cvxpy_min_multiple_operands():
+    """Test Min with multiple operands in CVXPy."""
+    import cvxpy as cp
+
+    from openscvx.symbolic.expr import Constant, Min, State
+    from openscvx.symbolic.lowerers.cvxpy import CvxpyLowerer
+
+    x_cvx = cp.Variable((10, 3), name="x")
+    variable_map = {"x": x_cvx}
+    lowerer = CvxpyLowerer(variable_map)
+
+    x = State("x", shape=(3,))
+    c1 = Constant(5.0)
+    c2 = Constant(10.0)
+    expr = Min(x, c1, c2)
+
+    result = lowerer.lower(expr)
+    assert isinstance(result, cp.Expression)
 
 
 # =============================================================================

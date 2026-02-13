@@ -12,7 +12,7 @@ Function Categories:
     - **Absolute Value:** `Abs` - Element-wise absolute value function
     - **Smooth Approximations:** `PositivePart`, `Huber`, `SmoothReLU` - Smooth, differentiable
         approximations of non-smooth functions like max(0, x) and absolute value
-    - **Reductions:** `Max` - Maximum over elements
+    - **Reductions:** `Max`, `Min` - Maximum and minimum over elements
     - **Smooth Maximum:** `LogSumExp` - Log-sum-exp function, a smooth approximation to maximum
 
 Example:
@@ -433,6 +433,80 @@ class Max(Expr):
     def __repr__(self) -> str:
         inner = ", ".join(repr(op) for op in self.operands)
         return f"max({inner})"
+
+
+class Min(Expr):
+    """Element-wise minimum function for symbolic expressions.
+
+    Computes the element-wise minimum across two or more operands. Supports
+    broadcasting following NumPy rules. During canonicalization, nested Min
+    operations are flattened and constants are folded.
+
+    Attributes:
+        operands: List of expressions to compute minimum over
+
+    Example:
+        Define a Min expression:
+
+            x = Variable("x", shape=(3,))
+            y = Variable("y", shape=(3,))
+            min_xy = Min(x, y, 10)  # Element-wise min(x, y, 10)
+    """
+
+    def __init__(self, *args: Union[Expr, float, int, np.ndarray]):
+        """Initialize a minimum operation.
+
+        Args:
+            *args: Two or more expressions to compute minimum over
+
+        Raises:
+            ValueError: If fewer than two operands are provided
+        """
+        if len(args) < 2:
+            raise ValueError("Min requires two or more operands")
+        self.operands = [to_expr(a) for a in args]
+
+    def children(self):
+        return list(self.operands)
+
+    def canonicalize(self) -> "Expr":
+        """Canonicalize min: flatten nested Min, fold constants."""
+        from .expr import Constant
+
+        operands = []
+        const_vals = []
+
+        for op in self.operands:
+            c = op.canonicalize()
+            if isinstance(c, Min):
+                operands.extend(c.operands)
+            elif isinstance(c, Constant):
+                const_vals.append(c.value)
+            else:
+                operands.append(c)
+
+        # If we have constants, compute their min and keep it
+        if const_vals:
+            min_const = np.minimum.reduce(const_vals)
+            operands.append(Constant(min_const))
+
+        if not operands:
+            raise ValueError("Min must have at least one operand after canonicalization")
+        if len(operands) == 1:
+            return operands[0]
+        return Min(*operands)
+
+    def check_shape(self) -> Tuple[int, ...]:
+        """Min broadcasts shapes like NumPy."""
+        shapes = [child.check_shape() for child in self.children()]
+        try:
+            return np.broadcast_shapes(*shapes)
+        except ValueError as e:
+            raise ValueError(f"Min shapes not broadcastable: {shapes}") from e
+
+    def __repr__(self) -> str:
+        inner = ", ".join(repr(op) for op in self.operands)
+        return f"min({inner})"
 
 
 # Penalty function building blocks

@@ -1,6 +1,6 @@
 """Parser handlers for mathematical functions.
 
-Handlers: Sin, Cos, Tan, Sqrt, Square, Exp, Log, Abs, Max,
+Handlers: Sin, Cos, Tan, Sqrt, Square, Exp, Log, Abs, Max, Min,
           PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Bilerp
 """
 
@@ -15,6 +15,7 @@ from openscvx.symbolic.expr.math import (
     Log,
     LogSumExp,
     Max,
+    Min,
     PositivePart,
     Sin,
     SmoothReLU,
@@ -93,6 +94,13 @@ def _parse_max(args, kwargs):
     if len(args) < 2:
         raise ValueError("Max() requires at least 2 arguments")
     return Max(*args)
+
+
+@function("Min")
+def _parse_min(args, kwargs):
+    if len(args) < 2:
+        raise ValueError("Min() requires at least 2 arguments")
+    return Min(*args)
 
 
 @function("PositivePart")

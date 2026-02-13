@@ -1,6 +1,6 @@
 """JAX visitors for math expressions.
 
-Visitors: Sin, Cos, Tan, Square, Sqrt, Exp, Log, Abs, Max,
+Visitors: Sin, Cos, Tan, Square, Sqrt, Exp, Log, Abs, Max, Min,
           PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Bilerp
 """
 
@@ -19,6 +19,7 @@ from openscvx.symbolic.expr.math import (
     Log,
     LogSumExp,
     Max,
+    Min,
     PositivePart,
     Sin,
     SmoothReLU,
@@ -105,6 +106,22 @@ def _visit_max(lowerer, node: Max):
         result = values[0]
         for val in values[1:]:
             result = jnp.maximum(result, val)
+        return result
+
+    return fn
+
+
+@visitor(Min)
+def _visit_min(lowerer, node: Min):
+    """Lower element-wise minimum to JAX function."""
+    fs = [lowerer.lower(op) for op in node.operands]
+
+    def fn(x, u, node, params):
+        values = [f(x, u, node, params) for f in fs]
+        # jnp.minimum can take multiple arguments
+        result = values[0]
+        for val in values[1:]:
+            result = jnp.minimum(result, val)
         return result
 
     return fn
