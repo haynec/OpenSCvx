@@ -51,6 +51,7 @@ from openscvx.symbolic.expr import (
     MatMul,
     Max,
     Maximize,
+    Min,
     Minimize,
     Mul,
     Neg,
@@ -131,6 +132,7 @@ __all__ = [
     "Log",
     "LogSumExp",
     "Max",
+    "Min",
     "Linterp",
     "Bilerp",
     # Logical/control flow operations

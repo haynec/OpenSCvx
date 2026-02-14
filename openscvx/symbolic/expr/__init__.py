@@ -129,6 +129,7 @@ from .math import (
     Log,
     LogSumExp,
     Max,
+    Min,
     PositivePart,
     Sin,
     SmoothReLU,
@@ -199,6 +200,7 @@ __all__ = [
     "Log",
     "LogSumExp",
     "Max",
+    "Min",
     "Linterp",
     "Bilerp",
     # Logical/control flow operations

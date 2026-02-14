@@ -1,7 +1,7 @@
 """Tests for parser math function handlers.
 
 This module tests parsing of mathematical functions:
-Sin, Cos, Tan, Sqrt, Square, Exp, Log, Abs, Max,
+Sin, Cos, Tan, Sqrt, Square, Exp, Log, Abs, Max, Min,
 PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Bilerp
 """
 
@@ -19,6 +19,7 @@ from openscvx.symbolic.expr import (
     Log,
     LogSumExp,
     Max,
+    Min,
     PositivePart,
     Sin,
     SmoothReLU,
@@ -125,6 +126,17 @@ def test_parse_max():
 def test_max_requires_two_args():
     with pytest.raises(ValueError, match="at least 2"):
         _parser().parse("Max(x)")
+
+
+def test_parse_min():
+    p = _parser()
+    expr = p.parse("Min(x[0], x[1])")
+    assert isinstance(expr, Min)
+
+
+def test_min_requires_two_args():
+    with pytest.raises(ValueError, match="at least 2"):
+        _parser().parse("Min(x)")
 
 
 def test_parse_logsumexp():
