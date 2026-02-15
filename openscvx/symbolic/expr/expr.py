@@ -629,7 +629,10 @@ def transitive_closure(A: np.ndarray) -> np.ndarray:
     n = A.shape[0]
     R = A | np.eye(n, dtype=bool)
     for _ in range(int(np.ceil(np.log2(max(n, 1))))):
-        R = _bool_matmul(R, R)
+        R_new = _bool_matmul(R, R)
+        if np.array_equal(R_new, R):
+            break
+        R = R_new
     return R
 
 
