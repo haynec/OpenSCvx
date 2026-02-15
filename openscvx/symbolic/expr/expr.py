@@ -590,6 +590,17 @@ def _broadcast_sparsity(
     return S_broadcast.reshape(int(np.prod(to_shape)), n_cols).copy()
 
 
+def _broadcast_liveness(
+    live: np.ndarray,
+    from_shape: Tuple[int, ...],
+    to_shape: Tuple[int, ...],
+) -> np.ndarray:
+    """Broadcast a 1-D liveness vector from *from_shape* to *to_shape*."""
+    from_shape = from_shape or (1,)
+    to_shape = to_shape or (1,)
+    return np.broadcast_to(live.reshape(from_shape), to_shape).flatten().copy()
+
+
 def _bool_matmul(A: np.ndarray, B: np.ndarray) -> np.ndarray:
     """Boolean matrix multiply: ``C[i,k] = OR_j (A[i,j] AND B[j,k])``."""
     return (A.astype(np.uint8) @ B.astype(np.uint8)) > 0

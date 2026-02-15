@@ -156,6 +156,87 @@ def test_scalar_expression():
 
 
 # =============================================================================
+# Mul / Div liveness gating
+# =============================================================================
+
+
+def test_mul_zero_constant_kills_dependence():
+    """Constant([1, 0, 1]) * state zeros out the middle row."""
+    x = State("x", (3,))
+    collect_and_assign_slices([x], [])
+
+    expr = Constant(np.array([1.0, 0.0, 1.0])) * x
+    S_x, _ = expr.sparsity(3, 0)
+
+    assert S_x.shape == (3, 3)
+    # Row 0: 1.0 * x[0] → depends on x[0]
+    np.testing.assert_array_equal(S_x[0], [True, False, False])
+    # Row 1: 0.0 * x[1] → always zero, no dependence
+    np.testing.assert_array_equal(S_x[1], [False, False, False])
+    # Row 2: 1.0 * x[2] → depends on x[2]
+    np.testing.assert_array_equal(S_x[2], [False, False, True])
+
+
+def test_mul_all_zero_constant():
+    """Multiplying by an all-zero constant kills all dependence."""
+    x = State("x", (2,))
+    y = State("y", (2,))
+    collect_and_assign_slices([x, y], [])
+
+    expr = Constant(np.zeros(2)) * (x + y)
+    S_x, _ = expr.sparsity(4, 0)
+
+    np.testing.assert_array_equal(S_x, False)
+
+
+def test_mul_three_factors_gating():
+    """With three flat factors, a zero in any non-differentiated factor kills that row."""
+    from openscvx.symbolic.expr.arithmetic import Mul
+
+    x = State("x", (2,))
+    collect_and_assign_slices([x], [])
+
+    # Mul(c1, c2, x) where c1=[1,0] and c2=[1,1]
+    # Row 0: 1*1*x[0] → live
+    # Row 1: 0*1*x[1] → dead (c1[1]=0)
+    c1 = Constant(np.array([1.0, 0.0]))
+    c2 = Constant(np.array([1.0, 1.0]))
+    expr = Mul(c1, c2, x)  # flat 3-factor Mul
+    S_x, _ = expr.sparsity(2, 0)
+
+    np.testing.assert_array_equal(S_x[0], [True, False])
+    np.testing.assert_array_equal(S_x[1], [False, False])
+
+
+def test_div_zero_numerator_kills_dependence():
+    """Constant([0, 1]) / state: row 0 is always 0, no dependence on denominator."""
+    x = State("x", (2,))
+    collect_and_assign_slices([x], [])
+
+    expr = Constant(np.array([0.0, 1.0])) / x
+    S_x, _ = expr.sparsity(2, 0)
+
+    assert S_x.shape == (2, 2)
+    # Row 0: d(0/x[0])/dx = 0 → no dependence
+    np.testing.assert_array_equal(S_x[0], [False, False])
+    # Row 1: d(1/x[1])/dx[1] = -1/x[1]^2 → depends on x[1]
+    np.testing.assert_array_equal(S_x[1], [False, True])
+
+
+def test_div_nonzero_values_unchanged():
+    """When both sides are non-constant, liveness is all-True — no change."""
+    pos, vel, mass, thrust, states, controls, n_x, n_u = _make_rocket_vars()
+    expr = thrust / mass  # both non-Constant → liveness all-True
+    S_x, S_u = expr.sparsity(n_x, n_u)
+
+    # Same result as before liveness gating — mass broadcasts to all rows
+    expected_x = np.zeros((3, n_x), dtype=bool)
+    expected_x[:, 6] = True
+    np.testing.assert_array_equal(S_x, expected_x)
+    np.testing.assert_array_equal(S_u, np.eye(3, dtype=bool))
+
+
+# =============================================================================
 # Concat decomposition (row-block analysis)
 # =============================================================================
 

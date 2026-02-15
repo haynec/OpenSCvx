@@ -40,6 +40,7 @@ from .expr import (
     Constant,
     Expr,
     _bool_matmul,
+    _broadcast_liveness,
     _broadcast_sparsity,
     _element_liveness,
     to_expr,
@@ -312,12 +313,29 @@ class Mul(Expr):
     def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
         out_shape = self.check_shape()
         n_out = int(np.prod(out_shape)) if out_shape else 1
+        # Collect broadcast sparsity and liveness for each factor.
+        sparsities = []
+        livenesses = []
+        for f in self.factors:
+            f_sx, f_su = f.sparsity(n_x, n_u)
+            sparsities.append((
+                _broadcast_sparsity(f_sx, f.check_shape(), out_shape, n_x),
+                _broadcast_sparsity(f_su, f.check_shape(), out_shape, n_u),
+            ))
+            livenesses.append(
+                _broadcast_liveness(_element_liveness(f), f.check_shape(), out_shape)
+            )
+        # Product rule: factor k's derivative survives only if all OTHER
+        # factors are live (might be nonzero).
         S_x = np.zeros((n_out, n_x), dtype=bool)
         S_u = np.zeros((n_out, n_u), dtype=bool)
-        for factor in self.factors:
-            f_sx, f_su = factor.sparsity(n_x, n_u)
-            S_x |= _broadcast_sparsity(f_sx, factor.check_shape(), out_shape, n_x)
-            S_u |= _broadcast_sparsity(f_su, factor.check_shape(), out_shape, n_u)
+        for k in range(len(self.factors)):
+            gate = np.ones(n_out, dtype=bool)
+            for j in range(len(self.factors)):
+                if j != k:
+                    gate &= livenesses[j]
+            S_x |= sparsities[k][0] & gate[:, None]
+            S_u |= sparsities[k][1] & gate[:, None]
         return S_x, S_u
 
     def __repr__(self) -> str:
@@ -388,15 +406,32 @@ class Div(Expr):
             raise ValueError(f"Div shapes not broadcastable: {shapes}") from e
 
     def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        # d(a/b)/dz = da/dz / b  -  a * db/dz / b^2
+        # left's derivative gated by right's liveness (denominator nonzero)
+        # right's derivative gated by left's liveness (numerator nonzero)
         out_shape = self.check_shape()
         l_sx, l_su = self.left.sparsity(n_x, n_u)
         r_sx, r_su = self.right.sparsity(n_x, n_u)
-        S_x = _broadcast_sparsity(
-            l_sx, self.left.check_shape(), out_shape, n_x
-        ) | _broadcast_sparsity(r_sx, self.right.check_shape(), out_shape, n_x)
-        S_u = _broadcast_sparsity(
-            l_su, self.left.check_shape(), out_shape, n_u
-        ) | _broadcast_sparsity(r_su, self.right.check_shape(), out_shape, n_u)
+        l_live = _broadcast_liveness(
+            _element_liveness(self.left), self.left.check_shape(), out_shape
+        )
+        r_live = _broadcast_liveness(
+            _element_liveness(self.right), self.right.check_shape(), out_shape
+        )
+        S_x = (
+            _broadcast_sparsity(l_sx, self.left.check_shape(), out_shape, n_x)
+            & r_live[:, None]
+        ) | (
+            _broadcast_sparsity(r_sx, self.right.check_shape(), out_shape, n_x)
+            & l_live[:, None]
+        )
+        S_u = (
+            _broadcast_sparsity(l_su, self.left.check_shape(), out_shape, n_u)
+            & r_live[:, None]
+        ) | (
+            _broadcast_sparsity(r_su, self.right.check_shape(), out_shape, n_u)
+            & l_live[:, None]
+        )
         return S_x, S_u
 
     def __repr__(self) -> str:
