@@ -12,6 +12,7 @@ from openscvx.symbolic.expr import (
     Concat,
     Constant,
     Control,
+    MatMul,
     Norm,
     Parameter,
     Sin,
@@ -431,3 +432,133 @@ def test_cross_node_with_control():
         else:
             np.testing.assert_array_equal(x_mask[k, :], False)
             np.testing.assert_array_equal(u_mask[k, :], False)
+
+
+# =============================================================================
+# MatMul — boolean matrix multiply sparsity
+# =============================================================================
+
+
+def test_matmul_constant_matrix_times_state():
+    """Constant @ State filters through the constant's zero structure."""
+    x = State("x", (3,))
+    collect_and_assign_slices([x], [])
+
+    # A has a sparse structure: row 0 uses x[0] only, row 1 uses x[1,2]
+    A = Constant(np.array([[1.0, 0.0, 0.0], [0.0, 2.0, 3.0]]))
+    expr = MatMul(A, x)  # (2,3) @ (3,) -> (2,)
+    S_x, S_u = expr.sparsity(3, 0)
+
+    assert S_x.shape == (2, 3)
+    # Row 0: only x[0] is live (A[0,:] = [1,0,0])
+    np.testing.assert_array_equal(S_x[0], [True, False, False])
+    # Row 1: x[1] and x[2] are live (A[1,:] = [0,2,3])
+    np.testing.assert_array_equal(S_x[1], [False, True, True])
+
+
+def test_matmul_identity_constant():
+    """Identity matrix @ State gives exact diagonal sparsity."""
+    x = State("x", (3,))
+    collect_and_assign_slices([x], [])
+
+    eye = Constant(np.eye(3))
+    expr = MatMul(eye, x)
+    S_x, _ = expr.sparsity(3, 0)
+
+    np.testing.assert_array_equal(S_x, np.eye(3, dtype=bool))
+
+
+def test_matmul_parameter_times_state_is_conservative():
+    """Parameter @ State gives column-level (not element-level) sparsity."""
+    x = State("x", (3,))
+    collect_and_assign_slices([x], [])
+
+    # Parameter has a sparse value, but we don't use it for liveness
+    P = Parameter("P", (2, 3), value=np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]))
+    expr = MatMul(P, x)
+    S_x, _ = expr.sparsity(3, 0)
+
+    assert S_x.shape == (2, 3)
+    # Conservative: every output depends on all state elements
+    np.testing.assert_array_equal(S_x, True)
+
+
+def test_matmul_state_times_constant_vector():
+    """State-derived matrix @ constant vector uses vector liveness."""
+    pos, vel, mass, thrust, states, controls, n_x, n_u = _make_rocket_vars()
+
+    # vel (3,) viewed as left operand, constant (3,) right operand with a zero
+    # This is a dot product: (3,) @ (3,) -> scalar
+    c = Constant(np.array([1.0, 0.0, 1.0]))
+    expr = MatMul(vel, c)
+    S_x, _ = expr.sparsity(n_x, n_u)
+
+    assert S_x.shape == (1, n_x)
+    # vel is x[3:6]; c has zeros at index 1 => vel[1] (x[4]) is filtered out
+    expected = np.zeros(n_x, dtype=bool)
+    expected[3] = True  # vel[0] * c[0]=1
+    expected[5] = True  # vel[2] * c[2]=1
+    np.testing.assert_array_equal(S_x[0], expected)
+
+
+def test_matmul_vector_times_matrix():
+    """Vector @ Matrix: (n,) @ (n,k) -> (k,)."""
+    x = State("x", (2,))
+    collect_and_assign_slices([x], [])
+
+    # (2,) @ (2, 3) -> (3,)
+    M = Constant(np.array([[1.0, 0.0, 2.0], [0.0, 3.0, 0.0]]))
+    expr = MatMul(x, M)
+    S_x, _ = expr.sparsity(2, 0)
+
+    assert S_x.shape == (3, 2)
+    # col 0 of M: [1,0] -> uses x[0] only
+    np.testing.assert_array_equal(S_x[0], [True, False])
+    # col 1 of M: [0,3] -> uses x[1] only
+    np.testing.assert_array_equal(S_x[1], [False, True])
+    # col 2 of M: [2,0] -> uses x[0] only
+    np.testing.assert_array_equal(S_x[2], [True, False])
+
+
+def test_matmul_matrix_times_matrix():
+    """Matrix @ Matrix: (m,n) @ (n,k) -> (m,k)."""
+    x = State("x", (4,))
+    collect_and_assign_slices([x], [])
+
+    # Build a (2,4) "state matrix" from x via Concat + reshaping is complex,
+    # so test with Constant @ Constant @ State to verify matrix-matrix path.
+    # A (2,2) @ (2,4_state) but we need a (2,4) state-dependent expr.
+    # Simpler: use Constant (2,3) @ Constant (3,4) — both constant, result all-False.
+    A = Constant(np.ones((2, 3)))
+    B = Constant(np.ones((3, 4)))
+    expr = MatMul(A, B)
+    S_x, _ = expr.sparsity(4, 0)
+
+    assert S_x.shape == (8, 4)
+    np.testing.assert_array_equal(S_x, False)
+
+
+def test_matmul_in_rocket_dynamics():
+    """MatMul with sparse constant in realistic dynamics: R @ thrust / mass."""
+    pos, vel, mass, thrust, states, controls, n_x, n_u = _make_rocket_vars()
+
+    # Rotation-like selector: only first two thrust components affect vel
+    R = Constant(np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 0.0]]))
+    accel = MatMul(R, thrust) / mass  # (3,) / (1,)
+
+    S_x, S_u = accel.sparsity(n_x, n_u)
+    assert S_x.shape == (3, n_x)
+    assert S_u.shape == (3, n_u)
+
+    # x dependence: mass (x[6]) broadcasts to all 3 rows
+    expected_x = np.zeros((3, n_x), dtype=bool)
+    expected_x[:, 6] = True
+    np.testing.assert_array_equal(S_x, expected_x)
+
+    # u dependence: R filters thrust — only u[0] and u[1] are live
+    # Row 0: R[0,:] = [1,0,0] -> u[0]
+    # Row 1: R[1,:] = [0,1,0] -> u[1]
+    # Row 2: R[2,:] = [0,0,0] -> nothing
+    np.testing.assert_array_equal(S_u[0], [True, False, False])
+    np.testing.assert_array_equal(S_u[1], [False, True, False])
+    np.testing.assert_array_equal(S_u[2], [False, False, False])

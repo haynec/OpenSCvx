@@ -590,6 +590,26 @@ def _broadcast_sparsity(
     return S_broadcast.reshape(int(np.prod(to_shape)), n_cols).copy()
 
 
+def _bool_matmul(A: np.ndarray, B: np.ndarray) -> np.ndarray:
+    """Boolean matrix multiply: ``C[i,k] = OR_j (A[i,j] AND B[j,k])``."""
+    return (A.astype(np.uint8) @ B.astype(np.uint8)) > 0
+
+
+def _element_liveness(expr: "Expr") -> np.ndarray:
+    """Which scalar elements of *expr* might be nonzero at runtime.
+
+    Returns the exact zero pattern for ``Constant`` nodes; assumes
+    all-live for everything else.
+    """
+    # Deferred to avoid referencing Constant before it is defined;
+    # safe because this function is only called at runtime.
+    if isinstance(expr, Constant):
+        return np.asarray(expr.value).flatten() != 0
+    shape = expr.check_shape()
+    n = int(np.prod(shape)) if shape else 1
+    return np.ones(n, dtype=bool)
+
+
 class Constant(Expr):
     """Constant value expression.
 
