@@ -36,7 +36,7 @@ from typing import Tuple, Union
 
 import numpy as np
 
-from .expr import Constant, Expr, to_expr
+from .expr import Constant, Expr, _broadcast_sparsity, to_expr
 
 
 class Add(Expr):
@@ -117,6 +117,17 @@ class Add(Expr):
         except ValueError as e:
             raise ValueError(f"Add shapes not broadcastable: {shapes}") from e
 
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        out_shape = self.check_shape()
+        n_out = int(np.prod(out_shape)) if out_shape else 1
+        S_x = np.zeros((n_out, n_x), dtype=bool)
+        S_u = np.zeros((n_out, n_u), dtype=bool)
+        for term in self.terms:
+            t_sx, t_su = term.sparsity(n_x, n_u)
+            S_x |= _broadcast_sparsity(t_sx, term.check_shape(), out_shape, n_x)
+            S_u |= _broadcast_sparsity(t_su, term.check_shape(), out_shape, n_u)
+        return S_x, S_u
+
     def __repr__(self) -> str:
         inner = " + ".join(repr(e) for e in self.terms)
         return f"({inner})"
@@ -183,6 +194,18 @@ class Sub(Expr):
             return np.broadcast_shapes(*shapes)
         except ValueError as e:
             raise ValueError(f"Sub shapes not broadcastable: {shapes}") from e
+
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        out_shape = self.check_shape()
+        l_sx, l_su = self.left.sparsity(n_x, n_u)
+        r_sx, r_su = self.right.sparsity(n_x, n_u)
+        S_x = _broadcast_sparsity(
+            l_sx, self.left.check_shape(), out_shape, n_x
+        ) | _broadcast_sparsity(r_sx, self.right.check_shape(), out_shape, n_x)
+        S_u = _broadcast_sparsity(
+            l_su, self.left.check_shape(), out_shape, n_u
+        ) | _broadcast_sparsity(r_su, self.right.check_shape(), out_shape, n_u)
+        return S_x, S_u
 
     def __repr__(self) -> str:
         return f"({self.left!r} - {self.right!r})"
@@ -279,6 +302,17 @@ class Mul(Expr):
         except ValueError as e:
             raise ValueError(f"Mul shapes not broadcastable: {shapes}") from e
 
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        out_shape = self.check_shape()
+        n_out = int(np.prod(out_shape)) if out_shape else 1
+        S_x = np.zeros((n_out, n_x), dtype=bool)
+        S_u = np.zeros((n_out, n_u), dtype=bool)
+        for factor in self.factors:
+            f_sx, f_su = factor.sparsity(n_x, n_u)
+            S_x |= _broadcast_sparsity(f_sx, factor.check_shape(), out_shape, n_x)
+            S_u |= _broadcast_sparsity(f_su, factor.check_shape(), out_shape, n_u)
+        return S_x, S_u
+
     def __repr__(self) -> str:
         inner = " * ".join(repr(e) for e in self.factors)
         return f"({inner})"
@@ -345,6 +379,18 @@ class Div(Expr):
             return np.broadcast_shapes(*shapes)
         except ValueError as e:
             raise ValueError(f"Div shapes not broadcastable: {shapes}") from e
+
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        out_shape = self.check_shape()
+        l_sx, l_su = self.left.sparsity(n_x, n_u)
+        r_sx, r_su = self.right.sparsity(n_x, n_u)
+        S_x = _broadcast_sparsity(
+            l_sx, self.left.check_shape(), out_shape, n_x
+        ) | _broadcast_sparsity(r_sx, self.right.check_shape(), out_shape, n_x)
+        S_u = _broadcast_sparsity(
+            l_su, self.left.check_shape(), out_shape, n_u
+        ) | _broadcast_sparsity(r_su, self.right.check_shape(), out_shape, n_u)
+        return S_x, S_u
 
     def __repr__(self) -> str:
         return f"({self.left!r} / {self.right!r})"
@@ -474,6 +520,9 @@ class Neg(Expr):
         """Negation preserves the shape of its operand."""
         return self.operand.check_shape()
 
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        return self.operand.sparsity(n_x, n_u)
+
     def __repr__(self) -> str:
         return f"(-{self.operand!r})"
 
@@ -528,6 +577,18 @@ class Power(Expr):
             return np.broadcast_shapes(*shapes)
         except ValueError as e:
             raise ValueError(f"Power shapes not broadcastable: {shapes}") from e
+
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        out_shape = self.check_shape()
+        b_sx, b_su = self.base.sparsity(n_x, n_u)
+        e_sx, e_su = self.exponent.sparsity(n_x, n_u)
+        S_x = _broadcast_sparsity(
+            b_sx, self.base.check_shape(), out_shape, n_x
+        ) | _broadcast_sparsity(e_sx, self.exponent.check_shape(), out_shape, n_x)
+        S_u = _broadcast_sparsity(
+            b_su, self.base.check_shape(), out_shape, n_u
+        ) | _broadcast_sparsity(e_su, self.exponent.check_shape(), out_shape, n_u)
+        return S_x, S_u
 
     def __repr__(self) -> str:
         return f"({self.base!r})**({self.exponent!r})"

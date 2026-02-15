@@ -1,13 +1,15 @@
-"""Static sparsity analysis for Jacobian matrices via AST traversal.
+"""Static sparsity analysis for Jacobian matrices.
 
-Derives boolean sparsity patterns for dynamics and constraint Jacobians
-by walking the expression tree and collecting which State/Control slices
-each sub-expression depends on. This is a conservative (superset) analysis:
-it may report a dependency that vanishes numerically, but will never miss one.
+Derives boolean sparsity patterns for dynamics and constraint Jacobians.
+Each ``Expr`` node implements a ``sparsity(n_x, n_u)`` method that
+propagates patterns through the AST.  This is a conservative (superset)
+analysis: it may report a dependency that vanishes numerically, but will
+never miss one.
 
 The primary entry points are:
 
 - ``jacobian_sparsity``: 2-D Jacobian sparsity pattern for any expression
+  (delegates to ``Expr.sparsity``)
 - ``cross_node_sparsity``: per-node patterns for cross-node constraints
 """
 
@@ -16,41 +18,12 @@ from typing import Tuple
 import numpy as np
 
 from openscvx.symbolic.expr import (
-    Concat,
     Control,
     Expr,
     NodeReference,
     State,
     traverse,
 )
-
-
-def _leaf_masks(
-    expr: Expr,
-    n_x: int,
-    n_u: int,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Flat boolean masks of which state/control indices appear in *expr*.
-
-    Returns 1-D arrays ``(x_mask[n_x], u_mask[n_u])``.
-    """
-    x_mask = np.zeros(n_x, dtype=bool)
-    u_mask = np.zeros(n_u, dtype=bool)
-
-    def _collect(node: Expr) -> None:
-        if isinstance(node, State) and node._slice is not None:
-            x_mask[node._slice] = True
-        elif isinstance(node, Control) and node._slice is not None:
-            u_mask[node._slice] = True
-
-    traverse(expr, _collect)
-    return x_mask, u_mask
-
-
-def _output_dim(expr: Expr) -> int:
-    """Number of scalar outputs of *expr* (product of its shape, min 1)."""
-    shape = expr.check_shape()
-    return int(np.prod(shape)) if shape else 1
 
 
 def jacobian_sparsity(
@@ -60,14 +33,9 @@ def jacobian_sparsity(
 ) -> Tuple[np.ndarray, np.ndarray]:
     """2-D boolean sparsity patterns for df/dx and df/du.
 
-    For a vector-valued expression ``f`` with *n_out* output elements,
-    returns boolean matrices of shape ``(n_out, n_x)`` and ``(n_out, n_u)``
-    indicating which partial derivatives may be nonzero.
-
-    When *expr* is a ``Concat``, each child is analysed independently so
-    that row blocks corresponding to independent sub-expressions get
-    tighter (sparser) patterns.  For all other node types the analysis
-    is column-level: every output row receives the same conservative mask.
+    Delegates to ``expr.sparsity(n_x, n_u)``.  See
+    :meth:`Expr.sparsity` for details on the per-node propagation
+    rules.
 
     Args:
         expr: Root of the expression tree to analyse.
@@ -78,20 +46,7 @@ def jacobian_sparsity(
         Tuple ``(df_dx, df_du)`` of bool arrays with shapes
         ``(n_out, n_x)`` and ``(n_out, n_u)``.
     """
-    if isinstance(expr, Concat):
-        children = expr.children()
-        blocks_x = []
-        blocks_u = []
-        for child in children:
-            child_dx, child_du = jacobian_sparsity(child, n_x, n_u)
-            blocks_x.append(child_dx)
-            blocks_u.append(child_du)
-        return np.vstack(blocks_x), np.vstack(blocks_u)
-
-    n_out = _output_dim(expr)
-    x_mask, u_mask = _leaf_masks(expr, n_x, n_u)
-    # Broadcast the 1-D column mask to every output row
-    return np.tile(x_mask, (n_out, 1)), np.tile(u_mask, (n_out, 1))
+    return expr.sparsity(n_x, n_u)
 
 
 def cross_node_sparsity(

@@ -316,6 +316,37 @@ class Expr:
         """
         raise NotImplementedError(f"check_shape() not implemented for {self.__class__.__name__}")
 
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Boolean Jacobian sparsity pattern for this expression.
+
+        Returns 2-D boolean arrays ``(S_x, S_u)`` of shapes
+        ``(n_out, n_x)`` and ``(n_out, n_u)`` where ``n_out`` is the
+        number of scalar output elements (product of ``check_shape()``).
+        Entry ``S_x[i, j] = True`` means output element *i* may depend
+        on state element *j*; likewise for ``S_u`` and controls.
+
+        The default implementation is *conservative*: it unions the
+        column masks of all children and broadcasts that mask to every
+        output row.  Subclasses override this to provide tighter
+        (sparser) patterns.
+
+        Args:
+            n_x: Total dimension of the unified state vector.
+            n_u: Total dimension of the unified control vector.
+
+        Returns:
+            Tuple ``(S_x, S_u)`` of bool ndarrays.
+        """
+        shape = self.check_shape()
+        n_out = int(np.prod(shape)) if shape else 1
+        x_mask = np.zeros(n_x, dtype=bool)
+        u_mask = np.zeros(n_u, dtype=bool)
+        for child in self.children():
+            child_sx, child_su = child.sparsity(n_x, n_u)
+            x_mask |= child_sx.any(axis=0)
+            u_mask |= child_su.any(axis=0)
+        return np.tile(x_mask, (n_out, 1)), np.tile(u_mask, (n_out, 1))
+
     def pretty(self, indent: int = 0) -> str:
         """Generate a pretty-printed string representation of the expression tree.
 
@@ -436,6 +467,14 @@ class Leaf(Expr):
         """
         return self._shape
 
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Leaf nodes with no decision-variable dependence return all-False."""
+        n_out = int(np.prod(self._shape)) if self._shape else 1
+        return (
+            np.zeros((n_out, n_x), dtype=bool),
+            np.zeros((n_out, n_u), dtype=bool),
+        )
+
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash leaf node by class name and shape.
 
@@ -533,6 +572,24 @@ def traverse(expr: Expr, visit: Callable[[Expr], None]):
         traverse(child, visit)
 
 
+def _broadcast_sparsity(
+    S: np.ndarray,
+    from_shape: Tuple[int, ...],
+    to_shape: Tuple[int, ...],
+    n_cols: int,
+) -> np.ndarray:
+    """Broadcast a sparsity matrix from *from_shape* to *to_shape*.
+
+    Reshapes *S* (``prod(from_shape), n_cols``) into the N-D expression
+    shape, broadcasts with NumPy rules, and flattens back.
+    """
+    from_shape = from_shape or (1,)
+    to_shape = to_shape or (1,)
+    S_nd = S.reshape(from_shape + (n_cols,))
+    S_broadcast = np.broadcast_to(S_nd, to_shape + (n_cols,))
+    return S_broadcast.reshape(int(np.prod(to_shape)), n_cols).copy()
+
+
 class Constant(Expr):
     """Constant value expression.
 
@@ -587,6 +644,15 @@ class Constant(Expr):
                 "Constants should be squeezed during construction."
             )
         return self.value.shape
+
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Constants have no decision-variable dependence."""
+        shape = self.value.shape
+        n_out = int(np.prod(shape)) if shape else 1
+        return (
+            np.zeros((n_out, n_x), dtype=bool),
+            np.zeros((n_out, n_u), dtype=bool),
+        )
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash constant by its value.
@@ -706,6 +772,10 @@ class NodeReference(Expr):
             tuple: The shape of the base expression
         """
         return self.base.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Pass through the base expression's sparsity."""
+        return self.base.sparsity(n_x, n_u)
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash NodeReference including its node index.

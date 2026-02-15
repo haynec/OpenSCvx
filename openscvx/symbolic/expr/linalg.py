@@ -117,6 +117,17 @@ class Transpose(Expr):
             # (..., m, n) -> (..., n, m)
             return operand_shape[:-2] + (operand_shape[-1], operand_shape[-2])
 
+    def sparsity(self, n_x: int, n_u: int):
+        op_sx, op_su = self.operand.sparsity(n_x, n_u)
+        op_shape = self.operand.check_shape()
+        if len(op_shape) <= 1:
+            return op_sx, op_su
+        # Permute flattened rows to match transposed element order
+        n_flat = op_sx.shape[0]
+        indices = np.arange(n_flat).reshape(op_shape)
+        perm = np.swapaxes(indices, -2, -1).flatten()
+        return op_sx[perm], op_su[perm]
+
     def __repr__(self) -> str:
         return f"({self.operand!r}).T"
 
@@ -211,6 +222,10 @@ class Sum(Expr):
         self.operand.check_shape()
         # Sum always produces a scalar regardless of input shape
         return ()
+
+    def sparsity(self, n_x: int, n_u: int):
+        op_sx, op_su = self.operand.sparsity(n_x, n_u)
+        return op_sx.any(axis=0, keepdims=True), op_su.any(axis=0, keepdims=True)
 
     def __repr__(self) -> str:
         return f"sum({self.operand!r})"
@@ -348,6 +363,10 @@ class Norm(Expr):
         self.operand.check_shape()
         # Norm always produces a scalar regardless of input shape
         return ()
+
+    def sparsity(self, n_x: int, n_u: int):
+        op_sx, op_su = self.operand.sparsity(n_x, n_u)
+        return op_sx.any(axis=0, keepdims=True), op_su.any(axis=0, keepdims=True)
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash Norm including its ord parameter.

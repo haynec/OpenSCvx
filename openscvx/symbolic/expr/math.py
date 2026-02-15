@@ -40,7 +40,7 @@ from typing import Tuple, Union
 
 import numpy as np
 
-from .expr import Expr, to_expr
+from .expr import Expr, _broadcast_sparsity, to_expr
 
 
 class Sin(Expr):
@@ -77,6 +77,9 @@ class Sin(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Sin preserves the shape of its operand."""
         return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
 
     def __repr__(self) -> str:
         return f"(sin({self.operand!r}))"
@@ -116,6 +119,9 @@ class Cos(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Cos preserves the shape of its operand."""
         return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
 
     def __repr__(self) -> str:
         return f"(cos({self.operand!r}))"
@@ -160,6 +166,9 @@ class Tan(Expr):
         """Tan preserves the shape of its operand."""
         return self.operand.check_shape()
 
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
+
     def __repr__(self) -> str:
         return f"(tan({self.operand!r}))"
 
@@ -200,6 +209,9 @@ class Square(Expr):
         """x^2 preserves the shape of x."""
         return self.x.check_shape()
 
+    def sparsity(self, n_x: int, n_u: int):
+        return self.x.sparsity(n_x, n_u)
+
     def __repr__(self) -> str:
         return f"({self.x!r})^2"
 
@@ -238,6 +250,9 @@ class Sqrt(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Sqrt preserves the shape of its operand."""
         return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
 
     def __repr__(self) -> str:
         return f"sqrt({self.operand!r})"
@@ -278,6 +293,9 @@ class Exp(Expr):
         """Exp preserves the shape of its operand."""
         return self.operand.check_shape()
 
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
+
     def __repr__(self) -> str:
         return f"exp({self.operand!r})"
 
@@ -316,6 +334,9 @@ class Log(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Log preserves the shape of its operand."""
         return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
 
     def __repr__(self) -> str:
         return f"log({self.operand!r})"
@@ -356,6 +377,9 @@ class Abs(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Abs preserves the shape of its operand."""
         return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
 
     def __repr__(self) -> str:
         return f"abs({self.operand!r})"
@@ -429,6 +453,17 @@ class Max(Expr):
             return np.broadcast_shapes(*shapes)
         except ValueError as e:
             raise ValueError(f"Max shapes not broadcastable: {shapes}") from e
+
+    def sparsity(self, n_x: int, n_u: int):
+        out_shape = self.check_shape()
+        n_out = int(np.prod(out_shape)) if out_shape else 1
+        S_x = np.zeros((n_out, n_x), dtype=bool)
+        S_u = np.zeros((n_out, n_u), dtype=bool)
+        for op in self.operands:
+            o_sx, o_su = op.sparsity(n_x, n_u)
+            S_x |= _broadcast_sparsity(o_sx, op.check_shape(), out_shape, n_x)
+            S_u |= _broadcast_sparsity(o_su, op.check_shape(), out_shape, n_u)
+        return S_x, S_u
 
     def __repr__(self) -> str:
         inner = ", ".join(repr(op) for op in self.operands)
@@ -504,6 +539,17 @@ class Min(Expr):
         except ValueError as e:
             raise ValueError(f"Min shapes not broadcastable: {shapes}") from e
 
+    def sparsity(self, n_x: int, n_u: int):
+        out_shape = self.check_shape()
+        n_out = int(np.prod(out_shape)) if out_shape else 1
+        S_x = np.zeros((n_out, n_x), dtype=bool)
+        S_u = np.zeros((n_out, n_u), dtype=bool)
+        for op in self.operands:
+            o_sx, o_su = op.sparsity(n_x, n_u)
+            S_x |= _broadcast_sparsity(o_sx, op.check_shape(), out_shape, n_x)
+            S_u |= _broadcast_sparsity(o_su, op.check_shape(), out_shape, n_u)
+        return S_x, S_u
+
     def __repr__(self) -> str:
         inner = ", ".join(repr(op) for op in self.operands)
         return f"min({inner})"
@@ -546,6 +592,9 @@ class PositivePart(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """pos(x) = max(x, 0) preserves the shape of x."""
         return self.x.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.x.sparsity(n_x, n_u)
 
     def __repr__(self) -> str:
         return f"pos({self.x!r})"
@@ -595,6 +644,9 @@ class Huber(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Huber penalty preserves the shape of x."""
         return self.x.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.x.sparsity(n_x, n_u)
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash Huber including its delta parameter.
@@ -657,6 +709,9 @@ class SmoothReLU(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Smooth ReLU preserves the shape of x."""
         return self.x.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.x.sparsity(n_x, n_u)
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash SmoothReLU including its c parameter.
@@ -767,6 +822,17 @@ class LogSumExp(Expr):
             return np.broadcast_shapes(*shapes)
         except ValueError as e:
             raise ValueError(f"LogSumExp shapes not broadcastable: {shapes}") from e
+
+    def sparsity(self, n_x: int, n_u: int):
+        out_shape = self.check_shape()
+        n_out = int(np.prod(out_shape)) if out_shape else 1
+        S_x = np.zeros((n_out, n_x), dtype=bool)
+        S_u = np.zeros((n_out, n_u), dtype=bool)
+        for op in self.operands:
+            o_sx, o_su = op.sparsity(n_x, n_u)
+            S_x |= _broadcast_sparsity(o_sx, op.check_shape(), out_shape, n_x)
+            S_u |= _broadcast_sparsity(o_su, op.check_shape(), out_shape, n_u)
+        return S_x, S_u
 
     def __repr__(self) -> str:
         inner = ", ".join(repr(op) for op in self.operands)
