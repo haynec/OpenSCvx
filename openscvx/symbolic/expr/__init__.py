@@ -96,7 +96,9 @@ from .expr import (
     Leaf,
     NodeReference,
     Parameter,
+    discrete_sparsity,
     to_expr,
+    transitive_closure,
     traverse,
 )
 
@@ -161,6 +163,8 @@ __all__ = [
     "Parameter",
     "to_expr",
     "traverse",
+    "transitive_closure",
+    "discrete_sparsity",
     "Add",
     "Sub",
     "Mul",

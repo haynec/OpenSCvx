@@ -17,6 +17,8 @@ from openscvx.symbolic.expr import (
     State,
     Sum,
     Transpose,
+    discrete_sparsity,
+    transitive_closure,
 )
 from openscvx.symbolic.preprocessing import collect_and_assign_slices
 
@@ -571,3 +573,183 @@ def test_matmul_in_rocket_dynamics():
     np.testing.assert_array_equal(S_u[0], [True, False, False])
     np.testing.assert_array_equal(S_u[1], [False, True, False])
     np.testing.assert_array_equal(S_u[2], [False, False, False])
+
+
+# =============================================================================
+# transitive_closure
+# =============================================================================
+
+
+def test_transitive_closure_identity():
+    """No coupling: closure of zeros is just the identity."""
+    A = np.zeros((3, 3), dtype=bool)
+    R = transitive_closure(A)
+    np.testing.assert_array_equal(R, np.eye(3, dtype=bool))
+
+
+def test_transitive_closure_already_full():
+    """All-True input stays all-True."""
+    A = np.ones((3, 3), dtype=bool)
+    R = transitive_closure(A)
+    np.testing.assert_array_equal(R, True)
+
+
+def test_transitive_closure_chain():
+    """Chain coupling: 0->1->2 fills the lower triangle.
+
+    A = [[0,0,0],   (state 0 depends on nothing)
+         [1,0,0],   (state 1 depends on 0)
+         [0,1,0]]   (state 2 depends on 1)
+
+    Closure should have 2 depending on 0 (indirect path).
+    """
+    A = np.array([[False, False, False], [True, False, False], [False, True, False]])
+    R = transitive_closure(A)
+    expected = np.array([[True, False, False], [True, True, False], [True, True, True]])
+    np.testing.assert_array_equal(R, expected)
+
+
+def test_transitive_closure_cycle():
+    """Cycle: 0->1->2->0 makes all reachable from all."""
+    A = np.array([[False, False, True], [True, False, False], [False, True, False]])
+    R = transitive_closure(A)
+    np.testing.assert_array_equal(R, True)
+
+
+def test_transitive_closure_block_diagonal():
+    """Decoupled blocks stay decoupled."""
+    # Block 1: states 0,1 coupled; Block 2: states 2,3 coupled
+    A = np.zeros((4, 4), dtype=bool)
+    A[0, 1] = True
+    A[1, 0] = True
+    A[2, 3] = True
+    A[3, 2] = True
+    R = transitive_closure(A)
+    # Each block is all-True within itself
+    np.testing.assert_array_equal(R[0:2, 0:2], True)
+    np.testing.assert_array_equal(R[2:4, 2:4], True)
+    # Cross-block stays False
+    np.testing.assert_array_equal(R[0:2, 2:4], False)
+    np.testing.assert_array_equal(R[2:4, 0:2], False)
+
+
+def test_transitive_closure_1x1():
+    """Edge case: scalar system."""
+    R = transitive_closure(np.array([[True]]))
+    np.testing.assert_array_equal(R, [[True]])
+    R = transitive_closure(np.array([[False]]))
+    np.testing.assert_array_equal(R, [[True]])  # identity
+
+
+# =============================================================================
+# discrete_sparsity
+# =============================================================================
+
+
+def test_discrete_sparsity_diagonal_a():
+    """Diagonal A (no coupling): A_d = I, B_d = B_c."""
+    A_c = np.eye(3, dtype=bool)
+    B_c = np.array([[True, False], [False, True], [False, False]], dtype=bool)
+    A_d, B_d, C_d = discrete_sparsity(A_c, B_c)
+
+    np.testing.assert_array_equal(A_d, np.eye(3, dtype=bool))
+    np.testing.assert_array_equal(B_d, B_c)
+    np.testing.assert_array_equal(C_d, False)  # ZOH default
+
+
+def test_discrete_sparsity_chain_fills_b():
+    """Chain coupling in A propagates into B_d.
+
+    If state 2 depends on state 1 (A[2,1]=True), and state 1 depends
+    on control 0 (B[1,0]=True), then discrete B_d[2,0] should be True.
+    """
+    A_c = np.array(
+        [[False, False, False], [False, False, False], [False, True, False]],
+        dtype=bool,
+    )
+    B_c = np.array([[False], [True], [False]], dtype=bool)
+    A_d, B_d, C_d = discrete_sparsity(A_c, B_c)
+
+    # A_d: closure adds path 2->1
+    assert A_d[2, 1]
+    # B_d: state 2 now depends on control 0 (through state 1)
+    assert B_d[1, 0]  # direct
+    assert B_d[2, 0]  # indirect, via chain
+    assert not B_d[0, 0]  # state 0 is decoupled
+
+
+def test_discrete_sparsity_foh():
+    """FOH: C_d has the same pattern as B_d."""
+    A_c = np.zeros((2, 2), dtype=bool)
+    B_c = np.array([[True, False], [False, True]], dtype=bool)
+    A_d, B_d, C_d = discrete_sparsity(A_c, B_c, dis_type="FOH")
+
+    np.testing.assert_array_equal(C_d, B_d)
+
+
+def test_discrete_sparsity_zoh_c_is_zero():
+    """ZOH: C_d is all-False regardless of B_c."""
+    A_c = np.ones((2, 2), dtype=bool)
+    B_c = np.ones((2, 2), dtype=bool)
+    _, _, C_d = discrete_sparsity(A_c, B_c, dis_type="ZOH")
+
+    np.testing.assert_array_equal(C_d, False)
+
+
+def test_discrete_sparsity_rocket():
+    """End-to-end: continuous rocket sparsity through discretization.
+
+    pos_dot = vel          → A row 0:3 has vel block, B row 0:3 is empty
+    vel_dot = thrust/mass  → A row 3:6 has mass col, B row 3:6 has thrust
+    mass_dot = -a*||T||    → A row 6 is empty, B row 6 has all thrust cols
+
+    After discretization, vel_dot depending on mass and mass_dot depending
+    on thrust means vel should indirectly depend on thrust through mass —
+    but that's already in B_c. The key new coupling: pos depends on vel in
+    A_c, so A_d should show pos depending on mass (vel->mass chain).
+    """
+    pos, vel, mass, thrust, states, controls, n_x, n_u = _make_rocket_vars()
+
+    g = Constant(np.array([0.0, 0.0, -9.81]))
+    alpha = Constant(np.array([0.01]))
+
+    dynamics_concat = Concat(
+        vel,
+        thrust / mass - g,
+        -alpha * Norm(thrust),
+    )
+    A_c, B_c = dynamics_concat.sparsity(n_x, n_u)
+    A_d, B_d, C_d = discrete_sparsity(A_c, B_c)
+
+    # --- A_d ---
+    # pos (0:3) depends on vel (3:6) directly in A_c.
+    # vel (3:6) depends on mass (6) in A_c.
+    # So in A_d, pos should also depend on mass (transitive).
+    assert A_d[0, 6]  # pos[0] -> mass (indirect via vel)
+    assert A_d[1, 6]
+    assert A_d[2, 6]
+
+    # pos depends on vel — element-level diagonal preserved through closure
+    # (pos[0] only reaches vel[0], not vel[1] or vel[2])
+    np.testing.assert_array_equal(A_d[0:3, 3:6], np.eye(3, dtype=bool))
+
+    # Self-dependence (identity)
+    for i in range(n_x):
+        assert A_d[i, i]
+
+    # pos does NOT depend on pos cross-terms
+    np.testing.assert_array_equal(A_d[0:3, 0:3], np.eye(3, dtype=bool))
+
+    # mass row: mass has no state deps in A_c, so A_d[6,:] is just identity
+    np.testing.assert_array_equal(A_d[6, 0:6], False)
+    assert A_d[6, 6]
+
+    # --- B_d = bool_matmul(A_d, B_c) ---
+    # B_c: vel rows are diagonal (thrust[i] -> vel[i]), mass row is all-True
+    # (Norm reduction).
+    # A_d: vel[i] depends on mass (col 6), and mass has B_c row [1,1,1],
+    # so B_d[3:6, :] = True (diagonal from vel + all from mass).
+    # A_d: pos[i] depends on vel[i] and mass, so same reasoning → all True.
+    np.testing.assert_array_equal(B_d[0:3, :], True)
+    np.testing.assert_array_equal(B_d[3:6, :], True)
+    np.testing.assert_array_equal(B_d[6:7, :], True)
