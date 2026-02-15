@@ -482,6 +482,12 @@ class MatMul(Expr):
             return L[:-1] + (R[-1],)
 
     def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        # Product rule in boolean arithmetic.  For y[i] = sum_j A[i,j]*B[j]:
+        #   dy[i]/dz[p] = sum_j (dA[i,j]/dz[p]*B[j] + A[i,j]*dB[j]/dz[p])
+        # A derivative term only survives if the *other* factor (the value,
+        # not the derivative) might be nonzero — that's what "liveness" captures.
+        # t1 = bmm(S_L, R_live): left's dependence, gated by right's values
+        # t2 = bmm(L_live, S_R): right's dependence, gated by left's values
         L_shape = self.left.check_shape()
         R_shape = self.right.check_shape()
 
