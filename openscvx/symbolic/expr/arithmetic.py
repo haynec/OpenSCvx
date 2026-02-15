@@ -318,13 +318,13 @@ class Mul(Expr):
         livenesses = []
         for f in self.factors:
             f_sx, f_su = f.sparsity(n_x, n_u)
-            sparsities.append((
-                _broadcast_sparsity(f_sx, f.check_shape(), out_shape, n_x),
-                _broadcast_sparsity(f_su, f.check_shape(), out_shape, n_u),
-            ))
-            livenesses.append(
-                _broadcast_liveness(_element_liveness(f), f.check_shape(), out_shape)
+            sparsities.append(
+                (
+                    _broadcast_sparsity(f_sx, f.check_shape(), out_shape, n_x),
+                    _broadcast_sparsity(f_su, f.check_shape(), out_shape, n_u),
+                )
             )
+            livenesses.append(_broadcast_liveness(_element_liveness(f), f.check_shape(), out_shape))
         # Product rule: factor k's derivative survives only if all OTHER
         # factors are live (might be nonzero).
         S_x = np.zeros((n_out, n_x), dtype=bool)
@@ -419,19 +419,11 @@ class Div(Expr):
             _element_liveness(self.right), self.right.check_shape(), out_shape
         )
         S_x = (
-            _broadcast_sparsity(l_sx, self.left.check_shape(), out_shape, n_x)
-            & r_live[:, None]
-        ) | (
-            _broadcast_sparsity(r_sx, self.right.check_shape(), out_shape, n_x)
-            & l_live[:, None]
-        )
+            _broadcast_sparsity(l_sx, self.left.check_shape(), out_shape, n_x) & r_live[:, None]
+        ) | (_broadcast_sparsity(r_sx, self.right.check_shape(), out_shape, n_x) & l_live[:, None])
         S_u = (
-            _broadcast_sparsity(l_su, self.left.check_shape(), out_shape, n_u)
-            & r_live[:, None]
-        ) | (
-            _broadcast_sparsity(r_su, self.right.check_shape(), out_shape, n_u)
-            & l_live[:, None]
-        )
+            _broadcast_sparsity(l_su, self.left.check_shape(), out_shape, n_u) & r_live[:, None]
+        ) | (_broadcast_sparsity(r_su, self.right.check_shape(), out_shape, n_u) & l_live[:, None])
         return S_x, S_u
 
     def __repr__(self) -> str:

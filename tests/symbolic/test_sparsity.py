@@ -2,8 +2,6 @@
 
 Covers:
 - Expr.sparsity() method (element-level propagation through AST)
-- jacobian_sparsity() wrapper in openscvx.symbolic.sparsity
-- cross_node_sparsity() for cross-node constraints
 """
 
 import numpy as np
@@ -21,10 +19,6 @@ from openscvx.symbolic.expr import (
     Transpose,
 )
 from openscvx.symbolic.preprocessing import collect_and_assign_slices
-from openscvx.symbolic.sparsity import (
-    cross_node_sparsity,
-    jacobian_sparsity,
-)
 
 # =============================================================================
 # Helpers
@@ -85,7 +79,7 @@ def test_control_leaf_element_level():
 def test_constant_has_no_dependence():
     pos, vel, mass, thrust, states, controls, n_x, n_u = _make_rocket_vars()
     c = Constant(np.array([9.81]))
-    df_dx, df_du = jacobian_sparsity(c, n_x, n_u)
+    df_dx, df_du = c.sparsity(n_x, n_u)
 
     assert df_dx.shape == (1, n_x)
     assert not df_dx.any()
@@ -95,7 +89,7 @@ def test_constant_has_no_dependence():
 def test_parameter_has_no_dependence():
     pos, vel, mass, thrust, states, controls, n_x, n_u = _make_rocket_vars()
     g = Parameter("g", (3,), value=np.array([0.0, 0.0, -9.81]))
-    df_dx, df_du = jacobian_sparsity(g, n_x, n_u)
+    df_dx, df_du = g.sparsity(n_x, n_u)
 
     assert df_dx.shape == (3, n_x)
     assert not df_dx.any()
@@ -130,7 +124,7 @@ def test_mixed_state_and_control():
     """thrust / mass depends on both u[0:3] and x[6:7]."""
     pos, vel, mass, thrust, states, controls, n_x, n_u = _make_rocket_vars()
     expr = thrust / mass  # shape (3,) / shape (1,) => shape (3,)
-    df_dx, df_du = jacobian_sparsity(expr, n_x, n_u)
+    df_dx, df_du = expr.sparsity(n_x, n_u)
 
     assert df_dx.shape == (3, n_x)
     # x dependence: mass (index 6) broadcasts to all 3 rows
@@ -147,7 +141,7 @@ def test_scalar_expression():
     """Norm reduces to scalar — output should be (1, n_x) and (1, n_u)."""
     pos, vel, mass, thrust, states, controls, n_x, n_u = _make_rocket_vars()
     expr = Norm(thrust)
-    df_dx, df_du = jacobian_sparsity(expr, n_x, n_u)
+    df_dx, df_du = expr.sparsity(n_x, n_u)
 
     assert df_dx.shape == (1, n_x)
     assert df_du.shape == (1, n_u)
@@ -256,7 +250,7 @@ def test_rocket_dynamics_sparsity():
     dynamics_exprs = [dynamics_dict[s.name] for s in states]
     dynamics_concat = Concat(*dynamics_exprs)
 
-    A, B = jacobian_sparsity(dynamics_concat, n_x, n_u)
+    A, B = dynamics_concat.sparsity(n_x, n_u)
 
     assert A.shape == (n_x, n_x)
     assert B.shape == (n_x, n_u)
@@ -299,7 +293,7 @@ def test_decoupled_dynamics():
 
     # x_dot = x, y_dot = y + u
     dynamics_concat = Concat(x, y + u)
-    A, B = jacobian_sparsity(dynamics_concat, 4, 1)
+    A, B = dynamics_concat.sparsity(4, 1)
 
     # x_dot depends only on x (cols 0:2) — element-level diagonal
     np.testing.assert_array_equal(A[0:2, 0:2], np.eye(2, dtype=bool))
@@ -322,7 +316,7 @@ def test_constant_dynamics_row():
     collect_and_assign_slices(states, controls)
 
     dynamics_concat = Concat(Constant(np.zeros(2)))
-    A, B = jacobian_sparsity(dynamics_concat, 2, 0)
+    A, B = dynamics_concat.sparsity(2, 0)
 
     np.testing.assert_array_equal(A, False)
     assert B.shape == (2, 0)
@@ -337,7 +331,7 @@ def test_nested_concat():
 
     inner = Concat(x, y)  # rows 0-1
     outer = Concat(inner, z)  # row 2
-    A, _ = jacobian_sparsity(outer, 3, 0)
+    A, _ = outer.sparsity(3, 0)
 
     np.testing.assert_array_equal(A[0], [True, False, False])
     np.testing.assert_array_equal(A[1], [False, True, False])
@@ -447,72 +441,6 @@ def test_default_fallback_is_conservative():
     assert S_x.shape == (9, 4)
     # Conservative: every output element depends on all 4 quaternion components
     np.testing.assert_array_equal(S_x, True)
-
-
-# =============================================================================
-# cross_node_sparsity — NodeReference-based analysis
-# =============================================================================
-
-
-def test_rate_constraint_sparsity():
-    """pos.at(k) - pos.at(k-1) should mark exactly nodes k and k-1 for pos."""
-    pos = State("pos", (3,))
-    vel = State("vel", (3,))
-    states = [pos, vel]
-    controls = []
-    collect_and_assign_slices(states, controls)
-    n_x = 6
-    N = 10
-
-    expr = pos.at(5) - pos.at(4)
-    x_mask, u_mask = cross_node_sparsity(expr, n_x, 0, N)
-
-    assert x_mask.shape == (N, n_x)
-    assert u_mask.shape == (N, 0)
-
-    for k in range(N):
-        if k in (4, 5):
-            np.testing.assert_array_equal(x_mask[k, 0:3], True)
-        else:
-            np.testing.assert_array_equal(x_mask[k, :], False)
-    np.testing.assert_array_equal(x_mask[:, 3:6], False)
-
-
-def test_cross_node_negative_index():
-    """Negative node indices are normalized correctly."""
-    x = State("x", (2,))
-    states = [x]
-    controls = []
-    collect_and_assign_slices(states, controls)
-    N = 5
-
-    expr = x.at(0) - x.at(-1)
-    x_mask, u_mask = cross_node_sparsity(expr, 2, 0, N)
-
-    np.testing.assert_array_equal(x_mask[0, :], True)
-    np.testing.assert_array_equal(x_mask[4, :], True)
-    np.testing.assert_array_equal(x_mask[1:4, :], False)
-
-
-def test_cross_node_with_control():
-    """Cross-node constraint referencing both state and control."""
-    x = State("x", (2,))
-    u = Control("u", (1,))
-    states = [x]
-    controls = [u]
-    collect_and_assign_slices(states, controls)
-    N = 5
-
-    expr = x.at(3) + u.at(3)
-    x_mask, u_mask = cross_node_sparsity(expr, 2, 1, N)
-
-    for k in range(N):
-        if k == 3:
-            np.testing.assert_array_equal(x_mask[k, :], True)
-            np.testing.assert_array_equal(u_mask[k, :], True)
-        else:
-            np.testing.assert_array_equal(x_mask[k, :], False)
-            np.testing.assert_array_equal(u_mask[k, :], False)
 
 
 # =============================================================================
