@@ -697,6 +697,14 @@ class PTRSolver(ConvexSolver):
             param = self._problem.param_dict[name]
             value_arr = np.asarray(value)
 
+            # For sparse parameters, assign only nonzero entries via value_sparse
+            if param.sparse_idx is not None:
+                from scipy.sparse import coo_array
+
+                data = value_arr[param.sparse_idx]
+                param.value_sparse = coo_array((data, param.sparse_idx), shape=param.shape)
+                return
+
             # Ensure the value shape matches the parameter shape exactly
             # This is critical for Python 3.11+ where NumPy/CVXPy are stricter about shapes
             if hasattr(param, "shape") and param.shape is not None:
