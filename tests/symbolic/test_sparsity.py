@@ -21,6 +21,7 @@ from openscvx.symbolic.expr import (
     transitive_closure,
 )
 from openscvx.symbolic.preprocessing import collect_and_assign_slices
+from openscvx.symbolic.sparsity import _bool_matmul
 
 # =============================================================================
 # Helpers
@@ -670,6 +671,33 @@ def test_transitive_closure_block_diagonal():
     # Cross-block stays False
     np.testing.assert_array_equal(R[0:2, 2:4], False)
     np.testing.assert_array_equal(R[2:4, 0:2], False)
+
+
+def test_transitive_closure_early_termination():
+    """Identity-like input converges in one iteration despite large n.
+
+    For n=8, the loop would run ceil(log2(8))=3 iterations without early
+    termination.  But R_0 = I | zeros = I, and I @ I = I, so R_1 == R_0
+    and the loop should break after the first squaring.
+    """
+    from unittest.mock import patch
+
+    n = 8
+    A = np.zeros((n, n), dtype=bool)
+
+    call_count = 0
+    orig_bool_matmul = _bool_matmul
+
+    def counting_bool_matmul(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        return orig_bool_matmul(*args, **kwargs)
+
+    with patch("openscvx.symbolic.sparsity._bool_matmul", counting_bool_matmul):
+        R = transitive_closure(A)
+
+    np.testing.assert_array_equal(R, np.eye(n, dtype=bool))
+    assert call_count == 1, f"Expected 1 iteration but got {call_count}"
 
 
 def test_transitive_closure_1x1():
