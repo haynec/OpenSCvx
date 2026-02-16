@@ -663,15 +663,28 @@ class Power(Expr):
             raise ValueError(f"Power shapes not broadcastable: {shapes}") from e
 
     def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        # d(b^e)/dz = e * b^(e-1) * db/dz  +  b^e * ln(b) * de/dz
+        # base's derivative gated by exponent's liveness (e=0 kills it)
+        # exponent's derivative gated by base's liveness (b=0 kills it)
         out_shape = self.check_shape()
         b_sx, b_su = self.base.sparsity(n_x, n_u)
         e_sx, e_su = self.exponent.sparsity(n_x, n_u)
-        S_x = _broadcast_sparsity(
-            b_sx, self.base.check_shape(), out_shape, n_x
-        ) | _broadcast_sparsity(e_sx, self.exponent.check_shape(), out_shape, n_x)
-        S_u = _broadcast_sparsity(
-            b_su, self.base.check_shape(), out_shape, n_u
-        ) | _broadcast_sparsity(e_su, self.exponent.check_shape(), out_shape, n_u)
+        b_live = _broadcast_liveness(
+            _element_liveness(self.base), self.base.check_shape(), out_shape
+        )
+        e_live = _broadcast_liveness(
+            _element_liveness(self.exponent), self.exponent.check_shape(), out_shape
+        )
+        S_x = (
+            _broadcast_sparsity(b_sx, self.base.check_shape(), out_shape, n_x) & e_live[:, None]
+        ) | (
+            _broadcast_sparsity(e_sx, self.exponent.check_shape(), out_shape, n_x) & b_live[:, None]
+        )
+        S_u = (
+            _broadcast_sparsity(b_su, self.base.check_shape(), out_shape, n_u) & e_live[:, None]
+        ) | (
+            _broadcast_sparsity(e_su, self.exponent.check_shape(), out_shape, n_u) & b_live[:, None]
+        )
         return S_x, S_u
 
     def __repr__(self) -> str:

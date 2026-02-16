@@ -232,6 +232,45 @@ def test_div_nonzero_values_unchanged():
     np.testing.assert_array_equal(S_u, np.eye(3, dtype=bool))
 
 
+def test_power_zero_exponent_kills_dependence():
+    """x ** Constant(0) = 1 everywhere, so no dependence on x."""
+    x = State("x", (3,))
+    collect_and_assign_slices([x], [])
+
+    expr = x ** Constant(np.array([0.0, 0.0, 0.0]))
+    S_x, _ = expr.sparsity(3, 0)
+
+    np.testing.assert_array_equal(S_x, False)
+
+
+def test_power_partial_zero_exponent():
+    """x ** Constant([2, 0, 1]): middle element has zero exponent, killing that row."""
+    x = State("x", (3,))
+    collect_and_assign_slices([x], [])
+
+    expr = x ** Constant(np.array([2.0, 0.0, 1.0]))
+    S_x, _ = expr.sparsity(3, 0)
+
+    assert S_x.shape == (3, 3)
+    # Row 0: x[0]^2 → depends on x[0]
+    np.testing.assert_array_equal(S_x[0], [True, False, False])
+    # Row 1: x[1]^0 = 1 → no dependence
+    np.testing.assert_array_equal(S_x[1], [False, False, False])
+    # Row 2: x[2]^1 → depends on x[2]
+    np.testing.assert_array_equal(S_x[2], [False, False, True])
+
+
+def test_power_zero_base_kills_exponent_dependence():
+    """Constant(0) ** x = 0 everywhere, so no dependence on x."""
+    x = State("x", (2,))
+    collect_and_assign_slices([x], [])
+
+    expr = Constant(np.array([0.0, 0.0])) ** x
+    S_x, _ = expr.sparsity(2, 0)
+
+    np.testing.assert_array_equal(S_x, False)
+
+
 # =============================================================================
 # Concat decomposition (row-block analysis)
 # =============================================================================
