@@ -66,7 +66,8 @@ def _element_liveness(expr: "Expr") -> np.ndarray:
     """Which scalar elements of *expr* might be nonzero at runtime.
 
     Returns the exact zero pattern for `Constant` nodes; assumes
-    all-live for everything else.
+    all-live for everything else (including `Parameter`, whose value
+    may be updated at runtime so its zero structure is not reliable).
     """
     from openscvx.symbolic.expr.expr import Constant
 

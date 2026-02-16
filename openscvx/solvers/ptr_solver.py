@@ -153,6 +153,8 @@ class PTRSolver(ConvexSolver):
             jax_constraints: Lowered JAX constraints (for sizing linearization params)
             dynamics_sparsity: Optional tuple ``(A_d, B_d, C_d)`` of boolean
                 ndarrays giving the discrete-time Jacobian sparsity patterns.
+                ``A_d`` has shape ``(n_x, n_x)``; ``B_d`` and ``C_d`` have
+                shape ``(n_x, n_u)``.
             constraint_sparsity: Optional list of ``(x_mask, u_mask)`` boolean
                 1-D arrays, one per nodal constraint.
         """
