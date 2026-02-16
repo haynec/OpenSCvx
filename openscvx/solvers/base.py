@@ -95,6 +95,7 @@ class ConvexSolver(ABC):
         u_unified: "UnifiedControl",
         jax_constraints: "LoweredJaxConstraints",
         dynamics_sparsity=None,
+        constraint_sparsity=None,
     ) -> None:
         """Create backend-specific optimization variables.
 
@@ -113,6 +114,8 @@ class ConvexSolver(ABC):
             dynamics_sparsity: Optional tuple ``(A_d, B_d, C_d)`` of boolean
                 ndarrays giving the discrete-time Jacobian sparsity patterns.
                 Shapes ``(n_x, n_x)``, ``(n_x, n_u)``, ``(n_x, n_u)``.
+            constraint_sparsity: Optional list of ``(x_mask, u_mask)`` boolean
+                1-D arrays, one per nodal constraint.
         """
         raise NotImplementedError
 

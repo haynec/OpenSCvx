@@ -138,6 +138,7 @@ class PTRSolver(ConvexSolver):
         u_unified: "UnifiedControl",
         jax_constraints: "LoweredJaxConstraints",
         dynamics_sparsity=None,
+        constraint_sparsity=None,
     ) -> None:
         """Create CVXPy optimization variables.
 
@@ -152,6 +153,8 @@ class PTRSolver(ConvexSolver):
             jax_constraints: Lowered JAX constraints (for sizing linearization params)
             dynamics_sparsity: Optional tuple ``(A_d, B_d, C_d)`` of boolean
                 ndarrays giving the discrete-time Jacobian sparsity patterns.
+            constraint_sparsity: Optional list of ``(x_mask, u_mask)`` boolean
+                1-D arrays, one per nodal constraint.
         """
         from openscvx.config import get_affine_scaling_matrices
         from openscvx.symbolic.lower import _tile_sparsity, create_cvxpy_variables
@@ -206,6 +209,7 @@ class PTRSolver(ConvexSolver):
             A_d_sparsity=A_d_sp,
             B_d_sparsity=B_d_sp,
             C_d_sparsity=C_d_sp,
+            constraint_sparsity=constraint_sparsity,
         )
 
     def initialize(
