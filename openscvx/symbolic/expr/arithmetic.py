@@ -36,15 +36,14 @@ from typing import Tuple, Union
 
 import numpy as np
 
-from .expr import (
-    Constant,
-    Expr,
+from openscvx.symbolic.sparsity import (
     _bool_matmul,
     _broadcast_liveness,
     _broadcast_sparsity,
     _element_liveness,
-    to_expr,
 )
+
+from .expr import Constant, Expr, to_expr
 
 
 class Add(Expr):

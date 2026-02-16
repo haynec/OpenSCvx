@@ -717,8 +717,7 @@ def lower_symbolic_problem(
     # patterns (the superset) since dis_type isn't known yet.
     dynamics_sparsity = None
     if byof is None and problem.dynamics is not None:
-        from openscvx.symbolic.expr import discrete_sparsity
-        from openscvx.symbolic.expr.expr import _element_liveness
+        from openscvx.symbolic.sparsity import _element_liveness, discrete_sparsity
 
         n_x = sum(s.shape[0] for s in problem.states)
         n_u = sum(c.shape[0] for c in problem.controls)

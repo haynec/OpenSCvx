@@ -70,6 +70,8 @@ Module Organization:
 """
 
 # Arithmetic operations
+from openscvx.symbolic.sparsity import discrete_sparsity, transitive_closure
+
 from .arithmetic import Add, Div, MatMul, Mul, Neg, Power, Sub
 
 # Array operations
@@ -96,9 +98,7 @@ from .expr import (
     Leaf,
     NodeReference,
     Parameter,
-    discrete_sparsity,
     to_expr,
-    transitive_closure,
     traverse,
 )
 

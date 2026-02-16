@@ -40,7 +40,9 @@ from typing import Tuple, Union
 
 import numpy as np
 
-from .expr import Expr, _broadcast_sparsity, to_expr
+from openscvx.symbolic.sparsity import _broadcast_sparsity
+
+from .expr import Expr, to_expr
 
 
 class Sin(Expr):
