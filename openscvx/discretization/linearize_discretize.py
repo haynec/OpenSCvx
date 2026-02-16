@@ -165,6 +165,9 @@ def _dVdt(
         beta = (tau) * N
     alpha = 1 - beta
 
+    # TODO: (norrisg) integrate the multiplication with `s` into the symbolic layer
+    # This currently requires a hack to get the sparsity pattern to include the relation with s
+
     # Interpolate the control input
     u = u_cur + beta * (u_next - u_cur)
     s = u[:, -1]
