@@ -7,7 +7,7 @@ code generation via cvxpygen for improved performance.
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 import cvxpy as cp
 import numpy as np
@@ -137,8 +137,8 @@ class PTRSolver(ConvexSolver):
         x_unified: "UnifiedState",
         u_unified: "UnifiedControl",
         jax_constraints: "LoweredJaxConstraints",
-        dynamics_sparsity=None,
-        constraint_sparsity=None,
+        dynamics_sparsity: Optional[tuple] = None,
+        constraint_sparsity: Optional[list] = None,
     ) -> None:
         """Create CVXPy optimization variables.
 

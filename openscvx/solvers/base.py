@@ -30,7 +30,7 @@ must follow for use within successive convexification algorithms.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any, List, Optional
 
 if TYPE_CHECKING:
     from openscvx.config import Config
@@ -94,8 +94,8 @@ class ConvexSolver(ABC):
         x_unified: "UnifiedState",
         u_unified: "UnifiedControl",
         jax_constraints: "LoweredJaxConstraints",
-        dynamics_sparsity=None,
-        constraint_sparsity=None,
+        dynamics_sparsity: Optional[tuple] = None,
+        constraint_sparsity: Optional[list] = None,
     ) -> None:
         """Create backend-specific optimization variables.
 

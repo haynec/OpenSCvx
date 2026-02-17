@@ -210,10 +210,10 @@ def create_cvxpy_variables(
     c_u: np.ndarray,
     n_nodal_constraints: int,
     n_cross_node_constraints: int,
-    A_d_sparsity=None,
-    B_d_sparsity=None,
-    C_d_sparsity=None,
-    constraint_sparsity=None,
+    A_d_sparsity: Optional[tuple] = None,
+    B_d_sparsity: Optional[tuple] = None,
+    C_d_sparsity: Optional[tuple] = None,
+    constraint_sparsity: Optional[list] = None,
 ) -> CVXPyVariables:
     """Create CVXPy variables and parameters for the optimal control problem.
 
