@@ -212,6 +212,16 @@ class State(Variable):
         self._scaling_min = None
         self._scaling_max = None
 
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Element-level exact sparsity: diagonal block at ``_slice``."""
+        n = self._shape[0]
+        S_x = np.zeros((n, n_x), dtype=bool)
+        S_u = np.zeros((n, n_u), dtype=bool)
+        if self._slice is not None:
+            for i in range(n):
+                S_x[i, self._slice.start + i] = True
+        return S_x, S_u
+
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash State including boundary condition types.
 

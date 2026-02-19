@@ -36,6 +36,13 @@ from typing import Tuple, Union
 
 import numpy as np
 
+from openscvx.symbolic.sparsity import (
+    _bool_matmul,
+    _broadcast_liveness,
+    _broadcast_sparsity,
+    _element_liveness,
+)
+
 from .expr import Constant, Expr, to_expr
 
 
@@ -117,6 +124,17 @@ class Add(Expr):
         except ValueError as e:
             raise ValueError(f"Add shapes not broadcastable: {shapes}") from e
 
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        out_shape = self.check_shape()
+        n_out = int(np.prod(out_shape)) if out_shape else 1
+        S_x = np.zeros((n_out, n_x), dtype=bool)
+        S_u = np.zeros((n_out, n_u), dtype=bool)
+        for term in self.terms:
+            t_sx, t_su = term.sparsity(n_x, n_u)
+            S_x |= _broadcast_sparsity(t_sx, term.check_shape(), out_shape, n_x)
+            S_u |= _broadcast_sparsity(t_su, term.check_shape(), out_shape, n_u)
+        return S_x, S_u
+
     def __repr__(self) -> str:
         inner = " + ".join(repr(e) for e in self.terms)
         return f"({inner})"
@@ -183,6 +201,18 @@ class Sub(Expr):
             return np.broadcast_shapes(*shapes)
         except ValueError as e:
             raise ValueError(f"Sub shapes not broadcastable: {shapes}") from e
+
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        out_shape = self.check_shape()
+        l_sx, l_su = self.left.sparsity(n_x, n_u)
+        r_sx, r_su = self.right.sparsity(n_x, n_u)
+        S_x = _broadcast_sparsity(
+            l_sx, self.left.check_shape(), out_shape, n_x
+        ) | _broadcast_sparsity(r_sx, self.right.check_shape(), out_shape, n_x)
+        S_u = _broadcast_sparsity(
+            l_su, self.left.check_shape(), out_shape, n_u
+        ) | _broadcast_sparsity(r_su, self.right.check_shape(), out_shape, n_u)
+        return S_x, S_u
 
     def __repr__(self) -> str:
         return f"({self.left!r} - {self.right!r})"
@@ -279,6 +309,34 @@ class Mul(Expr):
         except ValueError as e:
             raise ValueError(f"Mul shapes not broadcastable: {shapes}") from e
 
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        out_shape = self.check_shape()
+        n_out = int(np.prod(out_shape)) if out_shape else 1
+        # Collect broadcast sparsity and liveness for each factor.
+        sparsities = []
+        livenesses = []
+        for f in self.factors:
+            f_sx, f_su = f.sparsity(n_x, n_u)
+            sparsities.append(
+                (
+                    _broadcast_sparsity(f_sx, f.check_shape(), out_shape, n_x),
+                    _broadcast_sparsity(f_su, f.check_shape(), out_shape, n_u),
+                )
+            )
+            livenesses.append(_broadcast_liveness(_element_liveness(f), f.check_shape(), out_shape))
+        # Product rule: factor k's derivative survives only if all OTHER
+        # factors are live (might be nonzero).
+        S_x = np.zeros((n_out, n_x), dtype=bool)
+        S_u = np.zeros((n_out, n_u), dtype=bool)
+        for k in range(len(self.factors)):
+            gate = np.ones(n_out, dtype=bool)
+            for j in range(len(self.factors)):
+                if j != k:
+                    gate &= livenesses[j]
+            S_x |= sparsities[k][0] & gate[:, None]
+            S_u |= sparsities[k][1] & gate[:, None]
+        return S_x, S_u
+
     def __repr__(self) -> str:
         inner = " * ".join(repr(e) for e in self.factors)
         return f"({inner})"
@@ -345,6 +403,27 @@ class Div(Expr):
             return np.broadcast_shapes(*shapes)
         except ValueError as e:
             raise ValueError(f"Div shapes not broadcastable: {shapes}") from e
+
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        # d(a/b)/dz = da/dz / b  -  a * db/dz / b^2
+        # left's derivative gated by right's liveness (denominator nonzero)
+        # right's derivative gated by left's liveness (numerator nonzero)
+        out_shape = self.check_shape()
+        l_sx, l_su = self.left.sparsity(n_x, n_u)
+        r_sx, r_su = self.right.sparsity(n_x, n_u)
+        l_live = _broadcast_liveness(
+            _element_liveness(self.left), self.left.check_shape(), out_shape
+        )
+        r_live = _broadcast_liveness(
+            _element_liveness(self.right), self.right.check_shape(), out_shape
+        )
+        S_x = (
+            _broadcast_sparsity(l_sx, self.left.check_shape(), out_shape, n_x) & r_live[:, None]
+        ) | (_broadcast_sparsity(r_sx, self.right.check_shape(), out_shape, n_x) & l_live[:, None])
+        S_u = (
+            _broadcast_sparsity(l_su, self.left.check_shape(), out_shape, n_u) & r_live[:, None]
+        ) | (_broadcast_sparsity(r_su, self.right.check_shape(), out_shape, n_u) & l_live[:, None])
+        return S_x, S_u
 
     def __repr__(self) -> str:
         return f"({self.left!r} / {self.right!r})"
@@ -428,6 +507,57 @@ class MatMul(Expr):
                 raise ValueError(f"MatMul incompatible: {L} @ {R}")
             return L[:-1] + (R[-1],)
 
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        # Product rule in boolean arithmetic.  For y[i] = sum_j A[i,j]*B[j]:
+        #   dy[i]/dz[p] = sum_j (dA[i,j]/dz[p]*B[j] + A[i,j]*dB[j]/dz[p])
+        # A derivative term only survives if the *other* factor (the value,
+        # not the derivative) might be nonzero — that's what "liveness" captures.
+        # t1 = bmm(S_L, R_live): left's dependence, gated by right's values
+        # t2 = bmm(L_live, S_R): right's dependence, gated by left's values
+        L_shape = self.left.check_shape()
+        R_shape = self.right.check_shape()
+
+        S_L_x, S_L_u = self.left.sparsity(n_x, n_u)
+        S_R_x, S_R_u = self.right.sparsity(n_x, n_u)
+        L_live = _element_liveness(self.left)
+        R_live = _element_liveness(self.right)
+
+        def _bmm(S_L, S_R, n_z):
+            l_ndim, r_ndim = len(L_shape), len(R_shape)
+
+            if l_ndim == 1 and r_ndim == 1:
+                # Vector @ Vector -> scalar
+                t1 = (S_L & R_live[:, None]).any(axis=0, keepdims=True)
+                t2 = (L_live[:, None] & S_R).any(axis=0, keepdims=True)
+                return t1 | t2
+
+            if r_ndim == 1:
+                # Matrix @ Vector: (m, n) @ (n,) -> (m,)
+                m, n = L_shape[-2], L_shape[-1]
+                t1 = (S_L.reshape(m, n, n_z) & R_live[None, :, None]).any(axis=1)
+                t2 = _bool_matmul(L_live.reshape(m, n), S_R)
+                return t1 | t2
+
+            if l_ndim == 1:
+                # Vector @ Matrix: (n,) @ (n, k) -> (k,)
+                n, k = R_shape[-2], R_shape[-1]
+                t1 = (L_live[:, None, None] & S_R.reshape(n, k, n_z)).any(axis=0)
+                t2 = _bool_matmul(R_live.reshape(n, k).T, S_L)
+                return t1 | t2
+
+            # Matrix @ Matrix: (m, n) @ (n, k) -> (m, k)
+            m, n = L_shape[-2], L_shape[-1]
+            k = R_shape[-1]
+            S_L_u8 = S_L.reshape(m, n, n_z).astype(np.uint8)
+            S_R_u8 = S_R.reshape(n, k, n_z).astype(np.uint8)
+            L_u8 = L_live.reshape(m, n).astype(np.uint8)
+            R_u8 = R_live.reshape(n, k).astype(np.uint8)
+            t1 = np.einsum("ilp,lj->ijp", S_L_u8, R_u8) > 0
+            t2 = np.einsum("il,ljp->ijp", L_u8, S_R_u8) > 0
+            return (t1 | t2).reshape(m * k, n_z)
+
+        return _bmm(S_L_x, S_R_x, n_x), _bmm(S_L_u, S_R_u, n_u)
+
     def __repr__(self) -> str:
         return f"({self.left!r} * {self.right!r})"
 
@@ -473,6 +603,9 @@ class Neg(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Negation preserves the shape of its operand."""
         return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        return self.operand.sparsity(n_x, n_u)
 
     def __repr__(self) -> str:
         return f"(-{self.operand!r})"
@@ -528,6 +661,31 @@ class Power(Expr):
             return np.broadcast_shapes(*shapes)
         except ValueError as e:
             raise ValueError(f"Power shapes not broadcastable: {shapes}") from e
+
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        # d(b^e)/dz = e * b^(e-1) * db/dz  +  b^e * ln(b) * de/dz
+        # base's derivative gated by exponent's liveness (e=0 kills it)
+        # exponent's derivative gated by base's liveness (b=0 kills it)
+        out_shape = self.check_shape()
+        b_sx, b_su = self.base.sparsity(n_x, n_u)
+        e_sx, e_su = self.exponent.sparsity(n_x, n_u)
+        b_live = _broadcast_liveness(
+            _element_liveness(self.base), self.base.check_shape(), out_shape
+        )
+        e_live = _broadcast_liveness(
+            _element_liveness(self.exponent), self.exponent.check_shape(), out_shape
+        )
+        S_x = (
+            _broadcast_sparsity(b_sx, self.base.check_shape(), out_shape, n_x) & e_live[:, None]
+        ) | (
+            _broadcast_sparsity(e_sx, self.exponent.check_shape(), out_shape, n_x) & b_live[:, None]
+        )
+        S_u = (
+            _broadcast_sparsity(b_su, self.base.check_shape(), out_shape, n_u) & e_live[:, None]
+        ) | (
+            _broadcast_sparsity(e_su, self.exponent.check_shape(), out_shape, n_u) & b_live[:, None]
+        )
+        return S_x, S_u
 
     def __repr__(self) -> str:
         return f"({self.base!r})**({self.exponent!r})"

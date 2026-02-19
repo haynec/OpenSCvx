@@ -70,6 +70,8 @@ Module Organization:
 """
 
 # Arithmetic operations
+from openscvx.symbolic.sparsity import discrete_sparsity, transitive_closure
+
 from .arithmetic import Add, Div, MatMul, Mul, Neg, Power, Sub
 
 # Array operations
@@ -161,6 +163,8 @@ __all__ = [
     "Parameter",
     "to_expr",
     "traverse",
+    "transitive_closure",
+    "discrete_sparsity",
     "Add",
     "Sub",
     "Mul",

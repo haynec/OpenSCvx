@@ -30,7 +30,7 @@ must follow for use within successive convexification algorithms.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any, List, Optional
 
 if TYPE_CHECKING:
     from openscvx.config import Config
@@ -94,6 +94,8 @@ class ConvexSolver(ABC):
         x_unified: "UnifiedState",
         u_unified: "UnifiedControl",
         jax_constraints: "LoweredJaxConstraints",
+        dynamics_sparsity: Optional[tuple] = None,
+        constraint_sparsity: Optional[list] = None,
     ) -> None:
         """Create backend-specific optimization variables.
 
@@ -109,6 +111,12 @@ class ConvexSolver(ABC):
             x_unified: Unified state interface with dimensions and scaling bounds
             u_unified: Unified control interface with dimensions and scaling bounds
             jax_constraints: Lowered JAX constraints (for sizing linearization params)
+            dynamics_sparsity: Optional tuple ``(A_d, B_d, C_d)`` of boolean
+                ndarrays giving the discrete-time Jacobian sparsity patterns.
+                ``A_d`` has shape ``(n_x, n_x)``; ``B_d`` and ``C_d`` have
+                shape ``(n_x, n_u)``.
+            constraint_sparsity: Optional list of ``(x_mask, u_mask)`` boolean
+                1-D arrays, one per nodal constraint.
         """
         raise NotImplementedError
 

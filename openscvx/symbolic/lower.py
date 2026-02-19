@@ -165,6 +165,41 @@ def lower_to_jax(exprs: Union[Expr, Sequence[Expr]]) -> Union[callable, list[cal
     return fns
 
 
+def _tile_sparsity(pattern_2d: np.ndarray, K: int):
+    """Convert a 2-D boolean pattern to CVXPY sparsity indices tiled over *K* slices.
+
+    Returns ``np.where``-style index tuple ``(dim0, dim1, dim2)`` suitable for
+    ``cp.Parameter((K, m, n), sparsity=...)``, or ``None`` when the pattern is
+    fully dense (no benefit from declaring sparsity).
+    """
+    if pattern_2d.all():
+        return None
+    rows, cols = np.where(pattern_2d)
+    n_nz = len(rows)
+    return (
+        np.repeat(np.arange(K), n_nz),
+        np.tile(rows, K),
+        np.tile(cols, K),
+    )
+
+
+def _tile_sparsity_2d(mask_1d: np.ndarray, K: int):
+    """Convert a 1-D boolean mask to CVXPY sparsity indices tiled over *K* rows.
+
+    Returns ``np.where``-style index tuple ``(rows, cols)`` suitable for
+    ``cp.Parameter((K, len(mask)), sparsity=...)``, or ``None`` when the
+    mask is fully dense.
+    """
+    if mask_1d.all():
+        return None
+    (cols,) = np.where(mask_1d)
+    n_nz = len(cols)
+    return (
+        np.repeat(np.arange(K), n_nz),
+        np.tile(cols, K),
+    )
+
+
 def create_cvxpy_variables(
     N: int,
     n_states: int,
@@ -175,6 +210,10 @@ def create_cvxpy_variables(
     c_u: np.ndarray,
     n_nodal_constraints: int,
     n_cross_node_constraints: int,
+    A_d_sparsity: Optional[tuple] = None,
+    B_d_sparsity: Optional[tuple] = None,
+    C_d_sparsity: Optional[tuple] = None,
+    constraint_sparsity: Optional[list] = None,
 ) -> CVXPyVariables:
     """Create CVXPy variables and parameters for the optimal control problem.
 
@@ -188,6 +227,11 @@ def create_cvxpy_variables(
         c_u: Control offset vector
         n_nodal_constraints: Number of non-convex nodal constraints (for linearization params)
         n_cross_node_constraints: Number of non-convex cross-node constraints
+        A_d_sparsity: Optional CVXPY sparsity indices for A_d parameter (from _tile_sparsity)
+        B_d_sparsity: Optional CVXPY sparsity indices for B_d parameter
+        C_d_sparsity: Optional CVXPY sparsity indices for C_d parameter
+        constraint_sparsity: Optional list of ``(x_mask, u_mask)`` boolean 1-D
+            arrays, one per nodal constraint (from ``_tile_sparsity_2d``).
 
     Returns:
         CVXPyVariables dataclass containing all CVXPy variables and parameters for the OCP
@@ -218,9 +262,9 @@ def create_cvxpy_variables(
     u_bar = cp.Parameter((N, n_controls), name="u_bar")  # Previous SCP Control
 
     # Discretized Augmented Dynamics Constraints
-    A_d = cp.Parameter((N - 1, n_states, n_states), name="A_d")
-    B_d = cp.Parameter((N - 1, n_states, n_controls), name="B_d")
-    C_d = cp.Parameter((N - 1, n_states, n_controls), name="C_d")
+    A_d = cp.Parameter((N - 1, n_states, n_states), name="A_d", sparsity=A_d_sparsity)
+    B_d = cp.Parameter((N - 1, n_states, n_controls), name="B_d", sparsity=B_d_sparsity)
+    C_d = cp.Parameter((N - 1, n_states, n_controls), name="C_d", sparsity=C_d_sparsity)
     x_prop = cp.Parameter((N - 1, n_states), name="x_prop")
     nu = cp.Variable((N - 1, n_states), name="nu")  # Virtual Control
 
@@ -230,9 +274,19 @@ def create_cvxpy_variables(
     grad_g_u = []
     nu_vb = []
     for idx_ncvx in range(n_nodal_constraints):
+        g_x_sp = None
+        g_u_sp = None
+        if constraint_sparsity is not None:
+            x_mask, u_mask = constraint_sparsity[idx_ncvx]
+            g_x_sp = _tile_sparsity_2d(x_mask, N)
+            g_u_sp = _tile_sparsity_2d(u_mask, N)
         g.append(cp.Parameter(N, name="g_" + str(idx_ncvx)))
-        grad_g_x.append(cp.Parameter((N, n_states), name="grad_g_x_" + str(idx_ncvx)))
-        grad_g_u.append(cp.Parameter((N, n_controls), name="grad_g_u_" + str(idx_ncvx)))
+        grad_g_x.append(
+            cp.Parameter((N, n_states), name="grad_g_x_" + str(idx_ncvx), sparsity=g_x_sp)
+        )
+        grad_g_u.append(
+            cp.Parameter((N, n_controls), name="grad_g_u_" + str(idx_ncvx), sparsity=g_u_sp)
+        )
         nu_vb.append(cp.Variable(N, name="nu_vb_" + str(idx_ncvx)))  # Virtual Control for VB
 
     # Linearized Cross-Node Constraints
@@ -658,12 +712,54 @@ def lower_symbolic_problem(
             problem.N,
         )
 
+    # Compute dynamics Jacobian sparsity from the symbolic AST.
+    # Only available for symbolic dynamics (not byof).  Always use FOH
+    # patterns (the superset) since dis_type isn't known yet.
+    dynamics_sparsity = None
+    if byof is None and problem.dynamics is not None:
+        from openscvx.symbolic.sparsity import _element_liveness, discrete_sparsity
+
+        n_x = sum(s.shape[0] for s in problem.states)
+        n_u = sum(c.shape[0] for c in problem.controls)
+        A_c, B_c = problem.dynamics.sparsity(n_x, n_u)
+
+        # TODO: (norrisg) tidy up how time-dilation is multiplied onto the
+        # dynamics so that it is automatically included into the sparsity.
+        # Requires fixing stuff in the discretizer.
+
+        # The discretization multiplies all dynamics by the time-dilation
+        # factor s and adds a column df/d(sigma) = f(x, u) to the control
+        # Jacobian (see linearize_discretize.py).  The symbolic dynamics
+        # don't reference sigma, so we patch B_c here: every row whose
+        # dynamics can be nonzero depends on sigma.
+        for ctrl in problem.controls:
+            if ctrl.name == "_time_dilation" and ctrl._slice is not None:
+                live = _element_liveness(problem.dynamics)
+                B_c[live, ctrl._slice] = True
+                break
+
+        dynamics_sparsity = discrete_sparsity(A_c, B_c, dis_type="FOH")
+
+    # Compute per-constraint Jacobian sparsity from the symbolic AST.
+    # Each scalar nodal constraint produces a 1-D mask over x and u.
+    # No time-dilation patch needed: constraints take the full u vector.
+    constraint_sparsity = None
+    if byof is None and problem.constraints.nodal:
+        n_x = sum(s.shape[0] for s in problem.states)
+        n_u = sum(c.shape[0] for c in problem.controls)
+        constraint_sparsity = []
+        for nc in problem.constraints.nodal:
+            sx, su = nc.constraint.lhs.sparsity(n_x, n_u)
+            constraint_sparsity.append((sx.flatten(), su.flatten()))
+
     # Solver creates its own backend-specific variables
     solver.create_variables(
         N=problem.N,
         x_unified=x_unified,
         u_unified=u_unified,
         jax_constraints=jax_constraints,
+        dynamics_sparsity=dynamics_sparsity,
+        constraint_sparsity=constraint_sparsity,
     )
 
     # Lower convex constraints using solver's variables

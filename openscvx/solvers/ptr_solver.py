@@ -7,7 +7,7 @@ code generation via cvxpygen for improved performance.
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 
 import cvxpy as cp
 import numpy as np
@@ -137,6 +137,8 @@ class PTRSolver(ConvexSolver):
         x_unified: "UnifiedState",
         u_unified: "UnifiedControl",
         jax_constraints: "LoweredJaxConstraints",
+        dynamics_sparsity: Optional[tuple] = None,
+        constraint_sparsity: Optional[list] = None,
     ) -> None:
         """Create CVXPy optimization variables.
 
@@ -149,9 +151,15 @@ class PTRSolver(ConvexSolver):
             x_unified: Unified state interface with dimensions and scaling bounds
             u_unified: Unified control interface with dimensions and scaling bounds
             jax_constraints: Lowered JAX constraints (for sizing linearization params)
+            dynamics_sparsity: Optional tuple ``(A_d, B_d, C_d)`` of boolean
+                ndarrays giving the discrete-time Jacobian sparsity patterns.
+                ``A_d`` has shape ``(n_x, n_x)``; ``B_d`` and ``C_d`` have
+                shape ``(n_x, n_u)``.
+            constraint_sparsity: Optional list of ``(x_mask, u_mask)`` boolean
+                1-D arrays, one per nodal constraint.
         """
         from openscvx.config import get_affine_scaling_matrices
-        from openscvx.symbolic.lower import create_cvxpy_variables
+        from openscvx.symbolic.lower import _tile_sparsity, create_cvxpy_variables
 
         n_states = len(x_unified.max)
         n_controls = len(u_unified.max)
@@ -181,6 +189,14 @@ class PTRSolver(ConvexSolver):
 
         S_u, c_u = get_affine_scaling_matrices(n_controls, lower_u, upper_u)
 
+        # Convert boolean sparsity patterns to CVXPY index format
+        A_d_sp = B_d_sp = C_d_sp = None
+        if dynamics_sparsity is not None:
+            A_d_pat, B_d_pat, C_d_pat = dynamics_sparsity
+            A_d_sp = _tile_sparsity(A_d_pat, N - 1)
+            B_d_sp = _tile_sparsity(B_d_pat, N - 1)
+            C_d_sp = _tile_sparsity(C_d_pat, N - 1)
+
         # Create all CVXPy variables for the OCP
         self._ocp_vars = create_cvxpy_variables(
             N=N,
@@ -192,6 +208,10 @@ class PTRSolver(ConvexSolver):
             c_u=c_u,
             n_nodal_constraints=len(jax_constraints.nodal),
             n_cross_node_constraints=len(jax_constraints.cross_node),
+            A_d_sparsity=A_d_sp,
+            B_d_sparsity=B_d_sp,
+            C_d_sparsity=C_d_sp,
+            constraint_sparsity=constraint_sparsity,
         )
 
     def initialize(

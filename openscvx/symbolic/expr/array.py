@@ -156,6 +156,13 @@ class Index(Expr):
         # Hash the base expression
         self.base._hash_into(hasher)
 
+    def sparsity(self, n_x: int, n_u: int):
+        base_sx, base_su = self.base.sparsity(n_x, n_u)
+        base_shape = self.base.check_shape()
+        indices = np.arange(base_sx.shape[0]).reshape(base_shape)
+        selected = np.asarray(indices[self.index]).flatten()
+        return base_sx[selected], base_su[selected]
+
     def __repr__(self) -> str:
         return f"{self.base!r}[{self.index!r}]"
 
@@ -208,6 +215,14 @@ class Concat(Expr):
         if any(s[1:] != shapes[0][1:] for s in shapes[1:]):
             raise ValueError(f"Concat non-0 dims differ: {shapes}")
         return (sum(s[0] for s in shapes),) + shapes[0][1:]
+
+    def sparsity(self, n_x: int, n_u: int):
+        blocks_x, blocks_u = [], []
+        for child in self.exprs:
+            sx, su = child.sparsity(n_x, n_u)
+            blocks_x.append(sx)
+            blocks_u.append(su)
+        return np.vstack(blocks_x), np.vstack(blocks_u)
 
     def __repr__(self) -> str:
         inner = ", ".join(repr(e) for e in self.exprs)
@@ -272,6 +287,14 @@ class Stack(Expr):
 
         # Result shape is (num_rows, *row_shape)
         return (len(self.rows),) + first_shape
+
+    def sparsity(self, n_x: int, n_u: int):
+        blocks_x, blocks_u = [], []
+        for row in self.rows:
+            sx, su = row.sparsity(n_x, n_u)
+            blocks_x.append(sx)
+            blocks_u.append(su)
+        return np.vstack(blocks_x), np.vstack(blocks_u)
 
     def __repr__(self) -> str:
         rows_repr = ", ".join(repr(row) for row in self.rows)
@@ -433,6 +456,14 @@ class Vstack(Expr):
         # Result shape: concatenate along axis 0 (rows)
         total_rows = sum(shape[0] for shape in array_shapes)
         return (total_rows,) + first_shape[1:]
+
+    def sparsity(self, n_x: int, n_u: int):
+        blocks_x, blocks_u = [], []
+        for arr in self.arrays:
+            sx, su = arr.sparsity(n_x, n_u)
+            blocks_x.append(sx)
+            blocks_u.append(su)
+        return np.vstack(blocks_x), np.vstack(blocks_u)
 
     def __repr__(self) -> str:
         arrays_repr = ", ".join(repr(arr) for arr in self.arrays)
