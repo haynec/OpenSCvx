@@ -1,5 +1,7 @@
+import cProfile
 import os
 from datetime import datetime
+from typing import Callable, Optional
 
 
 def _create_session():
@@ -18,7 +20,9 @@ def _create_session():
     return path_for
 
 
-def profiling_start(profiling_enabled: bool, session=None):
+def profiling_start(
+    profiling_enabled: bool, session: Optional[Callable[[str], str]] = None
+) -> Optional[tuple[cProfile.Profile, Callable[[str], str]]]:
     """Start profiling if enabled.
 
     Args:
@@ -29,8 +33,6 @@ def profiling_start(profiling_enabled: bool, session=None):
         (Profile, session) tuple if enabled, None otherwise.
     """
     if profiling_enabled:
-        import cProfile
-
         if session is None:
             session = _create_session()
         pr = cProfile.Profile()
@@ -39,7 +41,7 @@ def profiling_start(profiling_enabled: bool, session=None):
     return None
 
 
-def profiling_end(ctx, identifier: str):
+def profiling_end(ctx: Optional[tuple[cProfile.Profile, Callable[[str], str]]], identifier: str):
     """Stop profiling and save results.
 
     Args:
