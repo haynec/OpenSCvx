@@ -31,7 +31,10 @@ def profiling_end(pr: "Optional[cProfile.Profile]", identifier: str):
         identifier: Identifier for the profiling session (e.g., "solve", "initialize").
     """
     if pr is not None:
+        import os
+
         pr.disable()
         # Save results so it can be visualized with snakeviz
+        os.makedirs("profiling", exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         pr.dump_stats(f"profiling/{timestamp}_{identifier}.prof")
