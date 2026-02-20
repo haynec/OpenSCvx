@@ -572,7 +572,7 @@ def traverse(expr: Expr, visit: Callable[[Expr], None]):
         traverse(child, visit)
 
 
-class Constant(Expr):
+class Constant(Leaf):
     """Constant value expression.
 
     Represents a constant numeric value in the expression tree. Constants are
@@ -601,40 +601,7 @@ class Constant(Expr):
         if not isinstance(value, np.ndarray):
             value = np.array(value, dtype=float)
         self.value = np.squeeze(value)
-
-    def canonicalize(self) -> "Expr":
-        """Constants are already in canonical form.
-
-        Returns:
-            Expr: Returns self since constants are already canonical
-        """
-        return self
-
-    def check_shape(self) -> Tuple[int, ...]:
-        """Return the shape of this constant's value.
-
-        Returns:
-            tuple: The shape of the constant's numpy array value
-        """
-        # Verify the invariant: constants should already be squeezed during construction
-        original_shape = self.value.shape
-        squeezed_shape = np.squeeze(self.value).shape
-        if original_shape != squeezed_shape:
-            raise ValueError(
-                f"Constant not properly normalized: has shape {original_shape} "
-                "but should have shape {squeezed_shape}. "
-                "Constants should be squeezed during construction."
-            )
-        return self.value.shape
-
-    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
-        """Constants have no decision-variable dependence."""
-        shape = self.value.shape
-        n_out = int(np.prod(shape)) if shape else 1
-        return (
-            np.zeros((n_out, n_x), dtype=bool),
-            np.zeros((n_out, n_u), dtype=bool),
-        )
+        super().__init__(name="__constant__", shape=self.value.shape)
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash constant by its value.
