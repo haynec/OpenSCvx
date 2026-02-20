@@ -105,7 +105,7 @@ class Control(Variable):
         val = np.asarray(val, dtype=float)
         if val.shape != self.shape:
             raise ValueError(
-                f"Scaling min shape {val.shape} does not match Control shape {self.shape}"
+                f"Control '{self.name}': scaling_min expected shape {self.shape}, got {val.shape}"
             )
         self._scaling_min = val
 
@@ -134,7 +134,7 @@ class Control(Variable):
         val = np.asarray(val, dtype=float)
         if val.shape != self.shape:
             raise ValueError(
-                f"Scaling max shape {val.shape} does not match Control shape {self.shape}"
+                f"Control '{self.name}': scaling_max expected shape {self.shape}, got {val.shape}"
             )
         self._scaling_max = val
 

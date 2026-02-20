@@ -66,7 +66,7 @@ def test_variable_min_shape_validation():
     from openscvx.symbolic.expr.variable import Variable
 
     v = Variable("x", shape=(3,))
-    with pytest.raises(ValueError, match="min must be 1D with shape"):
+    with pytest.raises(ValueError, match="min expected shape"):
         v.min = [1.0, 2.0]  # Wrong shape
 
 
@@ -75,7 +75,7 @@ def test_variable_max_shape_validation():
     from openscvx.symbolic.expr.variable import Variable
 
     v = Variable("x", shape=(3,))
-    with pytest.raises(ValueError, match="max must be 1D with shape"):
+    with pytest.raises(ValueError, match="max expected shape"):
         v.max = [1.0, 2.0, 3.0, 4.0]  # Wrong shape
 
 
@@ -86,10 +86,10 @@ def test_variable_guess_shape_validation():
     from openscvx.symbolic.expr.variable import Variable
 
     v = Variable("x", shape=(3,))
-    with pytest.raises(ValueError, match="Guess must be a 2D array"):
+    with pytest.raises(ValueError, match="guess expected 2D array"):
         v.guess = np.array([1.0, 2.0, 3.0])  # 1D instead of 2D
 
-    with pytest.raises(ValueError, match="Guess must have second dimension"):
+    with pytest.raises(ValueError, match="guess expected second dimension"):
         v.guess = np.zeros((10, 2))  # Wrong second dimension
 
 
@@ -252,10 +252,10 @@ def test_state_min_max_shape_validation():
     from openscvx.symbolic.expr import State
 
     s = State("x", shape=(3,))
-    with pytest.raises(ValueError, match="Min shape .* does not match State shape"):
+    with pytest.raises(ValueError, match="State 'x': min expected shape"):
         s.min = [1.0, 2.0]  # Wrong shape
 
-    with pytest.raises(ValueError, match="Max shape .* does not match State shape"):
+    with pytest.raises(ValueError, match="State 'x': max expected shape"):
         s.max = [1.0, 2.0, 3.0, 4.0]  # Wrong shape
 
 
@@ -264,10 +264,10 @@ def test_state_initial_final_shape_validation():
     from openscvx.symbolic.expr import State
 
     s = State("x", shape=(3,))
-    with pytest.raises(ValueError, match="Length mismatch"):
+    with pytest.raises(ValueError, match="State 'x': initial expected 3 elements"):
         s.initial = [0.0, 1.0]  # Wrong length
 
-    with pytest.raises(ValueError, match="Length mismatch"):
+    with pytest.raises(ValueError, match="State 'x': final expected 3 elements"):
         s.final = [0.0, 1.0, 2.0, 3.0]  # Wrong length
 
 
@@ -279,14 +279,14 @@ def test_state_bounds_validation():
     s1 = State("x", shape=(2,))
     s1.min = [0.0, 0.0]
     s1.max = [10.0, 10.0]
-    with pytest.raises(ValueError, match="Initial Fixed value .* is lower then the min"):
+    with pytest.raises(ValueError, match="State 'x': initial fixed value .* violates min bound"):
         s1.initial = [-1.0, 5.0]  # -1 < 0
 
     # Test final bounds violation
     s2 = State("x", shape=(2,))
     s2.min = [0.0, 0.0]
     s2.max = [10.0, 10.0]
-    with pytest.raises(ValueError, match="Final Fixed value .* is greater then the max"):
+    with pytest.raises(ValueError, match="State 'x': final fixed value .* violates max bound"):
         s2.final = [5.0, 15.0]  # 15 > 10
 
 
@@ -343,10 +343,10 @@ def test_control_min_max_shape_validation():
     from openscvx.symbolic.expr import Control
 
     c = Control("u", shape=(3,))
-    with pytest.raises(ValueError, match="min must be 1D with shape"):
+    with pytest.raises(ValueError, match="min expected shape"):
         c.min = [1.0, 2.0]  # Wrong shape
 
-    with pytest.raises(ValueError, match="max must be 1D with shape"):
+    with pytest.raises(ValueError, match="max expected shape"):
         c.max = [1.0, 2.0, 3.0, 4.0]  # Wrong shape
 
 
