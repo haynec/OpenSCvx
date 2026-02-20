@@ -111,11 +111,11 @@ def _dVdt(
     Their derivatives follow from the variational equations:
 
     - ``dx/dτ     = F(x, u)``          where F = s · f(x, u) is the time-dilated dynamics
-    - ``dΦ/dτ     = Ã(x, u) · Φ``
-    - ``dB_d/dτ   = Ã(x, u) · B_d  +  α · B̃(x, u)``
-    - ``dC_d/dτ   = Ã(x, u) · C_d  +  β · B̃(x, u)``
+    - ``dΦ/dτ     = A(x, u) · Φ``
+    - ``dB_d/dτ   = A(x, u) · B_d  +  α · B(x, u)``
+    - ``dC_d/dτ   = A(x, u) · C_d  +  β · B(x, u)``
 
-    where ``Ã = ∂f̃/∂x`` and ``B̃ = ∂f̃/∂u`` are Jacobians of the
+    where ``A = ∂F/∂x`` and ``B = ∂F/∂u`` are Jacobians of the
     time-dilated dynamics (which include the time-dilation factor ``s``
     symbolically), and ``α, β`` are interpolation weights determined by the
     hold type (ZOH: α=1, β=0; FOH: linear blend).
