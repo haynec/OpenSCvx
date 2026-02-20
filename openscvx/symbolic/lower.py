@@ -717,26 +717,11 @@ def lower_symbolic_problem(
     # patterns (the superset) since dis_type isn't known yet.
     dynamics_sparsity = None
     if byof is None and problem.dynamics is not None:
-        from openscvx.symbolic.sparsity import _element_liveness, discrete_sparsity
+        from openscvx.symbolic.sparsity import discrete_sparsity
 
         n_x = sum(s.shape[0] for s in problem.states)
         n_u = sum(c.shape[0] for c in problem.controls)
         A_c, B_c = problem.dynamics.sparsity(n_x, n_u)
-
-        # TODO: (norrisg) tidy up how time-dilation is multiplied onto the
-        # dynamics so that it is automatically included into the sparsity.
-        # Requires fixing stuff in the discretizer.
-
-        # The discretization multiplies all dynamics by the time-dilation
-        # factor s and adds a column df/d(sigma) = f(x, u) to the control
-        # Jacobian (see linearize_discretize.py).  The symbolic dynamics
-        # don't reference sigma, so we patch B_c here: every row whose
-        # dynamics can be nonzero depends on sigma.
-        for ctrl in problem.controls:
-            if ctrl.name == "_time_dilation" and ctrl._slice is not None:
-                live = _element_liveness(problem.dynamics)
-                B_c[live, ctrl._slice] = True
-                break
 
         dynamics_sparsity = discrete_sparsity(A_c, B_c, dis_type="FOH")
 

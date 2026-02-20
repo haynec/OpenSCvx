@@ -341,7 +341,19 @@ def preprocess_symbolic_problem(
             parameters=parameters,
         )
 
-    # ==================== PHASE 6: Process Algebraic Outputs ====================
+    # ==================== PHASE 6: Apply Time-Dilation Multiplication ===========
+    #
+    # Multiply all dynamics by the time-dilation control symbolically.
+    # This transforms f(x,u) -> s * f(x,u) so that JAX autodiff automatically
+    # computes the correct Jacobians including df/ds = f(x,u).
+    #
+    # This must happen AFTER propagation dynamics are assembled so that extra
+    # propagation states (e.g. distance) also get the s * multiplication.
+    time_dilation = next(c for c in controls_aug if c.name == "_time_dilation")
+    dynamics_aug = time_dilation * dynamics_aug
+    dynamics_prop = time_dilation * dynamics_prop
+
+    # ==================== PHASE 7: Process Algebraic Outputs ====================
 
     # Validate and canonicalize algebraic_prop expressions
     algebraic_prop_processed = None

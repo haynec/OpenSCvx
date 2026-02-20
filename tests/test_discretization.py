@@ -19,7 +19,7 @@ def settings():
     p = Dummy()
     p.sim = Dummy()
     p.sim.n_states = 2
-    p.sim.n_controls = 1
+    p.sim.n_controls = 2  # 1 vehicle control + 1 time-dilation (unified)
     p.sim.S_x = jnp.eye(p.sim.n_states)
     p.sim.c_x = jnp.zeros(p.sim.n_states)
     p.sim.S_u = jnp.eye(p.sim.n_controls)
@@ -41,20 +41,12 @@ def settings():
 
 
 def state_dot(x, u, node, params):
-    # simple linear: x' = A_true x + B_true u
-    return x + u
-
-
-def A(x, u, node, params):
-    batch = x.shape[0]
-    eye = jnp.eye(2)
-    return jnp.broadcast_to(eye, (batch, 2, 2))
-
-
-def B(x, u, node, params):
-    batch = x.shape[0]
-    ones = jnp.ones((2, 1))
-    return jnp.broadcast_to(ones, (batch, 2, 1))
+    # simple time-dilated dynamics: x' = s * (x + u_vehicle)
+    # u = [u_vehicle, s] includes both vehicle control and time-dilation
+    # This is the un-vmapped version (single sample, not batched)
+    s = u[1]
+    u_v = u[0]
+    return s * (x + u_v)
 
 
 @pytest.fixture
@@ -72,9 +64,9 @@ def test_discretization_shapes(settings, dynamics):
     discretizer = LinearizeDiscretize()
     solver = discretizer.get_solver(dynamics, settings)
 
-    # dummy x,u
+    # dummy x,u (n_controls already includes time-dilation)
     x = jnp.ones((settings.scp.n, settings.sim.n_states))
-    u = jnp.ones((settings.scp.n, settings.sim.n_controls + 1))  # +1 slack
+    u = jnp.ones((settings.scp.n, settings.sim.n_controls))
 
     A_bar, B_bar, C_bar, x_prop, Vmulti = solver(x, u, {})
 
@@ -85,19 +77,23 @@ def test_discretization_shapes(settings, dynamics):
     assert B_bar.shape == ((N - 1), n_x, n_u)
     assert C_bar.shape == ((N - 1), n_x, n_u)
     assert x_prop.shape == ((N - 1), n_x)
-    # assert Vmulti.shape == (N, (n_x + n_x*n_x + 2*n_x*n_u + n_x))
 
 
 def test_jit_dVdt_compiles(settings):
-    # prepare trivial inputs
+    # prepare trivial inputs (n_u already includes time-dilation)
     n_x, n_u = settings.sim.n_states, settings.sim.n_controls
     N = settings.scp.n
     aug_dim = n_x + n_x * n_x + 2 * n_x * n_u
 
     tau = jnp.array(0.3)
     V_flat = jnp.ones((N - 1) * aug_dim)
-    u_cur = jnp.ones((N - 1, n_u + 1))
-    u_next = jnp.ones((N - 1, n_u + 1))
+    u_cur = jnp.ones((N - 1, n_u))
+    u_next = jnp.ones((N - 1, n_u))
+
+    # Create vmapped versions of dynamics and Jacobians (as _dVdt expects)
+    f_vmapped = jax.vmap(state_dot, in_axes=(0, 0, 0, None))
+    A_vmapped = jax.vmap(jax.jacfwd(state_dot, argnums=0), in_axes=(0, 0, 0, None))
+    B_vmapped = jax.vmap(jax.jacfwd(state_dot, argnums=1), in_axes=(0, 0, 0, None))
 
     # bind out the Python callables & settings
     def wrapped(tau_, V_):
@@ -106,20 +102,20 @@ def test_jit_dVdt_compiles(settings):
             V_,
             u_cur,
             u_next,
-            state_dot,
-            A,
-            B,
+            f_vmapped,
+            A_vmapped,
+            B_vmapped,
             n_x,
             n_u,
             N,
             settings.dis.dis_type,
-            {},
             settings.sim.S_x,
             settings.sim.c_x,
             settings.sim.S_u,
             settings.sim.c_u,
             settings.sim.inv_S_x,
             settings.sim.inv_S_u,
+            {},
         )
 
     # now JIT only over (tau_, V_)
@@ -141,9 +137,9 @@ def test_jit_discretization_solver_compiles(settings, dynamics, integrator):
     discretizer = LinearizeDiscretize()
     solver = discretizer.get_solver(dynamics, settings)
 
-    # dummy x,u (including slack column)
+    # dummy x,u (n_controls already includes time-dilation)
     x = jnp.ones((settings.scp.n, settings.sim.n_states))
-    u = jnp.ones((settings.scp.n, settings.sim.n_controls + 1))
+    u = jnp.ones((settings.scp.n, settings.sim.n_controls))
 
     # jit & lower & compile
     jitted = jax.jit(solver)
