@@ -7060,7 +7060,7 @@ is created whose dynamics are the penalty function of constraint violations.</p>
   <summary>The augmented dynamics become</summary>
   <p>x_dot = f(x, u)
 aug_dot = penalty(g(x, u))  # For each constraint group
-time_dot = time_dilation</p>
+time_dot = 1.0</p>
 </details>
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -7472,7 +7472,7 @@ controls_aug includes u and _time_dilation</p>
 </span><span id="__span-0-457"><a id="__codelineno-0-457" name="__codelineno-0-457"></a><span class="sd">    The augmented dynamics become:</span>
 </span><span id="__span-0-458"><a id="__codelineno-0-458" name="__codelineno-0-458"></a><span class="sd">        x_dot = f(x, u)</span>
 </span><span id="__span-0-459"><a id="__codelineno-0-459" name="__codelineno-0-459"></a><span class="sd">        aug_dot = penalty(g(x, u))  # For each constraint group</span>
-</span><span id="__span-0-460"><a id="__codelineno-0-460" name="__codelineno-0-460"></a><span class="sd">        time_dot = time_dilation</span>
+</span><span id="__span-0-460"><a id="__codelineno-0-460" name="__codelineno-0-460"></a><span class="sd">        time_dot = 1.0</span>
 </span><span id="__span-0-461"><a id="__codelineno-0-461" name="__codelineno-0-461"></a>
 </span><span id="__span-0-462"><a id="__codelineno-0-462" name="__codelineno-0-462"></a><span class="sd">    Args:</span>
 </span><span id="__span-0-463"><a id="__codelineno-0-463" name="__codelineno-0-463"></a><span class="sd">        xdot: Original dynamics expression for states</span>
