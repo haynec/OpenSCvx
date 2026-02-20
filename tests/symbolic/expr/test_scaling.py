@@ -51,10 +51,10 @@ def test_state_scaling_shape_validation():
     state = State("pos", shape=(3,))
 
     # Should raise ValueError for wrong shape
-    with pytest.raises(ValueError, match="does not match State shape"):
+    with pytest.raises(ValueError, match="State 'pos': scaling_min expected shape"):
         state.scaling_min = [1.0, 2.0]  # Wrong length
 
-    with pytest.raises(ValueError, match="does not match State shape"):
+    with pytest.raises(ValueError, match="State 'pos': scaling_max expected shape"):
         state.scaling_max = [1.0]  # Wrong length
 
     # Should work with correct shape
@@ -102,10 +102,10 @@ def test_control_scaling_shape_validation():
     control = Control("u", shape=(2,))
 
     # Should raise ValueError for wrong shape
-    with pytest.raises(ValueError, match="does not match Control shape"):
+    with pytest.raises(ValueError, match="Control 'u': scaling_min expected shape"):
         control.scaling_min = [1.0]  # Wrong length
 
-    with pytest.raises(ValueError, match="does not match Control shape"):
+    with pytest.raises(ValueError, match="Control 'u': scaling_max expected shape"):
         control.scaling_max = [1.0, 2.0, 3.0]  # Wrong length
 
 
