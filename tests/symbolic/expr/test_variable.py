@@ -279,14 +279,14 @@ def test_state_bounds_validation():
     s1 = State("x", shape=(2,))
     s1.min = [0.0, 0.0]
     s1.max = [10.0, 10.0]
-    with pytest.raises(ValueError, match="State 'x': initial fixed value .* is lower than the min"):
+    with pytest.raises(ValueError, match="State 'x': initial fixed value .* violates min bound"):
         s1.initial = [-1.0, 5.0]  # -1 < 0
 
     # Test final bounds violation
     s2 = State("x", shape=(2,))
     s2.min = [0.0, 0.0]
     s2.max = [10.0, 10.0]
-    with pytest.raises(ValueError, match="State 'x': final fixed value .* is greater than the max"):
+    with pytest.raises(ValueError, match="State 'x': final fixed value .* violates max bound"):
         s2.final = [5.0, 15.0]  # 15 > 10
 
 

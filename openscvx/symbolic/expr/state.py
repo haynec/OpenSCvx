@@ -354,13 +354,13 @@ class State(Variable):
                 max_i = self._max[i] if self._max is not None else np.inf
                 if val < min_i:
                     raise ValueError(
-                        f"State '{self.name}': {field_name} fixed value at index {i[0]} is lower "
-                        f"than the min: {val} < {min_i}"
+                        f"State '{self.name}': {field_name} fixed value at index {i[0]} "
+                        f"violates min bound: {val:.6g} < {min_i:.6g}"
                     )
                 if val > max_i:
                     raise ValueError(
-                        f"State '{self.name}': {field_name} fixed value at index {i[0]} is greater "
-                        f"than the max: {val} > {max_i}"
+                        f"State '{self.name}': {field_name} fixed value at index {i[0]} "
+                        f"violates max bound: {val:.6g} > {max_i:.6g}"
                     )
 
     @property
