@@ -241,6 +241,7 @@ class Problem:
         self.timing_init = None
         self.timing_solve = None
         self.timing_post = None
+        self._profiling_session = None
 
         # Discretizer (handles linearization + discretization)
         self._discretizer = LinearizeDiscretize()
@@ -527,8 +528,11 @@ class Problem:
         """
         printing.intro()
 
-        # Enable the profiler
-        pr = profiling.profiling_start(self.settings.dev.profiling)
+        # Create a new profiling session (shared across initialize/solve/post_process)
+        self._profiling_session = (
+            profiling._create_session() if self.settings.dev.profiling else None
+        )
+        pr = profiling.profiling_start(self.settings.dev.profiling, self._profiling_session)
 
         t_0_while = time.time()
         # Ensure parameter sizes and normalization are correct
@@ -775,8 +779,8 @@ class Problem:
         if any(r is None for r in required):
             raise ValueError("Problem has not been initialized. Call initialize() before solve()")
 
-        # Enable the profiler
-        pr = profiling.profiling_start(self.settings.dev.profiling)
+        # Enable the profiler (reuse session from initialize)
+        pr = profiling.profiling_start(self.settings.dev.profiling, self._profiling_session)
 
         t_0_while = time.time()
         # Print top header for solver results
@@ -824,8 +828,8 @@ class Problem:
         if self._solution is None:
             raise ValueError("No solution available. Call solve() first.")
 
-        # Enable the profiler
-        pr = profiling.profiling_start(self.settings.dev.profiling)
+        # Enable the profiler (reuse session from initialize)
+        pr = profiling.profiling_start(self.settings.dev.profiling, self._profiling_session)
 
         # Create result from stored solution state
         result = self._format_result(self._solution, self._solution.k <= self.settings.scp.k_max)
