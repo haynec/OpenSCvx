@@ -192,7 +192,6 @@ def load_or_compile_propagation_solver(
         np.ones((1, n_controls)),  # controls_next
         np.ones((1, 1)),  # tau_0
         np.ones((1, 1)).astype("int"),  # segment index
-        0,  # idx_s_stop
         np.ones((max_tau_len,)),  # save_time (tau_cur_padded)
         np.ones((max_tau_len,), dtype=bool),  # mask_padded (boolean mask)
         params,  # additional parameters as dict
@@ -223,7 +222,6 @@ def prime_propagation_solver(
         controls_next = np.ones((1, settings.sim.u.shape[0]), dtype=settings.sim.u.guess.dtype)
         tau_init = np.array([[0.0]], dtype=np.float64)
         node = np.array([[0]], dtype=np.int64)
-        idx_s_stop = settings.sim.time_dilation_slice.stop
         save_time = np.ones((settings.prp.max_tau_len,), dtype=np.float64)
         mask_padded = np.ones((settings.prp.max_tau_len,), dtype=bool)
         # Create dummy params dict with same structure
@@ -238,7 +236,6 @@ def prime_propagation_solver(
             controls_next,
             tau_init,
             node,
-            idx_s_stop,
             save_time,
             mask_padded,
             dummy_params,

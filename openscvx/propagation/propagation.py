@@ -12,7 +12,6 @@ def prop_aug_dy(
     u_next: np.ndarray,
     tau_init: float,
     node: int,
-    idx_s: int,
     state_dot: callable,
     dis_type: str,
     N: int,
@@ -20,8 +19,10 @@ def prop_aug_dy(
 ) -> np.ndarray:
     """Compute the augmented dynamics for propagation.
 
-    This function computes the time-scaled dynamics for propagating the system state,
-    taking into account the discretization type (ZOH or FOH) and time dilation.
+    This function computes the time-dilated dynamics for propagating the system
+    state, taking into account the discretization type (ZOH or FOH). The
+    time-dilation multiplication is already included in ``state_dot``
+    symbolically.
 
     Args:
         tau (float): Current normalized time in [0,1].
@@ -30,14 +31,13 @@ def prop_aug_dy(
         u_next (np.ndarray): Control input at next node.
         tau_init (float): Initial normalized time.
         node (int): Current node index.
-        idx_s (int): Index of time dilation variable in control vector.
-        state_dot (callable): Function computing state derivatives.
+        state_dot (callable): Function computing time-dilated state derivatives.
         dis_type (str): Discretization type ("ZOH" or "FOH").
         N (int): Number of nodes in trajectory.
         params: Dictionary of additional parameters passed to state_dot.
 
     Returns:
-        np.ndarray: Time-scaled state derivatives.
+        np.ndarray: Time-dilated state derivatives.
     """
     x = x[None, :]
 
@@ -47,7 +47,7 @@ def prop_aug_dy(
         beta = (tau - tau_init) * N
     u = u_current + beta * (u_next - u_current)
 
-    return u[:, idx_s] * state_dot(x, u[:, :-1], node, params).squeeze()
+    return state_dot(x, u, node, params).squeeze()
 
 
 def get_propagation_solver(state_dot: Dynamics, settings: Config) -> callable:
@@ -64,9 +64,7 @@ def get_propagation_solver(state_dot: Dynamics, settings: Config) -> callable:
         callable: A function that solves the propagation problem.
     """
 
-    def propagation_solver(
-        V0, tau_grid, u_cur, u_next, tau_init, node, idx_s, save_time, mask, params
-    ):
+    def propagation_solver(V0, tau_grid, u_cur, u_next, tau_init, node, save_time, mask, params):
         param_map_update = params
         return solve_ivp_diffrax_prop(
             f=prop_aug_dy,
@@ -77,7 +75,6 @@ def get_propagation_solver(state_dot: Dynamics, settings: Config) -> callable:
                 u_next,  # shape (1, n_controls)
                 tau_init,  # shape (1, 1)
                 node,  # shape (1, 1)
-                idx_s,  # int
                 state_dot,  # function or array
                 settings.dis.dis_type,
                 settings.scp.n,
@@ -242,7 +239,6 @@ def simulate_nonlinear_time(
             controls_next,
             np.array([[tau[k]]]),
             np.array([[k]]),
-            settings.sim.time_dilation_slice.stop,
             tau_cur_padded,
             mask_padded,
             params,
