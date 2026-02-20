@@ -457,7 +457,7 @@ def augment_dynamics_with_ctcs(
     The augmented dynamics become:
         x_dot = f(x, u)
         aug_dot = penalty(g(x, u))  # For each constraint group
-        time_dot = time_dilation
+        time_dot = 1.0
 
     Args:
         xdot: Original dynamics expression for states

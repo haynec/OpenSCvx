@@ -110,25 +110,26 @@ def _dVdt(
 
     Their derivatives follow from the variational equations:
 
-    - ``dx/dτ     = s · f(x, u)``
-    - ``dΦ/dτ     = s · A(x, u) · Φ``
-    - ``dB_d/dτ   = s · A(x, u) · B_d  +  α · s · B(x, u)``
-    - ``dC_d/dτ   = s · A(x, u) · C_d  +  β · s · B(x, u)``
+    - ``dx/dτ     = F(x, u)``          where F = s · f(x, u) is the time-dilated dynamics
+    - ``dΦ/dτ     = Ã(x, u) · Φ``
+    - ``dB_d/dτ   = Ã(x, u) · B_d  +  α · B̃(x, u)``
+    - ``dC_d/dτ   = Ã(x, u) · C_d  +  β · B̃(x, u)``
 
-    where ``s`` is the time-dilation factor (last column of ``u``),
-    ``A = ∂f/∂x``, ``B = ∂f/∂u``, and ``α, β`` are interpolation weights
-    determined by the hold type (ZOH: α=1, β=0; FOH: linear blend).
+    where ``Ã = ∂f̃/∂x`` and ``B̃ = ∂f̃/∂u`` are Jacobians of the
+    time-dilated dynamics (which include the time-dilation factor ``s``
+    symbolically), and ``α, β`` are interpolation weights determined by the
+    hold type (ZOH: α=1, β=0; FOH: linear blend).
 
     Args:
         tau: Normalized time in [0, 1] within the current segment.
         V: Flattened augmented state vector, shape ``((N-1) * aug_dim,)``.
-        u_cur: Control at current node, shape ``(N-1, n_u+1)``.
-        u_next: Control at next node, shape ``(N-1, n_u+1)``.
-        state_dot: Vmapped dynamics ``f(x, u, node, params) -> x_dot``.
-        A: Vmapped state Jacobian ``∂f/∂x(x, u, node, params)``.
-        B: Vmapped control Jacobian ``∂f/∂u(x, u, node, params)``.
+        u_cur: Control at current node, shape ``(N-1, n_u)``.
+        u_next: Control at next node, shape ``(N-1, n_u)``.
+        state_dot: Vmapped time-dilated dynamics ``F(x, u, node, params) -> x_dot``.
+        A: Vmapped state Jacobian ``∂F/∂x(x, u, node, params)``.
+        B: Vmapped control Jacobian ``∂F/∂u(x, u, node, params)``.
         n_x: Number of states.
-        n_u: Number of controls (excluding time-dilation slack).
+        n_u: Number of controls (including time-dilation).
         N: Number of trajectory nodes.
         dis_type: ``"ZOH"`` (zero-order hold) or ``"FOH"`` (first-order hold).
         S_x: State scaling matrix (unused, reserved for future scaling).
@@ -165,46 +166,32 @@ def _dVdt(
         beta = (tau) * N
     alpha = 1 - beta
 
-    # TODO: (norrisg) integrate the multiplication with `s` into the symbolic layer
-    # This currently requires a hack to get the sparsity pattern to include the relation with s
-
     # Interpolate the control input
     u = u_cur + beta * (u_next - u_cur)
-    s = u[:, -1]
-
-    # Initialize the augmented Jacobians
-    dfdx = jnp.zeros((V.shape[0], n_x, n_x))
-    dfdu = jnp.zeros((V.shape[0], n_x, n_u))
 
     # Ensure x_seq and u have the same batch size
     x = V[:, :n_x]
     u = u[: x.shape[0]]
 
-    # Compute the nonlinear propagation term
-    f = state_dot(x, u[:, :-1], nodes, params)
-    F = s[:, None] * f
+    # Compute the time-dilated dynamics (s * f already included symbolically)
+    F = state_dot(x, u, nodes, params)
 
-    # Evaluate the State Jacobian
-    dfdx = A(x, u[:, :-1], nodes, params)
-    sdfdx = s[:, None, None] * dfdx
-
-    # Evaluate the Control Jacobian
-    dfdu_veh = B(x, u[:, :-1], nodes, params)
-    dfdu = dfdu.at[:, :, :-1].set(s[:, None, None] * dfdu_veh)
-    dfdu = dfdu.at[:, :, -1].set(f)
+    # Evaluate the Jacobians (already include time-dilation derivatives via autodiff)
+    dfdx = A(x, u, nodes, params)
+    dfdu = B(x, u, nodes, params)
 
     # Stack up the results into the augmented state vector
     # fmt: off
     dVdt = jnp.zeros_like(V)
     dVdt = dVdt.at[:, i0:i1].set(F)
     dVdt = dVdt.at[:, i1:i2].set(
-        jnp.matmul(sdfdx, V[:, i1:i2].reshape(-1, n_x, n_x)).reshape(-1, n_x * n_x)
+        jnp.matmul(dfdx, V[:, i1:i2].reshape(-1, n_x, n_x)).reshape(-1, n_x * n_x)
     )
     dVdt = dVdt.at[:, i2:i3].set(
-        (jnp.matmul(sdfdx, V[:, i2:i3].reshape(-1, n_x, n_u)) + dfdu * alpha).reshape(-1, n_x * n_u)
+        (jnp.matmul(dfdx, V[:, i2:i3].reshape(-1, n_x, n_u)) + dfdu * alpha).reshape(-1, n_x * n_u)
     )
     dVdt = dVdt.at[:, i3:i4].set(
-        (jnp.matmul(sdfdx, V[:, i3:i4].reshape(-1, n_x, n_u)) + dfdu * beta).reshape(-1, n_x * n_u)
+        (jnp.matmul(dfdx, V[:, i3:i4].reshape(-1, n_x, n_u)) + dfdu * beta).reshape(-1, n_x * n_u)
     )
     # fmt: on
 
@@ -231,11 +218,11 @@ def _calculate_discretization(
 
     Args:
         x: Reference state trajectory, shape ``(N, n_x)``.
-        u: Reference control trajectory, shape ``(N, n_u+1)`` (includes
-            time-dilation slack as last column).
-        state_dot: Vmapped dynamics ``f(x, u, node, params) -> x_dot``.
-        A: Vmapped state Jacobian ``∂f/∂x``.
-        B: Vmapped control Jacobian ``∂f/∂u``.
+        u: Reference control trajectory, shape ``(N, n_u)`` (includes
+            time-dilation as part of the unified control vector).
+        state_dot: Vmapped time-dilated dynamics ``F(x, u, node, params) -> x_dot``.
+        A: Vmapped state Jacobian ``∂F/∂x``.
+        B: Vmapped control Jacobian ``∂F/∂u``.
         settings: Configuration (integrator choice, tolerances, hold type, etc.).
         params: Parameters forwarded to ``state_dot``, ``A``, and ``B``.
 
