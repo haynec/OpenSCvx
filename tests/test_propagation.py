@@ -10,9 +10,10 @@ from openscvx.propagation import get_propagation_solver, prop_aug_dy, s_to_t, t_
 from openscvx.symbolic.expr import Control, State
 
 
-# simple scalar decay: x' = -x
+# simple scalar decay with time-dilation: x' = s * (-x)
+# u[:, -1] is the time-dilation factor s (included symbolically)
 def decay(x, u, node, params):
-    return -x
+    return u[:, -1:] * (-x)
 
 
 class Dummy:
@@ -32,13 +33,13 @@ def test_prop_aug_dy_linear(dis_type, beta_expected):
     """
     prop_aug_dy should compute:
       u = u_cur + beta*(u_next - u_cur)
-      return u[:,idx_s] * state_dot(x_batch, u[:,:-1]).squeeze()
+      return state_dot(x_batch, u).squeeze()
     for both ZOH (beta=0) and FOH (beta=(tau-tau_init)*N).
+    Time-dilation is already included in state_dot symbolically.
     """
     tau = 0.2
     tau_init = 0.0
     N = 5
-    idx_s = 1
     x = np.array([1.0, 2.0])
     u_cur = np.array([[0.5, 3.0]])
     u_next = np.array([[1.5, 5.0]])
@@ -51,8 +52,9 @@ def test_prop_aug_dy_linear(dis_type, beta_expected):
 
     # manually compute expected
     u = u_cur + beta * (u_next - u_cur)
-    # use a simple state_dot: x + u (with broadcasting)
-    expected = u[:, idx_s] * (x + u[:, 0])
+    # state_dot already includes time-dilation: s * (x + u_vehicle)
+    # Here we use a simple mock where the full u vector is passed through
+    expected = u[:, 1] * (x + u[:, 0])
 
     out = prop_aug_dy(
         tau,
@@ -61,8 +63,8 @@ def test_prop_aug_dy_linear(dis_type, beta_expected):
         u_next,
         tau_init,
         node,
-        idx_s,
-        lambda x_batch, u_control, node, params: x_batch + u_control,  # state_dot
+        # state_dot includes time-dilation: s * (x + u_vehicle)
+        lambda x_batch, u_full, node, params: u_full[:, 1:] * (x_batch + u_full[:, :1]),
         dis_type,
         N,
         {},
@@ -160,8 +162,6 @@ def test_propagation_solver_decay(dis_type):
     p.prp.atol = 1e-3
     p.prp.args = {}
     p.sim = Dummy()
-    p.sim.idx_s = Dummy()
-    p.sim.idx_s.stop = 1  # slack index
 
     solver = get_propagation_solver(decay, p)
 
@@ -172,14 +172,13 @@ def test_propagation_solver_decay(dis_type):
     u_next = jnp.array([[0.0, 1.0]])  # slack = 1
     tau_init = jnp.array([[0.0]])
     node = jnp.array([[0]])
-    idx_s = 1
 
     # We only care about t = 0.5
     save_time = jnp.array([0.5])
     mask = jnp.array([True])  # Only one point
 
     # Call the solver
-    sol = solver(V0, tau_grid, u_cur, u_next, tau_init, node, idx_s, save_time, mask, {})
+    sol = solver(V0, tau_grid, u_cur, u_next, tau_init, node, save_time, mask, {})
 
     # Extract solution
     y_half = float(sol[0][0])
@@ -207,8 +206,6 @@ def test_jit_propagation_solver_compiles(dis_type):
     p.prp.atol = 1e-3
     p.prp.args = {}
     p.sim = Dummy()
-    p.sim.idx_s = Dummy()
-    p.sim.idx_s.stop = 0  # dummy value
 
     solver = get_propagation_solver(decay, p)
 
@@ -219,7 +216,6 @@ def test_jit_propagation_solver_compiles(dis_type):
     u_next = jnp.array([[0.0, 1.0]])
     tau_init = jnp.array([[0.0]])
     node = jnp.array([[0]])
-    idx_s = 0
 
     MAX_TAU_LEN = 20
     save_time = jnp.linspace(0.0, 1.0, MAX_TAU_LEN)
@@ -227,13 +223,11 @@ def test_jit_propagation_solver_compiles(dis_type):
 
     # JIT and export the solver
     jitted = jax.jit(
-        lambda V0, tau_grid, u_cur, u_next, tau_init, node, idx_s, save_time, mask: solver(
-            V0, tau_grid, u_cur, u_next, tau_init, node, idx_s, save_time, mask, {}
+        lambda V0, tau_grid, u_cur, u_next, tau_init, node, save_time, mask: solver(
+            V0, tau_grid, u_cur, u_next, tau_init, node, save_time, mask, {}
         )
     )
 
     # Export
-    exported = export.export(jitted)(
-        V0, tau_grid, u_cur, u_next, tau_init, node, idx_s, save_time, mask
-    )
+    exported = export.export(jitted)(V0, tau_grid, u_cur, u_next, tau_init, node, save_time, mask)
     exported.serialize()

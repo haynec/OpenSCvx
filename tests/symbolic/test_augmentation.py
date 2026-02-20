@@ -387,6 +387,9 @@ def test_augment_single_penalty_no_add():
         N,
     )
 
+    # Augmented dynamics should be Concat
+    assert isinstance(xdot_aug, Concat)
+
     # Single penalty should not be wrapped in Add
     # But it should be wrapped in CTCS
     ctcs_expr = xdot_aug.exprs[1]
@@ -417,6 +420,9 @@ def test_augment_multiple_penalties_create_add():
         [c1, c2],
         N,
     )
+
+    # Augmented dynamics should be Concat
+    assert isinstance(xdot_aug, Concat)
 
     # Multiple penalties should be wrapped in Add
     penalty_expr = xdot_aug.exprs[1]
