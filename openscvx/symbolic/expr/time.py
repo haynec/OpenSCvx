@@ -175,7 +175,10 @@ class Time(State):
 
     @time_dilation_min.setter
     def time_dilation_min(self, val: float):
-        self._time_dilation_min = float(val)
+        val = float(val)
+        if val < 0:
+            raise ValueError(f"time_dilation_min must be non-negative, got {val}")
+        self._time_dilation_min = val
         self._sync_time_dilation_control()
 
     @property
