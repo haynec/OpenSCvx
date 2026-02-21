@@ -43,6 +43,7 @@ from openscvx.symbolic.constraint_set import ConstraintSet
 from openscvx.symbolic.expr import Constant, Parameter, traverse
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.expr.time import Time
 from openscvx.symbolic.preprocessing import (
     collect_and_assign_slices,
     convert_dynamics_dict_to_expr,
@@ -61,7 +62,6 @@ from openscvx.symbolic.preprocessing import (
     validate_variable_names,
 )
 from openscvx.symbolic.problem import SymbolicProblem
-from openscvx.symbolic.time import Time
 
 
 def preprocess_symbolic_problem(

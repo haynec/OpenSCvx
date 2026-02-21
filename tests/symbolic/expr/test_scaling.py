@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from openscvx.symbolic.expr import Control, State
-from openscvx.symbolic.time import Time
+from openscvx.symbolic.expr.time import Time
 from openscvx.symbolic.unified import unify_controls, unify_states
 
 # =============================================================================

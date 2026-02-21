@@ -988,7 +988,7 @@ def test_validate_guesses_raises_missing():
 @pytest.fixture
 def valid_inputs():
     """Provide a minimal set of valid inputs for validate_input_types."""
-    from openscvx.symbolic.time import Time
+    from openscvx.symbolic.expr.time import Time
 
     x = State("x", shape=(3,))
     u = Control("u", shape=(2,))

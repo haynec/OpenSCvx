@@ -71,7 +71,7 @@ from openscvx.symbolic.expr import (
 )
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
-from openscvx.symbolic.time import Time
+from openscvx.symbolic.expr.time import Time
 
 
 def _check_nonconvex_equality(constraint: Constraint, context: str) -> None:

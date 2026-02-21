@@ -865,7 +865,7 @@ def test_time_dilation_control_bounds():
 
 def test_time_dilation_overrides_from_time_object():
     """Test that Time's time_dilation_* attrs override factor-based defaults."""
-    from openscvx.symbolic.time import Time
+    from openscvx.symbolic.expr.time import Time
 
     time = Time(initial=0.0, final=15.0, min=0.0, max=30.0)
     time.guess = np.linspace(0, 15, 3).reshape(-1, 1)
@@ -906,7 +906,7 @@ def test_time_dilation_overrides_from_time_object():
 
 def test_time_dilation_partial_override():
     """Test that partial overrides work (e.g. only min, not max)."""
-    from openscvx.symbolic.time import Time
+    from openscvx.symbolic.expr.time import Time
 
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
     time.guess = np.linspace(0, 10, 5).reshape(-1, 1)
@@ -938,7 +938,7 @@ def test_time_dilation_partial_override():
 
 def test_time_dilation_live_propagation():
     """Test that mutating Time.time_dilation_* after augmentation propagates to the control."""
-    from openscvx.symbolic.time import Time
+    from openscvx.symbolic.expr.time import Time
 
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
     time.guess = np.linspace(0, 10, 5).reshape(-1, 1)
@@ -977,7 +977,7 @@ def test_time_dilation_live_propagation():
 
 def test_time_dilation_no_propagation_before_augmentation():
     """Test that setters work fine before augmentation (no control yet)."""
-    from openscvx.symbolic.time import Time
+    from openscvx.symbolic.expr.time import Time
 
     t = Time()
     t.time_dilation_min = 1.0

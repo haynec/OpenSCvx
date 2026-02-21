@@ -149,6 +149,9 @@ from .state import BoundaryType, Fixed, Free, Maximize, Minimize, State
 # STL operations
 from .stl import Or
 
+# Time
+from .time import Time
+
 # Variable
 from .variable import Variable
 
@@ -190,6 +193,8 @@ __all__ = [
     "Maximize",
     # Control
     "Control",
+    # Time
+    "Time",
     # Mathematical functions
     "Sin",
     "Cos",
