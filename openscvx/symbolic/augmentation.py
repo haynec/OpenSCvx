@@ -598,6 +598,11 @@ def augment_dynamics_with_ctcs(
             # Single node case: use time_final as guess
             time_dilation.guess = np.ones([N, 1]) * time_final
 
+    # Store a back-reference so that later mutations to the Time object
+    # (e.g. time.time_dilation_min = ...) propagate to the live control.
+    if hasattr(time_state, "_time_dilation_control"):
+        time_state._time_dilation_control = time_dilation
+
     controls_augmented.append(time_dilation)
 
     return xdot_aug, states_augmented, controls_augmented

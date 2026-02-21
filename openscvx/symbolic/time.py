@@ -102,6 +102,7 @@ class Time(State):
         self._time_dilation_min = None
         self._time_dilation_max = None
         self._time_dilation_guess = None
+        self._time_dilation_control = None  # set by augmentation for live propagation
 
         if min is not None:
             self.min = min
@@ -164,6 +165,7 @@ class Time(State):
     @time_dilation_min.setter
     def time_dilation_min(self, val: float):
         self._time_dilation_min = float(val)
+        self._sync_time_dilation_control()
 
     @property
     def time_dilation_max(self) -> Optional[float]:
@@ -173,6 +175,7 @@ class Time(State):
     @time_dilation_max.setter
     def time_dilation_max(self, val: float):
         self._time_dilation_max = float(val)
+        self._sync_time_dilation_control()
 
     @property
     def time_dilation_guess(self) -> Optional[np.ndarray]:
@@ -187,6 +190,19 @@ class Time(State):
         if arr.ndim != 2 or arr.shape[1] != 1:
             raise ValueError(f"time_dilation_guess expected shape (N, 1), got {arr.shape}")
         self._time_dilation_guess = arr
+        self._sync_time_dilation_control()
+
+    def _sync_time_dilation_control(self):
+        """Push current time_dilation_* values to the linked Control."""
+        ctrl = self._time_dilation_control
+        if ctrl is None:
+            return
+        if self._time_dilation_min is not None:
+            ctrl.min = np.array([self._time_dilation_min])
+        if self._time_dilation_max is not None:
+            ctrl.max = np.array([self._time_dilation_max])
+        if self._time_dilation_guess is not None:
+            ctrl.guess = self._time_dilation_guess
 
     def _generate_default_guess(self, N: int) -> np.ndarray:
         """Generate linear interpolation guess from initial to final time.
