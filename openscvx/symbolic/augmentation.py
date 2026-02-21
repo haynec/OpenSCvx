@@ -561,28 +561,42 @@ def augment_dynamics_with_ctcs(
         raise ValueError("No state named 'time' found in states list")
 
     time_final = time_state.final[0]
-    time_dilation.min = np.array([time_dilation_factor_min * time_final])
-    time_dilation.max = np.array([time_dilation_factor_max * time_final])
 
-    # Compute initial guess for time_dilation from time.guess using finite differences
-    # The relationship is: dt/dtau = time_dilation, where tau is normalized time [0,1]
-    # With N nodes, dtau = 1/(N-1) between consecutive nodes
-    if time_state.guess is None:
-        raise ValueError("time state must have a guess set before augmentation")
-
-    if N > 1:
-        time_guess = time_state.guess.flatten()  # Shape (N,)
-        time_dilation_guess = np.zeros(N)
-        dtau = 1.0 / (N - 1)  # Normalized time step between nodes
-        # Compute finite difference: time_dilation[k] = (time[k+1] - time[k]) / dtau
-        for k in range(N - 1):
-            time_dilation_guess[k] = (time_guess[k + 1] - time_guess[k]) / dtau
-        # For the last node, use the previous value (extrapolate)
-        time_dilation_guess[N - 1] = time_dilation_guess[N - 2]
-        time_dilation.guess = time_dilation_guess.reshape(-1, 1)
+    # Use user-provided absolute bounds from Time if available,
+    # otherwise fall back to factor * time_final
+    if hasattr(time_state, "time_dilation_min") and time_state.time_dilation_min is not None:
+        time_dilation.min = np.array([time_state.time_dilation_min])
     else:
-        # Single node case: use time_final as guess
-        time_dilation.guess = np.ones([N, 1]) * time_final
+        time_dilation.min = np.array([time_dilation_factor_min * time_final])
+
+    if hasattr(time_state, "time_dilation_max") and time_state.time_dilation_max is not None:
+        time_dilation.max = np.array([time_state.time_dilation_max])
+    else:
+        time_dilation.max = np.array([time_dilation_factor_max * time_final])
+
+    # Use user-provided time_dilation guess if available,
+    # otherwise compute from time.guess via finite differences
+    if hasattr(time_state, "time_dilation_guess") and time_state.time_dilation_guess is not None:
+        time_dilation.guess = time_state.time_dilation_guess
+    else:
+        # The relationship is: dt/dtau = time_dilation, where tau is normalized time [0,1]
+        # With N nodes, dtau = 1/(N-1) between consecutive nodes
+        if time_state.guess is None:
+            raise ValueError("time state must have a guess set before augmentation")
+
+        if N > 1:
+            time_guess = time_state.guess.flatten()  # Shape (N,)
+            time_dilation_guess = np.zeros(N)
+            dtau = 1.0 / (N - 1)  # Normalized time step between nodes
+            # Compute finite difference: time_dilation[k] = (time[k+1] - time[k]) / dtau
+            for k in range(N - 1):
+                time_dilation_guess[k] = (time_guess[k + 1] - time_guess[k]) / dtau
+            # For the last node, use the previous value (extrapolate)
+            time_dilation_guess[N - 1] = time_dilation_guess[N - 2]
+            time_dilation.guess = time_dilation_guess.reshape(-1, 1)
+        else:
+            # Single node case: use time_final as guess
+            time_dilation.guess = np.ones([N, 1]) * time_final
 
     controls_augmented.append(time_dilation)
 
