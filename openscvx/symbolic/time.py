@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 
@@ -16,16 +16,25 @@ class Time(State):
     - Added to the states list, or auto-added via the `time=` argument
 
     The constructor accepts scalar values for convenience, which are converted
-    to arrays internally to match State's API.
+    to arrays internally to match State's API. All parameters can also be set
+    via property setters after construction.
 
     Attributes:
         derivative (float): Always 1.0 - time derivative in normalized coordinates.
 
     Example:
-        Basic usage::
+        Constructor style::
 
             time = ox.Time(initial=0.0, final=10.0, min=0.0, max=20.0)
             problem = Problem(..., time=time)
+
+        Setter style::
+
+            time = ox.Time()
+            time.min = 0.0
+            time.max = 20.0
+            time.initial = 0.0
+            time.final = ox.Minimize(10.0)
 
         Time-optimal (minimize final time)::
 
@@ -45,12 +54,14 @@ class Time(State):
 
     def __init__(
         self,
-        initial: Union[float, tuple],
-        final: Union[float, tuple],
-        min: float,
-        max: float,
+        initial: Optional[Union[float, tuple]] = None,
+        final: Optional[Union[float, tuple]] = None,
+        min: Optional[float] = None,
+        max: Optional[float] = None,
     ):
         """Initialize a Time state.
+
+        All parameters are optional and can be set later via property setters.
 
         Args:
             initial: Initial time. Either a float (fixed) or tuple like
@@ -59,14 +70,47 @@ class Time(State):
             min: Minimum time bound.
             max: Maximum time bound.
         """
-        super().__init__("time", shape=(1,))
-
-        self.min = np.array([min])
-        self.max = np.array([max])
-        self.initial = [initial]  # State's setter handles tuple parsing
-        self.final = [final]
+        # Skip State.__init__'s kwarg handling — we wrap scalars ourselves
+        State.__init__(self, "time", shape=(1,))
 
         self.derivative = 1.0
+
+        if min is not None:
+            self.min = min
+        if max is not None:
+            self.max = max
+        if initial is not None:
+            self.initial = initial
+        if final is not None:
+            self.final = final
+
+    @State.min.setter
+    def min(self, val):
+        """Set the minimum time bound. Accepts a scalar or array."""
+        if isinstance(val, (int, float, np.number)):
+            val = np.array([val], dtype=float)
+        State.min.fset(self, val)
+
+    @State.max.setter
+    def max(self, val):
+        """Set the maximum time bound. Accepts a scalar or array."""
+        if isinstance(val, (int, float, np.number)):
+            val = np.array([val], dtype=float)
+        State.max.fset(self, val)
+
+    @State.initial.setter
+    def initial(self, val):
+        """Set the initial time. Accepts a scalar, tuple, or array."""
+        if not isinstance(val, (list, np.ndarray)):
+            val = [val]
+        State.initial.fset(self, val)
+
+    @State.final.setter
+    def final(self, val):
+        """Set the final time. Accepts a scalar, tuple, or array."""
+        if not isinstance(val, (list, np.ndarray)):
+            val = [val]
+        State.final.fset(self, val)
 
     def _generate_default_guess(self, N: int) -> np.ndarray:
         """Generate linear interpolation guess from initial to final time.
@@ -81,4 +125,6 @@ class Time(State):
         return np.linspace(self._initial[0], self._final[0], N).reshape(-1, 1)
 
     def __repr__(self):
-        return f"Time(initial={self._initial[0]}, final={self._final[0]})"
+        if self._initial is not None and self._final is not None:
+            return f"Time(initial={self._initial[0]}, final={self._final[0]})"
+        return "Time()"
