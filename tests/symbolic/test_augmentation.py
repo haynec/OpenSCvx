@@ -951,7 +951,11 @@ def test_time_dilation_live_propagation():
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
 
     _, _, controls_aug = augment_dynamics_with_ctcs(
-        x, states, [], [constraint], N,
+        x,
+        states,
+        [],
+        [constraint],
+        N,
     )
 
     td_control = controls_aug[0]

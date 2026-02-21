@@ -13,6 +13,7 @@ class Time(State):
     time-optimal control and problems with time-dependent dynamics/constraints.
 
     Since Time is a State, it can be:
+
     - Used directly in constraint expressions (e.g., `time[0] <= 5.0`)
     - Added to the states list, or auto-added via the `time=` argument
 
@@ -20,11 +21,17 @@ class Time(State):
     to arrays internally to match State's API. All parameters can also be set
     via property setters after construction.
 
-    In addition to the time state itself, Time exposes parameters for the
-    internal time dilation control that is created during augmentation.
-    Setting ``time_dilation_min``, ``time_dilation_max``, and
-    ``time_dilation_guess`` on the Time object will propagate through to the
-    augmented control, overriding the default factor-based computation.
+    Time dilation bounds and guesses can also be configured here via
+    `time_dilation_min`, `time_dilation_max`, and `time_dilation_guess`.
+    These control the augmented time dilation variable that the solver adds
+    internally, and can be updated between solves (e.g. in a receding horizon
+    loop) without reconstructing the problem.
+
+    .. note::
+       `time_dilation_min` and `time_dilation_max` are **absolute** bounds,
+       unlike the `time_dilation_factor_min` / `time_dilation_factor_max`
+       parameters on `Problem` which are *factors* multiplied by
+       `time_final`.
 
     Attributes:
         derivative (float): Always 1.0 - time derivative in normalized coordinates.
@@ -87,13 +94,13 @@ class Time(State):
             guess: Initial guess for the time trajectory. 1D array of shape
                 (N,) or 2D of shape (N, 1). If not provided, a linear
                 interpolation from initial to final is generated.
-            time_dilation_min: Absolute minimum bound for the time dilation
-                control. Overrides the default ``factor_min * time_final``.
-            time_dilation_max: Absolute maximum bound for the time dilation
-                control. Overrides the default ``factor_max * time_final``.
-            time_dilation_guess: Initial guess for the time dilation
-                control. 1D array of shape (N,) or 2D of shape (N, 1).
-                Overrides the default finite-difference computation.
+            time_dilation_min: Absolute minimum bound for time dilation.
+                Overrides the default `factor_min * time_final`.
+            time_dilation_max: Absolute maximum bound for time dilation.
+                Overrides the default `factor_max * time_final`.
+            time_dilation_guess: Initial guess for time dilation.
+                1D array of shape (N,) or 2D of shape (N, 1). Overrides
+                the default finite-difference computation.
         """
         # Skip State.__init__'s kwarg handling — we wrap scalars ourselves
         State.__init__(self, "time", shape=(1,))
@@ -159,7 +166,7 @@ class Time(State):
 
     @property
     def time_dilation_min(self) -> Optional[float]:
-        """Absolute minimum bound for the time dilation control."""
+        """Absolute minimum bound for time dilation."""
         return self._time_dilation_min
 
     @time_dilation_min.setter
@@ -169,7 +176,7 @@ class Time(State):
 
     @property
     def time_dilation_max(self) -> Optional[float]:
-        """Absolute maximum bound for the time dilation control."""
+        """Absolute maximum bound for time dilation."""
         return self._time_dilation_max
 
     @time_dilation_max.setter
@@ -179,7 +186,7 @@ class Time(State):
 
     @property
     def time_dilation_guess(self) -> Optional[np.ndarray]:
-        """Initial guess for the time dilation control, shape (N, 1)."""
+        """Initial guess for time dilation, shape (N, 1)."""
         return self._time_dilation_guess
 
     @time_dilation_guess.setter
