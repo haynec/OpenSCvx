@@ -3,6 +3,7 @@ from typing import Optional, Union
 import numpy as np
 
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.expr.variable import Variable
 
 
 class Time(State):
@@ -18,6 +19,12 @@ class Time(State):
     The constructor accepts scalar values for convenience, which are converted
     to arrays internally to match State's API. All parameters can also be set
     via property setters after construction.
+
+    In addition to the time state itself, Time exposes parameters for the
+    internal time dilation control that is created during augmentation.
+    Setting ``time_dilation_min``, ``time_dilation_max``, and
+    ``time_dilation_guess`` on the Time object will propagate through to the
+    augmented control, overriding the default factor-based computation.
 
     Attributes:
         derivative (float): Always 1.0 - time derivative in normalized coordinates.
@@ -36,13 +43,16 @@ class Time(State):
             time.initial = 0.0
             time.final = ox.Minimize(10.0)
 
-        Time-optimal (minimize final time)::
+        With guess and time-dilation overrides::
 
             time = ox.Time(
                 initial=0.0,
                 final=("minimize", 10.0),
                 min=0.0,
                 max=20.0,
+                guess=np.linspace(0, 10, 50).reshape(-1, 1),
+                time_dilation_min=1.0,
+                time_dilation_max=30.0,
             )
 
         Using time in constraints::
@@ -58,6 +68,11 @@ class Time(State):
         final: Optional[Union[float, tuple]] = None,
         min: Optional[float] = None,
         max: Optional[float] = None,
+        *,
+        guess: Optional[np.ndarray] = None,
+        time_dilation_min: Optional[float] = None,
+        time_dilation_max: Optional[float] = None,
+        time_dilation_guess: Optional[np.ndarray] = None,
     ):
         """Initialize a Time state.
 
@@ -69,11 +84,24 @@ class Time(State):
             final: Final time. Same format as initial.
             min: Minimum time bound.
             max: Maximum time bound.
+            guess: Initial guess for the time trajectory. 1D array of shape
+                (N,) or 2D of shape (N, 1). If not provided, a linear
+                interpolation from initial to final is generated.
+            time_dilation_min: Absolute minimum bound for the time dilation
+                control. Overrides the default ``factor_min * time_final``.
+            time_dilation_max: Absolute maximum bound for the time dilation
+                control. Overrides the default ``factor_max * time_final``.
+            time_dilation_guess: Initial guess for the time dilation
+                control. 1D array of shape (N,) or 2D of shape (N, 1).
+                Overrides the default finite-difference computation.
         """
         # Skip State.__init__'s kwarg handling — we wrap scalars ourselves
         State.__init__(self, "time", shape=(1,))
 
         self.derivative = 1.0
+        self._time_dilation_min = None
+        self._time_dilation_max = None
+        self._time_dilation_guess = None
 
         if min is not None:
             self.min = min
@@ -83,6 +111,14 @@ class Time(State):
             self.initial = initial
         if final is not None:
             self.final = final
+        if guess is not None:
+            self.guess = guess
+        if time_dilation_min is not None:
+            self.time_dilation_min = time_dilation_min
+        if time_dilation_max is not None:
+            self.time_dilation_max = time_dilation_max
+        if time_dilation_guess is not None:
+            self.time_dilation_guess = time_dilation_guess
 
     @State.min.setter
     def min(self, val):
@@ -111,6 +147,46 @@ class Time(State):
         if not isinstance(val, (list, np.ndarray)):
             val = [val]
         State.final.fset(self, val)
+
+    @Variable.guess.setter
+    def guess(self, arr):
+        """Set the time guess. Accepts 1D (N,) or 2D (N, 1) arrays."""
+        arr = np.asarray(arr, dtype=float)
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+        Variable.guess.fset(self, arr)
+
+    @property
+    def time_dilation_min(self) -> Optional[float]:
+        """Absolute minimum bound for the time dilation control."""
+        return self._time_dilation_min
+
+    @time_dilation_min.setter
+    def time_dilation_min(self, val: float):
+        self._time_dilation_min = float(val)
+
+    @property
+    def time_dilation_max(self) -> Optional[float]:
+        """Absolute maximum bound for the time dilation control."""
+        return self._time_dilation_max
+
+    @time_dilation_max.setter
+    def time_dilation_max(self, val: float):
+        self._time_dilation_max = float(val)
+
+    @property
+    def time_dilation_guess(self) -> Optional[np.ndarray]:
+        """Initial guess for the time dilation control, shape (N, 1)."""
+        return self._time_dilation_guess
+
+    @time_dilation_guess.setter
+    def time_dilation_guess(self, arr):
+        arr = np.asarray(arr, dtype=float)
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+        if arr.ndim != 2 or arr.shape[1] != 1:
+            raise ValueError(f"time_dilation_guess expected shape (N, 1), got {arr.shape}")
+        self._time_dilation_guess = arr
 
     def _generate_default_guess(self, N: int) -> np.ndarray:
         """Generate linear interpolation guess from initial to final time.
