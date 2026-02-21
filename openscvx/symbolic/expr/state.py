@@ -198,7 +198,14 @@ class State(Variable):
     """
 
     def __init__(
-        self, name: str, shape: Tuple[int, ...], *, min=None, max=None, initial=None, final=None
+        self,
+        name: str,
+        shape: Tuple[int, ...],
+        *,
+        min: Optional[np.ndarray] = None,
+        max: Optional[np.ndarray] = None,
+        initial: Optional[list] = None,
+        final: Optional[list] = None,
     ):
         """Initialize a State object.
 

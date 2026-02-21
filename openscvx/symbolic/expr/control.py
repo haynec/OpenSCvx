@@ -59,7 +59,14 @@ class Control(Variable):
             steer.guess = np.linspace([0, 0], [0, 1], 50)  # Gradual acceleration
     """
 
-    def __init__(self, name: str, shape: Tuple[int, ...], *, min=None, max=None):
+    def __init__(
+        self,
+        name: str,
+        shape: Tuple[int, ...],
+        *,
+        min: Optional[np.ndarray] = None,
+        max: Optional[np.ndarray] = None,
+    ):
         """Initialize a Control object.
 
         Args:
