@@ -197,12 +197,18 @@ class State(Variable):
             pos.final = [10, ("free", 5), ("maximize", 150)]  # Maximize final altitude
     """
 
-    def __init__(self, name: str, shape: Tuple[int, ...]):
+    def __init__(
+        self, name: str, shape: Tuple[int, ...], *, min=None, max=None, initial=None, final=None
+    ):
         """Initialize a State object.
 
         Args:
             name: Name identifier for the state variable
             shape: Shape of the state vector (typically 1D tuple)
+            min: Optional minimum bounds array (keyword-only)
+            max: Optional maximum bounds array (keyword-only)
+            initial: Optional initial boundary conditions array (keyword-only)
+            final: Optional final boundary conditions array (keyword-only)
         """
         super().__init__(name, shape)
         self._initial = None
@@ -211,6 +217,15 @@ class State(Variable):
         self.final_type = None
         self._scaling_min = None
         self._scaling_max = None
+
+        if min is not None:
+            self.min = min
+        if max is not None:
+            self.max = max
+        if initial is not None:
+            self.initial = initial
+        if final is not None:
+            self.final = final
 
     def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
         """Element-level exact sparsity: diagonal block at ``_slice``."""
