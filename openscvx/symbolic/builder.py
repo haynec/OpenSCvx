@@ -73,8 +73,6 @@ def preprocess_symbolic_problem(
     time: Time,
     licq_min: float = 0.0,
     licq_max: float = 1e-4,
-    time_dilation_factor_min: float = 0.3,
-    time_dilation_factor_max: float = 3.0,
     dynamics_prop_extra: dict = None,
     states_prop_extra: List[State] = None,
     algebraic_prop: dict = None,
@@ -109,8 +107,6 @@ def preprocess_symbolic_problem(
         time: Time configuration object specifying time bounds and constraints
         licq_min: Minimum bound for CTCS augmented states (default: 0.0)
         licq_max: Maximum bound for CTCS augmented states (default: 1e-4)
-        time_dilation_factor_min: Minimum factor for time dilation control (default: 0.3)
-        time_dilation_factor_max: Maximum factor for time dilation control (default: 3.0)
         dynamics_prop_extra: Optional dictionary of additional dynamics for propagation-only
             states (default: None)
         states_prop_extra: Optional list of additional State objects for propagation only
@@ -308,8 +304,6 @@ def preprocess_symbolic_problem(
         N,
         licq_min=licq_min,
         licq_max=licq_max,
-        time_dilation_factor_min=time_dilation_factor_min,
-        time_dilation_factor_max=time_dilation_factor_max,
     )
 
     # Assign slices to augmented states and controls in canonical order

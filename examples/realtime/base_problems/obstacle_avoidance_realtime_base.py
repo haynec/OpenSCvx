@@ -142,6 +142,7 @@ time = ox.Time(
     final=("minimize", total_time),
     min=0.0,
     max=total_time,
+    time_dilation_min=0.2 * total_time,
 )
 
 problem = Problem(
@@ -151,7 +152,6 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    time_dilation_factor_min=0.2,
     autotuner=ox.ConstantProximalWeight(),
 )
 

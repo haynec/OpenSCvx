@@ -86,6 +86,7 @@ time = ox.Time(
     final=ox.Minimize(total_time),
     min=0.0,
     max=20,
+    time_dilation_min=0.02 * total_time,
 )
 
 problem = Problem(
@@ -96,7 +97,6 @@ problem = Problem(
     constraints=constraints,
     N=n,
     licq_max=1e-8,
-    time_dilation_factor_min=0.02,
 )
 
 # Set solver parameters

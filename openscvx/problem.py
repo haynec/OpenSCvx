@@ -82,8 +82,6 @@ class Problem:
         algebraic_prop: Optional[dict] = None,
         licq_min: float = 0.0,
         licq_max: float = 1e-4,
-        time_dilation_factor_min: float = 0.3,
-        time_dilation_factor_max: float = 3.0,
         autotuner: Optional[AutotuningBase] = AugmentedLagrangian(),
         byof: Optional[ByofSpec] = None,
         float_dtype: str = "float32",
@@ -113,10 +111,6 @@ class Problem:
                 for outputs evaluated (not integrated) during propagation.
             licq_min (float): Minimum LICQ constraint value. Defaults to 0.0.
             licq_max (float): Maximum LICQ constraint value. Defaults to 1e-4.
-            time_dilation_factor_min (float): Minimum time dilation factor.
-                Defaults to 0.3.
-            time_dilation_factor_max (float): Maximum time dilation factor.
-                Defaults to 3.0.
             byof (ByofSpec, optional): Expert mode only. Raw JAX functions to
                 bypass symbolic layer. See :class:`openscvx.expert.ByofSpec` for
                 detailed documentation.
@@ -157,8 +151,6 @@ class Problem:
             time=time,
             licq_min=licq_min,
             licq_max=licq_max,
-            time_dilation_factor_min=time_dilation_factor_min,
-            time_dilation_factor_max=time_dilation_factor_max,
             dynamics_prop_extra=dynamics_prop,
             states_prop_extra=states_prop,
             algebraic_prop=algebraic_prop,

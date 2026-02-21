@@ -841,14 +841,12 @@ def test_time_dilation_control_bounds():
         controls,
         [constraint],
         N,
-        time_dilation_factor_min=0.5,
-        time_dilation_factor_max=2.5,
     )
 
-    # Check time dilation control bounds
+    # Check time dilation control bounds (default factors: 0.3 / 3.0)
     time_dilation = controls_aug[0]  # should be the only control
-    expected_min = 0.5 * 15.0  # min_factor * time_final
-    expected_max = 2.5 * 15.0  # max_factor * time_final
+    expected_min = 0.3 * 15.0  # default min_factor * time_final
+    expected_max = 3.0 * 15.0  # default max_factor * time_final
     expected_guess = 15.0  # time_final
 
     assert time_dilation.min[0] == expected_min, (
@@ -888,8 +886,6 @@ def test_time_dilation_overrides_from_time_object():
         controls,
         [constraint],
         N,
-        time_dilation_factor_min=0.5,  # would give 7.5 — should be ignored
-        time_dilation_factor_max=2.5,  # would give 37.5 — should be ignored
     )
 
     time_dilation = controls_aug[0]
@@ -927,13 +923,11 @@ def test_time_dilation_partial_override():
         controls,
         [constraint],
         N,
-        time_dilation_factor_min=0.3,
-        time_dilation_factor_max=3.0,
     )
 
     time_dilation = controls_aug[0]
     assert time_dilation.min[0] == 0.5, "User-provided min should override"
-    assert time_dilation.max[0] == 3.0 * 10.0, "Max should use factor fallback"
+    assert time_dilation.max[0] == 3.0 * 10.0, "Max should use default factor fallback"
 
 
 def test_time_dilation_live_propagation():

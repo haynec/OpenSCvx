@@ -27,11 +27,9 @@ class Time(State):
     internally, and can be updated between solves (e.g. in a receding horizon
     loop) without reconstructing the problem.
 
-    .. note::
-       `time_dilation_min` and `time_dilation_max` are **absolute** bounds,
-       unlike the `time_dilation_factor_min` / `time_dilation_factor_max`
-       parameters on `Problem` which are *factors* multiplied by
-       `time_final`.
+    !!! note
+       `time_dilation_min` and `time_dilation_max` are **absolute** bounds
+       on the time dilation control variable.
 
     Attributes:
         derivative (float): Always 1.0 - time derivative in normalized coordinates.
@@ -95,9 +93,9 @@ class Time(State):
                 (N,) or 2D of shape (N, 1). If not provided, a linear
                 interpolation from initial to final is generated.
             time_dilation_min: Absolute minimum bound for time dilation.
-                Overrides the default `factor_min * time_final`.
+                Defaults to `0.3 * time_final` if not set.
             time_dilation_max: Absolute maximum bound for time dilation.
-                Overrides the default `factor_max * time_final`.
+                Defaults to `3.0 * time_final` if not set.
             time_dilation_guess: Initial guess for time dilation.
                 1D array of shape (N,) or 2D of shape (N, 1). Overrides
                 the default finite-difference computation.

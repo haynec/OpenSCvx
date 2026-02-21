@@ -441,8 +441,6 @@ def augment_dynamics_with_ctcs(
     N: int,
     licq_min: float = 0.0,
     licq_max: float = 1e-4,
-    time_dilation_factor_min: float = 0.3,
-    time_dilation_factor_max: float = 3.0,
 ) -> Tuple[Expr, List[State], List[Control]]:
     """Augment dynamics with continuous-time constraint satisfaction states.
 
@@ -468,8 +466,6 @@ def augment_dynamics_with_ctcs(
         N: Number of discretization nodes
         licq_min: Minimum bound for augmented states (default: 0.0)
         licq_max: Maximum bound for augmented states (default: 1e-4)
-        time_dilation_factor_min: Minimum time dilation factor (default: 0.3)
-        time_dilation_factor_max: Maximum time dilation factor (default: 3.0)
 
     Returns:
         Tuple of:
@@ -563,20 +559,19 @@ def augment_dynamics_with_ctcs(
 
     time_final = time_state.final[0]
 
-    # If time_state is a Time instance, use its time_dilation_* overrides
+    # If time_state is a Time instance, use its time_dilation_* attributes.
+    # Otherwise fall back to default factor-based bounds (0.3 / 3.0).
     is_time = isinstance(time_state, Time)
 
-    # Use user-provided absolute bounds from Time if available,
-    # otherwise fall back to factor * time_final
     if is_time and time_state.time_dilation_min is not None:
         time_dilation.min = np.array([time_state.time_dilation_min])
     else:
-        time_dilation.min = np.array([time_dilation_factor_min * time_final])
+        time_dilation.min = np.array([0.3 * time_final])
 
     if is_time and time_state.time_dilation_max is not None:
         time_dilation.max = np.array([time_state.time_dilation_max])
     else:
-        time_dilation.max = np.array([time_dilation_factor_max * time_final])
+        time_dilation.max = np.array([3.0 * time_final])
 
     # Use user-provided time_dilation guess if available,
     # otherwise compute from time.guess via finite differences
