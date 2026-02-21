@@ -71,6 +71,7 @@ from openscvx.symbolic.expr import (
 )
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.time import Time
 
 
 def _check_nonconvex_equality(constraint: Constraint, context: str) -> None:
@@ -562,21 +563,24 @@ def augment_dynamics_with_ctcs(
 
     time_final = time_state.final[0]
 
+    # If time_state is a Time instance, use its time_dilation_* overrides
+    is_time = isinstance(time_state, Time)
+
     # Use user-provided absolute bounds from Time if available,
     # otherwise fall back to factor * time_final
-    if hasattr(time_state, "time_dilation_min") and time_state.time_dilation_min is not None:
+    if is_time and time_state.time_dilation_min is not None:
         time_dilation.min = np.array([time_state.time_dilation_min])
     else:
         time_dilation.min = np.array([time_dilation_factor_min * time_final])
 
-    if hasattr(time_state, "time_dilation_max") and time_state.time_dilation_max is not None:
+    if is_time and time_state.time_dilation_max is not None:
         time_dilation.max = np.array([time_state.time_dilation_max])
     else:
         time_dilation.max = np.array([time_dilation_factor_max * time_final])
 
     # Use user-provided time_dilation guess if available,
     # otherwise compute from time.guess via finite differences
-    if hasattr(time_state, "time_dilation_guess") and time_state.time_dilation_guess is not None:
+    if is_time and time_state.time_dilation_guess is not None:
         time_dilation.guess = time_state.time_dilation_guess
     else:
         # The relationship is: dt/dtau = time_dilation, where tau is normalized time [0,1]
@@ -600,7 +604,7 @@ def augment_dynamics_with_ctcs(
 
     # Store a back-reference so that later mutations to the Time object
     # (e.g. time.time_dilation_min = ...) propagate to the live control.
-    if hasattr(time_state, "_time_dilation_control"):
+    if is_time:
         time_state._time_dilation_control = time_dilation
 
     controls_augmented.append(time_dilation)
