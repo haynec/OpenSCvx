@@ -681,3 +681,157 @@ def test_time_repr():
 
     t2 = Time()
     assert repr(t2) == "Time()"
+
+
+# --- Time: Guess ---
+
+
+def test_time_guess_constructor_1d():
+    """Test Time guess via constructor with 1D array (auto-reshaped)."""
+    import numpy as np
+
+    from openscvx import Time
+
+    guess = np.linspace(0, 10, 50)
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0, guess=guess)
+    assert t.guess.shape == (50, 1)
+    assert np.allclose(t.guess.flatten(), guess)
+
+
+def test_time_guess_constructor_2d():
+    """Test Time guess via constructor with 2D array."""
+    import numpy as np
+
+    from openscvx import Time
+
+    guess = np.linspace(0, 10, 50).reshape(-1, 1)
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0, guess=guess)
+    assert t.guess.shape == (50, 1)
+    assert np.allclose(t.guess, guess)
+
+
+def test_time_guess_setter():
+    """Test Time guess via setter (1D auto-reshaped)."""
+    import numpy as np
+
+    from openscvx import Time
+
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    t.guess = np.linspace(0, 10, 50)
+    assert t.guess.shape == (50, 1)
+
+
+def test_time_guess_overrides_default():
+    """Test that user-provided guess prevents _generate_default_guess."""
+    import numpy as np
+
+    from openscvx import Time
+
+    custom_guess = np.array([0, 2, 5, 8, 10]).reshape(-1, 1)
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0, guess=custom_guess)
+    # guess is already set, so _generate_default_guess should not be needed
+    assert np.allclose(t.guess, custom_guess)
+
+
+# --- Time: Time Dilation ---
+
+
+def test_time_dilation_min_max_constructor():
+    """Test time_dilation_min/max via constructor."""
+    from openscvx import Time
+
+    t = Time(
+        initial=0.0,
+        final=10.0,
+        min=0.0,
+        max=20.0,
+        time_dilation_min=1.0,
+        time_dilation_max=30.0,
+    )
+    assert t.time_dilation_min == 1.0
+    assert t.time_dilation_max == 30.0
+
+
+def test_time_dilation_min_max_setter():
+    """Test time_dilation_min/max via setters."""
+    from openscvx import Time
+
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    assert t.time_dilation_min is None
+    assert t.time_dilation_max is None
+
+    t.time_dilation_min = 2.0
+    t.time_dilation_max = 25.0
+    assert t.time_dilation_min == 2.0
+    assert t.time_dilation_max == 25.0
+
+
+def test_time_dilation_guess_constructor_1d():
+    """Test time_dilation_guess via constructor with 1D array."""
+    import numpy as np
+
+    from openscvx import Time
+
+    td_guess = np.full(50, 10.0)
+    t = Time(
+        initial=0.0,
+        final=10.0,
+        min=0.0,
+        max=20.0,
+        time_dilation_guess=td_guess,
+    )
+    assert t.time_dilation_guess.shape == (50, 1)
+    assert np.allclose(t.time_dilation_guess.flatten(), 10.0)
+
+
+def test_time_dilation_guess_setter():
+    """Test time_dilation_guess via setter."""
+    import numpy as np
+
+    from openscvx import Time
+
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    assert t.time_dilation_guess is None
+
+    t.time_dilation_guess = np.full((50, 1), 10.0)
+    assert t.time_dilation_guess.shape == (50, 1)
+
+
+def test_time_dilation_guess_bad_shape():
+    """Test time_dilation_guess rejects bad shapes."""
+    import numpy as np
+    import pytest
+
+    from openscvx import Time
+
+    t = Time()
+    with pytest.raises(ValueError, match="time_dilation_guess expected shape"):
+        t.time_dilation_guess = np.ones((10, 2))
+
+
+def test_time_dilation_constructor_setter_equivalent():
+    """Test constructor and setter styles produce identical time_dilation results."""
+    import numpy as np
+
+    from openscvx import Time
+
+    td_guess = np.linspace(8, 12, 50)
+
+    t1 = Time(
+        initial=0.0,
+        final=10.0,
+        min=0.0,
+        max=20.0,
+        time_dilation_min=1.0,
+        time_dilation_max=30.0,
+        time_dilation_guess=td_guess,
+    )
+
+    t2 = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    t2.time_dilation_min = 1.0
+    t2.time_dilation_max = 30.0
+    t2.time_dilation_guess = td_guess
+
+    assert t1.time_dilation_min == t2.time_dilation_min
+    assert t1.time_dilation_max == t2.time_dilation_max
+    assert np.allclose(t1.time_dilation_guess, t2.time_dilation_guess)

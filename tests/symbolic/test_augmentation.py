@@ -863,6 +863,79 @@ def test_time_dilation_control_bounds():
     )
 
 
+def test_time_dilation_overrides_from_time_object():
+    """Test that Time's time_dilation_* attrs override factor-based defaults."""
+    from openscvx.symbolic.time import Time
+
+    time = Time(initial=0.0, final=15.0, min=0.0, max=30.0)
+    time.guess = np.linspace(0, 15, 3).reshape(-1, 1)
+    time.time_dilation_min = 1.0
+    time.time_dilation_max = 50.0
+    time.time_dilation_guess = np.full((3, 1), 15.0)
+
+    x = State("x", (2,))
+    x.final = np.array([0.0, 0.0])
+    xdot = x
+    states = [x, time]
+    controls = []
+    N = 3
+
+    constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
+
+    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+        xdot,
+        states,
+        controls,
+        [constraint],
+        N,
+        time_dilation_factor_min=0.5,  # would give 7.5 — should be ignored
+        time_dilation_factor_max=2.5,  # would give 37.5 — should be ignored
+    )
+
+    time_dilation = controls_aug[0]
+    assert time_dilation.min[0] == 1.0, (
+        f"Expected user-provided min 1.0, got {time_dilation.min[0]}"
+    )
+    assert time_dilation.max[0] == 50.0, (
+        f"Expected user-provided max 50.0, got {time_dilation.max[0]}"
+    )
+    assert np.allclose(time_dilation.guess, 15.0), (
+        f"Expected user-provided guess 15.0, got {time_dilation.guess}"
+    )
+
+
+def test_time_dilation_partial_override():
+    """Test that partial overrides work (e.g. only min, not max)."""
+    from openscvx.symbolic.time import Time
+
+    time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    time.guess = np.linspace(0, 10, 5).reshape(-1, 1)
+    time.time_dilation_min = 0.5  # override min only
+
+    x = State("x", (2,))
+    x.final = np.array([0.0, 0.0])
+    xdot = x
+    states = [x, time]
+    controls = []
+    N = 5
+
+    constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
+
+    _, _, controls_aug = augment_dynamics_with_ctcs(
+        xdot,
+        states,
+        controls,
+        [constraint],
+        N,
+        time_dilation_factor_min=0.3,
+        time_dilation_factor_max=3.0,
+    )
+
+    time_dilation = controls_aug[0]
+    assert time_dilation.min[0] == 0.5, "User-provided min should override"
+    assert time_dilation.max[0] == 3.0 * 10.0, "Max should use factor fallback"
+
+
 def test_ctcs_idx_grouping_auto_assignment():
     """Test automatic idx assignment for constraints without explicit idx."""
     x = State("x", (2,))
