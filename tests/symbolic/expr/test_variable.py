@@ -672,15 +672,17 @@ def test_time_setter_accepts_arrays():
 
 
 def test_time_repr():
-    """Test Time repr for both constructed and empty."""
+    """Test Time repr for constructed, partial, and empty."""
     from openscvx import Time
 
     t1 = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
-    assert "initial=0.0" in repr(t1)
-    assert "final=10.0" in repr(t1)
+    assert repr(t1) == "Time(initial=0.0, final=10.0, min=0.0, max=20.0)"
 
     t2 = Time()
     assert repr(t2) == "Time()"
+
+    t3 = Time(min=0.0, max=20.0)
+    assert repr(t3) == "Time(min=0.0, max=20.0)"
 
 
 # --- Time: Guess ---

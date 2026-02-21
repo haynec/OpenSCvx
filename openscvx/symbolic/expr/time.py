@@ -230,6 +230,13 @@ class Time(State):
         return np.linspace(self._initial[0], self._final[0], N).reshape(-1, 1)
 
     def __repr__(self):
-        if self._initial is not None and self._final is not None:
-            return f"Time(initial={self._initial[0]}, final={self._final[0]})"
-        return "Time()"
+        parts = []
+        if self._initial is not None:
+            parts.append(f"initial={self._initial[0]}")
+        if self._final is not None:
+            parts.append(f"final={self._final[0]}")
+        if self._min is not None:
+            parts.append(f"min={self._min[0]}")
+        if self._max is not None:
+            parts.append(f"max={self._max[0]}")
+        return f"Time({', '.join(parts)})"
