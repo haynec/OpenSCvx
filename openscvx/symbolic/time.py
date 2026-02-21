@@ -102,24 +102,30 @@ class Time(State):
                 1D array of shape (N,) or 2D of shape (N, 1). Overrides
                 the default finite-difference computation.
         """
-        # Skip State.__init__'s kwarg handling — we wrap scalars ourselves
-        State.__init__(self, "time", shape=(1,))
-
         self.derivative = 1.0
         self._time_dilation_min = None
         self._time_dilation_max = None
         self._time_dilation_guess = None
         self._time_dilation_control = None  # set by augmentation for live propagation
 
-        if min is not None:
-            self.min = min
-        if max is not None:
-            self.max = max
-        if initial is not None:
-            self.initial = initial
-        if final is not None:
-            self.final = final
+        # Wrap scalars into the array forms that State/Variable setters expect.
+        # Time is always shape (1,), so a bare scalar is unambiguous.
+        if isinstance(min, (int, float, np.number)):
+            min = np.array([min], dtype=float)
+        if isinstance(max, (int, float, np.number)):
+            max = np.array([max], dtype=float)
+        if initial is not None and not isinstance(initial, (list, np.ndarray)):
+            initial = [initial]
+        if final is not None and not isinstance(final, (list, np.ndarray)):
+            final = [final]
+
+        super().__init__("time", shape=(1,), min=min, max=max, initial=initial, final=final)
+
+        # guess: normalize 1D → 2D before assigning
         if guess is not None:
+            guess = np.asarray(guess, dtype=float)
+            if guess.ndim == 1:
+                guess = guess.reshape(-1, 1)
             self.guess = guess
         if time_dilation_min is not None:
             self.time_dilation_min = time_dilation_min
