@@ -124,6 +124,51 @@ def test_state_creation():
     assert s._final is None
 
 
+def test_state_creation_with_kwargs():
+    """Test State creation with constructor kwargs matches setter style."""
+    import numpy as np
+
+    from openscvx.symbolic.expr import State
+    from openscvx.symbolic.expr.state import Free, Minimize
+
+    # Constructor style
+    s1 = State(
+        "pos",
+        shape=(3,),
+        min=[0.0, 0.0, 0.0],
+        max=[10.0, 10.0, 10.0],
+        initial=[0.0, 1.0, 2.0],
+        final=[10.0, ("free", 5.0), Minimize(8.0)],
+    )
+
+    # Setter style
+    s2 = State("pos", shape=(3,))
+    s2.min = [0.0, 0.0, 0.0]
+    s2.max = [10.0, 10.0, 10.0]
+    s2.initial = [0.0, 1.0, 2.0]
+    s2.final = [10.0, Free(5.0), Minimize(8.0)]
+
+    assert np.allclose(s1.min, s2.min)
+    assert np.allclose(s1.max, s2.max)
+    assert np.allclose(s1.initial, s2.initial)
+    assert np.allclose(s1.final, s2.final)
+    assert list(s1.initial_type) == list(s2.initial_type)
+    assert list(s1.final_type) == list(s2.final_type)
+
+
+def test_state_creation_partial_kwargs():
+    """Test State creation with only some kwargs."""
+    import numpy as np
+
+    from openscvx.symbolic.expr import State
+
+    s = State("vel", shape=(2,), min=[-5.0, -5.0], max=[5.0, 5.0])
+    assert np.allclose(s.min, [-5.0, -5.0])
+    assert np.allclose(s.max, [5.0, 5.0])
+    assert s._initial is None
+    assert s._final is None
+
+
 def test_state_boundary_conditions_fixed():
     """Test setting fixed boundary conditions on State."""
     import numpy as np
@@ -322,6 +367,24 @@ def test_control_creation():
     assert c._guess is None
 
 
+def test_control_creation_with_kwargs():
+    """Test Control creation with constructor kwargs matches setter style."""
+    import numpy as np
+
+    from openscvx.symbolic.expr import Control
+
+    # Constructor style
+    c1 = Control("thrust", shape=(3,), min=[-10, -10, 0], max=[10, 10, 50])
+
+    # Setter style
+    c2 = Control("thrust", shape=(3,))
+    c2.min = [-10, -10, 0]
+    c2.max = [10, 10, 50]
+
+    assert np.allclose(c1.min, c2.min)
+    assert np.allclose(c1.max, c2.max)
+
+
 def test_control_bounds():
     """Test setting min/max bounds on Control."""
     import numpy as np
@@ -502,3 +565,119 @@ def test_cvxpy_missing_control_variable_error():
 
     with pytest.raises(ValueError, match="Control vector 'u' not found"):
         lowerer.lower(u)
+
+
+# =============================================================================
+# Time
+# =============================================================================
+
+# --- Time: Creation ---
+
+
+def test_time_constructor_style():
+    """Test Time creation with all constructor args (existing API)."""
+    import numpy as np
+
+    from openscvx import Time
+    from openscvx.symbolic.expr.state import Minimize
+
+    t = Time(initial=0.0, final=Minimize(10.0), min=0.0, max=20.0)
+    assert np.allclose(t.initial, [0.0])
+    assert np.allclose(t.final, [10.0])
+    assert np.allclose(t.min, [0.0])
+    assert np.allclose(t.max, [20.0])
+    assert t.initial_type[0] == "Fix"
+    assert t.final_type[0] == "Minimize"
+
+
+def test_time_setter_style():
+    """Test Time creation with setter-based API."""
+    import numpy as np
+
+    from openscvx import Time
+    from openscvx.symbolic.expr.state import Minimize
+
+    t = Time()
+    t.min = 0.0
+    t.max = 20.0
+    t.initial = 0.0
+    t.final = Minimize(10.0)
+
+    assert np.allclose(t.initial, [0.0])
+    assert np.allclose(t.final, [10.0])
+    assert np.allclose(t.min, [0.0])
+    assert np.allclose(t.max, [20.0])
+    assert t.initial_type[0] == "Fix"
+    assert t.final_type[0] == "Minimize"
+
+
+def test_time_setter_and_constructor_equivalent():
+    """Test that constructor and setter styles produce identical results."""
+    import numpy as np
+
+    from openscvx import Time
+    from openscvx.symbolic.expr.state import Free
+
+    # Constructor style
+    t1 = Time(initial=0.0, final=Free(5.0), min=0.0, max=10.0)
+
+    # Setter style
+    t2 = Time()
+    t2.min = 0.0
+    t2.max = 10.0
+    t2.initial = 0.0
+    t2.final = Free(5.0)
+
+    assert np.allclose(t1.min, t2.min)
+    assert np.allclose(t1.max, t2.max)
+    assert np.allclose(t1.initial, t2.initial)
+    assert np.allclose(t1.final, t2.final)
+    assert list(t1.initial_type) == list(t2.initial_type)
+    assert list(t1.final_type) == list(t2.final_type)
+
+
+def test_time_partial_construction():
+    """Test Time with partial constructor args then setters for the rest."""
+    import numpy as np
+
+    from openscvx import Time
+
+    t = Time(min=0.0, max=20.0)
+    assert np.allclose(t.min, [0.0])
+    assert np.allclose(t.max, [20.0])
+    assert t._initial is None
+    assert t._final is None
+
+    t.initial = 0.0
+    t.final = 10.0
+    assert np.allclose(t.initial, [0.0])
+    assert np.allclose(t.final, [10.0])
+
+
+def test_time_setter_accepts_arrays():
+    """Test that Time setters also accept array-form values."""
+    import numpy as np
+
+    from openscvx import Time
+
+    t = Time()
+    t.min = [0.0]
+    t.max = [20.0]
+    t.initial = [0.0]
+    t.final = [10.0]
+    assert np.allclose(t.min, [0.0])
+    assert np.allclose(t.max, [20.0])
+    assert np.allclose(t.initial, [0.0])
+    assert np.allclose(t.final, [10.0])
+
+
+def test_time_repr():
+    """Test Time repr for both constructed and empty."""
+    from openscvx import Time
+
+    t1 = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    assert "initial=0.0" in repr(t1)
+    assert "final=10.0" in repr(t1)
+
+    t2 = Time()
+    assert repr(t2) == "Time()"
