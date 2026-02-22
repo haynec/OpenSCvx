@@ -44,7 +44,7 @@ def _resolve_discretizer(val: Any) -> Discretizer:
     Examples::
 
         # Dict with keyword overrides (default class)
-        _resolve_discretizer({"dis_type": "ZOH", "solver": "Dopri8"})
+        _resolve_discretizer({"dis_type": "ZOH", "ode_solver": "Dopri8"})
 
         # Dict with explicit type
         _resolve_discretizer({"type": "LinearizeDiscretize", "dis_type": "ZOH"})

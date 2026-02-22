@@ -28,7 +28,7 @@ class LinearizeDiscretize(Discretizer):
     Args:
         dis_type: Control hold type. ``"FOH"`` (first-order hold) or
             ``"ZOH"`` (zero-order hold). Defaults to ``"FOH"``.
-        solver: Diffrax solver name. Any solver from
+        ode_solver: Diffrax solver name. Any solver from
             `Diffrax <https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/>`_
             is valid. Defaults to ``"Tsit5"``.
         custom_integrator: Use the built-in fixed-step RK45 integrator
@@ -42,14 +42,14 @@ class LinearizeDiscretize(Discretizer):
     def __init__(
         self,
         dis_type: str = "FOH",
-        solver: str = "Tsit5",
+        ode_solver: str = "Tsit5",
         custom_integrator: bool = False,
         atol: float = 1e-3,
         rtol: float = 1e-6,
         args: Optional[dict] = None,
     ):
         self.dis_type = dis_type
-        self.solver = solver
+        self.ode_solver = ode_solver
         self.custom_integrator = custom_integrator
         self.atol = atol
         self.rtol = rtol
@@ -332,7 +332,7 @@ def _calculate_discretization(
             dVdt_wrapped,
             1.0 / (N - 1),
             V0,
-            solver_name=discretizer.solver,
+            solver_name=discretizer.ode_solver,
             rtol=discretizer.rtol,
             atol=discretizer.atol,
             args=(),

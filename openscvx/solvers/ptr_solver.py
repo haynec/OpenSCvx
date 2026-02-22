@@ -110,7 +110,7 @@ class PTRSolver(ConvexSolver):
             x_sol = result.x  # Unscaled state trajectory
 
     Args:
-        solver: CVXPY solver backend name. Defaults to ``"QOCO"``.
+        cvx_solver: CVXPY solver backend name. Defaults to ``"QOCO"``.
         solver_args: Keyword arguments forwarded to the CVXPY solver
             (e.g. tolerances). Defaults to
             ``{"abstol": 1e-6, "reltol": 1e-9, "enforce_dpp": True}``.
@@ -125,7 +125,7 @@ class PTRSolver(ConvexSolver):
 
     def __init__(
         self,
-        solver: str = "QOCO",
+        cvx_solver: str = "QOCO",
         solver_args: Optional[dict] = None,
         cvxpygen: bool = False,
         cvxpygen_override: bool = False,
@@ -134,7 +134,7 @@ class PTRSolver(ConvexSolver):
 
         Call create_variables() then initialize() to build the problem structure.
         """
-        self.solver = solver
+        self.cvx_solver = cvx_solver
         self.solver_args = (
             solver_args
             if solver_args is not None
@@ -283,7 +283,7 @@ class PTRSolver(ConvexSolver):
                 )
             # Check to see if solver directory exists
             if not os.path.exists("solver"):
-                cpg.generate_code(prob, solver=self.solver, code_dir="solver", wrapper=True)
+                cpg.generate_code(prob, solver=self.cvx_solver, code_dir="solver", wrapper=True)
             else:
                 # Prompt the use to indicate if they wish to overwrite the solver
                 # directory or use the existing compiled solver
@@ -580,9 +580,9 @@ class PTRSolver(ConvexSolver):
                     "generation has been run. Install with: pip install openscvx[cvxpygen]"
                 )
         else:
-            solver = self.solver
+            cvx_solver = self.cvx_solver
             solver_args = self.solver_args
-            self._solve_fn = lambda: self._problem.solve(solver=solver, **solver_args)
+            self._solve_fn = lambda: self._problem.solve(solver=cvx_solver, **solver_args)
 
     def update_dynamics_linearization(
         self,

@@ -69,13 +69,13 @@ def _resolve_solver(val: Any) -> ConvexSolver:
     Examples::
 
         # Dict with keyword overrides (default class)
-        _resolve_solver({"solver": "CLARABEL", "solver_args": {"tol_gap_abs": 1e-7}})
+        _resolve_solver({"cvx_solver": "CLARABEL", "solver_args": {"tol_gap_abs": 1e-7}})
 
         # Dict with explicit type
-        _resolve_solver({"type": "PTRSolver", "solver": "CLARABEL"})
+        _resolve_solver({"type": "PTRSolver", "cvx_solver": "CLARABEL"})
 
         # Instance pass-through
-        _resolve_solver(PTRSolver(solver="CLARABEL"))
+        _resolve_solver(PTRSolver(cvx_solver="CLARABEL"))
     """
     if isinstance(val, ConvexSolver):
         return val

@@ -142,7 +142,7 @@ problem = Problem(
     constraints=constraints,
     N=n,
     algorithm={"autotuner": ox.RampProximalWeight(ramp_factor=1.04, lam_prox_max=1e2)},
-    discretizer={"dis_type": "ZOH", "solver": "Dopri8"},
+    discretizer={"dis_type": "ZOH", "ode_solver": "Dopri8"},
 )
 
 # Set algorithm weights (triggers automatic re-normalization)

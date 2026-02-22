@@ -152,7 +152,7 @@ class Problem:
                 Examples::
 
                     # Change hold type and ODE solver
-                    discretizer={"dis_type": "ZOH", "solver": "Dopri8"}
+                    discretizer={"dis_type": "ZOH", "ode_solver": "Dopri8"}
 
                     # Use custom integrator
                     discretizer={"custom_integrator": True}
@@ -168,7 +168,7 @@ class Problem:
                 Examples::
 
                     # Change CVXPY backend solver and tolerances
-                    solver={"solver": "CLARABEL", "solver_args": {"tol_gap_abs": 1e-7}}
+                    solver={"cvx_solver": "CLARABEL", "solver_args": {"tol_gap_abs": 1e-7}}
 
                     # Just change solver_args
                     solver={"solver_args": {"abstol": 1e-6, "reltol": 1e-9}}
@@ -177,7 +177,7 @@ class Problem:
                     solver={"cvxpygen": True}
 
                     # Instance
-                    solver=ox.PTRSolver(solver="CLARABEL")
+                    solver=ox.PTRSolver(cvx_solver="CLARABEL")
             byof (ByofSpec, optional): Expert mode only. Raw JAX functions to
                 bypass symbolic layer. See :class:`openscvx.expert.ByofSpec` for
                 detailed documentation.
@@ -341,7 +341,7 @@ class Problem:
     def solver(self) -> ConvexSolver:
         """Access the convex subproblem solver instance.
 
-        Attributes such as ``solver``, ``solver_args``, ``cvxpygen``, and
+        Attributes such as ``cvx_solver``, ``solver_args``, ``cvxpygen``, and
         ``cvxpygen_override`` can be modified freely before ``initialize``
         is called::
 
@@ -372,11 +372,11 @@ class Problem:
     def discretizer(self) -> Discretizer:
         """Access the discretizer instance.
 
-        Attributes such as `dis_type`, `solver`, and `custom_integrator`
+        Attributes such as `dis_type`, `ode_solver`, and `custom_integrator`
         can be modified freely before `initialize` is called:
 
             problem.discretizer.dis_type = "ZOH"
-            problem.discretizer.solver = "Dopri8"
+            problem.discretizer.ode_solver = "Dopri8"
             problem.initialize()
 
         !!! warning
@@ -717,8 +717,8 @@ class Problem:
             self._lowered,
             self._solver,
             self._algorithm.weights,
-            cvx_solver=self._solver.solver,
-            dis_solver=self._discretizer.solver,
+            cvx_solver=self._solver.cvx_solver,
+            dis_solver=self._discretizer.ode_solver,
         )
 
         # Get cache file paths using symbolic AST hashing

@@ -53,10 +53,10 @@ Expected schema
 
     discretizer:                     # optional
       dis_type: ZOH
-      solver: Dopri8
+      ode_solver: Dopri8
 
     solver:                          # optional (convex subproblem solver)
-      solver: QOCO
+      cvx_solver: QOCO
       solver_args: {abstol: 1.0e-6, reltol: 1.0e-9}
 
     settings:                        # optional, applied after Problem()
