@@ -16,15 +16,17 @@ The state, constrol and additional parameters are defined as follows:
 
 lam_prox = cp.Parameter(nonneg = True, name='lam_prox')       # Weight on the Trust Region
 lam_cost = cp.Parameter(nonneg=True, name='lam_cost') # Weight on the Nonlinear Cost
+lam_vc = cp.Parameter((params.sim.n - 1, params.sim.n_states), nonneg=True, name='lam_vc')  # Weight on Virtual Control
+lam_vb = cp.Parameter(nonneg=True, name='lam_vb')     # Weight on Virtual Buffer
 
-x = cp.Variable((params.scp.n, params.sim.n_states), name='x')   # State
-dx = cp.Variable((params.scp.n, params.sim.n_states), name='dx') # State Trust Region
-x_bar = cp.Parameter((params.scp.n, params.sim.n_states), name='x_bar') # Previous SCP State
+x = cp.Variable((params.sim.n, params.sim.n_states), name='x')   # State
+dx = cp.Variable((params.sim.n, params.sim.n_states), name='dx') # State Trust Region
+x_bar = cp.Parameter((params.sim.n, params.sim.n_states), name='x_bar') # Previous SCP State
 
 
-u = cp.Variable((params.scp.n, params.sim.n_controls), name='u')   # Control
-du = cp.Variable((params.scp.n, params.sim.n_controls), name='du') # Control Trust Region
-u_bar = cp.Parameter((params.scp.n, params.sim.n_controls), name='u_bar') # Previous SCP Control
+u = cp.Variable((params.sim.n, params.sim.n_controls), name='u')   # Control
+du = cp.Variable((params.sim.n, params.sim.n_controls), name='du') # Control Trust Region
+u_bar = cp.Parameter((params.sim.n, params.sim.n_controls), name='u_bar') # Previous SCP Control
 
 ```
 
@@ -62,11 +64,11 @@ The discretized dynamics matrices are defined as follows:
 ```python
 
 # Discretized Augmented Dynamics Constraints
-A_d = cp.Parameter((params.scp.n - 1, params.sim.n_states, params.sim.n_states)), name='A_d')
-B_d = cp.Parameter((params.scp.n - 1, params.sim.n_states, params.sim.n_controls), name='B_d')
-C_d = cp.Parameter((params.scp.n - 1, params.sim.n_states, params.sim.n_controls), name='C_d')
-z_d = cp.Parameter((params.scp.n - 1, params.sim.n_states), name='z_d') # Nonlinear Propagation Defect
-nu  = cp.Variable((params.scp.n - 1, params.sim.n_states), name='nu')  # Virtual Control Slack Variable
+A_d = cp.Parameter((params.sim.n - 1, params.sim.n_states, params.sim.n_states)), name='A_d')
+B_d = cp.Parameter((params.sim.n - 1, params.sim.n_states, params.sim.n_controls), name='B_d')
+C_d = cp.Parameter((params.sim.n - 1, params.sim.n_states, params.sim.n_controls), name='C_d')
+z_d = cp.Parameter((params.sim.n - 1, params.sim.n_states), name='z_d') # Nonlinear Propagation Defect
+nu  = cp.Variable((params.sim.n - 1, params.sim.n_states), name='nu')  # Virtual Control Slack Variable
 
 ```
 
@@ -82,10 +84,10 @@ The nonconvex nodal parameters and variables are instantiated using the followin
         nu_vb = []
         for idx_ncvx, constraint in enumerate(params.sim.constraints_nodal):
             if not constraint.convex:
-                g.append(cp.Parameter(params.scp.n, name = 'g_' + str(idx_ncvx)))
-                grad_g_x.append(cp.Parameter((params.scp.n, params.sim.n_states), name='grad_g_x_' + str(idx_ncvx)))
-                grad_g_u.append(cp.Parameter((params.scp.n, params.sim.n_controls), name='grad_g_u_' + str(idx_ncvx)))
-                nu_vb.append(cp.Variable(params.scp.n, name='nu_vb_' + str(idx_ncvx))) # Virtual Control for VB
+                g.append(cp.Parameter(params.sim.n, name = 'g_' + str(idx_ncvx)))
+                grad_g_x.append(cp.Parameter((params.sim.n, params.sim.n_states), name='grad_g_x_' + str(idx_ncvx)))
+                grad_g_u.append(cp.Parameter((params.sim.n, params.sim.n_controls), name='grad_g_u_' + str(idx_ncvx)))
+                nu_vb.append(cp.Variable(params.sim.n, name='nu_vb_' + str(idx_ncvx))) # Virtual Control for VB
 ```
 
 
@@ -99,11 +101,13 @@ def OptimalControlProblem(params: Config):
     # Parameters
     lam_prox = cp.Parameter(nonneg = True, name='lam_prox')
     lam_cost = cp.Parameter(nonneg=True, name='lam_cost')
+    lam_vc = cp.Parameter((params.sim.n - 1, params.sim.n_states), nonneg=True, name='lam_vc')
+    lam_vb = cp.Parameter(nonneg=True, name='lam_vb')
 
     # State
-    x = cp.Variable((params.scp.n, params.sim.n_states), name='x') 
-    dx = cp.Variable((params.scp.n, params.sim.n_states), name='dx') # State Trust Region
-    x_bar = cp.Parameter((params.scp.n, params.sim.n_states), name='x_bar') # Previous SCP State
+    x = cp.Variable((params.sim.n, params.sim.n_states), name='x') 
+    dx = cp.Variable((params.sim.n, params.sim.n_states), name='dx') # State Trust Region
+    x_bar = cp.Parameter((params.sim.n, params.sim.n_states), name='x_bar') # Previous SCP State
 
     # Affine Scaling for State
     S_x = params.sim.S_x
@@ -111,9 +115,9 @@ def OptimalControlProblem(params: Config):
     c_x = params.sim.c_x
 
     # Control
-    u = cp.Variable((params.scp.n, params.sim.n_controls), name='u') 
-    du = cp.Variable((params.scp.n, params.sim.n_controls), name='du') # Control Trust Region
-    u_bar = cp.Parameter((params.scp.n, params.sim.n_controls), name='u_bar') # Previous SCP Control
+    u = cp.Variable((params.sim.n, params.sim.n_controls), name='u') 
+    du = cp.Variable((params.sim.n, params.sim.n_controls), name='du') # Control Trust Region
+    u_bar = cp.Parameter((params.sim.n, params.sim.n_controls), name='u_bar') # Previous SCP Control
 
     # Affine Scaling for Control
     S_u = params.sim.S_u
@@ -121,11 +125,11 @@ def OptimalControlProblem(params: Config):
     c_u = params.sim.c_u
 
     # Discretized Augmented Dynamics Constraints
-    A_d = cp.Parameter((params.scp.n - 1, params.sim.n_states, params.sim.n_states), name='A_d')
-    B_d = cp.Parameter((params.scp.n - 1, params.sim.n_states, params.sim.n_controls), name='B_d')
-    C_d = cp.Parameter((params.scp.n - 1, params.sim.n_states, params.sim.n_controls), name='C_d')
-    z_d = cp.Parameter((params.scp.n - 1, params.sim.n_states), name='z_d')
-    nu  = cp.Variable((params.scp.n - 1, params.sim.n_states), name='nu') # Virtual Control
+    A_d = cp.Parameter((params.sim.n - 1, params.sim.n_states, params.sim.n_states), name='A_d')
+    B_d = cp.Parameter((params.sim.n - 1, params.sim.n_states, params.sim.n_controls), name='B_d')
+    C_d = cp.Parameter((params.sim.n - 1, params.sim.n_states, params.sim.n_controls), name='C_d')
+    z_d = cp.Parameter((params.sim.n - 1, params.sim.n_states), name='z_d')
+    nu  = cp.Variable((params.sim.n - 1, params.sim.n_states), name='nu') # Virtual Control
 
     # Linearized Nonconvex Nodal Constraints
     if params.sim.constraints_nodal:
@@ -135,15 +139,15 @@ def OptimalControlProblem(params: Config):
         nu_vb = []
         for idx_ncvx, constraint in enumerate(params.sim.constraints_nodal):
             if not constraint.convex:
-                g.append(cp.Parameter(params.scp.n, name = 'g_' + str(idx_ncvx)))
-                grad_g_x.append(cp.Parameter((params.scp.n, params.sim.n_states), name='grad_g_x_' + str(idx_ncvx)))
-                grad_g_u.append(cp.Parameter((params.scp.n, params.sim.n_controls), name='grad_g_u_' + str(idx_ncvx)))
-                nu_vb.append(cp.Variable(params.scp.n, name='nu_vb_' + str(idx_ncvx))) # Virtual Control for VB
+                g.append(cp.Parameter(params.sim.n, name = 'g_' + str(idx_ncvx)))
+                grad_g_x.append(cp.Parameter((params.sim.n, params.sim.n_states), name='grad_g_x_' + str(idx_ncvx)))
+                grad_g_u.append(cp.Parameter((params.sim.n, params.sim.n_controls), name='grad_g_u_' + str(idx_ncvx)))
+                nu_vb.append(cp.Variable(params.sim.n, name='nu_vb_' + str(idx_ncvx))) # Virtual Control for VB
 
     # Applying the affine scaling to state and control
     x_nonscaled = []
     u_nonscaled = []
-    for k in range(params.scp.n):
+    for k in range(params.sim.n):
         x_nonscaled.append(S_x @ x[k] + c_x)
         u_nonscaled.append(S_u @ u[k] + c_u)
 
@@ -157,7 +161,7 @@ def OptimalControlProblem(params: Config):
     if params.sim.constraints_nodal:
         for constraint in params.sim.constraints_nodal:
             if constraint.nodes is None:
-                nodes = range(params.scp.n)
+                nodes = range(params.sim.n)
             else:
                 nodes = constraint.nodes
 
@@ -182,38 +186,38 @@ def OptimalControlProblem(params: Config):
         if params.sim.final_state.type[i] == 'Maximize':
             cost += lam_cost * x_nonscaled[-1][i]
 
-    if params.scp.uniform_time_grid:
-        constr += [x_nonscaled[i][params.sim.idx_t] - x_nonscaled[i-1][params.sim.idx_t] == x_nonscaled[i-1][params.sim.idx_t] - x_nonscaled[i-2][params.sim.idx_t] for i in range(2, params.scp.n)] # Uniform Time Step
+    if params.sim._uniform_time_grid:
+        constr += [x_nonscaled[i][params.sim.idx_t] - x_nonscaled[i-1][params.sim.idx_t] == x_nonscaled[i-1][params.sim.idx_t] - x_nonscaled[i-2][params.sim.idx_t] for i in range(2, params.sim.n)] # Uniform Time Step
 
-    constr += [0 == la.inv(S_x) @ (x_nonscaled[i] - x_bar[i] - dx[i]) for i in range(params.scp.n)] # State Error
-    constr += [0 == la.inv(S_u) @ (u_nonscaled[i] - u_bar[i] - du[i]) for i in range(params.scp.n)] # Control Error
+    constr += [0 == la.inv(S_x) @ (x_nonscaled[i] - x_bar[i] - dx[i]) for i in range(params.sim.n)] # State Error
+    constr += [0 == la.inv(S_u) @ (u_nonscaled[i] - u_bar[i] - du[i]) for i in range(params.sim.n)] # Control Error
 
     constr += [x_nonscaled[i] == \
                       A_d[i-1] @ x_nonscaled[i-1] \
                     + B_d[i-1] @ u_nonscaled[i-1] \
                     + C_d[i-1] @ u_nonscaled[i] \
                     + z_d[i-1] \
-                    + nu[i-1] for i in range(1, params.scp.n)] # Dynamics Constraint
+                    + nu[i-1] for i in range(1, params.sim.n)] # Dynamics Constraint
     
-    constr += [u_nonscaled[i] <= params.sim.max_control for i in range(params.scp.n)]
-    constr += [u_nonscaled[i] >= params.sim.min_control for i in range(params.scp.n)] # Control Constraints
+    constr += [u_nonscaled[i] <= params.sim.max_control for i in range(params.sim.n)]
+    constr += [u_nonscaled[i] >= params.sim.min_control for i in range(params.sim.n)] # Control Constraints
 
-    constr += [x_nonscaled[i][params.sim.idx_x_true] <= params.sim.max_state[params.sim.idx_x_true] for i in range(params.scp.n)]
-    constr += [x_nonscaled[i][params.sim.idx_x_true] >= params.sim.min_state[params.sim.idx_x_true] for i in range(params.scp.n)] # State Constraints (Also implemented in CTCS but included for numerical stability)
+    constr += [x_nonscaled[i][params.sim.idx_x_true] <= params.sim.max_state[params.sim.idx_x_true] for i in range(params.sim.n)]
+    constr += [x_nonscaled[i][params.sim.idx_x_true] >= params.sim.min_state[params.sim.idx_x_true] for i in range(params.sim.n)] # State Constraints (Also implemented in CTCS but included for numerical stability)
 
     ########
     # COSTS
     ########
     
     inv = block([[inv_S_x, np.zeros((S_x.shape[0], S_u.shape[1]))], [np.zeros((S_u.shape[0], S_x.shape[1])), inv_S_u]])
-    cost += sum(lam_prox * cp.sum_squares(inv @ cp.hstack((dx[i], du[i]))) for i in range(params.scp.n))  # Trust Region Cost
-    cost += sum(params.scp.lam_vc * cp.sum(cp.abs(nu[i-1])) for i in range(1, params.scp.n)) # Virtual Control Slack
+    cost += sum(lam_prox * cp.sum_squares(inv @ cp.hstack((dx[i], du[i]))) for i in range(params.sim.n))  # Trust Region Cost
+    cost += sum(lam_vc * cp.sum(cp.abs(nu[i-1])) for i in range(1, params.sim.n)) # Virtual Control Slack
     
     idx_ncvx = 0
     if params.sim.constraints_nodal:
         for constraint in params.sim.constraints_nodal:
             if not constraint.convex:
-                cost += params.scp.lam_vb * cp.sum(cp.pos(nu_vb[idx_ncvx]))
+                cost += lam_vb * cp.sum(cp.pos(nu_vb[idx_ncvx]))
                 idx_ncvx += 1
 
     for idx, nodes in zip(np.arange(params.sim.idx_y.start, params.sim.idx_y.stop), params.sim.ctcs_node_intervals):  
@@ -229,15 +233,15 @@ def OptimalControlProblem(params: Config):
     # PROBLEM
     #########
     prob = cp.Problem(cp.Minimize(cost), constr)
-    if params.cvx.cvxpygen:
+    if solver.cvxpygen:
         # Check to see if solver directory exists
         if not os.path.exists('solver'):
-            cpg.generate_code(prob, solver = params.cvx.solver, code_dir='solver', wrapper = True)
+            cpg.generate_code(prob, solver = solver.cvx_solver, code_dir='solver', wrapper = True)
         else:
             # Prompt the use to indicate if they wish to overwrite the solver directory or use the existing compiled solver
             overwrite = input("Solver directory already exists. Overwrite? (y/n): ")
             if overwrite.lower() == 'y':
-                cpg.generate_code(prob, solver = params.cvx.solver, code_dir='solver', wrapper = True)
+                cpg.generate_code(prob, solver = solver.cvx_solver, code_dir='solver', wrapper = True)
             else:
                 pass
     return prob
