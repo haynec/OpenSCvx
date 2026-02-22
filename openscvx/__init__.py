@@ -70,7 +70,7 @@ from openscvx.symbolic.expr import (
     Vstack,
     ctcs,
 )
-from openscvx.symbolic.time import Time
+from openscvx.symbolic.expr.time import Time
 from openscvx.utils.cache import clear_cache, get_cache_dir, get_cache_size
 
 load_results = OptimizationResults.load

@@ -767,7 +767,7 @@ def validate_input_types(
         ValueError: If N is not positive
     """
     from openscvx.symbolic.expr import CTCS, Constraint, CrossNodeConstraint, NodalConstraint
-    from openscvx.symbolic.time import Time
+    from openscvx.symbolic.expr.time import Time
 
     if not isinstance(dynamics, dict):
         raise TypeError(

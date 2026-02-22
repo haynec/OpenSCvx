@@ -7,8 +7,8 @@ import cvxpy as cp
 
 # Expression types to handle — uncomment as you paste visitors:
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.expr.time import Time
 from openscvx.symbolic.lowerers.cvxpy._registry import visitor  # noqa: F401
-from openscvx.symbolic.time import Time
 
 
 @visitor(Time)

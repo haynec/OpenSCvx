@@ -841,14 +841,12 @@ def test_time_dilation_control_bounds():
         controls,
         [constraint],
         N,
-        time_dilation_factor_min=0.5,
-        time_dilation_factor_max=2.5,
     )
 
-    # Check time dilation control bounds
+    # Check time dilation control bounds (default factors: 0.3 / 3.0)
     time_dilation = controls_aug[0]  # should be the only control
-    expected_min = 0.5 * 15.0  # min_factor * time_final
-    expected_max = 2.5 * 15.0  # max_factor * time_final
+    expected_min = 0.3 * 15.0  # default min_factor * time_final
+    expected_max = 3.0 * 15.0  # default max_factor * time_final
     expected_guess = 15.0  # time_final
 
     assert time_dilation.min[0] == expected_min, (
@@ -861,6 +859,129 @@ def test_time_dilation_control_bounds():
     assert np.allclose(time_dilation.guess, expected_guess), (
         f"Expected guess {expected_guess}, got {time_dilation.guess}"
     )
+
+
+def test_time_dilation_overrides_from_time_object():
+    """Test that Time's time_dilation_* attrs override factor-based defaults."""
+    from openscvx.symbolic.expr.time import Time
+
+    time = Time(initial=0.0, final=15.0, min=0.0, max=30.0)
+    time.guess = np.linspace(0, 15, 3).reshape(-1, 1)
+    time.time_dilation_min = 1.0
+    time.time_dilation_max = 50.0
+    time.time_dilation_guess = np.full((3, 1), 15.0)
+
+    x = State("x", (2,))
+    x.final = np.array([0.0, 0.0])
+    xdot = x
+    states = [x, time]
+    controls = []
+    N = 3
+
+    constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
+
+    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+        xdot,
+        states,
+        controls,
+        [constraint],
+        N,
+    )
+
+    time_dilation = controls_aug[0]
+    assert time_dilation.min[0] == 1.0, (
+        f"Expected user-provided min 1.0, got {time_dilation.min[0]}"
+    )
+    assert time_dilation.max[0] == 50.0, (
+        f"Expected user-provided max 50.0, got {time_dilation.max[0]}"
+    )
+    assert np.allclose(time_dilation.guess, 15.0), (
+        f"Expected user-provided guess 15.0, got {time_dilation.guess}"
+    )
+
+
+def test_time_dilation_partial_override():
+    """Test that partial overrides work (e.g. only min, not max)."""
+    from openscvx.symbolic.expr.time import Time
+
+    time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    time.guess = np.linspace(0, 10, 5).reshape(-1, 1)
+    time.time_dilation_min = 0.5  # override min only
+
+    x = State("x", (2,))
+    x.final = np.array([0.0, 0.0])
+    xdot = x
+    states = [x, time]
+    controls = []
+    N = 5
+
+    constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
+
+    _, _, controls_aug = augment_dynamics_with_ctcs(
+        xdot,
+        states,
+        controls,
+        [constraint],
+        N,
+    )
+
+    time_dilation = controls_aug[0]
+    assert time_dilation.min[0] == 0.5, "User-provided min should override"
+    assert time_dilation.max[0] == 3.0 * 10.0, "Max should use default factor fallback"
+
+
+def test_time_dilation_live_propagation():
+    """Test that mutating Time.time_dilation_* after augmentation propagates to the control."""
+    from openscvx.symbolic.expr.time import Time
+
+    time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    time.guess = np.linspace(0, 10, 5).reshape(-1, 1)
+
+    x = State("x", (2,))
+    x.final = np.array([0.0, 0.0])
+    states = [x, time]
+    N = 5
+
+    constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
+
+    _, _, controls_aug = augment_dynamics_with_ctcs(
+        x,
+        states,
+        [],
+        [constraint],
+        N,
+    )
+
+    td_control = controls_aug[0]
+
+    # After augmentation, Time holds a reference to the _time_dilation control
+    assert time._time_dilation_control is td_control
+
+    # Mutate via Time — should propagate to the control
+    time.time_dilation_min = 0.5
+    assert td_control.min[0] == 0.5
+
+    time.time_dilation_max = 99.0
+    assert td_control.max[0] == 99.0
+
+    new_guess = np.full((5, 1), 7.0)
+    time.time_dilation_guess = new_guess
+    assert np.allclose(td_control.guess, 7.0)
+
+
+def test_time_dilation_no_propagation_before_augmentation():
+    """Test that setters work fine before augmentation (no control yet)."""
+    from openscvx.symbolic.expr.time import Time
+
+    t = Time()
+    t.time_dilation_min = 1.0
+    t.time_dilation_max = 50.0
+    t.time_dilation_guess = np.ones((10, 1))
+
+    # No error, values stored locally
+    assert t.time_dilation_min == 1.0
+    assert t.time_dilation_max == 50.0
+    assert t._time_dilation_control is None
 
 
 def test_ctcs_idx_grouping_auto_assignment():

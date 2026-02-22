@@ -409,7 +409,6 @@ class ScpConfig:
         ep_tr: float = 1e-4,
         ep_vb: float = 1e-4,
         ep_vc: float = 1e-8,
-        uniform_time_grid: bool = False,
         autotuner: Optional["AutotuningBase"] = None,
     ):
         """
@@ -433,8 +432,6 @@ class ScpConfig:
             lam_cost (float): The weight for original cost. Defaults to 0.0.
             lam_vb (float): The weight for virtual buffer. This is only used if
                 there are nonconvex nodal constraints present. Defaults to 0.0.
-            uniform_time_grid (bool): Whether to use a uniform time grid.
-                Defaults to `False`.
             autotuner: Optional custom autotuner instance. If not provided, defaults
                 to ``AugmentedLagrangian()`` with default parameters. Useful for
                 customizing parameters:
@@ -464,7 +461,7 @@ class ScpConfig:
         self.ep_vc = ep_vc
         self.lam_cost = lam_cost
         self.lam_vb = lam_vb
-        self.uniform_time_grid = uniform_time_grid
+        self._uniform_time_grid = False
         # Store autotuner via property to support lazy default construction
         self.autotuner = autotuner
 

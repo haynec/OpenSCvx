@@ -59,16 +59,30 @@ class Control(Variable):
             steer.guess = np.linspace([0, 0], [0, 1], 50)  # Gradual acceleration
     """
 
-    def __init__(self, name: str, shape: Tuple[int, ...]):
+    def __init__(
+        self,
+        name: str,
+        shape: Tuple[int, ...],
+        *,
+        min: Optional[np.ndarray] = None,
+        max: Optional[np.ndarray] = None,
+    ):
         """Initialize a Control object.
 
         Args:
             name: Name identifier for the control variable
             shape: Shape of the control vector (typically 1D tuple like (3,))
+            min: Optional minimum bounds array (keyword-only)
+            max: Optional maximum bounds array (keyword-only)
         """
         super().__init__(name, shape)
         self._scaling_min = None
         self._scaling_max = None
+
+        if min is not None:
+            self.min = min
+        if max is not None:
+            self.max = max
 
     def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
         """Element-level exact sparsity: diagonal block at ``_slice``."""

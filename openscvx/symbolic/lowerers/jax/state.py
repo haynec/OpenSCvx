@@ -5,8 +5,8 @@ Visitors: State, Time
 
 # Expression types to handle — uncomment as you paste visitors:
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.expr.time import Time
 from openscvx.symbolic.lowerers.jax._registry import visitor  # noqa: F401
-from openscvx.symbolic.time import Time
 
 
 @visitor(Time)

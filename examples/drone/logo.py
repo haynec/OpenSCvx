@@ -127,6 +127,8 @@ time_state = ox.Time(
     final=total_time,
     min=0.0,
     max=total_time,
+    time_dilation_min=0.001 * total_time,
+    time_dilation_max=3.0 * total_time,
 )
 
 # Control components
@@ -353,8 +355,6 @@ problem = Problem(
     constraints=constraints,
     N=n,
     byof=byof,
-    time_dilation_factor_min=0.001,
-    time_dilation_factor_max=3.0,
     autotuner=ox.RampProximalWeight(),
     float_dtype="float64",
 )

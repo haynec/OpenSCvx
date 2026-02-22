@@ -71,6 +71,7 @@ from openscvx.symbolic.expr import (
 )
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.expr.time import Time
 
 
 def _check_nonconvex_equality(constraint: Constraint, context: str) -> None:
@@ -440,8 +441,6 @@ def augment_dynamics_with_ctcs(
     N: int,
     licq_min: float = 0.0,
     licq_max: float = 1e-4,
-    time_dilation_factor_min: float = 0.3,
-    time_dilation_factor_max: float = 3.0,
 ) -> Tuple[Expr, List[State], List[Control]]:
     """Augment dynamics with continuous-time constraint satisfaction states.
 
@@ -467,8 +466,6 @@ def augment_dynamics_with_ctcs(
         N: Number of discretization nodes
         licq_min: Minimum bound for augmented states (default: 0.0)
         licq_max: Maximum bound for augmented states (default: 1e-4)
-        time_dilation_factor_min: Minimum time dilation factor (default: 0.3)
-        time_dilation_factor_max: Maximum time dilation factor (default: 3.0)
 
     Returns:
         Tuple of:
@@ -561,28 +558,49 @@ def augment_dynamics_with_ctcs(
         raise ValueError("No state named 'time' found in states list")
 
     time_final = time_state.final[0]
-    time_dilation.min = np.array([time_dilation_factor_min * time_final])
-    time_dilation.max = np.array([time_dilation_factor_max * time_final])
 
-    # Compute initial guess for time_dilation from time.guess using finite differences
-    # The relationship is: dt/dtau = time_dilation, where tau is normalized time [0,1]
-    # With N nodes, dtau = 1/(N-1) between consecutive nodes
-    if time_state.guess is None:
-        raise ValueError("time state must have a guess set before augmentation")
+    # If time_state is a Time instance, use its time_dilation_* attributes.
+    # Otherwise fall back to default factor-based bounds (0.3 / 3.0).
+    is_time = isinstance(time_state, Time)
 
-    if N > 1:
-        time_guess = time_state.guess.flatten()  # Shape (N,)
-        time_dilation_guess = np.zeros(N)
-        dtau = 1.0 / (N - 1)  # Normalized time step between nodes
-        # Compute finite difference: time_dilation[k] = (time[k+1] - time[k]) / dtau
-        for k in range(N - 1):
-            time_dilation_guess[k] = (time_guess[k + 1] - time_guess[k]) / dtau
-        # For the last node, use the previous value (extrapolate)
-        time_dilation_guess[N - 1] = time_dilation_guess[N - 2]
-        time_dilation.guess = time_dilation_guess.reshape(-1, 1)
+    if is_time and time_state.time_dilation_min is not None:
+        time_dilation.min = np.array([time_state.time_dilation_min])
     else:
-        # Single node case: use time_final as guess
-        time_dilation.guess = np.ones([N, 1]) * time_final
+        time_dilation.min = np.array([0.3 * time_final])
+
+    if is_time and time_state.time_dilation_max is not None:
+        time_dilation.max = np.array([time_state.time_dilation_max])
+    else:
+        time_dilation.max = np.array([3.0 * time_final])
+
+    # Use user-provided time_dilation guess if available,
+    # otherwise compute from time.guess via finite differences
+    if is_time and time_state.time_dilation_guess is not None:
+        time_dilation.guess = time_state.time_dilation_guess
+    else:
+        # The relationship is: dt/dtau = time_dilation, where tau is normalized time [0,1]
+        # With N nodes, dtau = 1/(N-1) between consecutive nodes
+        if time_state.guess is None:
+            raise ValueError("time state must have a guess set before augmentation")
+
+        if N > 1:
+            time_guess = time_state.guess.flatten()  # Shape (N,)
+            time_dilation_guess = np.zeros(N)
+            dtau = 1.0 / (N - 1)  # Normalized time step between nodes
+            # Compute finite difference: time_dilation[k] = (time[k+1] - time[k]) / dtau
+            for k in range(N - 1):
+                time_dilation_guess[k] = (time_guess[k + 1] - time_guess[k]) / dtau
+            # For the last node, use the previous value (extrapolate)
+            time_dilation_guess[N - 1] = time_dilation_guess[N - 2]
+            time_dilation.guess = time_dilation_guess.reshape(-1, 1)
+        else:
+            # Single node case: use time_final as guess
+            time_dilation.guess = np.ones([N, 1]) * time_final
+
+    # Store a back-reference so that later mutations to the Time object
+    # (e.g. time.time_dilation_min = ...) propagate to the live control.
+    if is_time:
+        time_state._time_dilation_control = time_dilation
 
     controls_augmented.append(time_dilation)
 

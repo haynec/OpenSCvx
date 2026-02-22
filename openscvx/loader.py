@@ -68,9 +68,9 @@ from openscvx.config import _resolve_autotuner
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.expr import Expr, Parameter
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.expr.time import Time
 from openscvx.symbolic.parser._registry import _PARSE_FUNCTIONS
 from openscvx.symbolic.parser.parser import ExprParser
-from openscvx.symbolic.time import Time
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -180,6 +180,7 @@ def load_dict(data: dict) -> dict:
         final=_parse_time_boundary(time_data["final"]),
         min=float(time_data["min"]),
         max=float(time_data["max"]),
+        uniform_time_grid=bool(time_data.get("uniform_time_grid", False)),
     )
 
     # ---- N -------------------------------------------------------------
