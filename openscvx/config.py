@@ -1,4 +1,4 @@
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from typing import Optional
 
 import numpy as np
@@ -14,85 +14,58 @@ def get_affine_scaling_matrices(n, minimum, maximum):
 
 @dataclass
 class DevConfig:
-    def __init__(
-        self,
-        profiling: bool = False,
-        debug: bool = False,
-        printing: bool = True,
-        verbosity: int = 2,
-    ):
-        """
-        Configuration class for development settings.
+    """Configuration class for development settings.
 
-        This class defines the parameters used for development and debugging
-        purposes.
+    This class defines the parameters used for development and debugging
+    purposes.
 
-        Main arguments:
-        These are the arguments most commonly used day-to-day.
+    Args:
+        profiling: Whether to enable profiling for performance
+            analysis. Defaults to False.
+        debug: Disables all precompilation so you can place
+            breakpoints and inspect values. Defaults to False.
+        printing: Whether to enable printing during development.
+            Defaults to True.
+        verbosity: Verbosity level for iteration output.
+            1 (MINIMAL): Core metrics only (iter, cost, status)
+            2 (STANDARD): + timing, penalty terms (default)
+            3 (FULL): + autotuning diagnostics
+    """
 
-        Args:
-            profiling (bool): Whether to enable profiling for performance
-                analysis. Defaults to False.
-            debug (bool): Disables all precompilation so you can place
-                breakpoints and inspect values. Defaults to False.
-            printing (bool): Whether to enable printing during development.
-                Defaults to True.
-            verbosity (int): Verbosity level for iteration output.
-                1 (MINIMAL): Core metrics only (iter, cost, status)
-                2 (STANDARD): + timing, penalty terms (default)
-                3 (FULL): + autotuning diagnostics
-        """
-        self.profiling = profiling
-        self.debug = debug
-        self.printing = printing
-        self.verbosity = verbosity
+    profiling: bool = False
+    debug: bool = False
+    printing: bool = True
+    verbosity: int = 2
 
 
 @dataclass
 class PropagationConfig:
-    def __init__(
-        self,
-        inter_sample: int = 30,
-        dt: float = 0.01,
-        solver: str = "Dopri8",
-        max_tau_len: int = 1000,
-        args: Optional[dict] = None,
-        atol: float = 1e-3,
-        rtol: float = 1e-6,
-    ):
-        """
-        Configuration class for propagation settings.
+    """Configuration class for propagation settings.
 
-        This class defines the parameters required for propagating the nonlinear
-        system dynamics using the optimal control sequence.
+    This class defines the parameters required for propagating the nonlinear
+    system dynamics using the optimal control sequence.
 
-        Main arguments:
-        These are the arguments most commonly used day-to-day.
+    Args:
+        inter_sample: How dense the propagation within multishot
+            discretization should be. Defaults to 30.
+        dt: The time step for propagation. Defaults to 0.01.
+        solver: The numerical solver to use for propagation
+            (e.g., "Dopri8"). Defaults to "Dopri8".
+        max_tau_len: The maximum length of the time vector for
+            propagation. Defaults to 1000.
+        args: Additional arguments to pass to the solver.
+            Defaults to an empty dictionary.
+        atol: Absolute tolerance for the solver. Defaults to 1e-3.
+        rtol: Relative tolerance for the solver. Defaults to 1e-6.
+    """
 
-        Other arguments:
-        The solver should likely not be changed as it is a high accuracy 8th-order
-        Runge-Kutta method.
-
-        Args:
-            inter_sample (int): How dense the propagation within multishot
-                discretization should be. Defaults to 30.
-            dt (float): The time step for propagation. Defaults to 0.1.
-            solver (str): The numerical solver to use for propagation
-                (e.g., "Dopri8"). Defaults to "Dopri8".
-            max_tau_len (int): The maximum length of the time vector for
-                propagation. Defaults to 1000.
-            args (Dict, optional): Additional arguments to pass to the solver.
-                Defaults to an empty dictionary.
-            atol (float): Absolute tolerance for the solver. Defaults to 1e-3.
-            rtol (float): Relative tolerance for the solver. Defaults to 1e-6.
-        """
-        self.inter_sample = inter_sample
-        self.dt = dt
-        self.solver = solver
-        self.max_tau_len = max_tau_len
-        self.args = args if args is not None else {}
-        self.atol = atol
-        self.rtol = rtol
+    inter_sample: int = 30
+    dt: float = 0.01
+    solver: str = "Dopri8"
+    max_tau_len: int = 1000
+    args: dict = field(default_factory=dict)
+    atol: float = 1e-3
+    rtol: float = 1e-6
 
 
 @dataclass(init=False)
