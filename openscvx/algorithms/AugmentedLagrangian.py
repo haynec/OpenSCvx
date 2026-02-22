@@ -117,7 +117,7 @@ class AugmentedLagrangian(AutotuningBase):
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
-        weights: "Weights" = None,
+        weights: "Weights",
     ) -> str:
         """Update SCP weights and cost parameters based on iteration number.
 

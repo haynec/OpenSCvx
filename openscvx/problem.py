@@ -712,9 +712,8 @@ class Problem:
             self.settings,
             self._lowered,
             self._solver,
-            self._algorithm.weights,
-            cvx_solver=self._solver.cvx_solver,
-            dis_solver=self._discretizer.ode_solver,
+            self._algorithm,
+            self._discretizer,
         )
 
         # Get cache file paths using symbolic AST hashing

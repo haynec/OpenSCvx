@@ -35,7 +35,7 @@ class ConstantProximalWeight(AutotuningBase):
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
-        weights: "Weights" = None,
+        weights: "Weights",
     ) -> str:
         """Update SCP weights keeping trust region constant.
 

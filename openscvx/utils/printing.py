@@ -11,8 +11,10 @@ import jax
 from termcolor import colored
 
 if TYPE_CHECKING:
-    from openscvx.algorithms import OptimizationResults
-    from openscvx.algorithms.base import Weights
+    from openscvx.algorithms import Algorithm, OptimizationResults
+    from openscvx.config import Config
+    from openscvx.discretization import Discretizer
+    from openscvx.solvers import ConvexSolver
 
 warnings.filterwarnings("ignore")
 
@@ -190,12 +192,11 @@ def print_summary_box(lines, title="Summary"):
 
 
 def print_problem_summary(
-    settings: Any,
+    settings: "Config",
     lowered: Any,
-    solver: Any,
-    weights: "Weights" = None,
-    cvx_solver: str = "QOCO",
-    dis_solver: str = "Tsit5",
+    solver: "ConvexSolver",
+    algorithm: "Algorithm",
+    discretizer: "Discretizer",
 ) -> None:
     """
     Print the problem summary box.
@@ -204,9 +205,8 @@ def print_problem_summary(
         settings: Configuration settings containing problem information
         lowered: LoweredProblem from lower_symbolic_problem()
         solver: Initialized ConvexSolver with built problem
-        weights: Normalized initial weights from the algorithm
-        cvx_solver: Convex solver backend name (e.g., ``"QOCO"``).
-        dis_solver: Discretization ODE solver name (e.g., ``"Tsit5"``).
+        algorithm: Algorithm instance (e.g., PenalizedTrustRegion)
+        discretizer: Discretizer instance (e.g., LinearizeDiscretize)
     """
     n_nodal_convex = len(lowered.cvxpy_constraints.constraints)
     n_nodal_nonconvex = len(lowered.jax_constraints.nodal)
@@ -224,6 +224,7 @@ def print_problem_summary(
     jax_version = jax.__version__
 
     # Build weights string from algorithm weights
+    weights = algorithm.weights
     weights_parts = [
         f"λ_cost={weights.lam_cost:4.1f}",
         f"λ_tr={weights.lam_prox:4.1f}",
@@ -248,7 +249,7 @@ def print_problem_summary(
             f" {n_cvx_constraints} constraints"
         ),
         f"Weights: {weights_str}",
-        f"CVX Solver: {cvx_solver}, Discretization Solver: {dis_solver}",
+        f"CVX Solver: {solver.cvx_solver}, Discretization Solver: {discretizer.ode_solver}",
         f"JAX Backend: {jax_backend} (v{jax_version})",
     ]
 
