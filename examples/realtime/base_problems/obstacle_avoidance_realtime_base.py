@@ -155,7 +155,7 @@ problem = Problem(
     algorithm=ox.PenalizedTrustRegion(autotuner=ox.ConstantProximalWeight()),
 )
 
-problem.settings.scp.lam_cost = 1e0  # Weight on the Nonlinear Cost
+problem.algorithm.lam_cost = 1e0  # Weight on the Nonlinear Cost
 
 plotting_dict = {
     "obstacles_centers": obstacle_center_positions,

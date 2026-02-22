@@ -9,7 +9,7 @@ from .base import AutotuningBase
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
-    from .base import AlgorithmState, CandidateIterate
+    from .base import AlgorithmState, CandidateIterate, Weights
 
 
 class ConstantProximalWeight(AutotuningBase):
@@ -35,6 +35,7 @@ class ConstantProximalWeight(AutotuningBase):
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
+        weights: "Weights" = None,
     ) -> str:
         """Update SCP weights keeping trust region constant.
 
@@ -43,6 +44,7 @@ class ConstantProximalWeight(AutotuningBase):
             nodal_constraints: Lowered JAX constraints
             settings: Configuration object containing adaptation parameters
             params: Dictionary of problem parameters
+            weights: Normalized initial weights from the algorithm
 
         Returns:
             str: Adaptive state string (e.g., "Accept", "Reject")
@@ -51,7 +53,7 @@ class ConstantProximalWeight(AutotuningBase):
         if state.k > self.lam_cost_drop:
             candidate.lam_cost = state.lam_cost * self.lam_cost_relax
         else:
-            candidate.lam_cost = settings.scp.lam_cost
+            candidate.lam_cost = weights.lam_cost
 
         state.lam_prox_history.append(state.lam_prox)
         state.accept_solution(candidate)

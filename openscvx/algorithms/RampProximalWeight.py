@@ -9,7 +9,7 @@ from .base import AutotuningBase
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
-    from .base import AlgorithmState, CandidateIterate
+    from .base import AlgorithmState, CandidateIterate, Weights
 
 
 class RampProximalWeight(AutotuningBase):
@@ -38,6 +38,7 @@ class RampProximalWeight(AutotuningBase):
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
+        weights: "Weights" = None,
     ) -> str:
         """Update SCP weights keeping trust region constant.
 
@@ -46,6 +47,7 @@ class RampProximalWeight(AutotuningBase):
             nodal_constraints: Lowered JAX constraints
             settings: Configuration object containing adaptation parameters
             params: Dictionary of problem parameters
+            weights: Normalized initial weights from the algorithm
 
         Returns:
             str: Adaptive state string (e.g., "Accept", "Reject")
@@ -54,7 +56,7 @@ class RampProximalWeight(AutotuningBase):
         if state.k > self.lam_cost_drop:
             candidate.lam_cost = state.lam_cost * self.lam_cost_relax
         else:
-            candidate.lam_cost = settings.scp.lam_cost
+            candidate.lam_cost = weights.lam_cost
 
         # Check if we're already at max before updating
         was_at_max = state.lam_prox >= self.lam_prox_max

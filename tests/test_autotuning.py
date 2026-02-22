@@ -9,8 +9,10 @@ from openscvx.algorithms.base import (
     AutotuningBase,
     CandidateIterate,
     DiscretizationResult,
+    Weights,
 )
 from openscvx.algorithms.ConstantProximalWeight import ConstantProximalWeight
+from openscvx.algorithms.penalized_trust_region import PenalizedTrustRegion
 from openscvx.algorithms.RampProximalWeight import RampProximalWeight
 from openscvx.config import (
     Config,
@@ -82,13 +84,7 @@ def settings(mock_unified_state, mock_unified_control):
         n_controls=1,
     )
 
-    scp_config = ScpConfig(
-        n=3,
-        lam_prox=1.0,
-        lam_vc=1.0,
-        lam_vb=1.0,
-        lam_cost=1.0,
-    )
+    scp_config = ScpConfig(n=3, n_states=2)
 
     config = Config(
         sim=sim_config,
@@ -100,6 +96,11 @@ def settings(mock_unified_state, mock_unified_control):
     )
 
     return config
+
+
+@pytest.fixture
+def weights():
+    return Weights(lam_prox=1.0, lam_vc=1.0, lam_vb=1.0, lam_cost=1.0)
 
 
 @pytest.fixture
@@ -408,7 +409,9 @@ def test_calculate_nonlinear_penalty_virtual_control_component(settings, empty_n
 # --- Tests for update_scp_weights -------------------------------------------
 
 
-def test_update_scp_weights_initial_iteration(settings, algorithm_state, empty_nodal_constraints):
+def test_update_scp_weights_initial_iteration(
+    settings, algorithm_state, empty_nodal_constraints, weights
+):
     """Test weight update on first iteration (k=1)."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 1
@@ -422,7 +425,7 @@ def test_update_scp_weights_initial_iteration(settings, algorithm_state, empty_n
     initial_x_len = len(algorithm_state.X)
 
     adaptive_state = autotuner.update_weights(
-        algorithm_state, candidate, empty_nodal_constraints, settings, params
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
     )
 
     assert adaptive_state == "Initial"
@@ -433,10 +436,12 @@ def test_update_scp_weights_initial_iteration(settings, algorithm_state, empty_n
 
     # Should set initial weights
     assert candidate.lam_vc is not None
-    assert candidate.lam_vb == settings.scp.lam_vb
+    assert candidate.lam_vb == weights.lam_vb
 
 
-def test_update_scp_weights_reject_higher(settings, algorithm_state, empty_nodal_constraints):
+def test_update_scp_weights_reject_higher(
+    settings, algorithm_state, empty_nodal_constraints, weights
+):
     """Test weight update when rho < eta_0 (reject solution, higher weight)."""
     algorithm_state.k = 2
     # Ensure lam_prox_history has the current weight
@@ -476,7 +481,7 @@ def test_update_scp_weights_reject_higher(settings, algorithm_state, empty_nodal
 
     autotuner = AugmentedLagrangian()
     adaptive_state = autotuner.update_weights(
-        algorithm_state, candidate, empty_nodal_constraints, settings, params
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
     )
 
     # Should update weight (may accept or reject depending on rho)
@@ -485,7 +490,9 @@ def test_update_scp_weights_reject_higher(settings, algorithm_state, empty_nodal
     assert len(algorithm_state.lam_prox_history) >= 2
 
 
-def test_update_scp_weights_accept_lower(settings, algorithm_state, empty_nodal_constraints):
+def test_update_scp_weights_accept_lower(
+    settings, algorithm_state, empty_nodal_constraints, weights
+):
     """Test weight update when rho >= eta_2 (accept solution, lower weight)."""
     algorithm_state.k = 2
     algorithm_state.lam_prox_history = [10.0]  # Start with higher weight
@@ -520,7 +527,7 @@ def test_update_scp_weights_accept_lower(settings, algorithm_state, empty_nodal_
 
     autotuner = AugmentedLagrangian()
     adaptive_state = autotuner.update_weights(
-        algorithm_state, candidate, empty_nodal_constraints, settings, params
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
     )
 
     # Should accept and potentially lower weight (depending on rho)
@@ -532,7 +539,7 @@ def test_update_scp_weights_accept_lower(settings, algorithm_state, empty_nodal_
 
 def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_constraints):
     """Test that cost relaxation happens after cost_drop iterations."""
-    settings.scp.lam_cost = 2.0
+    weights = Weights(lam_prox=1.0, lam_vc=1.0, lam_vb=1.0, lam_cost=2.0)
 
     # Create autotuner with cost relaxation parameters
     autotuner = AugmentedLagrangian(lam_cost_drop=3, lam_cost_relax=0.8)
@@ -566,7 +573,9 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
 
     params = {}
 
-    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
+    )
 
     # Cost should be relaxed when k > cost_drop
     expected_lam_cost = 2.0 * 0.8
@@ -575,7 +584,7 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
 
 def test_update_scp_weights_before_cost_drop(settings, algorithm_state, empty_nodal_constraints):
     """Test that cost relaxation does NOT happen before cost_drop iterations."""
-    settings.scp.lam_cost = 2.0
+    weights = Weights(lam_prox=1.0, lam_vc=1.0, lam_vb=1.0, lam_cost=2.0)
 
     # Create autotuner with cost relaxation parameters
     autotuner = AugmentedLagrangian(lam_cost_drop=5, lam_cost_relax=0.8)
@@ -590,14 +599,16 @@ def test_update_scp_weights_before_cost_drop(settings, algorithm_state, empty_no
 
     params = {}
 
-    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
+    )
 
     # Cost should remain at initial value (k=1 uses initial settings, not relaxed)
-    assert candidate.lam_cost == settings.scp.lam_cost
+    assert candidate.lam_cost == weights.lam_cost
 
 
 def test_update_scp_weights_virtual_control_update(
-    settings, algorithm_state, empty_nodal_constraints
+    settings, algorithm_state, empty_nodal_constraints, weights
 ):
     """Test that virtual control weights are updated based on nu."""
     algorithm_state.k = 2
@@ -631,7 +642,9 @@ def test_update_scp_weights_virtual_control_update(
     params = {}
 
     autotuner = AugmentedLagrangian()
-    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
+    )
 
     # Virtual control should be updated (increased due to large nu)
     assert candidate.lam_vc is not None
@@ -640,7 +653,9 @@ def test_update_scp_weights_virtual_control_update(
     assert candidate.lam_vc.shape == (2, 2)  # (N-1, n_x)
 
 
-def test_update_scp_weights_history_tracking(settings, algorithm_state, empty_nodal_constraints):
+def test_update_scp_weights_history_tracking(
+    settings, algorithm_state, empty_nodal_constraints, weights
+):
     """Test that reduction history is tracked correctly."""
     algorithm_state.k = 2
 
@@ -674,7 +689,9 @@ def test_update_scp_weights_history_tracking(settings, algorithm_state, empty_no
     initial_rho_len = len(algorithm_state.acceptance_ratio_history)
 
     autotuner = AugmentedLagrangian()
-    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
+    )
 
     # History should be updated
     assert len(algorithm_state.pred_reduction_history) == initial_pred_len + 1
@@ -687,7 +704,9 @@ def test_update_scp_weights_history_tracking(settings, algorithm_state, empty_no
     assert not np.isinf(algorithm_state.acceptance_ratio_history[-1])
 
 
-def test_update_scp_weights_weight_bounds(settings, algorithm_state, empty_nodal_constraints):
+def test_update_scp_weights_weight_bounds(
+    settings, algorithm_state, empty_nodal_constraints, weights
+):
     """Test that trust region weights respect min/max bounds."""
     algorithm_state.k = 2
     algorithm_state.lam_prox_history = [1e5]  # Very high weight
@@ -718,7 +737,9 @@ def test_update_scp_weights_weight_bounds(settings, algorithm_state, empty_nodal
     params = {}
 
     autotuner = AugmentedLagrangian()
-    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
+    )
 
     # Weight should be bounded
     lam_prox_min = 1e-3
@@ -731,7 +752,9 @@ def test_update_scp_weights_weight_bounds(settings, algorithm_state, empty_nodal
 # --- Tests for AugmentedLagrangianAutotuning ---------------------------------
 
 
-def test_augmented_lagrangian_initial_iteration(settings, algorithm_state, empty_nodal_constraints):
+def test_augmented_lagrangian_initial_iteration(
+    settings, algorithm_state, empty_nodal_constraints, weights
+):
     """Test AugmentedLagrangian (PTR method) on first iteration (k=1)."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 1
@@ -745,7 +768,7 @@ def test_augmented_lagrangian_initial_iteration(settings, algorithm_state, empty
     initial_x_len = len(algorithm_state.X)
 
     adaptive_state = autotuner.update_weights(
-        algorithm_state, candidate, empty_nodal_constraints, settings, params
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
     )
 
     assert adaptive_state == "Initial"
@@ -753,11 +776,11 @@ def test_augmented_lagrangian_initial_iteration(settings, algorithm_state, empty
     assert len(algorithm_state.X) == initial_x_len + 1
     # Should set initial weights
     assert candidate.lam_vc is not None
-    assert candidate.lam_vb == settings.scp.lam_vb
+    assert candidate.lam_vb == weights.lam_vb
 
 
 def test_augmented_lagrangian_multiplier_update(
-    settings, algorithm_state, nodal_constraints_with_violations
+    settings, algorithm_state, nodal_constraints_with_violations, weights
 ):
     """Test that AugmentedLagrangian uses PTR method (no multiplier updates)."""
     autotuner = AugmentedLagrangian()
@@ -793,7 +816,7 @@ def test_augmented_lagrangian_multiplier_update(
     params = {}
 
     adaptive_state = autotuner.update_weights(
-        algorithm_state, candidate, nodal_constraints_with_violations, settings, params
+        algorithm_state, candidate, nodal_constraints_with_violations, settings, params, weights
     )
 
     # Should use PTR method (no multiplier attributes)
@@ -805,7 +828,7 @@ def test_augmented_lagrangian_multiplier_update(
 
 
 def test_augmented_lagrangian_penalty_increase(
-    settings, algorithm_state, nodal_constraints_with_violations
+    settings, algorithm_state, nodal_constraints_with_violations, weights
 ):
     """Test that AugmentedLagrangian uses PTR method (no penalty parameters)."""
     autotuner = AugmentedLagrangian()
@@ -845,6 +868,7 @@ def test_augmented_lagrangian_penalty_increase(
         nodal_constraints_with_violations,
         settings,
         params,
+        weights,
     )
 
     # Should use PTR method (no penalty parameters)
@@ -854,7 +878,9 @@ def test_augmented_lagrangian_penalty_increase(
     assert len(algorithm_state.lam_prox_history) >= 2
 
 
-def test_augmented_lagrangian_penalty_decrease(settings, algorithm_state, empty_nodal_constraints):
+def test_augmented_lagrangian_penalty_decrease(
+    settings, algorithm_state, empty_nodal_constraints, weights
+):
     """Test that AugmentedLagrangian uses PTR method (no penalty parameters)."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
@@ -887,7 +913,9 @@ def test_augmented_lagrangian_penalty_decrease(settings, algorithm_state, empty_
 
     params = {}
 
-    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
+    )
 
     # Should use PTR method (no penalty parameters)
     assert not hasattr(algorithm_state, "rho")
@@ -897,7 +925,7 @@ def test_augmented_lagrangian_penalty_decrease(settings, algorithm_state, empty_
 
 
 def test_augmented_lagrangian_virtual_control_update(
-    settings, algorithm_state, empty_nodal_constraints
+    settings, algorithm_state, empty_nodal_constraints, weights
 ):
     """Test that virtual control weights are updated using PTR method."""
     autotuner = AugmentedLagrangian()
@@ -930,7 +958,9 @@ def test_augmented_lagrangian_virtual_control_update(
 
     params = {}
 
-    autotuner.update_weights(algorithm_state, candidate, empty_nodal_constraints, settings, params)
+    autotuner.update_weights(
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
+    )
 
     # Virtual control should be updated based on nu (PTR method)
     assert candidate.lam_vc is not None
@@ -954,22 +984,17 @@ def test_augmented_lagrangian_base_class_methods(settings):
     assert hasattr(auglag_autotuner, "calculate_nonlinear_penalty")
 
 
-def test_scpconfig_autotuner_default(settings):
-    """ScpConfig.autotuner should default to AugmentedLagrangian."""
-    # Default should be AugmentedLagrangian when no autotuner provided
-    settings.scp.autotuner = None
-    autotuner = settings.scp.autotuner
+def test_algorithm_autotuner_default():
+    """PenalizedTrustRegion.autotuner should default to AugmentedLagrangian."""
+    algorithm = PenalizedTrustRegion()
+    assert isinstance(algorithm.autotuner, AugmentedLagrangian)
+
+
+def test_algorithm_autotuner_configurable():
+    """PenalizedTrustRegion default autotuner should be a configurable AugmentedLagrangian."""
+    algorithm = PenalizedTrustRegion()
+    autotuner = algorithm.autotuner
     assert isinstance(autotuner, AugmentedLagrangian)
-
-
-def test_scpconfig_autotuner_augmented_lagrangian(settings):
-    """ScpConfig.autotuner default should be a configurable AugmentedLagrangian."""
-    # When no autotuner provided, should default to AugmentedLagrangian
-    settings.scp.autotuner = None
-    autotuner = settings.scp.autotuner
-    assert isinstance(autotuner, AugmentedLagrangian)
-
-    # Check that default parameters are set (AugmentedLagrangian constructor args)
     assert hasattr(autotuner, "rho_init")
     assert hasattr(autotuner, "rho_max")
     assert hasattr(autotuner, "lam_prox_min")
@@ -977,30 +1002,21 @@ def test_scpconfig_autotuner_augmented_lagrangian(settings):
     assert hasattr(autotuner, "lam_vc_max")
     assert hasattr(autotuner, "lam_cost_drop")
     assert hasattr(autotuner, "lam_cost_relax")
-
-    # Check that parameters can be modified
     autotuner.rho_max = 1e7
     assert autotuner.rho_max == 1e7
 
 
-def test_custom_autotuner_instance(settings):
-    """Custom autotuner instance can be passed via ScpConfig."""
-
-    # Create custom autotuner with modified parameters
+def test_custom_autotuner_instance():
+    """Custom autotuner instance can be passed to PenalizedTrustRegion."""
     custom_autotuner = AugmentedLagrangian()
     custom_autotuner.rho_max = 1e7
     custom_autotuner.lam_prox_max = 1e6
     custom_autotuner.lam_vc_max = 1e6
-
-    # Pass it to ScpConfig
-    settings.scp.autotuner = custom_autotuner
-
-    # ScpConfig.autotuner should return the custom instance
-    autotuner = settings.scp.autotuner
-    assert autotuner is custom_autotuner
-    assert autotuner.rho_max == 1e7
-    assert autotuner.lam_prox_max == 1e6
-    assert autotuner.lam_vc_max == 1e6
+    algorithm = PenalizedTrustRegion(autotuner=custom_autotuner)
+    assert algorithm.autotuner is custom_autotuner
+    assert algorithm.autotuner.rho_max == 1e7
+    assert algorithm.autotuner.lam_prox_max == 1e6
+    assert algorithm.autotuner.lam_vc_max == 1e6
 
 
 def test_augmented_lagrangian_exported():
@@ -1024,7 +1040,7 @@ def test_augmented_lagrangian_exported():
 
 
 def test_constant_proximal_weight_appends_history_and_accepts(
-    settings, algorithm_state, empty_nodal_constraints
+    settings, algorithm_state, empty_nodal_constraints, weights
 ):
     """ConstantProximalWeight should append the current lam_prox and accept."""
     autotuner = ConstantProximalWeight()
@@ -1040,7 +1056,7 @@ def test_constant_proximal_weight_appends_history_and_accepts(
     initial_lam_cost_history_len = len(algorithm_state.lam_cost_history)
 
     adaptive_state = autotuner.update_weights(
-        algorithm_state, candidate, empty_nodal_constraints, settings, {}
+        algorithm_state, candidate, empty_nodal_constraints, settings, {}, weights
     )
 
     # Always accepts and reports constant behaviour
@@ -1052,11 +1068,11 @@ def test_constant_proximal_weight_appends_history_and_accepts(
     assert algorithm_state.lam_prox_history[-1] == pytest.approx(initial_lam_prox)
     # Before cost_drop we use the configured lam_cost
     assert len(algorithm_state.lam_cost_history) == initial_lam_cost_history_len + 1
-    assert algorithm_state.lam_cost_history[-1] == pytest.approx(settings.scp.lam_cost)
+    assert algorithm_state.lam_cost_history[-1] == pytest.approx(weights.lam_cost)
 
 
 def test_constant_proximal_weight_uses_relaxed_cost_after_cost_drop(
-    settings, algorithm_state, empty_nodal_constraints
+    settings, algorithm_state, empty_nodal_constraints, weights
 ):
     """After cost_drop, ConstantProximalWeight should use relaxed lam_cost."""
     # Create autotuner with cost relaxation parameters
@@ -1070,7 +1086,7 @@ def test_constant_proximal_weight_uses_relaxed_cost_after_cost_drop(
     initial_lam_cost_history_len = len(algorithm_state.lam_cost_history)
 
     adaptive_state = autotuner.update_weights(
-        algorithm_state, candidate, empty_nodal_constraints, settings, {}
+        algorithm_state, candidate, empty_nodal_constraints, settings, {}, weights
     )
 
     assert adaptive_state == "Accept Constant"
@@ -1083,7 +1099,7 @@ def test_constant_proximal_weight_uses_relaxed_cost_after_cost_drop(
 
 
 def test_ramp_proximal_weight_increases_until_max(
-    settings, algorithm_state, empty_nodal_constraints
+    settings, algorithm_state, empty_nodal_constraints, weights
 ):
     """RampProximalWeight should ramp lam_prox up to a maximum, then stay constant."""
     autotuner = RampProximalWeight(ramp_factor=2.0, lam_prox_max=4.0)
@@ -1103,6 +1119,7 @@ def test_ramp_proximal_weight_increases_until_max(
         empty_nodal_constraints,
         settings,
         {},
+        weights,
     )
     # 1.0 -> 2.0, still below max
     assert state_str == "Accept Higher"
@@ -1116,6 +1133,7 @@ def test_ramp_proximal_weight_increases_until_max(
         empty_nodal_constraints,
         settings,
         {},
+        weights,
     )
     assert state_str == "Accept Higher"
     assert algorithm_state.lam_prox_history[-1] == pytest.approx(4.0)
@@ -1128,6 +1146,7 @@ def test_ramp_proximal_weight_increases_until_max(
         empty_nodal_constraints,
         settings,
         {},
+        weights,
     )
     assert state_str == "Accept Constant"
     # Still at the maximum and not exceeded

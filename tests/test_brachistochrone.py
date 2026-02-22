@@ -193,13 +193,11 @@ def test_monolithic():
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
+        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
     )
 
     problem.settings.prp.dt = 0.01
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
-    problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
-    problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -322,13 +320,11 @@ def test_constraint_types(constraint_type):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
+        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
     )
 
     problem.settings.prp.dt = 0.01
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
-    problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
-    problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -442,14 +438,13 @@ def test_algorithm_types(algorithm_type):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm=ox.PenalizedTrustRegion(autotuner=autotuner),
+        algorithm=ox.PenalizedTrustRegion(
+            autotuner=autotuner, lam_prox=1e1, lam_cost=1e0, lam_vc=1e1
+        ),
     )
 
     problem.settings.prp.dt = 0.01
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
-    problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
-    problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -587,15 +582,12 @@ def test_cross_nodal(test_case):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
+        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1, k_max=50),
     )
 
     problem.settings.prp.dt = 0.01
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
-    problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
-    problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
     problem.settings.sim.save_compiled = False
-    problem.settings.scp.k_max = 50  # Set lower max iterations for non-convergence case
 
     # Disable printing for cleaner test output
     if hasattr(problem.settings, "dev"):
@@ -722,18 +714,11 @@ def test_parameters():
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
+        algorithm=ox.PenalizedTrustRegion(lam_prox=1e0, lam_cost=1e-1, lam_vc=1e1),
     )
 
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.lam_prox = 1e0
-    problem.settings.scp.lam_cost = 1e-1
-    problem.settings.scp.lam_vc = 1e1
     problem.settings.sim.save_compiled = False
-
-    # Save original weight values for second problem setup
-    original_lam_prox = problem.settings.scp.lam_prox
-    original_lam_cost = problem.settings.scp.lam_cost
-    original_lam_vc = problem.settings.scp.lam_vc
 
     # Disable printing for cleaner test output
     if hasattr(problem.settings, "dev"):
@@ -776,11 +761,6 @@ def test_parameters():
     position.guess = np.linspace(position.initial, position.final, n)
     velocity.guess = np.linspace(0.0, 10.0, n).reshape(-1, 1)
     theta.guess = np.linspace(5 * jnp.pi / 180, 100.5 * jnp.pi / 180, n).reshape(-1, 1)
-
-    # Restore original weight values for second problem setup
-    problem.settings.scp.lam_prox = original_lam_prox
-    problem.settings.scp.lam_cost = original_lam_cost
-    problem.settings.scp.lam_vc = original_lam_vc
 
     # Reset solver state for second solve (parameters are updated)
     problem.reset()
@@ -930,13 +910,11 @@ def test_propagation():
         dynamics_prop=dynamics_prop_extra,  # Only extra states
         states_prop=states_prop_extra,  # Only extra states
         algebraic_prop=algebraic_prop,  # Algebraic outputs
+        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
     )
 
     problem.settings.prp.dt = 0.01
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
-    problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
-    problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -1329,13 +1307,11 @@ def test_byof(byof_mode):
         N=n,
         licq_max=1e-8,
         byof=byof,
+        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
     )
 
     problem.settings.prp.dt = 0.01
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.lam_prox = 1e1
-    problem.settings.scp.lam_cost = 1e0
-    problem.settings.scp.lam_vc = 1e1
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output

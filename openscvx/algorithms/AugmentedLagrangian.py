@@ -19,7 +19,7 @@ from .base import AutotuningBase
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
-    from .base import AlgorithmState, CandidateIterate
+    from .base import AlgorithmState, CandidateIterate, Weights
 
 
 class AugmentedLagrangian(AutotuningBase):
@@ -117,14 +117,17 @@ class AugmentedLagrangian(AutotuningBase):
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
+        weights: "Weights" = None,
     ) -> str:
         """Update SCP weights and cost parameters based on iteration number.
 
         Args:
             state: Solver state containing current weight values (mutated in place)
+            candidate: Candidate iterate from the current subproblem solve
             nodal_constraints: Lowered JAX constraints
             settings: Configuration object containing adaptation parameters
             params: Dictionary of problem parameters
+            weights: Normalized initial weights from the algorithm
         """
         # Calculate nonlinear penalty for current candidate
         nonlinear_cost, nonlinear_penalty, nodal_penalty = self.calculate_nonlinear_penalty(
@@ -145,7 +148,7 @@ class AugmentedLagrangian(AutotuningBase):
         if state.k > self.lam_cost_drop:
             candidate.lam_cost = state.lam_cost * self.lam_cost_relax
         else:
-            candidate.lam_cost = settings.scp.lam_cost
+            candidate.lam_cost = weights.lam_cost
 
         lam_prox_k = deepcopy(state.lam_prox)
 
@@ -215,12 +218,12 @@ class AugmentedLagrangian(AutotuningBase):
             vc_new = np.where(mask, case1, case2)
             vc_new = np.minimum(self.lam_vc_max, vc_new)
             candidate.lam_vc = vc_new
-            candidate.lam_vb = settings.scp.lam_vb
+            candidate.lam_vb = weights.lam_vb
 
         else:
             state.lam_prox_history.append(lam_prox_k)
-            candidate.lam_vc = settings.scp.lam_vc
-            candidate.lam_vb = settings.scp.lam_vb
+            candidate.lam_vc = state.lam_vc
+            candidate.lam_vb = weights.lam_vb
             state.accept_solution(candidate)
             adaptive_state = "Initial"
 

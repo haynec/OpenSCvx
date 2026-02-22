@@ -78,7 +78,7 @@ Current Implementations:
 """
 
 from .AugmentedLagrangian import AugmentedLagrangian
-from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult
+from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult, Weights
 from .ConstantProximalWeight import ConstantProximalWeight
 from .optimization_results import OptimizationResults
 from .penalized_trust_region import PenalizedTrustRegion
@@ -89,6 +89,7 @@ __all__ = [
     "Algorithm",
     "AlgorithmState",
     "DiscretizationResult",
+    "Weights",
     # Core results
     "OptimizationResults",
     # PTR algorithm

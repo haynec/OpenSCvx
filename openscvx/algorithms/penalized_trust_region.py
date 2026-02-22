@@ -21,7 +21,7 @@ from openscvx.utils.printing import (
     color_prob_stat,
 )
 
-from .base import Algorithm, AlgorithmState, CandidateIterate
+from .base import Algorithm, AlgorithmState, CandidateIterate, Weights
 from .ConstantProximalWeight import ConstantProximalWeight
 from .RampProximalWeight import RampProximalWeight
 
@@ -114,12 +114,17 @@ class PenalizedTrustRegion(Algorithm):
         # Autotuner (lazy default to AugmentedLagrangian)
         self._autotuner: "AutotuningBase" = autotuner
 
-        # SCP parameters
+        # SCP weights (grouped dataclass, normalized for numerical conditioning)
+        self.weights = Weights(
+            lam_prox=lam_prox,
+            lam_vc=lam_vc,
+            lam_cost=lam_cost,
+            lam_vb=lam_vb,
+        )
+        self.weights.normalize()
+
+        # SCP convergence parameters
         self.k_max = k_max
-        self.lam_prox = lam_prox
-        self.lam_vc = lam_vc
-        self.lam_cost = lam_cost
-        self.lam_vb = lam_vb
         self.ep_tr = ep_tr
         self.ep_vb = ep_vb
         self.ep_vc = ep_vc
@@ -144,6 +149,51 @@ class PenalizedTrustRegion(Algorithm):
     def autotuner(self, value: "AutotuningBase") -> None:
         """Set a custom autotuner instance or reset to default when None."""
         self._autotuner = value
+
+    # -- Weight properties ---------------------------------------------------
+    # Delegate to self.weights with automatic re-normalization on set.
+    # Getters return the raw (user-specified) value; the normalized values
+    # used by the algorithm live on self.weights.lam_*.
+
+    @property
+    def lam_prox(self) -> float:
+        """Trust region (proximal) weight (user-specified, pre-normalization)."""
+        return self.weights._raw_lam_prox
+
+    @lam_prox.setter
+    def lam_prox(self, value: float) -> None:
+        self.weights._raw_lam_prox = value
+        self.weights.normalize()
+
+    @property
+    def lam_vc(self) -> float:
+        """Virtual control penalty weight (user-specified, pre-normalization)."""
+        return self.weights._raw_lam_vc
+
+    @lam_vc.setter
+    def lam_vc(self, value: float) -> None:
+        self.weights._raw_lam_vc = value
+        self.weights.normalize()
+
+    @property
+    def lam_cost(self) -> float:
+        """Cost weight (user-specified, pre-normalization)."""
+        return self.weights._raw_lam_cost
+
+    @lam_cost.setter
+    def lam_cost(self, value: float) -> None:
+        self.weights._raw_lam_cost = value
+        self.weights.normalize()
+
+    @property
+    def lam_vb(self) -> float:
+        """Virtual buffer penalty weight (user-specified, pre-normalization)."""
+        return self.weights._raw_lam_vb
+
+    @lam_vb.setter
+    def lam_vb(self, value: float) -> None:
+        self.weights._raw_lam_vb = value
+        self.weights.normalize()
 
     def get_columns(self, verbosity: int = Verbosity.STANDARD) -> List[Column]:
         """Get the columns to display for iteration output.
@@ -201,7 +251,7 @@ class PenalizedTrustRegion(Algorithm):
         )
 
         # Create temporary state for initialization solve
-        init_state = AlgorithmState.from_settings(settings)
+        init_state = AlgorithmState.from_settings(settings, self.weights)
 
         # Solve a dumb problem to initialize DPP and JAX jacobians
         _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
@@ -289,14 +339,14 @@ class PenalizedTrustRegion(Algorithm):
         state.J_vc = np.sum(np.array(J_vc_vec))
 
         # Update weights in state using configured autotuning method
-        adaptive_state = self._autotuner.update_weights(
-            state, candidate, self._jax_constraints, settings, params
+        adaptive_state = self.autotuner.update_weights(
+            state, candidate, self._jax_constraints, settings, params, self.weights
         )
 
         # Build emission data - only include nonlinear/reduction metrics when
         # the autotuner actually uses them (constant/ramp methods don't)
         use_full_metrics = not isinstance(
-            self._autotuner, (ConstantProximalWeight, RampProximalWeight)
+            self.autotuner, (ConstantProximalWeight, RampProximalWeight)
         )
 
         emission_data = {

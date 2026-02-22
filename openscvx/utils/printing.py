@@ -8,11 +8,11 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import jax
-import numpy as np
 from termcolor import colored
 
 if TYPE_CHECKING:
     from openscvx.algorithms import OptimizationResults
+    from openscvx.algorithms.base import Weights
 
 warnings.filterwarnings("ignore")
 
@@ -186,7 +186,9 @@ def print_summary_box(lines, title="Summary"):
     print(f"{' ' * indent}╰{'─' * box_width}╯\n")
 
 
-def print_problem_summary(settings: Any, lowered: Any, solver: Any) -> None:
+def print_problem_summary(
+    settings: Any, lowered: Any, solver: Any, weights: "Weights" = None
+) -> None:
     """
     Print the problem summary box.
 
@@ -194,6 +196,7 @@ def print_problem_summary(settings: Any, lowered: Any, solver: Any) -> None:
         settings: Configuration settings containing problem information
         lowered: LoweredProblem from lower_symbolic_problem()
         solver: Initialized ConvexSolver with built problem
+        weights: Normalized initial weights from the algorithm
     """
     n_nodal_convex = len(lowered.cvxpy_constraints.constraints)
     n_nodal_nonconvex = len(lowered.jax_constraints.nodal)
@@ -210,20 +213,16 @@ def print_problem_summary(settings: Any, lowered: Any, solver: Any) -> None:
     jax_backend = jax.devices()[0].platform.upper()
     jax_version = jax.__version__
 
-    # Build weights string conditionally
-    if isinstance(settings.scp.lam_vc, np.ndarray):
-        lam_vc_str = f"λ_vc=matrix({settings.scp.lam_vc.shape})"
-    else:
-        lam_vc_str = f"λ_vc={settings.scp.lam_vc:4.1f}"
+    # Build weights string from algorithm weights
     weights_parts = [
-        f"λ_cost={settings.scp.lam_cost:4.1f}",
-        f"λ_tr={settings.scp.lam_prox:4.1f}",
-        lam_vc_str,
+        f"λ_cost={weights.lam_cost:4.1f}",
+        f"λ_tr={weights.lam_prox:4.1f}",
+        f"λ_vc={weights.lam_vc:4.1f}",
     ]
 
     # Add λ_vb only if there are nodal nonconvex constraints
     if n_nodal_nonconvex > 0:
-        weights_parts.append(f"λ_vb={settings.scp.lam_vb:4.1f}")
+        weights_parts.append(f"λ_vb={weights.lam_vb:4.1f}")
 
     weights_str = ", ".join(weights_parts)
 

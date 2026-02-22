@@ -15,6 +15,7 @@ import jax
 import numpy as np
 import pytest
 
+import openscvx as ox
 from openscvx import Problem
 from openscvx.loader import load_dict, load_json, load_yaml
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
@@ -44,9 +45,6 @@ def _configure_and_solve(problem):
     """Apply standard solver settings, solve, and post-process."""
     problem.settings.prp.dt = 0.01
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.lam_prox = 1e1
-    problem.settings.scp.lam_cost = 1e0
-    problem.settings.scp.lam_vc = 1e1
     problem.settings.sim.save_compiled = False
     problem.settings.dev.printing = False
 
@@ -147,7 +145,10 @@ def test_load_file(fmt):
     """Load brachistochrone from a config file, solve, and validate against analytical."""
     loader, filename = _LOADERS[fmt]
     kwargs = loader(FIXTURE_DIR / filename)
-    problem = Problem(**kwargs)
+    problem = Problem(
+        **kwargs,
+        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
+    )
     result = _configure_and_solve(problem)
     _validate_result(result, problem, f"Brachistochrone {fmt.upper()}")
     jax.clear_caches()
@@ -205,7 +206,10 @@ def test_constraint_types(constraint_type):
         ]
 
     kwargs = load_dict(data)
-    problem = Problem(**kwargs)
+    problem = Problem(
+        **kwargs,
+        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
+    )
     result = _configure_and_solve(problem)
     _validate_result(result, problem, f"YAML {constraint_type}")
     jax.clear_caches()
@@ -243,7 +247,10 @@ def test_propagation():
     }
 
     kwargs = load_dict(data)
-    problem = Problem(**kwargs)
+    problem = Problem(
+        **kwargs,
+        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
+    )
     result = _configure_and_solve(problem)
 
     # --- Trajectory validation ---
@@ -304,15 +311,14 @@ def test_cross_nodal(feasible):
     data["N"] = 2
 
     kwargs = load_dict(data)
-    problem = Problem(**kwargs)
+    problem = Problem(
+        **kwargs,
+        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1, k_max=50),
+    )
 
     problem.settings.prp.dt = 0.01
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
-    problem.settings.scp.lam_prox = 1e1
-    problem.settings.scp.lam_cost = 1e0
-    problem.settings.scp.lam_vc = 1e1
     problem.settings.sim.save_compiled = False
-    problem.settings.scp.k_max = 50
     problem.settings.dev.printing = False
 
     problem.initialize()

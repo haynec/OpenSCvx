@@ -210,15 +210,6 @@ class Problem:
             scp=ScpConfig(
                 n=N,
                 n_states=self._lowered.x_unified.shape[0],
-                k_max=self._algorithm.k_max,
-                lam_prox=self._algorithm.lam_prox,
-                lam_vc=self._algorithm.lam_vc,
-                lam_cost=self._algorithm.lam_cost,
-                lam_vb=self._algorithm.lam_vb,
-                ep_tr=self._algorithm.ep_tr,
-                ep_vb=self._algorithm.ep_vb,
-                ep_vc=self._algorithm.ep_vc,
-                autotuner=self._algorithm.autotuner,
             ),
             dis=DiscretizationConfig(),
             dev=DevConfig(),
@@ -552,8 +543,7 @@ class Problem:
         pr = profiling.profiling_start(self.settings.dev.profiling, self._profiling_session)
 
         t_0_while = time.time()
-        # Ensure parameter sizes and normalization are correct
-        self.settings.scp.__post_init__()
+        # Ensure scaling matrices are correct
         self.settings.sim.__post_init__()
 
         # Create compiled (vmapped) propagation dynamics
@@ -602,7 +592,9 @@ class Problem:
         self._solver.initialize(self._lowered, self.settings)
 
         # Print problem summary (after solver is initialized so we can access problem stats)
-        printing.print_problem_summary(self.settings, self._lowered, self._solver)
+        printing.print_problem_summary(
+            self.settings, self._lowered, self._solver, self._algorithm.weights
+        )
 
         # Get cache file paths using symbolic AST hashing
         # This is more stable than hashing lowered JAX code
@@ -667,7 +659,7 @@ class Problem:
             self.emitter_function = lambda data: None
 
         # Create fresh solver state
-        self._state = AlgorithmState.from_settings(self.settings)
+        self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
 
         t_f_while = time.time()
         self.timing_init = t_f_while - t_0_while
@@ -722,7 +714,7 @@ class Problem:
         self._sync_boundary_conditions()
 
         # Create fresh solver state from settings
-        self._state = AlgorithmState.from_settings(self.settings)
+        self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
 
         # Reset solution
         self._solution = None

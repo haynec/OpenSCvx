@@ -1,8 +1,5 @@
 from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING, Any, Dict, Optional
-
-if TYPE_CHECKING:
-    from openscvx.algorithms.base import AutotuningBase
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -401,146 +398,24 @@ class ScpConfig:
         self,
         n: Optional[int] = None,
         n_states: Optional[int] = None,
-        k_max: int = 200,
-        lam_prox: float = 1e0,
-        lam_vc: float = 1e1,
-        lam_cost: float = 1e-1,
-        lam_vb: float = 0.0,
-        ep_tr: float = 1e-4,
-        ep_vb: float = 1e-4,
-        ep_vc: float = 1e-8,
-        autotuner: Optional["AutotuningBase"] = None,
     ):
         """
         Configuration class for Sequential Convex Programming (SCP).
 
-        This class defines the parameters used to configure the SCP solver. You
-        will very likely need to modify the weights for your problem. Please
-        refer to my guide [here](https://openscvx.github.io/openscvx/
-        hyperparameter_tuning) for more information.
+        This class holds problem-level SCP parameters that are not owned by the
+        algorithm (e.g., node count). Algorithm-specific parameters (weights,
+        convergence tolerances, autotuner) live on the
+        :class:`~openscvx.algorithms.penalized_trust_region.PenalizedTrustRegion`
+        instance.
 
         Attributes:
             n (int): The number of discretization nodes. Defaults to `None`.
-            k_max (int): The maximum number of SCP iterations. Defaults to 200.
-            lam_prox (float): The trust region weight. Defaults to 1.0.
-            lam_vc (float): The penalty weight for virtual control. Defaults to 1.0.
-            ep_tr (float): The trust region convergence tolerance. Defaults to 1e-4.
-            ep_vb (float): The boundary constraint convergence tolerance.
-                Defaults to 1e-4.
-            ep_vc (float): The virtual constraint convergence tolerance.
-                Defaults to 1e-8.
-            lam_cost (float): The weight for original cost. Defaults to 0.0.
-            lam_vb (float): The weight for virtual buffer. This is only used if
-                there are nonconvex nodal constraints present. Defaults to 0.0.
-            autotuner: Optional custom autotuner instance. If not provided, defaults
-                to ``AugmentedLagrangian()`` with default parameters. Useful for
-                customizing parameters:
-
-                .. code-block:: python
-
-                    auto_tuner = ox.AugmentedLagrangian()
-                    auto_tuner.rho_max = 1e7
-                    problem.settings.scp.autotuner = auto_tuner
-
-        Note:
-            Autotuner parameters can be accessed and modified via the autotuner
-            instance (e.g., ``problem.algorithm.autotuner.rho_max``) after
-            initialization. Default values are set in the AugmentedLagrangian class.
+            n_states (int): The number of state variables. Defaults to `None`.
         """
-        # Initialize references first (before any setters that might use them)
         self._parent_config = None  # Will be set by Config.__post_init__
         self._n_states = n_states
-
         self.n = n
-        self.k_max = k_max
-        self.lam_prox = lam_prox
-        # Store raw lam_vc; convert to array later once n_states is known
-        self._lam_vc = lam_vc
-        self.ep_tr = ep_tr
-        self.ep_vb = ep_vb
-        self.ep_vc = ep_vc
-        self.lam_cost = lam_cost
-        self.lam_vb = lam_vb
         self._uniform_time_grid = False
-        # Store autotuner via property to support lazy default construction
-        self.autotuner = autotuner
-
-        # Internal storage for autotuner instance (may be lazily created)
-        # Initialized here to ensure attribute exists even if setter logic changes
-        if not hasattr(self, "_autotuner"):
-            self._autotuner = None
-
-    @property
-    def autotuner(self) -> Optional["AutotuningBase"]:
-        """Return the configured autotuner, defaulting to AugmentedLagrangian.
-
-        If no custom autotuner instance has been provided, this property lazily
-        constructs a default :class:`AugmentedLagrangian` instance and caches it
-        on the config object. This keeps the configuration as the single source
-        of truth for the autotuning strategy while avoiding circular imports by
-        importing inside the method body.
-        """
-        if self._autotuner is None:
-            # Local import avoids circular dependency:
-            # - autotuning imports Config
-            # - Config should not eagerly import autotuning at module import time
-            from openscvx.algorithms.AugmentedLagrangian import AugmentedLagrangian
-
-            self._autotuner = AugmentedLagrangian()
-        return self._autotuner
-
-    @autotuner.setter
-    def autotuner(self, value: Optional["AutotuningBase"]) -> None:
-        """Set a custom autotuner instance or reset to default when None.
-
-        Passing ``None`` clears the cached autotuner so that the next access
-        will recreate the default :class:`AugmentedLagrangian` instance.
-        """
-        self._autotuner = value
-
-    @property
-    def lam_vc(self):
-        """Getter for lam_vc."""
-        return self._lam_vc
-
-    @lam_vc.setter
-    def lam_vc(self, value):
-        """Setter for lam_vc that converts scalar to array if possible.
-
-        If a scalar is provided and both `n` and `n_states` (from parent config)
-        are available, the scalar is converted to an array of shape (n-1, n_states).
-        This setter assumes it is called only after `n_states` is available.
-        """
-        # If it's already an array, store it directly
-        if isinstance(value, np.ndarray):
-            self._lam_vc = value
-            return
-
-        # If it's a scalar, require dimensions to be available
-        if isinstance(value, (int, float)):
-            # Both dimensions available, convert to array
-            self._lam_vc = np.ones((self.n - 1, self._n_states)) * value
-            return
-
-        raise ValueError(f"Invalid value for lam_vc: {value}")
-
-    def __post_init__(self):
-        keys_to_scale = ["lam_prox", "lam_vc", "lam_cost", "lam_vb"]
-        # Handle lam_vc which might be scalar or array
-        scale_values = []
-        for key in keys_to_scale:
-            val = getattr(self, key)
-            if isinstance(val, np.ndarray):
-                scale_values.append(np.max(val))
-            else:
-                scale_values.append(val)
-        scale = max(scale_values)
-        for key in keys_to_scale:
-            val = getattr(self, key)
-            if isinstance(val, np.ndarray):
-                setattr(self, key, val / scale)
-            else:
-                setattr(self, key, val / scale)
 
 
 @dataclass
