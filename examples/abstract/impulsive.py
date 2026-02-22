@@ -44,7 +44,7 @@ dv = ox.Control(
     shape=(1,),
     impulsive=True,
     allocation_matrix=np.array([[0], [1]]),
-    impulsive_nodes=[0, n - 1],
+    nodes=[0, n - 1],
 )
 dv.max = np.array([1.0])
 dv.min = np.array([-1.0])

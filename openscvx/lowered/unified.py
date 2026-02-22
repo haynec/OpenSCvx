@@ -486,7 +486,7 @@ class UnifiedControl:
     scaling_max: Optional[np.ndarray] = None  # Scaling maximum bounds for unified control
     is_impulsive: Optional[bool] = False  # Default toggle for 'impulsivity' of the unified control
     allocation_matrix: Optional[np.ndarray] = None
-    impulsive_nodes: Optional[dict[str, list[int]]] = None
+    nodes: Optional[dict[str, list[int]]] = None
 
     def __post_init__(self):
         """Initialize slices after dataclass creation."""

@@ -213,11 +213,11 @@ def _augment_impulsive_constraints(
         is_impulsive = bool(is_imp.any()) if hasattr(is_imp, "any") else bool(is_imp)
         if not is_impulsive:
             continue
-        impulse_nodes = getattr(control, "impulsive_nodes", None)
-        if impulse_nodes is None:
+        control_nodes = getattr(control, "nodes", None)
+        if control_nodes is None:
             allowed = set()
         else:
-            allowed = {int(idx) for idx in impulse_nodes}
+            allowed = {int(idx) for idx in control_nodes}
         for idx in allowed:
             if idx < 0 or idx >= n_nodes:
                 raise ValueError(

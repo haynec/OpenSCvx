@@ -69,7 +69,7 @@ class Control(Variable):
         max: Optional[np.ndarray] = None,
         impulsive: bool = False,
         allocation_matrix: np.ndarray = None,
-        impulsive_nodes: Optional[list[int]] = None,
+        nodes: Optional[list[int]] = None,
     ):
         """Initialize a Control object.
 
@@ -79,17 +79,19 @@ class Control(Variable):
             min: Optional minimum bounds array (keyword-only)
             max: Optional maximum bounds array (keyword-only)
             impulsive: Whether this control is treated as impulsive
+            allocation_matrix: Matrix mapping impulsive control dimensions
+            nodes: Optional list of node indices where impulsive control is enabled
         """
         super().__init__(name, shape)
         self._scaling_min = None
         self._scaling_max = None
         self._is_impulsive = np.repeat(impulsive, shape[0])
-        if impulsive_nodes is not None and not impulsive:
-            raise ValueError("impulsive_nodes provided for a non-impulsive control.")
-        if impulsive_nodes is not None:
-            self._impulsive_nodes = [int(idx) for idx in impulsive_nodes]
+        if nodes is not None and not impulsive:
+            raise ValueError("nodes provided for a non-impulsive control.")
+        if nodes is not None:
+            self._nodes = [int(idx) for idx in nodes]
         else:
-            self._impulsive_nodes = None
+            self._nodes = None
         ## TODO: (fabio) maybe this check could be moved to ''builder.py''
         if impulsive:
             if allocation_matrix.shape[1] != shape[0]:
@@ -203,17 +205,17 @@ class Control(Variable):
         self._allocation_matrix = val
 
     @property
-    def impulsive_nodes(self) -> Optional[list[int]]:
-        return self._impulsive_nodes
+    def nodes(self) -> Optional[list[int]]:
+        return self._nodes
 
-    @impulsive_nodes.setter
-    def impulsive_nodes(self, val: Optional[list[int]]):
+    @nodes.setter
+    def nodes(self, val: Optional[list[int]]):
         if val is None:
-            self._impulsive_nodes = None
+            self._nodes = None
             return
         if not np.any(self._is_impulsive):
-            raise ValueError("impulsive_nodes can only be set for impulsive controls.")
-        self._impulsive_nodes = [int(idx) for idx in val]
+            raise ValueError("nodes can only be set for impulsive controls.")
+        self._nodes = [int(idx) for idx in val]
 
     def __repr__(self) -> str:
         """String representation of the Control object.
@@ -224,5 +226,5 @@ class Control(Variable):
         return (
             "Control("
             f"'{self.name}', shape={self.shape}, impulsive={self._is_impulsive}, "
-            f"allocation_matrix={self._allocation_matrix}, impulsive_nodes={self._impulsive_nodes})"
+            f"allocation_matrix={self._allocation_matrix}, nodes={self._nodes})"
         )

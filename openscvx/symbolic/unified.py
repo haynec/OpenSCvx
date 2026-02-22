@@ -407,20 +407,20 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         unified_scaling_min = np.concatenate(scaling_min_list)
         unified_scaling_max = np.concatenate(scaling_max_list)
 
-    impulsive_nodes = None
+    nodes = None
     if has_any_impulsive:
         # Build full scaling arrays
         is_impulsive_list = []
         allocation_matrix_list = []
-        impulsive_nodes = {}
+        nodes = {}
         for control in sorted_controls:
             if np.all(control.is_impulsive):
                 is_impulsive_list.append(control.is_impulsive)
                 if control.allocation_matrix is None:
                     raise ValueError("Provided impulsive control without field 'Allocation Matrix'")
                 allocation_matrix_list.append(control.allocation_matrix)
-                if control.impulsive_nodes is not None:
-                    impulsive_nodes[control.name] = list(control.impulsive_nodes)
+                if control.nodes is not None:
+                    nodes[control.name] = list(control.nodes)
             else:
                 is_impulsive_list.append(np.full(control.shape[0], False))
 
@@ -429,8 +429,8 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
             unified_allocation_matrix = None
         else:
             unified_allocation_matrix = np.hstack(allocation_matrix_list)
-        if not impulsive_nodes:
-            impulsive_nodes = None
+        if not nodes:
+            nodes = None
 
     return UnifiedControl(
         name=name,
@@ -446,5 +446,5 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         scaling_max=unified_scaling_max,
         is_impulsive=unified_is_impulsive,
         allocation_matrix=unified_allocation_matrix,
-        impulsive_nodes=impulsive_nodes,
+        nodes=nodes,
     )

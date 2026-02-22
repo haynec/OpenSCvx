@@ -364,7 +364,7 @@ def test_control_creation():
     assert c.shape == (2,)
     expected = (
         "Control('thrust', shape=(2,), impulsive=[False False], "
-        "allocation_matrix=None, impulsive_nodes=None)"
+        "allocation_matrix=None, nodes=None)"
     )
     assert repr(c) == expected
     assert c._min is None
@@ -377,7 +377,7 @@ def test_control_creation():
             shape=(2,),
             impulsive=True,
             allocation_matrix=np.array([[0], [1]]),
-            impulsive_nodes=[1],
+            nodes=[1],
         )
 
 
