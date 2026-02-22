@@ -290,7 +290,7 @@ class PTRSolver(ConvexSolver):
                 if self.cvxpygen_override:
                     cpg.generate_code(
                         prob,
-                        solver=self.solver,
+                        solver=self.cvx_solver,
                         code_dir="solver",
                         wrapper=True,
                     )
@@ -299,7 +299,7 @@ class PTRSolver(ConvexSolver):
                     if overwrite.lower() == "y":
                         cpg.generate_code(
                             prob,
-                            solver=self.solver,
+                            solver=self.cvx_solver,
                             code_dir="solver",
                             wrapper=True,
                         )
