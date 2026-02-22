@@ -21,17 +21,21 @@ if TYPE_CHECKING:
 
 @dataclass
 class Weights:
-    """Initial SCP weights that define the algorithm's penalty structure.
+    """Normalized SCP weights used internally by the algorithm and autotuner.
 
-    These values seed the weight histories in :class:`AlgorithmState` and
-    serve as the contract between the algorithm and its autotuner for what
-    weights the SCP operates over.
+    This dataclass is an **internal** representation. Users should read and
+    write weights through the algorithm's properties (e.g.
+    ``algorithm.lam_cost``) which are the source of truth for user-facing
+    values. The autotuner may mutate the normalized fields on this object
+    during SCP iteration; those mutations are reflected in the weight
+    histories on :class:`AlgorithmState` but do **not** alter the raw
+    (user-specified) values.
 
     The public fields (``lam_prox``, ``lam_vc``, ``lam_cost``, ``lam_vb``)
     always hold **normalized** values (largest == 1.0).  The original
-    user-specified values are preserved internally so that
-    :meth:`normalize` can be re-invoked after any single weight is updated
-    without accumulating rounding drift.
+    user-specified values are preserved in private ``_raw_*`` attributes so
+    that :meth:`normalize` can be re-invoked without accumulating rounding
+    drift.
 
     Attributes:
         lam_prox: Trust region (proximal) weight (normalized).

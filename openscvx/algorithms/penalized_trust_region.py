@@ -151,13 +151,27 @@ class PenalizedTrustRegion(Algorithm):
         self._autotuner = value
 
     # -- Weight properties ---------------------------------------------------
-    # Delegate to self.weights with automatic re-normalization on set.
-    # Getters return the raw (user-specified) value; the normalized values
-    # used by the algorithm live on self.weights.lam_*.
+    # These properties are the **source of truth** for user-facing weight
+    # values.  Getters return the raw (user-specified, pre-normalization)
+    # value.  Setters update the raw value and re-normalize ``self.weights``.
+    #
+    # During SCP iteration the autotuner may mutate the *normalized* values
+    # on ``self.weights`` directly (e.g. ramping ``lam_prox``).  Those
+    # in-flight changes are tracked in ``AlgorithmState`` weight histories
+    # but do not affect the raw values returned here.
 
     @property
     def lam_prox(self) -> float:
-        """Trust region (proximal) weight (user-specified, pre-normalization)."""
+        """Trust region (proximal) weight.
+
+        This is the user-specified value before normalization. Setting this
+        property triggers automatic re-normalization of all weights.
+
+        !!! note
+            The autotuner may modify the normalized weight in
+            ``self.weights.lam_prox`` during iteration. Those changes are
+            internal and do not alter the value returned here.
+        """
         return self.weights._raw_lam_prox
 
     @lam_prox.setter
@@ -167,7 +181,16 @@ class PenalizedTrustRegion(Algorithm):
 
     @property
     def lam_vc(self) -> float:
-        """Virtual control penalty weight (user-specified, pre-normalization)."""
+        """Virtual control penalty weight.
+
+        This is the user-specified value before normalization. Setting this
+        property triggers automatic re-normalization of all weights.
+
+        !!! note
+            The autotuner may modify the normalized weight in
+            ``self.weights.lam_vc`` during iteration. Those changes are
+            internal and do not alter the value returned here.
+        """
         return self.weights._raw_lam_vc
 
     @lam_vc.setter
@@ -177,7 +200,16 @@ class PenalizedTrustRegion(Algorithm):
 
     @property
     def lam_cost(self) -> float:
-        """Cost weight (user-specified, pre-normalization)."""
+        """Cost weight.
+
+        This is the user-specified value before normalization. Setting this
+        property triggers automatic re-normalization of all weights.
+
+        !!! note
+            The autotuner may modify the normalized weight in
+            ``self.weights.lam_cost`` during iteration. Those changes are
+            internal and do not alter the value returned here.
+        """
         return self.weights._raw_lam_cost
 
     @lam_cost.setter
@@ -187,7 +219,16 @@ class PenalizedTrustRegion(Algorithm):
 
     @property
     def lam_vb(self) -> float:
-        """Virtual buffer penalty weight (user-specified, pre-normalization)."""
+        """Virtual buffer penalty weight.
+
+        This is the user-specified value before normalization. Setting this
+        property triggers automatic re-normalization of all weights.
+
+        !!! note
+            The autotuner may modify the normalized weight in
+            ``self.weights.lam_vb`` during iteration. Those changes are
+            internal and do not alter the value returned here.
+        """
         return self.weights._raw_lam_vb
 
     @lam_vb.setter
