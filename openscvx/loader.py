@@ -69,9 +69,6 @@ from typing import Any, Dict, List, Union
 
 import numpy as np
 
-from openscvx.algorithms import _resolve_algorithm
-from openscvx.discretization import _resolve_discretizer
-from openscvx.solvers import _resolve_solver
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.expr import Expr, Parameter
 from openscvx.symbolic.expr.state import State
@@ -128,10 +125,10 @@ def load_dict(data: dict) -> dict:
 
     Returns:
         Dict with keys ``dynamics``, ``constraints``, ``states``,
-        ``controls``, ``N``, ``time``, and optionally ``autotuner``,
-        ``dynamics_prop``, ``states_prop``, ``algebraic_prop``, and
-        ``settings`` (a raw dict to be applied via
-        :meth:`Config.apply_dict() <openscvx.config.Config.apply_dict>`
+        ``controls``, ``N``, ``time``, and optionally ``algorithm``,
+        ``discretizer``, ``solver``, ``dynamics_prop``, ``states_prop``,
+        ``algebraic_prop``, and ``settings`` (a raw dict to be applied
+        via :meth:`Config.apply_dict() <openscvx.config.Config.apply_dict>`
         after construction).
     """
     # ---- states --------------------------------------------------------
@@ -222,20 +219,6 @@ def load_dict(data: dict) -> dict:
     for constraint_str in data.get("constraints", []):
         constraints.append(parser.parse(str(constraint_str)))
 
-    # ---- algorithm (optional, top-level) ---------------------------------
-    # Supports both the new ``algorithm:`` key and the legacy ``autotuner:``
-    # key. When ``autotuner:`` is used, the resolved autotuner instance is
-    # wrapped inside a default PenalizedTrustRegion.
-    algorithm = None
-    if "algorithm" in data:
-        algo_data = data["algorithm"]
-        if isinstance(algo_data, dict):
-            algorithm = _resolve_algorithm(algo_data)
-        else:
-            algorithm = algo_data  # Already an instance
-    elif "autotuner" in data:
-        algorithm = _resolve_algorithm({"autotuner": data["autotuner"]})
-
     result: Dict[str, Any] = {
         "dynamics": dynamics,
         "constraints": constraints,
@@ -245,24 +228,12 @@ def load_dict(data: dict) -> dict:
         "time": time,
     }
 
-    if algorithm is not None:
-        result["algorithm"] = algorithm
-
-    # ---- discretizer (optional, top-level) --------------------------------
-    if "discretizer" in data:
-        dis_data = data["discretizer"]
-        if isinstance(dis_data, dict):
-            result["discretizer"] = _resolve_discretizer(dis_data)
-        else:
-            result["discretizer"] = dis_data  # Already an instance
-
-    # ---- solver (optional, top-level) -----------------------------------
-    if "solver" in data:
-        solver_data = data["solver"]
-        if isinstance(solver_data, dict):
-            result["solver"] = _resolve_solver(solver_data)
-        else:
-            result["solver"] = solver_data  # Already an instance
+    # ---- algorithm / discretizer / solver (optional) ---------------------
+    # Pass raw values (dict or instance) through to Problem, which owns
+    # resolution via _resolve_algorithm / _resolve_discretizer / _resolve_solver.
+    for key in ("algorithm", "discretizer", "solver"):
+        if key in data:
+            result[key] = data[key]
 
     # ---- optional: propagation states ----------------------------------
     if "states_prop" in data:
