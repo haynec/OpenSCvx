@@ -28,6 +28,13 @@ class Dummy:
         return self.idx_s if hasattr(self, "idx_s") else None
 
 
+class DummyDiscretizer:
+    """Minimal mock that satisfies the Discretizer interface for propagation tests."""
+
+    def __init__(self, dis_type: str):
+        self.dis_type = dis_type
+
+
 @pytest.mark.parametrize("dis_type,beta_expected", [("ZOH", 0.0), ("FOH", 1.0)])
 def test_prop_aug_dy_linear(dis_type, beta_expected):
     """
@@ -90,7 +97,7 @@ def test_s_to_t_basic(dis_type):
     x = State("x", shape=(1,))  # dummy initial state
     x.guess = np.array([[0.0], [1.0]])
     # Pass arrays instead of State/Control objects
-    t = s_to_t(x.guess, u.guess, p, dis_type)
+    t = s_to_t(x.guess, u.guess, p, DummyDiscretizer(dis_type))
 
     # manually reconstruct expected t
     tau = np.linspace(0, 1, p.sim.n)
@@ -130,11 +137,12 @@ def test_t_to_tau_constant_slack(dis_type):
     u.guess = np.tile(np.array([0.0, 2.0]), (N, 1))  # constant slack of 2.0
 
     # get the "nodal" times via s_to_t - pass arrays instead of State/Control objects
-    t_nodal = s_to_t(x.guess, u.guess, p, dis_type)
+    disc = DummyDiscretizer(dis_type)
+    t_nodal = s_to_t(x.guess, u.guess, p, disc)
 
     # invert back - pass array instead of Control object
     tau, u_interp = t_to_tau(
-        u.guess, np.array(t_nodal).squeeze(), np.array(t_nodal).squeeze(), p, dis_type
+        u.guess, np.array(t_nodal).squeeze(), np.array(t_nodal).squeeze(), p, disc
     )
 
     np.testing.assert_allclose(tau, np.linspace(0, 1, N), rtol=1e-6)
@@ -156,7 +164,7 @@ def test_propagation_solver_decay(dis_type):
     p.prp.atol = 1e-3
     p.prp.args = {}
 
-    solver = get_propagation_solver(decay, p, dis_type)
+    solver = get_propagation_solver(decay, p, DummyDiscretizer(dis_type))
 
     # Initial conditions
     V0 = jnp.array([1.0])
@@ -197,7 +205,7 @@ def test_jit_propagation_solver_compiles(dis_type):
     p.prp.atol = 1e-3
     p.prp.args = {}
 
-    solver = get_propagation_solver(decay, p, dis_type)
+    solver = get_propagation_solver(decay, p, DummyDiscretizer(dis_type))
 
     # — dummy inputs —
     V0 = jnp.array([1.0])

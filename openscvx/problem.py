@@ -701,7 +701,7 @@ class Problem:
             self._lowered.dynamics, self.settings
         )
         self._propagation_solver = get_propagation_solver(
-            self._compiled_dynamics_prop.f, self.settings, self._discretizer.dis_type
+            self._compiled_dynamics_prop.f, self.settings, self._discretizer
         )
 
         # Build convex subproblem (solver was created in __init__, variables in lower)
@@ -971,7 +971,7 @@ class Problem:
             result,
             self._propagation_solver,
             algebraic_prop=self._lowered.algebraic_prop,
-            dis_type=self._discretizer.dis_type,
+            discretizer=self._discretizer,
         )
         t_f_post = time.time()
 
