@@ -64,8 +64,7 @@ from typing import Any, Dict, List, Union
 
 import numpy as np
 
-from openscvx.algorithms import PenalizedTrustRegion
-from openscvx.config import _resolve_autotuner
+from openscvx.algorithms import _resolve_algorithm
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.expr import Expr, Parameter
 from openscvx.symbolic.expr.state import State
@@ -219,21 +218,16 @@ def load_dict(data: dict) -> dict:
     # ---- algorithm (optional, top-level) ---------------------------------
     # Supports both the new ``algorithm:`` key and the legacy ``autotuner:``
     # key. When ``autotuner:`` is used, the resolved autotuner instance is
-    # wrapped inside a default :class:`PenalizedTrustRegion`.
+    # wrapped inside a default PenalizedTrustRegion.
     algorithm = None
     if "algorithm" in data:
         algo_data = data["algorithm"]
         if isinstance(algo_data, dict):
-            algo_params = dict(algo_data)
-            # Resolve nested autotuner if present
-            if "autotuner" in algo_params:
-                algo_params["autotuner"] = _resolve_autotuner(algo_params["autotuner"])
-            algorithm = PenalizedTrustRegion(**algo_params)
+            algorithm = _resolve_algorithm(algo_data)
         else:
             algorithm = algo_data  # Already an instance
     elif "autotuner" in data:
-        autotuner = _resolve_autotuner(data["autotuner"])
-        algorithm = PenalizedTrustRegion(autotuner=autotuner)
+        algorithm = _resolve_algorithm({"autotuner": data["autotuner"]})
 
     result: Dict[str, Any] = {
         "dynamics": dynamics,

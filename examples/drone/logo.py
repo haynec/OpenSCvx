@@ -355,11 +355,11 @@ problem = Problem(
     constraints=constraints,
     N=n,
     byof=byof,
-    algorithm=ox.PenalizedTrustRegion(
-        autotuner=ox.RampProximalWeight(ramp_factor=1.06, lam_prox_max=1e3),
-        lam_vc=1e3,
-        lam_cost=6e0,
-    ),
+    algorithm={
+        "autotuner": {"type": "RampProximalWeight", "ramp_factor": 1.06, "lam_prox_max": 1e3},
+        "lam_vc": 1e3,
+        "lam_cost": 6e0,
+    },
     float_dtype="float64",
 )
 problem.settings.cvx.solver_args = {"canon_backend": "COO", "enforce_dpp": True}

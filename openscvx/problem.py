@@ -25,9 +25,11 @@ import jax
 os.environ["EQX_ON_ERROR"] = "nan"
 
 from openscvx.algorithms import (
+    Algorithm,
     AlgorithmState,
     OptimizationResults,
     PenalizedTrustRegion,
+    _resolve_algorithm,
 )
 from openscvx.config import (
     Config,
@@ -80,7 +82,7 @@ class Problem:
         algebraic_prop: Optional[dict] = None,
         licq_min: float = 0.0,
         licq_max: float = 1e-4,
-        algorithm: Optional[PenalizedTrustRegion] = None,
+        algorithm: Optional[Union[Algorithm, dict]] = None,
         byof: Optional[ByofSpec] = None,
         float_dtype: str = "float32",
     ):
@@ -109,8 +111,37 @@ class Problem:
                 for outputs evaluated (not integrated) during propagation.
             licq_min (float): Minimum LICQ constraint value. Defaults to 0.0.
             licq_max (float): Maximum LICQ constraint value. Defaults to 1e-4.
-            algorithm: SCP algorithm instance. When ``None``, uses
-                ``PenalizedTrustRegion()`` with default parameters.
+            algorithm: SCP algorithm configuration. Accepts:
+
+                - ``None`` — uses ``PenalizedTrustRegion()`` with defaults.
+                - An ``Algorithm`` instance — used directly.
+                - A ``dict`` — passed as kwargs to ``PenalizedTrustRegion()``.
+                  Supports a nested ``autotuner`` key in any of these forms:
+
+                  - **string** — class name with default parameters, e.g.
+                    ``"RampProximalWeight"``.
+                  - **dict** — class name via ``"type"`` key plus parameter
+                    overrides, e.g.
+                    ``{"type": "RampProximalWeight", "ramp_factor": 1.04}``.
+                  - **instance** — an already-constructed autotuner object,
+                    e.g. ``ox.RampProximalWeight(ramp_factor=1.04)``.
+
+                Examples::
+
+                    # Just tweak weights (default algorithm & autotuner)
+                    algorithm={"lam_cost": 5e-1, "k_max": 50}
+
+                    # Autotuner by name (default parameters)
+                    algorithm={"autotuner": "RampProximalWeight"}
+
+                    # Autotuner as dict with overrides
+                    algorithm={
+                        "lam_cost": 5e-1,
+                        "autotuner": {"type": "RampProximalWeight", "ramp_factor": 1.04},
+                    }
+
+                    # Autotuner as instance
+                    algorithm={"autotuner": ox.RampProximalWeight(ramp_factor=1.04)}
             byof (ByofSpec, optional): Expert mode only. Raw JAX functions to
                 bypass symbolic layer. See :class:`openscvx.expert.ByofSpec` for
                 detailed documentation.
@@ -177,9 +208,11 @@ class Problem:
         # Store byof for cache hashing
         self._byof = byof
 
-        # Resolve algorithm: None → default PTR, instance → use directly
+        # Resolve algorithm: None → default PTR, dict → PTR(**dict), instance → use directly
         if algorithm is None:
             self._algorithm = PenalizedTrustRegion()
+        elif isinstance(algorithm, dict):
+            self._algorithm = _resolve_algorithm(algorithm)
         else:
             self._algorithm = algorithm
 
@@ -261,7 +294,7 @@ class Problem:
         # SCP algorithm (resolved from `algorithm` parameter above)
 
     @property
-    def algorithm(self) -> PenalizedTrustRegion:
+    def algorithm(self) -> Algorithm:
         """Access the SCP algorithm instance.
 
         Returns:

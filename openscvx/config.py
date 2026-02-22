@@ -1,5 +1,5 @@
 from dataclasses import dataclass, fields
-from typing import Any, Dict, Optional
+from typing import Optional
 
 import numpy as np
 
@@ -333,63 +333,6 @@ class SimConfig:
     def true_control_slice(self):
         """Slice for accessing true (non-augmented) controls."""
         return self.u._true_slice
-
-
-# ---------------------------------------------------------------------------
-# Autotuner resolver (used by the loader)
-# ---------------------------------------------------------------------------
-
-_AUTOTUNER_MAP: Dict[str, type] = {}
-
-
-def _resolve_autotuner(val: Any) -> Any:
-    """Resolve an autotuner specification into an instance.
-
-    Accepted forms:
-
-    * **string** — class name only, default parameters::
-
-          "RampProximalWeight"
-
-    * **dict** — class name + parameter overrides::
-
-          {"type": "RampProximalWeight", "ramp_factor": 1.04}
-
-    * **instance** — already-constructed autotuner (pass-through for
-      ``load_dict`` called from Python).
-    """
-    if not isinstance(val, (str, dict)):
-        return val
-
-    if isinstance(val, str):
-        name = val
-        params: dict = {}
-    else:
-        params = dict(val)  # copy to avoid mutating the input
-        name = params.pop("type", None)
-        if name is None:
-            raise ValueError(
-                "autotuner dict must include a 'type' key (e.g. type: RampProximalWeight)"
-            )
-
-    if not _AUTOTUNER_MAP:
-        from openscvx.algorithms.AugmentedLagrangian import AugmentedLagrangian
-        from openscvx.algorithms.ConstantProximalWeight import ConstantProximalWeight
-        from openscvx.algorithms.RampProximalWeight import RampProximalWeight
-
-        for cls in (AugmentedLagrangian, ConstantProximalWeight, RampProximalWeight):
-            _AUTOTUNER_MAP[cls.__name__] = cls
-
-    cls = _AUTOTUNER_MAP.get(name)
-    if cls is None:
-        raise ValueError(f"Unknown autotuner {name!r}; expected one of {sorted(_AUTOTUNER_MAP)}")
-
-    instance = cls()
-    for key, value in params.items():
-        if not hasattr(instance, key):
-            raise ValueError(f"Unknown autotuner parameter {key!r} for {name}")
-        setattr(instance, key, value)
-    return instance
 
 
 @dataclass

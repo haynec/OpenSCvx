@@ -152,10 +152,8 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm=ox.PenalizedTrustRegion(autotuner=ox.ConstantProximalWeight()),
+    algorithm={"autotuner": "ConstantProximalWeight", "lam_cost": 1e0},
 )
-
-problem.algorithm.lam_cost = 1e0  # Weight on the Nonlinear Cost
 
 plotting_dict = {
     "obstacles_centers": obstacle_center_positions,

@@ -15,7 +15,6 @@ import jax
 import numpy as np
 import pytest
 
-import openscvx as ox
 from openscvx import Problem
 from openscvx.loader import load_dict, load_json, load_yaml
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
@@ -147,7 +146,7 @@ def test_load_file(fmt):
     kwargs = loader(FIXTURE_DIR / filename)
     problem = Problem(
         **kwargs,
-        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
+        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
     )
     result = _configure_and_solve(problem)
     _validate_result(result, problem, f"Brachistochrone {fmt.upper()}")
@@ -208,7 +207,7 @@ def test_constraint_types(constraint_type):
     kwargs = load_dict(data)
     problem = Problem(
         **kwargs,
-        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
+        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
     )
     result = _configure_and_solve(problem)
     _validate_result(result, problem, f"YAML {constraint_type}")
@@ -249,7 +248,7 @@ def test_propagation():
     kwargs = load_dict(data)
     problem = Problem(
         **kwargs,
-        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
+        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
     )
     result = _configure_and_solve(problem)
 
@@ -313,7 +312,7 @@ def test_cross_nodal(feasible):
     kwargs = load_dict(data)
     problem = Problem(
         **kwargs,
-        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1, k_max=50),
+        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1, "k_max": 50},
     )
 
     problem.settings.prp.dt = 0.01

@@ -193,7 +193,7 @@ def test_monolithic():
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
+        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
     )
 
     problem.settings.prp.dt = 0.01
@@ -320,7 +320,7 @@ def test_constraint_types(constraint_type):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
+        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
     )
 
     problem.settings.prp.dt = 0.01
@@ -438,9 +438,7 @@ def test_algorithm_types(algorithm_type):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm=ox.PenalizedTrustRegion(
-            autotuner=autotuner, lam_prox=1e1, lam_cost=1e0, lam_vc=1e1
-        ),
+        algorithm={"autotuner": autotuner, "lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
     )
 
     problem.settings.prp.dt = 0.01
@@ -582,7 +580,7 @@ def test_cross_nodal(test_case):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1, k_max=50),
+        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1, "k_max": 50},
     )
 
     problem.settings.prp.dt = 0.01
@@ -714,7 +712,7 @@ def test_parameters():
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm=ox.PenalizedTrustRegion(lam_prox=1e0, lam_cost=1e-1, lam_vc=1e1),
+        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e1},
     )
 
     problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
@@ -910,7 +908,7 @@ def test_propagation():
         dynamics_prop=dynamics_prop_extra,  # Only extra states
         states_prop=states_prop_extra,  # Only extra states
         algebraic_prop=algebraic_prop,  # Algebraic outputs
-        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
+        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
     )
 
     problem.settings.prp.dt = 0.01
@@ -1307,7 +1305,7 @@ def test_byof(byof_mode):
         N=n,
         licq_max=1e-8,
         byof=byof,
-        algorithm=ox.PenalizedTrustRegion(lam_prox=1e1, lam_cost=1e0, lam_vc=1e1),
+        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
     )
 
     problem.settings.prp.dt = 0.01
