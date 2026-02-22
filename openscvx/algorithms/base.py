@@ -590,7 +590,19 @@ class Algorithm(ABC):
                 def step(self, state, params, settings):
                     # Run one iteration using self._* and per-step params/settings
                     return converged
+
+    Attributes:
+        weights: Normalized SCP weights used by the algorithm and autotuner.
+            Subclasses must set this in ``__init__``.
+        k_max: Maximum number of SCP iterations.
+            Subclasses must set this in ``__init__``.
     """
+
+    #: Normalized SCP weights. Subclasses must set this in ``__init__``.
+    weights: Weights
+
+    #: Maximum number of SCP iterations. Subclasses must set this in ``__init__``.
+    k_max: int
 
     @abstractmethod
     def initialize(

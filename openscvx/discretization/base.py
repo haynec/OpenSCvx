@@ -62,9 +62,13 @@ class Discretizer(ABC):
                     return []
     """
 
-    #: Control hold type (``"FOH"`` or ``"ZOH"``).  Subclasses set this in
-    #: ``__init__``.  Propagation code reads it to stay consistent.
+    #: Control hold type (``"FOH"`` or ``"ZOH"``).  Subclasses must set this
+    #: in ``__init__``.
     dis_type: str
+
+    #: ODE solver name used for integration (e.g., ``"Tsit5"``).  Subclasses
+    #: must set this in ``__init__``.
+    ode_solver: str
 
     @abstractmethod
     def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:

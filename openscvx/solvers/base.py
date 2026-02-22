@@ -87,6 +87,10 @@ class ConvexSolver(ABC):
                     return MyResult(...)
     """
 
+    #: Backend solver name (e.g., ``"QOCO"``, ``"CLARABEL"``).  Subclasses
+    #: must set this in ``__init__``.
+    cvx_solver: str
+
     @abstractmethod
     def create_variables(
         self,
