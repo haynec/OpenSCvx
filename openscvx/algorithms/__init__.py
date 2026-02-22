@@ -80,12 +80,12 @@ Current Implementations:
 import inspect
 from typing import Any, Dict
 
-from .AugmentedLagrangian import AugmentedLagrangian
+from .augmented_lagrangian import AugmentedLagrangian
 from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult, Weights
-from .ConstantProximalWeight import ConstantProximalWeight
+from .constant_proximal_weight import ConstantProximalWeight
 from .optimization_results import OptimizationResults
 from .penalized_trust_region import PenalizedTrustRegion
-from .RampProximalWeight import RampProximalWeight
+from .ramp_proximal_weight import RampProximalWeight
 
 # ---------------------------------------------------------------------------
 # Spec resolvers — turn dicts/strings into algorithm/autotuner instances
@@ -170,7 +170,7 @@ __all__ = [
     # PTR algorithm
     "PenalizedTrustRegion",
     "AutotuningBase",
-    "AugmentedLagrangian",
-    "ConstantProximalWeight",
-    "RampProximalWeight",
+    "augmented_lagrangian",
+    "constant_proximal_weight",
+    "ramp_proximal_weight",
 ]

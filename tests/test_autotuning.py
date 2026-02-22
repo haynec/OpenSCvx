@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from openscvx.algorithms.AugmentedLagrangian import AugmentedLagrangian
+from openscvx.algorithms.augmented_lagrangian import AugmentedLagrangian
 from openscvx.algorithms.base import (
     AlgorithmState,
     AutotuningBase,
@@ -11,9 +11,9 @@ from openscvx.algorithms.base import (
     DiscretizationResult,
     Weights,
 )
-from openscvx.algorithms.ConstantProximalWeight import ConstantProximalWeight
+from openscvx.algorithms.constant_proximal_weight import ConstantProximalWeight
 from openscvx.algorithms.penalized_trust_region import PenalizedTrustRegion
-from openscvx.algorithms.RampProximalWeight import RampProximalWeight
+from openscvx.algorithms.ramp_proximal_weight import RampProximalWeight
 from openscvx.config import (
     Config,
     DevConfig,
