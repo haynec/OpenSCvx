@@ -187,7 +187,7 @@ def print_summary_box(lines, title="Summary"):
 
 
 def print_problem_summary(
-    settings: Any, lowered: Any, solver: Any, weights: "Weights" = None
+    settings: Any, lowered: Any, solver: Any, weights: "Weights" = None, dis_solver: str = "Tsit5"
 ) -> None:
     """
     Print the problem summary box.
@@ -197,6 +197,7 @@ def print_problem_summary(
         lowered: LoweredProblem from lower_symbolic_problem()
         solver: Initialized ConvexSolver with built problem
         weights: Normalized initial weights from the algorithm
+        dis_solver: Discretization ODE solver name (e.g., ``"Tsit5"``).
     """
     n_nodal_convex = len(lowered.cvxpy_constraints.constraints)
     n_nodal_nonconvex = len(lowered.jax_constraints.nodal)
@@ -238,7 +239,7 @@ def print_problem_summary(
             f" {n_cvx_constraints} constraints"
         ),
         f"Weights: {weights_str}",
-        f"CVX Solver: {settings.cvx.solver}, Discretization Solver: {settings.dis.solver}",
+        f"CVX Solver: {settings.cvx.solver}, Discretization Solver: {dis_solver}",
         f"JAX Backend: {jax_backend} (v{jax_version})",
     ]
 

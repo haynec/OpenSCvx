@@ -35,12 +35,11 @@ from openscvx.config import (
     Config,
     ConvexSolverConfig,
     DevConfig,
-    DiscretizationConfig,
     PropagationConfig,
     ScpConfig,
     SimConfig,
 )
-from openscvx.discretization import LinearizeDiscretize
+from openscvx.discretization import Discretizer, LinearizeDiscretize, _resolve_discretizer
 from openscvx.expert import ByofSpec
 from openscvx.lowered import LoweredProblem, ParameterDict
 from openscvx.lowered.dynamics import Dynamics
@@ -83,6 +82,7 @@ class Problem:
         licq_min: float = 0.0,
         licq_max: float = 1e-4,
         algorithm: Optional[Union[Algorithm, dict]] = None,
+        discretizer: Optional[Union[Discretizer, dict]] = None,
         byof: Optional[ByofSpec] = None,
         float_dtype: str = "float32",
     ):
@@ -142,6 +142,23 @@ class Problem:
 
                     # Autotuner as instance
                     algorithm={"autotuner": ox.RampProximalWeight(ramp_factor=1.04)}
+            discretizer: Discretization method configuration. Accepts:
+
+                - ``None`` — uses ``LinearizeDiscretize()`` with defaults
+                  (FOH, Tsit5).
+                - A ``Discretizer`` instance — used directly.
+                - A ``dict`` — passed as kwargs to ``LinearizeDiscretize()``.
+
+                Examples::
+
+                    # Change hold type and ODE solver
+                    discretizer={"dis_type": "ZOH", "solver": "Dopri8"}
+
+                    # Use custom integrator
+                    discretizer={"custom_integrator": True}
+
+                    # Instance
+                    discretizer=ox.LinearizeDiscretize(dis_type="ZOH")
             byof (ByofSpec, optional): Expert mode only. Raw JAX functions to
                 bypass symbolic layer. See :class:`openscvx.expert.ByofSpec` for
                 detailed documentation.
@@ -216,6 +233,14 @@ class Problem:
         else:
             self._algorithm = algorithm
 
+        # Resolve discretizer: None → default, dict → LinearizeDiscretize(**dict), instance → use
+        if discretizer is None:
+            self._discretizer = LinearizeDiscretize()
+        elif isinstance(discretizer, dict):
+            self._discretizer = _resolve_discretizer(discretizer)
+        else:
+            self._discretizer = discretizer
+
         # Create solver before lowering (solver owns its variables)
         self._solver: PTRSolver = PTRSolver()
 
@@ -244,7 +269,6 @@ class Problem:
                 n=N,
                 n_states=self._lowered.x_unified.shape[0],
             ),
-            dis=DiscretizationConfig(),
             dev=DevConfig(),
             cvx=ConvexSolverConfig(),
             prp=PropagationConfig(),
@@ -276,9 +300,6 @@ class Problem:
         self.timing_post = None
         self._profiling_session = None
 
-        # Discretizer (handles linearization + discretization)
-        self._discretizer = LinearizeDiscretize()
-
         # Compiled dynamics (vmapped versions, set in initialize())
         self._compiled_dynamics_prop: Optional[Dynamics] = None
 
@@ -301,6 +322,27 @@ class Problem:
             The algorithm instance (e.g., PenalizedTrustRegion).
         """
         return self._algorithm
+
+    @property
+    def discretizer(self) -> Discretizer:
+        """Access the discretizer instance.
+
+        Attributes such as `dis_type`, `solver`, and `custom_integrator`
+        can be modified freely before `initialize` is called:
+
+            problem.discretizer.dis_type = "ZOH"
+            problem.discretizer.solver = "Dopri8"
+            problem.initialize()
+
+        !!! warning
+            Discretizer settings are compiled into the JIT-cached solver
+            during `initialize`.  Changes made **after**
+            `initialize()` will have no effect on subsequent solves.
+
+        Returns:
+            The discretizer instance (e.g., LinearizeDiscretize).
+        """
+        return self._discretizer
 
     @property
     def parameters(self) -> ParameterDict:
@@ -618,7 +660,7 @@ class Problem:
             self._lowered.dynamics, self.settings
         )
         self._propagation_solver = get_propagation_solver(
-            self._compiled_dynamics_prop.f, self.settings
+            self._compiled_dynamics_prop.f, self.settings, self._discretizer.dis_type
         )
 
         # Build convex subproblem (solver was created in __init__, variables in lower)
@@ -626,7 +668,11 @@ class Problem:
 
         # Print problem summary (after solver is initialized so we can access problem stats)
         printing.print_problem_summary(
-            self.settings, self._lowered, self._solver, self._algorithm.weights
+            self.settings,
+            self._lowered,
+            self._solver,
+            self._algorithm.weights,
+            dis_solver=self._discretizer.solver,
         )
 
         # Get cache file paths using symbolic AST hashing
@@ -883,6 +929,7 @@ class Problem:
             result,
             self._propagation_solver,
             algebraic_prop=self._lowered.algebraic_prop,
+            dis_type=self._discretizer.dis_type,
         )
         t_f_post = time.time()
 

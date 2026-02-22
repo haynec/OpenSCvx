@@ -13,56 +13,6 @@ def get_affine_scaling_matrices(n, minimum, maximum):
 
 
 @dataclass
-class DiscretizationConfig:
-    def __init__(
-        self,
-        dis_type: str = "FOH",
-        custom_integrator: bool = False,
-        solver: str = "Tsit5",
-        args: Optional[dict] = None,
-        atol: float = 1e-3,
-        rtol: float = 1e-6,
-    ):
-        """
-        Configuration class for discretization settings.
-
-        This class defines the parameters required for discretizing system dynamics.
-
-        Main arguments:
-        These are the arguments most commonly used day-to-day.
-
-        Args:
-            dis_type (str): The type of discretization to use (e.g., "FOH" for
-                First-Order Hold). Defaults to "FOH".
-            custom_integrator (bool): This enables our custom fixed-step RK45
-                algorithm. This tends to be faster than Diffrax but unless you're
-                going for speed, it's recommended to stick with Diffrax for
-                robustness and other solver options. Defaults to False.
-            solver (str): Not used if custom_integrator is enabled. Any choice of
-                solver in Diffrax is valid, please refer here,
-                [How to Choose a Solver](https://docs.kidger.site/diffrax/usage/
-                how-to-choose-a-solver/). Defaults to "Tsit5".
-
-        Other arguments:
-        These arguments are less frequently used, and for most purposes you
-        shouldn't need to understand these.
-
-        Args:
-            args (Dict): Additional arguments to pass to the solver which can be
-                found [here](https://docs.kidger.site/diffrax/api/diffeqsolve/).
-                Defaults to an empty dictionary.
-            atol (float): Absolute tolerance for the solver. Defaults to 1e-3.
-            rtol (float): Relative tolerance for the solver. Defaults to 1e-6.
-        """
-        self.dis_type = dis_type
-        self.custom_integrator = custom_integrator
-        self.solver = solver
-        self.args = args if args is not None else {}
-        self.atol = atol
-        self.rtol = rtol
-
-
-@dataclass
 class DevConfig:
     def __init__(
         self,
@@ -366,7 +316,6 @@ class Config:
     sim: SimConfig
     scp: ScpConfig
     cvx: ConvexSolverConfig
-    dis: DiscretizationConfig
     prp: PropagationConfig
     dev: DevConfig
 
@@ -386,8 +335,7 @@ class Config:
         Example::
 
             config.apply_dict({
-                "scp": {"ep_tr": 1e-3, "autotuner": {"ramp_factor": 1.04}},
-                "dis": {"dis_type": "ZOH"},
+                "cvx": {"solver_args": {"abstol": 1e-6}},
             })
 
         Dict values are handled contextually:

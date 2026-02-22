@@ -28,13 +28,6 @@ def settings():
     p.sim.inv_S_u = jnp.eye(p.sim.n_controls)
     p.scp = Dummy()
     p.scp.n = 5
-    p.dis = Dummy()
-    p.dis.custom_integrator = True
-    p.dis.solver = "Tsit5"
-    p.dis.rtol = 1e-3
-    p.dis.atol = 1e-6
-    p.dis.args = {}
-    p.dis.dis_type = "FOH"
     p.dev = Dummy()
     p.dev.debug = False
     return p
@@ -60,8 +53,8 @@ def dynamics():
 
 
 def test_discretization_shapes(settings, dynamics):
-    # build solver via LinearizeDiscretize
-    discretizer = LinearizeDiscretize()
+    # build solver via LinearizeDiscretize (custom_integrator for speed)
+    discretizer = LinearizeDiscretize(custom_integrator=True)
     solver = discretizer.get_solver(dynamics, settings)
 
     # dummy x,u (n_controls already includes time-dilation)
@@ -108,7 +101,7 @@ def test_jit_dVdt_compiles(settings):
             n_x,
             n_u,
             N,
-            settings.dis.dis_type,
+            "FOH",
             settings.sim.S_x,
             settings.sim.c_x,
             settings.sim.S_u,
@@ -127,14 +120,8 @@ def test_jit_dVdt_compiles(settings):
 
 @pytest.mark.parametrize("integrator", ["custom_integrator", "diffrax"])
 def test_jit_discretization_solver_compiles(settings, dynamics, integrator):
-    # flip between the two modes
-    if integrator == "custom_integrator":
-        settings.dis.custom_integrator = True
-    elif integrator == "diffrax":
-        settings.dis.custom_integrator = False
-
-    # build the solver via LinearizeDiscretize
-    discretizer = LinearizeDiscretize()
+    # build the solver via LinearizeDiscretize with the chosen integrator
+    discretizer = LinearizeDiscretize(custom_integrator=(integrator == "custom_integrator"))
     solver = discretizer.get_solver(dynamics, settings)
 
     # dummy x,u (n_controls already includes time-dilation)

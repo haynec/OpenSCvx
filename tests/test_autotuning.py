@@ -18,7 +18,6 @@ from openscvx.config import (
     Config,
     ConvexSolverConfig,
     DevConfig,
-    DiscretizationConfig,
     PropagationConfig,
     ScpConfig,
     SimConfig,
@@ -90,7 +89,6 @@ def settings(mock_unified_state, mock_unified_control):
         sim=sim_config,
         scp=scp_config,
         cvx=ConvexSolverConfig(),
-        dis=DiscretizationConfig(),
         prp=PropagationConfig(),
         dev=DevConfig(),
     )

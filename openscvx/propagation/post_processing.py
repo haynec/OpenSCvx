@@ -17,6 +17,7 @@ def propagate_trajectory_results(
     result: OptimizationResults,
     propagation_solver: callable,
     algebraic_prop: Optional[dict] = None,
+    dis_type: str = "FOH",
 ) -> OptimizationResults:
     """Propagate the optimal trajectory and compute additional results.
 
@@ -29,6 +30,7 @@ def propagate_trajectory_results(
         result (OptimizationResults): Optimization results object.
         propagation_solver (callable): Function for propagating the system state.
         algebraic_prop (dict, optional): Dictionary mapping output names to vmapped JAX functions.
+        dis_type: Control hold type (``"ZOH"`` or ``"FOH"``). Defaults to ``"FOH"``.
 
     Returns:
         OptimizationResults: Updated results object containing:
@@ -43,11 +45,11 @@ def propagate_trajectory_results(
     x = result.x
     u = result.u
 
-    t = np.array(s_to_t(x, u, settings)).squeeze()
+    t = np.array(s_to_t(x, u, settings, dis_type)).squeeze()
 
     t_full = np.arange(t[0], t[-1], settings.prp.dt)
 
-    tau_vals, u_full = t_to_tau(u, t_full, t, settings)
+    tau_vals, u_full = t_to_tau(u, t_full, t, settings, dis_type)
 
     # Create a copy of x_prop for propagation to avoid mutating settings
     # Match free values from initial state to the initial value from the result

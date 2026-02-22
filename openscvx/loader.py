@@ -51,12 +51,13 @@ Expected schema
         ramp_factor: 1.04
         lam_prox_max: 100.0
 
+    discretizer:                     # optional
+      dis_type: ZOH
+      solver: Dopri8
+
     settings:                        # optional, applied after Problem()
       cvx:
         solver_args: {abstol: 1.0e-6, reltol: 1.0e-9}
-      dis:
-        dis_type: ZOH
-        solver: Dopri8
 """
 
 from pathlib import Path
@@ -65,6 +66,7 @@ from typing import Any, Dict, List, Union
 import numpy as np
 
 from openscvx.algorithms import _resolve_algorithm
+from openscvx.discretization import _resolve_discretizer
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.expr import Expr, Parameter
 from openscvx.symbolic.expr.state import State
@@ -240,6 +242,14 @@ def load_dict(data: dict) -> dict:
 
     if algorithm is not None:
         result["algorithm"] = algorithm
+
+    # ---- discretizer (optional, top-level) --------------------------------
+    if "discretizer" in data:
+        dis_data = data["discretizer"]
+        if isinstance(dis_data, dict):
+            result["discretizer"] = _resolve_discretizer(dis_data)
+        else:
+            result["discretizer"] = dis_data  # Already an instance
 
     # ---- optional: propagation states ----------------------------------
     if "states_prop" in data:

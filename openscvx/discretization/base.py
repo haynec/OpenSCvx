@@ -44,11 +44,8 @@ class Discretizer(ABC):
     - The callable is invoked with a reference trajectory and parameters,
       returning discretized matrices (A_d, B_d, C_d, x_prop)
 
-    !!! tip "Configuration"
-        Discretization settings (tolerances, integrator choice, interpolation
-        type, etc.) are currently accessed via ``settings.dis.*`` which is
-        passed to ``get_solver()``. In the future, these may become class
-        attributes on individual ``Discretizer`` subclasses instead.
+    Discretization parameters (hold type, integrator, tolerances) live on each
+    concrete subclass as instance attributes.
 
     Example:
         Implementing a custom discretizer::
@@ -64,6 +61,10 @@ class Discretizer(ABC):
                 def citation(self):
                     return []
     """
+
+    #: Control hold type (``"FOH"`` or ``"ZOH"``).  Subclasses set this in
+    #: ``__init__``.  Propagation code reads it to stay consistent.
+    dis_type: str
 
     @abstractmethod
     def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
@@ -83,8 +84,7 @@ class Discretizer(ABC):
             dynamics: System dynamics object. ``dynamics.f`` is the continuous-
                 time nonlinear dynamics function with signature
                 ``f(x, u, node, params) -> x_dot``.
-            settings: Problem configuration including discretization settings
-                (tolerances, integrator choice, interpolation type, etc.).
+            settings: Problem configuration (node count, scaling matrices, etc.).
 
         Returns:
             Callable with signature
