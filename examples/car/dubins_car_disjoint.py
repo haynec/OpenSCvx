@@ -102,6 +102,7 @@ time = ox.Time(
     final=("minimize", total_time),
     min=0.0,
     max=20,
+    uniform_time_grid=True,
 )
 
 problem = Problem(
@@ -114,7 +115,6 @@ problem = Problem(
 )
 # Set solver parameters
 problem.settings.scp.lam_vc = 6e2
-problem.settings.scp.uniform_time_grid = True
 plotting_dict = {
     "wp1_radius": problem.parameters["wp1_radius"],
     "wp1_center": problem.parameters["wp1_center"],

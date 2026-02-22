@@ -470,7 +470,7 @@ class PTRSolver(ConvexSolver):
             if settings.sim.x.final_type[i] == "Fix":
                 constr += [x_nonscaled[-1][i] == x_term[i]]  # Final Boundary Conditions
 
-        if settings.scp.uniform_time_grid:
+        if settings.scp._uniform_time_grid:
             S_u_inv_td = inv_S_u[settings.sim.time_dilation_slice, settings.sim.time_dilation_slice]
             c_u_td = c_u[settings.sim.time_dilation_slice]
             constr += [

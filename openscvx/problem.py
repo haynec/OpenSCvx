@@ -212,8 +212,11 @@ class Problem:
             prp=PropagationConfig(),
         )
 
-        # OCP construction happens in initialize() so users can modify
-        # settings (like uniform_time_grid) between __init__ and initialize()
+        # Copy time grid setting from Time to SCP config so the solver can
+        # read it during constraint assembly.
+        if isinstance(time, Time):
+            self.settings.scp._uniform_time_grid = time.uniform_time_grid
+
         self._discretization_solver: callable = None
 
         # Set up emitter & queue (thread started in initialize() after columns are known)

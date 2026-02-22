@@ -180,6 +180,7 @@ def load_dict(data: dict) -> dict:
         final=_parse_time_boundary(time_data["final"]),
         min=float(time_data["min"]),
         max=float(time_data["max"]),
+        uniform_time_grid=bool(time_data.get("uniform_time_grid", False)),
     )
 
     # ---- N -------------------------------------------------------------

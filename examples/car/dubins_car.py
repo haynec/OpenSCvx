@@ -87,6 +87,7 @@ time = ox.Time(
     min=0.0,
     max=20,
     time_dilation_min=0.02 * total_time,
+    uniform_time_grid=True,
 )
 
 problem = Problem(
@@ -102,7 +103,6 @@ problem = Problem(
 # Set solver parameters
 problem.settings.scp.lam_cost = 4e1
 problem.settings.scp.lam_vc = 1e3
-problem.settings.scp.uniform_time_grid = True
 
 plotting_dict = {
     "obs_radius": problem.parameters["obs_radius"],

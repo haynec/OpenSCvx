@@ -182,6 +182,7 @@ def test_monolithic():
         final=("minimize", total_time),
         min=0.0,
         max=total_time,
+        uniform_time_grid=True,
     )
 
     problem = Problem(
@@ -199,7 +200,6 @@ def test_monolithic():
     problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
     problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
     problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
-    problem.settings.scp.uniform_time_grid = True
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -311,6 +311,7 @@ def test_constraint_types(constraint_type):
         final=("minimize", total_time),
         min=0.0,
         max=total_time,
+        uniform_time_grid=True,
     )
 
     problem = Problem(
@@ -328,7 +329,6 @@ def test_constraint_types(constraint_type):
     problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
     problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
     problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
-    problem.settings.scp.uniform_time_grid = True
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -426,6 +426,7 @@ def test_algorithm_types(algorithm_type):
         final=("minimize", total_time),
         min=0.0,
         max=total_time,
+        uniform_time_grid=True,
     )
 
     if algorithm_type == "augmented_lagrangian":
@@ -449,7 +450,6 @@ def test_algorithm_types(algorithm_type):
     problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
     problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
     problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
-    problem.settings.scp.uniform_time_grid = True
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -576,6 +576,7 @@ def test_cross_nodal(test_case):
         final=("minimize", total_time),
         min=0.0,
         max=total_time,
+        uniform_time_grid=True,
     )
 
     problem = Problem(
@@ -593,7 +594,6 @@ def test_cross_nodal(test_case):
     problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
     problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
     problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
-    problem.settings.scp.uniform_time_grid = True
     problem.settings.sim.save_compiled = False
     problem.settings.scp.k_max = 50  # Set lower max iterations for non-convergence case
 
@@ -708,6 +708,7 @@ def test_parameters():
         final=("minimize", total_time),
         min=0.0,
         max=10.0,
+        uniform_time_grid=True,
     )
     # Apply custom scaling for time (Time is a State with shape=(1,))
     time.scaling_min = [0.0]
@@ -727,7 +728,6 @@ def test_parameters():
     problem.settings.scp.lam_prox = 1e0
     problem.settings.scp.lam_cost = 1e-1
     problem.settings.scp.lam_vc = 1e1
-    problem.settings.scp.uniform_time_grid = True
     problem.settings.sim.save_compiled = False
 
     # Save original weight values for second problem setup
@@ -916,6 +916,7 @@ def test_propagation():
         final=("minimize", total_time),
         min=0.0,
         max=total_time,
+        uniform_time_grid=True,
     )
 
     problem = Problem(
@@ -936,7 +937,6 @@ def test_propagation():
     problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Region
     problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
     problem.settings.scp.lam_vc = 1e1  # Weight on the Virtual Control Objective
-    problem.settings.scp.uniform_time_grid = True
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -1317,6 +1317,7 @@ def test_byof(byof_mode):
         final=("minimize", total_time),
         min=0.0,
         max=total_time,
+        uniform_time_grid=True,
     )
 
     problem = Problem(
@@ -1335,7 +1336,6 @@ def test_byof(byof_mode):
     problem.settings.scp.lam_prox = 1e1
     problem.settings.scp.lam_cost = 1e0
     problem.settings.scp.lam_vc = 1e1
-    problem.settings.scp.uniform_time_grid = True
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output

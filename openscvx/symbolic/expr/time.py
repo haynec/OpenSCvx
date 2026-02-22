@@ -78,6 +78,7 @@ class Time(State):
         time_dilation_min: Optional[float] = None,
         time_dilation_max: Optional[float] = None,
         time_dilation_guess: Optional[np.ndarray] = None,
+        uniform_time_grid: bool = False,
     ):
         """Initialize a Time state.
 
@@ -99,8 +100,12 @@ class Time(State):
             time_dilation_guess: Initial guess for time dilation.
                 1D array of shape (N,) or 2D of shape (N, 1). Overrides
                 the default finite-difference computation.
+            uniform_time_grid: If True, constrain the time dilation to be
+                the same across all nodes (uniform time steps). Defaults
+                to False.
         """
         self.derivative = 1.0
+        self.uniform_time_grid = uniform_time_grid
         self._time_dilation_min = None
         self._time_dilation_max = None
         self._time_dilation_guess = None

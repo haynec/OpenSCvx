@@ -837,3 +837,22 @@ def test_time_dilation_constructor_setter_equivalent():
     assert t1.time_dilation_min == t2.time_dilation_min
     assert t1.time_dilation_max == t2.time_dilation_max
     assert np.allclose(t1.time_dilation_guess, t2.time_dilation_guess)
+
+
+# --- Time: Uniform Time Grid ---
+
+
+def test_time_uniform_time_grid_default():
+    """Test that uniform_time_grid defaults to False."""
+    from openscvx import Time
+
+    t = Time()
+    assert t.uniform_time_grid is False
+
+
+def test_time_uniform_time_grid_constructor():
+    """Test setting uniform_time_grid via constructor."""
+    from openscvx import Time
+
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0, uniform_time_grid=True)
+    assert t.uniform_time_grid is True

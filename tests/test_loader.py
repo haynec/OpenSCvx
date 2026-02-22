@@ -47,7 +47,6 @@ def _configure_and_solve(problem):
     problem.settings.scp.lam_prox = 1e1
     problem.settings.scp.lam_cost = 1e0
     problem.settings.scp.lam_vc = 1e1
-    problem.settings.scp.uniform_time_grid = True
     problem.settings.sim.save_compiled = False
     problem.settings.dev.printing = False
 
@@ -83,7 +82,13 @@ def _base_dict():
     """
     return {
         "N": 2,
-        "time": {"initial": 0.0, "final": ["minimize", 2.0], "min": 0.0, "max": 2.0},
+        "time": {
+            "initial": 0.0,
+            "final": ["minimize", 2.0],
+            "min": 0.0,
+            "max": 2.0,
+            "uniform_time_grid": True,
+        },
         "states": [
             {
                 "name": "position",
@@ -306,7 +311,6 @@ def test_cross_nodal(feasible):
     problem.settings.scp.lam_prox = 1e1
     problem.settings.scp.lam_cost = 1e0
     problem.settings.scp.lam_vc = 1e1
-    problem.settings.scp.uniform_time_grid = True
     problem.settings.sim.save_compiled = False
     problem.settings.scp.k_max = 50
     problem.settings.dev.printing = False
