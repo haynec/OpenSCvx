@@ -45,23 +45,26 @@ class Column:
 
 def color_J_tr(value: Any, params: Any, data: dict) -> Optional[str]:
     """Color J_tr green if within tolerance, red otherwise."""
-    if params is None:
+    ep = data.get("ep_tr")
+    if ep is None:
         return None
-    return col_pos if value <= params.scp.ep_tr else col_neg
+    return col_pos if value <= ep else col_neg
 
 
 def color_J_vb(value: Any, params: Any, data: dict) -> Optional[str]:
     """Color J_vb green if within tolerance, red otherwise."""
-    if params is None:
+    ep = data.get("ep_vb")
+    if ep is None:
         return None
-    return col_pos if value <= params.scp.ep_vb else col_neg
+    return col_pos if value <= ep else col_neg
 
 
 def color_J_vc(value: Any, params: Any, data: dict) -> Optional[str]:
     """Color J_vc green if within tolerance, red otherwise."""
-    if params is None:
+    ep = data.get("ep_vc")
+    if ep is None:
         return None
-    return col_pos if value <= params.scp.ep_vc else col_neg
+    return col_pos if value <= ep else col_neg
 
 
 def color_prob_stat(value: Any, params: Any, data: dict) -> Optional[str]:
@@ -237,7 +240,7 @@ def print_problem_summary(
         "Problem Summary",
         (
             f"Dimensions: {settings.sim.n_states} states ({n_augmented} aug),"
-            f" {settings.sim.n_controls} controls, {settings.scp.n} nodes"
+            f" {settings.sim.n_controls} controls, {settings.sim.n} nodes"
         ),
         f"Constraints: {n_nodal_convex} conv, {n_nodal_nonconvex} nonconv, {n_ctcs} ctcs",
         (

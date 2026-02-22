@@ -401,6 +401,9 @@ class PenalizedTrustRegion(Algorithm):
             "lam_prox": state.lam_prox,
             "prob_stat": prob_stat,
             "adaptive_state": adaptive_state,
+            "ep_tr": self.ep_tr,
+            "ep_vb": self.ep_vb,
+            "ep_vc": self.ep_vc,
         }
 
         # Only include nonlinear/reduction metrics when autotuner uses them

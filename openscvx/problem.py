@@ -35,7 +35,6 @@ from openscvx.config import (
     Config,
     DevConfig,
     PropagationConfig,
-    ScpConfig,
     SimConfig,
 )
 from openscvx.discretization import Discretizer, LinearizeDiscretize, _resolve_discretizer
@@ -285,22 +284,19 @@ class Problem:
                 x_prop=self._lowered.x_prop_unified,
                 u=self._lowered.u_unified,
                 total_time=self._lowered.x_unified.initial[self._lowered.x_unified.time_slice][0],
+                n=N,
                 n_states=self._lowered.x_unified.initial.shape[0],
                 n_states_prop=self._lowered.x_prop_unified.initial.shape[0],
                 ctcs_node_intervals=self.symbolic.node_intervals,
-            ),
-            scp=ScpConfig(
-                n=N,
-                n_states=self._lowered.x_unified.shape[0],
             ),
             dev=DevConfig(),
             prp=PropagationConfig(),
         )
 
-        # Copy time grid setting from Time to SCP config so the solver can
+        # Copy time grid setting from Time to sim config so the solver can
         # read it during constraint assembly.
         if isinstance(time, Time):
-            self.settings.scp._uniform_time_grid = time.uniform_time_grid
+            self.settings.sim._uniform_time_grid = time.uniform_time_grid
 
         self._discretization_solver: callable = None
 
@@ -735,7 +731,7 @@ class Problem:
             self._discretization_solver,
             dis_solver_file,
             self._parameters,  # Plain dict for JAX
-            self.settings.scp.n,
+            self.settings.sim.n,
             self.settings.sim.n_states,
             self.settings.sim.n_controls,
             save_compiled=self.settings.sim.save_compiled,
@@ -743,7 +739,7 @@ class Problem:
         )
 
         # Setup propagation solver parameters
-        dtau = 1.0 / (self.settings.scp.n - 1)
+        dtau = 1.0 / (self.settings.sim.n - 1)
         dt_max = self.settings.sim.u.max[self.settings.sim.time_dilation_slice][0] * dtau
         self.settings.prp.max_tau_len = int(dt_max / self.settings.prp.dt) + 2
 

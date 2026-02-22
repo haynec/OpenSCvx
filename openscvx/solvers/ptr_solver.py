@@ -363,11 +363,11 @@ class PTRSolver(ConvexSolver):
 
         # Trust Region Cost
         cost += sum(
-            lam_prox * cp.sum_squares(cp.hstack((dx[i], du[i]))) for i in range(settings.scp.n)
+            lam_prox * cp.sum_squares(cp.hstack((dx[i], du[i]))) for i in range(settings.sim.n)
         )
 
         # Virtual Control Slack
-        cost += sum(cp.sum(lam_vc[i - 1] * cp.abs(nu[i - 1])) for i in range(1, settings.scp.n))
+        cost += sum(cp.sum(lam_vc[i - 1] * cp.abs(nu[i - 1])) for i in range(1, settings.sim.n))
 
         # Virtual buffer penalty for nodal constraints
         idx_ncvx = 0
@@ -475,7 +475,7 @@ class PTRSolver(ConvexSolver):
                 # Linearization: g(X_bar, U_bar) + ∇g_X @ dX + ∇g_U @ dU == nu_vb
                 # Sum over all trajectory nodes to couple multiple nodes
                 residual = g_cross[idx_cross]
-                for k in range(settings.scp.n):
+                for k in range(settings.sim.n):
                     # Contribution from state at node k
                     residual += grad_g_X_cross[idx_cross][k, :] @ dx[k]
                     # Contribution from control at node k
@@ -495,20 +495,20 @@ class PTRSolver(ConvexSolver):
             if settings.sim.x.final_type[i] == "Fix":
                 constr += [x_nonscaled[-1][i] == x_term[i]]  # Final Boundary Conditions
 
-        if settings.scp._uniform_time_grid:
+        if settings.sim._uniform_time_grid:
             S_u_inv_td = inv_S_u[settings.sim.time_dilation_slice, settings.sim.time_dilation_slice]
             c_u_td = c_u[settings.sim.time_dilation_slice]
             constr += [
                 S_u_inv_td @ (u_nonscaled[i][settings.sim.time_dilation_slice] - c_u_td)
                 == S_u_inv_td @ (u_nonscaled[i - 1][settings.sim.time_dilation_slice] - c_u_td)
-                for i in range(1, settings.scp.n)
+                for i in range(1, settings.sim.n)
             ]
 
         constr += [
-            (x[i] - inv_S_x @ (x_bar[i] - c_x) - dx[i]) == 0 for i in range(settings.scp.n)
+            (x[i] - inv_S_x @ (x_bar[i] - c_x) - dx[i]) == 0 for i in range(settings.sim.n)
         ]  # State Error
         constr += [
-            (u[i] - inv_S_u @ (u_bar[i] - c_u) - du[i]) == 0 for i in range(settings.scp.n)
+            (u[i] - inv_S_u @ (u_bar[i] - c_u) - du[i]) == 0 for i in range(settings.sim.n)
         ]  # Control Error
 
         constr += [
@@ -522,26 +522,26 @@ class PTRSolver(ConvexSolver):
                 - c_x
             )
             + nu[i - 1]
-            for i in range(1, settings.scp.n)
+            for i in range(1, settings.sim.n)
         ]  # Dynamics Constraint
 
         constr += [
             inv_S_u @ (u_nonscaled[i] - c_u) <= inv_S_u @ (settings.sim.u.max - c_u)
-            for i in range(settings.scp.n)
+            for i in range(settings.sim.n)
         ]
         constr += [
             inv_S_u @ (u_nonscaled[i] - c_u) >= inv_S_u @ (settings.sim.u.min - c_u)
-            for i in range(settings.scp.n)
+            for i in range(settings.sim.n)
         ]  # Control Constraints
 
         # TODO: (norrisg) formalize this
         constr += [
             inv_S_x @ (x_nonscaled[i][:] - c_x) <= inv_S_x @ (settings.sim.x.max - c_x)
-            for i in range(settings.scp.n)
+            for i in range(settings.sim.n)
         ]
         constr += [
             inv_S_x @ (x_nonscaled[i][:] - c_x) >= inv_S_x @ (settings.sim.x.min - c_x)
-            for i in range(settings.scp.n)
+            for i in range(settings.sim.n)
         ]  # State Constraints (Also implemented in CTCS but included for numerical stability)
 
         for idx, nodes in zip(

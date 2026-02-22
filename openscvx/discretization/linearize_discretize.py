@@ -277,7 +277,7 @@ def _calculate_discretization(
     n_x = settings.sim.n_states
     n_u = settings.sim.n_controls
 
-    N = settings.scp.n
+    N = settings.sim.n
 
     # Define indices for slicing the augmented state vector
     i0 = 0

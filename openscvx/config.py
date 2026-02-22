@@ -105,6 +105,7 @@ class SimConfig:
         x_prop: UnifiedState,
         u: UnifiedControl,
         total_time: float,
+        n: int,
         save_compiled: bool = False,
         ctcs_node_intervals: Optional[list] = None,
         n_states: Optional[int] = None,
@@ -127,6 +128,7 @@ class SimConfig:
             u (Control): Control object, must have .min and .max attributes for
                 bounds.
             total_time (float): The total simulation time.
+            n (int): Number of discretization nodes.
             save_compiled (bool): If True, save and reuse compiled solver
                 functions. Defaults to False.
             ctcs_node_intervals (list, optional): Node intervals for CTCS
@@ -148,11 +150,13 @@ class SimConfig:
         self.x_prop = x_prop
         self.u = u
         self.total_time = total_time
+        self.n = n
         self.save_compiled = save_compiled
         self.ctcs_node_intervals = ctcs_node_intervals
         self.n_states = n_states
         self.n_states_prop = n_states_prop
         self.n_controls = n_controls
+        self._uniform_time_grid = False
 
         # Call post init logic
         self.__post_init__()
@@ -241,44 +245,13 @@ class SimConfig:
 
 
 @dataclass
-class ScpConfig:
-    def __init__(
-        self,
-        n: Optional[int] = None,
-        n_states: Optional[int] = None,
-    ):
-        """
-        Configuration class for Sequential Convex Programming (SCP).
-
-        This class holds problem-level SCP parameters that are not owned by the
-        algorithm (e.g., node count). Algorithm-specific parameters (weights,
-        convergence tolerances, autotuner) live on the
-        :class:`~openscvx.algorithms.penalized_trust_region.PenalizedTrustRegion`
-        instance.
-
-        Attributes:
-            n (int): The number of discretization nodes. Defaults to `None`.
-            n_states (int): The number of state variables. Defaults to `None`.
-        """
-        self._parent_config = None  # Will be set by Config.__post_init__
-        self._n_states = n_states
-        self.n = n
-        self._uniform_time_grid = False
-
-
-@dataclass
 class Config:
     sim: SimConfig
-    scp: ScpConfig
     prp: PropagationConfig
     dev: DevConfig
 
     # Subsections derived from the lowered problem — not user-configurable.
     _INTERNAL_FIELDS = frozenset({"sim"})
-
-    def __post_init__(self):
-        # Set parent config reference in scp
-        self.scp._parent_config = self
 
     def apply_dict(self, settings: dict) -> None:
         """Apply a nested settings dict to this :class:`Config`.

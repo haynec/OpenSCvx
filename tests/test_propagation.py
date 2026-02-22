@@ -78,9 +78,8 @@ def test_s_to_t_basic(dis_type):
     s_to_t should accumulate time steps correctly under both ZOH and FOH.
     """
     p = Dummy()
-    p.scp = Dummy()
-    p.scp.n = 4
     p.sim = Dummy()
+    p.sim.n = 4
     p.sim.initial_state = Dummy()
     p.sim.initial_state.value = np.array([0])
     p.sim.idx_t = slice(0, 1)
@@ -94,9 +93,9 @@ def test_s_to_t_basic(dis_type):
     t = s_to_t(x.guess, u.guess, p, dis_type)
 
     # manually reconstruct expected t
-    tau = np.linspace(0, 1, p.scp.n)
+    tau = np.linspace(0, 1, p.sim.n)
     expected = [0.0]
-    for k in range(1, p.scp.n):
+    for k in range(1, p.sim.n):
         s_kp = u.guess[k - 1, -1]
         s_k = u.guess[k, -1]
         if dis_type == "ZOH":
@@ -115,9 +114,8 @@ def test_t_to_tau_constant_slack(dis_type):
     Also, the interpolated u should exactly match u_nodal in that case.
     """
     p = Dummy()
-    p.scp = Dummy()
-    p.scp.n = 4
     p.sim = Dummy()
+    p.sim.n = 4
     p.sim.initial_state = Dummy()
     p.sim.initial_state.value = np.array([0])
     p.sim.idx_t = slice(0, 1)
@@ -126,7 +124,7 @@ def test_t_to_tau_constant_slack(dis_type):
     x = State("x", shape=(1,))  # dummy initial state
     x.guess = np.array([[0.0], [1.0]])  # dummy initial state guess
 
-    N = p.scp.n
+    N = p.sim.n
 
     u = Control("u", shape=(2,))  # 2 controls, last is slack
     u.guess = np.tile(np.array([0.0, 2.0]), (N, 1))  # constant slack of 2.0
@@ -150,14 +148,13 @@ def test_propagation_solver_decay(dis_type):
     """
     # Build dummy params
     p = Dummy()
-    p.scp = Dummy()
-    p.scp.n = 2  # only one segment needed
+    p.sim = Dummy()
+    p.sim.n = 2  # only one segment needed
     p.prp = Dummy()
     p.prp.solver = "Tsit5"
     p.prp.rtol = 1e-6
     p.prp.atol = 1e-3
     p.prp.args = {}
-    p.sim = Dummy()
 
     solver = get_propagation_solver(decay, p, dis_type)
 
@@ -192,14 +189,13 @@ def test_jit_propagation_solver_compiles(dis_type):
 
     # — build dummy params —
     p = Dummy()
-    p.scp = Dummy()
-    p.scp.n = 5
+    p.sim = Dummy()
+    p.sim.n = 5
     p.prp = Dummy()
     p.prp.solver = "Tsit5"
     p.prp.rtol = 1e-6
     p.prp.atol = 1e-3
     p.prp.args = {}
-    p.sim = Dummy()
 
     solver = get_propagation_solver(decay, p, dis_type)
 

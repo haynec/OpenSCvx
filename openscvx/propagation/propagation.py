@@ -78,7 +78,7 @@ def get_propagation_solver(state_dot: Dynamics, settings: Config, dis_type: str)
                 node,  # shape (1, 1)
                 state_dot,  # function or array
                 dis_type,
-                settings.scp.n,
+                settings.sim.n,
                 param_map_update,
                 # additional named parameters as **kwargs
             ),
@@ -110,8 +110,8 @@ def s_to_t(x: np.ndarray, u: np.ndarray, settings: Config, dis_type: str) -> lis
         list[float]: List of real time points.
     """
     t = [x[:, settings.sim.time_slice][0]]
-    tau = np.linspace(0, 1, settings.scp.n)
-    for k in range(1, settings.scp.n):
+    tau = np.linspace(0, 1, settings.sim.n)
+    for k in range(1, settings.sim.n):
         s_kp = u[k - 1, -1]
         s_k = u[k, -1]
         if dis_type == "ZOH":
@@ -157,7 +157,7 @@ def t_to_tau(
     u_interp = np.array([u_lam(t_i) for t_i in t])
 
     tau = np.zeros(len(t))
-    tau_nodal = np.linspace(0, 1, settings.scp.n)
+    tau_nodal = np.linspace(0, 1, settings.sim.n)
     for k in range(1, len(t)):
         k_nodal = np.where(t_nodal < t[k])[0][-1]
         s_kp = u[k_nodal, -1]
@@ -200,19 +200,19 @@ def simulate_nonlinear_time(
     """
     x_0 = settings.sim.x_prop.initial
 
-    n_segments = settings.scp.n - 1
+    n_segments = settings.sim.n - 1
     n_states = x_0.shape[0]
     n_tau = len(tau_vals)
 
     states = np.empty((n_states, n_tau))
-    tau = np.linspace(0, 1, settings.scp.n)
+    tau = np.linspace(0, 1, settings.sim.n)
 
     # Precompute control interpolation
     u_interp = np.stack([np.interp(t, t, u[:, i]) for i in range(u.shape[1])], axis=-1)
 
     # Bin tau_vals into segments of tau
     tau_inds = np.digitize(tau_vals, tau) - 1
-    tau_inds = np.where(tau_inds == settings.scp.n - 1, settings.scp.n - 2, tau_inds)
+    tau_inds = np.where(tau_inds == settings.sim.n - 1, settings.sim.n - 2, tau_inds)
 
     prev_count = 0
     out_idx = 0

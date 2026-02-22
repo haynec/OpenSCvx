@@ -521,7 +521,7 @@ class AlgorithmState:
         Returns:
             Fresh AlgorithmState initialized from settings with copied arrays
         """
-        n = settings.scp.n
+        n = settings.sim.n
         n_states = settings.sim.n_states
         lam_vc_array = np.ones((n - 1, n_states)) * weights.lam_vc
 

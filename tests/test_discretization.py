@@ -26,8 +26,7 @@ def settings():
     p.sim.c_u = jnp.zeros(p.sim.n_controls)
     p.sim.inv_S_x = jnp.eye(p.sim.n_states)
     p.sim.inv_S_u = jnp.eye(p.sim.n_controls)
-    p.scp = Dummy()
-    p.scp.n = 5
+    p.sim.n = 5
     p.dev = Dummy()
     p.dev.debug = False
     return p
@@ -58,13 +57,13 @@ def test_discretization_shapes(settings, dynamics):
     solver = discretizer.get_solver(dynamics, settings)
 
     # dummy x,u (n_controls already includes time-dilation)
-    x = jnp.ones((settings.scp.n, settings.sim.n_states))
-    u = jnp.ones((settings.scp.n, settings.sim.n_controls))
+    x = jnp.ones((settings.sim.n, settings.sim.n_states))
+    u = jnp.ones((settings.sim.n, settings.sim.n_controls))
 
     A_bar, B_bar, C_bar, x_prop, Vmulti = solver(x, u, {})
 
     # expected shapes
-    N = settings.scp.n
+    N = settings.sim.n
     n_x, n_u = settings.sim.n_states, settings.sim.n_controls
     assert A_bar.shape == ((N - 1), n_x, n_x)
     assert B_bar.shape == ((N - 1), n_x, n_u)
@@ -75,7 +74,7 @@ def test_discretization_shapes(settings, dynamics):
 def test_jit_dVdt_compiles(settings):
     # prepare trivial inputs (n_u already includes time-dilation)
     n_x, n_u = settings.sim.n_states, settings.sim.n_controls
-    N = settings.scp.n
+    N = settings.sim.n
     aug_dim = n_x + n_x * n_x + 2 * n_x * n_u
 
     tau = jnp.array(0.3)
@@ -125,8 +124,8 @@ def test_jit_discretization_solver_compiles(settings, dynamics, integrator):
     solver = discretizer.get_solver(dynamics, settings)
 
     # dummy x,u (n_controls already includes time-dilation)
-    x = jnp.ones((settings.scp.n, settings.sim.n_states))
-    u = jnp.ones((settings.scp.n, settings.sim.n_controls))
+    x = jnp.ones((settings.sim.n, settings.sim.n_states))
+    u = jnp.ones((settings.sim.n, settings.sim.n_controls))
 
     # jit & lower & compile
     jitted = jax.jit(solver)

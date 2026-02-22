@@ -18,7 +18,6 @@ from openscvx.config import (
     Config,
     DevConfig,
     PropagationConfig,
-    ScpConfig,
     SimConfig,
 )
 from openscvx.lowered.jax_constraints import (
@@ -78,15 +77,13 @@ def settings(mock_unified_state, mock_unified_control):
         x_prop=mock_unified_state,
         u=mock_unified_control,
         total_time=1.0,
+        n=3,
         n_states=2,
         n_controls=1,
     )
 
-    scp_config = ScpConfig(n=3, n_states=2)
-
     config = Config(
         sim=sim_config,
-        scp=scp_config,
         prp=PropagationConfig(),
         dev=DevConfig(),
     )
