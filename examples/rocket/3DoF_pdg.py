@@ -141,15 +141,14 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"autotuner": ox.RampProximalWeight(ramp_factor=1.04, lam_prox_max=1e2)},
+    algorithm={
+        "autotuner": ox.RampProximalWeight(ramp_factor=1.04, lam_prox_max=1e2),
+        "lam_cost": 5e-1,
+        "lam_vc": 1.5e0,
+        "lam_prox": 2e-1,
+    },
     discretizer={"dis_type": "ZOH", "ode_solver": "Dopri8"},
 )
-
-# Set algorithm weights (triggers automatic re-normalization)
-problem.algorithm.lam_cost = 5e-1
-problem.algorithm.lam_vc = 1.5e0
-problem.algorithm.lam_prox = 2e-1
-
 
 plotting_dict = {
     "rho_min": rho_min,

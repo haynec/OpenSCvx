@@ -179,9 +179,8 @@ problem = Problem(
     constraints=constraints,
     N=n,
     # licq_max=1E-8
+    algorithm={"ep_tr": 1e-3},
 )
-
-problem.algorithm.ep_tr = 1e-3  # Trust Region Tolerance
 
 problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
 plotting_dict = {

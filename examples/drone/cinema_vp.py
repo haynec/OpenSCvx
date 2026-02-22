@@ -235,11 +235,8 @@ problem = Problem(
     constraints=constraints,
     N=n,
     licq_max=1e-8,
+    algorithm={"lam_prox": 4e0, "ep_tr": 1e-6},
 )
-
-
-problem.settings.scp.lam_prox = 4e0  # Weight on the Trust Reigon
-problem.settings.scp.ep_tr = 1e-6  # Trust Region Tolerance
 
 plotting_dict = {
     "n_subs": n_subs,

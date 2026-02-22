@@ -98,11 +98,8 @@ problem = Problem(
     constraints=constraints,
     N=n,
     licq_max=1e-8,
+    algorithm={"lam_cost": 4e1, "lam_vc": 1e3},
 )
-
-# Set solver parameters
-problem.settings.scp.lam_cost = 4e1
-problem.settings.scp.lam_vc = 1e3
 
 plotting_dict = {
     "obs_radius": problem.parameters["obs_radius"],
@@ -121,7 +118,7 @@ if __name__ == "__main__":
     problem.reset()
     problem.parameters["obs_center"] = np.array([0.5, 0.0])
     total_time = 0.7  # Adjust total time for second run
-    problem.settings.scp.lam_vc = 1e2  # Adjust virtual control weight
+    problem.algorithm.lam_vc = 1e2  # Adjust virtual control weight
     position.guess = np.linspace([0, -2], [0, 2], n)
     theta.guess = np.zeros((n, 1))
     speed.guess = np.zeros((n, 1))

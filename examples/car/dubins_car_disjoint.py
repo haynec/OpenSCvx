@@ -112,9 +112,9 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
+    algorithm={"lam_vc": 6e2},
 )
-# Set solver parameters
-problem.settings.scp.lam_vc = 6e2
+
 plotting_dict = {
     "wp1_radius": problem.parameters["wp1_radius"],
     "wp1_center": problem.parameters["wp1_center"],

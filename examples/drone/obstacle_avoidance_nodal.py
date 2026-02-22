@@ -150,9 +150,8 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
+    algorithm={"lam_vb": 1e0},
 )
-
-problem.settings.scp.lam_vb = 1e0
 
 plotting_dict = {
     "obstacles_centers": obstacle_center_positions,

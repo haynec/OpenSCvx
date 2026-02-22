@@ -270,14 +270,14 @@ def create_realtime_server(
     with server.gui.add_folder("Optimization Weights"):
         lam_cost_input = server.gui.add_number(
             "lambda_cost",
-            initial_value=optimization_problem.settings.scp.lam_cost,
+            initial_value=optimization_problem.algorithm.lam_cost,
             min=1e-6,
             max=1e6,
             step=0.01,
         )
         lam_tr_input = server.gui.add_number(
             "lambda_tr (lam_prox)",
-            initial_value=optimization_problem.settings.scp.lam_prox,
+            initial_value=optimization_problem.algorithm.lam_prox,
             min=1e-6,
             max=1e6,
             step=0.1,
@@ -285,11 +285,11 @@ def create_realtime_server(
 
         @lam_cost_input.on_update
         def _(_) -> None:
-            optimization_problem.settings.scp.lam_cost = lam_cost_input.value
+            optimization_problem.algorithm.lam_cost = lam_cost_input.value
 
         @lam_tr_input.on_update
         def _(_) -> None:
-            optimization_problem.settings.scp.lam_prox = lam_tr_input.value
+            optimization_problem.algorithm.lam_prox = lam_tr_input.value
 
     # --- Problem Control ---
     with server.gui.add_folder("Problem Control"):
