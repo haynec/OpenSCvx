@@ -13,6 +13,7 @@ import openscvx.symbolic.expr.stl as stl
 from openscvx.algorithms import (
     AugmentedLagrangian,
     ConstantProximalWeight,
+    PenalizedTrustRegion,
     RampProximalWeight,
 )
 from openscvx.algorithms.optimization_results import OptimizationResults
@@ -156,7 +157,8 @@ __all__ = [
     "lie",
     # Expert mode types
     "ByofSpec",
-    # Autotuning
+    # Algorithm & Autotuning
+    "PenalizedTrustRegion",
     "AugmentedLagrangian",
     "ConstantProximalWeight",
     "RampProximalWeight",

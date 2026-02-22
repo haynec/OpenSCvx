@@ -26,8 +26,6 @@ os.environ["EQX_ON_ERROR"] = "nan"
 
 from openscvx.algorithms import (
     AlgorithmState,
-    AugmentedLagrangian,
-    AutotuningBase,
     OptimizationResults,
     PenalizedTrustRegion,
 )
@@ -82,7 +80,7 @@ class Problem:
         algebraic_prop: Optional[dict] = None,
         licq_min: float = 0.0,
         licq_max: float = 1e-4,
-        autotuner: Optional[AutotuningBase] = AugmentedLagrangian(),
+        algorithm: Optional[PenalizedTrustRegion] = None,
         byof: Optional[ByofSpec] = None,
         float_dtype: str = "float32",
     ):
@@ -111,6 +109,8 @@ class Problem:
                 for outputs evaluated (not integrated) during propagation.
             licq_min (float): Minimum LICQ constraint value. Defaults to 0.0.
             licq_max (float): Maximum LICQ constraint value. Defaults to 1e-4.
+            algorithm: SCP algorithm instance. When ``None``, uses
+                ``PenalizedTrustRegion()`` with default parameters.
             byof (ByofSpec, optional): Expert mode only. Raw JAX functions to
                 bypass symbolic layer. See :class:`openscvx.expert.ByofSpec` for
                 detailed documentation.
@@ -177,6 +177,12 @@ class Problem:
         # Store byof for cache hashing
         self._byof = byof
 
+        # Resolve algorithm: None → default PTR, instance → use directly
+        if algorithm is None:
+            self._algorithm = PenalizedTrustRegion()
+        else:
+            self._algorithm = algorithm
+
         # Create solver before lowering (solver owns its variables)
         self._solver: PTRSolver = PTRSolver()
 
@@ -204,7 +210,15 @@ class Problem:
             scp=ScpConfig(
                 n=N,
                 n_states=self._lowered.x_unified.shape[0],
-                autotuner=autotuner,
+                k_max=self._algorithm.k_max,
+                lam_prox=self._algorithm.lam_prox,
+                lam_vc=self._algorithm.lam_vc,
+                lam_cost=self._algorithm.lam_cost,
+                lam_vb=self._algorithm.lam_vb,
+                ep_tr=self._algorithm.ep_tr,
+                ep_vb=self._algorithm.ep_vb,
+                ep_vc=self._algorithm.ep_vc,
+                autotuner=self._algorithm.autotuner,
             ),
             dis=DiscretizationConfig(),
             dev=DevConfig(),
@@ -253,8 +267,16 @@ class Problem:
         # Final solution state (saved after successful solve)
         self._solution: Optional[AlgorithmState] = None
 
-        # SCP algorithm (currently hardcoded to PTR)
-        self._algorithm = PenalizedTrustRegion()
+        # SCP algorithm (resolved from `algorithm` parameter above)
+
+    @property
+    def algorithm(self) -> PenalizedTrustRegion:
+        """Access the SCP algorithm instance.
+
+        Returns:
+            The algorithm instance (e.g., PenalizedTrustRegion).
+        """
+        return self._algorithm
 
     @property
     def parameters(self) -> ParameterDict:
@@ -753,7 +775,7 @@ class Problem:
         """Run the SCP algorithm until convergence or iteration limit.
 
         Args:
-            max_iters: Maximum iterations (default: settings.scp.k_max)
+            max_iters: Maximum iterations (default: algorithm.k_max)
             continuous: If True, run all iterations regardless of convergence
 
         Returns:
@@ -782,7 +804,7 @@ class Problem:
         if self.settings.dev.printing:
             printing.header(self._columns)
 
-        k_max = max_iters if max_iters is not None else self.settings.scp.k_max
+        k_max = max_iters if max_iters is not None else self._algorithm.k_max
 
         while self._state.k <= k_max:
             result = self.step()
@@ -827,7 +849,7 @@ class Problem:
         pr = profiling.profiling_start(self.settings.dev.profiling, self._profiling_session)
 
         # Create result from stored solution state
-        result = self._format_result(self._solution, self._solution.k <= self.settings.scp.k_max)
+        result = self._format_result(self._solution, self._solution.k <= self._algorithm.k_max)
 
         t_0_post = time.time()
         result = propagate_trajectory_results(

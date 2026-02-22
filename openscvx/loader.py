@@ -43,15 +43,15 @@ Expected schema
       - "Norm(pos[:2] - obs_center) >= 2.0"
       - "(vel[0] <= 3.0).at(0, 10, 20)"
 
-    autotuner:                       # optional
-      type: RampProximalWeight
-      ramp_factor: 1.04
-      lam_prox_max: 100.0
+    algorithm:                       # optional
+      lam_cost: 5.0e-1
+      ep_tr: 1.0e-3
+      autotuner:
+        type: RampProximalWeight
+        ramp_factor: 1.04
+        lam_prox_max: 100.0
 
     settings:                        # optional, applied after Problem()
-      scp:
-        ep_tr: 1.0e-3
-        lam_cost: 5.0e-1
       cvx:
         solver_args: {abstol: 1.0e-6, reltol: 1.0e-9}
       dis:
@@ -64,6 +64,7 @@ from typing import Any, Dict, List, Union
 
 import numpy as np
 
+from openscvx.algorithms import PenalizedTrustRegion
 from openscvx.config import _resolve_autotuner
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.expr import Expr, Parameter
@@ -215,10 +216,24 @@ def load_dict(data: dict) -> dict:
     for constraint_str in data.get("constraints", []):
         constraints.append(parser.parse(str(constraint_str)))
 
-    # ---- autotuner (optional, top-level) --------------------------------
-    autotuner = None
-    if "autotuner" in data:
+    # ---- algorithm (optional, top-level) ---------------------------------
+    # Supports both the new ``algorithm:`` key and the legacy ``autotuner:``
+    # key. When ``autotuner:`` is used, the resolved autotuner instance is
+    # wrapped inside a default :class:`PenalizedTrustRegion`.
+    algorithm = None
+    if "algorithm" in data:
+        algo_data = data["algorithm"]
+        if isinstance(algo_data, dict):
+            algo_params = dict(algo_data)
+            # Resolve nested autotuner if present
+            if "autotuner" in algo_params:
+                algo_params["autotuner"] = _resolve_autotuner(algo_params["autotuner"])
+            algorithm = PenalizedTrustRegion(**algo_params)
+        else:
+            algorithm = algo_data  # Already an instance
+    elif "autotuner" in data:
         autotuner = _resolve_autotuner(data["autotuner"])
+        algorithm = PenalizedTrustRegion(autotuner=autotuner)
 
     result: Dict[str, Any] = {
         "dynamics": dynamics,
@@ -229,8 +244,8 @@ def load_dict(data: dict) -> dict:
         "time": time,
     }
 
-    if autotuner is not None:
-        result["autotuner"] = autotuner
+    if algorithm is not None:
+        result["algorithm"] = algorithm
 
     # ---- optional: propagation states ----------------------------------
     if "states_prop" in data:

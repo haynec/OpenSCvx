@@ -79,35 +79,71 @@ class PenalizedTrustRegion(Algorithm):
         Column("prob_stat", "Cvx Status", 11, "{}", color_prob_stat),
     ]
 
-    def __init__(self):
-        """Initialize PTR with unset infrastructure.
+    def __init__(
+        self,
+        autotuner: "AutotuningBase" = None,
+        k_max: int = 200,
+        lam_prox: float = 1e0,
+        lam_vc: float = 1e1,
+        lam_cost: float = 1e-1,
+        lam_vb: float = 0.0,
+        ep_tr: float = 1e-4,
+        ep_vb: float = 1e-4,
+        ep_vc: float = 1e-8,
+    ):
+        """Initialize PTR with algorithm parameters and optional autotuner.
 
-        Call initialize() before step() to set up compiled components.
+        Args:
+            autotuner: Weight adaptation strategy. Defaults to
+                :class:`AugmentedLagrangian` when ``None``.
+            k_max: Maximum SCP iterations. Defaults to 200.
+            lam_prox: Trust region (proximal) weight. Defaults to 1.0.
+            lam_vc: Virtual control penalty weight. Defaults to 10.0.
+            lam_cost: Cost weight. Defaults to 0.1.
+            lam_vb: Virtual buffer penalty weight. Defaults to 0.0.
+            ep_tr: Trust region convergence tolerance. Defaults to 1e-4.
+            ep_vb: Virtual buffer convergence tolerance. Defaults to 1e-4.
+            ep_vc: Virtual control convergence tolerance. Defaults to 1e-8.
         """
+        # Compiled infrastructure (set by initialize())
         self._solver: "ConvexSolver" = None
         self._discretization_solver: callable = None
         self._jax_constraints: "LoweredJaxConstraints" = None
         self._emitter: callable = None
-        self._autotuner: "AutotuningBase" = None
+
+        # Autotuner (lazy default to AugmentedLagrangian)
+        self._autotuner: "AutotuningBase" = autotuner
+
+        # SCP parameters
+        self.k_max = k_max
+        self.lam_prox = lam_prox
+        self.lam_vc = lam_vc
+        self.lam_cost = lam_cost
+        self.lam_vb = lam_vb
+        self.ep_tr = ep_tr
+        self.ep_vb = ep_vb
+        self.ep_vc = ep_vc
 
     @property
     def autotuner(self) -> "AutotuningBase":
         """Access the autotuner instance for configuring parameters.
 
-        For AugmentedLagrangian method, parameters can be modified via:
-            algorithm.autotuner.rho_max = 1e7
-            algorithm.autotuner.mu_max = 1e7
-            etc.
+        If no autotuner was provided at construction, lazily creates a default
+        :class:`AugmentedLagrangian` instance.
 
         Returns:
             AutotuningBase: The autotuner instance
-
-        Raises:
-            AttributeError: If algorithm has not been initialized yet
         """
         if self._autotuner is None:
-            raise AttributeError("Autotuner not yet initialized. Call initialize() first.")
+            from openscvx.algorithms.AugmentedLagrangian import AugmentedLagrangian
+
+            self._autotuner = AugmentedLagrangian()
         return self._autotuner
+
+    @autotuner.setter
+    def autotuner(self, value: "AutotuningBase") -> None:
+        """Set a custom autotuner instance or reset to default when None."""
+        self._autotuner = value
 
     def get_columns(self, verbosity: int = Verbosity.STANDARD) -> List[Column]:
         """Get the columns to display for iteration output.
@@ -127,10 +163,7 @@ class PenalizedTrustRegion(Algorithm):
         Raises:
             AttributeError: If algorithm has not been initialized yet.
         """
-        if self._autotuner is None:
-            raise AttributeError("Autotuner not yet initialized. Call initialize() first.")
-
-        all_columns = self.BASE_COLUMNS + self._autotuner.COLUMNS + self.TAIL_COLUMNS
+        all_columns = self.BASE_COLUMNS + self.autotuner.COLUMNS + self.TAIL_COLUMNS
         return [col for col in all_columns if col.min_verbosity <= verbosity]
 
     def initialize(
@@ -160,11 +193,6 @@ class PenalizedTrustRegion(Algorithm):
         self._discretization_solver = discretization_solver
         self._jax_constraints = jax_constraints
         self._emitter = emitter
-
-        # Initialize autotuner based on settings
-        # The autotuner is configured on ``settings.scp.autotuner`` with a default
-        # of :class:`AugmentedLagrangian` when no custom instance is provided.
-        self._autotuner = settings.scp.autotuner
 
         # Set boundary conditions
         self._solver.update_boundary_conditions(
@@ -317,11 +345,7 @@ class PenalizedTrustRegion(Algorithm):
         state.k += 1
 
         # Return convergence status
-        return (
-            (state.J_tr < settings.scp.ep_tr)
-            and (state.J_vb < settings.scp.ep_vb)
-            and (state.J_vc < settings.scp.ep_vc)
-        )
+        return (state.J_tr < self.ep_tr) and (state.J_vb < self.ep_vb) and (state.J_vc < self.ep_vc)
 
     def _subproblem(
         self,
