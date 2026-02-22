@@ -91,7 +91,11 @@ from .RampProximalWeight import RampProximalWeight
 # Spec resolvers — turn dicts/strings into algorithm/autotuner instances
 # ---------------------------------------------------------------------------
 
-_AUTOTUNER_MAP: Dict[str, type] = {}
+_AUTOTUNER_MAP: Dict[str, type] = {
+    "AugmentedLagrangian": AugmentedLagrangian,
+    "ConstantProximalWeight": ConstantProximalWeight,
+    "RampProximalWeight": RampProximalWeight,
+}
 
 
 def _resolve_autotuner(val: Any) -> Any:
@@ -114,29 +118,25 @@ def _resolve_autotuner(val: Any) -> Any:
 
     if isinstance(val, str):
         name = val
-        params: dict = {}
+        kwargs: dict = {}
     else:
-        params = dict(val)  # copy to avoid mutating the input
-        name = params.pop("type", None)
+        kwargs = dict(val)  # copy to avoid mutating the input
+        name = kwargs.pop("type", None)
         if name is None:
             raise ValueError(
                 "autotuner dict must include a 'type' key (e.g. type: RampProximalWeight)"
             )
 
-    if not _AUTOTUNER_MAP:
-        for cls in (AugmentedLagrangian, ConstantProximalWeight, RampProximalWeight):
-            _AUTOTUNER_MAP[cls.__name__] = cls
-
     cls = _AUTOTUNER_MAP.get(name)
     if cls is None:
         raise ValueError(f"Unknown autotuner {name!r}; expected one of {sorted(_AUTOTUNER_MAP)}")
 
-    instance = cls()
-    for key, value in params.items():
-        if not hasattr(instance, key):
-            raise ValueError(f"Unknown autotuner parameter {key!r} for {name}")
-        setattr(instance, key, value)
-    return instance
+    try:
+        return cls(**kwargs)
+    except TypeError as e:
+        valid = list(inspect.signature(cls.__init__).parameters.keys())
+        valid.remove("self")
+        raise TypeError(f"Invalid autotuner keyword argument: {e}. Valid keys: {valid}") from None
 
 
 def _resolve_algorithm(kwargs: dict) -> "PenalizedTrustRegion":
