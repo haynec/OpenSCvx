@@ -442,7 +442,7 @@ def test_algorithm_types(algorithm_type):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        autotuner=autotuner,
+        algorithm=ox.PenalizedTrustRegion(autotuner=autotuner),
     )
 
     problem.settings.prp.dt = 0.01
