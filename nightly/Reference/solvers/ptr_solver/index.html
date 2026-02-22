@@ -4168,8 +4168,6 @@
       
         
       
-        
-      
     
     
     
@@ -4319,6 +4317,8 @@
   
     
     
+      
+        
       
         
       
@@ -4858,6 +4858,34 @@
     
   
     stl
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../symbolic/expr/time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    time
   
 
     
@@ -6310,34 +6338,6 @@
     
   
     sparsity
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../symbolic/time/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    time
   
 
     
@@ -8675,7 +8675,7 @@ solver implementations for the PTR formulation.</p>
 </span><span id="__span-0-470"><a id="__codelineno-0-470" name="__codelineno-0-470"></a>            <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">final_type</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;Fix&quot;</span><span class="p">:</span>
 </span><span id="__span-0-471"><a id="__codelineno-0-471" name="__codelineno-0-471"></a>                <span class="n">constr</span> <span class="o">+=</span> <span class="p">[</span><span class="n">x_nonscaled</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="n">x_term</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span>  <span class="c1"># Final Boundary Conditions</span>
 </span><span id="__span-0-472"><a id="__codelineno-0-472" name="__codelineno-0-472"></a>
-</span><span id="__span-0-473"><a id="__codelineno-0-473" name="__codelineno-0-473"></a>        <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">scp</span><span class="o">.</span><span class="n">uniform_time_grid</span><span class="p">:</span>
+</span><span id="__span-0-473"><a id="__codelineno-0-473" name="__codelineno-0-473"></a>        <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">scp</span><span class="o">.</span><span class="n">_uniform_time_grid</span><span class="p">:</span>
 </span><span id="__span-0-474"><a id="__codelineno-0-474" name="__codelineno-0-474"></a>            <span class="n">S_u_inv_td</span> <span class="o">=</span> <span class="n">inv_S_u</span><span class="p">[</span><span class="n">settings</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">time_dilation_slice</span><span class="p">,</span> <span class="n">settings</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">time_dilation_slice</span><span class="p">]</span>
 </span><span id="__span-0-475"><a id="__codelineno-0-475" name="__codelineno-0-475"></a>            <span class="n">c_u_td</span> <span class="o">=</span> <span class="n">c_u</span><span class="p">[</span><span class="n">settings</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">time_dilation_slice</span><span class="p">]</span>
 </span><span id="__span-0-476"><a id="__codelineno-0-476" name="__codelineno-0-476"></a>            <span class="n">constr</span> <span class="o">+=</span> <span class="p">[</span>
@@ -9604,7 +9604,7 @@ the standard PTR constraints and extend them.</p>
 </span><span id="__span-0-470"><a id="__codelineno-0-470" name="__codelineno-0-470"></a>        <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">x</span><span class="o">.</span><span class="n">final_type</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;Fix&quot;</span><span class="p">:</span>
 </span><span id="__span-0-471"><a id="__codelineno-0-471" name="__codelineno-0-471"></a>            <span class="n">constr</span> <span class="o">+=</span> <span class="p">[</span><span class="n">x_nonscaled</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="n">i</span><span class="p">]</span> <span class="o">==</span> <span class="n">x_term</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span>  <span class="c1"># Final Boundary Conditions</span>
 </span><span id="__span-0-472"><a id="__codelineno-0-472" name="__codelineno-0-472"></a>
-</span><span id="__span-0-473"><a id="__codelineno-0-473" name="__codelineno-0-473"></a>    <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">scp</span><span class="o">.</span><span class="n">uniform_time_grid</span><span class="p">:</span>
+</span><span id="__span-0-473"><a id="__codelineno-0-473" name="__codelineno-0-473"></a>    <span class="k">if</span> <span class="n">settings</span><span class="o">.</span><span class="n">scp</span><span class="o">.</span><span class="n">_uniform_time_grid</span><span class="p">:</span>
 </span><span id="__span-0-474"><a id="__codelineno-0-474" name="__codelineno-0-474"></a>        <span class="n">S_u_inv_td</span> <span class="o">=</span> <span class="n">inv_S_u</span><span class="p">[</span><span class="n">settings</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">time_dilation_slice</span><span class="p">,</span> <span class="n">settings</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">time_dilation_slice</span><span class="p">]</span>
 </span><span id="__span-0-475"><a id="__codelineno-0-475" name="__codelineno-0-475"></a>        <span class="n">c_u_td</span> <span class="o">=</span> <span class="n">c_u</span><span class="p">[</span><span class="n">settings</span><span class="o">.</span><span class="n">sim</span><span class="o">.</span><span class="n">time_dilation_slice</span><span class="p">]</span>
 </span><span id="__span-0-476"><a id="__codelineno-0-476" name="__codelineno-0-476"></a>        <span class="n">constr</span> <span class="o">+=</span> <span class="p">[</span>
