@@ -33,7 +33,6 @@ from openscvx.algorithms import (
 )
 from openscvx.config import (
     Config,
-    ConvexSolverConfig,
     DevConfig,
     PropagationConfig,
     ScpConfig,
@@ -49,7 +48,7 @@ from openscvx.lowered.jax_constraints import (
     LoweredNodalConstraint,
 )
 from openscvx.propagation import get_propagation_solver, propagate_trajectory_results
-from openscvx.solvers import PTRSolver
+from openscvx.solvers import ConvexSolver, PTRSolver, _resolve_solver
 from openscvx.symbolic.builder import preprocess_symbolic_problem
 from openscvx.symbolic.expr import CTCS, Constraint
 from openscvx.symbolic.expr.control import Control
@@ -83,6 +82,7 @@ class Problem:
         licq_max: float = 1e-4,
         algorithm: Optional[Union[Algorithm, dict]] = None,
         discretizer: Optional[Union[Discretizer, dict]] = None,
+        solver: Optional[Union[ConvexSolver, dict]] = None,
         byof: Optional[ByofSpec] = None,
         float_dtype: str = "float32",
     ):
@@ -159,6 +159,25 @@ class Problem:
 
                     # Instance
                     discretizer=ox.LinearizeDiscretize(dis_type="ZOH")
+            solver: Convex subproblem solver configuration. Accepts:
+
+                - ``None`` — uses ``PTRSolver()`` with defaults (QOCO backend).
+                - A ``ConvexSolver`` instance — used directly.
+                - A ``dict`` — passed as kwargs to ``PTRSolver()``.
+
+                Examples::
+
+                    # Change CVXPY backend solver and tolerances
+                    solver={"solver": "CLARABEL", "solver_args": {"tol_gap_abs": 1e-7}}
+
+                    # Just change solver_args
+                    solver={"solver_args": {"abstol": 1e-6, "reltol": 1e-9}}
+
+                    # Enable cvxpygen code generation
+                    solver={"cvxpygen": True}
+
+                    # Instance
+                    solver=ox.PTRSolver(solver="CLARABEL")
             byof (ByofSpec, optional): Expert mode only. Raw JAX functions to
                 bypass symbolic layer. See :class:`openscvx.expert.ByofSpec` for
                 detailed documentation.
@@ -241,8 +260,13 @@ class Problem:
         else:
             self._discretizer = discretizer
 
-        # Create solver before lowering (solver owns its variables)
-        self._solver: PTRSolver = PTRSolver()
+        # Resolve solver: None → default PTRSolver, dict → PTRSolver(**dict), instance → use
+        if solver is None:
+            self._solver = PTRSolver()
+        elif isinstance(solver, dict):
+            self._solver = _resolve_solver(solver)
+        else:
+            self._solver = solver
 
         # Lower to JAX and CVXPy (byof handling happens inside lower_symbolic_problem)
         self._lowered: LoweredProblem = lower_symbolic_problem(
@@ -270,7 +294,6 @@ class Problem:
                 n_states=self._lowered.x_unified.shape[0],
             ),
             dev=DevConfig(),
-            cvx=ConvexSolverConfig(),
             prp=PropagationConfig(),
         )
 
@@ -313,6 +336,28 @@ class Problem:
         self._solution: Optional[AlgorithmState] = None
 
         # SCP algorithm (resolved from `algorithm` parameter above)
+
+    @property
+    def solver(self) -> ConvexSolver:
+        """Access the convex subproblem solver instance.
+
+        Attributes such as ``solver``, ``solver_args``, ``cvxpygen``, and
+        ``cvxpygen_override`` can be modified freely before ``initialize``
+        is called::
+
+            problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+            problem.solver.cvxpygen = True
+            problem.initialize()
+
+        !!! warning
+            Solver settings are compiled into the solve function during
+            ``initialize()``.  Changes made **after** ``initialize()``
+            will have no effect on subsequent solves.
+
+        Returns:
+            The solver instance (e.g., PTRSolver).
+        """
+        return self._solver
 
     @property
     def algorithm(self) -> Algorithm:
@@ -672,6 +717,7 @@ class Problem:
             self._lowered,
             self._solver,
             self._algorithm.weights,
+            cvx_solver=self._solver.solver,
             dis_solver=self._discretizer.solver,
         )
 

@@ -197,7 +197,7 @@ def test_monolithic():
     )
 
     problem.settings.prp.dt = 0.01
-    problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+    problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -324,7 +324,7 @@ def test_constraint_types(constraint_type):
     )
 
     problem.settings.prp.dt = 0.01
-    problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+    problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -442,7 +442,7 @@ def test_algorithm_types(algorithm_type):
     )
 
     problem.settings.prp.dt = 0.01
-    problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+    problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -584,7 +584,7 @@ def test_cross_nodal(test_case):
     )
 
     problem.settings.prp.dt = 0.01
-    problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+    problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -715,7 +715,7 @@ def test_parameters():
         algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e1},
     )
 
-    problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+    problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -912,7 +912,7 @@ def test_propagation():
     )
 
     problem.settings.prp.dt = 0.01
-    problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+    problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output
@@ -1309,7 +1309,7 @@ def test_byof(byof_mode):
     )
 
     problem.settings.prp.dt = 0.01
-    problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+    problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
     problem.settings.sim.save_compiled = False
 
     # Disable printing for cleaner test output

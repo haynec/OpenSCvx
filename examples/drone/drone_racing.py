@@ -181,9 +181,9 @@ problem = Problem(
     # licq_max=1E-8
 )
 
-problem.settings.scp.ep_tr = 1e-3  # Trust Region Tolerance
+problem.algorithm.ep_tr = 1e-3  # Trust Region Tolerance
 
-problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
 plotting_dict = {
     "vertices": vertices,
     "gate_centers": modified_centers,

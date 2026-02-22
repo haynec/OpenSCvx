@@ -16,7 +16,6 @@ from openscvx.algorithms.penalized_trust_region import PenalizedTrustRegion
 from openscvx.algorithms.RampProximalWeight import RampProximalWeight
 from openscvx.config import (
     Config,
-    ConvexSolverConfig,
     DevConfig,
     PropagationConfig,
     ScpConfig,
@@ -88,7 +87,6 @@ def settings(mock_unified_state, mock_unified_control):
     config = Config(
         sim=sim_config,
         scp=scp_config,
-        cvx=ConvexSolverConfig(),
         prp=PropagationConfig(),
         dev=DevConfig(),
     )

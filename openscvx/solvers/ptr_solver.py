@@ -109,15 +109,40 @@ class PTRSolver(ConvexSolver):
             result = solver.solve()
             x_sol = result.x  # Unscaled state trajectory
 
+    Args:
+        solver: CVXPY solver backend name. Defaults to ``"QOCO"``.
+        solver_args: Keyword arguments forwarded to the CVXPY solver
+            (e.g. tolerances). Defaults to
+            ``{"abstol": 1e-6, "reltol": 1e-9, "enforce_dpp": True}``.
+        cvxpygen: Enable CVXPy code generation for faster solves.
+            Defaults to ``False``.
+        cvxpygen_override: Overwrite existing generated solver directory
+            without prompting. Defaults to ``False``.
+
     Attributes:
         ocp_vars: The CVXPy variables and parameters (available after create_variables())
     """
 
-    def __init__(self):
-        """Initialize PTRSolver with unset problem.
+    def __init__(
+        self,
+        solver: str = "QOCO",
+        solver_args: Optional[dict] = None,
+        cvxpygen: bool = False,
+        cvxpygen_override: bool = False,
+    ):
+        """Initialize PTRSolver with solver configuration.
 
         Call create_variables() then initialize() to build the problem structure.
         """
+        self.solver = solver
+        self.solver_args = (
+            solver_args
+            if solver_args is not None
+            else {"abstol": 1e-06, "reltol": 1e-09, "enforce_dpp": True}
+        )
+        self.cvxpygen = cvxpygen
+        self.cvxpygen_override = cvxpygen_override
+
         self._ocp_vars: "CVXPyVariables" = None
         self._problem: cp.Problem = None
         self._solve_fn: callable = None
@@ -225,8 +250,8 @@ class PTRSolver(ConvexSolver):
         ``constraints()`` to build the objective and constraint formulations,
         then assembles them into a CVXPy Problem.
 
-        If cvxpygen is enabled in settings, generates compiled solver code
-        for improved performance.
+        If cvxpygen is enabled, generates compiled solver code for improved
+        performance.
 
         Note:
             ``create_variables()`` must be called before this method.
@@ -235,7 +260,7 @@ class PTRSolver(ConvexSolver):
             lowered: Lowered problem containing:
                 - ``cvxpy_constraints``: Lowered convex constraints
                 - ``jax_constraints``: JAX constraint functions (for structure)
-            settings: Configuration object with solver settings
+            settings: Problem configuration (node count, scaling, etc.)
 
         Raises:
             RuntimeError: If create_variables() has not been called.
@@ -250,7 +275,7 @@ class PTRSolver(ConvexSolver):
         constr = self.constraints(settings, lowered)
         prob = cp.Problem(cp.Minimize(objective), constr)
 
-        if settings.cvx.cvxpygen:
+        if self.cvxpygen:
             if not CVXPYGEN_AVAILABLE:
                 raise ImportError(
                     "cvxpygen is required for code generation but not installed. "
@@ -258,14 +283,14 @@ class PTRSolver(ConvexSolver):
                 )
             # Check to see if solver directory exists
             if not os.path.exists("solver"):
-                cpg.generate_code(prob, solver=settings.cvx.solver, code_dir="solver", wrapper=True)
+                cpg.generate_code(prob, solver=self.solver, code_dir="solver", wrapper=True)
             else:
                 # Prompt the use to indicate if they wish to overwrite the solver
                 # directory or use the existing compiled solver
-                if settings.cvx.cvxpygen_override:
+                if self.cvxpygen_override:
                     cpg.generate_code(
                         prob,
-                        solver=settings.cvx.solver,
+                        solver=self.solver,
                         code_dir="solver",
                         wrapper=True,
                     )
@@ -274,13 +299,13 @@ class PTRSolver(ConvexSolver):
                     if overwrite.lower() == "y":
                         cpg.generate_code(
                             prob,
-                            solver=settings.cvx.solver,
+                            solver=self.solver,
                             code_dir="solver",
                             wrapper=True,
                         )
 
         self._problem = prob
-        self._setup_solve_function(settings)
+        self._setup_solve_function()
 
     def cost(
         self,
@@ -532,16 +557,13 @@ class PTRSolver(ConvexSolver):
 
         return constr
 
-    def _setup_solve_function(self, settings: "Config") -> None:
-        """Configure the solve function based on settings.
+    def _setup_solve_function(self) -> None:
+        """Configure the solve function based on solver settings.
 
         Sets up either cvxpygen-based solving or standard CVXPy solving
         based on the configuration.
-
-        Args:
-            settings: Configuration object with solver settings
         """
-        if settings.cvx.cvxpygen:
+        if self.cvxpygen:
             try:
                 import pickle
 
@@ -550,7 +572,7 @@ class PTRSolver(ConvexSolver):
                 with open("solver/problem.pickle", "rb") as f:
                     pickle.load(f)
                 self._problem.register_solve("CPG", cpg_solve)
-                solver_args = settings.cvx.solver_args
+                solver_args = self.solver_args
                 self._solve_fn = lambda: self._problem.solve(method="CPG", **solver_args)
             except ImportError:
                 raise ImportError(
@@ -558,8 +580,8 @@ class PTRSolver(ConvexSolver):
                     "generation has been run. Install with: pip install openscvx[cvxpygen]"
                 )
         else:
-            solver = settings.cvx.solver
-            solver_args = settings.cvx.solver_args
+            solver = self.solver
+            solver_args = self.solver_args
             self._solve_fn = lambda: self._problem.solve(solver=solver, **solver_args)
 
     def update_dynamics_linearization(

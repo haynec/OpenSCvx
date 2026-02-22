@@ -361,8 +361,8 @@ problem = Problem(
         "lam_cost": 6e0,
     },
     float_dtype="float64",
+    solver={"solver_args": {"canon_backend": "COO", "enforce_dpp": True}},
 )
-problem.settings.cvx.solver_args = {"canon_backend": "COO", "enforce_dpp": True}
 
 
 plotting_dict = {

@@ -21,6 +21,7 @@ from openscvx.discretization import LinearizeDiscretize
 from openscvx.expert import ByofSpec
 from openscvx.loader import load_dict, load_json, load_yaml
 from openscvx.problem import Problem
+from openscvx.solvers import PTRSolver
 from openscvx.symbolic.expr import (
     CTCS,
     Abs,
@@ -160,6 +161,8 @@ __all__ = [
     "ByofSpec",
     # Discretization
     "LinearizeDiscretize",
+    # Convex Solver
+    "PTRSolver",
     # Algorithm & Autotuning
     "PenalizedTrustRegion",
     "AugmentedLagrangian",

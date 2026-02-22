@@ -55,9 +55,13 @@ Expected schema
       dis_type: ZOH
       solver: Dopri8
 
+    solver:                          # optional (convex subproblem solver)
+      solver: QOCO
+      solver_args: {abstol: 1.0e-6, reltol: 1.0e-9}
+
     settings:                        # optional, applied after Problem()
-      cvx:
-        solver_args: {abstol: 1.0e-6, reltol: 1.0e-9}
+      dev:
+        printing: true
 """
 
 from pathlib import Path
@@ -67,6 +71,7 @@ import numpy as np
 
 from openscvx.algorithms import _resolve_algorithm
 from openscvx.discretization import _resolve_discretizer
+from openscvx.solvers import _resolve_solver
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.expr import Expr, Parameter
 from openscvx.symbolic.expr.state import State
@@ -250,6 +255,14 @@ def load_dict(data: dict) -> dict:
             result["discretizer"] = _resolve_discretizer(dis_data)
         else:
             result["discretizer"] = dis_data  # Already an instance
+
+    # ---- solver (optional, top-level) -----------------------------------
+    if "solver" in data:
+        solver_data = data["solver"]
+        if isinstance(solver_data, dict):
+            result["solver"] = _resolve_solver(solver_data)
+        else:
+            result["solver"] = solver_data  # Already an instance
 
     # ---- optional: propagation states ----------------------------------
     if "states_prop" in data:

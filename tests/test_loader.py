@@ -43,7 +43,7 @@ G = 9.81
 def _configure_and_solve(problem):
     """Apply standard solver settings, solve, and post-process."""
     problem.settings.prp.dt = 0.01
-    problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+    problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
     problem.settings.sim.save_compiled = False
     problem.settings.dev.printing = False
 
@@ -316,7 +316,7 @@ def test_cross_nodal(feasible):
     )
 
     problem.settings.prp.dt = 0.01
-    problem.settings.cvx.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+    problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
     problem.settings.sim.save_compiled = False
     problem.settings.dev.printing = False
 

@@ -49,51 +49,6 @@ class DevConfig:
 
 
 @dataclass
-class ConvexSolverConfig:
-    def __init__(
-        self,
-        solver: str = "QOCO",
-        solver_args: Optional[dict] = None,
-        cvxpygen: bool = False,
-        cvxpygen_override: bool = False,
-    ):
-        """
-        Configuration class for convex solver settings.
-
-        This class defines the parameters required for configuring a convex solver.
-
-        These are the arguments most commonly used day-to-day. Generally I have
-        found [QOCO](https://qoco-org.github.io/qoco/index.html) to be the most
-        performant of the CVXPY solvers for these types of problems (I do have a
-        bias as the author is from my group) and can handle up to SOCP's.
-        [CLARABEL](https://clarabel.org/stable/) is also a great option with
-        feasibility checking and can handle a few more problem types.
-        [CVXPYGen](https://github.com/cvxgrp/cvxpygen) is also great if your
-        problem isn't too large. I have found qocogen to be the most performant
-        of the CVXPYGen solvers.
-
-        Args:
-            solver (str): The name of the CVXPY solver to use. A list of options
-                can be found [here](https://www.cvxpy.org/tutorial/solvers/
-                index.html). Defaults to "QOCO".
-            solver_args (dict, optional): Ensure you are using the correct
-                arguments for your solver as they are not all common. Additional
-                arguments to configure the solver, such as tolerances. Defaults
-                to {"abstol": 1e-6, "reltol": 1e-9}.
-            cvxpygen (bool): Whether to enable CVXPY code generation for the
-                solver. Defaults to False.
-        """
-        if solver_args is None:
-            solver_args = {"abstol": 1e-06, "reltol": 1e-09, "enforce_dpp": True}
-        self.solver = solver
-        self.solver_args = (
-            solver_args if solver_args is not None else {"abstol": 1e-6, "reltol": 1e-9}
-        )
-        self.cvxpygen = cvxpygen
-        self.cvxpygen_override = cvxpygen_override
-
-
-@dataclass
 class PropagationConfig:
     def __init__(
         self,
@@ -315,7 +270,6 @@ class ScpConfig:
 class Config:
     sim: SimConfig
     scp: ScpConfig
-    cvx: ConvexSolverConfig
     prp: PropagationConfig
     dev: DevConfig
 
@@ -335,7 +289,7 @@ class Config:
         Example::
 
             config.apply_dict({
-                "cvx": {"solver_args": {"abstol": 1e-6}},
+                "dev": {"printing": False, "verbosity": 1},
             })
 
         Dict values are handled contextually:
