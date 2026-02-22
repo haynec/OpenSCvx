@@ -21,6 +21,7 @@ from openscvx.utils.printing import (
     color_prob_stat,
 )
 
+from .AugmentedLagrangian import AugmentedLagrangian
 from .base import Algorithm, AlgorithmState, CandidateIterate, Weights
 from .ConstantProximalWeight import ConstantProximalWeight
 from .RampProximalWeight import RampProximalWeight
@@ -111,8 +112,10 @@ class PenalizedTrustRegion(Algorithm):
         self._jax_constraints: "LoweredJaxConstraints" = None
         self._emitter: callable = None
 
-        # Autotuner (lazy default to AugmentedLagrangian)
-        self._autotuner: "AutotuningBase" = autotuner
+        # Autotuner
+        self.autotuner: "AutotuningBase" = (
+            autotuner if autotuner is not None else AugmentedLagrangian()
+        )
 
         # SCP weights (grouped dataclass, normalized for numerical conditioning)
         self.weights = Weights(
@@ -128,27 +131,6 @@ class PenalizedTrustRegion(Algorithm):
         self.ep_tr = ep_tr
         self.ep_vb = ep_vb
         self.ep_vc = ep_vc
-
-    @property
-    def autotuner(self) -> "AutotuningBase":
-        """Access the autotuner instance for configuring parameters.
-
-        If no autotuner was provided at construction, lazily creates a default
-        :class:`AugmentedLagrangian` instance.
-
-        Returns:
-            AutotuningBase: The autotuner instance
-        """
-        if self._autotuner is None:
-            from openscvx.algorithms.AugmentedLagrangian import AugmentedLagrangian
-
-            self._autotuner = AugmentedLagrangian()
-        return self._autotuner
-
-    @autotuner.setter
-    def autotuner(self, value: "AutotuningBase") -> None:
-        """Set a custom autotuner instance or reset to default when None."""
-        self._autotuner = value
 
     # -- Weight properties ---------------------------------------------------
     # These properties are the **source of truth** for user-facing weight
