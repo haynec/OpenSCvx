@@ -152,7 +152,7 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    autotuner=ox.ConstantProximalWeight(),
+    algorithm=ox.PenalizedTrustRegion(autotuner=ox.ConstantProximalWeight()),
 )
 
 problem.settings.scp.lam_cost = 1e0  # Weight on the Nonlinear Cost

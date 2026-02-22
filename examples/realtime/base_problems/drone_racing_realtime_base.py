@@ -178,7 +178,7 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    autotuner=ox.ConstantProximalWeight(),
+    algorithm=ox.PenalizedTrustRegion(autotuner=ox.ConstantProximalWeight()),
 )
 
 problem.settings.scp.ep_tr = 1e-3  # Trust Region Tolerance

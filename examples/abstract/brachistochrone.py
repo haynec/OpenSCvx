@@ -85,7 +85,7 @@ problem = Problem(
     constraints=constraint_exprs,
     N=n,
     licq_max=1e-8,
-    autotuner=ox.ConstantProximalWeight(),
+    algorithm=ox.PenalizedTrustRegion(autotuner=ox.ConstantProximalWeight()),
 )
 
 problem.settings.prp.dt = 0.01
