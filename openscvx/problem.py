@@ -249,6 +249,11 @@ class Problem:
         elif isinstance(algorithm, dict):
             self._algorithm = _resolve_algorithm(algorithm)
         else:
+            if not isinstance(algorithm, Algorithm):
+                raise TypeError(
+                    f"algorithm must be an Algorithm instance, dict, or None, "
+                    f"got {type(algorithm).__name__}"
+                )
             self._algorithm = algorithm
 
         # Resolve discretizer: None → default, dict → LinearizeDiscretize(**dict), instance → use
@@ -257,6 +262,11 @@ class Problem:
         elif isinstance(discretizer, dict):
             self._discretizer = _resolve_discretizer(discretizer)
         else:
+            if not isinstance(discretizer, Discretizer):
+                raise TypeError(
+                    f"discretizer must be a Discretizer instance, dict, or None, "
+                    f"got {type(discretizer).__name__}"
+                )
             self._discretizer = discretizer
 
         # Resolve solver: None → default PTRSolver, dict → PTRSolver(**dict), instance → use
@@ -265,6 +275,11 @@ class Problem:
         elif isinstance(solver, dict):
             self._solver = _resolve_solver(solver)
         else:
+            if not isinstance(solver, ConvexSolver):
+                raise TypeError(
+                    f"solver must be a ConvexSolver instance, dict, or None, "
+                    f"got {type(solver).__name__}"
+                )
             self._solver = solver
 
         # Lower to JAX and CVXPy (byof handling happens inside lower_symbolic_problem)
