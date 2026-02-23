@@ -70,7 +70,8 @@ from openscvx.lowered import (
     LoweredProblem,
 )
 from openscvx.symbolic.constraint_set import ConstraintSet
-from openscvx.symbolic.expr import Expr, NodeReference
+from openscvx.symbolic.expr import Expr, NodeReference, traverse
+from openscvx.symbolic.expr.control import Control
 
 if TYPE_CHECKING:
     from openscvx.solvers import ConvexSolver
@@ -603,6 +604,24 @@ def _lower_dynamics(dynamics_expr) -> Dynamics:
     return Dynamics(f=dyn_fn)
 
 
+def _sync_control_slices(expr: Expr, controls: list[Control]) -> None:
+    """Synchronize control slices in an expression to unified-control ordering.
+
+    Some expressions (notably propagation dynamics) can hold deep-copied Control
+    nodes. After unified control re-ordering, those copied nodes may carry stale
+    slices. This pass rebinds slices by control name before lowering.
+    """
+    slice_by_name = {control.name: control._slice for control in controls}
+
+    def _visit(node: Expr) -> None:
+        if isinstance(node, Control):
+            sl = slice_by_name.get(node.name)
+            if sl is not None:
+                node._slice = sl
+
+    traverse(expr, _visit)
+
+
 def _lower_jax_constraints(
     constraints: ConstraintSet,
 ) -> LoweredJaxConstraints:
@@ -745,10 +764,9 @@ def lower_symbolic_problem(
     u_unified = unify_controls(problem.controls)
     x_prop_unified = unify_states(problem.states_prop, name="x_prop")
 
-    # Ensure copied dynamics trees (notably dynamics_prop) use the same
-    # post-unification control slices as problem.controls.
-    _sync_control_slices_in_expr(problem.dynamics, problem.controls)
-    _sync_control_slices_in_expr(problem.dynamics_prop, problem.controls)
+    # Keep control slices in copied expressions aligned with unified ordering.
+    _sync_control_slices(problem.dynamics, problem.controls)
+    _sync_control_slices(problem.dynamics_prop, problem.controls)
 
     # Lower dynamics to JAX
     dynamics = _lower_dynamics(problem.dynamics)
