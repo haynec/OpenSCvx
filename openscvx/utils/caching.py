@@ -222,6 +222,8 @@ def prime_propagation_solver(
         controls_next = np.ones((1, settings.sim.u.shape[0]), dtype=settings.sim.u.guess.dtype)
         tau_init = np.array([[0.0]], dtype=np.float64)
         node = np.array([[0]], dtype=np.int64)
+        td_slice = getattr(settings.sim, "time_dilation_slice", None)
+        idx_s = int(td_slice.start) if td_slice is not None else settings.sim.u.shape[0] - 1
         save_time = np.ones((settings.prp.max_tau_len,), dtype=np.float64)
         mask_padded = np.ones((settings.prp.max_tau_len,), dtype=bool)
         # Create dummy params dict with same structure
@@ -236,6 +238,7 @@ def prime_propagation_solver(
             controls_next,
             tau_init,
             node,
+            idx_s,
             save_time,
             mask_padded,
             dummy_params,
