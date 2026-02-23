@@ -236,13 +236,11 @@ def create_cvxpy_variables(
     N: int,
     n_states: int,
     n_controls: int,
-    n_controls_d: int,
+    n_controls_imp: int,
     S_x: np.ndarray,
     c_x: np.ndarray,
     S_u: np.ndarray,
     c_u: np.ndarray,
-    S_u_d: np.ndarray,
-    c_u_d: np.ndarray,
     n_nodal_constraints: int,
     n_cross_node_constraints: int,
     A_d_sparsity: Optional[tuple] = None,
@@ -277,7 +275,6 @@ def create_cvxpy_variables(
 
     inv_S_x = np.linalg.inv(S_x)
     inv_S_u = np.linalg.inv(S_u)
-    inv_S_u_d = np.linalg.inv(S_u_d) if S_u_d.size else S_u_d
 
     # Parameters
     lam_prox = cp.Parameter(nonneg=True, name="lam_prox")
@@ -297,21 +294,11 @@ def create_cvxpy_variables(
     du = cp.Variable((N, n_controls), name="du")  # Control Error
     u_bar = cp.Parameter((N, n_controls), name="u_bar")  # Previous SCP Control
 
-    # Discrete Control (optional if no impulsive controls)
-    if n_controls_d > 0:
-        u_d = cp.Variable((N, n_controls_d), name="u_d")  # Current Control
-        du_d = cp.Variable((N, n_controls_d), name="du_d")  # Control Error
-        u_d_bar = cp.Parameter((N, n_controls_d), name="u_d_bar")  # Previous SCP Control
-    else:
-        u_d = None
-        du_d = None
-        u_d_bar = None
-
     # Discretized Augmented Dynamics Constraints
     A_d = cp.Parameter((N - 1, n_states, n_states), name="A_d", sparsity=A_d_sparsity)
     B_d = cp.Parameter((N - 1, n_states, n_controls), name="B_d", sparsity=B_d_sparsity)
     C_d = cp.Parameter((N - 1, n_states, n_controls), name="C_d", sparsity=C_d_sparsity)
-    D_d = cp.Parameter((n_states, n_controls_d), name="D_d") if n_controls_d > 0 else None
+    D_d = cp.Parameter((n_states, n_controls_imp), name="D_d") if n_controls_imp > 0 else None
     x_prop = cp.Parameter((N - 1, n_states), name="x_prop")
     nu = cp.Variable((N - 1, n_states), name="nu")  # Virtual Control
 
@@ -319,7 +306,6 @@ def create_cvxpy_variables(
     g = []
     grad_g_x = []
     grad_g_u = []
-    grad_g_u_d = []
     nu_vb = []
     for idx_ncvx in range(n_nodal_constraints):
         g_x_sp = None
@@ -335,15 +321,12 @@ def create_cvxpy_variables(
         grad_g_u.append(
             cp.Parameter((N, n_controls), name="grad_g_u_" + str(idx_ncvx), sparsity=g_u_sp)
         )
-        if n_controls_d > 0:
-            grad_g_u_d.append(cp.Parameter((N, n_controls_d), name="grad_g_u_d_" + str(idx_ncvx)))
         nu_vb.append(cp.Variable(N, name="nu_vb_" + str(idx_ncvx)))  # Virtual Control for VB
 
     # Linearized Cross-Node Constraints
     g_cross = []
     grad_g_X_cross = []
     grad_g_U_cross = []
-    grad_g_U_d_cross = []
     nu_vb_cross = []
     for idx_cross in range(n_cross_node_constraints):
         # Cross-node constraints are single constraints with fixed node references
@@ -352,10 +335,6 @@ def create_cvxpy_variables(
         grad_g_U_cross.append(
             cp.Parameter((N, n_controls), name="grad_g_U_cross_" + str(idx_cross))
         )
-        if n_controls_d > 0:
-            grad_g_U_d_cross.append(
-                cp.Parameter((N, n_controls_d), name="grad_g_U_d_cross_" + str(idx_cross))
-            )
         nu_vb_cross.append(
             cp.Variable(name="nu_vb_cross_" + str(idx_cross))
         )  # Virtual Control for VB
@@ -363,19 +342,13 @@ def create_cvxpy_variables(
     # Applying the affine scaling to state and control
     x_nonscaled = []
     u_nonscaled = []
-    u_d_nonscaled = []
     dx_nonscaled = []
     du_nonscaled = []
-    du_d_nonscaled = []
     for k in range(N):
         x_nonscaled.append(S_x @ x[k] + c_x)
         u_nonscaled.append(S_u @ u[k] + c_u)
-        if n_controls_d > 0:
-            u_d_nonscaled.append(S_u_d @ u_d[k] + c_u_d)
         dx_nonscaled.append(S_x @ dx[k])
         du_nonscaled.append(S_u @ du[k])
-        if n_controls_d > 0:
-            du_d_nonscaled.append(S_u_d @ du_d[k])
 
     return CVXPyVariables(
         lam_prox=lam_prox,
@@ -390,9 +363,6 @@ def create_cvxpy_variables(
         u=u,
         du=du,
         u_bar=u_bar,
-        u_d=u_d,
-        du_d=du_d,
-        u_d_bar=u_d_bar,
         A_d=A_d,
         B_d=B_d,
         C_d=C_d,
@@ -402,12 +372,10 @@ def create_cvxpy_variables(
         g=g,
         grad_g_x=grad_g_x,
         grad_g_u=grad_g_u,
-        grad_g_u_d=grad_g_u_d,
         nu_vb=nu_vb,
         g_cross=g_cross,
         grad_g_X_cross=grad_g_X_cross,
         grad_g_U_cross=grad_g_U_cross,
-        grad_g_U_d_cross=grad_g_U_d_cross,
         nu_vb_cross=nu_vb_cross,
         S_x=S_x,
         inv_S_x=inv_S_x,
@@ -415,15 +383,10 @@ def create_cvxpy_variables(
         S_u=S_u,
         inv_S_u=inv_S_u,
         c_u=c_u,
-        S_u_d=S_u_d,
-        inv_S_u_d=inv_S_u_d,
-        c_u_d=c_u_d,
         x_nonscaled=x_nonscaled,
         u_nonscaled=u_nonscaled,
-        u_d_nonscaled=u_d_nonscaled,
         dx_nonscaled=dx_nonscaled,
         du_nonscaled=du_nonscaled,
-        du_d_nonscaled=du_d_nonscaled,
     )
 
 
@@ -431,7 +394,6 @@ def lower_cvxpy_constraints(
     constraints: ConstraintSet,
     x_cvxpy: List,
     u_cvxpy: List,
-    u_d_cvxpy: List,
     parameters: dict = None,
 ) -> Tuple[List, dict]:
     """Lower symbolic convex constraints to CVXPy constraints.
@@ -445,11 +407,8 @@ def lower_cvxpy_constraints(
         constraints: ConstraintSet containing nodal_convex and cross_node_convex
         x_cvxpy: List of CVXPy expressions for state at each node (length N).
             Typically the x_nonscaled list from create_cvxpy_variables().
-        u_cvxpy: List of CVXPy expressions for continuous controls at each node (length N).
+        u_cvxpy: List of CVXPy expressions for controls at each node (length N).
             Typically the u_nonscaled list from create_cvxpy_variables().
-        u_d_cvxpy: List of CVXPy expressions for discrete/impulsive controls at each node
-                                                                                        (length N).
-            Typically the u_d_nonscaled list from create_cvxpy_variables(). May be empty.
         parameters: Optional dict of parameter values to use for any Parameter
             expressions in the constraints. If None, uses Parameter default values.
 
@@ -466,7 +425,6 @@ def lower_cvxpy_constraints(
                 constraint_set,
                 ocp_vars.x_nonscaled,
                 ocp_vars.u_nonscaled,
-                ocp_vars.u_d_nonscaled,
                 parameters,
             )
 
@@ -476,7 +434,6 @@ def lower_cvxpy_constraints(
         lower_symbolic_expressions() and handled via linearization in the SCP.
     """
     import cvxpy as cp
-    import numpy as np
 
     from openscvx.symbolic.expr import Parameter, traverse
     from openscvx.symbolic.expr.control import Control
@@ -509,12 +466,6 @@ def lower_cvxpy_constraints(
 
     cvxpy_constraints = []
 
-    def _control_is_impulsive(control: Control) -> bool:
-        is_imp = getattr(control, "is_impulsive", False)
-        if isinstance(is_imp, np.ndarray):
-            return bool(np.any(is_imp))
-        return bool(is_imp)
-
     # Process nodal constraints
     for constraint in constraints.nodal_convex:
         # nodes should already be validated and normalized in preprocessing
@@ -523,16 +474,12 @@ def lower_cvxpy_constraints(
         # Collect all State and Control variables referenced in the constraint
         state_vars = {}
         control_vars = {}
-        control_vars_discrete = {}
 
         def collect_vars(expr):
             if isinstance(expr, State):
                 state_vars[expr.name] = expr
             elif isinstance(expr, Control):
-                if _control_is_impulsive(expr):
-                    control_vars_discrete[expr.name] = expr
-                else:
-                    control_vars[expr.name] = expr
+                control_vars[expr.name] = expr
 
         traverse(constraint.constraint, collect_vars)
 
@@ -546,14 +493,6 @@ def lower_cvxpy_constraints(
 
             if control_vars:
                 variable_map["u"] = u_cvxpy[node]
-
-            if control_vars_discrete:
-                if u_d_cvxpy is None or len(u_d_cvxpy) == 0:
-                    raise ValueError(
-                        "Constraint references impulsive controls but u_d_cvxpy is empty. "
-                        "Ensure discrete controls are enabled and u_d variables are created."
-                    )
-                variable_map["u_d"] = u_d_cvxpy[node]
 
             # Add all CVXPy Parameter objects to the variable map
             variable_map.update(all_params)
@@ -572,12 +511,6 @@ def lower_cvxpy_constraints(
                         f"Control variable '{control_name}' has no slice assigned. "
                         f"This indicates a bug in the preprocessing pipeline."
                     )
-            for control_name, control_var in control_vars_discrete.items():
-                if control_var._slice is None:
-                    raise ValueError(
-                        f"Control variable '{control_name}' has no slice assigned. "
-                        f"This indicates a bug in the preprocessing pipeline."
-                    )
 
             # Lower the constraint to CVXPy
             cvxpy_constraint = lower_to_cvxpy(constraint.constraint, variable_map)
@@ -588,16 +521,12 @@ def lower_cvxpy_constraints(
         # Collect all State and Control variables referenced in the constraint
         state_vars = {}
         control_vars = {}
-        control_vars_discrete = {}
 
         def collect_vars(expr):
             if isinstance(expr, State):
                 state_vars[expr.name] = expr
             elif isinstance(expr, Control):
-                if _control_is_impulsive(expr):
-                    control_vars_discrete[expr.name] = expr
-                else:
-                    control_vars[expr.name] = expr
+                control_vars[expr.name] = expr
 
         traverse(constraint.constraint, collect_vars)
 
@@ -611,14 +540,6 @@ def lower_cvxpy_constraints(
         if control_vars:
             variable_map["u"] = cp.vstack(u_cvxpy)
 
-        if control_vars_discrete:
-            if u_d_cvxpy is None or len(u_d_cvxpy) == 0:
-                raise ValueError(
-                    "Cross-node constraint references impulsive controls but u_d_cvxpy is empty. "
-                    "Ensure discrete controls are enabled and u_d variables are created."
-                )
-            variable_map["u_d"] = cp.vstack(u_d_cvxpy)
-
         # Add all CVXPy Parameter objects to the variable map
         variable_map.update(all_params)
 
@@ -631,12 +552,6 @@ def lower_cvxpy_constraints(
                 )
 
         for control_name, control_var in control_vars.items():
-            if control_var._slice is None:
-                raise ValueError(
-                    f"Control variable '{control_name}' has no slice assigned. "
-                    f"This indicates a bug in the preprocessing pipeline."
-                )
-        for control_name, control_var in control_vars_discrete.items():
             if control_var._slice is None:
                 raise ValueError(
                     f"Control variable '{control_name}' has no slice assigned. "
@@ -874,7 +789,6 @@ def lower_symbolic_problem(
         problem.constraints,
         solver.ocp_vars.x_nonscaled,
         solver.ocp_vars.u_nonscaled,
-        solver.ocp_vars.u_d_nonscaled,
         problem.parameters,
     )
     cvxpy_constraints = LoweredCvxpyConstraints(

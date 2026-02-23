@@ -4,7 +4,6 @@ Visitors: Control
 """
 
 import cvxpy as cp
-import numpy as np
 
 # Expression types to handle — uncomment as you paste visitors:
 from openscvx.symbolic.expr.control import Control
@@ -28,13 +27,7 @@ def _visit_control(lowerer, node: Control) -> cp.Expression:
     Raises:
         ValueError: If "u" is not found in variable_map
     """
-    is_imp = getattr(node, "is_impulsive", False)
-    if isinstance(is_imp, np.ndarray):
-        is_impulsive = bool(np.any(is_imp))
-    else:
-        is_impulsive = bool(is_imp)
-
-    key = "u_d" if is_impulsive else "u"
+    key = "u"
     if key not in lowerer.variable_map:
         raise ValueError(f"Control vector '{key}' not found in variable_map.")
 

@@ -90,11 +90,6 @@ class CVXPyVariables:
     du: "cp.Variable"
     u_bar: "cp.Parameter"
 
-    # Discrete control variables and parameters
-    u_d: "cp.Variable | None"
-    du_d: "cp.Variable | None"
-    u_d_bar: "cp.Parameter | None"
-
     # Dynamics discretization parameters
     A_d: "cp.Parameter"
     B_d: "cp.Parameter"
@@ -107,14 +102,12 @@ class CVXPyVariables:
     g: List["cp.Parameter"] = field(default_factory=list)
     grad_g_x: List["cp.Parameter"] = field(default_factory=list)
     grad_g_u: List["cp.Parameter"] = field(default_factory=list)
-    grad_g_u_d: List["cp.Parameter"] = field(default_factory=list)
     nu_vb: List["cp.Variable"] = field(default_factory=list)
 
     # Cross-node constraint linearization (lists, one per constraint)
     g_cross: List["cp.Parameter"] = field(default_factory=list)
     grad_g_X_cross: List["cp.Parameter"] = field(default_factory=list)
     grad_g_U_cross: List["cp.Parameter"] = field(default_factory=list)
-    grad_g_U_d_cross: List["cp.Parameter"] = field(default_factory=list)
     nu_vb_cross: List["cp.Variable"] = field(default_factory=list)
 
     # Scaling matrices and offsets (numpy arrays)
@@ -124,14 +117,9 @@ class CVXPyVariables:
     S_u: np.ndarray = field(default_factory=lambda: np.array([]))
     inv_S_u: np.ndarray = field(default_factory=lambda: np.array([]))
     c_u: np.ndarray = field(default_factory=lambda: np.array([]))
-    S_u_d: np.ndarray = field(default_factory=lambda: np.array([]))
-    inv_S_u_d: np.ndarray = field(default_factory=lambda: np.array([]))
-    c_u_d: np.ndarray = field(default_factory=lambda: np.array([]))
 
     # Scaled CVXPy expressions at each node (lists of length N)
     x_nonscaled: List = field(default_factory=list)
     u_nonscaled: List = field(default_factory=list)
-    u_d_nonscaled: List = field(default_factory=list)
     dx_nonscaled: List = field(default_factory=list)
     du_nonscaled: List = field(default_factory=list)
-    du_d_nonscaled: List = field(default_factory=list)

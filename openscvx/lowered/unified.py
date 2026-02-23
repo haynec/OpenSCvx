@@ -446,6 +446,8 @@ class UnifiedControl:
     Properties:
         true: Returns UnifiedControl view containing only true (user-defined) controls
         augmented: Returns UnifiedControl view containing only augmented controls
+        slice_continuous: Slice covering continuous controls in unified ordering
+        slice_impulsive: Slice covering impulsive controls in unified ordering
 
     Example:
         Creating a unified control from multiple Control objects::
@@ -530,6 +532,52 @@ class UnifiedControl:
                 aug_controls = unified.augmented  # Only time dilation
         """
         return self[self._augmented_slice]
+
+    @property
+    def slice_continuous(self) -> slice:
+        """Slice for continuous controls in the unified vector."""
+        if self.shape[0] == 0:
+            return slice(0, 0)
+
+        if self.is_impulsive is None:
+            return slice(0, self.shape[0])
+
+        mask = np.asarray(self.is_impulsive, dtype=bool).reshape(-1)
+        if mask.size == 1:
+            mask = np.repeat(mask, self.shape[0])
+        elif mask.size != self.shape[0]:
+            raise ValueError(
+                f"is_impulsive mask size {mask.size} does not match unified control size {self.shape[0]}"
+            )
+
+        if not np.any(mask):
+            return slice(0, self.shape[0])
+
+        first_impulsive_idx = int(np.flatnonzero(mask)[0])
+        return slice(0, first_impulsive_idx)
+
+    @property
+    def slice_impulsive(self) -> slice:
+        """Slice for impulsive controls in the unified vector."""
+        if self.shape[0] == 0:
+            return slice(0, 0)
+
+        if self.is_impulsive is None:
+            return slice(self.shape[0], self.shape[0])
+
+        mask = np.asarray(self.is_impulsive, dtype=bool).reshape(-1)
+        if mask.size == 1:
+            mask = np.repeat(mask, self.shape[0])
+        elif mask.size != self.shape[0]:
+            raise ValueError(
+                f"is_impulsive mask size {mask.size} does not match unified control size {self.shape[0]}"
+            )
+
+        if not np.any(mask):
+            return slice(self.shape[0], self.shape[0])
+
+        first_impulsive_idx = int(np.flatnonzero(mask)[0])
+        return slice(first_impulsive_idx, self.shape[0])
 
     def append(
         self,

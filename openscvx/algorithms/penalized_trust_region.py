@@ -464,12 +464,15 @@ class PenalizedTrustRegion(Algorithm):
         """
         param_dict = params
 
-        idx_impulsive_controls = settings.sim.u.is_impulsive
-        idx_continuous_controls = ~settings.sim.u.is_impulsive
-
-        has_u_d = state.u[:, idx_impulsive_controls].size > 0
-        if has_u_d:
-            D_d = settings.sim.u.allocation_matrix
+        idx_impulsive_controls = np.asarray(settings.sim.u.is_impulsive, dtype=bool)
+        if idx_impulsive_controls.size == 1:
+            idx_impulsive_controls = np.repeat(idx_impulsive_controls, state.u.shape[1])
+        elif idx_impulsive_controls.size != state.u.shape[1]:
+            raise ValueError(
+                "Unified control impulsive mask size does not match control trajectory width."
+            )
+        has_u_d = bool(np.any(idx_impulsive_controls))
+        D_d = settings.sim.u.allocation_matrix if has_u_d else None
 
         # Update solver with dynamics linearization
         self._solver.update_dynamics_linearization(
@@ -484,13 +487,13 @@ class PenalizedTrustRegion(Algorithm):
                 if has_u_d
                 else 0
             ),
-            u_bar=state.u[:, idx_continuous_controls],
-            u_d_bar=state.u[:, idx_impulsive_controls],
+            u_bar=state.u,
             A_d=state.A_d(),
-            B_d=state.B_d()[:, :, idx_continuous_controls],
-            C_d=state.C_d()[:, :, idx_continuous_controls],
+            B_d=state.B_d(),
+            C_d=state.C_d(),
             x_prop=state.x_prop()
             + (np.einsum("ij,nj->ni", D_d, state.u[1:, idx_impulsive_controls]) if has_u_d else 0),
+            D_d=D_d,
         )
 
         # Build constraint linearization data
@@ -583,16 +586,7 @@ class PenalizedTrustRegion(Algorithm):
 
         # Extract unscaled trajectories from result
         x_new_guess = result.x
-        # Reconstruct full control vector (continuous + impulsive) in unified order
-        mask = np.asarray(settings.sim.u.is_impulsive, dtype=bool)
-        if mask.size == 0:
-            u_new_guess = result.u
-        else:
-            u_new_guess = np.zeros((result.u.shape[0], mask.size), dtype=result.u.dtype)
-            if np.any(~mask):
-                u_new_guess[:, ~mask] = result.u
-            if np.any(mask):
-                u_new_guess[:, mask] = result.u_d
+        u_new_guess = result.u
 
         # Calculate costs from boundary conditions using utility function
         # Note: The original code only considered final_type, but the utility handles both

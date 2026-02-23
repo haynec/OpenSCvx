@@ -4,7 +4,6 @@ Visitors: Constant, Parameter, NodeReference
 """
 
 import cvxpy as cp
-import numpy as np
 
 # Expression types to handle — uncomment as you paste visitors:
 from openscvx.symbolic.expr.expr import Constant, NodeReference, Parameter
@@ -111,20 +110,14 @@ def _visit_node_reference(lowerer, node: "NodeReference") -> cp.Expression:
             return cvx_var[idx, :]
 
     elif isinstance(node.base, Control):
-        is_imp = getattr(node.base, "is_impulsive", False)
-        if isinstance(is_imp, np.ndarray):
-            is_impulsive = bool(np.any(is_imp))
-        else:
-            is_impulsive = bool(is_imp)
-
-        key = "u_d" if is_impulsive else "u"
+        key = "u"
         if key not in lowerer.variable_map:
             raise ValueError(
                 f"Control vector '{key}' not found in variable_map. "
-                "For cross-node constraints, provide the full trajectory (N, n_u) or (N, n_u_d)."
+                "For cross-node constraints, provide the full trajectory (N, n_u)."
             )
 
-        cvx_var = lowerer.variable_map[key]  # Should be (N, n_u) or (N, n_u_d)
+        cvx_var = lowerer.variable_map[key]  # Should be (N, n_u)
 
         # Apply slice if control has one assigned
         if node.base._slice is not None:
