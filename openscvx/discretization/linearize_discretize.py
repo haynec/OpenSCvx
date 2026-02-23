@@ -1,13 +1,15 @@
-from typing import List
+from typing import TYPE_CHECKING, List, Optional
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from openscvx.config import Config
 from openscvx.discretization.base import Discretizer
 from openscvx.integrators import solve_ivp_diffrax, solve_ivp_rk45
-from openscvx.lowered import Dynamics
+
+if TYPE_CHECKING:
+    from openscvx.config import Config
+    from openscvx.lowered import Dynamics
 
 
 class LinearizeDiscretize(Discretizer):
@@ -19,12 +21,41 @@ class LinearizeDiscretize(Discretizer):
     discrete-time matrices.
 
     Supports ZOH (zero-order hold) and FOH (first-order hold) control
-    interpolation between nodes, configurable via ``settings.dis.dis_type``.
+    interpolation between nodes.
 
     This is the default discretization scheme in OpenSCvx.
+
+    Args:
+        dis_type: Control hold type. ``"FOH"`` (first-order hold) or
+            ``"ZOH"`` (zero-order hold). Defaults to ``"FOH"``.
+        ode_solver: Diffrax solver name. Any solver from
+            `Diffrax <https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/>`_
+            is valid. Defaults to ``"Tsit5"``.
+        custom_integrator: Use the built-in fixed-step RK45 integrator
+            instead of Diffrax. Faster but less robust. Defaults to ``False``.
+        atol: Absolute tolerance for the ODE solver. Defaults to ``1e-3``.
+        rtol: Relative tolerance for the ODE solver. Defaults to ``1e-6``.
+        args: Extra keyword arguments forwarded to
+            :func:`diffrax.diffeqsolve`. Defaults to ``{}``.
     """
 
-    def get_solver(self, dynamics: Dynamics, settings: Config) -> callable:
+    def __init__(
+        self,
+        dis_type: str = "FOH",
+        ode_solver: str = "Tsit5",
+        custom_integrator: bool = False,
+        atol: float = 1e-3,
+        rtol: float = 1e-6,
+        args: Optional[dict] = None,
+    ):
+        self.dis_type = dis_type
+        self.ode_solver = ode_solver
+        self.custom_integrator = custom_integrator
+        self.atol = atol
+        self.rtol = rtol
+        self.args = args if args is not None else {}
+
+    def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
         """Create a multi-shoot discretization solver.
 
         Computes Jacobians of ``dynamics.f`` via ``jax.jacfwd``, vmaps all
@@ -48,6 +79,9 @@ class LinearizeDiscretize(Discretizer):
         A_vmapped = jax.vmap(A_fn, in_axes=(0, 0, 0, None))
         B_vmapped = jax.vmap(B_fn, in_axes=(0, 0, 0, None))
 
+        # Capture discretizer settings for the returned closure
+        discretizer = self
+
         return lambda x, u, params: _calculate_discretization(
             x=x,
             u=u,
@@ -55,6 +89,7 @@ class LinearizeDiscretize(Discretizer):
             A=A_vmapped,
             B=B_vmapped,
             settings=settings,
+            discretizer=discretizer,
             params=params,
         )
 
@@ -206,7 +241,8 @@ def _calculate_discretization(
     state_dot: callable,
     A: callable,
     B: callable,
-    settings: Config,
+    settings: "Config",
+    discretizer: "LinearizeDiscretize",
     params: dict,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Integrate the augmented variational equations to produce discrete-time matrices.
@@ -223,7 +259,9 @@ def _calculate_discretization(
         state_dot: Vmapped time-dilated dynamics ``F(x, u, node, params) -> x_dot``.
         A: Vmapped state Jacobian ``∂F/∂x``.
         B: Vmapped control Jacobian ``∂F/∂u``.
-        settings: Configuration (integrator choice, tolerances, hold type, etc.).
+        settings: Problem configuration (node count, scaling matrices, debug flag).
+        discretizer: Discretizer instance holding integrator settings (hold type,
+            solver, tolerances, etc.).
         params: Parameters forwarded to ``state_dot``, ``A``, and ``B``.
 
     Returns:
@@ -239,7 +277,7 @@ def _calculate_discretization(
     n_x = settings.sim.n_states
     n_u = settings.sim.n_controls
 
-    N = settings.scp.n
+    N = settings.sim.n
 
     # Define indices for slicing the augmented state vector
     i0 = 0
@@ -266,7 +304,7 @@ def _calculate_discretization(
         n_x=n_x,
         n_u=n_u,
         N=N,
-        dis_type=settings.dis.dis_type,
+        dis_type=discretizer.dis_type,
         S_x=settings.sim.S_x,
         c_x=settings.sim.c_x,
         S_u=settings.sim.S_u,
@@ -281,7 +319,7 @@ def _calculate_discretization(
         return _dVdt(t, y, **integrator_args)
 
     # Choose integrator
-    if settings.dis.custom_integrator:
+    if discretizer.custom_integrator:
         sol = solve_ivp_rk45(
             dVdt_wrapped,
             1.0 / (N - 1),
@@ -294,11 +332,11 @@ def _calculate_discretization(
             dVdt_wrapped,
             1.0 / (N - 1),
             V0,
-            solver_name=settings.dis.solver,
-            rtol=settings.dis.rtol,
-            atol=settings.dis.atol,
+            solver_name=discretizer.ode_solver,
+            rtol=discretizer.rtol,
+            atol=discretizer.atol,
             args=(),
-            extra_kwargs=settings.dis.args,
+            extra_kwargs=discretizer.args,
         )
 
     Vend = sol[-1].T.reshape(-1, i4)

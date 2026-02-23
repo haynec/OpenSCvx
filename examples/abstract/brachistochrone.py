@@ -85,14 +85,14 @@ problem = Problem(
     constraints=constraint_exprs,
     N=n,
     licq_max=1e-8,
-    autotuner=ox.ConstantProximalWeight(),
+    algorithm={
+        "autotuner": "ConstantProximalWeight",
+        "lam_prox": 1e1,
+        "lam_cost": 1e0,
+    },
 )
 
 problem.settings.prp.dt = 0.01
-
-problem.settings.scp.lam_prox = 1e1  # Weight on the Trust Reigon
-problem.settings.scp.lam_cost = 1e0  # Weight on the Minimal Time Objective
-
 
 plotting_dict = {}
 

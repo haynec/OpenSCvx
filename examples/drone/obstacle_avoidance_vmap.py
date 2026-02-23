@@ -173,9 +173,8 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
+    algorithm={"ep_tr": 1e-3},
 )
-
-problem.settings.scp.ep_tr = 1e-3
 
 # =============================================================================
 # Solve and Visualize

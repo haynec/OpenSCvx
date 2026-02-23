@@ -43,20 +43,25 @@ Expected schema
       - "Norm(pos[:2] - obs_center) >= 2.0"
       - "(vel[0] <= 3.0).at(0, 10, 20)"
 
-    autotuner:                       # optional
-      type: RampProximalWeight
-      ramp_factor: 1.04
-      lam_prox_max: 100.0
+    algorithm:                       # optional
+      lam_cost: 5.0e-1
+      ep_tr: 1.0e-3
+      autotuner:
+        type: RampProximalWeight
+        ramp_factor: 1.04
+        lam_prox_max: 100.0
+
+    discretizer:                     # optional
+      dis_type: ZOH
+      ode_solver: Dopri8
+
+    solver:                          # optional (convex subproblem solver)
+      cvx_solver: QOCO
+      solver_args: {abstol: 1.0e-6, reltol: 1.0e-9}
 
     settings:                        # optional, applied after Problem()
-      scp:
-        ep_tr: 1.0e-3
-        lam_cost: 5.0e-1
-      cvx:
-        solver_args: {abstol: 1.0e-6, reltol: 1.0e-9}
-      dis:
-        dis_type: ZOH
-        solver: Dopri8
+      dev:
+        printing: true
 """
 
 from pathlib import Path
@@ -64,7 +69,6 @@ from typing import Any, Dict, List, Union
 
 import numpy as np
 
-from openscvx.config import _resolve_autotuner
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.expr import Expr, Parameter
 from openscvx.symbolic.expr.state import State
@@ -121,10 +125,10 @@ def load_dict(data: dict) -> dict:
 
     Returns:
         Dict with keys ``dynamics``, ``constraints``, ``states``,
-        ``controls``, ``N``, ``time``, and optionally ``autotuner``,
-        ``dynamics_prop``, ``states_prop``, ``algebraic_prop``, and
-        ``settings`` (a raw dict to be applied via
-        :meth:`Config.apply_dict() <openscvx.config.Config.apply_dict>`
+        ``controls``, ``N``, ``time``, and optionally ``algorithm``,
+        ``discretizer``, ``solver``, ``dynamics_prop``, ``states_prop``,
+        ``algebraic_prop``, and ``settings`` (a raw dict to be applied
+        via :meth:`Config.apply_dict() <openscvx.config.Config.apply_dict>`
         after construction).
     """
     # ---- states --------------------------------------------------------
@@ -215,11 +219,6 @@ def load_dict(data: dict) -> dict:
     for constraint_str in data.get("constraints", []):
         constraints.append(parser.parse(str(constraint_str)))
 
-    # ---- autotuner (optional, top-level) --------------------------------
-    autotuner = None
-    if "autotuner" in data:
-        autotuner = _resolve_autotuner(data["autotuner"])
-
     result: Dict[str, Any] = {
         "dynamics": dynamics,
         "constraints": constraints,
@@ -229,8 +228,12 @@ def load_dict(data: dict) -> dict:
         "time": time,
     }
 
-    if autotuner is not None:
-        result["autotuner"] = autotuner
+    # ---- algorithm / discretizer / solver (optional) ---------------------
+    # Pass raw values (dict or instance) through to Problem, which owns
+    # resolution via _resolve_algorithm / _resolve_discretizer / _resolve_solver.
+    for key in ("algorithm", "discretizer", "solver"):
+        if key in data:
+            result[key] = data[key]
 
     # ---- optional: propagation states ----------------------------------
     if "states_prop" in data:

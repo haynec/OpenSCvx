@@ -299,6 +299,7 @@ def test_simconfig_uses_scaling_when_provided():
         x_prop=unified_state,
         u=unified_control,
         total_time=1.0,
+        n=10,
     )
 
     # Check that scaling matrices use scaling_min/max
@@ -337,6 +338,7 @@ def test_simconfig_falls_back_to_min_max():
         x_prop=unified_state,
         u=unified_control,
         total_time=1.0,
+        n=10,
     )
 
     # Should use regular min/max for scaling
@@ -372,6 +374,7 @@ def test_simconfig_partial_scaling():
         x_prop=unified_state,
         u=unified_control,
         total_time=1.0,
+        n=10,
     )
 
     # Should use scaling for state1, min/max for state2

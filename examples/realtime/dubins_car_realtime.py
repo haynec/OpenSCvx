@@ -183,7 +183,7 @@ def on_lam_cost_changed(input_widget):
     try:
         # Convert the new value to a float
         lam_cost_value = float(new_value)
-        problem.settings.scp.lam_cost = lam_cost_value
+        problem.algorithm.lam_cost = lam_cost_value
         # Update the display with scientific notation
         input_widget.setText(f"{lam_cost_value:.2E}")
     except ValueError:
@@ -197,7 +197,7 @@ def on_lam_tr_changed(input_widget):
     try:
         # Convert the new value to a float
         lam_tr_value = float(new_value)
-        problem.settings.scp.lam_prox = lam_tr_value
+        problem.algorithm.lam_prox = lam_tr_value
         # Update the display with scientific notation
         input_widget.setText(f"{lam_tr_value:.2E}")
     except ValueError:
@@ -230,7 +230,7 @@ def update_optimization_metrics(results, labels_dict):
     labels_dict["j_vb_label"].setText(f"J_vb: {j_vb:.2E}")
     labels_dict["j_vc_label"].setText(f"J_vc: {j_vc:.2E}")
     labels_dict["objective_label"].setText(f"Objective: {cost:.2E}")
-    labels_dict["lam_cost_display_label"].setText(f"λ_cost: {problem.settings.scp.lam_cost:.2E}")
+    labels_dict["lam_cost_display_label"].setText(f"λ_cost: {problem.algorithm.lam_cost:.2E}")
     labels_dict["dis_time_label"].setText(f"Dis Time: {dis_time:.1f}ms")
     labels_dict["solve_time_label"].setText(f"Solve Time: {solve_time:.1f}ms")
     labels_dict["status_label"].setText(f"Status: {status}")
@@ -268,7 +268,7 @@ def plot_thread_func():
     j_vb_label = QLabel("J_vb: 0.00E+00")
     j_vc_label = QLabel("J_vc: 0.00E+00")
     objective_label = QLabel("Objective: 0.00E+00")
-    lam_cost_display_label = QLabel(f"λ_cost: {problem.settings.scp.lam_cost:.2E}")
+    lam_cost_display_label = QLabel(f"λ_cost: {problem.algorithm.lam_cost:.2E}")
     dis_time_label = QLabel("Dis Time: 0.0ms")
     solve_time_label = QLabel("Solve Time: 0.0ms")
     status_label = QLabel("Status: --")
@@ -306,7 +306,7 @@ def plot_thread_func():
     # Lambda cost input - Input on left, label on right
     lam_cost_layout = QHBoxLayout()
     lam_cost_input = QLineEdit()
-    lam_cost_input.setText(f"{problem.settings.scp.lam_cost:.2E}")
+    lam_cost_input.setText(f"{problem.algorithm.lam_cost:.2E}")
     lam_cost_input.setFixedWidth(80)
     lam_cost_input.returnPressed.connect(lambda: on_lam_cost_changed(lam_cost_input))
     lam_cost_label = QLabel("λ_cost:")
@@ -318,7 +318,7 @@ def plot_thread_func():
     # Lambda trust region input - Input on left, label on right
     lam_tr_layout = QHBoxLayout()
     lam_tr_input = QLineEdit()
-    lam_tr_input.setText(f"{problem.settings.scp.lam_prox:.2E}")
+    lam_tr_input.setText(f"{problem.algorithm.lam_prox:.2E}")
     lam_tr_input.setFixedWidth(80)
     lam_tr_input.returnPressed.connect(lambda: on_lam_tr_changed(lam_tr_input))
     lam_tr_label = QLabel("λ_tr:")

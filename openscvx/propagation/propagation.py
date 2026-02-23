@@ -1,6 +1,7 @@
 import numpy as np
 
 from openscvx.config import Config
+from openscvx.discretization import Discretizer
 from openscvx.integrators import solve_ivp_diffrax_prop
 from openscvx.lowered import Dynamics
 
@@ -50,7 +51,9 @@ def prop_aug_dy(
     return state_dot(x, u, node, params).squeeze()
 
 
-def get_propagation_solver(state_dot: Dynamics, settings: Config) -> callable:
+def get_propagation_solver(
+    state_dot: Dynamics, settings: Config, discretizer: Discretizer
+) -> callable:
     """Create a propagation solver function.
 
     This function creates a solver that propagates the system state using the
@@ -59,6 +62,7 @@ def get_propagation_solver(state_dot: Dynamics, settings: Config) -> callable:
     Args:
         state_dot: Dynamics object containing state derivative function.
         settings: Configuration settings for propagation.
+        discretizer: Discretizer instance (used for ``dis_type``).
 
     Returns:
         callable: A function that solves the propagation problem.
@@ -76,8 +80,8 @@ def get_propagation_solver(state_dot: Dynamics, settings: Config) -> callable:
                 tau_init,  # shape (1, 1)
                 node,  # shape (1, 1)
                 state_dot,  # function or array
-                settings.dis.dis_type,
-                settings.scp.n,
+                discretizer.dis_type,
+                settings.sim.n,
                 param_map_update,
                 # additional named parameters as **kwargs
             ),
@@ -93,7 +97,7 @@ def get_propagation_solver(state_dot: Dynamics, settings: Config) -> callable:
     return propagation_solver
 
 
-def s_to_t(x: np.ndarray, u: np.ndarray, settings: Config) -> list[float]:
+def s_to_t(x: np.ndarray, u: np.ndarray, settings: Config, discretizer: Discretizer) -> list[float]:
     """Convert normalized time s to real time t.
 
     This function converts the normalized time variable s to real time t
@@ -103,16 +107,17 @@ def s_to_t(x: np.ndarray, u: np.ndarray, settings: Config) -> list[float]:
         x: State trajectory array, shape (N, n_states).
         u: Control trajectory array, shape (N, n_controls).
         settings (Config): Configuration settings.
+        discretizer: Discretizer instance (used for ``dis_type``).
 
     Returns:
         list[float]: List of real time points.
     """
     t = [x[:, settings.sim.time_slice][0]]
-    tau = np.linspace(0, 1, settings.scp.n)
-    for k in range(1, settings.scp.n):
+    tau = np.linspace(0, 1, settings.sim.n)
+    for k in range(1, settings.sim.n):
         s_kp = u[k - 1, -1]
         s_k = u[k, -1]
-        if settings.dis.dis_type == "ZOH":
+        if discretizer.dis_type == "ZOH":
             t.append(t[k - 1] + (tau[k] - tau[k - 1]) * (s_kp))
         else:
             t.append(t[k - 1] + 0.5 * (s_k + s_kp) * (tau[k] - tau[k - 1]))
@@ -120,7 +125,7 @@ def s_to_t(x: np.ndarray, u: np.ndarray, settings: Config) -> list[float]:
 
 
 def t_to_tau(
-    u: np.ndarray, t: np.ndarray, t_nodal: np.ndarray, settings: Config
+    u: np.ndarray, t: np.ndarray, t_nodal: np.ndarray, settings: Config, discretizer: Discretizer
 ) -> tuple[np.ndarray, np.ndarray]:
     """Convert real time t to normalized time tau.
 
@@ -132,19 +137,20 @@ def t_to_tau(
         t (np.ndarray): Real time points.
         t_nodal (np.ndarray): Nodal time points.
         settings (Config): Configuration settings.
+        discretizer: Discretizer instance (used for ``dis_type``).
 
     Returns:
         tuple[np.ndarray, np.ndarray]: (tau, u_interp) where tau is normalized time and u_interp is
             interpolated controls.
     """
-    if settings.dis.dis_type == "ZOH":
+    if discretizer.dis_type == "ZOH":
         # Zero-Order Hold: step interpolation (hold previous value)
         def u_lam(new_t):
             # Find the index of the last nodal time <= new_t
             idx = np.searchsorted(t_nodal, new_t, side="right") - 1
             idx = np.clip(idx, 0, len(t_nodal) - 1)
             return u[idx, :]
-    elif settings.dis.dis_type == "FOH":
+    elif discretizer.dis_type == "FOH":
         # First-Order Hold: linear interpolation
         def u_lam(new_t):
             return np.array([np.interp(new_t, t_nodal, u[:, i]) for i in range(u.shape[1])]).T
@@ -154,7 +160,7 @@ def t_to_tau(
     u_interp = np.array([u_lam(t_i) for t_i in t])
 
     tau = np.zeros(len(t))
-    tau_nodal = np.linspace(0, 1, settings.scp.n)
+    tau_nodal = np.linspace(0, 1, settings.sim.n)
     for k in range(1, len(t)):
         k_nodal = np.where(t_nodal < t[k])[0][-1]
         s_kp = u[k_nodal, -1]
@@ -162,7 +168,7 @@ def t_to_tau(
         tau_p = tau_nodal[k_nodal]
 
         s_k = u[k_nodal + 1, -1]
-        if settings.dis.dis_type == "ZOH":
+        if discretizer.dis_type == "ZOH":
             tau[k] = tau_p + (t[k] - tp) / s_kp
         else:
             tau[k] = tau_p + 2 * (t[k] - tp) / (s_k + s_kp)
@@ -197,19 +203,19 @@ def simulate_nonlinear_time(
     """
     x_0 = settings.sim.x_prop.initial
 
-    n_segments = settings.scp.n - 1
+    n_segments = settings.sim.n - 1
     n_states = x_0.shape[0]
     n_tau = len(tau_vals)
 
     states = np.empty((n_states, n_tau))
-    tau = np.linspace(0, 1, settings.scp.n)
+    tau = np.linspace(0, 1, settings.sim.n)
 
     # Precompute control interpolation
     u_interp = np.stack([np.interp(t, t, u[:, i]) for i in range(u.shape[1])], axis=-1)
 
     # Bin tau_vals into segments of tau
     tau_inds = np.digitize(tau_vals, tau) - 1
-    tau_inds = np.where(tau_inds == settings.scp.n - 1, settings.scp.n - 2, tau_inds)
+    tau_inds = np.where(tau_inds == settings.sim.n - 1, settings.sim.n - 2, tau_inds)
 
     prev_count = 0
     out_idx = 0

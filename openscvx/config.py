@@ -1,8 +1,5 @@
-from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING, Any, Dict, Optional
-
-if TYPE_CHECKING:
-    from openscvx.algorithms.base import AutotuningBase
+from dataclasses import dataclass, field, fields
+from typing import Optional
 
 import numpy as np
 
@@ -16,181 +13,59 @@ def get_affine_scaling_matrices(n, minimum, maximum):
 
 
 @dataclass
-class DiscretizationConfig:
-    def __init__(
-        self,
-        dis_type: str = "FOH",
-        custom_integrator: bool = False,
-        solver: str = "Tsit5",
-        args: Optional[dict] = None,
-        atol: float = 1e-3,
-        rtol: float = 1e-6,
-    ):
-        """
-        Configuration class for discretization settings.
-
-        This class defines the parameters required for discretizing system dynamics.
-
-        Main arguments:
-        These are the arguments most commonly used day-to-day.
-
-        Args:
-            dis_type (str): The type of discretization to use (e.g., "FOH" for
-                First-Order Hold). Defaults to "FOH".
-            custom_integrator (bool): This enables our custom fixed-step RK45
-                algorithm. This tends to be faster than Diffrax but unless you're
-                going for speed, it's recommended to stick with Diffrax for
-                robustness and other solver options. Defaults to False.
-            solver (str): Not used if custom_integrator is enabled. Any choice of
-                solver in Diffrax is valid, please refer here,
-                [How to Choose a Solver](https://docs.kidger.site/diffrax/usage/
-                how-to-choose-a-solver/). Defaults to "Tsit5".
-
-        Other arguments:
-        These arguments are less frequently used, and for most purposes you
-        shouldn't need to understand these.
-
-        Args:
-            args (Dict): Additional arguments to pass to the solver which can be
-                found [here](https://docs.kidger.site/diffrax/api/diffeqsolve/).
-                Defaults to an empty dictionary.
-            atol (float): Absolute tolerance for the solver. Defaults to 1e-3.
-            rtol (float): Relative tolerance for the solver. Defaults to 1e-6.
-        """
-        self.dis_type = dis_type
-        self.custom_integrator = custom_integrator
-        self.solver = solver
-        self.args = args if args is not None else {}
-        self.atol = atol
-        self.rtol = rtol
-
-
-@dataclass
 class DevConfig:
-    def __init__(
-        self,
-        profiling: bool = False,
-        debug: bool = False,
-        printing: bool = True,
-        verbosity: int = 2,
-    ):
-        """
-        Configuration class for development settings.
+    """Configuration class for development settings.
 
-        This class defines the parameters used for development and debugging
-        purposes.
+    This class defines the parameters used for development and debugging
+    purposes.
 
-        Main arguments:
-        These are the arguments most commonly used day-to-day.
+    Args:
+        profiling: Whether to enable profiling for performance
+            analysis. Defaults to False.
+        debug: Disables all precompilation so you can place
+            breakpoints and inspect values. Defaults to False.
+        printing: Whether to enable printing during development.
+            Defaults to True.
+        verbosity: Verbosity level for iteration output.
+            1 (MINIMAL): Core metrics only (iter, cost, status)
+            2 (STANDARD): + timing, penalty terms (default)
+            3 (FULL): + autotuning diagnostics
+    """
 
-        Args:
-            profiling (bool): Whether to enable profiling for performance
-                analysis. Defaults to False.
-            debug (bool): Disables all precompilation so you can place
-                breakpoints and inspect values. Defaults to False.
-            printing (bool): Whether to enable printing during development.
-                Defaults to True.
-            verbosity (int): Verbosity level for iteration output.
-                1 (MINIMAL): Core metrics only (iter, cost, status)
-                2 (STANDARD): + timing, penalty terms (default)
-                3 (FULL): + autotuning diagnostics
-        """
-        self.profiling = profiling
-        self.debug = debug
-        self.printing = printing
-        self.verbosity = verbosity
-
-
-@dataclass
-class ConvexSolverConfig:
-    def __init__(
-        self,
-        solver: str = "QOCO",
-        solver_args: Optional[dict] = None,
-        cvxpygen: bool = False,
-        cvxpygen_override: bool = False,
-    ):
-        """
-        Configuration class for convex solver settings.
-
-        This class defines the parameters required for configuring a convex solver.
-
-        These are the arguments most commonly used day-to-day. Generally I have
-        found [QOCO](https://qoco-org.github.io/qoco/index.html) to be the most
-        performant of the CVXPY solvers for these types of problems (I do have a
-        bias as the author is from my group) and can handle up to SOCP's.
-        [CLARABEL](https://clarabel.org/stable/) is also a great option with
-        feasibility checking and can handle a few more problem types.
-        [CVXPYGen](https://github.com/cvxgrp/cvxpygen) is also great if your
-        problem isn't too large. I have found qocogen to be the most performant
-        of the CVXPYGen solvers.
-
-        Args:
-            solver (str): The name of the CVXPY solver to use. A list of options
-                can be found [here](https://www.cvxpy.org/tutorial/solvers/
-                index.html). Defaults to "QOCO".
-            solver_args (dict, optional): Ensure you are using the correct
-                arguments for your solver as they are not all common. Additional
-                arguments to configure the solver, such as tolerances. Defaults
-                to {"abstol": 1e-6, "reltol": 1e-9}.
-            cvxpygen (bool): Whether to enable CVXPY code generation for the
-                solver. Defaults to False.
-        """
-        if solver_args is None:
-            solver_args = {"abstol": 1e-06, "reltol": 1e-09, "enforce_dpp": True}
-        self.solver = solver
-        self.solver_args = (
-            solver_args if solver_args is not None else {"abstol": 1e-6, "reltol": 1e-9}
-        )
-        self.cvxpygen = cvxpygen
-        self.cvxpygen_override = cvxpygen_override
+    profiling: bool = False
+    debug: bool = False
+    printing: bool = True
+    verbosity: int = 2
 
 
 @dataclass
 class PropagationConfig:
-    def __init__(
-        self,
-        inter_sample: int = 30,
-        dt: float = 0.01,
-        solver: str = "Dopri8",
-        max_tau_len: int = 1000,
-        args: Optional[dict] = None,
-        atol: float = 1e-3,
-        rtol: float = 1e-6,
-    ):
-        """
-        Configuration class for propagation settings.
+    """Configuration class for propagation settings.
 
-        This class defines the parameters required for propagating the nonlinear
-        system dynamics using the optimal control sequence.
+    This class defines the parameters required for propagating the nonlinear
+    system dynamics using the optimal control sequence.
 
-        Main arguments:
-        These are the arguments most commonly used day-to-day.
+    Args:
+        inter_sample: How dense the propagation within multishot
+            discretization should be. Defaults to 30.
+        dt: The time step for propagation. Defaults to 0.01.
+        solver: The numerical solver to use for propagation
+            (e.g., "Dopri8"). Defaults to "Dopri8".
+        max_tau_len: The maximum length of the time vector for
+            propagation. Defaults to 1000.
+        args: Additional arguments to pass to the solver.
+            Defaults to an empty dictionary.
+        atol: Absolute tolerance for the solver. Defaults to 1e-3.
+        rtol: Relative tolerance for the solver. Defaults to 1e-6.
+    """
 
-        Other arguments:
-        The solver should likely not be changed as it is a high accuracy 8th-order
-        Runge-Kutta method.
-
-        Args:
-            inter_sample (int): How dense the propagation within multishot
-                discretization should be. Defaults to 30.
-            dt (float): The time step for propagation. Defaults to 0.1.
-            solver (str): The numerical solver to use for propagation
-                (e.g., "Dopri8"). Defaults to "Dopri8".
-            max_tau_len (int): The maximum length of the time vector for
-                propagation. Defaults to 1000.
-            args (Dict, optional): Additional arguments to pass to the solver.
-                Defaults to an empty dictionary.
-            atol (float): Absolute tolerance for the solver. Defaults to 1e-3.
-            rtol (float): Relative tolerance for the solver. Defaults to 1e-6.
-        """
-        self.inter_sample = inter_sample
-        self.dt = dt
-        self.solver = solver
-        self.max_tau_len = max_tau_len
-        self.args = args if args is not None else {}
-        self.atol = atol
-        self.rtol = rtol
+    inter_sample: int = 30
+    dt: float = 0.01
+    solver: str = "Dopri8"
+    max_tau_len: int = 1000
+    args: dict = field(default_factory=dict)
+    atol: float = 1e-3
+    rtol: float = 1e-6
 
 
 @dataclass(init=False)
@@ -203,6 +78,7 @@ class SimConfig:
         x_prop: UnifiedState,
         u: UnifiedControl,
         total_time: float,
+        n: int,
         save_compiled: bool = False,
         ctcs_node_intervals: Optional[list] = None,
         n_states: Optional[int] = None,
@@ -225,6 +101,7 @@ class SimConfig:
             u (Control): Control object, must have .min and .max attributes for
                 bounds.
             total_time (float): The total simulation time.
+            n (int): Number of discretization nodes.
             save_compiled (bool): If True, save and reuse compiled solver
                 functions. Defaults to False.
             ctcs_node_intervals (list, optional): Node intervals for CTCS
@@ -246,11 +123,13 @@ class SimConfig:
         self.x_prop = x_prop
         self.u = u
         self.total_time = total_time
+        self.n = n
         self.save_compiled = save_compiled
         self.ctcs_node_intervals = ctcs_node_intervals
         self.n_states = n_states
         self.n_states_prop = n_states_prop
         self.n_controls = n_controls
+        self._uniform_time_grid = False
 
         # Call post init logic
         self.__post_init__()
@@ -338,226 +217,14 @@ class SimConfig:
         return self.u._true_slice
 
 
-# ---------------------------------------------------------------------------
-# Autotuner resolver (used by the loader)
-# ---------------------------------------------------------------------------
-
-_AUTOTUNER_MAP: Dict[str, type] = {}
-
-
-def _resolve_autotuner(val: Any) -> Any:
-    """Resolve an autotuner specification into an instance.
-
-    Accepted forms:
-
-    * **string** — class name only, default parameters::
-
-          "RampProximalWeight"
-
-    * **dict** — class name + parameter overrides::
-
-          {"type": "RampProximalWeight", "ramp_factor": 1.04}
-
-    * **instance** — already-constructed autotuner (pass-through for
-      ``load_dict`` called from Python).
-    """
-    if not isinstance(val, (str, dict)):
-        return val
-
-    if isinstance(val, str):
-        name = val
-        params: dict = {}
-    else:
-        params = dict(val)  # copy to avoid mutating the input
-        name = params.pop("type", None)
-        if name is None:
-            raise ValueError(
-                "autotuner dict must include a 'type' key (e.g. type: RampProximalWeight)"
-            )
-
-    if not _AUTOTUNER_MAP:
-        from openscvx.algorithms.AugmentedLagrangian import AugmentedLagrangian
-        from openscvx.algorithms.ConstantProximalWeight import ConstantProximalWeight
-        from openscvx.algorithms.RampProximalWeight import RampProximalWeight
-
-        for cls in (AugmentedLagrangian, ConstantProximalWeight, RampProximalWeight):
-            _AUTOTUNER_MAP[cls.__name__] = cls
-
-    cls = _AUTOTUNER_MAP.get(name)
-    if cls is None:
-        raise ValueError(f"Unknown autotuner {name!r}; expected one of {sorted(_AUTOTUNER_MAP)}")
-
-    instance = cls()
-    for key, value in params.items():
-        if not hasattr(instance, key):
-            raise ValueError(f"Unknown autotuner parameter {key!r} for {name}")
-        setattr(instance, key, value)
-    return instance
-
-
-@dataclass
-class ScpConfig:
-    def __init__(
-        self,
-        n: Optional[int] = None,
-        n_states: Optional[int] = None,
-        k_max: int = 200,
-        lam_prox: float = 1e0,
-        lam_vc: float = 1e1,
-        lam_cost: float = 1e-1,
-        lam_vb: float = 0.0,
-        ep_tr: float = 1e-4,
-        ep_vb: float = 1e-4,
-        ep_vc: float = 1e-8,
-        autotuner: Optional["AutotuningBase"] = None,
-    ):
-        """
-        Configuration class for Sequential Convex Programming (SCP).
-
-        This class defines the parameters used to configure the SCP solver. You
-        will very likely need to modify the weights for your problem. Please
-        refer to my guide [here](https://openscvx.github.io/openscvx/
-        hyperparameter_tuning) for more information.
-
-        Attributes:
-            n (int): The number of discretization nodes. Defaults to `None`.
-            k_max (int): The maximum number of SCP iterations. Defaults to 200.
-            lam_prox (float): The trust region weight. Defaults to 1.0.
-            lam_vc (float): The penalty weight for virtual control. Defaults to 1.0.
-            ep_tr (float): The trust region convergence tolerance. Defaults to 1e-4.
-            ep_vb (float): The boundary constraint convergence tolerance.
-                Defaults to 1e-4.
-            ep_vc (float): The virtual constraint convergence tolerance.
-                Defaults to 1e-8.
-            lam_cost (float): The weight for original cost. Defaults to 0.0.
-            lam_vb (float): The weight for virtual buffer. This is only used if
-                there are nonconvex nodal constraints present. Defaults to 0.0.
-            autotuner: Optional custom autotuner instance. If not provided, defaults
-                to ``AugmentedLagrangian()`` with default parameters. Useful for
-                customizing parameters:
-
-                .. code-block:: python
-
-                    auto_tuner = ox.AugmentedLagrangian()
-                    auto_tuner.rho_max = 1e7
-                    problem.settings.scp.autotuner = auto_tuner
-
-        Note:
-            Autotuner parameters can be accessed and modified via the autotuner
-            instance (e.g., ``problem.algorithm.autotuner.rho_max``) after
-            initialization. Default values are set in the AugmentedLagrangian class.
-        """
-        # Initialize references first (before any setters that might use them)
-        self._parent_config = None  # Will be set by Config.__post_init__
-        self._n_states = n_states
-
-        self.n = n
-        self.k_max = k_max
-        self.lam_prox = lam_prox
-        # Store raw lam_vc; convert to array later once n_states is known
-        self._lam_vc = lam_vc
-        self.ep_tr = ep_tr
-        self.ep_vb = ep_vb
-        self.ep_vc = ep_vc
-        self.lam_cost = lam_cost
-        self.lam_vb = lam_vb
-        self._uniform_time_grid = False
-        # Store autotuner via property to support lazy default construction
-        self.autotuner = autotuner
-
-        # Internal storage for autotuner instance (may be lazily created)
-        # Initialized here to ensure attribute exists even if setter logic changes
-        if not hasattr(self, "_autotuner"):
-            self._autotuner = None
-
-    @property
-    def autotuner(self) -> Optional["AutotuningBase"]:
-        """Return the configured autotuner, defaulting to AugmentedLagrangian.
-
-        If no custom autotuner instance has been provided, this property lazily
-        constructs a default :class:`AugmentedLagrangian` instance and caches it
-        on the config object. This keeps the configuration as the single source
-        of truth for the autotuning strategy while avoiding circular imports by
-        importing inside the method body.
-        """
-        if self._autotuner is None:
-            # Local import avoids circular dependency:
-            # - autotuning imports Config
-            # - Config should not eagerly import autotuning at module import time
-            from openscvx.algorithms.AugmentedLagrangian import AugmentedLagrangian
-
-            self._autotuner = AugmentedLagrangian()
-        return self._autotuner
-
-    @autotuner.setter
-    def autotuner(self, value: Optional["AutotuningBase"]) -> None:
-        """Set a custom autotuner instance or reset to default when None.
-
-        Passing ``None`` clears the cached autotuner so that the next access
-        will recreate the default :class:`AugmentedLagrangian` instance.
-        """
-        self._autotuner = value
-
-    @property
-    def lam_vc(self):
-        """Getter for lam_vc."""
-        return self._lam_vc
-
-    @lam_vc.setter
-    def lam_vc(self, value):
-        """Setter for lam_vc that converts scalar to array if possible.
-
-        If a scalar is provided and both `n` and `n_states` (from parent config)
-        are available, the scalar is converted to an array of shape (n-1, n_states).
-        This setter assumes it is called only after `n_states` is available.
-        """
-        # If it's already an array, store it directly
-        if isinstance(value, np.ndarray):
-            self._lam_vc = value
-            return
-
-        # If it's a scalar, require dimensions to be available
-        if isinstance(value, (int, float)):
-            # Both dimensions available, convert to array
-            self._lam_vc = np.ones((self.n - 1, self._n_states)) * value
-            return
-
-        raise ValueError(f"Invalid value for lam_vc: {value}")
-
-    def __post_init__(self):
-        keys_to_scale = ["lam_prox", "lam_vc", "lam_cost", "lam_vb"]
-        # Handle lam_vc which might be scalar or array
-        scale_values = []
-        for key in keys_to_scale:
-            val = getattr(self, key)
-            if isinstance(val, np.ndarray):
-                scale_values.append(np.max(val))
-            else:
-                scale_values.append(val)
-        scale = max(scale_values)
-        for key in keys_to_scale:
-            val = getattr(self, key)
-            if isinstance(val, np.ndarray):
-                setattr(self, key, val / scale)
-            else:
-                setattr(self, key, val / scale)
-
-
 @dataclass
 class Config:
     sim: SimConfig
-    scp: ScpConfig
-    cvx: ConvexSolverConfig
-    dis: DiscretizationConfig
     prp: PropagationConfig
     dev: DevConfig
 
     # Subsections derived from the lowered problem — not user-configurable.
     _INTERNAL_FIELDS = frozenset({"sim"})
-
-    def __post_init__(self):
-        # Set parent config reference in scp
-        self.scp._parent_config = self
 
     def apply_dict(self, settings: dict) -> None:
         """Apply a nested settings dict to this :class:`Config`.
@@ -568,8 +235,7 @@ class Config:
         Example::
 
             config.apply_dict({
-                "scp": {"ep_tr": 1e-3, "autotuner": {"ramp_factor": 1.04}},
-                "dis": {"dis_type": "ZOH"},
+                "dev": {"printing": False, "verbosity": 1},
             })
 
         Dict values are handled contextually:

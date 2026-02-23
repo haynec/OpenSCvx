@@ -21,9 +21,10 @@ from openscvx.utils.printing import (
     color_prob_stat,
 )
 
-from .base import Algorithm, AlgorithmState, CandidateIterate
-from .ConstantProximalWeight import ConstantProximalWeight
-from .RampProximalWeight import RampProximalWeight
+from .augmented_lagrangian import AugmentedLagrangian
+from .base import Algorithm, AlgorithmState, CandidateIterate, Weights
+from .constant_proximal_weight import ConstantProximalWeight
+from .ramp_proximal_weight import RampProximalWeight
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
@@ -79,35 +80,143 @@ class PenalizedTrustRegion(Algorithm):
         Column("prob_stat", "Cvx Status", 11, "{}", color_prob_stat),
     ]
 
-    def __init__(self):
-        """Initialize PTR with unset infrastructure.
+    def __init__(
+        self,
+        autotuner: "AutotuningBase" = None,
+        k_max: int = 200,
+        lam_prox: float = 1e0,
+        lam_vc: float = 1e1,
+        lam_cost: float = 1e-1,
+        lam_vb: float = 0.0,
+        ep_tr: float = 1e-4,
+        ep_vb: float = 1e-4,
+        ep_vc: float = 1e-8,
+    ):
+        """Initialize PTR with algorithm parameters and optional autotuner.
 
-        Call initialize() before step() to set up compiled components.
+        Args:
+            autotuner: Weight adaptation strategy. Defaults to
+                :class:`AugmentedLagrangian` when ``None``.
+            k_max: Maximum SCP iterations. Defaults to 200.
+            lam_prox: Trust region (proximal) weight. Defaults to 1.0.
+            lam_vc: Virtual control penalty weight. Defaults to 10.0.
+            lam_cost: Cost weight. Defaults to 0.1.
+            lam_vb: Virtual buffer penalty weight. Defaults to 0.0.
+            ep_tr: Trust region convergence tolerance. Defaults to 1e-4.
+            ep_vb: Virtual buffer convergence tolerance. Defaults to 1e-4.
+            ep_vc: Virtual control convergence tolerance. Defaults to 1e-8.
         """
+        # Compiled infrastructure (set by initialize())
         self._solver: "ConvexSolver" = None
         self._discretization_solver: callable = None
         self._jax_constraints: "LoweredJaxConstraints" = None
         self._emitter: callable = None
-        self._autotuner: "AutotuningBase" = None
+
+        # Autotuner
+        self.autotuner: "AutotuningBase" = (
+            autotuner if autotuner is not None else AugmentedLagrangian()
+        )
+
+        # SCP weights (grouped dataclass, normalized for numerical conditioning)
+        self.weights = Weights(
+            lam_prox=lam_prox,
+            lam_vc=lam_vc,
+            lam_cost=lam_cost,
+            lam_vb=lam_vb,
+        )
+        self.weights.normalize()
+
+        # SCP convergence parameters
+        self.k_max = k_max
+        self.ep_tr = ep_tr
+        self.ep_vb = ep_vb
+        self.ep_vc = ep_vc
+
+    # -- Weight properties ---------------------------------------------------
+    # These properties are the **source of truth** for user-facing weight
+    # values.  Getters return the raw (user-specified, pre-normalization)
+    # value.  Setters update the raw value and re-normalize ``self.weights``.
+    #
+    # During SCP iteration the autotuner may mutate the *normalized* values
+    # on ``self.weights`` directly (e.g. ramping ``lam_prox``).  Those
+    # in-flight changes are tracked in ``AlgorithmState`` weight histories
+    # but do not affect the raw values returned here.
 
     @property
-    def autotuner(self) -> "AutotuningBase":
-        """Access the autotuner instance for configuring parameters.
+    def lam_prox(self) -> float:
+        """Trust region (proximal) weight.
 
-        For AugmentedLagrangian method, parameters can be modified via:
-            algorithm.autotuner.rho_max = 1e7
-            algorithm.autotuner.mu_max = 1e7
-            etc.
+        This is the user-specified value before normalization. Setting this
+        property triggers automatic re-normalization of all weights.
 
-        Returns:
-            AutotuningBase: The autotuner instance
-
-        Raises:
-            AttributeError: If algorithm has not been initialized yet
+        !!! note
+            The autotuner may modify the normalized weight in
+            ``self.weights.lam_prox`` during iteration. Those changes are
+            internal and do not alter the value returned here.
         """
-        if self._autotuner is None:
-            raise AttributeError("Autotuner not yet initialized. Call initialize() first.")
-        return self._autotuner
+        return self.weights._raw_lam_prox
+
+    @lam_prox.setter
+    def lam_prox(self, value: float) -> None:
+        self.weights._raw_lam_prox = value
+        self.weights.normalize()
+
+    @property
+    def lam_vc(self) -> float:
+        """Virtual control penalty weight.
+
+        This is the user-specified value before normalization. Setting this
+        property triggers automatic re-normalization of all weights.
+
+        !!! note
+            The autotuner may modify the normalized weight in
+            ``self.weights.lam_vc`` during iteration. Those changes are
+            internal and do not alter the value returned here.
+        """
+        return self.weights._raw_lam_vc
+
+    @lam_vc.setter
+    def lam_vc(self, value: float) -> None:
+        self.weights._raw_lam_vc = value
+        self.weights.normalize()
+
+    @property
+    def lam_cost(self) -> float:
+        """Cost weight.
+
+        This is the user-specified value before normalization. Setting this
+        property triggers automatic re-normalization of all weights.
+
+        !!! note
+            The autotuner may modify the normalized weight in
+            ``self.weights.lam_cost`` during iteration. Those changes are
+            internal and do not alter the value returned here.
+        """
+        return self.weights._raw_lam_cost
+
+    @lam_cost.setter
+    def lam_cost(self, value: float) -> None:
+        self.weights._raw_lam_cost = value
+        self.weights.normalize()
+
+    @property
+    def lam_vb(self) -> float:
+        """Virtual buffer penalty weight.
+
+        This is the user-specified value before normalization. Setting this
+        property triggers automatic re-normalization of all weights.
+
+        !!! note
+            The autotuner may modify the normalized weight in
+            ``self.weights.lam_vb`` during iteration. Those changes are
+            internal and do not alter the value returned here.
+        """
+        return self.weights._raw_lam_vb
+
+    @lam_vb.setter
+    def lam_vb(self, value: float) -> None:
+        self.weights._raw_lam_vb = value
+        self.weights.normalize()
 
     def get_columns(self, verbosity: int = Verbosity.STANDARD) -> List[Column]:
         """Get the columns to display for iteration output.
@@ -127,10 +236,7 @@ class PenalizedTrustRegion(Algorithm):
         Raises:
             AttributeError: If algorithm has not been initialized yet.
         """
-        if self._autotuner is None:
-            raise AttributeError("Autotuner not yet initialized. Call initialize() first.")
-
-        all_columns = self.BASE_COLUMNS + self._autotuner.COLUMNS + self.TAIL_COLUMNS
+        all_columns = self.BASE_COLUMNS + self.autotuner.COLUMNS + self.TAIL_COLUMNS
         return [col for col in all_columns if col.min_verbosity <= verbosity]
 
     def initialize(
@@ -161,11 +267,6 @@ class PenalizedTrustRegion(Algorithm):
         self._jax_constraints = jax_constraints
         self._emitter = emitter
 
-        # Initialize autotuner based on settings
-        # The autotuner is configured on ``settings.scp.autotuner`` with a default
-        # of :class:`AugmentedLagrangian` when no custom instance is provided.
-        self._autotuner = settings.scp.autotuner
-
         # Set boundary conditions
         self._solver.update_boundary_conditions(
             x_init=settings.sim.x.initial,
@@ -173,7 +274,7 @@ class PenalizedTrustRegion(Algorithm):
         )
 
         # Create temporary state for initialization solve
-        init_state = AlgorithmState.from_settings(settings)
+        init_state = AlgorithmState.from_settings(settings, self.weights)
 
         # Solve a dumb problem to initialize DPP and JAX jacobians
         _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
@@ -261,14 +362,14 @@ class PenalizedTrustRegion(Algorithm):
         state.J_vc = np.sum(np.array(J_vc_vec))
 
         # Update weights in state using configured autotuning method
-        adaptive_state = self._autotuner.update_weights(
-            state, candidate, self._jax_constraints, settings, params
+        adaptive_state = self.autotuner.update_weights(
+            state, candidate, self._jax_constraints, settings, params, self.weights
         )
 
         # Build emission data - only include nonlinear/reduction metrics when
         # the autotuner actually uses them (constant/ramp methods don't)
         use_full_metrics = not isinstance(
-            self._autotuner, (ConstantProximalWeight, RampProximalWeight)
+            self.autotuner, (ConstantProximalWeight, RampProximalWeight)
         )
 
         emission_data = {
@@ -282,6 +383,9 @@ class PenalizedTrustRegion(Algorithm):
             "lam_prox": state.lam_prox,
             "prob_stat": prob_stat,
             "adaptive_state": adaptive_state,
+            "ep_tr": self.ep_tr,
+            "ep_vb": self.ep_vb,
+            "ep_vc": self.ep_vc,
         }
 
         # Only include nonlinear/reduction metrics when autotuner uses them
@@ -317,11 +421,7 @@ class PenalizedTrustRegion(Algorithm):
         state.k += 1
 
         # Return convergence status
-        return (
-            (state.J_tr < settings.scp.ep_tr)
-            and (state.J_vb < settings.scp.ep_vb)
-            and (state.J_vc < settings.scp.ep_vc)
-        )
+        return (state.J_tr < self.ep_tr) and (state.J_vb < self.ep_vb) and (state.J_vc < self.ep_vc)
 
     def _subproblem(
         self,

@@ -355,17 +355,14 @@ problem = Problem(
     constraints=constraints,
     N=n,
     byof=byof,
-    autotuner=ox.RampProximalWeight(),
+    algorithm={
+        "autotuner": {"type": "RampProximalWeight", "ramp_factor": 1.06, "lam_prox_max": 1e3},
+        "lam_vc": 1e3,
+        "lam_cost": 6e0,
+    },
     float_dtype="float64",
+    solver={"solver_args": {"canon_backend": "COO", "enforce_dpp": True}},
 )
-
-# problem.settings.scp.ep_tr = 1.6e-3
-problem.settings.scp.autotuner.ramp_factor = 1.06
-problem.settings.scp.autotuner.lam_prox_max = 1e3
-
-problem.settings.scp.lam_vc = 1e3
-problem.settings.scp.lam_cost = 6e0
-problem.settings.cvx.solver_args = {"canon_backend": "COO", "enforce_dpp": True}
 
 
 plotting_dict = {

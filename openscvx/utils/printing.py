@@ -8,11 +8,13 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import jax
-import numpy as np
 from termcolor import colored
 
 if TYPE_CHECKING:
-    from openscvx.algorithms import OptimizationResults
+    from openscvx.algorithms import Algorithm, OptimizationResults
+    from openscvx.config import Config
+    from openscvx.discretization import Discretizer
+    from openscvx.solvers import ConvexSolver
 
 warnings.filterwarnings("ignore")
 
@@ -45,23 +47,26 @@ class Column:
 
 def color_J_tr(value: Any, params: Any, data: dict) -> Optional[str]:
     """Color J_tr green if within tolerance, red otherwise."""
-    if params is None:
+    ep = data.get("ep_tr")
+    if ep is None:
         return None
-    return col_pos if value <= params.scp.ep_tr else col_neg
+    return col_pos if value <= ep else col_neg
 
 
 def color_J_vb(value: Any, params: Any, data: dict) -> Optional[str]:
     """Color J_vb green if within tolerance, red otherwise."""
-    if params is None:
+    ep = data.get("ep_vb")
+    if ep is None:
         return None
-    return col_pos if value <= params.scp.ep_vb else col_neg
+    return col_pos if value <= ep else col_neg
 
 
 def color_J_vc(value: Any, params: Any, data: dict) -> Optional[str]:
     """Color J_vc green if within tolerance, red otherwise."""
-    if params is None:
+    ep = data.get("ep_vc")
+    if ep is None:
         return None
-    return col_pos if value <= params.scp.ep_vc else col_neg
+    return col_pos if value <= ep else col_neg
 
 
 def color_prob_stat(value: Any, params: Any, data: dict) -> Optional[str]:
@@ -186,7 +191,13 @@ def print_summary_box(lines, title="Summary"):
     print(f"{' ' * indent}╰{'─' * box_width}╯\n")
 
 
-def print_problem_summary(settings: Any, lowered: Any, solver: Any) -> None:
+def print_problem_summary(
+    settings: "Config",
+    lowered: Any,
+    solver: "ConvexSolver",
+    algorithm: "Algorithm",
+    discretizer: "Discretizer",
+) -> None:
     """
     Print the problem summary box.
 
@@ -194,6 +205,8 @@ def print_problem_summary(settings: Any, lowered: Any, solver: Any) -> None:
         settings: Configuration settings containing problem information
         lowered: LoweredProblem from lower_symbolic_problem()
         solver: Initialized ConvexSolver with built problem
+        algorithm: Algorithm instance (e.g., PenalizedTrustRegion)
+        discretizer: Discretizer instance (e.g., LinearizeDiscretize)
     """
     n_nodal_convex = len(lowered.cvxpy_constraints.constraints)
     n_nodal_nonconvex = len(lowered.jax_constraints.nodal)
@@ -210,20 +223,17 @@ def print_problem_summary(settings: Any, lowered: Any, solver: Any) -> None:
     jax_backend = jax.devices()[0].platform.upper()
     jax_version = jax.__version__
 
-    # Build weights string conditionally
-    if isinstance(settings.scp.lam_vc, np.ndarray):
-        lam_vc_str = f"λ_vc=matrix({settings.scp.lam_vc.shape})"
-    else:
-        lam_vc_str = f"λ_vc={settings.scp.lam_vc:4.1f}"
+    # Build weights string from algorithm weights
+    weights = algorithm.weights
     weights_parts = [
-        f"λ_cost={settings.scp.lam_cost:4.1f}",
-        f"λ_tr={settings.scp.lam_prox:4.1f}",
-        lam_vc_str,
+        f"λ_cost={weights.lam_cost:4.1f}",
+        f"λ_tr={weights.lam_prox:4.1f}",
+        f"λ_vc={weights.lam_vc:4.1f}",
     ]
 
     # Add λ_vb only if there are nodal nonconvex constraints
     if n_nodal_nonconvex > 0:
-        weights_parts.append(f"λ_vb={settings.scp.lam_vb:4.1f}")
+        weights_parts.append(f"λ_vb={weights.lam_vb:4.1f}")
 
     weights_str = ", ".join(weights_parts)
 
@@ -231,7 +241,7 @@ def print_problem_summary(settings: Any, lowered: Any, solver: Any) -> None:
         "Problem Summary",
         (
             f"Dimensions: {settings.sim.n_states} states ({n_augmented} aug),"
-            f" {settings.sim.n_controls} controls, {settings.scp.n} nodes"
+            f" {settings.sim.n_controls} controls, {settings.sim.n} nodes"
         ),
         f"Constraints: {n_nodal_convex} conv, {n_nodal_nonconvex} nonconv, {n_ctcs} ctcs",
         (
@@ -239,7 +249,7 @@ def print_problem_summary(settings: Any, lowered: Any, solver: Any) -> None:
             f" {n_cvx_constraints} constraints"
         ),
         f"Weights: {weights_str}",
-        f"CVX Solver: {settings.cvx.solver}, Discretization Solver: {settings.dis.solver}",
+        f"CVX Solver: {solver.cvx_solver}, Discretization Solver: {discretizer.ode_solver}",
         f"JAX Backend: {jax_backend} (v{jax_version})",
     ]
 

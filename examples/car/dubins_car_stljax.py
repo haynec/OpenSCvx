@@ -105,9 +105,9 @@ problem = Problem(
     time=time,  # Time is already defined above as ox.Time
     constraints=constraints,
     N=n,
+    algorithm={"lam_vc": 6e2},
 )
-# Set solver parameters
-problem.settings.scp.lam_vc = 6e2
+
 # Extract parameter values from problem.parameters (not Parameter objects)
 plotting_dict = {
     "wp1_center": problem.parameters.get("wp1_center", None),

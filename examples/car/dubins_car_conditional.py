@@ -110,11 +110,8 @@ problem = Problem(
     constraints=constraints,
     N=n,
     licq_max=1e-6,
+    algorithm={"lam_vc": 1e3},
 )
-
-# Set solver parameters
-problem.settings.scp.lam_vc = 1e3
-
 
 plotting_dict = {
     "obs_radius": problem.parameters["obs_radius"],

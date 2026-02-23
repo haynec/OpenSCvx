@@ -20,6 +20,58 @@ if TYPE_CHECKING:
 
 
 @dataclass
+class Weights:
+    """Normalized SCP weights used internally by the algorithm and autotuner.
+
+    This dataclass is an **internal** representation. Users should read and
+    write weights through the algorithm's properties (e.g.
+    ``algorithm.lam_cost``) which are the source of truth for user-facing
+    values. The autotuner may mutate the normalized fields on this object
+    during SCP iteration; those mutations are reflected in the weight
+    histories on :class:`AlgorithmState` but do **not** alter the raw
+    (user-specified) values.
+
+    The public fields (``lam_prox``, ``lam_vc``, ``lam_cost``, ``lam_vb``)
+    always hold **normalized** values (largest == 1.0).  The original
+    user-specified values are preserved in private ``_raw_*`` attributes so
+    that :meth:`normalize` can be re-invoked without accumulating rounding
+    drift.
+
+    Attributes:
+        lam_prox: Trust region (proximal) weight (normalized).
+        lam_vc: Virtual control penalty weight (normalized).
+        lam_cost: Cost weight (normalized).
+        lam_vb: Virtual buffer penalty weight (normalized).
+    """
+
+    lam_prox: float = 1e0
+    lam_vc: float = 1e1
+    lam_cost: float = 1e-1
+    lam_vb: float = 0.0
+
+    def __post_init__(self):
+        # Snapshot the user-specified values so normalize() is idempotent.
+        self._raw_lam_prox = self.lam_prox
+        self._raw_lam_vc = self.lam_vc
+        self._raw_lam_cost = self.lam_cost
+        self._raw_lam_vb = self.lam_vb
+
+    def normalize(self) -> None:
+        """Normalize weights so the largest equals 1.0.
+
+        Always re-derives from the stored raw (user-specified) values,
+        making this method idempotent and safe to call after updating
+        any individual raw weight.
+        """
+        scale = max(self._raw_lam_prox, self._raw_lam_vc, self._raw_lam_cost, self._raw_lam_vb)
+        if scale > 0:
+            self.lam_prox = self._raw_lam_prox / scale
+            self.lam_vc = self._raw_lam_vc / scale
+            self.lam_cost = self._raw_lam_cost / scale
+            self.lam_vb = self._raw_lam_vb / scale
+
+
+@dataclass
 class CandidateIterate:
     x: Optional[np.ndarray] = None
     u: Optional[np.ndarray] = None
@@ -181,6 +233,7 @@ class AutotuningBase(ABC):
         nodal_constraints: "LoweredJaxConstraints",
         settings: "Config",
         params: dict,
+        weights: "Weights",
     ) -> str:
         """Update SCP weights and cost parameters based on iteration state.
 
@@ -189,9 +242,11 @@ class AutotuningBase(ABC):
 
         Args:
             state: Solver state containing current weight values (mutated in place)
+            candidate: Candidate iterate from the current subproblem solve
             nodal_constraints: Lowered JAX constraints
             settings: Configuration object containing adaptation parameters
             params: Dictionary of problem parameters
+            weights: Normalized initial weights from the algorithm
 
         Returns:
             str: Adaptive state string describing the update action (e.g., "Accept Lower")
@@ -452,7 +507,7 @@ class AlgorithmState:
         return self.lam_vb_history[-1]
 
     @classmethod
-    def from_settings(cls, settings: "Config") -> "AlgorithmState":
+    def from_settings(cls, settings: "Config", weights: "Weights") -> "AlgorithmState":
         """Create initial algorithm state from configuration.
 
         Copies only the trajectory arrays from settings, leaving all metadata
@@ -460,18 +515,24 @@ class AlgorithmState:
 
         Args:
             settings: Configuration object containing initial guesses and SCP parameters
+            weights: Normalized initial weights from the algorithm. The scalar
+                ``lam_vc`` is expanded to an ``(N-1, n_states)`` array here.
 
         Returns:
             Fresh AlgorithmState initialized from settings with copied arrays
         """
+        n = settings.sim.n
+        n_states = settings.sim.n_states
+        lam_vc_array = np.ones((n - 1, n_states)) * weights.lam_vc
+
         return cls(
             k=1,
             J_tr=1e2,
             J_vb=1e2,
             J_vc=1e2,
-            n_x=settings.sim.n_states,
+            n_x=n_states,
             n_u=settings.sim.n_controls,
-            N=settings.scp.n,
+            N=n,
             J_nonlin_history=[],
             J_lin_history=[],
             pred_reduction_history=[],
@@ -482,10 +543,10 @@ class AlgorithmState:
             discretizations=[],
             VC_history=[],
             TR_history=[],
-            lam_vc_history=[settings.scp.lam_vc],
-            lam_cost_history=[settings.scp.lam_cost],
-            lam_vb_history=[settings.scp.lam_vb],
-            lam_prox_history=[settings.scp.lam_prox],
+            lam_vc_history=[lam_vc_array],
+            lam_cost_history=[weights.lam_cost],
+            lam_vb_history=[weights.lam_vb],
+            lam_prox_history=[weights.lam_prox],
         )
 
 
@@ -529,7 +590,19 @@ class Algorithm(ABC):
                 def step(self, state, params, settings):
                     # Run one iteration using self._* and per-step params/settings
                     return converged
+
+    Attributes:
+        weights: Normalized SCP weights used by the algorithm and autotuner.
+            Subclasses must set this in ``__init__``.
+        k_max: Maximum number of SCP iterations.
+            Subclasses must set this in ``__init__``.
     """
+
+    #: Normalized SCP weights. Subclasses must set this in ``__init__``.
+    weights: Weights
+
+    #: Maximum number of SCP iterations. Subclasses must set this in ``__init__``.
+    k_max: int
 
     @abstractmethod
     def initialize(

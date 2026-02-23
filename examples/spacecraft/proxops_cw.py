@@ -126,11 +126,9 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n_nodes,
+    algorithm={"lam_vb": 1e0},
+    discretizer={"dis_type": "ZOH"},
 )
-
-# Solver settings (FOH is default, no need to set explicitly)
-problem.settings.dis.dis_type = "ZOH"
-problem.settings.scp.lam_vb = 1e0
 
 # Plotting metadata
 plotting_dict = {

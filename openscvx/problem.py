@@ -25,22 +25,19 @@ import jax
 os.environ["EQX_ON_ERROR"] = "nan"
 
 from openscvx.algorithms import (
+    Algorithm,
     AlgorithmState,
-    AugmentedLagrangian,
-    AutotuningBase,
     OptimizationResults,
     PenalizedTrustRegion,
+    _resolve_algorithm,
 )
 from openscvx.config import (
     Config,
-    ConvexSolverConfig,
     DevConfig,
-    DiscretizationConfig,
     PropagationConfig,
-    ScpConfig,
     SimConfig,
 )
-from openscvx.discretization import LinearizeDiscretize
+from openscvx.discretization import Discretizer, LinearizeDiscretize, _resolve_discretizer
 from openscvx.expert import ByofSpec
 from openscvx.lowered import LoweredProblem, ParameterDict
 from openscvx.lowered.dynamics import Dynamics
@@ -50,7 +47,7 @@ from openscvx.lowered.jax_constraints import (
     LoweredNodalConstraint,
 )
 from openscvx.propagation import get_propagation_solver, propagate_trajectory_results
-from openscvx.solvers import PTRSolver
+from openscvx.solvers import ConvexSolver, PTRSolver, _resolve_solver
 from openscvx.symbolic.builder import preprocess_symbolic_problem
 from openscvx.symbolic.expr import CTCS, Constraint
 from openscvx.symbolic.expr.control import Control
@@ -82,7 +79,9 @@ class Problem:
         algebraic_prop: Optional[dict] = None,
         licq_min: float = 0.0,
         licq_max: float = 1e-4,
-        autotuner: Optional[AutotuningBase] = AugmentedLagrangian(),
+        algorithm: Optional[Union[Algorithm, dict]] = None,
+        discretizer: Optional[Union[Discretizer, dict]] = None,
+        solver: Optional[Union[ConvexSolver, dict]] = None,
         byof: Optional[ByofSpec] = None,
         float_dtype: str = "float32",
     ):
@@ -111,6 +110,73 @@ class Problem:
                 for outputs evaluated (not integrated) during propagation.
             licq_min (float): Minimum LICQ constraint value. Defaults to 0.0.
             licq_max (float): Maximum LICQ constraint value. Defaults to 1e-4.
+            algorithm: SCP algorithm configuration. Accepts:
+
+                - ``None`` — uses ``PenalizedTrustRegion()`` with defaults.
+                - An ``Algorithm`` instance — used directly.
+                - A ``dict`` — passed as kwargs to ``PenalizedTrustRegion()``.
+                  Supports a nested ``autotuner`` key in any of these forms:
+
+                  - **string** — class name with default parameters, e.g.
+                    ``"RampProximalWeight"``.
+                  - **dict** — class name via ``"type"`` key plus parameter
+                    overrides, e.g.
+                    ``{"type": "RampProximalWeight", "ramp_factor": 1.04}``.
+                  - **instance** — an already-constructed autotuner object,
+                    e.g. ``ox.RampProximalWeight(ramp_factor=1.04)``.
+
+                Examples::
+
+                    # Just tweak weights (default algorithm & autotuner)
+                    algorithm={"lam_cost": 5e-1, "k_max": 50}
+
+                    # Autotuner by name (default parameters)
+                    algorithm={"autotuner": "RampProximalWeight"}
+
+                    # Autotuner as dict with overrides
+                    algorithm={
+                        "lam_cost": 5e-1,
+                        "autotuner": {"type": "RampProximalWeight", "ramp_factor": 1.04},
+                    }
+
+                    # Autotuner as instance
+                    algorithm={"autotuner": ox.RampProximalWeight(ramp_factor=1.04)}
+            discretizer: Discretization method configuration. Accepts:
+
+                - ``None`` — uses ``LinearizeDiscretize()`` with defaults
+                  (FOH, Tsit5).
+                - A ``Discretizer`` instance — used directly.
+                - A ``dict`` — passed as kwargs to ``LinearizeDiscretize()``.
+
+                Examples::
+
+                    # Change hold type and ODE solver
+                    discretizer={"dis_type": "ZOH", "ode_solver": "Dopri8"}
+
+                    # Use custom integrator
+                    discretizer={"custom_integrator": True}
+
+                    # Instance
+                    discretizer=ox.LinearizeDiscretize(dis_type="ZOH")
+            solver: Convex subproblem solver configuration. Accepts:
+
+                - ``None`` — uses ``PTRSolver()`` with defaults (QOCO backend).
+                - A ``ConvexSolver`` instance — used directly.
+                - A ``dict`` — passed as kwargs to ``PTRSolver()``.
+
+                Examples::
+
+                    # Change CVXPY backend solver and tolerances
+                    solver={"cvx_solver": "CLARABEL", "solver_args": {"tol_gap_abs": 1e-7}}
+
+                    # Just change solver_args
+                    solver={"solver_args": {"abstol": 1e-6, "reltol": 1e-9}}
+
+                    # Enable cvxpygen code generation
+                    solver={"cvxpygen": True}
+
+                    # Instance
+                    solver=ox.PTRSolver(cvx_solver="CLARABEL")
             byof (ByofSpec, optional): Expert mode only. Raw JAX functions to
                 bypass symbolic layer. See :class:`openscvx.expert.ByofSpec` for
                 detailed documentation.
@@ -177,8 +243,44 @@ class Problem:
         # Store byof for cache hashing
         self._byof = byof
 
-        # Create solver before lowering (solver owns its variables)
-        self._solver: PTRSolver = PTRSolver()
+        # Resolve algorithm: None → default PTR, dict → PTR(**dict), instance → use directly
+        if algorithm is None:
+            self._algorithm = PenalizedTrustRegion()
+        elif isinstance(algorithm, dict):
+            self._algorithm = _resolve_algorithm(algorithm)
+        else:
+            if not isinstance(algorithm, Algorithm):
+                raise TypeError(
+                    f"algorithm must be an Algorithm instance, dict, or None, "
+                    f"got {type(algorithm).__name__}"
+                )
+            self._algorithm = algorithm
+
+        # Resolve discretizer: None → default, dict → LinearizeDiscretize(**dict), instance → use
+        if discretizer is None:
+            self._discretizer = LinearizeDiscretize()
+        elif isinstance(discretizer, dict):
+            self._discretizer = _resolve_discretizer(discretizer)
+        else:
+            if not isinstance(discretizer, Discretizer):
+                raise TypeError(
+                    f"discretizer must be a Discretizer instance, dict, or None, "
+                    f"got {type(discretizer).__name__}"
+                )
+            self._discretizer = discretizer
+
+        # Resolve solver: None → default PTRSolver, dict → PTRSolver(**dict), instance → use
+        if solver is None:
+            self._solver = PTRSolver()
+        elif isinstance(solver, dict):
+            self._solver = _resolve_solver(solver)
+        else:
+            if not isinstance(solver, ConvexSolver):
+                raise TypeError(
+                    f"solver must be a ConvexSolver instance, dict, or None, "
+                    f"got {type(solver).__name__}"
+                )
+            self._solver = solver
 
         # Lower to JAX and CVXPy (byof handling happens inside lower_symbolic_problem)
         self._lowered: LoweredProblem = lower_symbolic_problem(
@@ -197,25 +299,19 @@ class Problem:
                 x_prop=self._lowered.x_prop_unified,
                 u=self._lowered.u_unified,
                 total_time=self._lowered.x_unified.initial[self._lowered.x_unified.time_slice][0],
+                n=N,
                 n_states=self._lowered.x_unified.initial.shape[0],
                 n_states_prop=self._lowered.x_prop_unified.initial.shape[0],
                 ctcs_node_intervals=self.symbolic.node_intervals,
             ),
-            scp=ScpConfig(
-                n=N,
-                n_states=self._lowered.x_unified.shape[0],
-                autotuner=autotuner,
-            ),
-            dis=DiscretizationConfig(),
             dev=DevConfig(),
-            cvx=ConvexSolverConfig(),
             prp=PropagationConfig(),
         )
 
-        # Copy time grid setting from Time to SCP config so the solver can
+        # Copy time grid setting from Time to sim config so the solver can
         # read it during constraint assembly.
         if isinstance(time, Time):
-            self.settings.scp._uniform_time_grid = time.uniform_time_grid
+            self.settings.sim._uniform_time_grid = time.uniform_time_grid
 
         self._discretization_solver: callable = None
 
@@ -238,9 +334,6 @@ class Problem:
         self.timing_post = None
         self._profiling_session = None
 
-        # Discretizer (handles linearization + discretization)
-        self._discretizer = LinearizeDiscretize()
-
         # Compiled dynamics (vmapped versions, set in initialize())
         self._compiled_dynamics_prop: Optional[Dynamics] = None
 
@@ -253,8 +346,59 @@ class Problem:
         # Final solution state (saved after successful solve)
         self._solution: Optional[AlgorithmState] = None
 
-        # SCP algorithm (currently hardcoded to PTR)
-        self._algorithm = PenalizedTrustRegion()
+        # SCP algorithm (resolved from `algorithm` parameter above)
+
+    @property
+    def solver(self) -> ConvexSolver:
+        """Access the convex subproblem solver instance.
+
+        Attributes such as ``cvx_solver``, ``solver_args``, ``cvxpygen``, and
+        ``cvxpygen_override`` can be modified freely before ``initialize``
+        is called::
+
+            problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+            problem.solver.cvxpygen = True
+            problem.initialize()
+
+        !!! warning
+            Solver settings are compiled into the solve function during
+            ``initialize()``.  Changes made **after** ``initialize()``
+            will have no effect on subsequent solves.
+
+        Returns:
+            The solver instance (e.g., PTRSolver).
+        """
+        return self._solver
+
+    @property
+    def algorithm(self) -> Algorithm:
+        """Access the SCP algorithm instance.
+
+        Returns:
+            The algorithm instance (e.g., PenalizedTrustRegion).
+        """
+        return self._algorithm
+
+    @property
+    def discretizer(self) -> Discretizer:
+        """Access the discretizer instance.
+
+        Attributes such as `dis_type`, `ode_solver`, and `custom_integrator`
+        can be modified freely before `initialize` is called:
+
+            problem.discretizer.dis_type = "ZOH"
+            problem.discretizer.ode_solver = "Dopri8"
+            problem.initialize()
+
+        !!! warning
+            Discretizer settings are compiled into the JIT-cached solver
+            during `initialize`.  Changes made **after**
+            `initialize()` will have no effect on subsequent solves.
+
+        Returns:
+            The discretizer instance (e.g., LinearizeDiscretize).
+        """
+        return self._discretizer
 
     @property
     def parameters(self) -> ParameterDict:
@@ -530,8 +674,7 @@ class Problem:
         pr = profiling.profiling_start(self.settings.dev.profiling, self._profiling_session)
 
         t_0_while = time.time()
-        # Ensure parameter sizes and normalization are correct
-        self.settings.scp.__post_init__()
+        # Ensure scaling matrices are correct
         self.settings.sim.__post_init__()
 
         # Create compiled (vmapped) propagation dynamics
@@ -573,14 +716,20 @@ class Problem:
             self._lowered.dynamics, self.settings
         )
         self._propagation_solver = get_propagation_solver(
-            self._compiled_dynamics_prop.f, self.settings
+            self._compiled_dynamics_prop.f, self.settings, self._discretizer
         )
 
         # Build convex subproblem (solver was created in __init__, variables in lower)
         self._solver.initialize(self._lowered, self.settings)
 
         # Print problem summary (after solver is initialized so we can access problem stats)
-        printing.print_problem_summary(self.settings, self._lowered, self._solver)
+        printing.print_problem_summary(
+            self.settings,
+            self._lowered,
+            self._solver,
+            self._algorithm,
+            self._discretizer,
+        )
 
         # Get cache file paths using symbolic AST hashing
         # This is more stable than hashing lowered JAX code
@@ -596,7 +745,7 @@ class Problem:
             self._discretization_solver,
             dis_solver_file,
             self._parameters,  # Plain dict for JAX
-            self.settings.scp.n,
+            self.settings.sim.n,
             self.settings.sim.n_states,
             self.settings.sim.n_controls,
             save_compiled=self.settings.sim.save_compiled,
@@ -604,7 +753,7 @@ class Problem:
         )
 
         # Setup propagation solver parameters
-        dtau = 1.0 / (self.settings.scp.n - 1)
+        dtau = 1.0 / (self.settings.sim.n - 1)
         dt_max = self.settings.sim.u.max[self.settings.sim.time_dilation_slice][0] * dtau
         self.settings.prp.max_tau_len = int(dt_max / self.settings.prp.dt) + 2
 
@@ -645,7 +794,7 @@ class Problem:
             self.emitter_function = lambda data: None
 
         # Create fresh solver state
-        self._state = AlgorithmState.from_settings(self.settings)
+        self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
 
         t_f_while = time.time()
         self.timing_init = t_f_while - t_0_while
@@ -700,7 +849,7 @@ class Problem:
         self._sync_boundary_conditions()
 
         # Create fresh solver state from settings
-        self._state = AlgorithmState.from_settings(self.settings)
+        self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
 
         # Reset solution
         self._solution = None
@@ -753,7 +902,7 @@ class Problem:
         """Run the SCP algorithm until convergence or iteration limit.
 
         Args:
-            max_iters: Maximum iterations (default: settings.scp.k_max)
+            max_iters: Maximum iterations (default: algorithm.k_max)
             continuous: If True, run all iterations regardless of convergence
 
         Returns:
@@ -782,7 +931,7 @@ class Problem:
         if self.settings.dev.printing:
             printing.header(self._columns)
 
-        k_max = max_iters if max_iters is not None else self.settings.scp.k_max
+        k_max = max_iters if max_iters is not None else self._algorithm.k_max
 
         while self._state.k <= k_max:
             result = self.step()
@@ -827,7 +976,7 @@ class Problem:
         pr = profiling.profiling_start(self.settings.dev.profiling, self._profiling_session)
 
         # Create result from stored solution state
-        result = self._format_result(self._solution, self._solution.k <= self.settings.scp.k_max)
+        result = self._format_result(self._solution, self._solution.k <= self._algorithm.k_max)
 
         t_0_post = time.time()
         result = propagate_trajectory_results(
@@ -836,6 +985,7 @@ class Problem:
             result,
             self._propagation_solver,
             algebraic_prop=self._lowered.algebraic_prop,
+            discretizer=self._discretizer,
         )
         t_f_post = time.time()
 

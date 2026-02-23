@@ -241,12 +241,8 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
+    algorithm={"lam_prox": 2e0, "lam_vc": 4e1, "ep_tr": 1e-5},
 )
-
-problem.settings.scp.lam_prox = 2e0  # Weight on the Trust Reigon
-problem.settings.scp.lam_vc = 4e1  # Weight on the Virtual Control Objective
-
-problem.settings.scp.ep_tr = 1e-5  # Trust Region Tolerance
 
 plotting_dict = {
     "vertices": vertices,
