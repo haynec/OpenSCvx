@@ -170,7 +170,7 @@ __all__ = [
     # PTR algorithm
     "PenalizedTrustRegion",
     "AutotuningBase",
-    "augmented_lagrangian",
-    "constant_proximal_weight",
-    "ramp_proximal_weight",
+    "AugmentedLagrangian",
+    "ConstantProximalWeight",
+    "RampProximalWeight",
 ]
