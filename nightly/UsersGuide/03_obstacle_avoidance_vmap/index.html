@@ -888,17 +888,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#solver-settings" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Solver Settings
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#solution" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -988,10 +977,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#adjusting-solver-settings" class="md-nav__link">
+  <a href="#adjusting-algorithm-weights" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Adjusting Solver Settings
+        Adjusting Algorithm Weights
       
     </span>
   </a>
@@ -7084,17 +7073,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#solver-settings" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Solver Settings
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#solution" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7184,10 +7162,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#adjusting-solver-settings" class="md-nav__link">
+  <a href="#adjusting-algorithm-weights" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Adjusting Solver Settings
+        Adjusting Algorithm Weights
       
     </span>
   </a>
@@ -7475,6 +7453,7 @@ But what if you want to update obstacle positions at runtime, for example, in a 
 </span></code></pre></div>
 <p>These are continuous-time constraints (CTCS), so the drone avoids obstacles not just at discrete nodes but throughout the entire trajectory.</p>
 <h3 id="problem-setup">Problem Setup<a class="headerlink" href="#problem-setup" title="Permanent link">&para;</a></h3>
+<p>The SCP algorithm has several tuning parameters that affect convergence. These can be passed directly to the <code>Problem</code> constructor via the <code>algorithm</code> argument. For this obstacle avoidance problem:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">time</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Time</span><span class="p">(</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">initial</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
 </span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">final</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;minimize&quot;</span><span class="p">,</span> <span class="n">total_time</span><span class="p">),</span>
@@ -7489,23 +7468,21 @@ But what if you want to update obstacle positions at runtime, for example, in a 
 </span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="p">,</span>
 </span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    <span class="n">constraints</span><span class="o">=</span><span class="n">constraints</span><span class="p">,</span>
 </span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>    <span class="n">N</span><span class="o">=</span><span class="n">n</span><span class="p">,</span>
-</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a><span class="p">)</span>
-</span></code></pre></div>
-<h3 id="solver-settings">Solver Settings<a class="headerlink" href="#solver-settings" title="Permanent link">&para;</a></h3>
-<p>The SCP algorithm has several tuning parameters that affect convergence. For this obstacle avoidance problem:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">problem</span><span class="o">.</span><span class="n">settings</span><span class="o">.</span><span class="n">scp</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">=</span> <span class="mf">1e1</span>        <span class="c1"># Trust region weight</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">problem</span><span class="o">.</span><span class="n">settings</span><span class="o">.</span><span class="n">scp</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="mf">1e1</span>    <span class="c1"># Cost objective weight</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">problem</span><span class="o">.</span><span class="n">settings</span><span class="o">.</span><span class="n">scp</span><span class="o">.</span><span class="n">lam_vc</span> <span class="o">=</span> <span class="mf">1e2</span>      <span class="c1"># Virtual control weight</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Configure cost relaxation via autotuner</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">problem</span><span class="o">.</span><span class="n">settings</span><span class="o">.</span><span class="n">scp</span><span class="o">.</span><span class="n">autotuner</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">AugmentedLagrangian</span><span class="p">(</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">lam_cost_drop</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>     <span class="c1"># Iteration to start relaxing cost</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">lam_cost_relax</span><span class="o">=</span><span class="mf">0.5</span>  <span class="c1"># Cost relaxation factor</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="p">)</span>
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>    <span class="n">algorithm</span><span class="o">=</span><span class="p">{</span>
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>        <span class="s2">&quot;lam_prox&quot;</span><span class="p">:</span> <span class="mf">1e1</span><span class="p">,</span>       <span class="c1"># Trust region weight</span>
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>        <span class="s2">&quot;lam_cost&quot;</span><span class="p">:</span> <span class="mf">1e1</span><span class="p">,</span>       <span class="c1"># Cost objective weight</span>
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>        <span class="s2">&quot;lam_vc&quot;</span><span class="p">:</span> <span class="mf">1e2</span><span class="p">,</span>         <span class="c1"># Virtual control weight</span>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>        <span class="s2">&quot;autotuner&quot;</span><span class="p">:</span> <span class="n">ox</span><span class="o">.</span><span class="n">AugmentedLagrangian</span><span class="p">(</span>
+</span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>            <span class="n">lam_cost_drop</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>     <span class="c1"># Iteration to start relaxing cost</span>
+</span><span id="__span-6-21"><a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>            <span class="n">lam_cost_relax</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>  <span class="c1"># Cost relaxation factor</span>
+</span><span id="__span-6-22"><a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a>        <span class="p">),</span>
+</span><span id="__span-6-23"><a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a>    <span class="p">},</span>
+</span><span id="__span-6-24"><a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="solution">Solution<a class="headerlink" href="#solution" title="Permanent link">&para;</a></h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">problem</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">solve</span><span class="p">()</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">post_process</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">problem</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">solve</span><span class="p">()</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">post_process</span><span class="p">()</span>
 </span></code></pre></div>
 <hr />
 <h2 id="data-parallelism-vmap">Data Parallelism: Vmap<a class="headerlink" href="#data-parallelism-vmap" title="Permanent link">&para;</a></h2>
@@ -7513,30 +7490,30 @@ But what if you want to update obstacle positions at runtime, for example, in a 
 <p>Creating individual CTCS constraints in a loop means each constraint object is processed separately by the constraint system, this doesn't scale.</p>
 <h3 id="the-scaling-problem">The Scaling Problem<a class="headerlink" href="#the-scaling-problem" title="Permanent link">&para;</a></h3>
 <p>Consider a 3D grid of obstacles:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">n_obstacles</span> <span class="o">=</span> <span class="mi">64</span>  <span class="c1"># 4 x 4 x 4 grid</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">obstacle_centers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">...</span><span class="p">])</span>  <span class="c1"># Shape: (64, 3)</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">obstacle_radii</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">...</span><span class="p">])</span>    <span class="c1"># Shape: (64,)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">n_obstacles</span> <span class="o">=</span> <span class="mi">64</span>  <span class="c1"># 4 x 4 x 4 grid</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">obstacle_centers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">...</span><span class="p">])</span>  <span class="c1"># Shape: (64, 3)</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">obstacle_radii</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">...</span><span class="p">])</span>    <span class="c1"># Shape: (64,)</span>
 </span></code></pre></div>
 <p>The naive approach creates 64 separate constraints:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Approach 1: Loop (doesn&#39;t scale well)</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_obstacles</span><span class="p">):</span>
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">center</span> <span class="o">=</span> <span class="n">obstacle_centers</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="n">radius</span> <span class="o">=</span> <span class="n">obstacle_radii</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>        <span class="n">ox</span><span class="o">.</span><span class="n">ctcs</span><span class="p">(</span><span class="n">radius</span> <span class="o">&lt;=</span> <span class="n">ox</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">Norm</span><span class="p">(</span><span class="n">position</span> <span class="o">-</span> <span class="n">center</span><span class="p">))</span>
-</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>    <span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Approach 1: Loop (doesn&#39;t scale well)</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_obstacles</span><span class="p">):</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="n">center</span> <span class="o">=</span> <span class="n">obstacle_centers</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="n">radius</span> <span class="o">=</span> <span class="n">obstacle_radii</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>        <span class="n">ox</span><span class="o">.</span><span class="n">ctcs</span><span class="p">(</span><span class="n">radius</span> <span class="o">&lt;=</span> <span class="n">ox</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">Norm</span><span class="p">(</span><span class="n">position</span> <span class="o">-</span> <span class="n">center</span><span class="p">))</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>    <span class="p">)</span>
 </span></code></pre></div>
 <p>This creates N separate constraint objects, each processed independently. For 64 obstacles this adds overhead; for 2000+ it becomes impractical.</p>
 <h3 id="vectorized-constraints-with-vmap">Vectorized Constraints with Vmap<a class="headerlink" href="#vectorized-constraints-with-vmap" title="Permanent link">&para;</a></h3>
 <p><code>ox.Vmap</code> enables data-parallel evaluation by applying a function across a batch of inputs, returning a vector-valued result that is enforced element-wise:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Approach 2: Vmap (vectorized, efficient)</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">obstacle_avoidance</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">ctcs</span><span class="p">(</span>
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="n">obstacle_radii</span> <span class="o">&lt;=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Vmap</span><span class="p">(</span>
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>        <span class="k">lambda</span> <span class="n">center</span><span class="p">:</span> <span class="n">ox</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">Norm</span><span class="p">(</span><span class="n">position</span> <span class="o">-</span> <span class="n">center</span><span class="p">),</span>
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>        <span class="n">batch</span><span class="o">=</span><span class="n">obstacle_centers</span><span class="p">,</span>
-</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="p">)</span>
-</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="p">)</span>
-</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obstacle_avoidance</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Approach 2: Vmap (vectorized, efficient)</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">obstacle_avoidance</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">ctcs</span><span class="p">(</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">obstacle_radii</span> <span class="o">&lt;=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Vmap</span><span class="p">(</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>        <span class="k">lambda</span> <span class="n">center</span><span class="p">:</span> <span class="n">ox</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">Norm</span><span class="p">(</span><span class="n">position</span> <span class="o">-</span> <span class="n">center</span><span class="p">),</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>        <span class="n">batch</span><span class="o">=</span><span class="n">obstacle_centers</span><span class="p">,</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="p">)</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="p">)</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obstacle_avoidance</span><span class="p">)</span>
 </span></code></pre></div>
 <p>This creates a <strong>single</strong> CTCS constraint that computes distances to all obstacles in parallel. The constraint is:</p>
 <div class="arithmatex">\[
@@ -7552,48 +7529,48 @@ r_i \leq \lVert \mathbf{p} - \mathbf{c}_i \rVert \quad \forall i \in [1, N_{\mat
 <p>So far we've used <code>problem.solve()</code> which runs the full SCP algorithm to convergence. But for receding-horizon or model-predictive control (MPC) applications, you often want finer control: run a single SCP iteration, update parameters based on new sensor data, and repeat.</p>
 <h3 id="single-step-iteration">Single-Step Iteration<a class="headerlink" href="#single-step-iteration" title="Permanent link">&para;</a></h3>
 <p>Use <code>problem.step()</code> instead of <code>problem.solve()</code> to run one SCP iteration:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">problem</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="c1"># Real-time control loop</span>
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="k">while</span> <span class="n">running</span><span class="p">:</span>
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="c1"># Run one SCP iteration</span>
-</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="n">step_result</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
-</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>
-</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>    <span class="c1"># step_result contains iteration metrics:</span>
-</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>    <span class="c1"># - step_result.J_tr: trust region cost</span>
-</span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>    <span class="c1"># - step_result.J_vc: virtual control cost</span>
-</span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>    <span class="c1"># - step_result.converged: whether convergence criteria met</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">problem</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="c1"># Real-time control loop</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="k">while</span> <span class="n">running</span><span class="p">:</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="c1"># Run one SCP iteration</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="n">step_result</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>    <span class="c1"># step_result contains iteration metrics:</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>    <span class="c1"># - step_result.J_tr: trust region cost</span>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>    <span class="c1"># - step_result.J_vc: virtual control cost</span>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>    <span class="c1"># - step_result.converged: whether convergence criteria met</span>
 </span></code></pre></div>
 <p>Each call to <code>step()</code> performs one linearization and convex solve, warm-starting from the previous solution.</p>
 <h3 id="updating-parameters-between-steps">Updating Parameters Between Steps<a class="headerlink" href="#updating-parameters-between-steps" title="Permanent link">&para;</a></h3>
 <p>Parameters (introduced <a href="#parameters">earlier in this tutorial</a>) are designed for exactly this use case. Update obstacle positions, target locations, or physical constants between iterations:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="k">while</span> <span class="n">running</span><span class="p">:</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="c1"># Get new state estimate from sensors</span>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>    <span class="n">current_position</span> <span class="o">=</span> <span class="n">get_state_estimate</span><span class="p">()</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>
-</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="c1"># Update obstacle positions from perception system</span>
-</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">obs_pos</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">detected_obstacles</span><span class="p">):</span>
-</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>        <span class="n">problem</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;obstacle_center_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">obs_pos</span>
-</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>
-</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>    <span class="c1"># Run one iteration with updated parameters</span>
-</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>    <span class="n">step_result</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
-</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>
-</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>    <span class="c1"># Extract control to apply</span>
-</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>    <span class="n">control</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">V_history</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># Access current solution</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="k">while</span> <span class="n">running</span><span class="p">:</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="c1"># Get new state estimate from sensors</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="n">current_position</span> <span class="o">=</span> <span class="n">get_state_estimate</span><span class="p">()</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="c1"># Update obstacle positions from perception system</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">obs_pos</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">detected_obstacles</span><span class="p">):</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>        <span class="n">problem</span><span class="o">.</span><span class="n">parameters</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;obstacle_center_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">obs_pos</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>
+</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>    <span class="c1"># Run one iteration with updated parameters</span>
+</span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>    <span class="n">step_result</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">step</span><span class="p">()</span>
+</span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>
+</span><span id="__span-12-12"><a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a>    <span class="c1"># Extract control to apply</span>
+</span><span id="__span-12-13"><a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a>    <span class="n">control</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">V_history</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># Access current solution</span>
 </span></code></pre></div>
 <p>Parameter updates take effect immediately on the next <code>step()</code> call without any recompilation.</p>
-<h3 id="adjusting-solver-settings">Adjusting Solver Settings<a class="headerlink" href="#adjusting-solver-settings" title="Permanent link">&para;</a></h3>
+<h3 id="adjusting-algorithm-weights">Adjusting Algorithm Weights<a class="headerlink" href="#adjusting-algorithm-weights" title="Permanent link">&para;</a></h3>
 <p>You can also adjust SCP weights at runtime to change solver behavior:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="c1"># Increase cost weight as solution converges</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="k">if</span> <span class="n">step_result</span><span class="o">.</span><span class="n">J_vc</span> <span class="o">&lt;</span> <span class="mf">1e-4</span><span class="p">:</span>
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>    <span class="n">problem</span><span class="o">.</span><span class="n">settings</span><span class="o">.</span><span class="n">scp</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">*=</span> <span class="mf">1.1</span>
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>
-</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="c1"># Tighten trust region if solution is oscillating</span>
-</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="n">problem</span><span class="o">.</span><span class="n">settings</span><span class="o">.</span><span class="n">scp</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">=</span> <span class="mf">2.0</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># Increase cost weight as solution converges</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="k">if</span> <span class="n">step_result</span><span class="o">.</span><span class="n">J_vc</span> <span class="o">&lt;</span> <span class="mf">1e-4</span><span class="p">:</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>    <span class="n">problem</span><span class="o">.</span><span class="n">algorithm</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">*=</span> <span class="mf">1.1</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="c1"># Tighten trust region if solution is oscillating</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="n">problem</span><span class="o">.</span><span class="n">algorithm</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">=</span> <span class="mf">2.0</span>
 </span></code></pre></div>
 <h3 id="resetting-the-problem">Resetting the Problem<a class="headerlink" href="#resetting-the-problem" title="Permanent link">&para;</a></h3>
 <p>To reset the solver state back to the initial guess (e.g., when starting a new trajectory or after a large disturbance):</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="n">problem</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>  <span class="c1"># Clears V_history, resets to initial guess</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">problem</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>  <span class="c1"># Clears V_history, resets to initial guess</span>
 </span></code></pre></div>
 <h3 id="example-interactive-drone-racing">Example: Interactive Drone Racing<a class="headerlink" href="#example-interactive-drone-racing" title="Permanent link">&para;</a></h3>
 <p>For a complete real-time example with interactive 3D visualization, see <a href="https://github.com/OpenSCvx/OpenSCvx/blob/main/examples/realtime/drone_racing_realtime.py"><code>examples/realtime/drone_racing_realtime.py</code></a>. This example demonstrates:</p>
