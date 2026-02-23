@@ -464,14 +464,8 @@ class PenalizedTrustRegion(Algorithm):
         """
         param_dict = params
 
-        idx_impulsive_controls = np.asarray(settings.sim.u.is_impulsive, dtype=bool)
-        if idx_impulsive_controls.size == 1:
-            idx_impulsive_controls = np.repeat(idx_impulsive_controls, state.u.shape[1])
-        elif idx_impulsive_controls.size != state.u.shape[1]:
-            raise ValueError(
-                "Unified control impulsive mask size does not match control trajectory width."
-            )
-        has_u_d = bool(np.any(idx_impulsive_controls))
+        slice_impulsive = settings.sim.u.slice_impulsive
+        has_u_d = bool(slice_impulsive.stop > slice_impulsive.start)
         D_d = settings.sim.u.allocation_matrix if has_u_d else None
 
         # Update solver with dynamics linearization
@@ -480,7 +474,7 @@ class PenalizedTrustRegion(Algorithm):
             - (
                 np.vstack(
                     (
-                        D_d @ state.u[0, idx_impulsive_controls],
+                        D_d @ state.u[0, slice_impulsive],
                         np.zeros((state.x.shape[0] - 1, state.x.shape[1])),
                     )
                 )
@@ -492,7 +486,7 @@ class PenalizedTrustRegion(Algorithm):
             B_d=state.B_d(),
             C_d=state.C_d(),
             x_prop=state.x_prop()
-            + (np.einsum("ij,nj->ni", D_d, state.u[1:, idx_impulsive_controls]) if has_u_d else 0),
+            + (np.einsum("ij,nj->ni", D_d, state.u[1:, slice_impulsive]) if has_u_d else 0),
             D_d=D_d,
         )
 

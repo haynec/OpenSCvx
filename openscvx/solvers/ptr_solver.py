@@ -6,7 +6,6 @@ code generation via cvxpygen for improved performance.
 """
 
 import os
-import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional, Union
 
@@ -160,26 +159,6 @@ class PTRSolver(ConvexSolver):
         """
         return self._ocp_vars
 
-    @staticmethod
-    def _normalize_impulsive_mask(u_unified: "UnifiedControl") -> np.ndarray:
-        """Return an impulsive mask aligned with the unified control dimension."""
-        n_controls = int(u_unified.shape[0])
-        if n_controls == 0:
-            return np.zeros((0,), dtype=bool)
-
-        is_impulsive = getattr(u_unified, "is_impulsive", None)
-        if is_impulsive is None:
-            return np.zeros((n_controls,), dtype=bool)
-
-        mask = np.asarray(is_impulsive, dtype=bool).reshape(-1)
-        if mask.size == 1:
-            mask = np.repeat(mask, n_controls)
-        elif mask.size != n_controls:
-            raise ValueError(
-                f"is_impulsive mask size {mask.size} does not match unified control size {n_controls}"
-            )
-        return mask
-
     ## TODO (fabio): convert controls to impulsive
     def create_variables(
         self,
@@ -213,20 +192,15 @@ class PTRSolver(ConvexSolver):
 
         n_states = len(x_unified.max)
         n_controls = len(u_unified.max)
-        mask = self._normalize_impulsive_mask(u_unified)
-        if np.any(mask):
-            first_impulsive = int(np.flatnonzero(mask)[0])
-            if np.any(~mask[first_impulsive:]):
-                warnings.warn(
-                    (
-                        "Unified control is not ordered as [continuous | impulsive]. "
-                        "Proceeding with index-based splitting in PTR constraints."
-                    ),
-                    RuntimeWarning,
-                )
-            n_controls_imp = int(mask.sum())
-        else:
-            n_controls_imp = 0
+        slice_cont = u_unified.slice_continuous
+        slice_imp = u_unified.slice_impulsive
+        n_controls_cont = int(slice_cont.stop - slice_cont.start)
+        n_controls_imp = int(slice_imp.stop - slice_imp.start)
+        if n_controls_cont + n_controls_imp != n_controls:
+            raise ValueError(
+                "Unified control slices are inconsistent with control dimension. "
+                f"continuous={n_controls_cont}, impulsive={n_controls_imp}, total={n_controls}."
+            )
 
         # Compute scaling matrices from unified object bounds
         if x_unified.scaling_min is not None:
@@ -490,16 +464,15 @@ class PTRSolver(ConvexSolver):
         u_nonscaled = ocp_vars.u_nonscaled
         dx_nonscaled = ocp_vars.dx_nonscaled
         du_nonscaled = ocp_vars.du_nonscaled
-        mask = self._normalize_impulsive_mask(settings.sim.u)
-        has_impulsive = bool(np.any(mask))
-        has_continuous = bool(np.any(~mask))
+        slice_cont = settings.sim.u.slice_continuous
+        slice_imp = settings.sim.u.slice_impulsive
+        has_continuous = bool(slice_cont.stop > slice_cont.start)
+        has_impulsive = bool(slice_imp.stop > slice_imp.start)
         D_d = settings.sim.u.allocation_matrix if has_impulsive else None
         if has_impulsive and D_d is None:
             raise ValueError(
                 "Impulsive controls detected but allocation_matrix is missing from unified control."
             )
-        idx_cont = np.flatnonzero(~mask)
-        idx_imp = np.flatnonzero(mask)
 
         constr = []
 
@@ -566,11 +539,15 @@ class PTRSolver(ConvexSolver):
             == inv_S_x
             @ (
                 A_d[i - 1] @ dx_nonscaled[i - 1]
-                + (B_d[i - 1][:, idx_cont] @ du_nonscaled[i - 1][idx_cont] if has_continuous else 0)
-                + (C_d[i - 1][:, idx_cont] @ du_nonscaled[i][idx_cont] if has_continuous else 0)
-                + (D_d @ du_nonscaled[i][idx_imp] if has_impulsive else 0)
                 + (
-                    A_d[i - 1] @ D_d @ du_nonscaled[i - 1][idx_imp]
+                    B_d[i - 1][:, slice_cont] @ du_nonscaled[i - 1][slice_cont]
+                    if has_continuous
+                    else 0
+                )
+                + (C_d[i - 1][:, slice_cont] @ du_nonscaled[i][slice_cont] if has_continuous else 0)
+                + (D_d @ du_nonscaled[i][slice_imp] if has_impulsive else 0)
+                + (
+                    A_d[i - 1] @ D_d @ du_nonscaled[i - 1][slice_imp]
                     if (has_impulsive and i == 1)
                     else 0
                 )

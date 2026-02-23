@@ -238,7 +238,6 @@ def prime_propagation_solver(
             controls_next,
             tau_init,
             node,
-            idx_s,
             save_time,
             mask_padded,
             dummy_params,
