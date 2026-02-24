@@ -139,7 +139,7 @@ class Problem:
                 minimize/maximize objective must have an entry. States
                 without objectives are automatically assigned weight 0.
                 The dict is expanded to an array of shape
-                ``(n_states,)`` during ``Problem.initialize()``.
+                ``(n_states,)`` during ``Problem`` construction.
 
                 Examples::
 
