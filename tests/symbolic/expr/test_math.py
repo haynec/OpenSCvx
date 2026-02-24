@@ -2999,6 +2999,268 @@ def test_cvxpy_linterp_not_implemented():
 
 
 # =============================================================================
+# Cinterp (1D Cubic Spline Interpolation)
+# =============================================================================
+
+
+def test_cinterp_creation():
+    """Test Cinterp node creation and properties."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0])
+    x = Variable("x", shape=())
+
+    interp = Cinterp(x, xp, fp)
+    assert len(interp.children()) == 1  # only x is a child
+    assert interp.coeffs.shape == (4, 3)  # 4 coefficients, 3 segments
+    np.testing.assert_array_equal(interp.xp_np, xp)
+    np.testing.assert_array_equal(interp.fp_np, fp)
+
+
+def test_cinterp_creation_with_expressions():
+    """Test Cinterp with symbolic query point."""
+    from openscvx.symbolic.expr import Cinterp, State
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([10.0, 20.0, 30.0])
+    state = State("alt", shape=(1,))
+
+    interp = Cinterp(state[0], xp, fp)
+    assert len(interp.children()) == 1
+
+
+# --- Cinterp: Shape Checking ---
+
+
+def test_cinterp_shape_scalar_query():
+    """Test Cinterp shape with scalar query point."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([1.0, 2.0, 3.0])
+    x = Variable("x", shape=())
+
+    interp = Cinterp(x, xp, fp)
+    assert interp.check_shape() == ()
+
+
+def test_cinterp_shape_vector_query():
+    """Test Cinterp shape with vector query points."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([1.0, 2.0, 3.0])
+    x = Variable("x", shape=(5,))
+
+    interp = Cinterp(x, xp, fp)
+    assert interp.check_shape() == (5,)
+
+
+def test_cinterp_shape_invalid_xp():
+    """Test Cinterp raises error for non-1D xp."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([[0.0, 1.0], [2.0, 3.0]])  # 2D - invalid
+    fp = np.array([1.0, 2.0])
+    x = Variable("x", shape=())
+
+    with pytest.raises(ValueError, match="Cinterp xp must be 1D"):
+        Cinterp(x, xp, fp)
+
+
+def test_cinterp_shape_invalid_fp():
+    """Test Cinterp raises error for non-1D fp."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([[1.0, 2.0], [3.0, 4.0]])  # 2D - invalid
+    x = Variable("x", shape=())
+
+    with pytest.raises(ValueError, match="Cinterp fp must be 1D"):
+        Cinterp(x, xp, fp)
+
+
+def test_cinterp_shape_mismatched_xp_fp():
+    """Test Cinterp raises error when xp and fp have different lengths."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([1.0, 2.0])  # Different length
+    x = Variable("x", shape=())
+
+    with pytest.raises(ValueError, match="Cinterp xp and fp must have same length"):
+        Cinterp(x, xp, fp)
+
+
+# --- Cinterp: Canonicalization ---
+
+
+def test_cinterp_canonicalize_preserves_structure():
+    """Test that Cinterp canonicalization preserves structure."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([1.0, 2.0, 3.0])
+    x = Variable("x", shape=())
+
+    interp = Cinterp(x, xp, fp)
+    canonical = interp.canonicalize()
+
+    assert isinstance(canonical, Cinterp)
+
+
+def test_cinterp_canonicalize_recursively():
+    """Test that Cinterp canonicalization recurses into operands."""
+    from openscvx.symbolic.expr import Add, Cinterp, Constant
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([1.0, 2.0, 3.0])
+    x = Variable("x", shape=())
+
+    # Cinterp with x + 0 should canonicalize to Cinterp with x
+    expr = Cinterp(Add(x, Constant(0.0)), xp, fp)
+    canonical = expr.canonicalize()
+
+    assert isinstance(canonical, Cinterp)
+    # The query should be canonicalized (x + 0 -> x)
+    assert canonical.x == x
+
+
+def test_cinterp_canonicalize_preserves_coefficients():
+    """Test that canonicalization reuses precomputed coefficients."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0])
+    x = Variable("x", shape=())
+
+    interp = Cinterp(x, xp, fp)
+    canonical = interp.canonicalize()
+
+    np.testing.assert_array_equal(interp.coeffs, canonical.coeffs)
+
+
+# --- Cinterp: JAX Lowering ---
+
+
+def test_cinterp_exact_data_points():
+    """Test Cinterp returns exact values at data points."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Cinterp, Constant
+    from openscvx.symbolic.lower import lower_to_jax
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([5.0, 10.0, 7.0, 12.0])
+
+    expr = Cinterp(Constant(xp), xp, fp)
+
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    assert jnp.allclose(result, fp)
+
+
+def test_cinterp_constant_query():
+    """Test Cinterp with constant query values against scipy."""
+    import jax.numpy as jnp
+    from scipy.interpolate import CubicSpline
+
+    from openscvx.symbolic.expr import Cinterp, Constant
+    from openscvx.symbolic.lower import lower_to_jax
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0])
+    query = np.array([0.5, 1.5, 2.5])
+
+    expr = Cinterp(Constant(query), xp, fp)
+
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    expected = CubicSpline(xp, fp)(query)
+    assert jnp.allclose(result, expected)
+
+
+def test_cinterp_state_query():
+    """Test Cinterp with state variable as query."""
+    import jax.numpy as jnp
+    from scipy.interpolate import CubicSpline
+
+    from openscvx.symbolic.expr import Cinterp, State
+    from openscvx.symbolic.lower import lower_to_jax
+
+    alt_data = np.array([0.0, 5000.0, 10000.0, 15000.0, 20000.0])
+    rho_data = np.array([1.225, 0.736, 0.414, 0.195, 0.089])
+
+    altitude = State("alt", (1,))
+    altitude._slice = slice(0, 1)
+
+    expr = Cinterp(altitude[0], alt_data, rho_data)
+
+    fn = lower_to_jax(expr)
+    cs = CubicSpline(alt_data, rho_data)
+
+    for alt_val in [0.0, 2500.0, 7500.0, 12500.0, 20000.0]:
+        x = jnp.array([alt_val])
+        result = fn(x, None, None, None)
+        expected = cs(alt_val)
+        assert jnp.allclose(result, expected)
+
+
+def test_cinterp_in_expression():
+    """Test Cinterp composed with other operations."""
+    import jax.numpy as jnp
+    from scipy.interpolate import CubicSpline
+
+    from openscvx.symbolic.expr import Cinterp, Mul, State
+    from openscvx.symbolic.lower import lower_to_jax
+
+    alt_data = np.array([0.0, 10000.0, 20000.0])
+    rho_data = np.array([1.225, 0.414, 0.089])
+
+    altitude = State("alt", (1,))
+    altitude._slice = slice(0, 1)
+    velocity = State("vel", (1,))
+    velocity._slice = slice(1, 2)
+
+    rho = Cinterp(altitude[0], alt_data, rho_data)
+    dynamic_pressure = Mul(0.5, Mul(rho, velocity[0] ** 2))
+
+    fn = lower_to_jax(dynamic_pressure)
+
+    x = jnp.array([0.0, 100.0])
+    result = fn(x, None, None, None)
+
+    expected = 0.5 * CubicSpline(alt_data, rho_data)(0.0) * 100.0**2
+    assert jnp.allclose(result, expected)
+
+
+# --- Cinterp: CVXPy Lowering ---
+
+
+def test_cvxpy_cinterp_not_implemented():
+    """Test that Cinterp raises NotImplementedError in CVXPy."""
+    import cvxpy as cp
+
+    from openscvx.symbolic.expr import Cinterp, State
+    from openscvx.symbolic.lowerers.cvxpy import CvxpyLowerer
+
+    x_cvx = cp.Variable((10, 3), name="x")
+    variable_map = {"x": x_cvx}
+    lowerer = CvxpyLowerer(variable_map)
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([10.0, 20.0, 30.0])
+    x = State("x", shape=(3,))
+    expr = Cinterp(x[0], xp, fp)
+
+    with pytest.raises(NotImplementedError, match="Cubic spline interpolation"):
+        lowerer.lower(expr)
+
+
+# =============================================================================
 # Bilerp (2D Bilinear Interpolation)
 # =============================================================================
 
