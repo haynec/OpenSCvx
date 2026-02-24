@@ -7,7 +7,7 @@ code generation via cvxpygen for improved performance.
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, Optional, Union
 
 import cvxpy as cp
 import numpy as np
@@ -346,20 +346,20 @@ class PTRSolver(ConvexSolver):
         nu_vb = ocp_vars.nu_vb
         nu_vb_cross = ocp_vars.nu_vb_cross
 
-        cost = lam_cost * 0
+        cost = cp.sum(lam_cost) * 0
         cost += lam_vb * 0
 
         # Boundary condition cost terms (use scaled x for numerical conditioning)
         x = ocp_vars.x
         for i in range(settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop):
             if settings.sim.x.initial_type[i] == "Minimize":
-                cost += lam_cost * x[0][i]
+                cost += lam_cost[i] * x[0][i]
             if settings.sim.x.final_type[i] == "Minimize":
-                cost += lam_cost * x[-1][i]
+                cost += lam_cost[i] * x[-1][i]
             if settings.sim.x.initial_type[i] == "Maximize":
-                cost -= lam_cost * x[0][i]
+                cost -= lam_cost[i] * x[0][i]
             if settings.sim.x.final_type[i] == "Maximize":
-                cost -= lam_cost * x[-1][i]
+                cost -= lam_cost[i] * x[-1][i]
 
         # Trust Region Cost
         cost += sum(
@@ -648,7 +648,7 @@ class PTRSolver(ConvexSolver):
     def update_penalties(
         self,
         lam_prox: float,
-        lam_cost: float,
+        lam_cost: Union[float, np.ndarray],
         lam_vc: np.ndarray,
         lam_vb: float,
     ) -> None:
@@ -659,7 +659,8 @@ class PTRSolver(ConvexSolver):
 
         Args:
             lam_prox: Trust region weight (penalizes deviation from linearization point)
-            lam_cost: Cost function weight
+            lam_cost: Cost function weight. Scalar or array of shape
+                ``(n_states,)`` for per-state weighting.
             lam_vc: Virtual control penalty weights, shape (N-1, n_states)
             lam_vb: Virtual buffer penalty weight (for constraint violations)
         """

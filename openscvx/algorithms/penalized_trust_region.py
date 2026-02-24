@@ -6,7 +6,7 @@ optimization problems through iterative convex approximation.
 
 import time
 import warnings
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Dict, List, Union
 
 import numpy as np
 import numpy.linalg as la
@@ -86,7 +86,7 @@ class PenalizedTrustRegion(Algorithm):
         k_max: int = 200,
         lam_prox: float = 1e0,
         lam_vc: float = 1e1,
-        lam_cost: float = 1e-1,
+        lam_cost: Union[float, Dict[str, float]] = 1e-1,
         lam_vb: float = 0.0,
         ep_tr: float = 1e-4,
         ep_vb: float = 1e-4,
@@ -100,7 +100,10 @@ class PenalizedTrustRegion(Algorithm):
             k_max: Maximum SCP iterations. Defaults to 200.
             lam_prox: Trust region (proximal) weight. Defaults to 1.0.
             lam_vc: Virtual control penalty weight. Defaults to 10.0.
-            lam_cost: Cost weight. Defaults to 0.1.
+            lam_cost: Cost weight. Either a float (applied to all
+                minimize/maximize states) or a dict mapping state names
+                to per-state weights, e.g.
+                ``{"velocity": 1e-1, "time": 1e0}``. Defaults to 0.1.
             lam_vb: Virtual buffer penalty weight. Defaults to 0.0.
             ep_tr: Trust region convergence tolerance. Defaults to 1e-4.
             ep_vb: Virtual buffer convergence tolerance. Defaults to 1e-4.
@@ -117,14 +120,22 @@ class PenalizedTrustRegion(Algorithm):
             autotuner if autotuner is not None else AugmentedLagrangian()
         )
 
+        # Store raw user-specified lam_cost (may be dict, expanded later
+        # by Problem.__init__ once state info is available).
+        self._lam_cost_spec = lam_cost
+
         # SCP weights (grouped dataclass, normalized for numerical conditioning)
+        # If lam_cost is a dict, defer to Problem._expand_lam_cost_dict();
+        # use 0.0 as placeholder so Weights can normalize without error.
+        lam_cost_init = lam_cost if not isinstance(lam_cost, dict) else 0.0
         self.weights = Weights(
             lam_prox=lam_prox,
             lam_vc=lam_vc,
-            lam_cost=lam_cost,
+            lam_cost=lam_cost_init,
             lam_vb=lam_vb,
         )
-        self.weights.normalize()
+        if not isinstance(lam_cost, dict):
+            self.weights.normalize()
 
         # SCP convergence parameters
         self.k_max = k_max
@@ -181,23 +192,28 @@ class PenalizedTrustRegion(Algorithm):
         self.weights.normalize()
 
     @property
-    def lam_cost(self) -> float:
+    def lam_cost(self) -> Union[float, Dict[str, float], np.ndarray]:
         """Cost weight.
 
         This is the user-specified value before normalization. Setting this
         property triggers automatic re-normalization of all weights.
+
+        Can be a float (uniform weight for all cost states), a dict mapping
+        state names to per-state weights, or an ndarray after expansion.
 
         !!! note
             The autotuner may modify the normalized weight in
             ``self.weights.lam_cost`` during iteration. Those changes are
             internal and do not alter the value returned here.
         """
-        return self.weights._raw_lam_cost
+        return self._lam_cost_spec
 
     @lam_cost.setter
-    def lam_cost(self, value: float) -> None:
-        self.weights._raw_lam_cost = value
-        self.weights.normalize()
+    def lam_cost(self, value: Union[float, Dict[str, float]]) -> None:
+        self._lam_cost_spec = value
+        if not isinstance(value, dict):
+            self.weights._raw_lam_cost = value
+            self.weights.normalize()
 
     @property
     def lam_vb(self) -> float:

@@ -29,7 +29,7 @@ class CVXPyVariables:
 
     Attributes:
         lam_prox: Trust region weight parameter (scalar, nonneg)
-        lam_cost: Cost function weight parameter (scalar, nonneg)
+        lam_cost: Cost function weight parameter (n_states, nonneg)
         lam_vc: Virtual control penalty weights (N-1 x n_states, nonneg)
         lam_vb: Virtual buffer penalty weight (scalar, nonneg)
 

@@ -54,6 +54,7 @@ from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
 from openscvx.symbolic.expr.time import Time
 from openscvx.symbolic.lower import lower_symbolic_problem
+from openscvx.symbolic.preprocessing import expand_lam_cost_dict
 from openscvx.symbolic.problem import SymbolicProblem
 from openscvx.utils import printing, profiling
 from openscvx.utils.caching import (
@@ -124,6 +125,22 @@ class Problem:
                     ``{"type": "RampProximalWeight", "ramp_factor": 1.04}``.
                   - **instance** — an already-constructed autotuner object,
                     e.g. ``ox.RampProximalWeight(ramp_factor=1.04)``.
+
+                The ``lam_cost`` key accepts either a float (applied
+                uniformly to all minimize/maximize states) or a dict
+                mapping state names to per-state weights::
+
+                    # Uniform cost weight
+                    algorithm={"lam_cost": 5e-1}
+
+                    # Per-state cost weights
+                    algorithm={"lam_cost": {"velocity": 1e-1, "time": 1e0}}
+
+                When a dict is provided, every state that has a
+                minimize/maximize objective must have an entry. States
+                without objectives are automatically assigned weight 0.
+                The dict is expanded to an array of shape
+                ``(n_states,)`` during ``Problem.__init__``.
 
                 Examples::
 
@@ -255,6 +272,15 @@ class Problem:
                     f"got {type(algorithm).__name__}"
                 )
             self._algorithm = algorithm
+
+        # Expand dict lam_cost → per-state array now that states are known
+        if isinstance(self._algorithm, PenalizedTrustRegion) and isinstance(
+            self._algorithm._lam_cost_spec, dict
+        ):
+            lam_arr = expand_lam_cost_dict(self._algorithm._lam_cost_spec, self.symbolic.states)
+            self._algorithm.weights._raw_lam_cost = lam_arr.copy()
+            self._algorithm.weights.lam_cost = lam_arr.copy()
+            self._algorithm.weights.normalize()
 
         # Resolve discretizer: None → default, dict → LinearizeDiscretize(**dict), instance → use
         if discretizer is None:

@@ -40,20 +40,23 @@ class Weights:
     Attributes:
         lam_prox: Trust region (proximal) weight (normalized).
         lam_vc: Virtual control penalty weight (normalized).
-        lam_cost: Cost weight (normalized).
+        lam_cost: Cost weight per state (normalized). Scalar or array of
+            shape ``(n_states,)`` for per-state weighting.
         lam_vb: Virtual buffer penalty weight (normalized).
     """
 
     lam_prox: float = 1e0
     lam_vc: float = 1e1
-    lam_cost: float = 1e-1
+    lam_cost: Union[float, np.ndarray] = 1e-1
     lam_vb: float = 0.0
 
     def __post_init__(self):
         # Snapshot the user-specified values so normalize() is idempotent.
         self._raw_lam_prox = self.lam_prox
         self._raw_lam_vc = self.lam_vc
-        self._raw_lam_cost = self.lam_cost
+        self._raw_lam_cost = (
+            self.lam_cost.copy() if isinstance(self.lam_cost, np.ndarray) else self.lam_cost
+        )
         self._raw_lam_vb = self.lam_vb
 
     def normalize(self) -> None:
@@ -63,7 +66,12 @@ class Weights:
         making this method idempotent and safe to call after updating
         any individual raw weight.
         """
-        scale = max(self._raw_lam_prox, self._raw_lam_vc, self._raw_lam_cost, self._raw_lam_vb)
+        raw_cost_max = (
+            float(np.max(self._raw_lam_cost))
+            if isinstance(self._raw_lam_cost, np.ndarray)
+            else self._raw_lam_cost
+        )
+        scale = max(self._raw_lam_prox, self._raw_lam_vc, raw_cost_max, self._raw_lam_vb)
         if scale > 0:
             self.lam_prox = self._raw_lam_prox / scale
             self.lam_vc = self._raw_lam_vc / scale
@@ -80,7 +88,7 @@ class CandidateIterate:
     VC: Optional[np.ndarray] = None
     TR: Optional[np.ndarray] = None
     lam_vc: Optional[Union[float, np.ndarray]] = None
-    lam_cost: Optional[float] = None
+    lam_cost: Optional[Union[float, np.ndarray]] = None
     lam_vb: Optional[float] = None
     J_lin: Optional[float] = None
     J_nonlin: Optional[float] = None
@@ -135,27 +143,35 @@ class AutotuningBase(ABC):
     COLUMNS: List[Column] = []
 
     @staticmethod
-    def calculate_cost_from_state(x: np.ndarray, settings: "Config") -> float:
+    def calculate_cost_from_state(
+        x: np.ndarray,
+        settings: "Config",
+        lam_cost: Union[float, np.ndarray] = 1.0,
+    ) -> float:
         """Calculate cost from state vector based on final_type and initial_type.
 
         Args:
             x: State trajectory array (n_nodes, n_states)
             settings: Configuration object containing state types
+            lam_cost: Per-state cost weight. Scalar (applied uniformly) or
+                array of shape ``(n_states,)`` for per-state weighting.
 
         Returns:
-            float: Computed cost
+            float: Computed cost (weighted by lam_cost)
         """
         scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
+        lam = np.asarray(lam_cost)
         cost = 0.0
         for i in range(settings.sim.n_states):
+            w = float(lam[i]) if lam.ndim > 0 else float(lam)
             if settings.sim.x.final_type[i] == "Minimize":
-                cost += scaled_x[-1, i]
+                cost += w * scaled_x[-1, i]
             if settings.sim.x.final_type[i] == "Maximize":
-                cost -= scaled_x[-1, i]
+                cost -= w * scaled_x[-1, i]
             if settings.sim.x.initial_type[i] == "Minimize":
-                cost += scaled_x[0, i]
+                cost += w * scaled_x[0, i]
             if settings.sim.x.initial_type[i] == "Maximize":
-                cost -= scaled_x[0, i]
+                cost -= w * scaled_x[0, i]
         return cost
 
     @staticmethod
@@ -165,7 +181,7 @@ class AutotuningBase(ABC):
         u_bar: np.ndarray,
         lam_vc: np.ndarray,
         lam_vb: float,
-        lam_cost: float,
+        lam_cost: Union[float, np.ndarray],
         nodal_constraints: "LoweredJaxConstraints",
         params: dict,
         settings: "Config",
@@ -183,7 +199,8 @@ class AutotuningBase(ABC):
             u_bar: Solution control (n_nodes, n_controls)
             lam_vc: Virtual control weight (scalar or matrix)
             lam_vb: Virtual buffer penalty weight (scalar)
-            lam_cost: Cost relaxation parameter (scalar)
+            lam_cost: Cost weight. Scalar (applied uniformly) or
+                array of shape ``(n_states,)`` for per-state weighting.
             nodal_constraints: Lowered JAX constraints
             params: Dictionary of problem parameters
             settings: Configuration object
@@ -220,10 +237,10 @@ class AutotuningBase(ABC):
             # Cross-node constraints return scalar or array, sum all violations
             nodal_penalty += lam_vb * np.sum(np.maximum(0, g))
 
-        cost = AutotuningBase.calculate_cost_from_state(x_bar, settings)
+        cost = AutotuningBase.calculate_cost_from_state(x_bar, settings, lam_cost)
         x_diff = settings.sim.inv_S_x @ (x_bar[1:, :] - x_prop).T
 
-        return lam_cost * cost, np.sum(lam_vc * np.abs(x_diff.T)), nodal_penalty
+        return cost, np.sum(lam_vc * np.abs(x_diff.T)), nodal_penalty
 
     @abstractmethod
     def update_weights(
@@ -309,7 +326,7 @@ class AlgorithmState:
     VC_history: List[np.ndarray] = field(default_factory=list)
     TR_history: List[np.ndarray] = field(default_factory=list)
     lam_vc_history: List[Union[float, np.ndarray]] = field(default_factory=list)
-    lam_cost_history: List[float] = field(default_factory=list)
+    lam_cost_history: List[Union[float, np.ndarray]] = field(default_factory=list)
     lam_vb_history: List[float] = field(default_factory=list)
     lam_prox_history: List[float] = field(default_factory=list)
     x_full: List[np.ndarray] = field(default_factory=list)
@@ -474,11 +491,12 @@ class AlgorithmState:
         return self.lam_prox_history[-1]
 
     @property
-    def lam_cost(self) -> float:
+    def lam_cost(self) -> Union[float, np.ndarray]:
         """Get current cost weight.
 
         Returns:
-            Current cost weight (latest entry in lam_cost_history)
+            Current cost weight (latest entry in lam_cost_history).
+            Scalar or array of shape ``(n_states,)`` for per-state weighting.
         """
         if not self.lam_cost_history:
             raise ValueError("lam_cost_history is empty. Initialize state using from_settings().")
@@ -525,6 +543,12 @@ class AlgorithmState:
         n_states = settings.sim.n_states
         lam_vc_array = np.ones((n - 1, n_states)) * weights.lam_vc
 
+        # Expand scalar lam_cost to per-state array
+        if isinstance(weights.lam_cost, np.ndarray):
+            lam_cost_init = weights.lam_cost.copy()
+        else:
+            lam_cost_init = np.full(n_states, weights.lam_cost)
+
         return cls(
             k=1,
             J_tr=1e2,
@@ -544,7 +568,7 @@ class AlgorithmState:
             VC_history=[],
             TR_history=[],
             lam_vc_history=[lam_vc_array],
-            lam_cost_history=[weights.lam_cost],
+            lam_cost_history=[lam_cost_init],
             lam_vb_history=[weights.lam_vb],
             lam_prox_history=[weights.lam_prox],
         )
