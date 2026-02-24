@@ -1,7 +1,7 @@
 """CVXPy visitors for math expressions.
 
 Visitors: Sin, Cos, Tan, Exp, Log, Abs, PositivePart, Square, Huber,
-          SmoothReLU, Sqrt, Max, Min, LogSumExp, Linterp, Bilerp
+          SmoothReLU, Sqrt, Max, Min, LogSumExp, Linterp, Cinterp, Bilerp
 """
 
 import cvxpy as cp
@@ -10,6 +10,7 @@ import cvxpy as cp
 from openscvx.symbolic.expr.math import (
     Abs,
     Bilerp,
+    Cinterp,
     Cos,
     Exp,
     Huber,
@@ -383,6 +384,18 @@ def _visit_linterp(lowerer, node: Linterp) -> cp.Expression:
         NotImplementedError: Always raised since Linterp is not DCP-compliant
     """
     raise NotImplementedError("Linear interpolation (Linterp) is not DCP-compliant in CVXPy.")
+
+
+@visitor(Cinterp)
+def _visit_cinterp(lowerer, node: Cinterp) -> cp.Expression:
+    """Raise NotImplementedError for cubic spline interpolation.
+
+    Cubic spline interpolation (Cinterp) is not DCP-compliant in CVXPy.
+
+    Raises:
+        NotImplementedError: Always raised since Cinterp is not DCP-compliant
+    """
+    raise NotImplementedError("Cubic spline interpolation (Cinterp) is not DCP-compliant in CVXPy.")
 
 
 @visitor(Bilerp)

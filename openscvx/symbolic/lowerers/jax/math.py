@@ -1,7 +1,7 @@
 """JAX visitors for math expressions.
 
 Visitors: Sin, Cos, Tan, Square, Sqrt, Exp, Log, Abs, Max, Min,
-          PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Bilerp
+          PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Cinterp, Bilerp
 """
 
 import jax
@@ -12,6 +12,7 @@ from jax.scipy.special import logsumexp
 from openscvx.symbolic.expr.math import (
     Abs,
     Bilerp,
+    Cinterp,
     Cos,
     Exp,
     Huber,
@@ -238,6 +239,38 @@ def _visit_linterp(lowerer, node: Linterp):
         return jnp.interp(x_val, xp_val, fp_val)
 
     return linterp_fn
+
+
+@visitor(Cinterp)
+def _visit_cinterp(lowerer, node: Cinterp):
+    """Lower 1D cubic spline interpolation to JAX function.
+
+    Evaluates a precomputed cubic spline via segment lookup and Horner's
+    method.  Coefficients are baked in as constants; only the query point
+    is symbolic.  For queries outside the data range the boundary segment
+    polynomial is extrapolated.
+
+    Args:
+        node: Cinterp expression node with precomputed coeffs and xp_np.
+
+    Returns:
+        Function (x, u, node_idx, params) -> interpolated value(s)
+    """
+    f_x = lowerer.lower(node.x)
+    xp = jnp.asarray(node.xp_np)
+    coeffs = jnp.asarray(node.coeffs)  # (4, n_seg)
+
+    def cinterp_fn(x, u, node_idx, params):
+        x_val = f_x(x, u, node_idx, params)
+        # Segment index (clamp to valid range)
+        idx = jnp.searchsorted(xp, x_val, side="right") - 1
+        idx = jnp.clip(idx, 0, xp.shape[0] - 2)
+        t = x_val - xp[idx]
+        # Horner evaluation: c0 + t*(c1 + t*(c2 + t*c3))
+        c = coeffs[:, idx]
+        return c[0] + t * (c[1] + t * (c[2] + t * c[3]))
+
+    return cinterp_fn
 
 
 @visitor(Bilerp)
