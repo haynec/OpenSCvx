@@ -39,7 +39,9 @@ import struct
 from typing import Tuple, Union
 
 import numpy as np
+from scipy.interpolate import Akima1DInterpolator as _Akima
 from scipy.interpolate import CubicSpline as _CubicSpline
+from scipy.interpolate import PchipInterpolator as _Pchip
 
 from openscvx.symbolic.sparsity import _broadcast_sparsity
 
@@ -939,18 +941,27 @@ class Linterp(Expr):
         return f"linterp({self.x!r}, {self.xp!r}, {self.fp!r})"
 
 
+_CINTERP_METHODS = {
+    "cubic": _CubicSpline,
+    "pchip": _Pchip,
+    "akima": _Akima,
+}
+
+
 class Cinterp(Expr):
     """1D cubic spline interpolation for symbolic expressions.
 
-    Computes a not-a-knot cubic spline through data points (xp, fp) and
-    evaluates it (or its derivative) at query point x.  Spline coefficients
-    are precomputed at construction time with ``scipy.interpolate.CubicSpline``
-    so that JAX evaluation reduces to a segment lookup and polynomial eval.
+    Computes a cubic spline through data points (xp, fp) and evaluates it at
+    query point x.  Spline coefficients are precomputed at construction time
+    via scipy so that JAX evaluation reduces to a segment lookup and
+    polynomial eval.
 
     Attributes:
         x: Query point at which to evaluate the spline (symbolic expression).
         xp: 1D array of breakpoints (must be strictly increasing).
         fp: 1D array of values at the breakpoints (same length as xp).
+        method: Spline method used — ``"cubic"`` (not-a-knot, C2),
+            ``"pchip"`` (monotonicity-preserving, C1), or ``"akima"`` (C1).
         coeffs: Precomputed polynomial coefficients, shape (4, n_segments).
             Row k contains the degree-k coefficients, so the value in segment i
             at local coordinate t = x - xp[i] is
@@ -968,10 +979,20 @@ class Cinterp(Expr):
             progress = ox.State("progress", shape=(1,))
             px = ox.Cinterp(progress[0], s_data, px_data)
 
-    Note:
-        - xp must be strictly increasing.
-        - For query points outside [xp[0], xp[-1]], boundary segment
-          polynomials are extrapolated (consistent with scipy defaults).
+        Use PCHIP for monotonicity-preserving interpolation::
+
+            alt_data = np.array([0, 5000, 10000, 15000, 20000])
+            rho_data = np.array([1.225, 0.736, 0.414, 0.195, 0.089])
+
+            altitude = ox.State("altitude", shape=(1,))
+            rho = ox.Cinterp(altitude[0], alt_data, rho_data, method="pchip")
+
+    !!! note
+        `xp` must be strictly increasing.
+
+    !!! warning "Extrapolation behavior"
+        For query points outside `[xp[0], xp[-1]]`, boundary segment
+        polynomials are extrapolated (consistent with scipy defaults).
     """
 
     def __init__(
@@ -980,11 +1001,17 @@ class Cinterp(Expr):
         xp: Union[np.ndarray, list],
         fp: Union[np.ndarray, list],
         *,
+        method: str = "cubic",
         _coeffs: Union[np.ndarray, None] = None,
     ):
         self.x = to_expr(x)
         xp = np.asarray(xp, dtype=float)
         fp = np.asarray(fp, dtype=float)
+
+        if method not in _CINTERP_METHODS:
+            raise ValueError(
+                f"Cinterp method must be one of {set(_CINTERP_METHODS)}, got {method!r}"
+            )
 
         if xp.ndim != 1:
             raise ValueError(f"Cinterp xp must be 1D, got shape {xp.shape}")
@@ -997,6 +1024,7 @@ class Cinterp(Expr):
 
         self.xp_np = xp
         self.fp_np = fp
+        self.method = method
 
         if _coeffs is not None:
             self.coeffs = _coeffs
@@ -1004,7 +1032,7 @@ class Cinterp(Expr):
             # Precompute spline coefficients via scipy.
             # scipy returns shape (4, n_seg) with c[0]=cubic, c[1]=quadratic, ...
             # We reorder to ascending-degree layout for Horner evaluation.
-            cs = _CubicSpline(xp, fp)
+            cs = _CINTERP_METHODS[method](xp, fp)
             self.coeffs = cs.c[::-1].copy()  # row 0 = const, row 3 = cubic
 
     def children(self):
@@ -1012,19 +1040,22 @@ class Cinterp(Expr):
 
     def canonicalize(self) -> "Expr":
         x = self.x.canonicalize()
-        return Cinterp(x, self.xp_np, self.fp_np, _coeffs=self.coeffs)
+        return Cinterp(x, self.xp_np, self.fp_np, method=self.method, _coeffs=self.coeffs)
 
     def check_shape(self) -> Tuple[int, ...]:
         return self.x.check_shape()
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         hasher.update(b"Cinterp")
+        hasher.update(self.method.encode())
         hasher.update(self.xp_np.tobytes())
         hasher.update(self.fp_np.tobytes())
         self.x._hash_into(hasher)
 
     def __repr__(self) -> str:
-        return f"cinterp({self.x!r})"
+        if self.method == "cubic":
+            return f"cinterp({self.x!r})"
+        return f"cinterp({self.x!r}, method={self.method!r})"
 
 
 class Bilerp(Expr):

@@ -154,8 +154,9 @@ def _parse_linterp(args, kwargs):
 @function("Cinterp")
 def _parse_cinterp(args, kwargs):
     if len(args) != 3:
-        raise ValueError("Cinterp() takes exactly 3 arguments (x, xp, fp)")
-    return Cinterp(args[0], args[1], args[2])
+        raise ValueError("Cinterp() takes exactly 3 positional arguments (x, xp, fp)")
+    method = kwargs.get("method", "cubic")
+    return Cinterp(args[0], args[1], args[2], method=method)
 
 
 @function("Bilerp")

@@ -3014,8 +3014,48 @@ def test_cinterp_creation():
     interp = Cinterp(x, xp, fp)
     assert len(interp.children()) == 1  # only x is a child
     assert interp.coeffs.shape == (4, 3)  # 4 coefficients, 3 segments
+    assert interp.method == "cubic"
     np.testing.assert_array_equal(interp.xp_np, xp)
     np.testing.assert_array_equal(interp.fp_np, fp)
+
+
+def test_cinterp_creation_pchip():
+    """Test Cinterp node creation with PCHIP method."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0])
+    x = Variable("x", shape=())
+
+    interp = Cinterp(x, xp, fp, method="pchip")
+    assert interp.method == "pchip"
+    assert interp.coeffs.shape == (4, 3)
+
+
+def test_cinterp_creation_akima():
+    """Test Cinterp node creation with Akima method."""
+    from openscvx.symbolic.expr import Cinterp
+
+    # Akima needs at least 5 data points
+    xp = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0, 2.0])
+    x = Variable("x", shape=())
+
+    interp = Cinterp(x, xp, fp, method="akima")
+    assert interp.method == "akima"
+    assert interp.coeffs.shape == (4, 4)
+
+
+def test_cinterp_invalid_method():
+    """Test Cinterp raises error for invalid method."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0])
+    x = Variable("x", shape=())
+
+    with pytest.raises(ValueError, match="Cinterp method must be one of"):
+        Cinterp(x, xp, fp, method="quadratic")
 
 
 def test_cinterp_creation_with_expressions():
@@ -3141,6 +3181,20 @@ def test_cinterp_canonicalize_preserves_coefficients():
     np.testing.assert_array_equal(interp.coeffs, canonical.coeffs)
 
 
+def test_cinterp_canonicalize_preserves_method():
+    """Test that canonicalization preserves the method."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0])
+    x = Variable("x", shape=())
+
+    for method in ("cubic", "pchip"):
+        interp = Cinterp(x, xp, fp, method=method)
+        canonical = interp.canonicalize()
+        assert canonical.method == method
+
+
 # --- Cinterp: JAX Lowering ---
 
 
@@ -3181,6 +3235,28 @@ def test_cinterp_constant_query():
 
     expected = CubicSpline(xp, fp)(query)
     assert jnp.allclose(result, expected)
+
+
+def test_cinterp_pchip_monotonicity():
+    """Test that PCHIP preserves monotonicity of the data."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Cinterp, Constant
+    from openscvx.symbolic.lower import lower_to_jax
+
+    # Monotonically decreasing data (e.g., atmospheric density)
+    xp = np.array([0.0, 5000.0, 10000.0, 15000.0, 20000.0])
+    fp = np.array([1.225, 0.736, 0.414, 0.195, 0.089])
+
+    # Evaluate at many points
+    query = np.linspace(0.0, 20000.0, 200)
+    expr = Cinterp(Constant(query), xp, fp, method="pchip")
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    # All consecutive differences should be non-positive (monotonically decreasing)
+    diffs = jnp.diff(result)
+    assert jnp.all(diffs <= 0)
 
 
 def test_cinterp_state_query():
