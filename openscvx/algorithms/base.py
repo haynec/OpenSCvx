@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 def _expand_lam_cost_dict(
-    lam_cost_dict: Dict[str, float],
+    lam_cost_dict: Dict[str, Union[float, list, np.ndarray]],
     states: List["State"],
 ) -> np.ndarray:
     """Expand a ``{state_name: weight}`` dict to a per-state weight array.
@@ -31,8 +31,13 @@ def _expand_lam_cost_dict(
     minimize/maximize objective receive weight 0.  States **with** a
     minimize/maximize objective **must** appear in the dict.
 
+    Values may be scalars (broadcast to every component of that state) or
+    arrays matching the state's shape for per-component weighting, e.g.
+    ``{"position": [0, 0, 1e-6]}``.
+
     Args:
-        lam_cost_dict: Mapping from state names to scalar cost weights.
+        lam_cost_dict: Mapping from state names to cost weights (scalar or
+            array matching the state's shape).
         states: List of State objects (must already have ``_slice`` assigned).
 
     Returns:
@@ -84,7 +89,14 @@ def _expand_lam_cost_dict(
     # (via collect_and_assign_slices), which runs before algorithm construction.
     for state in states:
         if state.name in lam_cost_dict:
-            lam_arr[state._slice] = lam_cost_dict[state.name]
+            val = np.asarray(lam_cost_dict[state.name], dtype=float)
+            n_components = state.shape[0] if len(state.shape) > 0 else 1
+            if val.ndim > 0 and val.shape[0] != n_components:
+                raise ValueError(
+                    f"lam_cost['{state.name}'] has length {val.shape[0]}, "
+                    f"expected scalar or length {n_components}"
+                )
+            lam_arr[state._slice] = val
 
     return lam_arr
 

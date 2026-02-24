@@ -105,7 +105,9 @@ class PenalizedTrustRegion(Algorithm):
             lam_cost: Cost weight. Either a float (applied to all
                 minimize/maximize states) or a dict mapping state names
                 to per-state weights, e.g.
-                ``{"velocity": 1e-1, "time": 1e0}``. Defaults to 0.1.
+                ``{"velocity": 1e-1, "time": 1e0}``.  Dict values may
+                be arrays for per-component weighting, e.g.
+                ``{"position": [0, 0, 1e-6]}``. Defaults to 0.1.
             lam_vb: Virtual buffer penalty weight. Defaults to 0.0.
             ep_tr: Trust region convergence tolerance. Defaults to 1e-4.
             ep_vb: Virtual buffer convergence tolerance. Defaults to 1e-4.

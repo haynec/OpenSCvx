@@ -135,11 +135,16 @@ class Problem:
                     # Per-state cost weights
                     algorithm={"lam_cost": {"velocity": 1e-1, "time": 1e0}}
 
+                    # Per-component weights for vector states
+                    algorithm={"lam_cost": {"position": [0, 0, 1e-6], "fuel": 1e0}}
+
                 When a dict is provided, every state that has a
-                minimize/maximize objective must have an entry. States
-                without objectives are automatically assigned weight 0.
-                The dict is expanded to an array of shape
-                ``(n_states,)`` during ``Problem`` construction.
+                minimize/maximize objective must have an entry.  Dict
+                values may be scalars (broadcast to all components) or
+                arrays matching the state's shape.  States without
+                objectives are automatically assigned weight 0.  The
+                dict is expanded to an array of shape ``(n_states,)``
+                during ``Problem`` construction.
 
                 Examples::
 
