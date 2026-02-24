@@ -1,5 +1,5 @@
 import copy
-from typing import Optional
+from typing import Callable, Optional
 
 import jax.numpy as jnp
 import numpy as np
@@ -17,6 +17,7 @@ def propagate_trajectory_results(
     settings: Config,
     result: OptimizationResults,
     propagation_solver: callable,
+    dynamics_discrete: Optional[Callable] = None,
     algebraic_prop: Optional[dict] = None,
     discretizer: Optional[Discretizer] = None,
 ) -> OptimizationResults:
@@ -30,6 +31,8 @@ def propagate_trajectory_results(
         settings (Config): Configuration settings.
         result (OptimizationResults): Optimization results object.
         propagation_solver (callable): Function for propagating the system state.
+        dynamics_discrete (callable, optional): Discrete dynamics map used to apply
+            node-wise impulsive/discrete updates before continuous propagation.
         algebraic_prop (dict, optional): Dictionary mapping output names to vmapped JAX functions.
         discretizer: Discretizer instance (used for ``dis_type``).
             Defaults to ``None`` which uses FOH.
@@ -82,7 +85,16 @@ def propagate_trajectory_results(
     settings.sim.x_prop = x_prop_for_propagation
 
     try:
-        x_full = simulate_nonlinear_time(params, x, u, tau_vals, t, settings, propagation_solver)
+        x_full = simulate_nonlinear_time(
+            params,
+            x,
+            u,
+            tau_vals,
+            t,
+            settings,
+            propagation_solver,
+            dynamics_discrete=dynamics_discrete,
+        )
     finally:
         # Always restore original x_prop, even if propagation fails
         settings.sim.x_prop = original_x_prop

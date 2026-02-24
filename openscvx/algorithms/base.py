@@ -7,7 +7,7 @@ during SCP iterations.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
@@ -166,7 +166,11 @@ class CandidateIterate:
     x: Optional[np.ndarray] = None
     u: Optional[np.ndarray] = None
     V: Optional[np.ndarray] = None
+    W: Optional[np.ndarray] = None
     x_prop: Optional[np.ndarray] = None
+    x_prop_pp: Optional[np.ndarray] = None
+    D_d: Optional[np.ndarray] = None
+    E_d: Optional[np.ndarray] = None
     VC: Optional[np.ndarray] = None
     TR: Optional[np.ndarray] = None
     lam_vc: Optional[Union[float, np.ndarray]] = None
@@ -191,9 +195,18 @@ class DiscretizationResult:
     A_d: np.ndarray  # (N-1, n_x, n_x)
     B_d: np.ndarray  # (N-1, n_x, n_u)
     C_d: np.ndarray  # (N-1, n_x, n_u)
+    x_prop_pp: Optional[np.ndarray] = None  # (N, n_x), discrete dynamics on node states
+    D_d: Optional[np.ndarray] = None  # (N, n_x, n_x), d(x_prop_pp)/d(x_node)
+    E_d: Optional[np.ndarray] = None  # (N, n_x, n_u), d(x_prop_pp)/d(u_node)
 
     @classmethod
-    def from_V(cls, V: np.ndarray, n_x: int, n_u: int, N: int) -> "DiscretizationResult":
+    def from_V(
+        cls,
+        V: np.ndarray,
+        n_x: int,
+        n_u: int,
+        N: int,
+    ) -> "DiscretizationResult":
         """Unpack the final timestep of a raw discretization matrix ``V``."""
         i1, i2 = n_x, n_x + n_x * n_x
         i3, i4 = i2 + n_x * n_u, i2 + 2 * n_x * n_u
@@ -204,6 +217,37 @@ class DiscretizationResult:
             A_d=V_final[:, i1:i2].reshape(N - 1, n_x, n_x),
             B_d=V_final[:, i2:i3].reshape(N - 1, n_x, n_u),
             C_d=V_final[:, i3:i4].reshape(N - 1, n_x, n_u),
+        )
+
+    @classmethod
+    def from_VW(
+        cls,
+        V: np.ndarray,
+        W: np.ndarray,
+        n_x: int,
+        n_u: int,
+        N: int,
+    ) -> "DiscretizationResult":
+        """Unpack continuous and impulsive discretization blocks from ``V`` and ``W``."""
+        base = cls.from_V(V=V, n_x=n_x, n_u=n_u, N=N)
+
+        W_arr = np.asarray(W)
+        i_w = n_x + n_x * n_x + n_x * n_u
+        i1 = n_x
+        i2 = i1 + n_x * n_x
+        i3 = i2 + n_x * n_u
+
+        W_final = W_arr[:, -1].reshape(-1, i_w)
+
+        return cls(
+            V=base.V,
+            x_prop=base.x_prop,
+            A_d=base.A_d,
+            B_d=base.B_d,
+            C_d=base.C_d,
+            x_prop_pp=W_final[:, :i1],
+            D_d=W_final[:, i1:i2].reshape(W_final.shape[0], n_x, n_x),
+            E_d=W_final[:, i2:i3].reshape(W_final.shape[0], n_x, n_u),
         )
 
 
@@ -429,9 +473,25 @@ class AlgorithmState:
         self.U.append(cand.u)
 
         if cand.V is not None:
-            self.discretizations.append(
-                DiscretizationResult.from_V(cand.V, n_x=self.n_x, n_u=self.n_u, N=self.N)
-            )
+            if cand.W is not None:
+                self.discretizations.append(
+                    DiscretizationResult.from_VW(
+                        cand.V,
+                        cand.W,
+                        n_x=self.n_x,
+                        n_u=self.n_u,
+                        N=self.N,
+                    )
+                )
+            else:
+                self.discretizations.append(
+                    DiscretizationResult.from_V(
+                        cand.V,
+                        n_x=self.n_x,
+                        n_u=self.n_u,
+                        N=self.N,
+                    )
+                )
         if cand.VC is not None:
             self.VC_history.append(cand.VC)
         if cand.TR is not None:
@@ -471,6 +531,24 @@ class AlgorithmState:
         """Append a raw discretization matrix as an unpacked result."""
         self.discretizations.append(
             DiscretizationResult.from_V(V, n_x=self.n_x, n_u=self.n_u, N=self.N)
+        )
+
+    def add_impulsive_discretization(
+        self,
+        W: np.ndarray,
+    ) -> None:
+        """Attach impulsive discretization data to the latest discretization entry."""
+        if not self.discretizations:
+            raise ValueError(
+                "Cannot attach impulsive discretization before adding the base discretization."
+            )
+        last = self.discretizations[-1]
+        self.discretizations[-1] = DiscretizationResult.from_VW(
+            V=last.V,
+            W=W,
+            n_x=self.n_x,
+            n_u=self.n_u,
+            N=self.N,
         )
 
     @property
@@ -562,6 +640,24 @@ class AlgorithmState:
         if not self.discretizations:
             return None
         return self.discretizations[index].C_d
+
+    def x_prop_pp(self, index: int = -1) -> np.ndarray:
+        """Extract discrete dynamics evaluated at x_prop."""
+        if not self.discretizations:
+            return None
+        return self.discretizations[index].x_prop_pp
+
+    def D_d(self, index: int = -1) -> np.ndarray:
+        """Extract Jacobian of x_prop_pp w.r.t. x_prop."""
+        if not self.discretizations:
+            return None
+        return self.discretizations[index].D_d
+
+    def E_d(self, index: int = -1) -> np.ndarray:
+        """Extract Jacobian of x_prop_pp w.r.t. discrete controls."""
+        if not self.discretizations:
+            return None
+        return self.discretizations[index].E_d
 
     @property
     def lam_prox(self) -> float:
@@ -753,6 +849,7 @@ class Algorithm(ABC):
         emitter: callable,
         params: dict,
         settings: "Config",
+        discretization_solver_impulsive: Optional[Callable] = None,
     ) -> None:
         """Initialize the algorithm and store compiled infrastructure.
 
@@ -767,6 +864,8 @@ class Algorithm(ABC):
             emitter: Callback for emitting iteration progress data
             params: Problem parameters dictionary (for warm-start only)
             settings: Configuration object (for warm-start only)
+            discretization_solver_impulsive: Optional solver for discrete/impulsive
+                dynamics evaluated on ``(x_prop, u_discrete)``
         """
         raise NotImplementedError
 

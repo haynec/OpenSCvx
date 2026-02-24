@@ -159,7 +159,6 @@ class PTRSolver(ConvexSolver):
         """
         return self._ocp_vars
 
-    ## TODO (fabio): convert controls to impulsive
     def create_variables(
         self,
         N: int,
@@ -240,7 +239,6 @@ class PTRSolver(ConvexSolver):
             N=N,
             n_states=n_states,
             n_controls=n_controls,
-            n_controls_imp=n_controls_imp,
             S_x=S_x,
             c_x=c_x,
             S_u=S_u,
@@ -399,7 +397,6 @@ class PTRSolver(ConvexSolver):
 
         return cost
 
-    ## TODO:(fabio - ongoing) add support for impulsive controls
     def constraints(
         self,
         settings: "Config",
@@ -434,7 +431,6 @@ class PTRSolver(ConvexSolver):
         jax_constraints = lowered.jax_constraints
         cvxpy_constraints = lowered.cvxpy_constraints
 
-        ## TODO: (fabio) pass the D_d from the ocp_vars to allow for the update
         x = ocp_vars.x
         dx = ocp_vars.dx
         x_bar = ocp_vars.x_bar
@@ -446,6 +442,9 @@ class PTRSolver(ConvexSolver):
         A_d = ocp_vars.A_d
         B_d = ocp_vars.B_d
         C_d = ocp_vars.C_d
+        x_prop_pp = ocp_vars.x_prop_pp
+        D_d = ocp_vars.D_d
+        E_d = ocp_vars.E_d
         x_prop = ocp_vars.x_prop
         nu = ocp_vars.nu
         g = ocp_vars.g
@@ -468,11 +467,6 @@ class PTRSolver(ConvexSolver):
         slice_imp = settings.sim.u.slice_impulsive
         has_continuous = bool(slice_cont.stop > slice_cont.start)
         has_impulsive = bool(slice_imp.stop > slice_imp.start)
-        D_d = settings.sim.u.allocation_matrix if has_impulsive else None
-        if has_impulsive and D_d is None:
-            raise ValueError(
-                "Impulsive controls detected but allocation_matrix is missing from unified control."
-            )
 
         constr = []
 
@@ -514,7 +508,13 @@ class PTRSolver(ConvexSolver):
         # Boundary conditions (Fix)
         for i in range(settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop):
             if settings.sim.x.initial_type[i] == "Fix":
-                constr += [x_nonscaled[0][i] == x_init[i]]  # Initial Boundary Conditions
+                if has_impulsive:
+                    constr += [
+                        x_nonscaled[0][i]
+                        == x_prop_pp[0][i] + E_d[0][i, slice_imp] @ du_nonscaled[0][slice_imp]
+                    ]
+                else:
+                    constr += [x_nonscaled[0][i] == x_init[i]]  # Initial Boundary Conditions
             if settings.sim.x.final_type[i] == "Fix":
                 constr += [x_nonscaled[-1][i] == x_term[i]]  # Final Boundary Conditions
 
@@ -538,20 +538,22 @@ class PTRSolver(ConvexSolver):
             inv_S_x @ (x_nonscaled[i] - c_x)
             == inv_S_x
             @ (
-                A_d[i - 1] @ dx_nonscaled[i - 1]
-                + (
-                    B_d[i - 1][:, slice_cont] @ du_nonscaled[i - 1][slice_cont]
-                    if has_continuous
-                    else 0
+                D_d[i]
+                @ (
+                    A_d[i - 1] @ dx_nonscaled[i - 1]
+                    + (
+                        B_d[i - 1][:, slice_cont] @ du_nonscaled[i - 1][slice_cont]
+                        if has_continuous
+                        else 0
+                    )
+                    + (
+                        C_d[i - 1][:, slice_cont] @ du_nonscaled[i][slice_cont]
+                        if has_continuous
+                        else 0
+                    )
                 )
-                + (C_d[i - 1][:, slice_cont] @ du_nonscaled[i][slice_cont] if has_continuous else 0)
-                + (D_d @ du_nonscaled[i][slice_imp] if has_impulsive else 0)
-                + (
-                    A_d[i - 1] @ D_d @ du_nonscaled[i - 1][slice_imp]
-                    if (has_impulsive and i == 1)
-                    else 0
-                )
-                + x_prop[i - 1]
+                + (E_d[i][:, slice_imp] @ du_nonscaled[i][slice_imp] if has_impulsive else 0)
+                + x_prop_pp[i]
                 - c_x
             )
             + nu[i - 1]
@@ -613,9 +615,19 @@ class PTRSolver(ConvexSolver):
                     "generation has been run. Install with: pip install openscvx[cvxpygen]"
                 )
         else:
-            cvx_solver = self.cvx_solver
-            solver_args = self.solver_args
-            self._solve_fn = lambda: self._problem.solve(solver=cvx_solver, **solver_args)
+            solver = self.cvx_solver
+            solver_args = dict(self.solver_args)
+
+            def _solve_with_dpp_fallback():
+                try:
+                    return self._problem.solve(solver=solver, **solver_args)
+                except cp.error.DPPError:
+                    fallback_args = dict(solver_args)
+                    fallback_args.pop("enforce_dpp", None)
+                    fallback_args["ignore_dpp"] = True
+                    return self._problem.solve(solver=solver, **fallback_args)
+
+            self._solve_fn = _solve_with_dpp_fallback
 
     def update_dynamics_linearization(
         self,
@@ -625,7 +637,9 @@ class PTRSolver(ConvexSolver):
         B_d: np.ndarray,
         C_d: np.ndarray,
         x_prop: np.ndarray,
+        x_prop_pp: np.ndarray | None = None,
         D_d: np.ndarray | None = None,
+        E_d: np.ndarray | None = None,
     ) -> None:
         """Update dynamics linearization point and matrices.
 
@@ -639,15 +653,25 @@ class PTRSolver(ConvexSolver):
             B_d: Discretized control Jacobian (current node), shape (N-1, n_states, n_controls)
             C_d: Discretized control Jacobian (next node), shape (N-1, n_states, n_controls)
             x_prop: Propagated state from dynamics, shape (N-1, n_states)
+            x_prop_pp: Optional impulsive/discrete propagated state, shape (N, n_states)
+            D_d: Optional impulsive/discrete Jacobian wrt state, shape (N, n_states, n_states)
+            E_d: Optional impulsive/discrete Jacobian wrt control, shape (N, n_states, n_controls)
         """
         self._set_param("x_bar", x_bar)
         self._set_param("u_bar", u_bar)
         self._set_param("A_d", A_d)
         self._set_param("B_d", B_d)
         self._set_param("C_d", C_d)
-        self._set_param("x_prop", x_prop)
-        if D_d is not None and "D_d" in self._problem.param_dict:
-            self._set_param("D_d", D_d)
+        if "x_prop" in self._problem.param_dict:
+            self._set_param("x_prop", x_prop)
+        elif self._ocp_vars.x_prop is not None:
+            self._ocp_vars.x_prop.value = np.asarray(x_prop)
+        if x_prop_pp is not None and self._ocp_vars.x_prop_pp is not None:
+            self._ocp_vars.x_prop_pp.value = np.asarray(x_prop_pp)
+        if D_d is not None and self._ocp_vars.D_d is not None:
+            self._ocp_vars.D_d.value = np.asarray(D_d)
+        if E_d is not None and self._ocp_vars.E_d is not None:
+            self._ocp_vars.E_d.value = np.asarray(E_d)
 
     def update_constraint_linearizations(
         self,

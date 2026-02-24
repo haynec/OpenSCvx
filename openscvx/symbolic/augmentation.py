@@ -62,6 +62,7 @@ from openscvx.symbolic.expr import (
     CTCS,
     Add,
     Concat,
+    Constant,
     Constraint,
     CrossNodeConstraint,
     Equality,
@@ -439,9 +440,10 @@ def augment_dynamics_with_ctcs(
     controls: List[Control],
     constraints_ctcs: List[CTCS],
     N: int,
+    xdelta: Expr = None,
     licq_min: float = 0.0,
     licq_max: float = 1e-4,
-) -> Tuple[Expr, List[State], List[Control]]:
+) -> Tuple[Expr, Expr, List[State], List[Control]]:
     """Augment dynamics with continuous-time constraint satisfaction states.
 
     Implements the CTCS method by adding augmented states and time dilation control
@@ -495,10 +497,14 @@ def augment_dynamics_with_ctcs(
         states_aug includes x, time, and _ctcs_aug_0,
         controls_aug includes u and _time_dilation
     """
+    # Save if discrete dynamics is null
+    discrete_dynamics_set = xdelta is not None
+
     # Copy the original states and controls lists
     states_augmented = list(states)
     controls_augmented = list(controls)
 
+    num_augmented_states = 0
     if constraints_ctcs:
         # Group penalty expressions by idx (constraints should already be sorted)
         penalty_groups: Dict[int, List[Expr]] = {}
@@ -515,8 +521,13 @@ def augment_dynamics_with_ctcs(
                 penalty_groups[ctcs.idx] = []
             penalty_groups[ctcs.idx].append(ctcs)
 
-        # Create augmented state expressions for each group
+        num_augmented_states = len(penalty_groups)
+
+        # Create augmented state expressions for each group and corresponding
+        # augmented state variables. For discrete dynamics, preserve these states
+        # by identity mapping across impulsive updates.
         augmented_state_exprs = []
+        augmented_state_exprs_discrete = []
         for idx in sorted(penalty_groups.keys()):
             penalty_terms = penalty_groups[idx]
             if len(penalty_terms) == 1:
@@ -525,11 +536,6 @@ def augment_dynamics_with_ctcs(
                 augmented_state_expr = Add(*penalty_terms)
             augmented_state_exprs.append(augmented_state_expr)
 
-        # Calculate number of augmented states from the penalty groups
-        num_augmented_states = len(penalty_groups)
-
-        # Create augmented state variables
-        for idx in range(num_augmented_states):
             aug_var = State(f"_ctcs_aug_{idx}", shape=(1,))
             aug_var.initial = np.array([licq_min])  # Set initial to respect bounds
             aug_var.final = [("free", 0)]
@@ -538,11 +544,17 @@ def augment_dynamics_with_ctcs(
             # Set guess to licq_min as well
             aug_var.guess = np.full([N, 1], licq_min)  # N x num augmented states
             states_augmented.append(aug_var)
+            augmented_state_exprs_discrete.append(aug_var)
 
         # Concatenate with original dynamics
         xdot_aug = Concat(xdot, *augmented_state_exprs)
+        if discrete_dynamics_set:
+            xdelta_aug = Concat(xdelta, *augmented_state_exprs_discrete)
+        else:
+            xdelta_aug = Concat(xdelta, *augmented_state_exprs_discrete)
     else:
         xdot_aug = xdot
+        xdelta_aug = xdelta
 
     time_dilation = Control("_time_dilation", shape=(1,))
 
@@ -604,16 +616,4 @@ def augment_dynamics_with_ctcs(
 
     controls_augmented.append(time_dilation)
 
-    # Append zeros to the allocation matrix of the impulsive controls
-    # to account for time and constraint augmentation states
-    for control in controls_augmented:
-        if control.allocation_matrix is not None:
-            # The +1 is for the time state
-            control.allocation_matrix = np.vstack(
-                (
-                    control.allocation_matrix,
-                    np.zeros((num_augmented_states + 1, control.allocation_matrix.shape[1])),
-                )
-            )
-
-    return xdot_aug, states_augmented, controls_augmented
+    return xdot_aug, xdelta_aug, states_augmented, controls_augmented

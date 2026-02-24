@@ -74,6 +74,7 @@ def preprocess_symbolic_problem(
     licq_min: float = 0.0,
     licq_max: float = 1e-4,
     dynamics_prop_extra: dict = None,
+    dynamics_discrete: dict = None,
     states_prop_extra: List[State] = None,
     algebraic_prop: dict = None,
     byof: Optional[dict] = None,
@@ -183,7 +184,7 @@ def preprocess_symbolic_problem(
     """
 
     # Validate input types before anything else
-    validate_input_types(dynamics, states, controls, constraints, N, time)
+    validate_input_types(dynamics, dynamics_discrete, states, controls, constraints, N, time)
     validate_propagation_input_types(dynamics_prop_extra, states_prop_extra)
 
     # Wrap validated constraints into a ConstraintSet
@@ -226,12 +227,27 @@ def preprocess_symbolic_problem(
     if "time" not in dynamics:
         dynamics["time"] = 1.0
 
+    # Discrete dynamics are required for impulsive controls and optional otherwise.
+    # When omitted, use zero discrete dynamics for all states.
+    if dynamics_discrete is None:
+        dynamics_discrete = {
+            state.name: Constant(np.zeros(state.shape, dtype=float)) for state in states
+        }
+    else:
+        dynamics_discrete = dict(dynamics_discrete)  # Avoid mutating caller input
+    if "time" not in dynamics_discrete:
+        # Preserve time evolution across the impulsive/discrete map by default.
+        # If the user does not provide a discrete "time" expression, keep time as identity.
+        time_state = next((state for state in states if state.name == "time"), None)
+        dynamics_discrete["time"] = time_state if time_state is not None else 0.0
+
     # Extract byof dynamics for validation
     byof_dynamics = byof.get("dynamics", {}) if byof else {}
 
     # Validate dynamics dict matches state names and dimensions
     # byof_dynamics states should not be in symbolic dynamics dict
     validate_dynamics_dict(dynamics, states, byof_dynamics=byof_dynamics)
+    validate_dynamics_dict(dynamics_discrete, states)
 
     # Inject zero placeholders for byof dynamics states
     # These will be replaced with the actual byof functions at lowering time
@@ -244,23 +260,27 @@ def preprocess_symbolic_problem(
 
     # Convert dynamics dict to concatenated expression
     dynamics, dynamics_concat = convert_dynamics_dict_to_expr(dynamics, states)
+    dynamics_discrete, dynamics_discrete_concat = convert_dynamics_dict_to_expr(
+        dynamics_discrete, states
+    )
 
     # ==================== PHASE 2: Expression Validation ====================
-
     # Validate all expressions (use unsorted constraints)
-    all_exprs = [dynamics_concat] + constraints.unsorted
-    validate_variable_names(all_exprs)
     collect_and_assign_slices(states, controls)
-    validate_shapes(all_exprs)
     validate_constraints_at_root(constraints.unsorted)
     validate_and_normalize_constraint_nodes(constraints.unsorted, N)
     validate_dynamics_dimension(dynamics_concat, states)
+    all_exprs = [dynamics_concat, dynamics_discrete_concat] + constraints.unsorted
+    validate_dynamics_dimension(dynamics_concat, states)
+    validate_variable_names(all_exprs)
+    validate_shapes(all_exprs)
 
     # ==================== PHASE 3: Canonicalization & Parameter Collection ====================
 
     # Canonicalize all expressions after validation
     dynamics_concat = dynamics_concat.canonicalize()
     constraints.unsorted = [expr.canonicalize() for expr in constraints.unsorted]
+    dynamics_discrete_concat = dynamics_discrete_concat.canonicalize()
 
     # Collect parameter values from all constraints and dynamics
     parameters = {}
@@ -283,6 +303,9 @@ def preprocess_symbolic_problem(
             if param.name not in parameters:
                 parameters[param.name] = param.value
 
+    # Collect from discrete dynamics
+    traverse(dynamics_discrete_concat, collect_param_values)
+
     # ==================== PHASE 4: Constraint Separation & Augmentation ====================
 
     # Sort and separate constraints by type (drains unsorted -> fills categories)
@@ -296,12 +319,13 @@ def preprocess_symbolic_problem(
     constraints.ctcs, node_intervals, _ = sort_ctcs_constraints(constraints.ctcs)
 
     # Augment dynamics, states, and controls with CTCS constraints, time dilation
-    dynamics_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    dynamics_aug, dynamics_discrete_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
         dynamics_concat,
         states,
         controls,
         constraints.ctcs,
         N,
+        xdelta=dynamics_discrete_concat,
         licq_min=licq_min,
         licq_max=licq_max,
     )
@@ -380,6 +404,7 @@ def preprocess_symbolic_problem(
         parameters=parameters,
         N=N,
         node_intervals=node_intervals,
+        dynamics_discrete=dynamics_discrete_aug,
         dynamics_prop=dynamics_prop,
         states_prop=states_prop,
         controls_prop=controls_prop,

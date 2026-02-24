@@ -363,22 +363,12 @@ def test_control_creation():
     assert c.name == "thrust"
     assert c.shape == (2,)
     expected = (
-        "Control('thrust', shape=(2,), impulsive=[False False], "
-        "allocation_matrix=None, nodes=None)"
+        "Control('thrust', shape=(2,), impulsive=[False False], nodes=None)"
     )
     assert repr(c) == expected
     assert c._min is None
     assert c._max is None
     assert c._guess is None
-
-    with pytest.raises(ValueError, match="Allocation matrix dimensions not consistent"):
-        Control(
-            "delta_v",
-            shape=(2,),
-            impulsive=True,
-            allocation_matrix=np.array([[0], [1]]),
-            nodes=[1],
-        )
 
 
 def test_control_creation_with_kwargs():

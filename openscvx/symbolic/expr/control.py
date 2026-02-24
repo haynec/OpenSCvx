@@ -68,7 +68,6 @@ class Control(Variable):
         min: Optional[np.ndarray] = None,
         max: Optional[np.ndarray] = None,
         impulsive: bool = False,
-        allocation_matrix: np.ndarray = None,
         nodes: Optional[list[int]] = None,
     ):
         """Initialize a Control object.
@@ -79,7 +78,6 @@ class Control(Variable):
             min: Optional minimum bounds array (keyword-only)
             max: Optional maximum bounds array (keyword-only)
             impulsive: Whether this control is treated as impulsive
-            allocation_matrix: Matrix mapping impulsive control dimensions
             nodes: Optional list of node indices where impulsive control is enabled
         """
         super().__init__(name, shape)
@@ -92,16 +90,6 @@ class Control(Variable):
             self._nodes = [int(idx) for idx in nodes]
         else:
             self._nodes = None
-        ## TODO: (fabio) maybe this check could be moved to ''builder.py''
-        if impulsive:
-            if allocation_matrix.shape[1] != shape[0]:
-                raise ValueError(
-                    (
-                        "Allocation matrix dimensions not consistent with control dimensions.",
-                        "Number of rows shall be equal to control dimension.",
-                    )
-                )
-        self._allocation_matrix = allocation_matrix
 
         if min is not None:
             self.min = min
@@ -196,15 +184,6 @@ class Control(Variable):
         self._is_impulsive = val
 
     @property
-    def allocation_matrix(self) -> Optional[np.ndarray]:
-        return self._allocation_matrix
-
-    @allocation_matrix.setter
-    def allocation_matrix(self, val):
-        # TODO @haynec find a better way to check shape including augmentation
-        self._allocation_matrix = val
-
-    @property
     def nodes(self) -> Optional[list[int]]:
         return self._nodes
 
@@ -226,5 +205,5 @@ class Control(Variable):
         return (
             "Control("
             f"'{self.name}', shape={self.shape}, impulsive={self._is_impulsive}, "
-            f"allocation_matrix={self._allocation_matrix}, nodes={self._nodes})"
+            f"nodes={self._nodes})"
         )

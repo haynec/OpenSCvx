@@ -37,7 +37,12 @@ from openscvx.config import (
     PropagationConfig,
     SimConfig,
 )
-from openscvx.discretization import Discretizer, LinearizeDiscretize, _resolve_discretizer
+from openscvx.discretization import (
+    Discretizer,
+    LinearizeDiscretize,
+    get_impulsive_discretization_solver,
+    _resolve_discretizer,
+)
 from openscvx.expert import ByofSpec
 from openscvx.lowered import LoweredProblem, ParameterDict
 from openscvx.lowered.dynamics import Dynamics
@@ -74,6 +79,7 @@ class Problem:
         N: int,
         time: Time,
         *,
+        dynamics_discrete: Optional[dict] = None,
         dynamics_prop: Optional[dict] = None,
         states_prop: Optional[List[State]] = None,
         algebraic_prop: Optional[dict] = None,
@@ -231,6 +237,7 @@ class Problem:
         # Symbolic Preprocessing & Augmentation
         self.symbolic: SymbolicProblem = preprocess_symbolic_problem(
             dynamics=dynamics,
+            dynamics_discrete=dynamics_discrete,
             constraints=constraints,
             states=states,
             controls=controls,
@@ -336,6 +343,7 @@ class Problem:
             self.settings.sim._uniform_time_grid = time.uniform_time_grid
 
         self._discretization_solver: callable = None
+        self._discretization_solver_impulsive: callable = None
 
         # Set up emitter & queue (thread started in initialize() after columns are known)
         if self.settings.dev.printing:
@@ -644,10 +652,19 @@ class Problem:
         """
         # Build nodes dictionary with all states and controls
         nodes_dict = {}
+        has_impulsive_controls = any(
+            bool(control.is_impulsive.any())
+            if hasattr(control.is_impulsive, "any")
+            else bool(control.is_impulsive)
+            for control in self.symbolic.controls
+        )
 
         # Add all states (user-defined and augmented)
         for sym_state in self.symbolic.states:
-            nodes_dict[sym_state.name] = state.x[:, sym_state._slice]
+            state_nodes = state.x[:, sym_state._slice].copy()
+            if has_impulsive_controls:
+                state_nodes[0] = self.settings.sim.x.initial[sym_state._slice]
+            nodes_dict[sym_state.name] = state_nodes
 
         # Add all controls (user-defined and augmented)
         for control in self.symbolic.controls:
@@ -737,6 +754,9 @@ class Problem:
         self._discretization_solver = self._discretizer.get_solver(
             self._lowered.dynamics, self.settings
         )
+        self._discretization_solver_impulsive = get_impulsive_discretization_solver(
+            self._lowered.dynamics_discrete
+        )
         self._propagation_solver = get_propagation_solver(
             self._compiled_dynamics_prop.f, self.settings, self._discretizer
         )
@@ -774,6 +794,22 @@ class Problem:
             debug=self.settings.dev.debug,
         )
 
+        # Compile the impulsive/discrete discretization solver with the same pipeline.
+        # This solver is evaluated on node-wise inputs (x_nodes, u_nodes), shape (N, ...).
+        dis_imp_solver_file = dis_solver_file.with_name(
+            f"{dis_solver_file.stem}_impulsive{dis_solver_file.suffix}"
+        )
+        self._discretization_solver_impulsive = load_or_compile_discretization_solver(
+            self._discretization_solver_impulsive,
+            dis_imp_solver_file,
+            self._parameters,  # Plain dict for JAX
+            self.settings.sim.n,
+            self.settings.sim.n_states,
+            self.settings.sim.n_controls,
+            save_compiled=self.settings.sim.save_compiled,
+            debug=self.settings.dev.debug,
+        )
+
         # Setup propagation solver parameters
         dtau = 1.0 / (self.settings.sim.n - 1)
         dt_max = self.settings.sim.u.max[self.settings.sim.time_dilation_slice][0] * dtau
@@ -799,6 +835,7 @@ class Problem:
             self.emitter_function,
             self._parameters,  # For warm-start only
             self.settings,  # For warm-start only
+            discretization_solver_impulsive=self._discretization_solver_impulsive,
         )
         print("✓ SCvx Subproblem Solver initialized")
 
@@ -1006,6 +1043,7 @@ class Problem:
             self.settings,
             result,
             self._propagation_solver,
+            dynamics_discrete=self._lowered.dynamics_discrete.f,
             algebraic_prop=self._lowered.algebraic_prop,
             discretizer=self._discretizer,
         )

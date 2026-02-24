@@ -43,7 +43,6 @@ dv = ox.Control(
     "delta_v",
     shape=(1,),
     impulsive=True,
-    allocation_matrix=np.array([[0], [1]]),
     nodes=[0, n - 1],
 )
 dv.max = np.array([1.0])
@@ -64,6 +63,11 @@ dynamics = {
     "velocity": a,
 }
 
+dynamics_discrete = {
+    "position": p,
+    "velocity": v + ox.Power(dv, 2),
+}
+
 states = [p, v]
 controls = [dv, a]
 
@@ -75,6 +79,7 @@ time = ox.Time(initial=0.0, final=ox.Minimize(10.0), min=0.0, max=20.0)
 
 problem = Problem(
     dynamics=dynamics,
+    dynamics_discrete=dynamics_discrete,
     states=states,
     controls=controls,
     time=time,

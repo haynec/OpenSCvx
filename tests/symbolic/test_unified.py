@@ -363,7 +363,6 @@ def test_unified_control_impulsive_order_and_true_selector():
         "impulse",
         (1,),
         impulsive=True,
-        allocation_matrix=np.array([[1.0]]),
         nodes=[0],
     )
     impulse.min = np.array([-10.0])

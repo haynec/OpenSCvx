@@ -400,7 +400,6 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     unified_scaling_min = None
     unified_scaling_max = None
     unified_is_impulsive = np.zeros((total_shape,), dtype=bool)
-    unified_allocation_matrix = None
 
     # Check if any control has scaling
     has_any_scaling = any(
@@ -435,7 +434,6 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
 
     nodes = {}
     is_impulsive_list = []
-    allocation_matrix_list = []
     for control in sorted_controls:
         is_impulsive_block = np.asarray(control.is_impulsive, dtype=bool).reshape(-1)
         if is_impulsive_block.size != int(control.shape[0]):
@@ -450,9 +448,6 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
                     f"Control '{control.name}' mixes continuous and impulsive components. "
                     "Use separate Control objects."
                 )
-            if control.allocation_matrix is None:
-                raise ValueError("Provided impulsive control without field 'Allocation Matrix'")
-            allocation_matrix_list.append(control.allocation_matrix)
             if control.nodes is not None:
                 nodes[control.name] = list(control.nodes)
 
@@ -460,8 +455,6 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
 
     if is_impulsive_list:
         unified_is_impulsive = np.concatenate(is_impulsive_list)
-    if allocation_matrix_list:
-        unified_allocation_matrix = np.hstack(allocation_matrix_list)
     if not nodes:
         nodes = None
 
@@ -478,6 +471,5 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         scaling_min=unified_scaling_min,
         scaling_max=unified_scaling_max,
         is_impulsive=unified_is_impulsive,
-        allocation_matrix=unified_allocation_matrix,
         nodes=nodes,
     )

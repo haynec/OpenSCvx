@@ -487,7 +487,6 @@ class UnifiedControl:
     scaling_min: Optional[np.ndarray] = None  # Scaling minimum bounds for unified control
     scaling_max: Optional[np.ndarray] = None  # Scaling maximum bounds for unified control
     is_impulsive: Optional[bool] = False  # Default toggle for 'impulsivity' of the unified control
-    allocation_matrix: Optional[np.ndarray] = None
     nodes: Optional[dict[str, list[int]]] = None
 
     def __post_init__(self):
@@ -612,7 +611,6 @@ class UnifiedControl:
             scaling_min=new_scaling_min,
             scaling_max=new_scaling_max,
             is_impulsive=new_is_impulsive,
-            allocation_matrix=None,
             nodes=None,
         )
 
@@ -701,7 +699,6 @@ class UnifiedControl:
         min=-np.inf,
         max=np.inf,
         is_impulsive=False,
-        allocation_matrix=None,
         guess=0.0,
         augmented=False,
     ) -> None:
@@ -819,8 +816,6 @@ class UnifiedControl:
                 self.scaling_max = np.concatenate([self.scaling_max, np.array([max])])
             if self.is_impulsive is not None:
                 self.is_impulsive = np.concatenate([self.is_impulsive, np.array([is_impulsive])])
-            if self.allocation_matrix is not None:
-                self.allocation_matrix = np.hstack((self.allocation_matrix, allocation_matrix))
 
             # Update dimensions
             self.shape = new_shape

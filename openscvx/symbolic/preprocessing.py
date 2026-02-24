@@ -750,6 +750,7 @@ def validate_bounds(variables: List[Variable]) -> None:
 
 def validate_input_types(
     dynamics: any,
+    dynamics_discrete: any,
     states: any,
     controls: any,
     constraints: any,
@@ -793,6 +794,18 @@ def validate_input_types(
             hint = f" Hint: use controls=[{controls.name}] instead of controls={controls.name}"
         raise TypeError(
             f"'controls' must be a list of Control objects, got {type(controls).__name__}.{hint}"
+        )
+
+    any_impulsive_control_set = any(np.any(c.is_impulsive) for c in controls)
+    if dynamics_discrete is None:
+        if any_impulsive_control_set:
+            raise ValueError(
+                "'dynamics_discrete' must be provided if any control is marked as 'impulsive'"
+            )
+    elif not isinstance(dynamics_discrete, dict):
+        raise TypeError(
+            f"'dynamics_discrete' must be a dict mapping state names to expressions, "
+            f"got {type(dynamics_discrete).__name__}"
         )
 
     for i, c in enumerate(controls):

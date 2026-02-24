@@ -350,3 +350,62 @@ def _calculate_discretization(
     C_bar = Vend[:, i3:i4].reshape(N - 1, n_x, n_u)
 
     return A_bar, B_bar, C_bar, x_prop, Vmulti
+
+
+def get_discretization_solver(
+    dyn: "Dynamics",
+    settings: "Config",
+    discretizer: Optional["LinearizeDiscretize"] = None,
+) -> callable:
+    """Public compatibility wrapper returning a discretization solver callable."""
+    discretizer = LinearizeDiscretize() if discretizer is None else discretizer
+    return discretizer.get_solver(dyn, settings)
+
+
+def calculate_impulsive_discretization(
+    x_nodes: np.ndarray,
+    u_nodes: np.ndarray,
+    state_dot_discrete: callable,
+    A_discrete: callable,
+    B_discrete: callable,
+    params: dict,
+) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+    """Evaluate discrete/impulsive dynamics and Jacobians at all nodes."""
+    n_nodes = x_nodes.shape[0]
+    nodes = jnp.arange(n_nodes)
+    n_x = x_nodes.shape[1]
+    n_u = u_nodes.shape[1]
+
+    x_prop_pp = state_dot_discrete(x_nodes, u_nodes, nodes, params)
+    D_d = A_discrete(x_nodes, u_nodes, nodes, params)
+    E_d = B_discrete(x_nodes, u_nodes, nodes, params)
+
+    W_end = jnp.concatenate(
+        (
+            x_prop_pp,
+            D_d.reshape(n_nodes, n_x * n_x),
+            E_d.reshape(n_nodes, n_x * n_u),
+        ),
+        axis=1,
+    )
+    W = W_end.reshape(-1, 1)
+    return x_prop_pp, D_d, E_d, W
+
+
+def get_impulsive_discretization_solver(dyn_discrete: "Dynamics") -> callable:
+    """Create a solver for discrete/impulsive dynamics linearization."""
+    A_fn = jax.jacfwd(dyn_discrete.f, argnums=0)
+    B_fn = jax.jacfwd(dyn_discrete.f, argnums=1)
+
+    f_vmapped = jax.vmap(dyn_discrete.f, in_axes=(0, 0, 0, None))
+    A_vmapped = jax.vmap(A_fn, in_axes=(0, 0, 0, None))
+    B_vmapped = jax.vmap(B_fn, in_axes=(0, 0, 0, None))
+
+    return lambda x_nodes, u_nodes, params: calculate_impulsive_discretization(
+        x_nodes=x_nodes,
+        u_nodes=u_nodes,
+        state_dot_discrete=f_vmapped,
+        A_discrete=A_vmapped,
+        B_discrete=B_vmapped,
+        params=params,
+    )

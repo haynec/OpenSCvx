@@ -130,8 +130,11 @@ class AugmentedLagrangian(AutotuningBase):
             weights: Normalized initial weights from the algorithm
         """
         # Calculate nonlinear penalty for current candidate
+        candidate_x_prop = (
+            candidate.x_prop_pp[1:] if candidate.x_prop_pp is not None else candidate.x_prop
+        )
         nonlinear_cost, nonlinear_penalty, nodal_penalty = self.calculate_nonlinear_penalty(
-            candidate.x_prop,
+            candidate_x_prop,
             candidate.x,
             candidate.u,
             state.lam_vc,
@@ -155,9 +158,11 @@ class AugmentedLagrangian(AutotuningBase):
         lam_prox_k = deepcopy(state.lam_prox)
 
         if state.k > 1:
+            state_x_prop_pp = state.x_prop_pp()
+            state_x_prop = state_x_prop_pp[1:] if state_x_prop_pp is not None else state.x_prop()
             prev_nonlinear_cost, prev_nonlinear_penalty, prev_nodal_penalty = (
                 self.calculate_nonlinear_penalty(
-                    state.x_prop(),
+                    state_x_prop,
                     state.x,
                     state.u,
                     state.lam_vc,
@@ -208,7 +213,7 @@ class AugmentedLagrangian(AutotuningBase):
                 adaptive_state = "Accept Lower"
 
             # Update virtual control weight matrix
-            nu = (settings.sim.inv_S_x @ abs(candidate.x[1:] - candidate.x_prop).T).T
+            nu = (settings.sim.inv_S_x @ abs(candidate.x[1:] - candidate_x_prop).T).T
 
             # Vectorized update: use mask to select between two update rules
             mask = nu > self.ep

@@ -1,3 +1,5 @@
+from typing import Callable, Optional
+
 import jax.numpy as jnp
 import numpy as np
 
@@ -207,6 +209,7 @@ def simulate_nonlinear_time(
     t: np.ndarray,
     settings: Config,
     propagation_solver: callable,
+    dynamics_discrete: Optional[Callable] = None,
 ) -> np.ndarray:
     """Simulate the nonlinear system dynamics over time.
 
@@ -221,6 +224,8 @@ def simulate_nonlinear_time(
         t (np.ndarray): Real time points.
         settings: Configuration settings.
         propagation_solver (callable): Function for propagating the system state.
+        dynamics_discrete: Optional discrete dynamics map f_discrete(x, u, node, params)
+            used to apply impulsive/discrete updates at each node before continuous propagation.
 
     Returns:
         np.ndarray: Simulated state trajectory.
@@ -236,12 +241,9 @@ def simulate_nonlinear_time(
 
     # Precompute control interpolation
     u_interp = np.stack([np.interp(t, t, u[:, i]) for i in range(u.shape[1])], axis=-1)
-    bool_impulsive = settings.sim.u.is_impulsive
     idx_s = _time_dilation_index(settings, u.shape[1])
 
     has_u_d = np.any(settings.sim.u.is_impulsive)
-    if has_u_d:
-        D_d = settings.sim.u.allocation_matrix
 
     # Bin tau_vals into segments of tau
     tau_inds = np.digitize(tau_vals, tau) - 1
@@ -253,7 +255,6 @@ def simulate_nonlinear_time(
     for k in range(n_segments):
         controls_current = u_interp[k][None, :]
         controls_next = u_interp[k + 1][None, :]
-        controls_imp = u[k, bool_impulsive]
 
         # Mask for tau_vals in current segment
         mask = (tau_inds >= k) & (tau_inds < k + 1)
@@ -268,9 +269,22 @@ def simulate_nonlinear_time(
         tau_cur_padded = np.pad(tau_cur, (0, pad_len), constant_values=tau[k + 1])
         mask_padded = np.concatenate([np.ones(count), np.zeros(pad_len)]).astype(bool)
 
-        # Call the solver with padded tau_cur and mask
+        # Map prior node state to posterior using discrete dynamics when available.
+        if has_u_d and dynamics_discrete is not None:
+            x_post = np.asarray(
+                dynamics_discrete(
+                    np.asarray(x_0),
+                    np.asarray(u[k]),
+                    int(k),
+                    params,
+                )
+            ).reshape(-1)
+        else:
+            x_post = x_0
+
+        # Call the continuous propagation solver with padded tau_cur and mask
         sol = propagation_solver.call(
-            x_0 + (D_d @ controls_imp if has_u_d else 0),
+            x_post,
             (tau[k], tau[k + 1]),
             controls_current,
             controls_next,

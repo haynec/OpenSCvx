@@ -259,7 +259,6 @@ def create_cvxpy_variables(
     N: int,
     n_states: int,
     n_controls: int,
-    n_controls_imp: int,
     S_x: np.ndarray,
     c_x: np.ndarray,
     S_u: np.ndarray,
@@ -321,7 +320,9 @@ def create_cvxpy_variables(
     A_d = cp.Parameter((N - 1, n_states, n_states), name="A_d", sparsity=A_d_sparsity)
     B_d = cp.Parameter((N - 1, n_states, n_controls), name="B_d", sparsity=B_d_sparsity)
     C_d = cp.Parameter((N - 1, n_states, n_controls), name="C_d", sparsity=C_d_sparsity)
-    D_d = cp.Parameter((n_states, n_controls_imp), name="D_d") if n_controls_imp > 0 else None
+    x_prop_pp = cp.Parameter((N, n_states), name="x_prop_pp")
+    D_d = cp.Parameter((N, n_states, n_states), name="D_d")
+    E_d = cp.Parameter((N, n_states, n_controls), name="E_d")
     x_prop = cp.Parameter((N - 1, n_states), name="x_prop")
     nu = cp.Variable((N - 1, n_states), name="nu")  # Virtual Control
 
@@ -389,7 +390,9 @@ def create_cvxpy_variables(
         A_d=A_d,
         B_d=B_d,
         C_d=C_d,
+        x_prop_pp=x_prop_pp,
         D_d=D_d,
+        E_d=E_d,
         x_prop=x_prop,
         nu=nu,
         g=g,
@@ -766,10 +769,12 @@ def lower_symbolic_problem(
 
     # Keep control slices in copied expressions aligned with unified ordering.
     _sync_control_slices(problem.dynamics, problem.controls)
+    _sync_control_slices(problem.dynamics_discrete, problem.controls)
     _sync_control_slices(problem.dynamics_prop, problem.controls)
 
     # Lower dynamics to JAX
     dynamics = _lower_dynamics(problem.dynamics)
+    dynamics_discrete = _lower_dynamics(problem.dynamics_discrete)
     dynamics_prop = _lower_dynamics(problem.dynamics_prop)
 
     # Lower non-convex constraints to JAX
@@ -852,6 +857,7 @@ def lower_symbolic_problem(
 
     return LoweredProblem(
         dynamics=dynamics,
+        dynamics_discrete=dynamics_discrete,
         dynamics_prop=dynamics_prop,
         jax_constraints=jax_constraints,
         cvxpy_constraints=cvxpy_constraints,
