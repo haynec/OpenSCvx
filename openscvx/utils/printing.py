@@ -233,10 +233,14 @@ def print_problem_summary(
             for s in algorithm._states:
                 w = weights.lam_cost[s._slice]
                 if np.any(w != 0):
-                    if w.size == 1:
-                        parts.append(f"{s.name}={w.item():.1g}")
+                    nz_idx = np.nonzero(w)[0]
+                    if w.size == 1 or np.all(w == w[0]):
+                        parts.append(f"{s.name}={w.flat[0]:.1g}")
+                    elif nz_idx.size == 1:
+                        parts.append(f"{s.name}[{nz_idx[0]}]={w[nz_idx[0]]:.1g}")
                     else:
-                        parts.append(f"{s.name}={np.array2string(w, precision=1)}")
+                        fmt = [f"{v:.1g}" for v in w]
+                        parts.append(f"{s.name}=[{', '.join(fmt)}]")
             cost_str = "λ_cost={" + ", ".join(parts) + "}"
         else:
             cost_str = f"λ_cost={np.array2string(nz, precision=1, separator=',')}"
