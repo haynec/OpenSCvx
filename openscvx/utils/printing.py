@@ -8,6 +8,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import jax
+import numpy as np
 from termcolor import colored
 
 if TYPE_CHECKING:
@@ -225,8 +226,12 @@ def print_problem_summary(
 
     # Build weights string from algorithm weights
     weights = algorithm.weights
+    if isinstance(weights.lam_cost, np.ndarray):
+        cost_str = f"λ_cost={np.array2string(weights.lam_cost, precision=1, separator=',')}"
+    else:
+        cost_str = f"λ_cost={weights.lam_cost:4.1f}"
     weights_parts = [
-        f"λ_cost={weights.lam_cost:4.1f}",
+        cost_str,
         f"λ_tr={weights.lam_prox:4.1f}",
         f"λ_vc={weights.lam_vc:4.1f}",
     ]
