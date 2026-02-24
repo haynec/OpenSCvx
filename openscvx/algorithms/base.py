@@ -55,7 +55,9 @@ def _expand_lam_cost_dict(
             f"Valid state names: {sorted(valid_names)}"
         )
 
-    # Identify states that have minimize/maximize objectives
+    # Identify states that have minimize/maximize objectives.
+    # initial_type/final_type are set on symbolic State objects during property
+    # assignment (e.g. state.initial = ...), so they are available before lowering.
     cost_states: Set[str] = set()
     for state in states:
         if state.initial_type is not None:
@@ -78,7 +80,8 @@ def _expand_lam_cost_dict(
             f"cost terms must have a weight in the dict."
         )
 
-    # Fill the array
+    # Fill the array.  _slice is assigned by preprocess_symbolic_problem
+    # (via collect_and_assign_slices), which runs before algorithm construction.
     for state in states:
         if state.name in lam_cost_dict:
             lam_arr[state._slice] = lam_cost_dict[state.name]
@@ -304,6 +307,8 @@ class AutotuningBase(ABC):
             # Cross-node constraints return scalar or array, sum all violations
             nodal_penalty += lam_vb * np.sum(np.maximum(0, g))
 
+        # lam_cost weighting is applied inside calculate_cost_from_state,
+        # so the returned cost is already weighted (no outer multiplication).
         cost = AutotuningBase.calculate_cost_from_state(x_bar, settings, lam_cost)
         x_diff = settings.sim.inv_S_x @ (x_bar[1:, :] - x_prop).T
 

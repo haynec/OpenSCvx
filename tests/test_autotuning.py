@@ -268,6 +268,70 @@ def test_calculate_cost_from_state_no_cost(settings):
     assert cost == 0.0
 
 
+def test_calculate_cost_from_state_per_state_weights(settings):
+    """Test cost calculation with a per-state lam_cost array."""
+    settings.sim.x.final_type = ["Minimize", "Minimize"]
+    x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    lam_cost = np.array([2.0, 5.0])
+
+    cost = AutotuningBase.calculate_cost_from_state(x, settings, lam_cost=lam_cost)
+
+    scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
+    expected = 2.0 * scaled_x[-1, 0] + 5.0 * scaled_x[-1, 1]
+    assert cost == pytest.approx(expected, rel=1e-6)
+
+
+def test_calculate_cost_from_state_per_state_weights_maximize(settings):
+    """Test per-state weights with Maximize objective."""
+    settings.sim.x.final_type = ["Maximize", "None"]
+    x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    lam_cost = np.array([3.0, 0.0])
+
+    cost = AutotuningBase.calculate_cost_from_state(x, settings, lam_cost=lam_cost)
+
+    scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
+    expected = -3.0 * scaled_x[-1, 0]
+    assert cost == pytest.approx(expected, rel=1e-6)
+
+
+def test_calculate_cost_from_state_per_state_weights_mixed(settings):
+    """Test per-state weights with mixed Minimize initial and Maximize final."""
+    settings.sim.x.initial_type = ["Minimize", "None"]
+    settings.sim.x.final_type = ["None", "Maximize"]
+    x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    lam_cost = np.array([4.0, 7.0])
+
+    cost = AutotuningBase.calculate_cost_from_state(x, settings, lam_cost=lam_cost)
+
+    scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
+    expected = 4.0 * scaled_x[0, 0] - 7.0 * scaled_x[-1, 1]
+    assert cost == pytest.approx(expected, rel=1e-6)
+
+
+def test_calculate_cost_from_state_per_state_zero_weight_ignores_cost(settings):
+    """Test that a zero weight effectively ignores the cost for that state."""
+    settings.sim.x.final_type = ["Minimize", "Minimize"]
+    x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    lam_cost = np.array([0.0, 3.0])
+
+    cost = AutotuningBase.calculate_cost_from_state(x, settings, lam_cost=lam_cost)
+
+    scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
+    expected = 3.0 * scaled_x[-1, 1]
+    assert cost == pytest.approx(expected, rel=1e-6)
+
+
+def test_calculate_cost_from_state_scalar_lam_cost_matches_default(settings):
+    """Test that passing a scalar lam_cost gives consistent results with the default."""
+    settings.sim.x.final_type = ["None", "Minimize"]
+    x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+
+    cost_default = AutotuningBase.calculate_cost_from_state(x, settings)
+    cost_scalar = AutotuningBase.calculate_cost_from_state(x, settings, lam_cost=1.0)
+
+    assert cost_scalar == pytest.approx(cost_default, rel=1e-6)
+
+
 # --- Tests for calculate_nonlinear_penalty ----------------------------------
 
 
