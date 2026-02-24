@@ -6915,7 +6915,9 @@ Useful when you want a fixed trust region size without adaptation.</p>
 <span class="normal"><a href="#__codelineno-0-57">57</a></span>
 <span class="normal"><a href="#__codelineno-0-58">58</a></span>
 <span class="normal"><a href="#__codelineno-0-59">59</a></span>
-<span class="normal"><a href="#__codelineno-0-60">60</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15"></a><span class="k">class</span><span class="w"> </span><span class="nc">ConstantProximalWeight</span><span class="p">(</span><span class="n">AutotuningBase</span><span class="p">):</span>
+<span class="normal"><a href="#__codelineno-0-60">60</a></span>
+<span class="normal"><a href="#__codelineno-0-61">61</a></span>
+<span class="normal"><a href="#__codelineno-0-62">62</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15"></a><span class="k">class</span><span class="w"> </span><span class="nc">ConstantProximalWeight</span><span class="p">(</span><span class="n">AutotuningBase</span><span class="p">):</span>
 </span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Constant Proximal Weight method.</span>
 </span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17"></a>
 </span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18"></a><span class="sd">    This method keeps the trust region weight constant throughout the optimization,</span>
@@ -6952,15 +6954,17 @@ Useful when you want a fixed trust region size without adaptation.</p>
 </span><span id="__span-0-49"><a id="__codelineno-0-49" name="__codelineno-0-49"></a><span class="sd">        Returns:</span>
 </span><span id="__span-0-50"><a id="__codelineno-0-50" name="__codelineno-0-50"></a><span class="sd">            str: Adaptive state string (e.g., &quot;Accept&quot;, &quot;Reject&quot;)</span>
 </span><span id="__span-0-51"><a id="__codelineno-0-51" name="__codelineno-0-51"></a><span class="sd">        &quot;&quot;&quot;</span>
-</span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52"></a>        <span class="c1"># Update cost relaxation parameter after cost_drop iterations</span>
-</span><span id="__span-0-53"><a id="__codelineno-0-53" name="__codelineno-0-53"></a>        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">k</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_drop</span><span class="p">:</span>
-</span><span id="__span-0-54"><a id="__codelineno-0-54" name="__codelineno-0-54"></a>            <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_relax</span>
-</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55"></a>        <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-0-56"><a id="__codelineno-0-56" name="__codelineno-0-56"></a>            <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">lam_cost</span>
-</span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57"></a>
-</span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58"></a>        <span class="n">state</span><span class="o">.</span><span class="n">lam_prox_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span><span class="p">)</span>
-</span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59"></a>        <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
-</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60"></a>        <span class="k">return</span> <span class="s2">&quot;Accept Constant&quot;</span>
+</span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52"></a>        <span class="c1"># Update cost relaxation parameter after cost_drop iterations.</span>
+</span><span id="__span-0-53"><a id="__codelineno-0-53" name="__codelineno-0-53"></a>        <span class="c1"># When lam_cost is a per-state array, scalar lam_cost_relax scales</span>
+</span><span id="__span-0-54"><a id="__codelineno-0-54" name="__codelineno-0-54"></a>        <span class="c1"># uniformly, preserving the user-specified per-state weight ratios.</span>
+</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55"></a>        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">k</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_drop</span><span class="p">:</span>
+</span><span id="__span-0-56"><a id="__codelineno-0-56" name="__codelineno-0-56"></a>            <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_relax</span>
+</span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57"></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58"></a>            <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">lam_cost</span>
+</span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59"></a>
+</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60"></a>        <span class="n">state</span><span class="o">.</span><span class="n">lam_prox_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span><span class="p">)</span>
+</span><span id="__span-0-61"><a id="__codelineno-0-61" name="__codelineno-0-61"></a>        <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+</span><span id="__span-0-62"><a id="__codelineno-0-62" name="__codelineno-0-62"></a>        <span class="k">return</span> <span class="s2">&quot;Accept Constant&quot;</span>
 </span></code></pre></div></td></tr></table></div>
               </details>
 
@@ -7140,7 +7144,9 @@ Useful when you want a fixed trust region size without adaptation.</p>
 <span class="normal"><a href="#__codelineno-0-57">57</a></span>
 <span class="normal"><a href="#__codelineno-0-58">58</a></span>
 <span class="normal"><a href="#__codelineno-0-59">59</a></span>
-<span class="normal"><a href="#__codelineno-0-60">60</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31"></a><span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span>
+<span class="normal"><a href="#__codelineno-0-60">60</a></span>
+<span class="normal"><a href="#__codelineno-0-61">61</a></span>
+<span class="normal"><a href="#__codelineno-0-62">62</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31"></a><span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span>
 </span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32"></a>    <span class="bp">self</span><span class="p">,</span>
 </span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33"></a>    <span class="n">state</span><span class="p">:</span> <span class="s2">&quot;AlgorithmState&quot;</span><span class="p">,</span>
 </span><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34"></a>    <span class="n">candidate</span><span class="p">:</span> <span class="s2">&quot;CandidateIterate&quot;</span><span class="p">,</span>
@@ -7161,15 +7167,17 @@ Useful when you want a fixed trust region size without adaptation.</p>
 </span><span id="__span-0-49"><a id="__codelineno-0-49" name="__codelineno-0-49"></a><span class="sd">    Returns:</span>
 </span><span id="__span-0-50"><a id="__codelineno-0-50" name="__codelineno-0-50"></a><span class="sd">        str: Adaptive state string (e.g., &quot;Accept&quot;, &quot;Reject&quot;)</span>
 </span><span id="__span-0-51"><a id="__codelineno-0-51" name="__codelineno-0-51"></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52"></a>    <span class="c1"># Update cost relaxation parameter after cost_drop iterations</span>
-</span><span id="__span-0-53"><a id="__codelineno-0-53" name="__codelineno-0-53"></a>    <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">k</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_drop</span><span class="p">:</span>
-</span><span id="__span-0-54"><a id="__codelineno-0-54" name="__codelineno-0-54"></a>        <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_relax</span>
-</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55"></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-0-56"><a id="__codelineno-0-56" name="__codelineno-0-56"></a>        <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">lam_cost</span>
-</span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57"></a>
-</span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58"></a>    <span class="n">state</span><span class="o">.</span><span class="n">lam_prox_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span><span class="p">)</span>
-</span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59"></a>    <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
-</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60"></a>    <span class="k">return</span> <span class="s2">&quot;Accept Constant&quot;</span>
+</span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52"></a>    <span class="c1"># Update cost relaxation parameter after cost_drop iterations.</span>
+</span><span id="__span-0-53"><a id="__codelineno-0-53" name="__codelineno-0-53"></a>    <span class="c1"># When lam_cost is a per-state array, scalar lam_cost_relax scales</span>
+</span><span id="__span-0-54"><a id="__codelineno-0-54" name="__codelineno-0-54"></a>    <span class="c1"># uniformly, preserving the user-specified per-state weight ratios.</span>
+</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55"></a>    <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">k</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_drop</span><span class="p">:</span>
+</span><span id="__span-0-56"><a id="__codelineno-0-56" name="__codelineno-0-56"></a>        <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_relax</span>
+</span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57"></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58"></a>        <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">lam_cost</span>
+</span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59"></a>
+</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60"></a>    <span class="n">state</span><span class="o">.</span><span class="n">lam_prox_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span><span class="p">)</span>
+</span><span id="__span-0-61"><a id="__codelineno-0-61" name="__codelineno-0-61"></a>    <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+</span><span id="__span-0-62"><a id="__codelineno-0-62" name="__codelineno-0-62"></a>    <span class="k">return</span> <span class="s2">&quot;Accept Constant&quot;</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>

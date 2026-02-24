@@ -6928,7 +6928,9 @@ then keeps it constant.</p>
 <span class="normal"><a href="#__codelineno-0-71">71</a></span>
 <span class="normal"><a href="#__codelineno-0-72">72</a></span>
 <span class="normal"><a href="#__codelineno-0-73">73</a></span>
-<span class="normal"><a href="#__codelineno-0-74">74</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15"></a><span class="k">class</span><span class="w"> </span><span class="nc">RampProximalWeight</span><span class="p">(</span><span class="n">AutotuningBase</span><span class="p">):</span>
+<span class="normal"><a href="#__codelineno-0-74">74</a></span>
+<span class="normal"><a href="#__codelineno-0-75">75</a></span>
+<span class="normal"><a href="#__codelineno-0-76">76</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15"></a><span class="k">class</span><span class="w"> </span><span class="nc">RampProximalWeight</span><span class="p">(</span><span class="n">AutotuningBase</span><span class="p">):</span>
 </span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Ramp Proximal Weight method.</span>
 </span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17"></a>
 </span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18"></a><span class="sd">    This method ramps the proximal weight up linearly over the first few iterations,</span>
@@ -6968,26 +6970,28 @@ then keeps it constant.</p>
 </span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52"></a><span class="sd">        Returns:</span>
 </span><span id="__span-0-53"><a id="__codelineno-0-53" name="__codelineno-0-53"></a><span class="sd">            str: Adaptive state string (e.g., &quot;Accept&quot;, &quot;Reject&quot;)</span>
 </span><span id="__span-0-54"><a id="__codelineno-0-54" name="__codelineno-0-54"></a><span class="sd">        &quot;&quot;&quot;</span>
-</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55"></a>        <span class="c1"># Update cost relaxation parameter after cost_drop iterations</span>
-</span><span id="__span-0-56"><a id="__codelineno-0-56" name="__codelineno-0-56"></a>        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">k</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_drop</span><span class="p">:</span>
-</span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57"></a>            <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_relax</span>
-</span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58"></a>        <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59"></a>            <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">lam_cost</span>
-</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60"></a>
-</span><span id="__span-0-61"><a id="__codelineno-0-61" name="__codelineno-0-61"></a>        <span class="c1"># Check if we&#39;re already at max before updating</span>
-</span><span id="__span-0-62"><a id="__codelineno-0-62" name="__codelineno-0-62"></a>        <span class="n">was_at_max</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_prox_max</span>
-</span><span id="__span-0-63"><a id="__codelineno-0-63" name="__codelineno-0-63"></a>
-</span><span id="__span-0-64"><a id="__codelineno-0-64" name="__codelineno-0-64"></a>        <span class="c1"># Calculate and append new value</span>
-</span><span id="__span-0-65"><a id="__codelineno-0-65" name="__codelineno-0-65"></a>        <span class="n">new_lam_prox</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">ramp_factor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_prox_max</span><span class="p">)</span>
-</span><span id="__span-0-66"><a id="__codelineno-0-66" name="__codelineno-0-66"></a>        <span class="n">state</span><span class="o">.</span><span class="n">lam_prox_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_lam_prox</span><span class="p">)</span>
-</span><span id="__span-0-67"><a id="__codelineno-0-67" name="__codelineno-0-67"></a>
-</span><span id="__span-0-68"><a id="__codelineno-0-68" name="__codelineno-0-68"></a>        <span class="c1"># If we were already at max, or if we just reached it and it&#39;s staying constant</span>
-</span><span id="__span-0-69"><a id="__codelineno-0-69" name="__codelineno-0-69"></a>        <span class="k">if</span> <span class="n">was_at_max</span><span class="p">:</span>
-</span><span id="__span-0-70"><a id="__codelineno-0-70" name="__codelineno-0-70"></a>            <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
-</span><span id="__span-0-71"><a id="__codelineno-0-71" name="__codelineno-0-71"></a>            <span class="k">return</span> <span class="s2">&quot;Accept Constant&quot;</span>
-</span><span id="__span-0-72"><a id="__codelineno-0-72" name="__codelineno-0-72"></a>        <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-0-73"><a id="__codelineno-0-73" name="__codelineno-0-73"></a>            <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
-</span><span id="__span-0-74"><a id="__codelineno-0-74" name="__codelineno-0-74"></a>            <span class="k">return</span> <span class="s2">&quot;Accept Higher&quot;</span>
+</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55"></a>        <span class="c1"># Update cost relaxation parameter after cost_drop iterations.</span>
+</span><span id="__span-0-56"><a id="__codelineno-0-56" name="__codelineno-0-56"></a>        <span class="c1"># When lam_cost is a per-state array, scalar lam_cost_relax scales</span>
+</span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57"></a>        <span class="c1"># uniformly, preserving the user-specified per-state weight ratios.</span>
+</span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58"></a>        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">k</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_drop</span><span class="p">:</span>
+</span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59"></a>            <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_relax</span>
+</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60"></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-61"><a id="__codelineno-0-61" name="__codelineno-0-61"></a>            <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">lam_cost</span>
+</span><span id="__span-0-62"><a id="__codelineno-0-62" name="__codelineno-0-62"></a>
+</span><span id="__span-0-63"><a id="__codelineno-0-63" name="__codelineno-0-63"></a>        <span class="c1"># Check if we&#39;re already at max before updating</span>
+</span><span id="__span-0-64"><a id="__codelineno-0-64" name="__codelineno-0-64"></a>        <span class="n">was_at_max</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_prox_max</span>
+</span><span id="__span-0-65"><a id="__codelineno-0-65" name="__codelineno-0-65"></a>
+</span><span id="__span-0-66"><a id="__codelineno-0-66" name="__codelineno-0-66"></a>        <span class="c1"># Calculate and append new value</span>
+</span><span id="__span-0-67"><a id="__codelineno-0-67" name="__codelineno-0-67"></a>        <span class="n">new_lam_prox</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">ramp_factor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_prox_max</span><span class="p">)</span>
+</span><span id="__span-0-68"><a id="__codelineno-0-68" name="__codelineno-0-68"></a>        <span class="n">state</span><span class="o">.</span><span class="n">lam_prox_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_lam_prox</span><span class="p">)</span>
+</span><span id="__span-0-69"><a id="__codelineno-0-69" name="__codelineno-0-69"></a>
+</span><span id="__span-0-70"><a id="__codelineno-0-70" name="__codelineno-0-70"></a>        <span class="c1"># If we were already at max, or if we just reached it and it&#39;s staying constant</span>
+</span><span id="__span-0-71"><a id="__codelineno-0-71" name="__codelineno-0-71"></a>        <span class="k">if</span> <span class="n">was_at_max</span><span class="p">:</span>
+</span><span id="__span-0-72"><a id="__codelineno-0-72" name="__codelineno-0-72"></a>            <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+</span><span id="__span-0-73"><a id="__codelineno-0-73" name="__codelineno-0-73"></a>            <span class="k">return</span> <span class="s2">&quot;Accept Constant&quot;</span>
+</span><span id="__span-0-74"><a id="__codelineno-0-74" name="__codelineno-0-74"></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-75"><a id="__codelineno-0-75" name="__codelineno-0-75"></a>            <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+</span><span id="__span-0-76"><a id="__codelineno-0-76" name="__codelineno-0-76"></a>            <span class="k">return</span> <span class="s2">&quot;Accept Higher&quot;</span>
 </span></code></pre></div></td></tr></table></div>
               </details>
 
@@ -7178,7 +7182,9 @@ then keeps it constant.</p>
 <span class="normal"><a href="#__codelineno-0-71">71</a></span>
 <span class="normal"><a href="#__codelineno-0-72">72</a></span>
 <span class="normal"><a href="#__codelineno-0-73">73</a></span>
-<span class="normal"><a href="#__codelineno-0-74">74</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34"></a><span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span>
+<span class="normal"><a href="#__codelineno-0-74">74</a></span>
+<span class="normal"><a href="#__codelineno-0-75">75</a></span>
+<span class="normal"><a href="#__codelineno-0-76">76</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34"></a><span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span>
 </span><span id="__span-0-35"><a id="__codelineno-0-35" name="__codelineno-0-35"></a>    <span class="bp">self</span><span class="p">,</span>
 </span><span id="__span-0-36"><a id="__codelineno-0-36" name="__codelineno-0-36"></a>    <span class="n">state</span><span class="p">:</span> <span class="s2">&quot;AlgorithmState&quot;</span><span class="p">,</span>
 </span><span id="__span-0-37"><a id="__codelineno-0-37" name="__codelineno-0-37"></a>    <span class="n">candidate</span><span class="p">:</span> <span class="s2">&quot;CandidateIterate&quot;</span><span class="p">,</span>
@@ -7199,26 +7205,28 @@ then keeps it constant.</p>
 </span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52"></a><span class="sd">    Returns:</span>
 </span><span id="__span-0-53"><a id="__codelineno-0-53" name="__codelineno-0-53"></a><span class="sd">        str: Adaptive state string (e.g., &quot;Accept&quot;, &quot;Reject&quot;)</span>
 </span><span id="__span-0-54"><a id="__codelineno-0-54" name="__codelineno-0-54"></a><span class="sd">    &quot;&quot;&quot;</span>
-</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55"></a>    <span class="c1"># Update cost relaxation parameter after cost_drop iterations</span>
-</span><span id="__span-0-56"><a id="__codelineno-0-56" name="__codelineno-0-56"></a>    <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">k</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_drop</span><span class="p">:</span>
-</span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57"></a>        <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_relax</span>
-</span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58"></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59"></a>        <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">lam_cost</span>
-</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60"></a>
-</span><span id="__span-0-61"><a id="__codelineno-0-61" name="__codelineno-0-61"></a>    <span class="c1"># Check if we&#39;re already at max before updating</span>
-</span><span id="__span-0-62"><a id="__codelineno-0-62" name="__codelineno-0-62"></a>    <span class="n">was_at_max</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_prox_max</span>
-</span><span id="__span-0-63"><a id="__codelineno-0-63" name="__codelineno-0-63"></a>
-</span><span id="__span-0-64"><a id="__codelineno-0-64" name="__codelineno-0-64"></a>    <span class="c1"># Calculate and append new value</span>
-</span><span id="__span-0-65"><a id="__codelineno-0-65" name="__codelineno-0-65"></a>    <span class="n">new_lam_prox</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">ramp_factor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_prox_max</span><span class="p">)</span>
-</span><span id="__span-0-66"><a id="__codelineno-0-66" name="__codelineno-0-66"></a>    <span class="n">state</span><span class="o">.</span><span class="n">lam_prox_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_lam_prox</span><span class="p">)</span>
-</span><span id="__span-0-67"><a id="__codelineno-0-67" name="__codelineno-0-67"></a>
-</span><span id="__span-0-68"><a id="__codelineno-0-68" name="__codelineno-0-68"></a>    <span class="c1"># If we were already at max, or if we just reached it and it&#39;s staying constant</span>
-</span><span id="__span-0-69"><a id="__codelineno-0-69" name="__codelineno-0-69"></a>    <span class="k">if</span> <span class="n">was_at_max</span><span class="p">:</span>
-</span><span id="__span-0-70"><a id="__codelineno-0-70" name="__codelineno-0-70"></a>        <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
-</span><span id="__span-0-71"><a id="__codelineno-0-71" name="__codelineno-0-71"></a>        <span class="k">return</span> <span class="s2">&quot;Accept Constant&quot;</span>
-</span><span id="__span-0-72"><a id="__codelineno-0-72" name="__codelineno-0-72"></a>    <span class="k">else</span><span class="p">:</span>
-</span><span id="__span-0-73"><a id="__codelineno-0-73" name="__codelineno-0-73"></a>        <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
-</span><span id="__span-0-74"><a id="__codelineno-0-74" name="__codelineno-0-74"></a>        <span class="k">return</span> <span class="s2">&quot;Accept Higher&quot;</span>
+</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55"></a>    <span class="c1"># Update cost relaxation parameter after cost_drop iterations.</span>
+</span><span id="__span-0-56"><a id="__codelineno-0-56" name="__codelineno-0-56"></a>    <span class="c1"># When lam_cost is a per-state array, scalar lam_cost_relax scales</span>
+</span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57"></a>    <span class="c1"># uniformly, preserving the user-specified per-state weight ratios.</span>
+</span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58"></a>    <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">k</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_drop</span><span class="p">:</span>
+</span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59"></a>        <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_cost_relax</span>
+</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60"></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-61"><a id="__codelineno-0-61" name="__codelineno-0-61"></a>        <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">lam_cost</span>
+</span><span id="__span-0-62"><a id="__codelineno-0-62" name="__codelineno-0-62"></a>
+</span><span id="__span-0-63"><a id="__codelineno-0-63" name="__codelineno-0-63"></a>    <span class="c1"># Check if we&#39;re already at max before updating</span>
+</span><span id="__span-0-64"><a id="__codelineno-0-64" name="__codelineno-0-64"></a>    <span class="n">was_at_max</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_prox_max</span>
+</span><span id="__span-0-65"><a id="__codelineno-0-65" name="__codelineno-0-65"></a>
+</span><span id="__span-0-66"><a id="__codelineno-0-66" name="__codelineno-0-66"></a>    <span class="c1"># Calculate and append new value</span>
+</span><span id="__span-0-67"><a id="__codelineno-0-67" name="__codelineno-0-67"></a>    <span class="n">new_lam_prox</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">ramp_factor</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">lam_prox_max</span><span class="p">)</span>
+</span><span id="__span-0-68"><a id="__codelineno-0-68" name="__codelineno-0-68"></a>    <span class="n">state</span><span class="o">.</span><span class="n">lam_prox_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_lam_prox</span><span class="p">)</span>
+</span><span id="__span-0-69"><a id="__codelineno-0-69" name="__codelineno-0-69"></a>
+</span><span id="__span-0-70"><a id="__codelineno-0-70" name="__codelineno-0-70"></a>    <span class="c1"># If we were already at max, or if we just reached it and it&#39;s staying constant</span>
+</span><span id="__span-0-71"><a id="__codelineno-0-71" name="__codelineno-0-71"></a>    <span class="k">if</span> <span class="n">was_at_max</span><span class="p">:</span>
+</span><span id="__span-0-72"><a id="__codelineno-0-72" name="__codelineno-0-72"></a>        <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+</span><span id="__span-0-73"><a id="__codelineno-0-73" name="__codelineno-0-73"></a>        <span class="k">return</span> <span class="s2">&quot;Accept Constant&quot;</span>
+</span><span id="__span-0-74"><a id="__codelineno-0-74" name="__codelineno-0-74"></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-75"><a id="__codelineno-0-75" name="__codelineno-0-75"></a>        <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
+</span><span id="__span-0-76"><a id="__codelineno-0-76" name="__codelineno-0-76"></a>        <span class="k">return</span> <span class="s2">&quot;Accept Higher&quot;</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
