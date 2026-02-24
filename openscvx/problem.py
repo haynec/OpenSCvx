@@ -54,7 +54,6 @@ from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
 from openscvx.symbolic.expr.time import Time
 from openscvx.symbolic.lower import lower_symbolic_problem
-from openscvx.symbolic.preprocessing import expand_lam_cost_dict
 from openscvx.symbolic.problem import SymbolicProblem
 from openscvx.utils import printing, profiling
 from openscvx.utils.caching import (
@@ -140,7 +139,7 @@ class Problem:
                 minimize/maximize objective must have an entry. States
                 without objectives are automatically assigned weight 0.
                 The dict is expanded to an array of shape
-                ``(n_states,)`` during ``Problem.__init__``.
+                ``(n_states,)`` during ``Problem.initialize()``.
 
                 Examples::
 
@@ -272,15 +271,6 @@ class Problem:
                     f"got {type(algorithm).__name__}"
                 )
             self._algorithm = algorithm
-
-        # Expand dict lam_cost → per-state array now that states are known
-        if isinstance(self._algorithm, PenalizedTrustRegion) and isinstance(
-            self._algorithm._lam_cost_spec, dict
-        ):
-            lam_arr = expand_lam_cost_dict(self._algorithm._lam_cost_spec, self.symbolic.states)
-            self._algorithm.weights._raw_lam_cost = lam_arr.copy()
-            self._algorithm.weights.lam_cost = lam_arr.copy()
-            self._algorithm.weights.normalize()
 
         # Resolve discretizer: None → default, dict → LinearizeDiscretize(**dict), instance → use
         if discretizer is None:
@@ -803,6 +793,7 @@ class Problem:
             self.emitter_function,
             self._parameters,  # For warm-start only
             self.settings,  # For warm-start only
+            states=self.symbolic.states,
         )
         print("✓ SCvx Subproblem Solver initialized")
 

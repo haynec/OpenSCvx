@@ -603,7 +603,7 @@ class Algorithm(ABC):
             class MyAlgorithm(Algorithm):
                 def initialize(self, solver, discretization_solver,
                                jax_constraints, emitter,
-                               params, settings):
+                               params, settings, states=None):
                     # Store compiled infrastructure
                     self._solver = solver
                     self._discretization_solver = discretization_solver
@@ -637,6 +637,7 @@ class Algorithm(ABC):
         emitter: callable,
         params: dict,
         settings: "Config",
+        states: list = None,
     ) -> None:
         """Initialize the algorithm and store compiled infrastructure.
 
@@ -651,6 +652,7 @@ class Algorithm(ABC):
             emitter: Callback for emitting iteration progress data
             params: Problem parameters dictionary (for warm-start only)
             settings: Configuration object (for warm-start only)
+            states: List of symbolic State objects (for per-state weight expansion)
         """
         raise NotImplementedError
 

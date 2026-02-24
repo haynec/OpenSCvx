@@ -11,7 +11,7 @@ implementations and custom SCvx variants:
 class Algorithm(ABC):
     @abstractmethod
     def initialize(self, solver, discretization_solver, jax_constraints,
-                   emitter, params, settings) -> None:
+                   emitter, params, settings, states=None) -> None:
         '''Store compiled infrastructure and warm-start solvers.'''
         ...
 
