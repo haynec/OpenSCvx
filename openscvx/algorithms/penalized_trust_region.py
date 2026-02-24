@@ -6,7 +6,7 @@ optimization problems through iterative convex approximation.
 
 import time
 import warnings
-from typing import TYPE_CHECKING, Dict, List, Set, Union
+from typing import TYPE_CHECKING, Dict, List, Union
 
 import numpy as np
 import numpy.linalg as la
@@ -32,73 +32,6 @@ if TYPE_CHECKING:
     from openscvx.symbolic.expr.state import State
 
     from .base import AutotuningBase
-
-
-def _expand_lam_cost_dict(
-    lam_cost_dict: Dict[str, float],
-    states: List["State"],
-) -> np.ndarray:
-    """Expand a ``{state_name: weight}`` dict to a per-state weight array.
-
-    Maps user-provided per-state cost weights to a dense array of shape
-    ``(n_states,)`` using each state's ``_slice``.  States without a
-    minimize/maximize objective receive weight 0.  States **with** a
-    minimize/maximize objective **must** appear in the dict.
-
-    Args:
-        lam_cost_dict: Mapping from state names to scalar cost weights.
-        states: List of State objects (must already have ``_slice`` assigned).
-
-    Returns:
-        np.ndarray of shape ``(n_states,)`` with per-index weights.
-
-    Raises:
-        ValueError: If the dict contains unknown state names or is missing
-            entries for states that have minimize/maximize objectives.
-    """
-    n_states = sum(s.shape[0] if len(s.shape) > 0 else 1 for s in states)
-    lam_arr = np.zeros(n_states)
-
-    valid_names = {s.name for s in states}
-
-    # Check for unknown keys
-    unknown = set(lam_cost_dict.keys()) - valid_names
-    if unknown:
-        raise ValueError(
-            f"lam_cost dict contains unknown state name(s): {unknown}. "
-            f"Valid state names: {sorted(valid_names)}"
-        )
-
-    # Identify states that have minimize/maximize objectives
-    cost_states: Set[str] = set()
-    for state in states:
-        if state.initial_type is not None:
-            for t in state.initial_type:
-                if t in ("Minimize", "Maximize"):
-                    cost_states.add(state.name)
-                    break
-        if state.final_type is not None:
-            for t in state.final_type:
-                if t in ("Minimize", "Maximize"):
-                    cost_states.add(state.name)
-                    break
-
-    # Check that all cost states are in the dict
-    missing = cost_states - set(lam_cost_dict.keys())
-    if missing:
-        raise ValueError(
-            f"lam_cost dict is missing weight(s) for state(s) with "
-            f"minimize/maximize objectives: {missing}. All states with "
-            f"cost terms must have a weight in the dict."
-        )
-
-    # Fill the array
-    for state in states:
-        if state.name in lam_cost_dict:
-            lam_arr[state._slice] = lam_cost_dict[state.name]
-
-    return lam_arr
-
 
 warnings.filterwarnings("ignore")
 
@@ -159,6 +92,7 @@ class PenalizedTrustRegion(Algorithm):
         ep_tr: float = 1e-4,
         ep_vb: float = 1e-4,
         ep_vc: float = 1e-8,
+        states: List["State"] = None,
     ):
         """Initialize PTR with algorithm parameters and optional autotuner.
 
@@ -176,6 +110,8 @@ class PenalizedTrustRegion(Algorithm):
             ep_tr: Trust region convergence tolerance. Defaults to 1e-4.
             ep_vb: Virtual buffer convergence tolerance. Defaults to 1e-4.
             ep_vc: Virtual control convergence tolerance. Defaults to 1e-8.
+            states: Symbolic State objects (required when *lam_cost* is a
+                dict). Normally provided automatically by :class:`Problem`.
         """
         # Compiled infrastructure (set by initialize())
         self._solver: "ConvexSolver" = None
@@ -188,34 +124,27 @@ class PenalizedTrustRegion(Algorithm):
             autotuner if autotuner is not None else AugmentedLagrangian()
         )
 
-        # Raw user-specified lam_cost (may be dict, expanded in initialize).
-        self._lam_cost_spec = lam_cost
-        self._states: List["State"] = None
+        # Store states for later re-resolution (e.g. user sets lam_cost to a
+        # new dict via the property setter after construction).
+        self._states: List["State"] = states
+
+        # Resolve dict lam_cost → ndarray (requires states)
+        resolved_lam_cost = self._resolve_lam_cost(lam_cost, states)
 
         # SCP weights (grouped dataclass, normalized for numerical conditioning)
-        # If lam_cost is a dict, defer to initialize(); use 0.0 as placeholder.
-        lam_cost_init = lam_cost if not isinstance(lam_cost, dict) else 0.0
         self.weights = Weights(
             lam_prox=lam_prox,
             lam_vc=lam_vc,
-            lam_cost=lam_cost_init,
+            lam_cost=resolved_lam_cost,
             lam_vb=lam_vb,
         )
-        if not isinstance(lam_cost, dict):
-            self.weights.normalize()
+        self.weights.normalize()
 
         # SCP convergence parameters
         self.k_max = k_max
         self.ep_tr = ep_tr
         self.ep_vb = ep_vb
         self.ep_vc = ep_vc
-
-    def _expand_lam_cost(self) -> None:
-        """Expand dict ``_lam_cost_spec`` into weights and normalize."""
-        lam_arr = _expand_lam_cost_dict(self._lam_cost_spec, self._states)
-        self.weights._raw_lam_cost = lam_arr.copy()
-        self.weights.lam_cost = lam_arr.copy()
-        self.weights.normalize()
 
     # -- Weight properties ---------------------------------------------------
     # These properties are the **source of truth** for user-facing weight
@@ -266,32 +195,27 @@ class PenalizedTrustRegion(Algorithm):
         self.weights.normalize()
 
     @property
-    def lam_cost(self) -> Union[float, Dict[str, float], np.ndarray]:
-        """Cost weight.
+    def lam_cost(self) -> Union[float, np.ndarray]:
+        """Cost weight (pre-normalization).
 
         This is the user-specified value before normalization. Setting this
         property triggers automatic re-normalization of all weights.
 
-        Can be a float (uniform weight for all cost states), a dict mapping
-        state names to per-state weights, or an ndarray after expansion.
+        Returns a float when a uniform scalar was provided, or an ndarray
+        of shape ``(n_states,)`` when per-state weights were given (via dict
+        or array).
 
         !!! note
             The autotuner may modify the normalized weight in
             ``self.weights.lam_cost`` during iteration. Those changes are
             internal and do not alter the value returned here.
         """
-        return self._lam_cost_spec
+        return self.weights._raw_lam_cost
 
     @lam_cost.setter
     def lam_cost(self, value: Union[float, Dict[str, float]]) -> None:
-        self._lam_cost_spec = value
-        if isinstance(value, dict):
-            if self._states is None:
-                return  # Will be expanded in initialize()
-            self._expand_lam_cost()
-        else:
-            self.weights._raw_lam_cost = value
-            self.weights.normalize()
+        self.weights._raw_lam_cost = self._resolve_lam_cost(value, self._states)
+        self.weights.normalize()
 
     @property
     def lam_vb(self) -> float:
@@ -341,7 +265,6 @@ class PenalizedTrustRegion(Algorithm):
         emitter: callable,
         params: dict,
         settings: Config,
-        states: list = None,
     ) -> None:
         """Initialize PTR algorithm.
 
@@ -355,20 +278,7 @@ class PenalizedTrustRegion(Algorithm):
             emitter: Callback for emitting iteration progress
             params: Problem parameters dictionary (for warm-start)
             settings: Configuration object (for warm-start)
-            states: List of symbolic State objects (for per-state weight expansion)
         """
-        # Expand dict lam_cost now that states are available
-        if states is not None:
-            self._states = states
-        if isinstance(self._lam_cost_spec, dict):
-            if self._states is None:
-                raise ValueError(
-                    "lam_cost was specified as a dict but no states were "
-                    "provided to initialize(). Pass states so the dict can "
-                    "be expanded to a per-state weight array."
-                )
-            self._expand_lam_cost()
-
         # Store immutable infrastructure
         self._solver = solver
         self._discretization_solver = discretization_solver

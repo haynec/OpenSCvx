@@ -260,10 +260,11 @@ class Problem:
         self._byof = byof
 
         # Resolve algorithm: None → default PTR, dict → PTR(**dict), instance → use directly
+        # Pass symbolic states so dict-valued lam_cost can be expanded eagerly.
         if algorithm is None:
-            self._algorithm = PenalizedTrustRegion()
+            self._algorithm = PenalizedTrustRegion(states=self.symbolic.states)
         elif isinstance(algorithm, dict):
-            self._algorithm = _resolve_algorithm(algorithm)
+            self._algorithm = _resolve_algorithm(algorithm, states=self.symbolic.states)
         else:
             if not isinstance(algorithm, Algorithm):
                 raise TypeError(
@@ -793,7 +794,6 @@ class Problem:
             self.emitter_function,
             self._parameters,  # For warm-start only
             self.settings,  # For warm-start only
-            states=self.symbolic.states,
         )
         print("✓ SCvx Subproblem Solver initialized")
 

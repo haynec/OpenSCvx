@@ -7,7 +7,7 @@ during SCP iterations.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
@@ -17,6 +17,73 @@ if TYPE_CHECKING:
     from openscvx.config import Config
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
     from openscvx.solvers import ConvexSolver
+    from openscvx.symbolic.expr.state import State
+
+
+def _expand_lam_cost_dict(
+    lam_cost_dict: Dict[str, float],
+    states: List["State"],
+) -> np.ndarray:
+    """Expand a ``{state_name: weight}`` dict to a per-state weight array.
+
+    Maps user-provided per-state cost weights to a dense array of shape
+    ``(n_states,)`` using each state's ``_slice``.  States without a
+    minimize/maximize objective receive weight 0.  States **with** a
+    minimize/maximize objective **must** appear in the dict.
+
+    Args:
+        lam_cost_dict: Mapping from state names to scalar cost weights.
+        states: List of State objects (must already have ``_slice`` assigned).
+
+    Returns:
+        np.ndarray of shape ``(n_states,)`` with per-index weights.
+
+    Raises:
+        ValueError: If the dict contains unknown state names or is missing
+            entries for states that have minimize/maximize objectives.
+    """
+    n_states = sum(s.shape[0] if len(s.shape) > 0 else 1 for s in states)
+    lam_arr = np.zeros(n_states)
+
+    valid_names = {s.name for s in states}
+
+    # Check for unknown keys
+    unknown = set(lam_cost_dict.keys()) - valid_names
+    if unknown:
+        raise ValueError(
+            f"lam_cost dict contains unknown state name(s): {unknown}. "
+            f"Valid state names: {sorted(valid_names)}"
+        )
+
+    # Identify states that have minimize/maximize objectives
+    cost_states: Set[str] = set()
+    for state in states:
+        if state.initial_type is not None:
+            for t in state.initial_type:
+                if t in ("Minimize", "Maximize"):
+                    cost_states.add(state.name)
+                    break
+        if state.final_type is not None:
+            for t in state.final_type:
+                if t in ("Minimize", "Maximize"):
+                    cost_states.add(state.name)
+                    break
+
+    # Check that all cost states are in the dict
+    missing = cost_states - set(lam_cost_dict.keys())
+    if missing:
+        raise ValueError(
+            f"lam_cost dict is missing weight(s) for state(s) with "
+            f"minimize/maximize objectives: {missing}. All states with "
+            f"cost terms must have a weight in the dict."
+        )
+
+    # Fill the array
+    for state in states:
+        if state.name in lam_cost_dict:
+            lam_arr[state._slice] = lam_cost_dict[state.name]
+
+    return lam_arr
 
 
 @dataclass
@@ -603,7 +670,7 @@ class Algorithm(ABC):
             class MyAlgorithm(Algorithm):
                 def initialize(self, solver, discretization_solver,
                                jax_constraints, emitter,
-                               params, settings, states=None):
+                               params, settings):
                     # Store compiled infrastructure
                     self._solver = solver
                     self._discretization_solver = discretization_solver
@@ -628,6 +695,38 @@ class Algorithm(ABC):
     #: Maximum number of SCP iterations. Subclasses must set this in ``__init__``.
     k_max: int
 
+    @staticmethod
+    def _resolve_lam_cost(
+        lam_cost: Union[float, Dict[str, float]],
+        states: Optional[List["State"]] = None,
+    ) -> Union[float, np.ndarray]:
+        """Resolve a ``lam_cost`` spec to a numeric value.
+
+        If *lam_cost* is a float it is returned as-is.  If it is a dict
+        mapping state names to weights, *states* must be provided so the
+        dict can be expanded to a per-state array via
+        :func:`_expand_lam_cost_dict`.
+
+        Args:
+            lam_cost: Scalar weight or ``{state_name: weight}`` dict.
+            states: Symbolic State objects (required when *lam_cost* is a dict).
+
+        Returns:
+            float or np.ndarray of shape ``(n_states,)``.
+
+        Raises:
+            ValueError: If *lam_cost* is a dict and *states* is ``None``.
+        """
+        if isinstance(lam_cost, dict):
+            if states is None:
+                raise ValueError(
+                    "lam_cost was specified as a dict but no states were "
+                    "provided. Pass states so the dict can be expanded to "
+                    "a per-state weight array."
+                )
+            return _expand_lam_cost_dict(lam_cost, states)
+        return lam_cost
+
     @abstractmethod
     def initialize(
         self,
@@ -637,7 +736,6 @@ class Algorithm(ABC):
         emitter: callable,
         params: dict,
         settings: "Config",
-        states: list = None,
     ) -> None:
         """Initialize the algorithm and store compiled infrastructure.
 
@@ -652,7 +750,6 @@ class Algorithm(ABC):
             emitter: Callback for emitting iteration progress data
             params: Problem parameters dictionary (for warm-start only)
             settings: Configuration object (for warm-start only)
-            states: List of symbolic State objects (for per-state weight expansion)
         """
         raise NotImplementedError
 
