@@ -1,13 +1,14 @@
 """Parser handlers for mathematical functions.
 
 Handlers: Sin, Cos, Tan, Sqrt, Square, Exp, Log, Abs, Max, Min,
-          PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Bilerp
+          PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Cinterp, Bilerp
 """
 
 from openscvx.symbolic.expr.expr import Constant
 from openscvx.symbolic.expr.math import (
     Abs,
     Bilerp,
+    Cinterp,
     Cos,
     Exp,
     Huber,
@@ -148,6 +149,14 @@ def _parse_linterp(args, kwargs):
     if len(args) != 3:
         raise ValueError("Linterp() takes exactly 3 arguments (x, xp, fp)")
     return Linterp(args[0], args[1], args[2])
+
+
+@function("Cinterp")
+def _parse_cinterp(args, kwargs):
+    if len(args) != 3:
+        raise ValueError("Cinterp() takes exactly 3 positional arguments (x, xp, fp)")
+    method = kwargs.get("method", "cubic")
+    return Cinterp(args[0], args[1], args[2], method=method)
 
 
 @function("Bilerp")

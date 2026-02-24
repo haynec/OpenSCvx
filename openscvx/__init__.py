@@ -30,6 +30,7 @@ from openscvx.symbolic.expr import (
     Any,
     Bilerp,
     Block,
+    Cinterp,
     Concat,
     Cond,
     Constant,
@@ -137,6 +138,7 @@ __all__ = [
     "Max",
     "Min",
     "Linterp",
+    "Cinterp",
     "Bilerp",
     # Logical/control flow operations
     "All",

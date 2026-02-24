@@ -124,6 +124,7 @@ from .logic import All, Any, Cond
 from .math import (
     Abs,
     Bilerp,
+    Cinterp,
     Cos,
     Exp,
     Huber,
@@ -211,6 +212,7 @@ __all__ = [
     "Max",
     "Min",
     "Linterp",
+    "Cinterp",
     "Bilerp",
     # Logical/control flow operations
     "All",
