@@ -227,7 +227,19 @@ def print_problem_summary(
     # Build weights string from algorithm weights
     weights = algorithm.weights
     if isinstance(weights.lam_cost, np.ndarray):
-        cost_str = f"λ_cost={np.array2string(weights.lam_cost, precision=1, separator=',')}"
+        nz = weights.lam_cost[weights.lam_cost != 0]
+        if hasattr(algorithm, "_states") and algorithm._states is not None:
+            parts = []
+            for s in algorithm._states:
+                w = weights.lam_cost[s._slice]
+                if np.any(w != 0):
+                    if w.size == 1:
+                        parts.append(f"{s.name}={w.item():.1g}")
+                    else:
+                        parts.append(f"{s.name}={np.array2string(w, precision=1)}")
+            cost_str = "λ_cost={" + ", ".join(parts) + "}"
+        else:
+            cost_str = f"λ_cost={np.array2string(nz, precision=1, separator=',')}"
     else:
         cost_str = f"λ_cost={weights.lam_cost:4.1f}"
     weights_parts = [
