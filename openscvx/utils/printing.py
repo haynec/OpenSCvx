@@ -8,6 +8,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import jax
+import numpy as np
 from termcolor import colored
 
 if TYPE_CHECKING:
@@ -225,8 +226,28 @@ def print_problem_summary(
 
     # Build weights string from algorithm weights
     weights = algorithm.weights
+    if isinstance(weights.lam_cost, np.ndarray):
+        nz = weights.lam_cost[weights.lam_cost != 0]
+        if hasattr(algorithm, "_states") and algorithm._states is not None:
+            parts = []
+            for s in algorithm._states:
+                w = weights.lam_cost[s._slice]
+                if np.any(w != 0):
+                    nz_idx = np.nonzero(w)[0]
+                    if w.size == 1 or np.all(w == w[0]):
+                        parts.append(f"{s.name}={w.flat[0]:.1g}")
+                    elif nz_idx.size == 1:
+                        parts.append(f"{s.name}[{nz_idx[0]}]={w[nz_idx[0]]:.1g}")
+                    else:
+                        fmt = [f"{v:.1g}" for v in w]
+                        parts.append(f"{s.name}=[{', '.join(fmt)}]")
+            cost_str = "λ_cost={" + ", ".join(parts) + "}"
+        else:
+            cost_str = f"λ_cost={np.array2string(nz, precision=1, separator=',')}"
+    else:
+        cost_str = f"λ_cost={weights.lam_cost:4.1f}"
     weights_parts = [
-        f"λ_cost={weights.lam_cost:4.1f}",
+        cost_str,
         f"λ_tr={weights.lam_prox:4.1f}",
         f"λ_vc={weights.lam_vc:4.1f}",
     ]

@@ -139,17 +139,26 @@ def _resolve_autotuner(val: Any) -> Any:
         raise TypeError(f"Invalid autotuner keyword argument: {e}. Valid keys: {valid}") from None
 
 
-def _resolve_algorithm(kwargs: dict) -> "PenalizedTrustRegion":
+def _resolve_algorithm(kwargs: dict, states: list = None) -> "PenalizedTrustRegion":
     """Build a :class:`PenalizedTrustRegion` from a user-supplied dict.
 
     Supports a nested ``autotuner`` key that is resolved via
     :func:`_resolve_autotuner` (string, dict, or instance).
+
+    Args:
+        kwargs: Algorithm keyword arguments (e.g. ``lam_cost``, ``autotuner``).
+        states: Symbolic State objects, forwarded to the algorithm constructor
+            so that dict-valued ``lam_cost`` can be expanded immediately.
     """
     kwargs = dict(kwargs)  # copy to avoid mutating the caller's dict
 
     # Resolve nested autotuner spec if present
     if "autotuner" in kwargs:
         kwargs["autotuner"] = _resolve_autotuner(kwargs["autotuner"])
+
+    # Forward states so dict lam_cost can be expanded eagerly
+    if states is not None:
+        kwargs.setdefault("states", states)
 
     try:
         return PenalizedTrustRegion(**kwargs)

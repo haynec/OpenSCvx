@@ -144,7 +144,9 @@ class AugmentedLagrangian(AutotuningBase):
 
         candidate.J_nonlin = nonlinear_cost + nonlinear_penalty + nodal_penalty
 
-        # Update cost relaxation parameter after cost_drop iterations
+        # Update cost relaxation parameter after cost_drop iterations.
+        # When lam_cost is a per-state array, scalar lam_cost_relax scales
+        # uniformly, preserving the user-specified per-state weight ratios.
         if state.k > self.lam_cost_drop:
             candidate.lam_cost = state.lam_cost * self.lam_cost_relax
         else:

@@ -125,6 +125,27 @@ class Problem:
                   - **instance** — an already-constructed autotuner object,
                     e.g. ``ox.RampProximalWeight(ramp_factor=1.04)``.
 
+                The ``lam_cost`` key accepts either a float (applied
+                uniformly to all minimize/maximize states) or a dict
+                mapping state names to per-state weights::
+
+                    # Uniform cost weight
+                    algorithm={"lam_cost": 5e-1}
+
+                    # Per-state cost weights
+                    algorithm={"lam_cost": {"velocity": 1e-1, "time": 1e0}}
+
+                    # Per-component weights for vector states
+                    algorithm={"lam_cost": {"position": [0, 0, 1e-6], "fuel": 1e0}}
+
+                When a dict is provided, every state that has a
+                minimize/maximize objective must have an entry.  Dict
+                values may be scalars (broadcast to all components) or
+                arrays matching the state's shape.  States without
+                objectives are automatically assigned weight 0.  The
+                dict is expanded to an array of shape ``(n_states,)``
+                during ``Problem`` construction.
+
                 Examples::
 
                     # Just tweak weights (default algorithm & autotuner)
@@ -244,10 +265,11 @@ class Problem:
         self._byof = byof
 
         # Resolve algorithm: None → default PTR, dict → PTR(**dict), instance → use directly
+        # Pass symbolic states so dict-valued lam_cost can be expanded eagerly.
         if algorithm is None:
-            self._algorithm = PenalizedTrustRegion()
+            self._algorithm = PenalizedTrustRegion(states=self.symbolic.states)
         elif isinstance(algorithm, dict):
-            self._algorithm = _resolve_algorithm(algorithm)
+            self._algorithm = _resolve_algorithm(algorithm, states=self.symbolic.states)
         else:
             if not isinstance(algorithm, Algorithm):
                 raise TypeError(

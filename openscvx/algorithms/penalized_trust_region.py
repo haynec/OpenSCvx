@@ -6,7 +6,7 @@ optimization problems through iterative convex approximation.
 
 import time
 import warnings
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Dict, List, Union
 
 import numpy as np
 import numpy.linalg as la
@@ -29,6 +29,7 @@ from .ramp_proximal_weight import RampProximalWeight
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
     from openscvx.solvers import ConvexSolver
+    from openscvx.symbolic.expr.state import State
 
     from .base import AutotuningBase
 
@@ -86,11 +87,12 @@ class PenalizedTrustRegion(Algorithm):
         k_max: int = 200,
         lam_prox: float = 1e0,
         lam_vc: float = 1e1,
-        lam_cost: float = 1e-1,
+        lam_cost: Union[float, Dict[str, float]] = 1e-1,
         lam_vb: float = 0.0,
         ep_tr: float = 1e-4,
         ep_vb: float = 1e-4,
         ep_vc: float = 1e-8,
+        states: List["State"] = None,
     ):
         """Initialize PTR with algorithm parameters and optional autotuner.
 
@@ -100,11 +102,18 @@ class PenalizedTrustRegion(Algorithm):
             k_max: Maximum SCP iterations. Defaults to 200.
             lam_prox: Trust region (proximal) weight. Defaults to 1.0.
             lam_vc: Virtual control penalty weight. Defaults to 10.0.
-            lam_cost: Cost weight. Defaults to 0.1.
+            lam_cost: Cost weight. Either a float (applied to all
+                minimize/maximize states) or a dict mapping state names
+                to per-state weights, e.g.
+                ``{"velocity": 1e-1, "time": 1e0}``.  Dict values may
+                be arrays for per-component weighting, e.g.
+                ``{"position": [0, 0, 1e-6]}``. Defaults to 0.1.
             lam_vb: Virtual buffer penalty weight. Defaults to 0.0.
             ep_tr: Trust region convergence tolerance. Defaults to 1e-4.
             ep_vb: Virtual buffer convergence tolerance. Defaults to 1e-4.
             ep_vc: Virtual control convergence tolerance. Defaults to 1e-8.
+            states: Symbolic State objects (required when *lam_cost* is a
+                dict). Normally provided automatically by :class:`Problem`.
         """
         # Compiled infrastructure (set by initialize())
         self._solver: "ConvexSolver" = None
@@ -117,11 +126,18 @@ class PenalizedTrustRegion(Algorithm):
             autotuner if autotuner is not None else AugmentedLagrangian()
         )
 
+        # Store states for later re-resolution (e.g. user sets lam_cost to a
+        # new dict via the property setter after construction).
+        self._states: List["State"] = states
+
+        # Resolve dict lam_cost → ndarray (requires states)
+        resolved_lam_cost = self._resolve_lam_cost(lam_cost, states)
+
         # SCP weights (grouped dataclass, normalized for numerical conditioning)
         self.weights = Weights(
             lam_prox=lam_prox,
             lam_vc=lam_vc,
-            lam_cost=lam_cost,
+            lam_cost=resolved_lam_cost,
             lam_vb=lam_vb,
         )
         self.weights.normalize()
@@ -181,11 +197,15 @@ class PenalizedTrustRegion(Algorithm):
         self.weights.normalize()
 
     @property
-    def lam_cost(self) -> float:
-        """Cost weight.
+    def lam_cost(self) -> Union[float, np.ndarray]:
+        """Cost weight (pre-normalization).
 
         This is the user-specified value before normalization. Setting this
         property triggers automatic re-normalization of all weights.
+
+        Returns a float when a uniform scalar was provided, or an ndarray
+        of shape ``(n_states,)`` when per-state weights were given (via dict
+        or array).
 
         !!! note
             The autotuner may modify the normalized weight in
@@ -195,8 +215,8 @@ class PenalizedTrustRegion(Algorithm):
         return self.weights._raw_lam_cost
 
     @lam_cost.setter
-    def lam_cost(self, value: float) -> None:
-        self.weights._raw_lam_cost = value
+    def lam_cost(self, value: Union[float, Dict[str, float]]) -> None:
+        self.weights._raw_lam_cost = self._resolve_lam_cost(value, self._states)
         self.weights.normalize()
 
     @property

@@ -245,7 +245,7 @@ def create_cvxpy_variables(
 
     # Parameters
     lam_prox = cp.Parameter(nonneg=True, name="lam_prox")
-    lam_cost = cp.Parameter(nonneg=True, name="lam_cost")
+    lam_cost = cp.Parameter(n_states, nonneg=True, name="lam_cost")
     lam_vc = cp.Parameter((N - 1, n_states), nonneg=True, name="lam_vc")
     lam_vb = cp.Parameter(nonneg=True, name="lam_vb")
 

@@ -7,7 +7,7 @@ during SCP iterations.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 
@@ -17,6 +17,88 @@ if TYPE_CHECKING:
     from openscvx.config import Config
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
     from openscvx.solvers import ConvexSolver
+    from openscvx.symbolic.expr.state import State
+
+
+def _expand_lam_cost_dict(
+    lam_cost_dict: Dict[str, Union[float, list, np.ndarray]],
+    states: List["State"],
+) -> np.ndarray:
+    """Expand a ``{state_name: weight}`` dict to a per-state weight array.
+
+    Maps user-provided per-state cost weights to a dense array of shape
+    ``(n_states,)`` using each state's ``_slice``.  States without a
+    minimize/maximize objective receive weight 0.  States **with** a
+    minimize/maximize objective **must** appear in the dict.
+
+    Values may be scalars (broadcast to every component of that state) or
+    arrays matching the state's shape for per-component weighting, e.g.
+    ``{"position": [0, 0, 1e-6]}``.
+
+    Args:
+        lam_cost_dict: Mapping from state names to cost weights (scalar or
+            array matching the state's shape).
+        states: List of State objects (must already have ``_slice`` assigned).
+
+    Returns:
+        np.ndarray of shape ``(n_states,)`` with per-index weights.
+
+    Raises:
+        ValueError: If the dict contains unknown state names or is missing
+            entries for states that have minimize/maximize objectives.
+    """
+    n_states = sum(s.shape[0] if len(s.shape) > 0 else 1 for s in states)
+    lam_arr = np.zeros(n_states)
+
+    valid_names = {s.name for s in states}
+
+    # Check for unknown keys
+    unknown = set(lam_cost_dict.keys()) - valid_names
+    if unknown:
+        raise ValueError(
+            f"lam_cost dict contains unknown state name(s): {unknown}. "
+            f"Valid state names: {sorted(valid_names)}"
+        )
+
+    # Identify states that have minimize/maximize objectives.
+    # initial_type/final_type are set on symbolic State objects during property
+    # assignment (e.g. state.initial = ...), so they are available before lowering.
+    cost_states: Set[str] = set()
+    for state in states:
+        if state.initial_type is not None:
+            for t in state.initial_type:
+                if t in ("Minimize", "Maximize"):
+                    cost_states.add(state.name)
+                    break
+        if state.final_type is not None:
+            for t in state.final_type:
+                if t in ("Minimize", "Maximize"):
+                    cost_states.add(state.name)
+                    break
+
+    # Check that all cost states are in the dict
+    missing = cost_states - set(lam_cost_dict.keys())
+    if missing:
+        raise ValueError(
+            f"lam_cost dict is missing weight(s) for state(s) with "
+            f"minimize/maximize objectives: {missing}. All states with "
+            f"cost terms must have a weight in the dict."
+        )
+
+    # Fill the array.  _slice is assigned by preprocess_symbolic_problem
+    # (via collect_and_assign_slices), which runs before algorithm construction.
+    for state in states:
+        if state.name in lam_cost_dict:
+            val = np.asarray(lam_cost_dict[state.name], dtype=float)
+            n_components = state.shape[0] if len(state.shape) > 0 else 1
+            if val.ndim > 0 and val.shape[0] != n_components:
+                raise ValueError(
+                    f"lam_cost['{state.name}'] has length {val.shape[0]}, "
+                    f"expected scalar or length {n_components}"
+                )
+            lam_arr[state._slice] = val
+
+    return lam_arr
 
 
 @dataclass
@@ -40,20 +122,23 @@ class Weights:
     Attributes:
         lam_prox: Trust region (proximal) weight (normalized).
         lam_vc: Virtual control penalty weight (normalized).
-        lam_cost: Cost weight (normalized).
+        lam_cost: Cost weight per state (normalized). Scalar or array of
+            shape ``(n_states,)`` for per-state weighting.
         lam_vb: Virtual buffer penalty weight (normalized).
     """
 
     lam_prox: float = 1e0
     lam_vc: float = 1e1
-    lam_cost: float = 1e-1
+    lam_cost: Union[float, np.ndarray] = 1e-1
     lam_vb: float = 0.0
 
     def __post_init__(self):
         # Snapshot the user-specified values so normalize() is idempotent.
         self._raw_lam_prox = self.lam_prox
         self._raw_lam_vc = self.lam_vc
-        self._raw_lam_cost = self.lam_cost
+        self._raw_lam_cost = (
+            self.lam_cost.copy() if isinstance(self.lam_cost, np.ndarray) else self.lam_cost
+        )
         self._raw_lam_vb = self.lam_vb
 
     def normalize(self) -> None:
@@ -63,7 +148,12 @@ class Weights:
         making this method idempotent and safe to call after updating
         any individual raw weight.
         """
-        scale = max(self._raw_lam_prox, self._raw_lam_vc, self._raw_lam_cost, self._raw_lam_vb)
+        raw_cost_max = (
+            float(np.max(self._raw_lam_cost))
+            if isinstance(self._raw_lam_cost, np.ndarray)
+            else self._raw_lam_cost
+        )
+        scale = max(self._raw_lam_prox, self._raw_lam_vc, raw_cost_max, self._raw_lam_vb)
         if scale > 0:
             self.lam_prox = self._raw_lam_prox / scale
             self.lam_vc = self._raw_lam_vc / scale
@@ -80,7 +170,7 @@ class CandidateIterate:
     VC: Optional[np.ndarray] = None
     TR: Optional[np.ndarray] = None
     lam_vc: Optional[Union[float, np.ndarray]] = None
-    lam_cost: Optional[float] = None
+    lam_cost: Optional[Union[float, np.ndarray]] = None
     lam_vb: Optional[float] = None
     J_lin: Optional[float] = None
     J_nonlin: Optional[float] = None
@@ -135,27 +225,35 @@ class AutotuningBase(ABC):
     COLUMNS: List[Column] = []
 
     @staticmethod
-    def calculate_cost_from_state(x: np.ndarray, settings: "Config") -> float:
+    def calculate_cost_from_state(
+        x: np.ndarray,
+        settings: "Config",
+        lam_cost: Union[float, np.ndarray] = 1.0,
+    ) -> float:
         """Calculate cost from state vector based on final_type and initial_type.
 
         Args:
             x: State trajectory array (n_nodes, n_states)
             settings: Configuration object containing state types
+            lam_cost: Per-state cost weight. Scalar (applied uniformly) or
+                array of shape ``(n_states,)`` for per-state weighting.
 
         Returns:
-            float: Computed cost
+            float: Computed cost (weighted by lam_cost)
         """
         scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
+        lam = np.asarray(lam_cost)
         cost = 0.0
         for i in range(settings.sim.n_states):
+            w = float(lam[i]) if lam.ndim > 0 else float(lam)
             if settings.sim.x.final_type[i] == "Minimize":
-                cost += scaled_x[-1, i]
+                cost += w * scaled_x[-1, i]
             if settings.sim.x.final_type[i] == "Maximize":
-                cost -= scaled_x[-1, i]
+                cost -= w * scaled_x[-1, i]
             if settings.sim.x.initial_type[i] == "Minimize":
-                cost += scaled_x[0, i]
+                cost += w * scaled_x[0, i]
             if settings.sim.x.initial_type[i] == "Maximize":
-                cost -= scaled_x[0, i]
+                cost -= w * scaled_x[0, i]
         return cost
 
     @staticmethod
@@ -165,7 +263,7 @@ class AutotuningBase(ABC):
         u_bar: np.ndarray,
         lam_vc: np.ndarray,
         lam_vb: float,
-        lam_cost: float,
+        lam_cost: Union[float, np.ndarray],
         nodal_constraints: "LoweredJaxConstraints",
         params: dict,
         settings: "Config",
@@ -183,7 +281,8 @@ class AutotuningBase(ABC):
             u_bar: Solution control (n_nodes, n_controls)
             lam_vc: Virtual control weight (scalar or matrix)
             lam_vb: Virtual buffer penalty weight (scalar)
-            lam_cost: Cost relaxation parameter (scalar)
+            lam_cost: Cost weight. Scalar (applied uniformly) or
+                array of shape ``(n_states,)`` for per-state weighting.
             nodal_constraints: Lowered JAX constraints
             params: Dictionary of problem parameters
             settings: Configuration object
@@ -220,10 +319,12 @@ class AutotuningBase(ABC):
             # Cross-node constraints return scalar or array, sum all violations
             nodal_penalty += lam_vb * np.sum(np.maximum(0, g))
 
-        cost = AutotuningBase.calculate_cost_from_state(x_bar, settings)
+        # lam_cost weighting is applied inside calculate_cost_from_state,
+        # so the returned cost is already weighted (no outer multiplication).
+        cost = AutotuningBase.calculate_cost_from_state(x_bar, settings, lam_cost)
         x_diff = settings.sim.inv_S_x @ (x_bar[1:, :] - x_prop).T
 
-        return lam_cost * cost, np.sum(lam_vc * np.abs(x_diff.T)), nodal_penalty
+        return cost, np.sum(lam_vc * np.abs(x_diff.T)), nodal_penalty
 
     @abstractmethod
     def update_weights(
@@ -309,7 +410,7 @@ class AlgorithmState:
     VC_history: List[np.ndarray] = field(default_factory=list)
     TR_history: List[np.ndarray] = field(default_factory=list)
     lam_vc_history: List[Union[float, np.ndarray]] = field(default_factory=list)
-    lam_cost_history: List[float] = field(default_factory=list)
+    lam_cost_history: List[Union[float, np.ndarray]] = field(default_factory=list)
     lam_vb_history: List[float] = field(default_factory=list)
     lam_prox_history: List[float] = field(default_factory=list)
     x_full: List[np.ndarray] = field(default_factory=list)
@@ -474,11 +575,12 @@ class AlgorithmState:
         return self.lam_prox_history[-1]
 
     @property
-    def lam_cost(self) -> float:
+    def lam_cost(self) -> Union[float, np.ndarray]:
         """Get current cost weight.
 
         Returns:
-            Current cost weight (latest entry in lam_cost_history)
+            Current cost weight (latest entry in lam_cost_history).
+            Scalar or array of shape ``(n_states,)`` for per-state weighting.
         """
         if not self.lam_cost_history:
             raise ValueError("lam_cost_history is empty. Initialize state using from_settings().")
@@ -525,6 +627,12 @@ class AlgorithmState:
         n_states = settings.sim.n_states
         lam_vc_array = np.ones((n - 1, n_states)) * weights.lam_vc
 
+        # Expand scalar lam_cost to per-state array
+        if isinstance(weights.lam_cost, np.ndarray):
+            lam_cost_init = weights.lam_cost.copy()
+        else:
+            lam_cost_init = np.full(n_states, weights.lam_cost)
+
         return cls(
             k=1,
             J_tr=1e2,
@@ -544,7 +652,7 @@ class AlgorithmState:
             VC_history=[],
             TR_history=[],
             lam_vc_history=[lam_vc_array],
-            lam_cost_history=[weights.lam_cost],
+            lam_cost_history=[lam_cost_init],
             lam_vb_history=[weights.lam_vb],
             lam_prox_history=[weights.lam_prox],
         )
@@ -603,6 +711,38 @@ class Algorithm(ABC):
 
     #: Maximum number of SCP iterations. Subclasses must set this in ``__init__``.
     k_max: int
+
+    @staticmethod
+    def _resolve_lam_cost(
+        lam_cost: Union[float, Dict[str, float]],
+        states: Optional[List["State"]] = None,
+    ) -> Union[float, np.ndarray]:
+        """Resolve a ``lam_cost`` spec to a numeric value.
+
+        If *lam_cost* is a float it is returned as-is.  If it is a dict
+        mapping state names to weights, *states* must be provided so the
+        dict can be expanded to a per-state array via
+        :func:`_expand_lam_cost_dict`.
+
+        Args:
+            lam_cost: Scalar weight or ``{state_name: weight}`` dict.
+            states: Symbolic State objects (required when *lam_cost* is a dict).
+
+        Returns:
+            float or np.ndarray of shape ``(n_states,)``.
+
+        Raises:
+            ValueError: If *lam_cost* is a dict and *states* is ``None``.
+        """
+        if isinstance(lam_cost, dict):
+            if states is None:
+                raise ValueError(
+                    "lam_cost was specified as a dict but no states were "
+                    "provided. Pass states so the dict can be expanded to "
+                    "a per-state weight array."
+                )
+            return _expand_lam_cost_dict(lam_cost, states)
+        return lam_cost
 
     @abstractmethod
     def initialize(
