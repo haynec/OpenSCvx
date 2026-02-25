@@ -143,7 +143,7 @@ problem = Problem(
     N=n,
 )
 
-problem.settings.scp.ep_tr = 1e-3  # Trust Region Tolerance
+problem.algorithm.ep_tr = 1e-3  # Trust Region Tolerance
 
 plotting_dict = {"vertices": vertices}
 
@@ -349,7 +349,7 @@ def create_mpcc_problem(
         time=t_mpc,
         constraints=constraints_mpc,
         N=n_mpc,
-        autotuner=ox.ConstantProximalWeight(),
+        algorithm={"autotuner": ox.ConstantProximalWeight()},
     )
 
     # Return states/controls for updating .initial and .guess between solves

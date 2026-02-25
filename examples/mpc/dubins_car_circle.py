@@ -147,7 +147,7 @@ problem_mpc = Problem(
     time=t,
     constraints=constraints,
     N=n_mpc,
-    autotuner=ox.ConstantProximalWeight(),
+    algorithm={"autotuner": ox.ConstantProximalWeight()},
 )
 
 
