@@ -28,6 +28,7 @@ from examples.plotting_viser import (
 )
 from openscvx import Problem
 from openscvx.plotting import plot_scp_iterations
+from openscvx.plotting.viser import add_ghost_trajectory, compute_velocity_colors
 from openscvx.utils import gen_vertices, rot
 
 n = 22  # Number of Nodes
@@ -418,6 +419,14 @@ if __name__ == "__main__":
         results_mpc,
         thrust_key="force",
         viewcone_scale=10.0,
+    )
+    # Add time-optimal reference as a ghost trail
+    add_ghost_trajectory(
+        traj_server,
+        p_ref_data,
+        compute_velocity_colors(v_ref_data),
+        # point_size=0.05,  # Smaller than the animated trail
+        # name="reference_trajectory",
     )
     scp_server = create_scp_animated_plotting_server(
         results_mpc,
