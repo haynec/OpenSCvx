@@ -11,6 +11,7 @@ import os
 import sys
 
 import numpy as np
+import plotly.express as px
 import plotly.graph_objects as go
 
 # Add grandparent directory to path to import openscvx
@@ -227,11 +228,38 @@ if __name__ == "__main__":
 
     max_steps = 1
 
+    fig = go.Figure()
+
+    # Reference circle
+    circle_theta = np.linspace(0, 2 * np.pi, 200)
+    fig.add_trace(
+        go.Scatter(
+            x=center[0] + R_circle * np.cos(circle_theta),
+            y=center[1] + R_circle * np.sin(circle_theta),
+            mode="lines",
+            line={"color": "red", "width": 2, "dash": "dash"},
+            name="Reference",
+        )
+    )
+
+    colors = px.colors.sample_colorscale("Viridis", np.linspace(0, 1, max_steps))
+
     for step in range(max_steps):
         problem_mpc.reset()
         results = problem_mpc.solve()
         results = problem_mpc.post_process()
         nodes = results.nodes
+
+        traj = results.trajectory["position"]
+        fig.add_trace(
+            go.Scatter(
+                x=traj[:, 0],
+                y=traj[:, 1],
+                mode="lines",
+                line={"color": colors[step], "width": 2},
+                name=f"Step {step}",
+            )
+        )
 
         cur_pos = nodes["position"][0]
         cur_progress = nodes["progress"][0, 0]
@@ -248,28 +276,6 @@ if __name__ == "__main__":
 
         update_initial_conditions(nodes)
         shift_guess(nodes)
-
-    fig = go.Figure()
-
-    # Reference circle
-    circle_theta = np.linspace(0, 2 * np.pi, 200)
-    fig.add_trace(
-        go.Scatter(
-            x=center[0] + R_circle * np.cos(circle_theta),
-            y=center[1] + R_circle * np.sin(circle_theta),
-            mode="lines",
-            line={"color": "red", "width": 2, "dash": "dash"},
-            name="Reference",
-        )
-    )
-
-    position = results.trajectory["position"]
-    x = position[:, 0]
-    y = position[:, 1]
-
-    fig.add_trace(
-        go.Scatter(x=x, y=y, mode="lines", line={"color": "blue", "width": 2}, name="Trajectory")
-    )
 
     fig.update_layout(title="Dubins Car MPCC", title_x=0.5, template="plotly_dark")
     fig.update_xaxes(scaleanchor="y", scaleratio=1)
