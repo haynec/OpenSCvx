@@ -58,8 +58,9 @@ py_data = np.tile(py_lap, len(laps))
 n_mpc = 10  # Horizon nodes
 horizon_duration = 1.0  # Horizon length [s]
 
-Q_LAG = 1e2  # Lag error weight (high -> accurate progress tracking)
-Q_CONTOUR = 1e1  # Contour error weight
+Q_LAG = 1e0  # Lag error weight (high -> accurate progress tracking)
+Q_CONTOUR = 1e-1  # Contour error weight
+Q_PROGRESS = 1e-1
 
 ###############################################################################
 # MPCC problem definition
@@ -86,13 +87,13 @@ progress.final = [ox.Maximize(0.0)]
 
 lag_sum = ox.State("lag_sum", shape=(1,))  # Integrated lag cost
 lag_sum.min = np.array([0.0])
-lag_sum.max = np.array([1e1])
+lag_sum.max = np.array([1e-3])
 lag_sum.initial = np.array([0.0])
 lag_sum.final = [ox.Minimize(0.0)]
 
 contour_sum = ox.State("contour_sum", shape=(1,))  # Integrated contour cost
 contour_sum.min = np.array([0.0])
-contour_sum.max = np.array([5e0])
+contour_sum.max = np.array([5e-3])
 contour_sum.initial = np.array([0.0])
 contour_sum.final = [ox.Minimize(0.0)]
 
@@ -152,8 +153,8 @@ dynamics = {
     ),
     "heading": angular_rate[0],
     "progress": progress_rate,
-    "lag_sum": Q_LAG * lag_cost,
-    "contour_sum": Q_CONTOUR * contour_cost,
+    "lag_sum": lag_cost,
+    "contour_sum": contour_cost,
 }
 
 # --- Constraints ---
@@ -177,7 +178,10 @@ problem_mpc = Problem(
     time=t,
     constraints=constraints,
     N=n_mpc,
-    algorithm={"autotuner": ox.ConstantProximalWeight()},
+    algorithm={
+        "autotuner": ox.ConstantProximalWeight(),
+        "lam_cost": {"lag_sum": Q_LAG, "contour_sum": Q_CONTOUR, "progress": Q_PROGRESS}
+    },
 )
 
 problem_mpc.settings.dev.printing = False
