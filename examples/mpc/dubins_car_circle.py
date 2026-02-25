@@ -60,7 +60,7 @@ progress = ox.State("progress", shape=(1,))  # Arc-length progress theta_hat
 progress.min = np.array([-0.5 * total_arc_length])
 progress.max = np.array([1.5 * total_arc_length])
 progress.initial = np.array([0.0])
-progress.final = [ox.Free(0.0)]
+progress.final = [ox.Maximize(0.0)]
 
 lag_sum = ox.State("lag_sum", shape=(1,))  # Integrated lag cost
 lag_sum.min = np.array([0.0])
