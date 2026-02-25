@@ -57,8 +57,8 @@ heading.initial = [0.0]  # Facing tangent (CCW)
 heading.final = [ox.Free(0.0)]
 
 progress = ox.State("progress", shape=(1,))  # Arc-length progress theta_hat
-progress.min = np.array([0.0])
-progress.max = np.array([total_arc_length])
+progress.min = np.array([-0.5 * total_arc_length])
+progress.max = np.array([1.5 * total_arc_length])
 progress.initial = np.array([0.0])
 progress.final = [ox.Free(0.0)]
 
@@ -197,9 +197,17 @@ def shift_guess(nodes: dict):
     ext_hdg = hdg_last + dt * ar_last
     ext_prog = nodes["progress"][-1, 0] + dt * pr_last
 
+    shifted_progress = np.vstack([nodes["progress"][1:], [[ext_prog]]])
+    wrap_offset = (nodes["progress"][1, 0] // total_arc_length) * total_arc_length
+    shifted_progress -= wrap_offset
+
+    shifted_heading = np.vstack([nodes["heading"][1:], [[ext_hdg]]])
+    hdg_wrap_offset = np.round(nodes["heading"][1, 0] / (2 * np.pi)) * (2 * np.pi)
+    shifted_heading -= hdg_wrap_offset
+
     position.guess = np.vstack([nodes["position"][1:], ext_pos])
-    heading.guess = np.vstack([nodes["heading"][1:], [[ext_hdg]]])
-    progress.guess = np.vstack([nodes["progress"][1:], [[ext_prog]]])
+    heading.guess = shifted_heading
+    progress.guess = shifted_progress
     lag_sum.guess = np.zeros((n_mpc, 1))
     contour_sum.guess = np.zeros((n_mpc, 1))
 
@@ -211,8 +219,13 @@ def shift_guess(nodes: dict):
 def update_initial_conditions(nodes: dict):
     """Set initial conditions from node 1 of previous solution (simulate one step)."""
     position.initial = nodes["position"][1]
-    heading.initial = nodes["heading"][1]
-    progress.initial = nodes["progress"][1]
+
+    hdg_wrap_offset = np.round(nodes["heading"][1, 0] / (2 * np.pi)) * (2 * np.pi)
+    heading.initial = nodes["heading"][1] - hdg_wrap_offset
+
+    wrap_offset = (nodes["progress"][1, 0] // total_arc_length) * total_arc_length
+    progress.initial = np.array([nodes["progress"][1, 0] - wrap_offset])
+
     # Cost integrators always restart from zero each horizon
     lag_sum.initial = np.array([0.0])
     contour_sum.initial = np.array([0.0])
@@ -226,7 +239,7 @@ if __name__ == "__main__":
 
     problem_mpc.initialize()
 
-    max_steps = 1
+    max_steps = 30
 
     fig = go.Figure()
 
