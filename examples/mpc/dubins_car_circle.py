@@ -135,7 +135,7 @@ for state in [position, heading]:
     constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
 # --- Time ---
-t = ox.Time(initial=0.0, final=horizon_duration, min=0.0, max=horizon_duration)
+t = ox.Time(initial=0.0, final=horizon_duration, min=0.0, max=horizon_duration, uniform_time_grid=True)
 
 # --- Problem ---
 problem_mpc = Problem(
@@ -147,8 +147,6 @@ problem_mpc = Problem(
     N=n_mpc,
     autotuner=ox.ConstantProximalWeight(),
 )
-
-problem_mpc.settings.scp.uniform_time_grid = True
 
 
 ###############################################################################

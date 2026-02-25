@@ -339,6 +339,7 @@ def create_mpcc_problem(
         final=horizon_duration,
         min=0.0,
         max=horizon_duration,
+        uniform_time_grid=True,
     )
 
     problem_mpc = Problem(
@@ -350,8 +351,6 @@ def create_mpcc_problem(
         N=n_mpc,
         autotuner=ox.ConstantProximalWeight(),
     )
-
-    problem_mpc.settings.scp.uniform_time_grid = True
 
     # Return states/controls for updating .initial and .guess between solves
     states_dict = {
