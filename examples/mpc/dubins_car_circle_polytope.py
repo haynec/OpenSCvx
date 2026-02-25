@@ -209,6 +209,7 @@ def set_initial_guess(
         [px_data[seg_idx + 1] - px_data[seg_idx], py_data[seg_idx + 1] - py_data[seg_idx]]
     )
     hdg_guess = np.arctan2(seg_dp[:, 0], seg_dp[:, 1])  # x_dot = v*sin(θ), y_dot = v*cos(θ)
+    heading.initial = np.array([hdg_guess[0]])
     heading.guess = hdg_guess.reshape(-1, 1)
 
     seg_lengths = np.linalg.norm(seg_dp, axis=1)
@@ -342,5 +343,5 @@ if __name__ == "__main__":
     fig.update_xaxes(scaleanchor="y", scaleratio=1)
     fig.show()
 
-    # plot_states(results).show()
-    # plot_scp_iterations(results).show()
+    plot_states(results).show()
+    plot_scp_iterations(results).show()
