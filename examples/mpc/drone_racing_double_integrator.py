@@ -163,6 +163,7 @@ def create_mpcc_problem(
     arc_length_grid: np.ndarray,
     p_ref: np.ndarray,
     v_ref: np.ndarray,
+    a_ref: np.ndarray,
     f_ref: np.ndarray,
     f_ref_arc_length: np.ndarray,
     time_ref: np.ndarray,
@@ -174,9 +175,10 @@ def create_mpcc_problem(
         arc_length_grid: Arc-length at each reference point, shape (N,)
         p_ref: Reference positions, shape (N, 3)
         v_ref: Reference velocities, shape (N, 3)
+        a_ref: Reference accelerations, shape (N, 3)
         f_ref: Reference forces, shape (M, 3) where M may differ from N
         f_ref_arc_length: Arc-length grid for force data, shape (M,)
-        time_ref_data: Time at each reference point, shape (N,)
+        time_ref: Time at each reference point, shape (N,)
         horizon_duration: MPC horizon length in seconds
 
     Returns:
@@ -258,7 +260,9 @@ def create_mpcc_problem(
     progress_rate.max = np.array([50.0])  # Max progress rate
     # Initialize progress rate from reference speeds (dθ/dt = ||v||)
     ref_speeds = np.linalg.norm(v_ref, axis=1)
-    progress_rate.guess = np.interp(theta_guess.flatten(), arc_length_grid, ref_speeds).reshape(-1, 1)
+    progress_rate.guess = np.interp(theta_guess.flatten(), arc_length_grid, ref_speeds).reshape(
+        -1, 1
+    )
 
     # Interpolate reference trajectory at current progress (data baked in as constants)
     # Use progress[0] (scalar) for Linterp, then Stack to get (3,) vector
@@ -276,23 +280,36 @@ def create_mpcc_problem(
             ox.Linterp(progress[0], arc_length_grid, v_ref[:, 2]),
         ]
     )
+    a_ref_interp = ox.Stack(
+        [
+            ox.Linterp(progress[0], arc_length_grid, a_ref[:, 0]),
+            ox.Linterp(progress[0], arc_length_grid, a_ref[:, 1]),
+            ox.Linterp(progress[0], arc_length_grid, a_ref[:, 2]),
+        ]
+    )
 
-    # Error vector
-    e = position_mpc - p_ref_interp
+    # 6D error vector: position and velocity errors
+    e_pos = position_mpc - p_ref_interp
+    e_vel = velocity_mpc - v_ref_interp
 
-    # Unit tangent direction
-    tangent_norm = ox.linalg.Norm(v_ref_interp)
-    tangent_unit = v_ref_interp / tangent_norm
+    # 6D tangent direction in state space
+    # Since θ is position arc-length: t_6d = [v/||v||, a/||v||]
+    speed = ox.linalg.Norm(v_ref_interp)
+    t_pos = v_ref_interp / speed  # Unit tangent in position space
+    t_vel = a_ref_interp / speed  # Velocity-space component of tangent
 
-    # Lag and contour costs (squared errors)
-    # Compute lag as projection of error onto tangent direction
-    lag_scalar = ox.Sum(e * tangent_unit)  # e · t_hat
+    # ||t_6d||² = 1 + ||a||²/||v||²
+    tangent_norm_sq = 1.0 + ox.linalg.Norm(a_ref_interp) ** 2 / speed**2
+    tangent_norm = ox.Sqrt(tangent_norm_sq)
+
+    # Lag = (e_6d · t_6d) / ||t_6d|| = (e_pos · t_pos + e_vel · t_vel) / ||t_6d||
+    lag_unnorm = ox.Sum(e_pos * t_pos) + ox.Sum(e_vel * t_vel)
+    lag_scalar = lag_unnorm / tangent_norm
     lag_cost = lag_scalar**2
 
-    # Compute contour cost as norm of perpendicular component (more numerically stable)
-    # e_parallel = (e · t_hat) * t_hat, e_perp = e - e_parallel
-    e_perp = e - lag_scalar * tangent_unit
-    contour_cost = ox.linalg.Norm(e_perp) ** 2
+    # Contour² = ||e_6d||² - lag²
+    e_norm_sq = ox.linalg.Norm(e_pos) ** 2 + ox.linalg.Norm(e_vel) ** 2
+    contour_cost = e_norm_sq - lag_cost
 
     # MPCC dynamics
     dynamics_mpc = {
@@ -472,6 +489,22 @@ if __name__ == "__main__":
     f_ref = results.trajectory["force"]  # (M, 3), may be N-1 or N
     time_ref = results.trajectory["time"]  # (N,)
 
+    # Compute reference acceleration from force (a = f/m + g)
+    # Need to interpolate f_ref to state nodes if lengths differ
+    if f_ref.shape[0] == len(time_ref):
+        a_ref = f_ref / m + np.array([0, 0, g_const])
+    else:
+        # Force at midpoints - interpolate to state nodes
+        time_1d = np.asarray(time_ref).flatten()
+        t_mid = (time_1d[:-1] + time_1d[1:]) / 2
+        a_ref = np.column_stack(
+            [
+                np.interp(time_1d, t_mid, f_ref[:, 0] / m),
+                np.interp(time_1d, t_mid, f_ref[:, 1] / m),
+                np.interp(time_1d, t_mid, f_ref[:, 2] / m + g_const),
+            ]
+        )
+
     trajectory_length = len(time_ref)
     print(f"Reference trajectory length: {trajectory_length} points")
 
@@ -491,7 +524,7 @@ if __name__ == "__main__":
 
     # Create MPCC problem with reference trajectory baked in
     problem_mpc, states, controls = create_mpcc_problem(
-        arc_length_grid, p_ref, v_ref, f_ref, f_ref_arc_length, time_ref
+        arc_length_grid, p_ref, v_ref, a_ref, f_ref, f_ref_arc_length, time_ref
     )
 
     # Initialize MPCC problem
