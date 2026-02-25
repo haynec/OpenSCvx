@@ -21,7 +21,7 @@ sys.path.append(grandparent_dir)
 
 import openscvx as ox
 from openscvx import Problem
-from openscvx.plotting import plot_states, plot_scp_iterations
+from openscvx.plotting import plot_scp_iterations, plot_states
 
 ###############################################################################
 # Reference circle parameters
@@ -135,7 +135,9 @@ for state in [position, heading]:
     constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
 # --- Time ---
-t = ox.Time(initial=0.0, final=horizon_duration, min=0.0, max=horizon_duration, uniform_time_grid=True)
+t = ox.Time(
+    initial=0.0, final=horizon_duration, min=0.0, max=horizon_duration, uniform_time_grid=True
+)
 
 # --- Problem ---
 problem_mpc = Problem(
