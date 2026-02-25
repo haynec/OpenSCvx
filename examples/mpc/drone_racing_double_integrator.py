@@ -256,7 +256,9 @@ def create_mpcc_problem(
     progress_rate = ox.Control("progress_rate", shape=(1,))  # Progress rate control
     progress_rate.min = np.array([0.0])  # Only move forward along path
     progress_rate.max = np.array([50.0])  # Max progress rate
-    progress_rate.guess = np.ones((n_mpc, 1)) * 10.0  # Initial progress rate guess
+    # Initialize progress rate from reference speeds (dθ/dt = ||v||)
+    ref_speeds = np.linalg.norm(v_ref, axis=1)
+    progress_rate.guess = np.interp(theta_guess.flatten(), arc_length_grid, ref_speeds).reshape(-1, 1)
 
     # Interpolate reference trajectory at current progress (data baked in as constants)
     # Use progress[0] (scalar) for Linterp, then Stack to get (3,) vector
