@@ -195,20 +195,23 @@ def create_mpcc_problem(
     velocity_mpc.initial = v_ref_data[0]
     velocity_mpc.final = [("free", 0), ("free", 0), ("free", 0)]
 
-    theta_hat = ox.State("theta_hat", shape=(1,))  # Estimated progress along path
-    theta_hat.min = np.array([0.0])
-    theta_hat.max = np.array([total_arc_length])
-    theta_hat.initial = np.array([0.0])
+    progress = ox.State("progress", shape=(1,))  # Estimated progress along path
+    progress.min = np.array([0.0])
+    progress.max = np.array([total_arc_length])
+    progress.initial = np.array([0.0])
+    progress.final = [("maximize", 0.0)]
 
     lag_sum = ox.State("lag_sum", shape=(1,))  # Integral of lag cost
-    lag_sum.initial = np.array([0.0])
     lag_sum.min = np.array([0.0])
     lag_sum.max = np.array([1e6])
+    lag_sum.initial = np.array([0.0])
+    lag_sum.final = [("minimize", 0.0)]
 
     contour_sum = ox.State("contour_sum", shape=(1,))  # Integral of contour cost
-    contour_sum.initial = np.array([0.0])
     contour_sum.min = np.array([0.0])
     contour_sum.max = np.array([1e6])
+    contour_sum.initial = np.array([0.0])
+    contour_sum.final = [("minimize", 0.0)]
 
     # Set state guesses from reference trajectory
     # Estimate arc length covered in horizon based on average reference speed
@@ -231,7 +234,7 @@ def create_mpcc_problem(
             np.interp(theta_guess.flatten(), arc_length_grid, v_ref_data[:, 2]),
         ]
     )
-    theta_hat.guess = theta_guess
+    progress.guess = theta_guess
     lag_sum.guess = np.zeros((n_mpc, 1))
     contour_sum.guess = np.zeros((n_mpc, 1))
 
@@ -248,25 +251,25 @@ def create_mpcc_problem(
         ]
     )
 
-    v_theta = ox.Control("v_theta", shape=(1,))  # Progress rate control
-    v_theta.min = np.array([0.0])  # Only move forward along path
-    v_theta.max = np.array([50.0])  # Max progress rate
-    v_theta.guess = np.ones((n_mpc, 1)) * 10.0  # Initial progress rate guess
+    progress_rate = ox.Control("progress_rate", shape=(1,))  # Progress rate control
+    progress_rate.min = np.array([0.0])  # Only move forward along path
+    progress_rate.max = np.array([50.0])  # Max progress rate
+    progress_rate.guess = np.ones((n_mpc, 1)) * 10.0  # Initial progress rate guess
 
-    # Interpolate reference trajectory at current theta_hat (data baked in as constants)
-    # Use theta_hat[0] (scalar) for Linterp, then Stack to get (3,) vector
+    # Interpolate reference trajectory at current progress (data baked in as constants)
+    # Use progress[0] (scalar) for Linterp, then Stack to get (3,) vector
     p_ref_interp = ox.Stack(
         [
-            ox.Linterp(theta_hat[0], arc_length_grid, p_ref_data[:, 0]),
-            ox.Linterp(theta_hat[0], arc_length_grid, p_ref_data[:, 1]),
-            ox.Linterp(theta_hat[0], arc_length_grid, p_ref_data[:, 2]),
+            ox.Linterp(progress[0], arc_length_grid, p_ref_data[:, 0]),
+            ox.Linterp(progress[0], arc_length_grid, p_ref_data[:, 1]),
+            ox.Linterp(progress[0], arc_length_grid, p_ref_data[:, 2]),
         ]
     )
     v_ref_interp = ox.Stack(
         [
-            ox.Linterp(theta_hat[0], arc_length_grid, v_ref_data[:, 0]),
-            ox.Linterp(theta_hat[0], arc_length_grid, v_ref_data[:, 1]),
-            ox.Linterp(theta_hat[0], arc_length_grid, v_ref_data[:, 2]),
+            ox.Linterp(progress[0], arc_length_grid, v_ref_data[:, 0]),
+            ox.Linterp(progress[0], arc_length_grid, v_ref_data[:, 1]),
+            ox.Linterp(progress[0], arc_length_grid, v_ref_data[:, 2]),
         ]
     )
 
@@ -291,19 +294,14 @@ def create_mpcc_problem(
     dynamics_mpc = {
         "position": velocity_mpc,
         "velocity": (1 / m) * force_mpc + np.array([0, 0, g_const], dtype=np.float64),
-        "theta_hat": v_theta,
+        "progress": progress_rate,
         "lag_sum": Q_LAG * lag_cost,
         "contour_sum": Q_CONTOUR * contour_cost,
     }
 
-    # Terminal cost: minimize integrated costs, maximize progress
-    lag_sum.final = [("minimize", 0.0)]
-    contour_sum.final = [("minimize", 0.0)]
-    theta_hat.final = [("maximize", 0.0)]
-
     # MPCC constraints (box constraints)
-    states_mpc = [position_mpc, velocity_mpc, theta_hat, lag_sum, contour_sum]
-    controls_mpc = [force_mpc, v_theta]
+    states_mpc = [position_mpc, velocity_mpc, progress, lag_sum, contour_sum]
+    controls_mpc = [force_mpc, progress_rate]
 
     constraints_mpc = []
     for state in [position_mpc, velocity_mpc]:
@@ -337,13 +335,13 @@ def create_mpcc_problem(
     states_dict = {
         "position": position_mpc,
         "velocity": velocity_mpc,
-        "theta_hat": theta_hat,
+        "progress": progress,
         "lag_sum": lag_sum,
         "contour_sum": contour_sum,
     }
     controls_dict = {
         "force": force_mpc,
-        "v_theta": v_theta,
+        "progress_rate": progress_rate,
     }
 
     return problem_mpc, states_dict, controls_dict
@@ -425,9 +423,6 @@ if __name__ == "__main__":
 
     # Initialize MPCC from start of reference path
     initial_theta = find_closest_arc_length(p_ref_data[0], p_ref_data, arc_length_grid)
-    # states["position"].initial = p_ref_data[0]
-    # states["velocity"].initial = v_ref_data[0]
-    # states["theta_hat"].initial = np.array([initial_theta])
 
     # Initialize and first solve
     problem_mpc.initialize()
