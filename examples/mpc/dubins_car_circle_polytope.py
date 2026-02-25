@@ -2,7 +2,7 @@
 
 Demonstrates model-predictive contouring control (MPCC) with:
 - 2D Dubins car dynamics (position + heading, speed + angular rate controls)
-- Discrete reference path via Linterp (sampled from a circle, generalizes to arbitrary paths)
+- Discrete reference path via Cinterp (sampled from a circle, generalizes to arbitrary paths)
 - Lag/contour error decomposition following Romero 2022
 - Receding horizon closed-loop simulation
 """
@@ -51,14 +51,6 @@ s_data = np.concatenate([s_lap + k * total_arc_length for k in laps])
 px_data = np.tile(px_lap, len(laps))
 py_data = np.tile(py_lap, len(laps))
 
-# Unit tangent: outgoing PL segment direction at each sample point.
-# At sample point k, the tangent points toward sample point k+1, so by the
-# time progress reaches k the tangent is already aligned with the next segment.
-seg_dx = np.diff(px_data)
-seg_dy = np.diff(py_data)
-seg_lengths = np.sqrt(seg_dx**2 + seg_dy**2)
-tx_data = np.append(seg_dx / seg_lengths, seg_dx[-1] / seg_lengths[-1])
-ty_data = np.append(seg_dy / seg_lengths, seg_dy[-1] / seg_lengths[-1])
 
 ###############################################################################
 # MPCC parameters
@@ -100,7 +92,7 @@ lag_sum.final = [ox.Minimize(0.0)]
 
 contour_sum = ox.State("contour_sum", shape=(1,))  # Integrated contour cost
 contour_sum.min = np.array([0.0])
-contour_sum.max = np.array([1e1])
+contour_sum.max = np.array([5e0])
 contour_sum.initial = np.array([0.0])
 contour_sum.final = [ox.Minimize(0.0)]
 
@@ -120,14 +112,25 @@ progress_rate.min = np.array([0.0])  # Forward only
 progress_rate.max = np.array([10.0])
 progress_rate.guess = np.full((n_mpc, 1), 5.0)
 
-# --- Reference trajectory (discrete, via Linterp) ---
+# --- Reference trajectory (discrete, via Cinterp) ---
 p_ref = ox.Concat(
-    ox.Linterp(progress[0], s_data, px_data),
-    ox.Linterp(progress[0], s_data, py_data),
+    ox.Cinterp(progress[0], s_data, px_data),
+    ox.Cinterp(progress[0], s_data, py_data),
 )
+
+# Tangent: derivative of the position spline, sampled at breakpoints and
+# re-interpolated with a second Cinterp for a smooth tangent field.
+from scipy.interpolate import CubicSpline as _CS
+
+_dpx = _CS(s_data, px_data)(s_data, 1)
+_dpy = _CS(s_data, py_data)(s_data, 1)
+_tnorm = np.sqrt(_dpx**2 + _dpy**2)
+tx_data = _dpx / _tnorm
+ty_data = _dpy / _tnorm
+
 tangent = ox.Concat(
-    ox.Linterp(progress[0], s_data, tx_data),
-    ox.Linterp(progress[0], s_data, ty_data),
+    ox.Cinterp(progress[0], s_data, tx_data),
+    ox.Cinterp(progress[0], s_data, ty_data),
 )
 
 # --- Error decomposition (position-only, per Romero 2022 Fig. 2) ---
