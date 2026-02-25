@@ -348,6 +348,7 @@ def create_mpcc_problem(
         time=t_mpc,
         constraints=constraints_mpc,
         N=n_mpc,
+        autotuner=ox.ConstantProximalWeight(),
     )
 
     problem_mpc.settings.scp.uniform_time_grid = True
