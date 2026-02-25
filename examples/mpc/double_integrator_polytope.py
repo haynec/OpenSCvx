@@ -28,16 +28,46 @@ from openscvx.plotting import plot_scp_iterations, plot_states
 ###############################################################################
 
 def wavy_circle(M: int, R: float = 3.0, z_amp: float = 0.5, z_freq: int = 3) -> np.ndarray:
-    """Circle in the xy-plane with a sinusoidal z-component.
-
-    Returns (M, 3) array of local-frame points for one lap.
-    The path is periodic: the first and last points connect smoothly.
-    """
+    """Circle in the xy-plane with a sinusoidal z-component."""
     theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
     return np.column_stack([
         R * np.cos(theta),
         R * np.sin(theta),
         z_amp * np.sin(z_freq * theta),
+    ])
+
+
+def torus_knot(M: int, R: float = 3.0, r: float = 1.0, p: int = 2, q: int = 3) -> np.ndarray:
+    """(p, q) torus knot. p=2, q=3 gives a trefoil knot."""
+    theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
+    return np.column_stack([
+        (R + r * np.cos(q * theta)) * np.cos(p * theta),
+        (R + r * np.cos(q * theta)) * np.sin(p * theta),
+        r * np.sin(q * theta),
+    ])
+
+
+def lissajous_3d(
+    M: int, R: float = 3.0, a: int = 1, b: int = 2, c: int = 3,
+    phi: float = np.pi / 2, z_amp: float = 1.0,
+) -> np.ndarray:
+    """3D Lissajous curve. Periodic when a, b, c are integers."""
+    theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
+    return np.column_stack([
+        R * np.cos(a * theta),
+        R * np.sin(b * theta + phi),
+        z_amp * np.sin(c * theta),
+    ])
+
+
+def figure_eight(M: int, R: float = 3.0, z_amp: float = 1.0) -> np.ndarray:
+    """Figure-eight knot curve."""
+    theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
+    scale = R / 3.0  # Normalize so max radial extent ~ R
+    return np.column_stack([
+        scale * (2 + np.cos(2 * theta)) * np.cos(3 * theta),
+        scale * (2 + np.cos(2 * theta)) * np.sin(3 * theta),
+        z_amp * np.sin(4 * theta),
     ])
 
 
