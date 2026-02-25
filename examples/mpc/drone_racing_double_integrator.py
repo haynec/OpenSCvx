@@ -27,6 +27,7 @@ from examples.plotting_viser import (
     create_scp_animated_plotting_server,
 )
 from openscvx import Problem
+from openscvx.plotting import plot_scp_iterations
 from openscvx.utils import gen_vertices, rot
 
 n = 22  # Number of Nodes
@@ -152,8 +153,8 @@ plotting_dict = {"vertices": vertices}
 n_mpc = 4  # Number of nodes for MPC horizon
 
 # Cost weights
-Q_LAG = 10.0  # Lag weight (high for accurate progress tracking)
-Q_CONTOUR = 1.0  # Contour weight
+Q_LAG = 1e1  # Lag weight
+Q_CONTOUR = 1e0  # Contour weight
 
 
 def create_mpcc_problem(
@@ -201,6 +202,31 @@ def create_mpcc_problem(
     contour_sum.min = np.array([0.0])
     contour_sum.max = np.array([1e6])
 
+    # Set state guesses from reference trajectory
+    # Estimate arc length covered in horizon based on average reference speed
+    avg_speed = np.mean(np.linalg.norm(v_ref_data, axis=1))
+    horizon_arc_length = min(avg_speed * 1.0, total_arc_length * 0.1)  # 1 second horizon
+
+    # Sample reference trajectory for guess
+    theta_guess = np.linspace(0, horizon_arc_length, n_mpc).reshape(-1, 1)
+    position_mpc.guess = np.column_stack(
+        [
+            np.interp(theta_guess.flatten(), arc_length_grid, p_ref_data[:, 0]),
+            np.interp(theta_guess.flatten(), arc_length_grid, p_ref_data[:, 1]),
+            np.interp(theta_guess.flatten(), arc_length_grid, p_ref_data[:, 2]),
+        ]
+    )
+    velocity_mpc.guess = np.column_stack(
+        [
+            np.interp(theta_guess.flatten(), arc_length_grid, v_ref_data[:, 0]),
+            np.interp(theta_guess.flatten(), arc_length_grid, v_ref_data[:, 1]),
+            np.interp(theta_guess.flatten(), arc_length_grid, v_ref_data[:, 2]),
+        ]
+    )
+    theta_hat.guess = theta_guess
+    lag_sum.guess = np.zeros((n_mpc, 1))
+    contour_sum.guess = np.zeros((n_mpc, 1))
+
     # MPCC controls
     force_mpc = ox.Control("force", shape=(3,))
     force_mpc.max = np.array([f_max, f_max, f_max])
@@ -213,19 +239,19 @@ def create_mpcc_problem(
     v_theta.guess = np.ones((n_mpc, 1)) * 10.0  # Initial progress rate guess
 
     # Interpolate reference trajectory at current theta_hat (data baked in as constants)
-    # Use theta_hat directly (shape (1,)) so Linterp outputs (1,) and Hstack gives (3,)
-    p_ref_interp = ox.Hstack(
+    # Use theta_hat[0] (scalar) for Linterp, then Stack to get (3,) vector
+    p_ref_interp = ox.Stack(
         [
-            ox.Linterp(theta_hat, arc_length_grid, p_ref_data[:, 0]),
-            ox.Linterp(theta_hat, arc_length_grid, p_ref_data[:, 1]),
-            ox.Linterp(theta_hat, arc_length_grid, p_ref_data[:, 2]),
+            ox.Linterp(theta_hat[0], arc_length_grid, p_ref_data[:, 0]),
+            ox.Linterp(theta_hat[0], arc_length_grid, p_ref_data[:, 1]),
+            ox.Linterp(theta_hat[0], arc_length_grid, p_ref_data[:, 2]),
         ]
     )
-    v_ref_interp = ox.Hstack(
+    v_ref_interp = ox.Stack(
         [
-            ox.Linterp(theta_hat, arc_length_grid, v_ref_data[:, 0]),
-            ox.Linterp(theta_hat, arc_length_grid, v_ref_data[:, 1]),
-            ox.Linterp(theta_hat, arc_length_grid, v_ref_data[:, 2]),
+            ox.Linterp(theta_hat[0], arc_length_grid, v_ref_data[:, 0]),
+            ox.Linterp(theta_hat[0], arc_length_grid, v_ref_data[:, 1]),
+            ox.Linterp(theta_hat[0], arc_length_grid, v_ref_data[:, 2]),
         ]
     )
 
@@ -237,9 +263,14 @@ def create_mpcc_problem(
     tangent_unit = v_ref_interp / tangent_norm
 
     # Lag and contour costs (squared errors)
+    # Compute lag as projection of error onto tangent direction
     lag_scalar = ox.Sum(e * tangent_unit)  # e · t_hat
     lag_cost = lag_scalar**2
-    contour_cost = ox.linalg.Norm(e) ** 2 - lag_cost
+
+    # Compute contour cost as norm of perpendicular component (more numerically stable)
+    # e_parallel = (e · t_hat) * t_hat, e_perp = e - e_parallel
+    e_perp = e - lag_scalar * tangent_unit
+    contour_cost = ox.linalg.Norm(e_perp) ** 2
 
     # MPCC dynamics
     dynamics_mpc = {
@@ -375,17 +406,21 @@ if __name__ == "__main__":
     problem_mpc.initialize()
     results_mpc = problem_mpc.solve()
     print("Initial MPCC solve complete!")
+    results_mpc = problem_mpc.post_process()
+    results_mpc.update(plotting_dict)
 
     # Then need to solve in a loop!
 
+    plot_scp_iterations(results_mpc).show()
+
     # Create both visualization servers (viser auto-assigns ports)
     traj_server = create_animated_plotting_server(
-        results,
+        results_mpc,
         thrust_key="force",
         viewcone_scale=10.0,
     )
     scp_server = create_scp_animated_plotting_server(
-        results,
+        results_mpc,
         attitude_stride=3,
         frame_duration_ms=200,
     )
