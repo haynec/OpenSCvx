@@ -161,20 +161,20 @@ Q_CONTOUR = 1e0  # Contour weight
 
 def create_mpcc_problem(
     arc_length_grid: np.ndarray,
-    p_ref_data: np.ndarray,
-    v_ref_data: np.ndarray,
-    f_ref_data: np.ndarray,
+    p_ref: np.ndarray,
+    v_ref: np.ndarray,
+    f_ref: np.ndarray,
     f_ref_arc_length: np.ndarray,
-    time_ref_data: np.ndarray,
+    time_ref: np.ndarray,
     horizon_duration: float = horizon_duration,
 ) -> tuple:
     """Create MPCC problem with reference trajectory baked in as constants.
 
     Args:
         arc_length_grid: Arc-length at each reference point, shape (N,)
-        p_ref_data: Reference positions, shape (N, 3)
-        v_ref_data: Reference velocities, shape (N, 3)
-        f_ref_data: Reference forces, shape (M, 3) where M may differ from N
+        p_ref: Reference positions, shape (N, 3)
+        v_ref: Reference velocities, shape (N, 3)
+        f_ref: Reference forces, shape (M, 3) where M may differ from N
         f_ref_arc_length: Arc-length grid for force data, shape (M,)
         time_ref_data: Time at each reference point, shape (N,)
         horizon_duration: MPC horizon length in seconds
@@ -188,13 +188,13 @@ def create_mpcc_problem(
     position_mpc = ox.State("position", shape=(3,))
     position_mpc.max = np.array([200.0, 100, 50])
     position_mpc.min = np.array([-200.0, -100, 15])
-    position_mpc.initial = p_ref_data[0]
+    position_mpc.initial = p_ref[0]
     position_mpc.final = [("free", 0), ("free", 0), ("free", 0)]
 
     velocity_mpc = ox.State("velocity", shape=(3,))
     velocity_mpc.max = np.array([100, 100, 100])
     velocity_mpc.min = np.array([-100, -100, -100])
-    velocity_mpc.initial = v_ref_data[0]
+    velocity_mpc.initial = v_ref[0]
     velocity_mpc.final = [("free", 0), ("free", 0), ("free", 0)]
 
     progress = ox.State("progress", shape=(1,))  # Estimated progress along path
@@ -217,23 +217,23 @@ def create_mpcc_problem(
 
     # Set state guesses from reference trajectory
     # Use reference trajectory timing to estimate arc length covered in horizon
-    time_1d = np.asarray(time_ref_data).flatten()
+    time_1d = np.asarray(time_ref).flatten()
     horizon_arc_length = np.interp(horizon_duration, time_1d, arc_length_grid)
 
     # Sample reference trajectory for guess
     theta_guess = np.linspace(0, horizon_arc_length, n_mpc).reshape(-1, 1)
     position_mpc.guess = np.column_stack(
         [
-            np.interp(theta_guess.flatten(), arc_length_grid, p_ref_data[:, 0]),
-            np.interp(theta_guess.flatten(), arc_length_grid, p_ref_data[:, 1]),
-            np.interp(theta_guess.flatten(), arc_length_grid, p_ref_data[:, 2]),
+            np.interp(theta_guess.flatten(), arc_length_grid, p_ref[:, 0]),
+            np.interp(theta_guess.flatten(), arc_length_grid, p_ref[:, 1]),
+            np.interp(theta_guess.flatten(), arc_length_grid, p_ref[:, 2]),
         ]
     )
     velocity_mpc.guess = np.column_stack(
         [
-            np.interp(theta_guess.flatten(), arc_length_grid, v_ref_data[:, 0]),
-            np.interp(theta_guess.flatten(), arc_length_grid, v_ref_data[:, 1]),
-            np.interp(theta_guess.flatten(), arc_length_grid, v_ref_data[:, 2]),
+            np.interp(theta_guess.flatten(), arc_length_grid, v_ref[:, 0]),
+            np.interp(theta_guess.flatten(), arc_length_grid, v_ref[:, 1]),
+            np.interp(theta_guess.flatten(), arc_length_grid, v_ref[:, 2]),
         ]
     )
     progress.guess = theta_guess
@@ -247,9 +247,9 @@ def create_mpcc_problem(
     # Initialize force guess from reference trajectory
     force_mpc.guess = np.column_stack(
         [
-            np.interp(theta_guess.flatten(), f_ref_arc_length, f_ref_data[:, 0]),
-            np.interp(theta_guess.flatten(), f_ref_arc_length, f_ref_data[:, 1]),
-            np.interp(theta_guess.flatten(), f_ref_arc_length, f_ref_data[:, 2]),
+            np.interp(theta_guess.flatten(), f_ref_arc_length, f_ref[:, 0]),
+            np.interp(theta_guess.flatten(), f_ref_arc_length, f_ref[:, 1]),
+            np.interp(theta_guess.flatten(), f_ref_arc_length, f_ref[:, 2]),
         ]
     )
 
@@ -262,16 +262,16 @@ def create_mpcc_problem(
     # Use progress[0] (scalar) for Linterp, then Stack to get (3,) vector
     p_ref_interp = ox.Stack(
         [
-            ox.Linterp(progress[0], arc_length_grid, p_ref_data[:, 0]),
-            ox.Linterp(progress[0], arc_length_grid, p_ref_data[:, 1]),
-            ox.Linterp(progress[0], arc_length_grid, p_ref_data[:, 2]),
+            ox.Linterp(progress[0], arc_length_grid, p_ref[:, 0]),
+            ox.Linterp(progress[0], arc_length_grid, p_ref[:, 1]),
+            ox.Linterp(progress[0], arc_length_grid, p_ref[:, 2]),
         ]
     )
     v_ref_interp = ox.Stack(
         [
-            ox.Linterp(progress[0], arc_length_grid, v_ref_data[:, 0]),
-            ox.Linterp(progress[0], arc_length_grid, v_ref_data[:, 1]),
-            ox.Linterp(progress[0], arc_length_grid, v_ref_data[:, 2]),
+            ox.Linterp(progress[0], arc_length_grid, v_ref[:, 0]),
+            ox.Linterp(progress[0], arc_length_grid, v_ref[:, 1]),
+            ox.Linterp(progress[0], arc_length_grid, v_ref[:, 2]),
         ]
     )
 
@@ -396,22 +396,22 @@ if __name__ == "__main__":
     results.update(plotting_dict)
 
     # Extract reference trajectory for MPCC
-    p_ref_data = results.trajectory["position"]  # (N, 3)
-    v_ref_data = results.trajectory["velocity"]  # (N, 3)
-    f_ref_data = results.trajectory["force"]  # (M, 3), may be N-1 or N
-    time_ref_data = results.trajectory["time"]  # (N,)
+    p_ref = results.trajectory["position"]  # (N, 3)
+    v_ref = results.trajectory["velocity"]  # (N, 3)
+    f_ref = results.trajectory["force"]  # (M, 3), may be N-1 or N
+    time_ref = results.trajectory["time"]  # (N,)
 
-    trajectory_length = len(time_ref_data)
+    trajectory_length = len(time_ref)
     print(f"Reference trajectory length: {trajectory_length} points")
 
     # Compute arc-length parameterization for states
-    arc_length_grid = compute_arc_length_grid(v_ref_data, time_ref_data)
+    arc_length_grid = compute_arc_length_grid(v_ref, time_ref)
     total_arc_length = arc_length_grid[-1]
     print(f"Total arc length: {total_arc_length:.2f} m")
 
     # Compute arc-length grid for controls (may have different length than states)
-    n_force = f_ref_data.shape[0]
-    if n_force == len(time_ref_data):
+    n_force = f_ref.shape[0]
+    if n_force == len(time_ref):
         # Control at same nodes as state
         f_ref_arc_length = arc_length_grid
     else:
@@ -420,11 +420,11 @@ if __name__ == "__main__":
 
     # Create MPCC problem with reference trajectory baked in
     problem_mpc, states, controls = create_mpcc_problem(
-        arc_length_grid, p_ref_data, v_ref_data, f_ref_data, f_ref_arc_length, time_ref_data
+        arc_length_grid, p_ref, v_ref, f_ref, f_ref_arc_length, time_ref
     )
 
     # Initialize MPCC from start of reference path
-    initial_theta = find_closest_arc_length(p_ref_data[0], p_ref_data, arc_length_grid)
+    initial_theta = find_closest_arc_length(p_ref[0], p_ref, arc_length_grid)
 
     # Initialize and first solve
     problem_mpc.initialize()
@@ -446,8 +446,8 @@ if __name__ == "__main__":
     # Add time-optimal reference as a ghost trail
     add_ghost_trajectory(
         traj_server,
-        p_ref_data,
-        compute_velocity_colors(v_ref_data),
+        p_ref,
+        compute_velocity_colors(v_ref),
         # point_size=0.05,  # Smaller than the animated trail
         # name="reference_trajectory",
     )
