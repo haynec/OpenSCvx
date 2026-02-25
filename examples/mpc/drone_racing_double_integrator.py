@@ -407,51 +407,37 @@ def shift_guess(
     controls_dict: dict,
     prev_trajectory: dict,
     arc_length_grid: np.ndarray,
-    p_ref: np.ndarray,
-    v_ref: np.ndarray,
-    f_ref: np.ndarray,
-    f_ref_arc_length: np.ndarray,
+    horizon_duration: float,
 ) -> None:
     """Shift previous solution to create warm-start guess for next solve.
 
     Shifts trajectory by one node and extrapolates the last node using
-    the reference trajectory.
+    the MPC solution's terminal state and dynamics.
 
     Args:
         states_dict: Dictionary of state objects to update
         controls_dict: Dictionary of control objects to update
         prev_trajectory: Previous solution trajectory dict
-        arc_length_grid: Arc-length grid for reference interpolation
-        p_ref: Reference positions for guess extrapolation
-        v_ref: Reference velocities for guess extrapolation
-        f_ref: Reference forces for guess extrapolation
-        f_ref_arc_length: Arc-length grid for force reference
+        arc_length_grid: Arc-length grid (used for progress clamping)
+        horizon_duration: MPC horizon duration in seconds
     """
     n_nodes = prev_trajectory["position"].shape[0]
+    dt = horizon_duration / (n_nodes - 1)
 
-    # Shift position guess: drop first, extrapolate last from reference
-    prev_progress = prev_trajectory["progress"]
-    # Estimate progress at extrapolated node (linear extrapolation)
-    if n_nodes >= 2:
-        delta_theta = prev_progress[-1, 0] - prev_progress[-2, 0]
-    else:
-        delta_theta = prev_progress[-1, 0] / n_nodes
-    extrapolated_theta = min(prev_progress[-1, 0] + delta_theta, arc_length_grid[-1])
-
-    # Extrapolate position from reference trajectory
-    extrapolated_pos = np.array(
-        [np.interp(extrapolated_theta, arc_length_grid, p_ref[:, i]) for i in range(3)]
-    )
+    # Extrapolate position using MPC solution's terminal velocity
+    extrapolated_pos = prev_trajectory["position"][-1] + prev_trajectory["velocity"][-1] * dt
     states_dict["position"].guess = np.vstack([prev_trajectory["position"][1:], extrapolated_pos])
 
-    # Extrapolate velocity from reference trajectory
-    extrapolated_vel = np.array(
-        [np.interp(extrapolated_theta, arc_length_grid, v_ref[:, i]) for i in range(3)]
-    )
+    # Extrapolate velocity using MPC solution's terminal acceleration (from force)
+    terminal_accel = prev_trajectory["force"][-1] / m + np.array([0, 0, g_const])
+    extrapolated_vel = prev_trajectory["velocity"][-1] + terminal_accel * dt
     states_dict["velocity"].guess = np.vstack([prev_trajectory["velocity"][1:], extrapolated_vel])
 
-    # Shift progress guess
-    extrapolated_progress = np.array([[extrapolated_theta]])
+    # Extrapolate progress using terminal progress rate
+    extrapolated_progress = (
+        prev_trajectory["progress"][-1] + prev_trajectory["progress_rate"][-1] * dt
+    )
+    extrapolated_progress = np.clip(extrapolated_progress, 0, arc_length_grid[-1])
     states_dict["progress"].guess = np.vstack(
         [prev_trajectory["progress"][1:], extrapolated_progress]
     )
@@ -460,13 +446,11 @@ def shift_guess(
     states_dict["lag_sum"].guess = np.zeros((n_nodes, 1))
     states_dict["contour_sum"].guess = np.zeros((n_nodes, 1))
 
-    # Shift force guess
-    extrapolated_force = np.array(
-        [np.interp(extrapolated_theta, f_ref_arc_length, f_ref[:, i]) for i in range(3)]
-    )
+    # Extrapolate force (zero-order hold)
+    extrapolated_force = prev_trajectory["force"][-1]
     controls_dict["force"].guess = np.vstack([prev_trajectory["force"][1:], extrapolated_force])
 
-    # Shift progress rate guess (use last value for extrapolation)
+    # Shift progress rate guess (zero-order hold)
     controls_dict["progress_rate"].guess = np.vstack(
         [prev_trajectory["progress_rate"][1:], prev_trajectory["progress_rate"][-1:]]
     )
@@ -531,7 +515,9 @@ if __name__ == "__main__":
         )
 
         update_initial_conditions(states, nodes)
-        shift_guess(states, controls, nodes, arc_length_grid, p_ref, v_ref, f_ref, f_ref_arc_length)
+        shift_guess(states, controls, nodes, arc_length_grid, horizon_duration)
+
+    results_mpc.update(plotting_dict)
     plot_scp_iterations(results_mpc).show()
 
     # Create both visualization servers (viser auto-assigns ports)
