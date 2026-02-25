@@ -152,6 +152,7 @@ plotting_dict = {"vertices": vertices}
 ###############################################################################
 
 n_mpc = 4  # Number of nodes for MPC horizon
+horizon_duration = 1.0  # MPC horizon length in seconds
 
 # Cost weights
 Q_LAG = 1e1  # Lag weight
@@ -164,6 +165,7 @@ def create_mpcc_problem(
     v_ref_data: np.ndarray,
     f_ref_data: np.ndarray,
     f_ref_arc_length: np.ndarray,
+    horizon_duration: float = horizon_duration,
 ) -> tuple:
     """Create MPCC problem with reference trajectory baked in as constants.
 
@@ -173,6 +175,7 @@ def create_mpcc_problem(
         v_ref_data: Reference velocities, shape (N, 3)
         f_ref_data: Reference forces, shape (M, 3) where M may differ from N
         f_ref_arc_length: Arc-length grid for force data, shape (M,)
+        horizon_duration: MPC horizon length in seconds
 
     Returns:
         Tuple of (problem, states_dict, controls_dict) for updating between solves
@@ -210,7 +213,7 @@ def create_mpcc_problem(
     # Set state guesses from reference trajectory
     # Estimate arc length covered in horizon based on average reference speed
     avg_speed = np.mean(np.linalg.norm(v_ref_data, axis=1))
-    horizon_arc_length = min(avg_speed * 1.0, total_arc_length * 0.1)  # 1 second horizon
+    horizon_arc_length = min(avg_speed * horizon_duration, total_arc_length * 0.5)
 
     # Sample reference trajectory for guess
     theta_guess = np.linspace(0, horizon_arc_length, n_mpc).reshape(-1, 1)
@@ -314,9 +317,9 @@ def create_mpcc_problem(
     # Fixed time horizon for MPC
     t_mpc = ox.Time(
         initial=0.0,
-        final=1.0,  # Fixed horizon length
+        final=horizon_duration,
         min=0.0,
-        max=1.0,
+        max=horizon_duration,
     )
 
     problem_mpc = Problem(
