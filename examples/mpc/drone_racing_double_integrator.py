@@ -387,6 +387,91 @@ def find_closest_arc_length(
     return arc_length_grid[closest_idx]
 
 
+def update_initial_conditions(
+    states_dict: dict,
+    prev_nodes: dict,
+) -> None:
+    """Update initial conditions from previous solution's node 1.
+
+    Args:
+        states_dict: Dictionary of state objects to update
+        prev_nodes: Previous solution nodes dict
+    """
+    states_dict["position"].initial = prev_nodes["position"][1]
+    states_dict["velocity"].initial = prev_nodes["velocity"][1]
+    states_dict["progress"].initial = prev_nodes["progress"][1]
+
+
+def shift_guess(
+    states_dict: dict,
+    controls_dict: dict,
+    prev_trajectory: dict,
+    arc_length_grid: np.ndarray,
+    p_ref: np.ndarray,
+    v_ref: np.ndarray,
+    f_ref: np.ndarray,
+    f_ref_arc_length: np.ndarray,
+) -> None:
+    """Shift previous solution to create warm-start guess for next solve.
+
+    Shifts trajectory by one node and extrapolates the last node using
+    the reference trajectory.
+
+    Args:
+        states_dict: Dictionary of state objects to update
+        controls_dict: Dictionary of control objects to update
+        prev_trajectory: Previous solution trajectory dict
+        arc_length_grid: Arc-length grid for reference interpolation
+        p_ref: Reference positions for guess extrapolation
+        v_ref: Reference velocities for guess extrapolation
+        f_ref: Reference forces for guess extrapolation
+        f_ref_arc_length: Arc-length grid for force reference
+    """
+    n_nodes = prev_trajectory["position"].shape[0]
+
+    # Shift position guess: drop first, extrapolate last from reference
+    prev_progress = prev_trajectory["progress"]
+    # Estimate progress at extrapolated node (linear extrapolation)
+    if n_nodes >= 2:
+        delta_theta = prev_progress[-1, 0] - prev_progress[-2, 0]
+    else:
+        delta_theta = prev_progress[-1, 0] / n_nodes
+    extrapolated_theta = min(prev_progress[-1, 0] + delta_theta, arc_length_grid[-1])
+
+    # Extrapolate position from reference trajectory
+    extrapolated_pos = np.array(
+        [np.interp(extrapolated_theta, arc_length_grid, p_ref[:, i]) for i in range(3)]
+    )
+    states_dict["position"].guess = np.vstack([prev_trajectory["position"][1:], extrapolated_pos])
+
+    # Extrapolate velocity from reference trajectory
+    extrapolated_vel = np.array(
+        [np.interp(extrapolated_theta, arc_length_grid, v_ref[:, i]) for i in range(3)]
+    )
+    states_dict["velocity"].guess = np.vstack([prev_trajectory["velocity"][1:], extrapolated_vel])
+
+    # Shift progress guess
+    extrapolated_progress = np.array([[extrapolated_theta]])
+    states_dict["progress"].guess = np.vstack(
+        [prev_trajectory["progress"][1:], extrapolated_progress]
+    )
+
+    # Reset cost states to zero (they integrate from zero each horizon)
+    states_dict["lag_sum"].guess = np.zeros((n_nodes, 1))
+    states_dict["contour_sum"].guess = np.zeros((n_nodes, 1))
+
+    # Shift force guess
+    extrapolated_force = np.array(
+        [np.interp(extrapolated_theta, f_ref_arc_length, f_ref[:, i]) for i in range(3)]
+    )
+    controls_dict["force"].guess = np.vstack([prev_trajectory["force"][1:], extrapolated_force])
+
+    # Shift progress rate guess (use last value for extrapolation)
+    controls_dict["progress_rate"].guess = np.vstack(
+        [prev_trajectory["progress_rate"][1:], prev_trajectory["progress_rate"][-1:]]
+    )
+
+
 if __name__ == "__main__":
     # Solve time-optimal problem
     problem.initialize()
@@ -423,18 +508,30 @@ if __name__ == "__main__":
         arc_length_grid, p_ref, v_ref, f_ref, f_ref_arc_length, time_ref
     )
 
-    # Initialize MPCC from start of reference path
-    initial_theta = find_closest_arc_length(p_ref[0], p_ref, arc_length_grid)
-
-    # Initialize and first solve
+    # Initialize MPCC problem
     problem_mpc.initialize()
-    results_mpc = problem_mpc.solve()
-    print("Initial MPCC solve complete!")
-    results_mpc = problem_mpc.post_process()
-    results_mpc.update(plotting_dict)
 
-    # Then need to solve in a loop!
+    # Run closed-loop MPC
+    max_iterations = 2
 
+    for iteration in range(max_iterations):
+        print(f"\n--- Iteration {iteration} ---")
+        problem_mpc.reset()
+
+        results_mpc = problem_mpc.solve()
+        results_mpc = problem_mpc.post_process()
+        nodes = results_mpc.nodes
+
+        current_progress = nodes["progress"][0, 0]
+        print(
+            f"Iteration {iteration:3d}: progress = {current_progress:7.2f}/{total_arc_length:.2f} "
+            f"({100 * current_progress / total_arc_length:5.1f}%), "
+            f"pos = [{nodes['position'][0, 0]:6.1f}, {nodes['position'][0, 1]:6.1f}, "
+            f"{nodes['position'][0, 2]:6.1f}]"
+        )
+
+        update_initial_conditions(states, nodes)
+        shift_guess(states, controls, nodes, arc_length_grid, p_ref, v_ref, f_ref, f_ref_arc_length)
     plot_scp_iterations(results_mpc).show()
 
     # Create both visualization servers (viser auto-assigns ports)
@@ -448,8 +545,6 @@ if __name__ == "__main__":
         traj_server,
         p_ref,
         compute_velocity_colors(v_ref),
-        # point_size=0.05,  # Smaller than the animated trail
-        # name="reference_trajectory",
     )
     scp_server = create_scp_animated_plotting_server(
         results_mpc,
