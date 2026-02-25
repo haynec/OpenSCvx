@@ -24,12 +24,29 @@ from openscvx import Problem
 from openscvx.plotting import plot_scp_iterations, plot_states
 
 ###############################################################################
-# Reference circle parameters
+# Reference path shape
+###############################################################################
+
+def wavy_circle(M: int, R: float = 3.0, z_amp: float = 0.5, z_freq: int = 3) -> np.ndarray:
+    """Circle in the xy-plane with a sinusoidal z-component.
+
+    Returns (M, 3) array of local-frame points for one lap.
+    The path is periodic: the first and last points connect smoothly.
+    """
+    theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
+    return np.column_stack([
+        R * np.cos(theta),
+        R * np.sin(theta),
+        z_amp * np.sin(z_freq * theta),
+    ])
+
+
+###############################################################################
+# Reference path parameters
 ###############################################################################
 R_circle = 3.0  # Radius of the reference circle
-center = np.array([0.0, 0.0, 0.0])  # Center of the reference circle (3D)
-tilt_angle = np.radians(45)  # Tilt the circle out of the xy-plane (rotation about x-axis)
-total_arc_length = 2 * np.pi * R_circle  # One full lap
+center = np.array([0.0, 0.0, 0.0])  # Center of the reference path (3D)
+tilt_angle = np.radians(45)  # Tilt out of the xy-plane (rotation about x-axis)
 
 # Rotation matrix: tilt about x-axis by tilt_angle
 R_tilt = np.array([
@@ -39,22 +56,23 @@ R_tilt = np.array([
 ])
 
 ###############################################################################
-# Discrete reference path (sampled from the tilted circle)
+# Discrete reference path
 ###############################################################################
-M = 3  # Number of samples per lap
+M = 30  # Number of samples per lap
+path_fn = wavy_circle  # Swap this for any (M) -> (M, 3) function
 
-# Sample one lap in the local xy-plane, then rotate into 3D
-s_lap = np.linspace(0, total_arc_length, M, endpoint=False)
-angle_lap = s_lap / R_circle
-circle_local = np.column_stack([
-    R_circle * np.cos(angle_lap),
-    R_circle * np.sin(angle_lap),
-    np.zeros(M),
-])
-circle_rotated = (R_tilt @ circle_local.T).T + center
-px_lap = circle_rotated[:, 0]
-py_lap = circle_rotated[:, 1]
-pz_lap = circle_rotated[:, 2]
+# Sample one lap in the local frame, then rotate into 3D
+path_local = path_fn(M, R=R_circle)
+path_rotated = (R_tilt @ path_local.T).T + center
+px_lap = path_rotated[:, 0]
+py_lap = path_rotated[:, 1]
+pz_lap = path_rotated[:, 2]
+
+# Arc-length parametrization via cumulative chord lengths
+dp = np.diff(path_rotated, axis=0, append=path_rotated[:1])  # wrap to start
+chord_lengths = np.linalg.norm(dp, axis=1)
+total_arc_length = np.sum(chord_lengths)  # Recompute from actual path
+s_lap = np.concatenate([[0.0], np.cumsum(chord_lengths[:-1])])
 
 # Tile to cover [progress.min, progress.max] = [-0.5L, 1.5L]
 s_min, s_max = -0.5 * total_arc_length, 1.5 * total_arc_length
@@ -86,7 +104,7 @@ Q_PROGRESS = 1e-1
 position = ox.State("position", shape=(3,))
 position.min = np.array([-10.0, -10.0, -10.0])
 position.max = np.array([10.0, 10.0, 10.0])
-position.initial = R_tilt @ np.array([R_circle, 0.0, 0.0]) + center  # Start on circle at theta=0
+position.initial = path_rotated[0]  # Start at first sample point
 position.final = [ox.Free(0.0), ox.Free(0.0), ox.Free(0.0)]
 
 velocity = ox.State("velocity", shape=(3,))
@@ -121,7 +139,7 @@ force.max = np.array([f_max, f_max, f_max])
 force.guess = np.zeros((n_mpc, 3))
 
 progress_rate = ox.Control("progress_rate", shape=(1,))  # d(theta_hat)/dt
-progress_rate.min = np.array([0.0])  # Forward only
+progress_rate.min = np.array([1.5])  # Forward only
 progress_rate.max = np.array([10.0])
 progress_rate.guess = np.full((n_mpc, 1), 5.0)
 
@@ -297,16 +315,14 @@ if __name__ == "__main__":
 
     fig = go.Figure()
 
-    # Reference circle (tilted)
-    circle_theta = np.linspace(0, 2 * np.pi, 200)
-    circle_pts = R_tilt @ np.array([
-        R_circle * np.cos(circle_theta),
-        R_circle * np.sin(circle_theta),
-        np.zeros_like(circle_theta),
-    ]) + center[:, None]
+    # Reference path (dense resample for smooth visualization)
+    ref_dense = path_fn(200, R=R_circle)
+    ref_dense = (R_tilt @ ref_dense.T).T + center
+    # Close the loop
+    ref_dense = np.vstack([ref_dense, ref_dense[:1]])
     fig.add_trace(
         go.Scatter3d(
-            x=circle_pts[0], y=circle_pts[1], z=circle_pts[2],
+            x=ref_dense[:, 0], y=ref_dense[:, 1], z=ref_dense[:, 2],
             mode="lines",
             line={"color": "red", "width": 4, "dash": "dash"},
             name="Reference",
