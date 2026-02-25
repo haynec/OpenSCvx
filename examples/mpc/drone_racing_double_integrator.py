@@ -145,12 +145,238 @@ problem.settings.scp.ep_tr = 1e-3  # Trust Region Tolerance
 
 plotting_dict = {"vertices": vertices}
 
+###############################################################################
+# MPCC Problem Formulation
+###############################################################################
+
+n_mpc = 4  # Number of nodes for MPC horizon
+
+# Cost weights
+Q_LAG = 10.0  # Lag weight (high for accurate progress tracking)
+Q_CONTOUR = 1.0  # Contour weight
+
+
+def create_mpcc_problem(
+    arc_length_grid: np.ndarray,
+    p_ref_data: np.ndarray,
+    v_ref_data: np.ndarray,
+) -> tuple:
+    """Create MPCC problem with reference trajectory baked in as constants.
+
+    Args:
+        arc_length_grid: Arc-length at each reference point, shape (N,)
+        p_ref_data: Reference positions, shape (N, 3)
+        v_ref_data: Reference velocities, shape (N, 3)
+
+    Returns:
+        Tuple of (problem, states_dict, controls_dict) for updating between solves
+    """
+    total_arc_length = arc_length_grid[-1]
+
+    # MPCC states (default initial conditions from start of reference trajectory)
+    position_mpc = ox.State("position", shape=(3,))
+    position_mpc.max = np.array([200.0, 100, 50])
+    position_mpc.min = np.array([-200.0, -100, 15])
+    position_mpc.initial = p_ref_data[0]
+    position_mpc.final = [("free", 0), ("free", 0), ("free", 0)]
+
+    velocity_mpc = ox.State("velocity", shape=(3,))
+    velocity_mpc.max = np.array([100, 100, 100])
+    velocity_mpc.min = np.array([-100, -100, -100])
+    velocity_mpc.initial = v_ref_data[0]
+    velocity_mpc.final = [("free", 0), ("free", 0), ("free", 0)]
+
+    theta_hat = ox.State("theta_hat", shape=(1,))  # Estimated progress along path
+    theta_hat.min = np.array([0.0])
+    theta_hat.max = np.array([total_arc_length])
+    theta_hat.initial = np.array([0.0])
+
+    lag_sum = ox.State("lag_sum", shape=(1,))  # Integral of lag cost
+    lag_sum.initial = np.array([0.0])
+    lag_sum.min = np.array([0.0])
+    lag_sum.max = np.array([1e6])
+
+    contour_sum = ox.State("contour_sum", shape=(1,))  # Integral of contour cost
+    contour_sum.initial = np.array([0.0])
+    contour_sum.min = np.array([0.0])
+    contour_sum.max = np.array([1e6])
+
+    # MPCC controls
+    force_mpc = ox.Control("force", shape=(3,))
+    force_mpc.max = np.array([f_max, f_max, f_max])
+    force_mpc.min = np.array([-f_max, -f_max, -f_max])
+    force_mpc.guess = np.tile([0.0, 0.0, m * abs(g_const)], (n_mpc, 1))  # Hover thrust
+
+    v_theta = ox.Control("v_theta", shape=(1,))  # Progress rate control
+    v_theta.min = np.array([0.0])  # Only move forward along path
+    v_theta.max = np.array([50.0])  # Max progress rate
+    v_theta.guess = np.ones((n_mpc, 1)) * 10.0  # Initial progress rate guess
+
+    # Interpolate reference trajectory at current theta_hat (data baked in as constants)
+    # Use theta_hat directly (shape (1,)) so Linterp outputs (1,) and Hstack gives (3,)
+    p_ref_interp = ox.Hstack(
+        [
+            ox.Linterp(theta_hat, arc_length_grid, p_ref_data[:, 0]),
+            ox.Linterp(theta_hat, arc_length_grid, p_ref_data[:, 1]),
+            ox.Linterp(theta_hat, arc_length_grid, p_ref_data[:, 2]),
+        ]
+    )
+    v_ref_interp = ox.Hstack(
+        [
+            ox.Linterp(theta_hat, arc_length_grid, v_ref_data[:, 0]),
+            ox.Linterp(theta_hat, arc_length_grid, v_ref_data[:, 1]),
+            ox.Linterp(theta_hat, arc_length_grid, v_ref_data[:, 2]),
+        ]
+    )
+
+    # Error vector
+    e = position_mpc - p_ref_interp
+
+    # Unit tangent direction
+    tangent_norm = ox.linalg.Norm(v_ref_interp)
+    tangent_unit = v_ref_interp / tangent_norm
+
+    # Lag and contour costs (squared errors)
+    lag_scalar = ox.Sum(e * tangent_unit)  # e · t_hat
+    lag_cost = lag_scalar**2
+    contour_cost = ox.linalg.Norm(e) ** 2 - lag_cost
+
+    # MPCC dynamics
+    dynamics_mpc = {
+        "position": velocity_mpc,
+        "velocity": (1 / m) * force_mpc + np.array([0, 0, g_const], dtype=np.float64),
+        "theta_hat": v_theta,
+        "lag_sum": Q_LAG * lag_cost,
+        "contour_sum": Q_CONTOUR * contour_cost,
+    }
+
+    # Terminal cost: minimize integrated costs, maximize progress
+    lag_sum.final = [("minimize", 0.0)]
+    contour_sum.final = [("minimize", 0.0)]
+    theta_hat.final = [("maximize", 0.0)]
+
+    # MPCC constraints (box constraints)
+    states_mpc = [position_mpc, velocity_mpc, theta_hat, lag_sum, contour_sum]
+    controls_mpc = [force_mpc, v_theta]
+
+    constraints_mpc = []
+    for state in [position_mpc, velocity_mpc]:
+        constraints_mpc.extend(
+            [
+                ox.ctcs(state <= state.max),
+                ox.ctcs(state.min <= state),
+            ]
+        )
+
+    # Fixed time horizon for MPC
+    t_mpc = ox.Time(
+        initial=0.0,
+        final=1.0,  # Fixed horizon length
+        min=0.0,
+        max=1.0,
+    )
+
+    problem_mpc = Problem(
+        dynamics=dynamics_mpc,
+        states=states_mpc,
+        controls=controls_mpc,
+        time=t_mpc,
+        constraints=constraints_mpc,
+        N=n_mpc,
+    )
+
+    problem_mpc.settings.scp.uniform_time_grid = True
+
+    # Return states/controls for updating .initial and .guess between solves
+    states_dict = {
+        "position": position_mpc,
+        "velocity": velocity_mpc,
+        "theta_hat": theta_hat,
+        "lag_sum": lag_sum,
+        "contour_sum": contour_sum,
+    }
+    controls_dict = {
+        "force": force_mpc,
+        "v_theta": v_theta,
+    }
+
+    return problem_mpc, states_dict, controls_dict
+
+
+def compute_arc_length_grid(velocity_trajectory: np.ndarray, time: np.ndarray) -> np.ndarray:
+    """Compute cumulative arc length from velocity trajectory.
+
+    Args:
+        velocity_trajectory: Velocity at each time point, shape (N, 3)
+        time: Time values, shape (N,) or (N, 1)
+
+    Returns:
+        Cumulative arc length at each point, shape (N,)
+    """
+    from scipy.integrate import cumulative_trapezoid
+
+    speeds = np.linalg.norm(velocity_trajectory, axis=1)
+    time_1d = np.asarray(time).flatten()  # Ensure 1D
+    arc_length = np.concatenate([[0.0], cumulative_trapezoid(speeds, time_1d)])
+    return arc_length
+
+
+def find_closest_arc_length(
+    position: np.ndarray,
+    p_ref_data: np.ndarray,
+    arc_length_grid: np.ndarray,
+) -> float:
+    """Find arc length of closest point on reference trajectory.
+
+    Args:
+        position: Current position, shape (3,)
+        p_ref_data: Reference trajectory positions, shape (N, 3)
+        arc_length_grid: Arc length at each reference point, shape (N,)
+
+    Returns:
+        Arc length of closest point
+    """
+    distances = np.linalg.norm(p_ref_data - position, axis=1)
+    closest_idx = np.argmin(distances)
+    return arc_length_grid[closest_idx]
+
+
 if __name__ == "__main__":
+    # Solve time-optimal problem
     problem.initialize()
     results = problem.solve()
     results = problem.post_process()
 
     results.update(plotting_dict)
+
+    # Extract reference trajectory for MPCC
+    p_ref_data = results.trajectory["position"]  # (N, 3)
+    v_ref_data = results.trajectory["velocity"]  # (N, 3)
+    time_data = results.trajectory["time"]  # (N,)
+
+    trajectory_length = len(time_data)
+    print(f"Reference trajectory length: {trajectory_length} points")
+
+    # Compute arc-length parameterization
+    arc_length_grid = compute_arc_length_grid(v_ref_data, time_data)
+    total_arc_length = arc_length_grid[-1]
+    print(f"Total arc length: {total_arc_length:.2f} m")
+
+    # Create MPCC problem with reference trajectory baked in
+    problem_mpc, states, controls = create_mpcc_problem(arc_length_grid, p_ref_data, v_ref_data)
+
+    # Initialize MPCC from start of reference path
+    initial_theta = find_closest_arc_length(p_ref_data[0], p_ref_data, arc_length_grid)
+    states["position"].initial = p_ref_data[0]
+    states["velocity"].initial = v_ref_data[0]
+    states["theta_hat"].initial = np.array([initial_theta])
+
+    # Initialize and first solve
+    problem_mpc.initialize()
+    results_mpc = problem_mpc.solve()
+    print("Initial MPCC solve complete!")
+
+    # Then need to solve in a loop!
 
     # Create both visualization servers (viser auto-assigns ports)
     traj_server = create_animated_plotting_server(
