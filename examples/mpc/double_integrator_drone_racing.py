@@ -329,35 +329,89 @@ if __name__ == "__main__":
     problem_mpc.settings.dev.printing = False
 
     # =================================================================
-    # Initial guess from reference trajectory
+    # Initial guesses
     # =================================================================
-    avg_speed = ref_speeds.mean()
-    arc_guess = np.linspace(0, avg_speed * horizon_duration, n_mpc)
+    def set_initial_guess(
+        theta_start: float = 0.0,
+        ref_speed: float = ref_speeds.mean(),
+    ):
+        """Set guesses by interpolating the discrete reference path."""
+        arc_guess = np.linspace(
+            theta_start, theta_start + ref_speed * horizon_duration, n_mpc
+        )
 
-    position.guess = np.column_stack(
-        [
-            np.interp(arc_guess, s_data, px_data),
-            np.interp(arc_guess, s_data, py_data),
-            np.interp(arc_guess, s_data, pz_data),
-        ]
-    )
+        # Position: interpolate from reference sample nodes
+        pos_guess = np.column_stack(
+            [
+                np.interp(arc_guess, s_data, px_data),
+                np.interp(arc_guess, s_data, py_data),
+                np.interp(arc_guess, s_data, pz_data),
+            ]
+        )
+        position.guess = pos_guess
 
-    dt_guess = horizon_duration / (n_mpc - 1)
-    vel_guess = np.gradient(position.guess, dt_guess, axis=0)
-    velocity.guess = vel_guess
-    velocity.initial = vel_guess[0]
+        # Velocity: finite-difference of position guess
+        dt = horizon_duration / (n_mpc - 1)
+        vel_guess = np.gradient(pos_guess, dt, axis=0)
+        velocity.guess = vel_guess
+        velocity.initial = vel_guess[0]
 
-    acc_guess = np.gradient(vel_guess, dt_guess, axis=0)
-    force.guess = m * acc_guess
+        # Force: finite-difference of velocity (mass * acceleration)
+        acc_guess = np.gradient(vel_guess, dt, axis=0)
+        force.guess = m * acc_guess
 
-    progress.guess = arc_guess.reshape(-1, 1)
-    lag_sum.guess = np.zeros((n_mpc, 1))
-    contour_sum.guess = np.zeros((n_mpc, 1))
-    progress_rate.guess = np.full((n_mpc, 1), avg_speed)
+        progress.guess = arc_guess.reshape(-1, 1)
+        lag_sum.guess = np.zeros((n_mpc, 1))
+        contour_sum.guess = np.zeros((n_mpc, 1))
+
+        progress_rate.guess = np.full((n_mpc, 1), ref_speed)
 
     # =================================================================
-    # Closed-loop MPC simulation
+    # Closed-loop simulation
     # =================================================================
+    def shift_guess(nodes: dict):
+        """Shift previous solution by one node for warm-starting."""
+        dt = horizon_duration / (n_mpc - 1)
+
+        # Extrapolate a new final node
+        pos_last = nodes["position"][-1]
+        vel_last = nodes["velocity"][-1]
+        force_last = nodes["force"][-1]
+        pr_last = nodes["progress_rate"][-1, 0]
+
+        ext_pos = pos_last + dt * vel_last
+        ext_vel = vel_last + dt * ((1 / m) * force_last + np.array([0, 0, g_const]))
+        ext_prog = nodes["progress"][-1, 0] + dt * pr_last
+
+        shifted_progress = np.vstack([nodes["progress"][1:], [[ext_prog]]])
+        wrap_offset = (nodes["progress"][1, 0] // total_arc_length) * total_arc_length
+        shifted_progress -= wrap_offset
+
+        position.guess = np.vstack([nodes["position"][1:], [ext_pos]])
+        velocity.guess = np.vstack([nodes["velocity"][1:], [ext_vel]])
+        progress.guess = shifted_progress
+        lag_sum.guess = np.zeros((n_mpc, 1))
+        contour_sum.guess = np.zeros((n_mpc, 1))
+
+        force.guess = np.vstack([nodes["force"][1:], nodes["force"][-1:]])
+        progress_rate.guess = np.vstack(
+            [nodes["progress_rate"][1:], nodes["progress_rate"][-1:]]
+        )
+
+    def update_initial_conditions(nodes: dict):
+        """Set initial conditions from node 1 of previous solution (simulate one step)."""
+        position.initial = nodes["position"][1]
+        velocity.initial = nodes["velocity"][1]
+
+        wrap_offset = (nodes["progress"][1, 0] // total_arc_length) * total_arc_length
+        progress.initial = np.array([nodes["progress"][1, 0] - wrap_offset])
+
+        # Cost integrators always restart from zero each horizon
+        lag_sum.initial = np.array([0.0])
+        contour_sum.initial = np.array([0.0])
+
+    set_initial_guess(theta_start=0.0)
+
     problem_mpc.initialize()
 
     max_steps = 1000
@@ -400,40 +454,8 @@ if __name__ == "__main__":
             f"pos=[{cur_pos[0]:+7.2f}, {cur_pos[1]:+7.2f}, {cur_pos[2]:+7.2f}]"
         )
 
-        # --- Update initial conditions from node 1 ---
-        position.initial = nodes["position"][1]
-        velocity.initial = nodes["velocity"][1]
-
-        wrap_offset = (nodes["progress"][1, 0] // total_arc_length) * total_arc_length
-        progress.initial = np.array([nodes["progress"][1, 0] - wrap_offset])
-
-        # Cost integrators always restart from zero each horizon
-        lag_sum.initial = np.array([0.0])
-        contour_sum.initial = np.array([0.0])
-
-        # --- Shift guess for warm-starting ---
-        dt_node = horizon_duration / (n_mpc - 1)
-
-        pos_last = nodes["position"][-1]
-        vel_last = nodes["velocity"][-1]
-        force_last = nodes["force"][-1]
-        pr_last = nodes["progress_rate"][-1, 0]
-
-        ext_pos = pos_last + dt_node * vel_last
-        ext_vel = vel_last + dt_node * ((1 / m) * force_last + np.array([0, 0, g_const]))
-        ext_prog = nodes["progress"][-1, 0] + dt_node * pr_last
-
-        shifted_progress = np.vstack([nodes["progress"][1:], [[ext_prog]]])
-        shifted_progress -= wrap_offset
-
-        position.guess = np.vstack([nodes["position"][1:], [ext_pos]])
-        velocity.guess = np.vstack([nodes["velocity"][1:], [ext_vel]])
-        progress.guess = shifted_progress
-        lag_sum.guess = np.zeros((n_mpc, 1))
-        contour_sum.guess = np.zeros((n_mpc, 1))
-
-        force.guess = np.vstack([nodes["force"][1:], nodes["force"][-1:]])
-        progress_rate.guess = np.vstack([nodes["progress_rate"][1:], nodes["progress_rate"][-1:]])
+        update_initial_conditions(nodes)
+        shift_guess(nodes)
 
     # =================================================================
     # Visualization
