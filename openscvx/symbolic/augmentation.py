@@ -62,7 +62,6 @@ from openscvx.symbolic.expr import (
     CTCS,
     Add,
     Concat,
-    Constant,
     Constraint,
     CrossNodeConstraint,
     Equality,
@@ -504,7 +503,6 @@ def augment_dynamics_with_ctcs(
     states_augmented = list(states)
     controls_augmented = list(controls)
 
-    num_augmented_states = 0
     if constraints_ctcs:
         # Group penalty expressions by idx (constraints should already be sorted)
         penalty_groups: Dict[int, List[Expr]] = {}
@@ -521,7 +519,7 @@ def augment_dynamics_with_ctcs(
                 penalty_groups[ctcs.idx] = []
             penalty_groups[ctcs.idx].append(ctcs)
 
-        num_augmented_states = len(penalty_groups)
+        len(penalty_groups)
 
         # Create augmented state expressions for each group and corresponding
         # augmented state variables. For discrete dynamics, preserve these states

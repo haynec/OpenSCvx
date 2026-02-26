@@ -805,8 +805,7 @@ def validate_input_types(
         )
     if (not any_impulsive_control_set) and has_discrete_dynamics:
         raise ValueError(
-            "'dynamics_discrete' must not be provided when no control is marked as "
-            "'impulsive'."
+            "'dynamics_discrete' must not be provided when no control is marked as 'impulsive'."
         )
     if has_discrete_dynamics and not isinstance(dynamics_discrete, dict):
         raise TypeError(

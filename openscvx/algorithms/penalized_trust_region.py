@@ -166,7 +166,11 @@ class PenalizedTrustRegion(Algorithm):
             return solver.call(*args)
         return solver(*args)
 
-    def _recover_prior_node_from_initial(self, settings: Config, x0_fallback: np.ndarray) -> np.ndarray:
+    def _recover_prior_node_from_initial(
+        self,
+        settings: Config,
+        x0_fallback: np.ndarray,
+    ) -> np.ndarray:
         """Build node-0 prior state from initial conditions (fixed entries exact)."""
         x0_prior = np.asarray(x0_fallback, dtype=float).reshape(-1).copy()
         x0_init = np.asarray(settings.sim.x.initial, dtype=float).reshape(-1)

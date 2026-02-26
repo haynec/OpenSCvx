@@ -35,7 +35,6 @@ def test_variable_creation():
 
 def test_variable_min_max_bounds():
     """Test setting min/max bounds on Variable."""
-    import numpy as np
 
     from openscvx.symbolic.expr.variable import Variable
 
@@ -48,7 +47,6 @@ def test_variable_min_max_bounds():
 
 def test_variable_guess():
     """Test setting initial guess trajectory."""
-    import numpy as np
 
     from openscvx.symbolic.expr.variable import Variable
 
@@ -82,7 +80,6 @@ def test_variable_max_shape_validation():
 
 def test_variable_guess_shape_validation():
     """Test that guess must be 2D with correct second dimension."""
-    import numpy as np
 
     from openscvx.symbolic.expr.variable import Variable
 
@@ -127,7 +124,6 @@ def test_state_creation():
 
 def test_state_creation_with_kwargs():
     """Test State creation with constructor kwargs matches setter style."""
-    import numpy as np
 
     from openscvx.symbolic.expr import State
     from openscvx.symbolic.expr.state import Free, Minimize
@@ -159,7 +155,6 @@ def test_state_creation_with_kwargs():
 
 def test_state_creation_partial_kwargs():
     """Test State creation with only some kwargs."""
-    import numpy as np
 
     from openscvx.symbolic.expr import State
 
@@ -172,7 +167,6 @@ def test_state_creation_partial_kwargs():
 
 def test_state_boundary_conditions_fixed():
     """Test setting fixed boundary conditions on State."""
-    import numpy as np
 
     from openscvx.symbolic.expr import State
 
@@ -190,7 +184,6 @@ def test_state_boundary_conditions_fixed():
 
 def test_state_boundary_conditions_mixed():
     """Test mixed boundary condition types."""
-    import numpy as np
 
     from openscvx.symbolic.expr import State
 
@@ -212,7 +205,6 @@ def test_state_boundary_conditions_mixed():
 
 def test_boundary_condition_helpers():
     """Test the Free, Fixed, Minimize, Maximize helper functions."""
-    import numpy as np
 
     import openscvx as ox
     from openscvx.symbolic.expr import Fixed, Free, Maximize, Minimize, State
@@ -362,9 +354,7 @@ def test_control_creation():
     c = Control("thrust", shape=(2,))
     assert c.name == "thrust"
     assert c.shape == (2,)
-    expected = (
-        "Control('thrust', shape=(2,), impulsive=[False False], nodes=None)"
-    )
+    expected = "Control('thrust', shape=(2,), impulsive=[False False], nodes=None)"
     assert repr(c) == expected
     assert c._min is None
     assert c._max is None
@@ -373,7 +363,6 @@ def test_control_creation():
 
 def test_control_creation_with_kwargs():
     """Test Control creation with constructor kwargs matches setter style."""
-    import numpy as np
 
     from openscvx.symbolic.expr import Control
 
@@ -391,7 +380,6 @@ def test_control_creation_with_kwargs():
 
 def test_control_bounds():
     """Test setting min/max bounds on Control."""
-    import numpy as np
 
     from openscvx.symbolic.expr import Control
 
@@ -580,7 +568,6 @@ def test_cvxpy_missing_control_variable_error():
 
 def test_time_constructor_style():
     """Test Time creation with all constructor args (existing API)."""
-    import numpy as np
 
     from openscvx import Time
     from openscvx.symbolic.expr.state import Minimize
@@ -596,7 +583,6 @@ def test_time_constructor_style():
 
 def test_time_setter_style():
     """Test Time creation with setter-based API."""
-    import numpy as np
 
     from openscvx import Time
     from openscvx.symbolic.expr.state import Minimize
@@ -617,7 +603,6 @@ def test_time_setter_style():
 
 def test_time_setter_and_constructor_equivalent():
     """Test that constructor and setter styles produce identical results."""
-    import numpy as np
 
     from openscvx import Time
     from openscvx.symbolic.expr.state import Free
@@ -642,7 +627,6 @@ def test_time_setter_and_constructor_equivalent():
 
 def test_time_partial_construction():
     """Test Time with partial constructor args then setters for the rest."""
-    import numpy as np
 
     from openscvx import Time
 
@@ -660,7 +644,6 @@ def test_time_partial_construction():
 
 def test_time_setter_accepts_arrays():
     """Test that Time setters also accept array-form values."""
-    import numpy as np
 
     from openscvx import Time
 
@@ -694,7 +677,6 @@ def test_time_repr():
 
 def test_time_guess_constructor_1d():
     """Test Time guess via constructor with 1D array (auto-reshaped)."""
-    import numpy as np
 
     from openscvx import Time
 
@@ -706,7 +688,6 @@ def test_time_guess_constructor_1d():
 
 def test_time_guess_constructor_2d():
     """Test Time guess via constructor with 2D array."""
-    import numpy as np
 
     from openscvx import Time
 
@@ -718,7 +699,6 @@ def test_time_guess_constructor_2d():
 
 def test_time_guess_setter():
     """Test Time guess via setter (1D auto-reshaped)."""
-    import numpy as np
 
     from openscvx import Time
 
@@ -729,7 +709,6 @@ def test_time_guess_setter():
 
 def test_time_guess_overrides_default():
     """Test that user-provided guess prevents _generate_default_guess."""
-    import numpy as np
 
     from openscvx import Time
 
@@ -774,7 +753,6 @@ def test_time_dilation_min_max_setter():
 
 def test_time_dilation_guess_constructor_1d():
     """Test time_dilation_guess via constructor with 1D array."""
-    import numpy as np
 
     from openscvx import Time
 
@@ -792,7 +770,6 @@ def test_time_dilation_guess_constructor_1d():
 
 def test_time_dilation_guess_setter():
     """Test time_dilation_guess via setter."""
-    import numpy as np
 
     from openscvx import Time
 
@@ -805,7 +782,6 @@ def test_time_dilation_guess_setter():
 
 def test_time_dilation_guess_bad_shape():
     """Test time_dilation_guess rejects bad shapes."""
-    import numpy as np
     import pytest
 
     from openscvx import Time
@@ -817,7 +793,6 @@ def test_time_dilation_guess_bad_shape():
 
 def test_time_dilation_constructor_setter_equivalent():
     """Test constructor and setter styles produce identical time_dilation results."""
-    import numpy as np
 
     from openscvx import Time
 

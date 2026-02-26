@@ -573,7 +573,8 @@ class UnifiedControl:
             return np.repeat(mask, self.shape[0])
         if mask.size != self.shape[0]:
             raise ValueError(
-                f"is_impulsive mask size {mask.size} does not match unified control size {self.shape[0]}"
+                f"is_impulsive mask size {mask.size} does not match unified "
+                f"control size {self.shape[0]}"
             )
         return mask
 
@@ -592,8 +593,10 @@ class UnifiedControl:
         new_scaling_max = self.scaling_max[indices] if self.scaling_max is not None else None
 
         parent_impulsive_mask = self._impulsive_mask()
-        new_is_impulsive = parent_impulsive_mask[indices] if parent_impulsive_mask.size else np.zeros(
-            (new_shape[0],), dtype=bool
+        new_is_impulsive = (
+            parent_impulsive_mask[indices]
+            if parent_impulsive_mask.size
+            else np.zeros((new_shape[0],), dtype=bool)
         )
 
         true_selector = self._mask_to_selector(true_mask, empty_at_end=False)
@@ -819,7 +822,9 @@ class UnifiedControl:
 
             # Update dimensions
             self.shape = new_shape
-            new_true_mask = np.concatenate([current_true_mask, np.array([not augmented], dtype=bool)])
+            new_true_mask = np.concatenate(
+                [current_true_mask, np.array([not augmented], dtype=bool)]
+            )
             self._true_dim = int(np.sum(new_true_mask))
             self._true_slice = self._mask_to_selector(new_true_mask, empty_at_end=False)
             self._augmented_slice = self._mask_to_selector(~new_true_mask, empty_at_end=True)

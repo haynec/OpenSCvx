@@ -1,7 +1,6 @@
 from typing import Optional, Tuple
 
 import numpy as np
-from numpy.typing import NDArray
 
 from .variable import Variable
 

@@ -543,11 +543,7 @@ class PTRSolver(ConvexSolver):
                     if has_continuous
                     else 0
                 )
-                + (
-                    C_d[i - 1][:, slice_cont] @ du_nonscaled[i][slice_cont]
-                    if has_continuous
-                    else 0
-                )
+                + (C_d[i - 1][:, slice_cont] @ du_nonscaled[i][slice_cont] if has_continuous else 0)
                 + (E_d[i][:, slice_imp] @ du_nonscaled[i][slice_imp] if has_impulsive else 0)
                 + (x_prop_pp[i] if has_impulsive else x_prop[i - 1])
                 - c_x
@@ -670,7 +666,8 @@ class PTRSolver(ConvexSolver):
             else:
                 raise ValueError(
                     "Unexpected D_d shape for dynamics update: "
-                    f"{D_arr.shape}, expected {(A_eff.shape[0] + 1, A_eff.shape[1], A_eff.shape[2])} "
+                    f"{D_arr.shape}, expected "
+                    f"{(A_eff.shape[0] + 1, A_eff.shape[1], A_eff.shape[2])} "
                     f"or {(A_eff.shape[0], A_eff.shape[1], A_eff.shape[2])}."
                 )
 

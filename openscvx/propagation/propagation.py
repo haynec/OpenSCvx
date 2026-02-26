@@ -1,6 +1,5 @@
 from typing import Callable, Optional
 
-import jax.numpy as jnp
 import numpy as np
 
 from openscvx.config import Config
@@ -72,9 +71,6 @@ def prop_aug_dy(
 #     dyn_indices = base + (base >= idx_s_arr)
 #     u_dyn = jnp.take(u, dyn_indices, axis=1)
 #     return u[:, idx_s_arr] * state_dot(x, u_dyn, node, params).squeeze()
-# >>>>>>> 149a9924 ([350_hybrid_support]: Reorganized ordering of controls in the unified controls to 'first all continuous, then all impulsive')
-
-
 def get_propagation_solver(
     state_dot: Dynamics, settings: Config, discretizer: Discretizer
 ) -> callable:
@@ -241,7 +237,7 @@ def simulate_nonlinear_time(
 
     # Precompute control interpolation
     u_interp = np.stack([np.interp(t, t, u[:, i]) for i in range(u.shape[1])], axis=-1)
-    idx_s = _time_dilation_index(settings, u.shape[1])
+    _time_dilation_index(settings, u.shape[1])
 
     has_u_d = np.any(settings.sim.u.is_impulsive)
 

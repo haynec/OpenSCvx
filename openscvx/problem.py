@@ -40,8 +40,8 @@ from openscvx.config import (
 from openscvx.discretization import (
     Discretizer,
     LinearizeDiscretize,
-    get_impulsive_discretization_solver,
     _resolve_discretizer,
+    get_impulsive_discretization_solver,
 )
 from openscvx.expert import ByofSpec
 from openscvx.lowered import LoweredProblem, ParameterDict
