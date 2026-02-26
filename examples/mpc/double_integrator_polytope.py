@@ -417,9 +417,9 @@ if __name__ == "__main__":
     step_boundaries = np.cumsum(frames_per_step)  # frame index where each step ends
 
     # Dense time array: offset each segment's local time by the MPC step
-    actual_time = np.concatenate([
-        seg_t + i * dt_mpc for i, seg_t in enumerate(actual_time_segments)
-    ])
+    actual_time = np.concatenate(
+        [seg_t + i * dt_mpc for i, seg_t in enumerate(actual_time_segments)]
+    )
 
     # Horizon rollout colors (single global viridis mapping across all steps)
     all_horizon_vel = np.concatenate(horizon_velocities, axis=0)
