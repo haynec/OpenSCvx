@@ -797,12 +797,18 @@ def validate_input_types(
         )
 
     any_impulsive_control_set = any(np.any(c.is_impulsive) for c in controls)
-    if dynamics_discrete is None:
-        if any_impulsive_control_set:
-            raise ValueError(
-                "'dynamics_discrete' must be provided if any control is marked as 'impulsive'"
-            )
-    elif not isinstance(dynamics_discrete, dict):
+    has_discrete_dynamics = dynamics_discrete is not None
+    if any_impulsive_control_set and not has_discrete_dynamics:
+        raise ValueError(
+            "'dynamics_discrete' must be provided when at least one control is marked as "
+            "'impulsive'."
+        )
+    if (not any_impulsive_control_set) and has_discrete_dynamics:
+        raise ValueError(
+            "'dynamics_discrete' must not be provided when no control is marked as "
+            "'impulsive'."
+        )
+    if has_discrete_dynamics and not isinstance(dynamics_discrete, dict):
         raise TypeError(
             f"'dynamics_discrete' must be a dict mapping state names to expressions, "
             f"got {type(dynamics_discrete).__name__}"
