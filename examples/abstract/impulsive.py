@@ -39,17 +39,17 @@ v.initial = np.array([0.0])
 v.final = np.array([0.0])
 v.guess = np.linspace(v.initial, v.final, n).reshape(-1, 1)
 
-dv = ox.Control(
-    "delta_v",
-    shape=(1,),
-    impulsive=True,
-    nodes=[0, n - 1],
-)
-dv.max = np.array([1.0])
-dv.min = np.array([-1.0])
-dv.guess = np.linspace(np.array([0]), np.array([0]), n)
-dv.scaling_min = np.array([-1])
-dv.scaling_max = np.array([1])
+# dv = ox.Control(
+#     "delta_v",
+#     shape=(1,),
+#     impulsive=True,
+#     nodes=[0, n - 1],
+# )
+# dv.max = np.array([0.2])
+# dv.min = np.array([-0.2])
+# dv.guess = np.linspace(np.array([0]), np.array([0]), n)
+# dv.scaling_min = np.array([-0.2])
+# dv.scaling_max = np.array([0.2])
 
 a = ox.Control("acceleration", shape=(1,))
 a.max = np.array([0.01])
@@ -63,13 +63,14 @@ dynamics = {
     "velocity": a,
 }
 
-dynamics_discrete = {
-    "position": p,
-    "velocity": v + ox.Power(dv, 2),
-}
+# dynamics_discrete = {
+#     "position": p,
+#     "velocity": v + ox.Power(ox.Max(ox.Abs(dv), 1e-10), 1.5) * dv,
+# }
 
 states = [p, v]
-controls = [dv, a]
+# controls = [dv, a]
+controls = [a]
 
 constraints = []
 for state in states:

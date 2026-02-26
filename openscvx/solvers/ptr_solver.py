@@ -443,9 +443,7 @@ class PTRSolver(ConvexSolver):
         B_d = ocp_vars.B_d
         C_d = ocp_vars.C_d
         x_prop_pp = ocp_vars.x_prop_pp
-        D_d = ocp_vars.D_d
         E_d = ocp_vars.E_d
-        x_prop = ocp_vars.x_prop
         nu = ocp_vars.nu
         g = ocp_vars.g
         grad_g_x = ocp_vars.grad_g_x
@@ -538,19 +536,16 @@ class PTRSolver(ConvexSolver):
             inv_S_x @ (x_nonscaled[i] - c_x)
             == inv_S_x
             @ (
-                D_d[i]
-                @ (
-                    A_d[i - 1] @ dx_nonscaled[i - 1]
-                    + (
-                        B_d[i - 1][:, slice_cont] @ du_nonscaled[i - 1][slice_cont]
-                        if has_continuous
-                        else 0
-                    )
-                    + (
-                        C_d[i - 1][:, slice_cont] @ du_nonscaled[i][slice_cont]
-                        if has_continuous
-                        else 0
-                    )
+                A_d[i - 1] @ dx_nonscaled[i - 1]
+                + (
+                    B_d[i - 1][:, slice_cont] @ du_nonscaled[i - 1][slice_cont]
+                    if has_continuous
+                    else 0
+                )
+                + (
+                    C_d[i - 1][:, slice_cont] @ du_nonscaled[i][slice_cont]
+                    if has_continuous
+                    else 0
                 )
                 + (E_d[i][:, slice_imp] @ du_nonscaled[i][slice_imp] if has_impulsive else 0)
                 + x_prop_pp[i]
@@ -636,7 +631,6 @@ class PTRSolver(ConvexSolver):
         A_d: np.ndarray,
         B_d: np.ndarray,
         C_d: np.ndarray,
-        x_prop: np.ndarray,
         x_prop_pp: np.ndarray | None = None,
         D_d: np.ndarray | None = None,
         E_d: np.ndarray | None = None,
@@ -652,24 +646,40 @@ class PTRSolver(ConvexSolver):
             A_d: Discretized state Jacobian, shape (N-1, n_states, n_states)
             B_d: Discretized control Jacobian (current node), shape (N-1, n_states, n_controls)
             C_d: Discretized control Jacobian (next node), shape (N-1, n_states, n_controls)
-            x_prop: Propagated state from dynamics, shape (N-1, n_states)
             x_prop_pp: Optional impulsive/discrete propagated state, shape (N, n_states)
             D_d: Optional impulsive/discrete Jacobian wrt state, shape (N, n_states, n_states)
             E_d: Optional impulsive/discrete Jacobian wrt control, shape (N, n_states, n_controls)
         """
         self._set_param("x_bar", x_bar)
         self._set_param("u_bar", u_bar)
-        self._set_param("A_d", A_d)
-        self._set_param("B_d", B_d)
-        self._set_param("C_d", C_d)
-        if "x_prop" in self._problem.param_dict:
-            self._set_param("x_prop", x_prop)
-        elif self._ocp_vars.x_prop is not None:
-            self._ocp_vars.x_prop.value = np.asarray(x_prop)
+
+        A_eff = np.asarray(A_d)
+        B_eff = np.asarray(B_d)
+        C_eff = np.asarray(C_d)
+        if D_d is not None:
+            D_arr = np.asarray(D_d)
+            # Temporary DPP-safe workaround: absorb D_d into A/B/C numerically
+            # so the CVXPY graph has only Parameter@Variable products.
+            if D_arr.ndim == 3 and D_arr.shape[0] == A_eff.shape[0] + 1:
+                D_steps = D_arr[1:]
+            elif D_arr.ndim == 3 and D_arr.shape[0] == A_eff.shape[0]:
+                D_steps = D_arr
+            else:
+                raise ValueError(
+                    "Unexpected D_d shape for dynamics update: "
+                    f"{D_arr.shape}, expected {(A_eff.shape[0] + 1, A_eff.shape[1], A_eff.shape[2])} "
+                    f"or {(A_eff.shape[0], A_eff.shape[1], A_eff.shape[2])}."
+                )
+
+            A_eff = np.einsum("kij,kjl->kil", D_steps, A_eff)
+            B_eff = np.einsum("kij,kjl->kil", D_steps, B_eff)
+            C_eff = np.einsum("kij,kjl->kil", D_steps, C_eff)
+
+        self._set_param("A_d", A_eff)
+        self._set_param("B_d", B_eff)
+        self._set_param("C_d", C_eff)
         if x_prop_pp is not None and self._ocp_vars.x_prop_pp is not None:
             self._ocp_vars.x_prop_pp.value = np.asarray(x_prop_pp)
-        if D_d is not None and self._ocp_vars.D_d is not None:
-            self._ocp_vars.D_d.value = np.asarray(D_d)
         if E_d is not None and self._ocp_vars.E_d is not None:
             self._ocp_vars.E_d.value = np.asarray(E_d)
 

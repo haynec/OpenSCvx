@@ -527,7 +527,6 @@ class PenalizedTrustRegion(Algorithm):
             A_d=state.A_d(),
             B_d=state.B_d(),
             C_d=state.C_d(),
-            x_prop=state.x_prop(),
             x_prop_pp=state.x_prop_pp(),
             D_d=state.D_d(),
             E_d=state.E_d(),
