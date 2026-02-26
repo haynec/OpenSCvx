@@ -27,6 +27,7 @@ from .linearize_discretize import (
 )
 from .linearize_discretize_sparse import LinearizeDiscretizeSparse
 from .sparse_utils import color_columns, make_sparse_jacobian_fns
+from .discretize_linearize import DiscretizeLinearize
 
 # ---------------------------------------------------------------------------
 # Spec resolver — turn a dict into a Discretizer instance
@@ -35,6 +36,7 @@ from .sparse_utils import color_columns, make_sparse_jacobian_fns
 _DISCRETIZER_MAP = {
     "LinearizeDiscretize": LinearizeDiscretize,
     "LinearizeDiscretizeSparse": LinearizeDiscretizeSparse,
+    "DiscretizeLinearize": DiscretizeLinearize,
 }
 
 
@@ -44,9 +46,9 @@ def _resolve_discretizer(val: Any) -> Discretizer:
     Accepted forms:
 
     * **instance** — already-constructed :class:`Discretizer` (pass-through).
-    * **dict** — keyword arguments passed to the selected discretizer class.
-      An optional ``"type"`` key selects the class (defaults to
-      :class:`LinearizeDiscretizeSparse`).
+    * **dict** — keyword arguments passed to a new :class:`LinearizeDiscretize`.
+      An optional ``"type"`` key selects which :class:`Discretizer` to construct
+      instead.
 
     Examples::
 
@@ -86,6 +88,7 @@ __all__ = [
     "Discretizer",
     "LinearizeDiscretize",
     "LinearizeDiscretizeSparse",
+    "DiscretizeLinearize",
     "_resolve_discretizer",
     "calculate_impulsive_discretization",
     "color_columns",
