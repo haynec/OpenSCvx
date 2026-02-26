@@ -352,16 +352,6 @@ def _calculate_discretization(
     return A_bar, B_bar, C_bar, x_prop, Vmulti
 
 
-def get_discretization_solver(
-    dyn: "Dynamics",
-    settings: "Config",
-    discretizer: Optional["LinearizeDiscretize"] = None,
-) -> callable:
-    """Public compatibility wrapper returning a discretization solver callable."""
-    discretizer = LinearizeDiscretize() if discretizer is None else discretizer
-    return discretizer.get_solver(dyn, settings)
-
-
 def calculate_impulsive_discretization(
     x_nodes: np.ndarray,
     u_nodes: np.ndarray,

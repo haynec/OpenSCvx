@@ -23,7 +23,6 @@ from .base import Discretizer
 from .linearize_discretize import (
     LinearizeDiscretize,
     calculate_impulsive_discretization,
-    get_discretization_solver,
     get_impulsive_discretization_solver,
 )
 
@@ -85,6 +84,5 @@ __all__ = [
     "LinearizeDiscretize",
     "_resolve_discretizer",
     "calculate_impulsive_discretization",
-    "get_discretization_solver",
     "get_impulsive_discretization_solver",
 ]

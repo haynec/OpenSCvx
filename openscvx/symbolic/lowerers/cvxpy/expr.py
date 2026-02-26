@@ -110,14 +110,13 @@ def _visit_node_reference(lowerer, node: "NodeReference") -> cp.Expression:
             return cvx_var[idx, :]
 
     elif isinstance(node.base, Control):
-        key = "u"
-        if key not in lowerer.variable_map:
+        if "u" not in lowerer.variable_map:
             raise ValueError(
-                f"Control vector '{key}' not found in variable_map. "
-                "For cross-node constraints, provide the full trajectory (N, n_u)."
+                "Control vector 'u' not found in variable_map. "
+                "For cross-node constraints, 'u' must be the full trajectory (N, n_u)."
             )
 
-        cvx_var = lowerer.variable_map[key]  # Should be (N, n_u)
+        cvx_var = lowerer.variable_map["u"]  # Should be (N, n_u) for cross-node constraints
 
         # Apply slice if control has one assigned
         if node.base._slice is not None:

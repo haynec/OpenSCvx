@@ -41,7 +41,7 @@ Example:
         # Augment dynamics with CTCS
         from openscvx.symbolic.augmentation import augment_dynamics_with_ctcs
 
-        xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+        xdot_aug, xdelta_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
             xdot=xdot,
             states=[x],
             controls=[u],
@@ -49,11 +49,12 @@ Example:
             N=50
         )
         # xdot_aug now includes augmented state dynamics
+        # xdelta_aug includes augmented discrete dynamics (if provided)
         # states_aug includes original states + augmented states
         # controls_aug includes original controls + time dilation
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -439,12 +440,11 @@ def augment_dynamics_with_ctcs(
     controls: List[Control],
     constraints_ctcs: List[CTCS],
     N: int,
-    xdelta: Expr = None,
+    xdelta: Optional[Expr] = None,
     *,
-    return_discrete: bool = False,
     licq_min: float = 0.0,
     licq_max: float = 1e-4,
-) -> Tuple[Expr, List[State], List[Control]] | Tuple[Expr, Expr, List[State], List[Control]]:
+) -> Tuple[Expr, Optional[Expr], List[State], List[Control]]:
     """Augment dynamics with continuous-time constraint satisfaction states.
 
     Implements the CTCS method by adding augmented states and time dilation control
@@ -471,16 +471,11 @@ def augment_dynamics_with_ctcs(
         licq_max: Maximum bound for augmented states (default: 1e-4)
 
     Returns:
-        By default (`return_discrete=False`), tuple of:
-            - Augmented dynamics expression (original + augmented state dynamics)
-            - Updated states list (original + augmented states)
-            - Updated controls list (original + time dilation control)
-
-        If `return_discrete=True`, additionally returns augmented discrete dynamics:
+        Tuple of:
             - Augmented continuous dynamics expression
             - Augmented discrete dynamics expression (or None if not provided)
-            - Updated states list
-            - Updated controls list
+            - Updated states list (original + augmented states)
+            - Updated controls list (original + time dilation control)
 
     Raises:
         ValueError: If no state named "time" is found in the states list
@@ -493,7 +488,7 @@ def augment_dynamics_with_ctcs(
             time = ox.State("time", shape=(1,))
             xdot = u @ A  # Some dynamics
             constraint = (ox.Norm(x) <= 1.0).over((0, 50))
-            xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+            xdot_aug, xdelta_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
                 xdot=xdot,
                 states=[x, time],
                 controls=[u],
@@ -625,6 +620,4 @@ def augment_dynamics_with_ctcs(
 
     controls_augmented.append(time_dilation)
 
-    if return_discrete:
-        return xdot_aug, xdelta_aug, states_augmented, controls_augmented
-    return xdot_aug, states_augmented, controls_augmented
+    return xdot_aug, xdelta_aug, states_augmented, controls_augmented

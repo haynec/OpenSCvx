@@ -61,16 +61,6 @@ def prop_aug_dy(
     return state_dot(x, u, node, params).squeeze()
 
 
-# <<<<<<< HEAD
-#     return state_dot(x, u, node, params).squeeze()
-# =======
-#     # Build non-time-dilation control indices in a JAX-trace-safe way.
-#     n_controls = u.shape[1]
-#     idx_s_arr = jnp.asarray(idx_s, dtype=jnp.int32).reshape(())
-#     base = jnp.arange(n_controls - 1, dtype=jnp.int32)
-#     dyn_indices = base + (base >= idx_s_arr)
-#     u_dyn = jnp.take(u, dyn_indices, axis=1)
-#     return u[:, idx_s_arr] * state_dot(x, u_dyn, node, params).squeeze()
 def get_propagation_solver(
     state_dot: Dynamics, settings: Config, discretizer: Discretizer
 ) -> callable:

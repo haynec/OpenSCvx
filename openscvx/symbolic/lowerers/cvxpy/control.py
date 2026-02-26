@@ -27,11 +27,10 @@ def _visit_control(lowerer, node: Control) -> cp.Expression:
     Raises:
         ValueError: If "u" is not found in variable_map
     """
-    key = "u"
-    if key not in lowerer.variable_map:
-        raise ValueError(f"Control vector '{key}' not found in variable_map.")
+    if "u" not in lowerer.variable_map:
+        raise ValueError("Control vector 'u' not found in variable_map.")
 
-    cvx_var = lowerer.variable_map[key]
+    cvx_var = lowerer.variable_map["u"]
 
     # If the control has a slice assigned, apply it
     if node._slice is not None:

@@ -334,7 +334,6 @@ def preprocess_symbolic_problem(
         constraints.ctcs,
         N,
         xdelta=dynamics_discrete_concat,
-        return_discrete=True,
         licq_min=licq_min,
         licq_max=licq_max,
     )

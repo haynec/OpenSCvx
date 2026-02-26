@@ -26,7 +26,7 @@ class LoweredProblem:
 
     Attributes:
         dynamics: Optimization dynamics with fields f, A, B (JAX functions)
-        dynamics: Discrete optimization dynamics with fields f, A, B (JAX functions)
+        dynamics_discrete: Discrete optimization dynamics with fields f, A, B (JAX functions)
         dynamics_prop: Propagation dynamics with fields f, A, B
         jax_constraints: Non-convex constraints lowered to JAX with gradients
         cvxpy_constraints: Convex constraints lowered to CVXPy
