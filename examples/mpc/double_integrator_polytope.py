@@ -2,7 +2,7 @@
 
 Demonstrates model-predictive contouring control (MPCC) with:
 - 3D double integrator (point mass) dynamics (position + velocity, force control)
-- Discrete reference path via Cinterp (sampled from a tilted circle, generalizes to arbitrary 3D paths)
+- Discrete reference path via Cinterp (sampled from a periodic function arbitrary 3D paths)
 - Lag/contour error decomposition following Romero 2022
 - Receding horizon closed-loop simulation
 """
@@ -11,8 +11,6 @@ import os
 import sys
 
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
 
 # Add grandparent directory to path to import openscvx
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,53 +20,74 @@ sys.path.append(grandparent_dir)
 import openscvx as ox
 from openscvx import Problem
 from openscvx.plotting import plot_scp_iterations, plot_states
+from openscvx.plotting.viser import (
+    add_animation_controls,
+    add_ghost_trajectory,
+    add_position_marker,
+    compute_velocity_colors,
+    create_server,
+)
 
 ###############################################################################
 # Reference path shape
 ###############################################################################
 
+
 def wavy_circle(M: int, R: float = 3.0, z_amp: float = 0.5, z_freq: int = 3) -> np.ndarray:
     """Circle in the xy-plane with a sinusoidal z-component."""
     theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
-    return np.column_stack([
-        R * np.cos(theta),
-        R * np.sin(theta),
-        z_amp * np.sin(z_freq * theta),
-    ])
+    return np.column_stack(
+        [
+            R * np.cos(theta),
+            R * np.sin(theta),
+            z_amp * np.sin(z_freq * theta),
+        ]
+    )
 
 
 def torus_knot(M: int, R: float = 3.0, r: float = 1.0, p: int = 2, q: int = 3) -> np.ndarray:
     """(p, q) torus knot. p=2, q=3 gives a trefoil knot."""
     theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
-    return np.column_stack([
-        (R + r * np.cos(q * theta)) * np.cos(p * theta),
-        (R + r * np.cos(q * theta)) * np.sin(p * theta),
-        r * np.sin(q * theta),
-    ])
+    return np.column_stack(
+        [
+            (R + r * np.cos(q * theta)) * np.cos(p * theta),
+            (R + r * np.cos(q * theta)) * np.sin(p * theta),
+            r * np.sin(q * theta),
+        ]
+    )
 
 
 def lissajous_3d(
-    M: int, R: float = 3.0, a: int = 1, b: int = 2, c: int = 3,
-    phi: float = np.pi / 2, z_amp: float = 1.0,
+    M: int,
+    R: float = 3.0,
+    a: int = 1,
+    b: int = 2,
+    c: int = 3,
+    phi: float = np.pi / 2,
+    z_amp: float = 1.0,
 ) -> np.ndarray:
     """3D Lissajous curve. Periodic when a, b, c are integers."""
     theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
-    return np.column_stack([
-        R * np.cos(a * theta),
-        R * np.sin(b * theta + phi),
-        z_amp * np.sin(c * theta),
-    ])
+    return np.column_stack(
+        [
+            R * np.cos(a * theta),
+            R * np.sin(b * theta + phi),
+            z_amp * np.sin(c * theta),
+        ]
+    )
 
 
 def figure_eight(M: int, R: float = 3.0, z_amp: float = 1.0) -> np.ndarray:
     """Figure-eight knot curve."""
     theta = np.linspace(0, 2 * np.pi, M, endpoint=False)
     scale = R / 3.0  # Normalize so max radial extent ~ R
-    return np.column_stack([
-        scale * (2 + np.cos(2 * theta)) * np.cos(3 * theta),
-        scale * (2 + np.cos(2 * theta)) * np.sin(3 * theta),
-        z_amp * np.sin(4 * theta),
-    ])
+    return np.column_stack(
+        [
+            scale * (2 + np.cos(2 * theta)) * np.cos(3 * theta),
+            scale * (2 + np.cos(2 * theta)) * np.sin(3 * theta),
+            z_amp * np.sin(4 * theta),
+        ]
+    )
 
 
 ###############################################################################
@@ -79,17 +98,19 @@ center = np.array([0.0, 0.0, 0.0])  # Center of the reference path (3D)
 tilt_angle = np.radians(45)  # Tilt out of the xy-plane (rotation about x-axis)
 
 # Rotation matrix: tilt about x-axis by tilt_angle
-R_tilt = np.array([
-    [1, 0, 0],
-    [0, np.cos(tilt_angle), -np.sin(tilt_angle)],
-    [0, np.sin(tilt_angle), np.cos(tilt_angle)],
-])
+R_tilt = np.array(
+    [
+        [1, 0, 0],
+        [0, np.cos(tilt_angle), -np.sin(tilt_angle)],
+        [0, np.sin(tilt_angle), np.cos(tilt_angle)],
+    ]
+)
 
 ###############################################################################
 # Discrete reference path
 ###############################################################################
 M = 30  # Number of samples per lap
-path_fn = wavy_circle  # Swap this for any (M) -> (M, 3) function
+path_fn = figure_eight  # Swap this for any (M) -> (M, 3) function
 
 # Sample one lap in the local frame, then rotate into 3D
 path_local = path_fn(M, R=R_circle)
@@ -265,11 +286,13 @@ def set_initial_guess(
     arc_guess = np.linspace(theta_start, theta_start + ref_speed * horizon_duration, n_mpc)
 
     # Position: interpolate from reference sample nodes
-    pos_guess = np.column_stack([
-        np.interp(arc_guess, s_data, px_data),
-        np.interp(arc_guess, s_data, py_data),
-        np.interp(arc_guess, s_data, pz_data),
-    ])
+    pos_guess = np.column_stack(
+        [
+            np.interp(arc_guess, s_data, px_data),
+            np.interp(arc_guess, s_data, py_data),
+            np.interp(arc_guess, s_data, pz_data),
+        ]
+    )
     position.guess = pos_guess
 
     # Velocity: finite-difference of position guess
@@ -341,25 +364,12 @@ if __name__ == "__main__":
 
     problem_mpc.initialize()
 
-    max_steps = 100
+    max_steps = 300
 
-    fig = go.Figure()
-
-    # Reference path (dense resample for smooth visualization)
-    ref_dense = path_fn(200, R=R_circle)
-    ref_dense = (R_tilt @ ref_dense.T).T + center
-    # Close the loop
-    ref_dense = np.vstack([ref_dense, ref_dense[:1]])
-    fig.add_trace(
-        go.Scatter3d(
-            x=ref_dense[:, 0], y=ref_dense[:, 1], z=ref_dense[:, 2],
-            mode="lines",
-            line={"color": "red", "width": 4, "dash": "dash"},
-            name="Reference",
-        )
-    )
-
-    colors = px.colors.sample_colorscale("Viridis", np.linspace(0, 1, max_steps))
+    # --- Run MPC loop, collecting data ---
+    actual_positions = []
+    horizon_trajectories = []
+    horizon_velocities = []
 
     for step in range(max_steps):
         problem_mpc.reset()
@@ -367,15 +377,9 @@ if __name__ == "__main__":
         results = problem_mpc.post_process()
         nodes = results.nodes
 
-        traj = results.trajectory["position"]
-        fig.add_trace(
-            go.Scatter3d(
-                x=traj[:, 0], y=traj[:, 1], z=traj[:, 2],
-                mode="lines",
-                line={"color": colors[step], "width": 3},
-                name=f"Step {step}",
-            )
-        )
+        actual_positions.append(nodes["position"][0].copy())
+        horizon_trajectories.append(results.trajectory["position"].copy())
+        horizon_velocities.append(results.trajectory["velocity"].copy())
 
         cur_pos = nodes["position"][0]
         cur_progress = nodes["progress"][0, 0]
@@ -393,11 +397,58 @@ if __name__ == "__main__":
         update_initial_conditions(nodes)
         shift_guess(nodes)
 
-    fig.update_layout(
-        title="Double Integrator MPCC", title_x=0.5, template="plotly_dark",
-        scene={"aspectmode": "data"},
+    actual_positions = np.array(actual_positions)
+
+    # --- Viser visualization ---
+    # Concatenate all horizon points and compute velocity-based colors
+    all_points = np.concatenate(horizon_trajectories, axis=0)
+    all_vel = np.concatenate(horizon_velocities, axis=0)
+    all_colors = compute_velocity_colors(all_vel)
+    points_per_step = [len(ht) for ht in horizon_trajectories]
+    cumulative_points = np.cumsum(points_per_step)
+
+    server = create_server(actual_positions)
+
+    # Reference path (static, red point cloud)
+    ref_dense = path_fn(400, R=R_circle)
+    ref_dense = (R_tilt @ ref_dense.T).T + center
+    ref_dense = np.vstack([ref_dense, ref_dense[:1]])
+    ref_colors = np.full((len(ref_dense), 3), fill_value=[255, 80, 80], dtype=np.uint8)
+    server.scene.add_point_cloud(
+        "/reference",
+        points=ref_dense.astype(np.float32),
+        colors=(ref_colors * 0.5).astype(np.uint8),
+        point_size=0.02,
     )
-    fig.show()
+
+    # Ghost of all MPC trajectories (faint, shows full history at a glance)
+    add_ghost_trajectory(server, all_points, all_colors, point_size=0.003)
+
+    # Animated trail (accumulates whole horizons per step)
+    trail_handle = server.scene.add_point_cloud(
+        "/trail",
+        points=all_points[: cumulative_points[0]],
+        colors=all_colors[: cumulative_points[0]],
+        point_size=0.02,
+    )
+
+    # Position marker at actual car position
+    _, update_marker = add_position_marker(server, actual_positions, radius=0.05)
+
+    def update_trail(frame_idx):
+        end = cumulative_points[frame_idx]
+        trail_handle.points = all_points[:end]
+        trail_handle.colors = all_colors[:end]
+
+    dt_mpc = horizon_duration / (n_mpc - 1)  # Time between MPC steps
+    step_time = np.arange(max_steps, dtype=np.float64) * dt_mpc
+    add_animation_controls(
+        server,
+        step_time,
+        [update_trail, update_marker],
+    )
 
     plot_states(results).show()
     plot_scp_iterations(results).show()
+
+    server.sleep_forever()

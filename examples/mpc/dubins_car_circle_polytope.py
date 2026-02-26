@@ -180,7 +180,7 @@ problem_mpc = Problem(
     N=n_mpc,
     algorithm={
         "autotuner": ox.ConstantProximalWeight(),
-        "lam_cost": {"lag_sum": Q_LAG, "contour_sum": Q_CONTOUR, "progress": Q_PROGRESS}
+        "lam_cost": {"lag_sum": Q_LAG, "contour_sum": Q_CONTOUR, "progress": Q_PROGRESS},
     },
 )
 
