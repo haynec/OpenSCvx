@@ -6,7 +6,7 @@ optimization problems through iterative convex approximation.
 
 import time
 import warnings
-from typing import TYPE_CHECKING, Dict, List, Union
+from typing import TYPE_CHECKING, Callable, Dict, List, Union
 
 import numpy as np
 import numpy.linalg as la
@@ -287,7 +287,7 @@ class PenalizedTrustRegion(Algorithm):
         emitter: callable,
         params: dict,
         settings: Config,
-        discretization_solver_impulsive=None,
+        discretization_solver_impulsive: Callable[..., object] | None = None,
     ) -> None:
         """Initialize PTR algorithm.
 
