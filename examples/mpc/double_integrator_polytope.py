@@ -21,6 +21,7 @@ import openscvx as ox
 from openscvx import Problem
 from openscvx.plotting import plot_scp_iterations, plot_states
 from openscvx.plotting.viser import (
+    add_animated_trail,
     add_animation_controls,
     add_ghost_trajectory,
     add_position_marker,
@@ -110,7 +111,7 @@ R_tilt = np.array(
 # Discrete reference path
 ###############################################################################
 M = 30  # Number of samples per lap
-path_fn = figure_eight  # Swap this for any (M) -> (M, 3) function
+path_fn = wavy_circle  # Swap this for any (M) -> (M, 3) function
 
 # Sample one lap in the local frame, then rotate into 3D
 path_local = path_fn(M, R=R_circle)
@@ -364,10 +365,14 @@ if __name__ == "__main__":
 
     problem_mpc.initialize()
 
-    max_steps = 300
+    max_steps = 100
+    dt_mpc = horizon_duration / n_mpc  # Time between MPC steps
+    node1_time = dt_mpc  # Time of node 1 in each horizon
 
     # --- Run MPC loop, collecting data ---
-    actual_positions = []
+    actual_segments = []
+    actual_vel_segments = []
+    actual_time_segments = []
     horizon_trajectories = []
     horizon_velocities = []
 
@@ -377,7 +382,13 @@ if __name__ == "__main__":
         results = problem_mpc.post_process()
         nodes = results.nodes
 
-        actual_positions.append(nodes["position"][0].copy())
+        # Slice trajectory from node 0 to node 1 (the executed segment)
+        traj_time = results.trajectory["time"].flatten()
+        seg_end = np.searchsorted(traj_time, node1_time, side="right")
+        actual_segments.append(results.trajectory["position"][:seg_end].copy())
+        actual_vel_segments.append(results.trajectory["velocity"][:seg_end].copy())
+        actual_time_segments.append(traj_time[:seg_end].copy())
+
         horizon_trajectories.append(results.trajectory["position"].copy())
         horizon_velocities.append(results.trajectory["velocity"].copy())
 
@@ -397,19 +408,29 @@ if __name__ == "__main__":
         update_initial_conditions(nodes)
         shift_guess(nodes)
 
-    actual_positions = np.array(actual_positions)
+    # --- Build dense actual trajectory and horizon lookup ---
+    actual_path = np.concatenate(actual_segments, axis=0)
+    actual_vel = np.concatenate(actual_vel_segments, axis=0)
+    actual_colors = compute_velocity_colors(actual_vel)
+
+    frames_per_step = np.array([len(seg) for seg in actual_segments])
+    step_boundaries = np.cumsum(frames_per_step)  # frame index where each step ends
+
+    # Dense time array: offset each segment's local time by the MPC step
+    actual_time = np.concatenate([
+        seg_t + i * dt_mpc for i, seg_t in enumerate(actual_time_segments)
+    ])
+
+    # Horizon rollout colors (single global viridis mapping across all steps)
+    all_horizon_vel = np.concatenate(horizon_velocities, axis=0)
+    all_horizon_colors = compute_velocity_colors(all_horizon_vel)
+    cumulative_horizon_pts = np.cumsum([len(hv) for hv in horizon_velocities])
+    horizon_colors = np.split(all_horizon_colors, cumulative_horizon_pts[:-1])
 
     # --- Viser visualization ---
-    # Concatenate all horizon points and compute velocity-based colors
-    all_points = np.concatenate(horizon_trajectories, axis=0)
-    all_vel = np.concatenate(horizon_velocities, axis=0)
-    all_colors = compute_velocity_colors(all_vel)
-    points_per_step = [len(ht) for ht in horizon_trajectories]
-    cumulative_points = np.cumsum(points_per_step)
+    server = create_server(actual_path)
 
-    server = create_server(actual_positions)
-
-    # Reference path (static, red point cloud)
+    # Reference path (static)
     ref_dense = path_fn(400, R=R_circle)
     ref_dense = (R_tilt @ ref_dense.T).T + center
     ref_dense = np.vstack([ref_dense, ref_dense[:1]])
@@ -421,31 +442,35 @@ if __name__ == "__main__":
         point_size=0.02,
     )
 
-    # Ghost of all MPC trajectories (faint, shows full history at a glance)
-    add_ghost_trajectory(server, all_points, all_colors, point_size=0.003)
+    # Ghost of all MPC horizons (faint background)
+    all_horizon_points = np.concatenate(horizon_trajectories, axis=0)
+    add_ghost_trajectory(server, all_horizon_points, all_horizon_colors, point_size=0.005)
 
-    # Animated trail (accumulates whole horizons per step)
-    trail_handle = server.scene.add_point_cloud(
-        "/trail",
-        points=all_points[: cumulative_points[0]],
-        colors=all_colors[: cumulative_points[0]],
-        point_size=0.02,
+    # Animated actual trail (grows as drone flies, uses library primitive)
+    _, update_trail = add_animated_trail(server, actual_path, actual_colors, point_size=0.03)
+
+    # Position marker at current drone position
+    _, update_marker = add_position_marker(server, actual_path, radius=0.05)
+
+    # Horizon rollout pop-in: shows the current planned horizon
+    horizon_handle = server.scene.add_point_cloud(
+        "/horizon_rollout",
+        points=horizon_trajectories[0].astype(np.float32),
+        colors=horizon_colors[0],
+        point_size=0.015,
     )
 
-    # Position marker at actual car position
-    _, update_marker = add_position_marker(server, actual_positions, radius=0.05)
+    def update_horizon(frame_idx):
+        """Swap in the horizon rollout for the current MPC step."""
+        step = int(np.searchsorted(step_boundaries, frame_idx, side="right"))
+        step = min(step, max_steps - 1)
+        horizon_handle.points = horizon_trajectories[step].astype(np.float32)
+        horizon_handle.colors = horizon_colors[step]
 
-    def update_trail(frame_idx):
-        end = cumulative_points[frame_idx]
-        trail_handle.points = all_points[:end]
-        trail_handle.colors = all_colors[:end]
-
-    dt_mpc = horizon_duration / (n_mpc - 1)  # Time between MPC steps
-    step_time = np.arange(max_steps, dtype=np.float64) * dt_mpc
     add_animation_controls(
         server,
-        step_time,
-        [update_trail, update_marker],
+        actual_time,
+        [update_trail, update_marker, update_horizon],
     )
 
     plot_states(results).show()
