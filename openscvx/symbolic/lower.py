@@ -784,10 +784,11 @@ def lower_symbolic_problem(
     # This must happen BEFORE CVXPy variable creation since CTCS constraints
     # augment the state dimension
     if byof is not None:
-        dynamics, dynamics_prop, jax_constraints, x_unified, x_prop_unified = apply_byof(
+        dynamics, dynamics_prop, dynamics_discrete, jax_constraints, x_unified, x_prop_unified = apply_byof(
             byof,
             dynamics,
             dynamics_prop,
+            dynamics_discrete,
             jax_constraints,
             x_unified,
             x_prop_unified,

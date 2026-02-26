@@ -100,6 +100,7 @@ def load_or_compile_discretization_solver(
     n_states: int,
     n_controls: int,
     save_compiled: bool = False,
+    name: str = "continuous",
     debug: bool = False,
 ) -> callable:
     """Load discretization solver from cache or compile and cache it.
@@ -125,13 +126,13 @@ def load_or_compile_discretization_solver(
             with open(cache_file, "rb") as f:
                 serial_dis = f.read()
             compiled_solver = export.deserialize(serial_dis)
-            print("✓ Loaded existing discretization solver")
+            print(f"✓ Loaded existing {name} discretization solver")
             return compiled_solver
         except FileNotFoundError:
-            print("Compiling discretization solver...")
+            print(f"Compiling {name} discretization solver...")
 
     else:
-        print("Compiling discretization solver (not saving/loading from disk)...")
+        print(f"Compiling {name} discretization solver (not saving/loading from disk)...")
 
     # Pass parameters as a single dictionary
     compiled_solver = export.export(jax.jit(discretization_solver))(
@@ -143,7 +144,7 @@ def load_or_compile_discretization_solver(
     if save_compiled:
         with open(cache_file, "wb") as f:
             f.write(compiled_solver.serialize())
-        print("✓ Discretization solver compiled and saved")
+        print(f"✓ {name} discretization solver compiled and saved")
 
     return compiled_solver
 

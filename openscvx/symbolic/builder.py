@@ -236,11 +236,10 @@ def preprocess_symbolic_problem(
         dynamics["time"] = 1.0
 
     # Discrete dynamics are required for impulsive controls and optional otherwise.
-    # When omitted, use zero discrete dynamics for all states.
+    # When omitted (and no impulsive controls are present), default to an identity
+    # mapping for each state so the discrete map preserves the state by default.
     if dynamics_discrete is None:
-        dynamics_discrete = {
-            state.name: Constant(np.zeros(state.shape, dtype=float)) for state in states
-        }
+        dynamics_discrete = {state.name: state for state in states}
     else:
         dynamics_discrete = dict(dynamics_discrete)  # Avoid mutating caller input
     if "time" not in dynamics_discrete:

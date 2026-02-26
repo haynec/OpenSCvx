@@ -754,13 +754,7 @@ class Problem:
         self._discretization_solver = self._discretizer.get_solver(
             self._lowered.dynamics, self.settings
         )
-        slice_imp = self._lowered.u_unified.slice_impulsive
-        has_impulsive = bool(slice_imp.stop > slice_imp.start)
-        self._discretization_solver_impulsive = (
-            get_impulsive_discretization_solver(self._lowered.dynamics_discrete)
-            if has_impulsive
-            else None
-        )
+        self._discretization_solver_impulsive =  get_impulsive_discretization_solver(self._lowered.dynamics_discrete)
         self._propagation_solver = get_propagation_solver(
             self._compiled_dynamics_prop.f, self.settings, self._discretizer
         )
@@ -800,20 +794,21 @@ class Problem:
 
         # Compile the impulsive/discrete discretization solver with the same pipeline.
         # This solver is evaluated on node-wise inputs (x_nodes, u_nodes), shape (N, ...).
-        if has_impulsive and self._discretization_solver_impulsive is not None:
-            dis_imp_solver_file = dis_solver_file.with_name(
-                f"{dis_solver_file.stem}_impulsive{dis_solver_file.suffix}"
-            )
-            self._discretization_solver_impulsive = load_or_compile_discretization_solver(
-                self._discretization_solver_impulsive,
-                dis_imp_solver_file,
-                self._parameters,  # Plain dict for JAX
-                self.settings.sim.n,
-                self.settings.sim.n_states,
-                self.settings.sim.n_controls,
-                save_compiled=self.settings.sim.save_compiled,
-                debug=self.settings.dev.debug,
-            )
+        # if has_impulsive and self._discretization_solver_impulsive is not None:
+        dis_imp_solver_file = dis_solver_file.with_name(
+            f"{dis_solver_file.stem}_impulsive{dis_solver_file.suffix}"
+        )
+        self._discretization_solver_impulsive = load_or_compile_discretization_solver(
+            self._discretization_solver_impulsive,
+            dis_imp_solver_file,
+            self._parameters,  # Plain dict for JAX
+            self.settings.sim.n,
+            self.settings.sim.n_states,
+            self.settings.sim.n_controls,
+            save_compiled=self.settings.sim.save_compiled,
+            debug=self.settings.dev.debug,
+            name="discrete",
+        )
 
         # Setup propagation solver parameters
         dtau = 1.0 / (self.settings.sim.n - 1)

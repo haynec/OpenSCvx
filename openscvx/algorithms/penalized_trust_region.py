@@ -376,19 +376,17 @@ class PenalizedTrustRegion(Algorithm):
             _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
                 state.x, state.u.astype(float), params
             )
+
+            u_state = state.u.astype(float)
+            x0_prior = self._recover_prior_node_from_initial(settings, state.x[0])
+            x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
+            _, _, _, W_multi_shoot = self._discretization_solver_impulsive.call(
+                x_nodes_prior, u_state, params
+            )
             dis_time = time.time() - t0
 
             state.add_discretization(V_multi_shoot.__array__())
-            slice_imp = settings.sim.u.slice_impulsive
-            has_impulsive = bool(slice_imp.stop > slice_imp.start)
-            if has_impulsive and self._discretization_solver_impulsive is not None:
-                u_state = state.u.astype(float)
-                x0_prior = self._recover_prior_node_from_initial(settings, state.x[0])
-                x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
-                _, _, _, W_multi_shoot = self._discretization_solver_impulsive.call(
-                    x_nodes_prior, u_state, params
-                )
-                state.add_impulsive_discretization(W_multi_shoot.__array__())
+            state.add_impulsive_discretization(W_multi_shoot.__array__())
 
         # Run the subproblem
         (
@@ -414,23 +412,25 @@ class PenalizedTrustRegion(Algorithm):
         _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
             candidate.x, candidate.u.astype(float), params
         )
+
+
+        u_candidate = candidate.u.astype(float)
+        x0_prior = self._recover_prior_node_from_initial(settings, candidate.x[0])
+        x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
+        x_prop_pp, D_d, E_d, W_multi_shoot = self._discretization_solver_impulsive.call(
+            x_nodes_prior, u_candidate, params
+        )
+
         dis_time = time.time() - t0
 
         candidate.V = V_multi_shoot.__array__()
+        candidate.W = W_multi_shoot.__array__()
         candidate.x_prop = x_prop.__array__()
-        slice_imp = settings.sim.u.slice_impulsive
-        has_impulsive = bool(slice_imp.stop > slice_imp.start)
-        if has_impulsive and self._discretization_solver_impulsive is not None:
-            u_candidate = candidate.u.astype(float)
-            x0_prior = self._recover_prior_node_from_initial(settings, candidate.x[0])
-            x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
-            x_prop_pp, D_d, E_d, W_multi_shoot = self._discretization_solver_impulsive.call(
-                x_nodes_prior, u_candidate, params
-            )
-            candidate.x_prop_pp = x_prop_pp.__array__()
-            candidate.D_d = D_d.__array__()
-            candidate.E_d = E_d.__array__()
-            candidate.W = W_multi_shoot.__array__()
+        candidate.x_prop_pp = x_prop_pp.__array__()
+        candidate.D_d = D_d.__array__()
+        candidate.E_d = E_d.__array__()
+        
+        
 
         # Update state in place by appending to history
         # The x_guess/u_guess properties will automatically return the latest entry

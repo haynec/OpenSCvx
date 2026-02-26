@@ -655,7 +655,9 @@ class PTRSolver(ConvexSolver):
         A_eff = np.asarray(A_d)
         B_eff = np.asarray(B_d)
         C_eff = np.asarray(C_d)
+        
         if D_d is not None:
+
             D_arr = np.asarray(D_d)
             # Temporary DPP-safe workaround: absorb D_d into A/B/C numerically
             # so the CVXPY graph has only Parameter@Variable products.
