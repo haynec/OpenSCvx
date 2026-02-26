@@ -65,7 +65,7 @@ dynamics = {
 
 dynamics_discrete = {
     "position": p,
-    "velocity": v + ox.Power(ox.Max(ox.Abs(dv), 1e-10), 1.5) * dv,
+    "velocity": v + ox.Power(ox.Max(ox.Abs(dv), 1e-6), 1.5) * dv,
 }
 
 states = [p, v]

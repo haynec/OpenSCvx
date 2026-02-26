@@ -440,9 +440,11 @@ def augment_dynamics_with_ctcs(
     constraints_ctcs: List[CTCS],
     N: int,
     xdelta: Expr = None,
+    *,
+    return_discrete: bool = False,
     licq_min: float = 0.0,
     licq_max: float = 1e-4,
-) -> Tuple[Expr, Expr, List[State], List[Control]]:
+) -> Tuple[Expr, List[State], List[Control]] | Tuple[Expr, Expr, List[State], List[Control]]:
     """Augment dynamics with continuous-time constraint satisfaction states.
 
     Implements the CTCS method by adding augmented states and time dilation control
@@ -469,10 +471,16 @@ def augment_dynamics_with_ctcs(
         licq_max: Maximum bound for augmented states (default: 1e-4)
 
     Returns:
-        Tuple of:
+        By default (`return_discrete=False`), tuple of:
             - Augmented dynamics expression (original + augmented state dynamics)
             - Updated states list (original + augmented states)
             - Updated controls list (original + time dilation control)
+
+        If `return_discrete=True`, additionally returns augmented discrete dynamics:
+            - Augmented continuous dynamics expression
+            - Augmented discrete dynamics expression (or None if not provided)
+            - Updated states list
+            - Updated controls list
 
     Raises:
         ValueError: If no state named "time" is found in the states list
@@ -502,6 +510,9 @@ def augment_dynamics_with_ctcs(
     # Copy the original states and controls lists
     states_augmented = list(states)
     controls_augmented = list(controls)
+
+    if constraints_ctcs:
+        constraints_ctcs, _, _ = sort_ctcs_constraints(list(constraints_ctcs))
 
     if constraints_ctcs:
         # Group penalty expressions by idx (constraints should already be sorted)
@@ -549,10 +560,10 @@ def augment_dynamics_with_ctcs(
         if discrete_dynamics_set:
             xdelta_aug = Concat(xdelta, *augmented_state_exprs_discrete)
         else:
-            xdelta_aug = Concat(xdelta, *augmented_state_exprs_discrete)
+            xdelta_aug = None
     else:
         xdot_aug = xdot
-        xdelta_aug = xdelta
+        xdelta_aug = xdelta if discrete_dynamics_set else None
 
     time_dilation = Control("_time_dilation", shape=(1,))
 
@@ -614,4 +625,6 @@ def augment_dynamics_with_ctcs(
 
     controls_augmented.append(time_dilation)
 
-    return xdot_aug, xdelta_aug, states_augmented, controls_augmented
+    if return_discrete:
+        return xdot_aug, xdelta_aug, states_augmented, controls_augmented
+    return xdot_aug, states_augmented, controls_augmented

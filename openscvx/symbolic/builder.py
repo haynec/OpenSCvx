@@ -184,7 +184,15 @@ def preprocess_symbolic_problem(
     """
 
     # Validate input types before anything else
-    validate_input_types(dynamics, dynamics_discrete, states, controls, constraints, N, time)
+    validate_input_types(
+        dynamics,
+        states,
+        controls,
+        constraints,
+        N,
+        time,
+        dynamics_discrete=dynamics_discrete,
+    )
     validate_propagation_input_types(dynamics_prop_extra, states_prop_extra)
 
     # Wrap validated constraints into a ConstraintSet
@@ -326,6 +334,7 @@ def preprocess_symbolic_problem(
         constraints.ctcs,
         N,
         xdelta=dynamics_discrete_concat,
+        return_discrete=True,
         licq_min=licq_min,
         licq_max=licq_max,
     )
