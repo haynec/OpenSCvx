@@ -192,6 +192,7 @@ def preprocess_symbolic_problem(
         N,
         time,
         dynamics_discrete=dynamics_discrete,
+        byof=byof,
     )
     validate_propagation_input_types(dynamics_prop_extra, states_prop_extra)
 
@@ -239,7 +240,13 @@ def preprocess_symbolic_problem(
     # When omitted (and no impulsive controls are present), default to an identity
     # mapping for each state so the discrete map preserves the state by default.
     if dynamics_discrete is None:
-        dynamics_discrete = {state.name: state for state in states}
+        byof_dd = byof.get("dynamics_discrete", {}) if byof else {}
+        if byof_dd:
+            dynamics_discrete = {
+                state.name: state for state in states if state.name not in byof_dd
+            }
+        else:
+            dynamics_discrete = {state.name: state for state in states}
     else:
         dynamics_discrete = dict(dynamics_discrete)  # Avoid mutating caller input
     if "time" not in dynamics_discrete:
@@ -250,11 +257,12 @@ def preprocess_symbolic_problem(
 
     # Extract byof dynamics for validation
     byof_dynamics = byof.get("dynamics", {}) if byof else {}
+    byof_dynamics_discrete = byof.get("dynamics_discrete", {}) if byof else {}
 
     # Validate dynamics dict matches state names and dimensions
     # byof_dynamics states should not be in symbolic dynamics dict
     validate_dynamics_dict(dynamics, states, byof_dynamics=byof_dynamics)
-    validate_dynamics_dict(dynamics_discrete, states)
+    validate_dynamics_dict(dynamics_discrete, states, byof_dynamics=byof_dynamics_discrete)
 
     # Inject zero placeholders for byof dynamics states
     # These will be replaced with the actual byof functions at lowering time
@@ -262,8 +270,15 @@ def preprocess_symbolic_problem(
         if state.name in byof_dynamics:
             dynamics[state.name] = Constant(np.zeros(state.shape))
 
+    # Inject identity placeholders for byof dynamics_discrete states (x_next = x for those components)
+    # These will be replaced with the actual byof functions at lowering time
+    for state in states:
+        if state.name in byof_dynamics_discrete:
+            dynamics_discrete[state.name] = state
+
     # Validate dynamics dimensions AFTER injecting placeholders
     validate_dynamics_dict_dimensions(dynamics, states)
+    validate_dynamics_dict_dimensions(dynamics_discrete, states)
 
     # Convert dynamics dict to concatenated expression
     dynamics, dynamics_concat = convert_dynamics_dict_to_expr(dynamics, states)

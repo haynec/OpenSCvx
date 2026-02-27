@@ -24,6 +24,11 @@ Function Signatures:
         - params: Dict of parameters
         - Returns: State derivative component (array matching state shape)
 
+    - dynamics_discrete: ``(x, u, node, params) -> x_next_component``
+        - Same arguments as dynamics
+        - Returns: Next-state component for impulsive/discrete update (array matching state shape)
+        - Used when controls include impulsive (e.g. delta-V); can mix with symbolic dynamics_discrete.
+
     - nodal_constraints: ``(x, u, node, params) -> residual``
         - Same arguments as dynamics
         - Returns: Constraint residual (g <= 0: negative=satisfied, positive=violated)
@@ -262,6 +267,10 @@ class ByofSpec(TypedDict, total=False):
             with signature ``(x, u, node, params) -> xdot_component``. States here should
             NOT appear in symbolic dynamics dict. You can mix: some states symbolic,
             some in byof.
+        dynamics_discrete: Raw JAX functions for discrete/impulsive state updates. Maps state
+            names to functions with signature ``(x, u, node, params) -> x_next_component``.
+            States here should NOT appear in symbolic dynamics_discrete dict. Use when you need
+            custom impulsive updates (e.g. delta-V) alongside or instead of symbolic ones.
         nodal_constraints: Point-wise constraints applied at specific nodes.
             Each item is a :class:`NodalConstraintSpec` dict with:
 
@@ -302,6 +311,9 @@ class ByofSpec(TypedDict, total=False):
                 "dynamics": {
                     "velocity": custom_velocity_dynamics,
                 },
+                "dynamics_discrete": {
+                    # Optional: e.g. "velocity": lambda x, u, node, params: x[vel_sl] + u[dv_sl]
+                },
                 "nodal_constraints": [
                     # Applied to all nodes (no "nodes" field)
                     {
@@ -332,6 +344,7 @@ class ByofSpec(TypedDict, total=False):
 
     parameters: List["Parameter"]
     dynamics: dict[str, DynamicsFunction]
+    dynamics_discrete: dict[str, DynamicsFunction]
     nodal_constraints: List[NodalConstraintSpec]
     cross_nodal_constraints: List[CrossNodalConstraintFunction]
     ctcs_constraints: List[CtcsConstraintSpec]

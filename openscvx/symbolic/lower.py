@@ -737,6 +737,8 @@ def lower_symbolic_problem(
             The solver's ``create_variables()`` method will be called to create
             optimization variables before constraint lowering.
         byof: Optional dict of raw JAX functions for expert users. Supported keys:
+            - "dynamics": Dict of state name -> f(x, u, node, params) -> xdot_component
+            - "dynamics_discrete": Dict of state name -> f(x, u, node, params) -> x_next_component
             - "nodal_constraints": List of f(x, u, node, params) -> residual
             - "cross_nodal_constraints": List of f(X, U, params) -> residual
             - "ctcs_constraints": List of dicts with "constraint_fn", "penalty", "bounds"

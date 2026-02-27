@@ -133,6 +133,29 @@ def apply_byof(
         )
         dynamics_prop = Dynamics(f=composite_f_prop)
 
+    # Handle byof dynamics_discrete by splicing in raw JAX functions at the correct slices
+    byof_dynamics_discrete = byof.get("dynamics_discrete", {})
+    if byof_dynamics_discrete:
+        state_slices = {state.name: state._slice for state in states}
+
+        def _make_composite_dynamics_discrete(orig_f, byof_fns, slices_map):
+            """Create composite discrete dynamics combining symbolic and byof state updates."""
+
+            def composite_f(x, u, node, params):
+                x_next = orig_f(x, u, node, params)
+                for state_name, byof_fn in byof_fns.items():
+                    sl = slices_map[state_name]
+                    x_next = x_next.at[sl].set(byof_fn(x, u, node, params))
+                return x_next
+
+            return composite_f
+
+        dynamics_discrete = Dynamics(
+            f=_make_composite_dynamics_discrete(
+                dynamics_discrete.f, byof_dynamics_discrete, state_slices
+            )
+        )
+
     # Handle nodal constraints
     # Note: Validation happens earlier in Problem.__init__ via validate_byof
     for constraint_spec in byof.get("nodal_constraints", []):

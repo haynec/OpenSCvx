@@ -29,6 +29,9 @@ def _hash_byof(byof: Optional["ByofSpec"]) -> bytes:
     for f in byof.get("dynamics", {}).values():
         codes.append(f.__code__.co_code)
         codes.append(repr(f.__code__.co_consts).encode())
+    for f in byof.get("dynamics_discrete", {}).values():
+        codes.append(f.__code__.co_code)
+        codes.append(repr(f.__code__.co_consts).encode())
     for c in byof.get("nodal_constraints", []):
         codes.append(c["constraint_fn"].__code__.co_code)
         codes.append(repr(c["constraint_fn"].__code__.co_consts).encode())

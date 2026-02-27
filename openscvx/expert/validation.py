@@ -49,6 +49,7 @@ def validate_byof(
     valid_keys = {
         "parameters",
         "dynamics",
+        "dynamics_discrete",
         "nodal_constraints",
         "cross_nodal_constraints",
         "ctcs_constraints",
@@ -117,6 +118,49 @@ def validate_byof(
             except Exception as e:
                 raise ValueError(
                     f"byof dynamics '{state_name}' is not differentiable with JAX. "
+                    f"Ensure the function uses JAX operations (jax.numpy, not numpy): {e}"
+                ) from e
+
+    # Validate dynamics_discrete functions (same signature and shape as dynamics)
+    byof_dynamics_discrete = byof.get("dynamics_discrete", {})
+    if byof_dynamics_discrete:
+        state_shapes = {state.name: state.shape for state in states}
+        for state_name, fn in byof_dynamics_discrete.items():
+            if state_name not in state_shapes:
+                raise ValueError(
+                    f"byof dynamics_discrete '{state_name}' does not match any state name. "
+                    f"Available states: {list(state_shapes.keys())}"
+                )
+            if not callable(fn):
+                raise TypeError(
+                    f"byof dynamics_discrete '{state_name}' must be callable, got {type(fn)}"
+                )
+            sig = inspect.signature(fn)
+            if len(sig.parameters) != 4:
+                raise ValueError(
+                    f"byof dynamics_discrete '{state_name}' must have signature "
+                    f"f(x, u, node, params), got {len(sig.parameters)} parameters: "
+                    f"{list(sig.parameters.keys())}"
+                )
+            try:
+                result = fn(dummy_x, dummy_u, dummy_node, dummy_params)
+            except Exception as e:
+                raise ValueError(
+                    f"byof dynamics_discrete '{state_name}' failed on test call with "
+                    f"x.shape={dummy_x.shape}, u.shape={dummy_u.shape}: {e}"
+                ) from e
+            expected_shape = state_shapes[state_name]
+            result_shape = jnp.asarray(result).shape
+            if result_shape != expected_shape:
+                raise ValueError(
+                    f"byof dynamics_discrete '{state_name}' returned shape {result_shape}, "
+                    f"expected {expected_shape} (state '{state_name}' shape)"
+                )
+            try:
+                jax.grad(lambda x: jnp.sum(fn(x, dummy_u, dummy_node, dummy_params)))(dummy_x)
+            except Exception as e:
+                raise ValueError(
+                    f"byof dynamics_discrete '{state_name}' is not differentiable with JAX. "
                     f"Ensure the function uses JAX operations (jax.numpy, not numpy): {e}"
                 ) from e
 
