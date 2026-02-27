@@ -755,6 +755,8 @@ def validate_input_types(
     constraints: any,
     N: any,
     time: any,
+    dynamics_discrete: any = None,
+    byof: any = None,
 ) -> None:
     """Validate that all user-facing inputs have correct types.
 
@@ -798,6 +800,25 @@ def validate_input_types(
     for i, c in enumerate(controls):
         if not isinstance(c, Control):
             raise TypeError(f"controls[{i}] must be a Control, got {type(c).__name__}")
+
+    any_impulsive_control_set = any(np.any(c.is_impulsive) for c in controls)
+    # Discrete dynamics can be provided explicitly or via byof["dynamics_discrete"]
+    has_discrete_from_byof = byof is not None and bool(byof.get("dynamics_discrete"))
+    has_discrete_dynamics = dynamics_discrete is not None or has_discrete_from_byof
+    if any_impulsive_control_set and not has_discrete_dynamics:
+        raise ValueError(
+            "'dynamics_discrete' must be provided when at least one control is marked as "
+            "'impulsive'. Provide a dynamics_discrete dict and/or byof['dynamics_discrete']."
+        )
+    if (not any_impulsive_control_set) and dynamics_discrete is not None:
+        raise ValueError(
+            "'dynamics_discrete' must not be provided when no control is marked as 'impulsive'."
+        )
+    if dynamics_discrete is not None and not isinstance(dynamics_discrete, dict):
+        raise TypeError(
+            f"'dynamics_discrete' must be a dict mapping state names to expressions, "
+            f"got {type(dynamics_discrete).__name__}"
+        )
 
     if not isinstance(constraints, list):
         raise TypeError(

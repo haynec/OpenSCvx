@@ -1,9 +1,19 @@
+from typing import Callable, Optional
+
 import numpy as np
 
 from openscvx.config import Config
 from openscvx.discretization import Discretizer
 from openscvx.integrators import solve_ivp_diffrax_prop
 from openscvx.lowered import Dynamics
+
+
+def _time_dilation_index(settings: Config, n_controls: int) -> int:
+    """Return time-dilation control index, falling back to last control."""
+    td_slice = getattr(settings.sim, "time_dilation_slice", None)
+    if td_slice is None:
+        return n_controls - 1
+    return int(td_slice.start)
 
 
 def prop_aug_dy(
@@ -114,9 +124,10 @@ def s_to_t(x: np.ndarray, u: np.ndarray, settings: Config, discretizer: Discreti
     """
     t = [x[:, settings.sim.time_slice][0]]
     tau = np.linspace(0, 1, settings.sim.n)
+    idx_s = _time_dilation_index(settings, u.shape[1])
     for k in range(1, settings.sim.n):
-        s_kp = u[k - 1, -1]
-        s_k = u[k, -1]
+        s_kp = u[k - 1, idx_s]
+        s_k = u[k, idx_s]
         if discretizer.dis_type == "ZOH":
             t.append(t[k - 1] + (tau[k] - tau[k - 1]) * (s_kp))
         else:
@@ -161,13 +172,14 @@ def t_to_tau(
 
     tau = np.zeros(len(t))
     tau_nodal = np.linspace(0, 1, settings.sim.n)
+    idx_s = _time_dilation_index(settings, u.shape[1])
     for k in range(1, len(t)):
         k_nodal = np.where(t_nodal < t[k])[0][-1]
-        s_kp = u[k_nodal, -1]
+        s_kp = u[k_nodal, idx_s]
         tp = t_nodal[k_nodal]
         tau_p = tau_nodal[k_nodal]
 
-        s_k = u[k_nodal + 1, -1]
+        s_k = u[k_nodal + 1, idx_s]
         if discretizer.dis_type == "ZOH":
             tau[k] = tau_p + (t[k] - tp) / s_kp
         else:
@@ -183,6 +195,7 @@ def simulate_nonlinear_time(
     t: np.ndarray,
     settings: Config,
     propagation_solver: callable,
+    dynamics_discrete: Optional[Callable] = None,
 ) -> np.ndarray:
     """Simulate the nonlinear system dynamics over time.
 
@@ -197,6 +210,8 @@ def simulate_nonlinear_time(
         t (np.ndarray): Real time points.
         settings: Configuration settings.
         propagation_solver (callable): Function for propagating the system state.
+        dynamics_discrete: Optional discrete dynamics map f_discrete(x, u, node, params)
+            used to apply impulsive/discrete updates at each node before continuous propagation.
 
     Returns:
         np.ndarray: Simulated state trajectory.
@@ -212,6 +227,9 @@ def simulate_nonlinear_time(
 
     # Precompute control interpolation
     u_interp = np.stack([np.interp(t, t, u[:, i]) for i in range(u.shape[1])], axis=-1)
+    _time_dilation_index(settings, u.shape[1])
+
+    has_u_d = np.any(settings.sim.u.is_impulsive)
 
     # Bin tau_vals into segments of tau
     tau_inds = np.digitize(tau_vals, tau) - 1
@@ -237,9 +255,22 @@ def simulate_nonlinear_time(
         tau_cur_padded = np.pad(tau_cur, (0, pad_len), constant_values=tau[k + 1])
         mask_padded = np.concatenate([np.ones(count), np.zeros(pad_len)]).astype(bool)
 
-        # Call the solver with padded tau_cur and mask
+        # Map prior node state to posterior using discrete dynamics when available.
+        if has_u_d and dynamics_discrete is not None:
+            x_post = np.asarray(
+                dynamics_discrete(
+                    np.asarray(x_0),
+                    np.asarray(u[k]),
+                    int(k),
+                    params,
+                )
+            ).reshape(-1)
+        else:
+            x_post = x_0
+
+        # Call the continuous propagation solver with padded tau_cur and mask
         sol = propagation_solver.call(
-            x_0,
+            x_post,
             (tau[k], tau[k + 1]),
             controls_current,
             controls_next,

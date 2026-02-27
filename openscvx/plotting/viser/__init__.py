@@ -51,8 +51,7 @@ For problem-specific examples (drones with viewcones, rockets with glideslope
 constraints, etc.), see ``examples/plotting_viser.py``.
 """
 
-# Server setup
-# Animated components
+# Server setup, animated components, Plotly integration, static primitives, and SCP visualization
 from .animated import (
     UpdateCallback,
     add_animated_trail,
@@ -64,23 +63,18 @@ from .animated import (
     add_thrust_vector,
     add_viewcone,
 )
-
-# Plotly integration
+from .orbits import add_circular_orbit, create_hohmann_transfer_server
 from .plotly_integration import (
     add_animated_plotly_marker,
     add_animated_plotly_vline,
     add_animated_vector_norm_plot,
 )
-
-# Static primitives
 from .primitives import (
     add_ellipsoid_obstacles,
     add_gates,
     add_ghost_trajectory,
     add_glideslope_cone,
 )
-
-# SCP iteration visualization
 from .scp import (
     add_scp_animation_controls,
     add_scp_ghost_iterations,
@@ -101,6 +95,9 @@ __all__ = [
     "add_ellipsoid_obstacles",
     "add_glideslope_cone",
     "add_ghost_trajectory",
+    # Orbit helpers
+    "add_circular_orbit",
+    "create_hohmann_transfer_server",
     # Animated components
     "UpdateCallback",
     "add_animated_trail",

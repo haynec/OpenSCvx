@@ -46,6 +46,9 @@ class CVXPyVariables:
         A_d: Discretized state Jacobian parameter (N-1 x n_states*n_states)
         B_d: Discretized control Jacobian parameter (N-1 x n_states*n_controls)
         C_d: Discretized control Jacobian (next node) parameter
+        x_prop_plus: Discrete dynamics propagated state parameter
+        D_d: Jacobian of impulsive/discrete dynamics w.r.t. state
+        E_d: Jacobian of impulsive/discrete dynamics w.r.t. control
         x_prop: Propagated state parameter (N-1 x n_states)
         nu: Virtual control variable (N-1 x n_states)
 
@@ -94,6 +97,9 @@ class CVXPyVariables:
     A_d: "cp.Parameter"
     B_d: "cp.Parameter"
     C_d: "cp.Parameter"
+    x_prop_plus: "cp.Parameter | None"
+    D_d: "cp.Parameter | None"
+    E_d: "cp.Parameter | None"
     x_prop: "cp.Parameter"
     nu: "cp.Variable"
 

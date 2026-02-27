@@ -61,6 +61,9 @@ except ImportError:
     cpg = None
 
 
+## TODO: (fabio) add support for impulsive controls
+
+
 class PTRSolver(ConvexSolver):
     """CVXPy-based convex subproblem solver for the PTR algorithm.
 
@@ -188,6 +191,15 @@ class PTRSolver(ConvexSolver):
 
         n_states = len(x_unified.max)
         n_controls = len(u_unified.max)
+        slice_cont = u_unified.slice_continuous
+        slice_imp = u_unified.slice_impulsive
+        n_controls_cont = int(slice_cont.stop - slice_cont.start)
+        n_controls_imp = int(slice_imp.stop - slice_imp.start)
+        if n_controls_cont + n_controls_imp != n_controls:
+            raise ValueError(
+                "Unified control slices are inconsistent with control dimension. "
+                f"continuous={n_controls_cont}, impulsive={n_controls_imp}, total={n_controls}."
+            )
 
         # Compute scaling matrices from unified object bounds
         if x_unified.scaling_min is not None:
@@ -431,6 +443,8 @@ class PTRSolver(ConvexSolver):
         B_d = ocp_vars.B_d
         C_d = ocp_vars.C_d
         x_prop = ocp_vars.x_prop
+        x_prop_plus = ocp_vars.x_prop_plus
+        E_d = ocp_vars.E_d
         nu = ocp_vars.nu
         g = ocp_vars.g
         grad_g_x = ocp_vars.grad_g_x
@@ -448,6 +462,10 @@ class PTRSolver(ConvexSolver):
         u_nonscaled = ocp_vars.u_nonscaled
         dx_nonscaled = ocp_vars.dx_nonscaled
         du_nonscaled = ocp_vars.du_nonscaled
+        slice_cont = settings.sim.u.slice_continuous
+        slice_imp = settings.sim.u.slice_impulsive
+        has_continuous = bool(slice_cont.stop > slice_cont.start)
+        has_impulsive = bool(slice_imp.stop > slice_imp.start)
 
         constr = []
 
@@ -457,15 +475,13 @@ class PTRSolver(ConvexSolver):
             for constraint in jax_constraints.nodal:
                 # nodes should already be validated and normalized in preprocessing
                 nodes = constraint.nodes
-                constr += [
-                    (
+                for node in nodes:
+                    residual = (
                         g[idx_ncvx][node]
                         + grad_g_x[idx_ncvx][node] @ dx[node]
                         + grad_g_u[idx_ncvx][node] @ du[node]
                     )
-                    == nu_vb[idx_ncvx][node]
-                    for node in nodes
-                ]
+                    constr += [residual == nu_vb[idx_ncvx][node]]
                 idx_ncvx += 1
 
         # Linearized cross-node constraints (from JAX-lowered non-convex)
@@ -491,7 +507,13 @@ class PTRSolver(ConvexSolver):
         # Boundary conditions (Fix)
         for i in range(settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop):
             if settings.sim.x.initial_type[i] == "Fix":
-                constr += [x_nonscaled[0][i] == x_init[i]]  # Initial Boundary Conditions
+                if has_impulsive:
+                    constr += [
+                        x_nonscaled[0][i]
+                        == x_prop_plus[0][i] + E_d[0][i, slice_imp] @ du_nonscaled[0][slice_imp]
+                    ]
+                else:
+                    constr += [x_nonscaled[0][i] == x_init[i]]  # Initial Boundary Conditions
             if settings.sim.x.final_type[i] == "Fix":
                 constr += [x_nonscaled[-1][i] == x_term[i]]  # Final Boundary Conditions
 
@@ -516,9 +538,14 @@ class PTRSolver(ConvexSolver):
             == inv_S_x
             @ (
                 A_d[i - 1] @ dx_nonscaled[i - 1]
-                + B_d[i - 1] @ du_nonscaled[i - 1]
-                + C_d[i - 1] @ du_nonscaled[i]
-                + x_prop[i - 1]
+                + (
+                    B_d[i - 1][:, slice_cont] @ du_nonscaled[i - 1][slice_cont]
+                    if has_continuous
+                    else 0
+                )
+                + (C_d[i - 1][:, slice_cont] @ du_nonscaled[i][slice_cont] if has_continuous else 0)
+                + (E_d[i][:, slice_imp] @ du_nonscaled[i][slice_imp] if has_impulsive else 0)
+                + (x_prop_plus[i] if has_impulsive else x_prop[i - 1])
                 - c_x
             )
             + nu[i - 1]
@@ -580,9 +607,19 @@ class PTRSolver(ConvexSolver):
                     "generation has been run. Install with: pip install openscvx[cvxpygen]"
                 )
         else:
-            cvx_solver = self.cvx_solver
-            solver_args = self.solver_args
-            self._solve_fn = lambda: self._problem.solve(solver=cvx_solver, **solver_args)
+            solver = self.cvx_solver
+            solver_args = dict(self.solver_args)
+
+            def _solve_with_dpp_fallback():
+                try:
+                    return self._problem.solve(solver=solver, **solver_args)
+                except cp.error.DPPError:
+                    fallback_args = dict(solver_args)
+                    fallback_args.pop("enforce_dpp", None)
+                    fallback_args["ignore_dpp"] = True
+                    return self._problem.solve(solver=solver, **fallback_args)
+
+            self._solve_fn = _solve_with_dpp_fallback
 
     def update_dynamics_linearization(
         self,
@@ -592,6 +629,9 @@ class PTRSolver(ConvexSolver):
         B_d: np.ndarray,
         C_d: np.ndarray,
         x_prop: np.ndarray,
+        x_prop_plus: np.ndarray | None = None,
+        D_d: np.ndarray | None = None,
+        E_d: np.ndarray | None = None,
     ) -> None:
         """Update dynamics linearization point and matrices.
 
@@ -604,14 +644,49 @@ class PTRSolver(ConvexSolver):
             A_d: Discretized state Jacobian, shape (N-1, n_states, n_states)
             B_d: Discretized control Jacobian (current node), shape (N-1, n_states, n_controls)
             C_d: Discretized control Jacobian (next node), shape (N-1, n_states, n_controls)
-            x_prop: Propagated state from dynamics, shape (N-1, n_states)
+            x_prop: Propagated state from continuous dynamics, shape (N-1, n_states)
+            x_prop_plus: Optional impulsive/discrete propagated state, shape (N, n_states)
+            D_d: Optional impulsive/discrete Jacobian wrt state, shape (N, n_states, n_states)
+            E_d: Optional impulsive/discrete Jacobian wrt control, shape (N, n_states, n_controls)
         """
         self._set_param("x_bar", x_bar)
         self._set_param("u_bar", u_bar)
-        self._set_param("A_d", A_d)
-        self._set_param("B_d", B_d)
-        self._set_param("C_d", C_d)
-        self._set_param("x_prop", x_prop)
+
+        A_eff = np.asarray(A_d)
+        B_eff = np.asarray(B_d)
+        C_eff = np.asarray(C_d)
+
+        if D_d is not None:
+            D_arr = np.asarray(D_d)
+            # Temporary DPP-safe workaround: absorb D_d into A/B/C numerically
+            # so the CVXPY graph has only Parameter@Variable products.
+            if D_arr.ndim == 3 and D_arr.shape[0] == A_eff.shape[0] + 1:
+                D_steps = D_arr[1:]
+            elif D_arr.ndim == 3 and D_arr.shape[0] == A_eff.shape[0]:
+                D_steps = D_arr
+            else:
+                raise ValueError(
+                    "Unexpected D_d shape for dynamics update: "
+                    f"{D_arr.shape}, expected "
+                    f"{(A_eff.shape[0] + 1, A_eff.shape[1], A_eff.shape[2])} "
+                    f"or {(A_eff.shape[0], A_eff.shape[1], A_eff.shape[2])}."
+                )
+
+            A_eff = np.einsum("kij,kjl->kil", D_steps, A_eff)
+            B_eff = np.einsum("kij,kjl->kil", D_steps, B_eff)
+            C_eff = np.einsum("kij,kjl->kil", D_steps, C_eff)
+
+        self._set_param("A_d", A_eff)
+        self._set_param("B_d", B_eff)
+        self._set_param("C_d", C_eff)
+        if "x_prop" in self._problem.param_dict:
+            self._set_param("x_prop", x_prop)
+        elif self._ocp_vars.x_prop is not None:
+            self._ocp_vars.x_prop.value = np.asarray(x_prop)
+        if x_prop_plus is not None and self._ocp_vars.x_prop_plus is not None:
+            self._ocp_vars.x_prop_plus.value = np.asarray(x_prop_plus)
+        if E_d is not None and self._ocp_vars.E_d is not None:
+            self._ocp_vars.E_d.value = np.asarray(E_d)
 
     def update_constraint_linearizations(
         self,

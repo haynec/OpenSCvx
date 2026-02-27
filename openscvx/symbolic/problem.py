@@ -93,6 +93,9 @@ class SymbolicProblem:
     parameters: Dict[str, any]
     N: int
 
+    # Discrete dynamics
+    dynamics_discrete: Optional["Expr"] = None
+
     # CTCS node intervals (populated during preprocessing)
     node_intervals: List[Tuple[int, int]] = field(default_factory=list)
 

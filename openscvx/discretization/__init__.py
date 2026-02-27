@@ -20,7 +20,11 @@ import inspect
 from typing import Any
 
 from .base import Discretizer
-from .linearize_discretize import LinearizeDiscretize
+from .linearize_discretize import (
+    LinearizeDiscretize,
+    calculate_impulsive_discretization,
+    get_impulsive_discretization_solver,
+)
 
 # ---------------------------------------------------------------------------
 # Spec resolver — turn a dict into a Discretizer instance
@@ -79,4 +83,6 @@ __all__ = [
     "Discretizer",
     "LinearizeDiscretize",
     "_resolve_discretizer",
+    "calculate_impulsive_discretization",
+    "get_impulsive_discretization_solver",
 ]

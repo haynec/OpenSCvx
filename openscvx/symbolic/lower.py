@@ -70,7 +70,9 @@ from openscvx.lowered import (
     LoweredProblem,
 )
 from openscvx.symbolic.constraint_set import ConstraintSet
-from openscvx.symbolic.expr import Expr, NodeReference
+from openscvx.symbolic.expr import Expr, NodeReference, traverse
+from openscvx.symbolic.expr.control import Control
+from openscvx.symbolic.unified import unify_controls, unify_states
 
 if TYPE_CHECKING:
     from openscvx.solvers import ConvexSolver
@@ -83,7 +85,6 @@ __all__ = [
     "create_cvxpy_variables",
     "lower_symbolic_problem",
 ]
-from openscvx.symbolic.unified import unify_controls, unify_states
 
 
 def lower(expr: Expr, lowerer: Any) -> Any:
@@ -200,6 +201,38 @@ def _tile_sparsity_2d(mask_1d: np.ndarray, K: int):
     )
 
 
+def _augment_impulsive_constraints(
+    constraints: ConstraintSet,
+    controls: list,
+    n_nodes: int,
+) -> None:
+    if not controls:
+        return
+    added = []
+    for control in controls:
+        is_imp = getattr(control, "is_impulsive", False)
+        is_impulsive = bool(is_imp.any()) if hasattr(is_imp, "any") else bool(is_imp)
+        if not is_impulsive:
+            continue
+        control_nodes = getattr(control, "nodes", None)
+        if control_nodes is None:
+            allowed = set()
+        else:
+            allowed = {int(idx) for idx in control_nodes}
+        for idx in allowed:
+            if idx < 0 or idx >= n_nodes:
+                raise ValueError(
+                    f"Impulsive node index {idx} for control '{control.name}' "
+                    f"is out of range [0, {n_nodes})"
+                )
+        nodes = [i for i in range(n_nodes) if i not in allowed]
+        if not nodes:
+            continue
+        added.append((control == 0.0).convex().at(nodes))
+    if added:
+        constraints.nodal_convex.extend(added)
+
+
 def create_cvxpy_variables(
     N: int,
     n_states: int,
@@ -265,6 +298,9 @@ def create_cvxpy_variables(
     A_d = cp.Parameter((N - 1, n_states, n_states), name="A_d", sparsity=A_d_sparsity)
     B_d = cp.Parameter((N - 1, n_states, n_controls), name="B_d", sparsity=B_d_sparsity)
     C_d = cp.Parameter((N - 1, n_states, n_controls), name="C_d", sparsity=C_d_sparsity)
+    x_prop_plus = cp.Parameter((N, n_states), name="x_prop_plus")
+    D_d = cp.Parameter((N, n_states, n_states), name="D_d")
+    E_d = cp.Parameter((N, n_states, n_controls), name="E_d")
     x_prop = cp.Parameter((N - 1, n_states), name="x_prop")
     nu = cp.Variable((N - 1, n_states), name="nu")  # Virtual Control
 
@@ -332,6 +368,9 @@ def create_cvxpy_variables(
         A_d=A_d,
         B_d=B_d,
         C_d=C_d,
+        x_prop_plus=x_prop_plus,
+        D_d=D_d,
+        E_d=E_d,
         x_prop=x_prop,
         nu=nu,
         g=g,
@@ -372,7 +411,7 @@ def lower_cvxpy_constraints(
         constraints: ConstraintSet containing nodal_convex and cross_node_convex
         x_cvxpy: List of CVXPy expressions for state at each node (length N).
             Typically the x_nonscaled list from create_cvxpy_variables().
-        u_cvxpy: List of CVXPy expressions for control at each node (length N).
+        u_cvxpy: List of CVXPy expressions for controls at each node (length N).
             Typically the u_nonscaled list from create_cvxpy_variables().
         parameters: Optional dict of parameter values to use for any Parameter
             expressions in the constraints. If None, uses Parameter default values.
@@ -546,6 +585,24 @@ def _lower_dynamics(dynamics_expr) -> Dynamics:
     return Dynamics(f=dyn_fn)
 
 
+def _sync_control_slices(expr: Expr, controls: list[Control]) -> None:
+    """Synchronize control slices in an expression to unified-control ordering.
+
+    Some expressions (notably propagation dynamics) can hold deep-copied Control
+    nodes. After unified control re-ordering, those copied nodes may carry stale
+    slices. This pass rebinds slices by control name before lowering.
+    """
+    slice_by_name = {control.name: control._slice for control in controls}
+
+    def _visit(node: Expr) -> None:
+        if isinstance(node, Control):
+            sl = slice_by_name.get(node.name)
+            if sl is not None:
+                node._slice = sl
+
+    traverse(expr, _visit)
+
+
 def _lower_jax_constraints(
     constraints: ConstraintSet,
 ) -> LoweredJaxConstraints:
@@ -658,6 +715,8 @@ def lower_symbolic_problem(
             The solver's ``create_variables()`` method will be called to create
             optimization variables before constraint lowering.
         byof: Optional dict of raw JAX functions for expert users. Supported keys:
+            - "dynamics": Dict of state name -> f(x, u, node, params) -> xdot_component
+            - "dynamics_discrete": Dict of state name -> f(x, u, node, params) -> x_next_component
             - "nodal_constraints": List of f(x, u, node, params) -> residual
             - "cross_nodal_constraints": List of f(X, U, params) -> residual
             - "ctcs_constraints": List of dicts with "constraint_fn", "penalty", "bounds"
@@ -688,8 +747,14 @@ def lower_symbolic_problem(
     u_unified = unify_controls(problem.controls)
     x_prop_unified = unify_states(problem.states_prop, name="x_prop")
 
+    # Keep control slices in copied expressions aligned with unified ordering.
+    _sync_control_slices(problem.dynamics, problem.controls)
+    _sync_control_slices(problem.dynamics_discrete, problem.controls)
+    _sync_control_slices(problem.dynamics_prop, problem.controls)
+
     # Lower dynamics to JAX
     dynamics = _lower_dynamics(problem.dynamics)
+    dynamics_discrete = _lower_dynamics(problem.dynamics_discrete)
     dynamics_prop = _lower_dynamics(problem.dynamics_prop)
 
     # Lower non-convex constraints to JAX
@@ -699,10 +764,18 @@ def lower_symbolic_problem(
     # This must happen BEFORE CVXPy variable creation since CTCS constraints
     # augment the state dimension
     if byof is not None:
-        dynamics, dynamics_prop, jax_constraints, x_unified, x_prop_unified = apply_byof(
+        (
+            dynamics,
+            dynamics_prop,
+            dynamics_discrete,
+            jax_constraints,
+            x_unified,
+            x_prop_unified,
+        ) = apply_byof(
             byof,
             dynamics,
             dynamics_prop,
+            dynamics_discrete,
             jax_constraints,
             x_unified,
             x_prop_unified,
@@ -747,6 +820,8 @@ def lower_symbolic_problem(
         constraint_sparsity=constraint_sparsity,
     )
 
+    _augment_impulsive_constraints(problem.constraints, problem.controls, problem.N)
+
     # Lower convex constraints using solver's variables
     lowered_cvxpy_constraint_list, cvxpy_params = lower_cvxpy_constraints(
         problem.constraints,
@@ -770,6 +845,7 @@ def lower_symbolic_problem(
 
     return LoweredProblem(
         dynamics=dynamics,
+        dynamics_discrete=dynamics_discrete,
         dynamics_prop=dynamics_prop,
         jax_constraints=jax_constraints,
         cvxpy_constraints=cvxpy_constraints,

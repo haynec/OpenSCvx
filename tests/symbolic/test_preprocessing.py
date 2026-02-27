@@ -2,7 +2,14 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from openscvx.symbolic.expr import Add, Concat, Constant, Control, CrossNodeConstraint, State
+from openscvx.symbolic.expr import (
+    Add,
+    Concat,
+    Constant,
+    Control,
+    CrossNodeConstraint,
+    State,
+)
 from openscvx.symbolic.preprocessing import (
     collect_and_assign_slices,
     convert_dynamics_dict_to_expr,
@@ -1010,7 +1017,8 @@ def test_validate_input_types_bare_control(valid_inputs):
     u = Control("thrust", shape=(2,))
 
     with pytest.raises(
-        TypeError, match=r"'controls' must be a list.*Control.*Hint.*controls=\[thrust\]"
+        TypeError,
+        match=r"'controls' must be a list.*Control.*Hint.*controls=\[thrust\]",
     ):
         validate_input_types(dynamics, states, u, constraints, N, time)
 
@@ -1100,6 +1108,190 @@ def test_validate_input_types_time_not_time(valid_inputs):
 
     with pytest.raises(TypeError, match="'time' must be a Time object, got float"):
         validate_input_types(dynamics, states, controls, constraints, N, 10.0)
+
+
+# =============================================================================
+# validate_input_types — dynamics_discrete (impulsive control) Tests
+# =============================================================================
+
+
+def test_validate_input_types_impulsive_requires_dynamics_discrete():
+    """Impulsive controls require discrete dynamics via dynamics_discrete or byof."""
+    from openscvx.symbolic.expr.time import Time
+
+    x = State("x", shape=(2,))
+    u_impulsive = Control("dv", shape=(1,), impulsive=True)
+    dynamics = {"x": x}
+    constraints = [x <= 5]
+    time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+
+    with pytest.raises(
+        ValueError,
+        match="'dynamics_discrete' must be provided when at least one control",
+    ):
+        validate_input_types(
+            dynamics,
+            [x],
+            [u_impulsive],
+            constraints,
+            20,
+            time,
+            dynamics_discrete=None,
+            byof=None,
+        )
+
+
+def test_validate_input_types_impulsive_with_dynamics_discrete_dict_passes():
+    """Impulsive control with explicit dynamics_discrete dict passes validation."""
+    from openscvx.symbolic.expr.time import Time
+
+    x = State("x", shape=(2,))
+    u_impulsive = Control("dv", shape=(1,), impulsive=True)
+    dynamics = {"x": x}
+    dynamics_discrete = {"x": x}  # identity for discrete step
+    constraints = [x <= 5]
+    time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+
+    validate_input_types(
+        dynamics,
+        [x],
+        [u_impulsive],
+        constraints,
+        20,
+        time,
+        dynamics_discrete=dynamics_discrete,
+        byof=None,
+    )
+
+
+def test_validate_input_types_impulsive_with_byof_dynamics_discrete_passes():
+    """Impulsive control with byof['dynamics_discrete'] (no explicit dynamics_discrete) passes."""
+    from openscvx.symbolic.expr.time import Time
+
+    x = State("x", shape=(2,))
+    u_impulsive = Control("dv", shape=(1,), impulsive=True)
+    dynamics = {"x": x}
+    byof = {"dynamics_discrete": {"x": lambda x, u, node, params: x}}  # placeholder for validation
+    constraints = [x <= 5]
+    time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+
+    validate_input_types(
+        dynamics,
+        [x],
+        [u_impulsive],
+        constraints,
+        20,
+        time,
+        dynamics_discrete=None,
+        byof=byof,
+    )
+
+
+def test_validate_input_types_no_impulsive_with_dynamics_discrete_raises():
+    """When no control is impulsive, providing dynamics_discrete raises ValueError."""
+    from openscvx.symbolic.expr.time import Time
+
+    x = State("x", shape=(2,))
+    u = Control("u", shape=(1,))  # not impulsive
+    dynamics = {"x": x}
+    dynamics_discrete = {"x": x}
+    constraints = [x <= 5]
+    time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+
+    with pytest.raises(
+        ValueError,
+        match="'dynamics_discrete' must not be provided when no control is marked",
+    ):
+        validate_input_types(
+            dynamics,
+            [x],
+            [u],
+            constraints,
+            20,
+            time,
+            dynamics_discrete=dynamics_discrete,
+            byof=None,
+        )
+
+
+def test_validate_input_types_dynamics_discrete_must_be_dict():
+    """dynamics_discrete must be a dict when provided."""
+    from openscvx.symbolic.expr.time import Time
+
+    x = State("x", shape=(2,))
+    u_impulsive = Control("dv", shape=(1,), impulsive=True)
+    dynamics = {"x": x}
+    constraints = [x <= 5]
+    time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+
+    with pytest.raises(TypeError, match="'dynamics_discrete' must be a dict"):
+        validate_input_types(
+            dynamics,
+            [x],
+            [u_impulsive],
+            constraints,
+            20,
+            time,
+            dynamics_discrete=[("x", x)],  # wrong type
+            byof=None,
+        )
+
+
+# =============================================================================
+# preprocess_symbolic_problem with dynamics_discrete (integration)
+# =============================================================================
+
+
+def test_preprocess_symbolic_problem_with_dynamics_discrete_builds():
+    """Preprocessing pipeline accepts and processes dynamics_discrete for impulsive control."""
+    from openscvx.symbolic.builder import preprocess_symbolic_problem
+    from openscvx.symbolic.expr.time import Time
+
+    N = 5
+    p = State("position", shape=(1,))
+    p.initial = np.array([0.0])
+    p.final = np.array([1.0])
+    p.min = np.array([0.0])
+    p.max = np.array([2.0])
+    p.guess = np.linspace(0.0, 1.0, N).reshape(-1, 1)
+
+    v = State("velocity", shape=(1,))
+    v.initial = np.array([0.0])
+    v.final = np.array([0.0])
+    v.min = np.array([-1.0])
+    v.max = np.array([1.0])
+    v.guess = np.zeros((N, 1))
+
+    dv = Control("delta_v", shape=(1,), impulsive=True)
+    dv.min = np.array([-0.5])
+    dv.max = np.array([0.5])
+    dv.guess = np.zeros((N, 1))
+
+    a = Control("acceleration", shape=(1,))
+    a.min = np.array([-0.1])
+    a.max = np.array([0.1])
+    a.guess = np.zeros((N, 1))
+
+    dynamics = {"position": v, "velocity": a}
+    dynamics_discrete = {"position": p, "velocity": v + dv}
+    states = [p, v]
+    controls = [dv, a]
+    constraints = []
+    time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+
+    result = preprocess_symbolic_problem(
+        dynamics=dynamics,
+        dynamics_discrete=dynamics_discrete,
+        states=states,
+        controls=controls,
+        constraints=constraints,
+        N=N,
+        time=time,
+    )
+
+    assert result is not None
+    assert hasattr(result, "dynamics_discrete")
+    assert result.dynamics_discrete is not None
 
 
 # =============================================================================

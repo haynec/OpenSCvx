@@ -446,6 +446,8 @@ class UnifiedControl:
     Properties:
         true: Returns UnifiedControl view containing only true (user-defined) controls
         augmented: Returns UnifiedControl view containing only augmented controls
+        slice_continuous: Slice covering continuous controls in unified ordering
+        slice_impulsive: Slice covering impulsive controls in unified ordering
 
     Example:
         Creating a unified control from multiple Control objects::
@@ -479,18 +481,141 @@ class UnifiedControl:
     max: Optional[np.ndarray] = None
     guess: Optional[np.ndarray] = None
     _true_dim: int = 0
-    _true_slice: Optional[slice] = None
-    _augmented_slice: Optional[slice] = None
+    _true_slice: Optional[slice | tuple[slice, ...]] = None
+    _augmented_slice: Optional[slice | tuple[slice, ...]] = None
     time_dilation_slice: Optional[slice] = None  # Slice for time dilation control
     scaling_min: Optional[np.ndarray] = None  # Scaling minimum bounds for unified control
     scaling_max: Optional[np.ndarray] = None  # Scaling maximum bounds for unified control
+    is_impulsive: Optional[bool] = False  # Default toggle for 'impulsivity' of the unified control
+    nodes: Optional[dict[str, list[int]]] = None
 
     def __post_init__(self):
         """Initialize slices after dataclass creation."""
         if self._true_slice is None:
             self._true_slice = slice(0, self._true_dim)
         if self._augmented_slice is None:
-            self._augmented_slice = slice(self._true_dim, self.shape[0])
+            true_mask = self._selector_to_mask(self._true_slice, self.shape[0])
+            self._augmented_slice = self._mask_to_selector(~true_mask, empty_at_end=True)
+        true_mask = self._selector_to_mask(self._true_slice, self.shape[0])
+        self._true_dim = int(np.sum(true_mask))
+
+    @staticmethod
+    def _mask_to_selector(
+        mask: np.ndarray,
+        *,
+        empty_at_end: bool,
+    ) -> slice | tuple[slice, ...]:
+        """Convert a boolean mask to one slice (contiguous) or tuple of slices."""
+        mask = np.asarray(mask, dtype=bool).reshape(-1)
+        n = int(mask.size)
+        if n == 0:
+            return slice(0, 0)
+        if not np.any(mask):
+            return slice(n, n) if empty_at_end else slice(0, 0)
+
+        idx = np.flatnonzero(mask)
+        run_starts = [int(idx[0])]
+        run_stops = []
+        prev = int(idx[0])
+        for value in idx[1:]:
+            current = int(value)
+            if current != prev + 1:
+                run_stops.append(prev + 1)
+                run_starts.append(current)
+            prev = current
+        run_stops.append(prev + 1)
+
+        slices = tuple(slice(start, stop) for start, stop in zip(run_starts, run_stops))
+        if len(slices) == 1:
+            return slices[0]
+        return slices
+
+    @staticmethod
+    def _selector_to_mask(selector: slice | tuple[slice, ...], size: int) -> np.ndarray:
+        """Convert selector (slice or tuple of slices) to boolean mask."""
+        mask = np.zeros((size,), dtype=bool)
+        selectors = selector if isinstance(selector, tuple) else (selector,)
+        for sl in selectors:
+            if not isinstance(sl, slice):
+                raise TypeError(f"Expected slice selector, got {type(sl).__name__}")
+            start, stop, step = sl.indices(size)
+            if step != 1:
+                raise NotImplementedError("Step slicing not supported")
+            if stop > start:
+                mask[start:stop] = True
+        return mask
+
+    @staticmethod
+    def _selector_to_indices(selector: slice | tuple[slice, ...], size: int) -> np.ndarray:
+        """Convert selector to ordered integer indices."""
+        selectors = selector if isinstance(selector, tuple) else (selector,)
+        idx_parts = []
+        for sl in selectors:
+            if not isinstance(sl, slice):
+                raise TypeError(f"Expected slice selector, got {type(sl).__name__}")
+            start, stop, step = sl.indices(size)
+            if step != 1:
+                raise NotImplementedError("Step slicing not supported")
+            if stop > start:
+                idx_parts.append(np.arange(start, stop, dtype=int))
+        if not idx_parts:
+            return np.array([], dtype=int)
+        return np.concatenate(idx_parts)
+
+    def _impulsive_mask(self) -> np.ndarray:
+        """Return impulsive mask aligned to unified control dimension."""
+        if self.shape[0] == 0:
+            return np.zeros((0,), dtype=bool)
+        if self.is_impulsive is None:
+            return np.zeros((self.shape[0],), dtype=bool)
+        mask = np.asarray(self.is_impulsive, dtype=bool).reshape(-1)
+        if mask.size == 1:
+            return np.repeat(mask, self.shape[0])
+        if mask.size != self.shape[0]:
+            raise ValueError(
+                f"is_impulsive mask size {mask.size} does not match unified "
+                f"control size {self.shape[0]}"
+            )
+        return mask
+
+    def _subset(self, indices: np.ndarray, *, name: str, true_mask: np.ndarray) -> "UnifiedControl":
+        """Build a sliced UnifiedControl by explicit indices."""
+        indices = np.asarray(indices, dtype=int).reshape(-1)
+        true_mask = np.asarray(true_mask, dtype=bool).reshape(-1)
+        if indices.size != true_mask.size:
+            raise ValueError("Subset indices and true_mask must have the same size.")
+
+        new_shape = (int(indices.size),)
+        new_min = self.min[indices] if self.min is not None else None
+        new_max = self.max[indices] if self.max is not None else None
+        new_guess = self.guess[:, indices] if self.guess is not None else None
+        new_scaling_min = self.scaling_min[indices] if self.scaling_min is not None else None
+        new_scaling_max = self.scaling_max[indices] if self.scaling_max is not None else None
+
+        parent_impulsive_mask = self._impulsive_mask()
+        new_is_impulsive = (
+            parent_impulsive_mask[indices]
+            if parent_impulsive_mask.size
+            else np.zeros((new_shape[0],), dtype=bool)
+        )
+
+        true_selector = self._mask_to_selector(true_mask, empty_at_end=False)
+        augmented_selector = self._mask_to_selector(~true_mask, empty_at_end=True)
+
+        return UnifiedControl(
+            name=name,
+            shape=new_shape,
+            min=new_min,
+            max=new_max,
+            guess=new_guess,
+            _true_dim=int(np.sum(true_mask)),
+            _true_slice=true_selector,
+            _augmented_slice=augmented_selector,
+            scaling_min=new_scaling_min,
+            scaling_max=new_scaling_max,
+            is_impulsive=new_is_impulsive,
+            nodes=None,
+        )
 
     @property
     def true(self) -> "UnifiedControl":
@@ -508,7 +633,9 @@ class UnifiedControl:
                 unified = unify_controls([thrust, torque, time_dilation], name="u")
                 true_controls = unified.true  # Only thrust and torque
         """
-        return self[self._true_slice]
+        true_indices = self._selector_to_indices(self._true_slice, self.shape[0])
+        true_mask = np.ones((true_indices.size,), dtype=bool)
+        return self._subset(true_indices, name=f"{self.name}[true]", true_mask=true_mask)
 
     @property
     def augmented(self) -> "UnifiedControl":
@@ -526,7 +653,47 @@ class UnifiedControl:
                 unified = unify_controls([thrust, time_dilation], name="u")
                 aug_controls = unified.augmented  # Only time dilation
         """
-        return self[self._augmented_slice]
+        augmented_indices = self._selector_to_indices(self._augmented_slice, self.shape[0])
+        true_mask = np.zeros((augmented_indices.size,), dtype=bool)
+        return self._subset(augmented_indices, name=f"{self.name}[augmented]", true_mask=true_mask)
+
+    @property
+    def slice_continuous(self) -> slice:
+        """Slice for continuous controls in the unified vector."""
+        if self.shape[0] == 0:
+            return slice(0, 0)
+
+        mask = self._impulsive_mask()
+
+        if not np.any(mask):
+            return slice(0, self.shape[0])
+
+        first_impulsive_idx = int(np.flatnonzero(mask)[0])
+        if np.any(~mask[first_impulsive_idx:]):
+            raise ValueError(
+                "Unified controls are not ordered as [continuous | impulsive], "
+                "cannot represent continuous controls with one slice."
+            )
+        return slice(0, first_impulsive_idx)
+
+    @property
+    def slice_impulsive(self) -> slice:
+        """Slice for impulsive controls in the unified vector."""
+        if self.shape[0] == 0:
+            return slice(0, 0)
+
+        mask = self._impulsive_mask()
+
+        if not np.any(mask):
+            return slice(self.shape[0], self.shape[0])
+
+        first_impulsive_idx = int(np.flatnonzero(mask)[0])
+        if np.any(~mask[first_impulsive_idx:]):
+            raise ValueError(
+                "Unified controls are not ordered as [continuous | impulsive], "
+                "cannot represent impulsive controls with one slice."
+            )
+        return slice(first_impulsive_idx, self.shape[0])
 
     def append(
         self,
@@ -534,6 +701,7 @@ class UnifiedControl:
         *,
         min=-np.inf,
         max=np.inf,
+        is_impulsive=False,
         guess=0.0,
         augmented=False,
     ) -> None:
@@ -571,6 +739,8 @@ class UnifiedControl:
         """
         # Import here to avoid circular imports at module level
         from openscvx.symbolic.expr.control import Control
+
+        current_true_mask = self._selector_to_mask(self._true_slice, self.shape[0])
 
         if isinstance(other, (Control, UnifiedControl)):
             # Append another control object
@@ -612,11 +782,13 @@ class UnifiedControl:
             else:
                 new_scaling_max = self.scaling_max
 
-            # Update true dimension
-            if not augmented:
-                new_true_dim = self._true_dim + getattr(other, "_true_dim", other.shape[0])
+            if augmented:
+                appended_true_mask = np.zeros((other.shape[0],), dtype=bool)
+            elif isinstance(other, UnifiedControl):
+                appended_true_mask = self._selector_to_mask(other._true_slice, other.shape[0])
             else:
-                new_true_dim = self._true_dim
+                appended_true_mask = np.ones((other.shape[0],), dtype=bool)
+            new_true_mask = np.concatenate([current_true_mask, appended_true_mask])
 
             # Update all attributes in place
             self.shape = new_shape
@@ -625,9 +797,9 @@ class UnifiedControl:
             self.guess = new_guess
             self.scaling_min = new_scaling_min
             self.scaling_max = new_scaling_max
-            self._true_dim = new_true_dim
-            self._true_slice = slice(0, self._true_dim)
-            self._augmented_slice = slice(self._true_dim, self.shape[0])
+            self._true_dim = int(np.sum(new_true_mask))
+            self._true_slice = self._mask_to_selector(new_true_mask, empty_at_end=False)
+            self._augmented_slice = self._mask_to_selector(~new_true_mask, empty_at_end=True)
 
         else:
             # Create a single new variable
@@ -645,13 +817,17 @@ class UnifiedControl:
                 self.scaling_min = np.concatenate([self.scaling_min, np.array([min])])
             if self.scaling_max is not None:
                 self.scaling_max = np.concatenate([self.scaling_max, np.array([max])])
+            if self.is_impulsive is not None:
+                self.is_impulsive = np.concatenate([self.is_impulsive, np.array([is_impulsive])])
 
             # Update dimensions
             self.shape = new_shape
-            if not augmented:
-                self._true_dim += 1
-            self._true_slice = slice(0, self._true_dim)
-            self._augmented_slice = slice(self._true_dim, self.shape[0])
+            new_true_mask = np.concatenate(
+                [current_true_mask, np.array([not augmented], dtype=bool)]
+            )
+            self._true_dim = int(np.sum(new_true_mask))
+            self._true_slice = self._mask_to_selector(new_true_mask, empty_at_end=False)
+            self._augmented_slice = self._mask_to_selector(~new_true_mask, empty_at_end=True)
 
     def __getitem__(self, idx):
         """Get a subset of the unified control variables.
@@ -689,26 +865,13 @@ class UnifiedControl:
             if step != 1:
                 raise NotImplementedError("Step slicing not supported")
 
-            new_shape = (stop - start,)
-            new_name = f"{self.name}[{start}:{stop}]"
-
-            # Slice all arrays
-            new_min = self.min[idx] if self.min is not None else None
-            new_max = self.max[idx] if self.max is not None else None
-            new_guess = self.guess[:, idx] if self.guess is not None else None
-
-            # Calculate new true dimension
-            new_true_dim = max(0, min(stop, self._true_dim) - max(start, 0))
-
-            return UnifiedControl(
-                name=new_name,
-                shape=new_shape,
-                min=new_min,
-                max=new_max,
-                guess=new_guess,
-                _true_dim=new_true_dim,
-                _true_slice=slice(0, new_true_dim),
-                _augmented_slice=slice(new_true_dim, new_shape[0]),
+            subset_indices = np.arange(start, stop, dtype=int)
+            parent_true_mask = self._selector_to_mask(self._true_slice, self.shape[0])
+            subset_true_mask = parent_true_mask[start:stop]
+            return self._subset(
+                subset_indices,
+                name=f"{self.name}[{start}:{stop}]",
+                true_mask=subset_true_mask,
             )
         else:
             raise NotImplementedError("Only slice indexing is supported")

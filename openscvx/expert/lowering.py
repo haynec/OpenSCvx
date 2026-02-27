@@ -31,6 +31,7 @@ def apply_byof(
     byof: dict,
     dynamics: Dynamics,
     dynamics_prop: Dynamics,
+    dynamics_discrete: Dynamics,
     jax_constraints: LoweredJaxConstraints,
     x_unified: "UnifiedState",
     x_prop_unified: "UnifiedState",
@@ -38,7 +39,7 @@ def apply_byof(
     states: List["State"],
     states_prop: List["State"],
     N: int,
-) -> Tuple[Dynamics, Dynamics, LoweredJaxConstraints, "UnifiedState", "UnifiedState"]:
+) -> Tuple[Dynamics, Dynamics, Dynamics, LoweredJaxConstraints, "UnifiedState", "UnifiedState"]:
     """Apply bring-your-own-functions (byof) to augment lowered problem.
 
     Handles raw JAX functions provided by expert users, including:
@@ -52,6 +53,8 @@ def apply_byof(
             "ctcs_constraints"
         dynamics: Lowered optimization dynamics to potentially augment
         dynamics_prop: Lowered propagation dynamics to potentially augment
+        dynamics_discrete: Lowered discrete dynamics (for impulsive solver); extended when
+            new CTCS states are added so its output dimension matches the unified state.
         jax_constraints: Lowered JAX constraints to append to
         x_unified: Unified optimization state interface to potentially augment
         x_prop_unified: Unified propagation state interface to potentially augment
@@ -61,11 +64,13 @@ def apply_byof(
         N: Number of nodes in the trajectory
 
     Returns:
-        Tuple of (dynamics, dynamics_prop, jax_constraints, x_unified, x_prop_unified)
+        Tuple of (dynamics, dynamics_prop, dynamics_discrete, jax_constraints,
+        x_unified, x_prop_unified)
 
     Example:
-        >>> dynamics, dynamics_prop, constraints, x_unified, x_prop_unified = apply_byof(
-        ...     byof, dynamics, dynamics_prop, jax_constraints,
+        >>> (dynamics, dynamics_prop, dynamics_discrete, constraints, x_unified,
+        ...     x_prop_unified) = apply_byof(
+        ...     byof, dynamics, dynamics_prop, dynamics_discrete, jax_constraints,
         ...     x_unified, x_prop_unified, u_unified, states, states_prop, N
         ... )
     """
@@ -127,6 +132,29 @@ def apply_byof(
             dynamics_prop.f, byof_dynamics, state_slices_prop, td_slice
         )
         dynamics_prop = Dynamics(f=composite_f_prop)
+
+    # Handle byof dynamics_discrete by splicing in raw JAX functions at the correct slices
+    byof_dynamics_discrete = byof.get("dynamics_discrete", {})
+    if byof_dynamics_discrete:
+        state_slices = {state.name: state._slice for state in states}
+
+        def _make_composite_dynamics_discrete(orig_f, byof_fns, slices_map):
+            """Create composite discrete dynamics combining symbolic and byof state updates."""
+
+            def composite_f(x, u, node, params):
+                x_next = orig_f(x, u, node, params)
+                for state_name, byof_fn in byof_fns.items():
+                    sl = slices_map[state_name]
+                    x_next = x_next.at[sl].set(byof_fn(x, u, node, params))
+                return x_next
+
+            return composite_f
+
+        dynamics_discrete = Dynamics(
+            f=_make_composite_dynamics_discrete(
+                dynamics_discrete.f, byof_dynamics_discrete, state_slices
+            )
+        )
 
     # Handle nodal constraints
     # Note: Validation happens earlier in Problem.__init__ via validate_byof
@@ -359,6 +387,20 @@ def apply_byof(
 
                 return augmented_f
 
+            def _extend_discrete_dynamics(orig_discrete_f, aug_sl):
+                """Extend discrete dynamics so output dim matches unified state.
+
+                For impulsive/discrete updates, new CTCS augmented states are
+                pass-through: x_next[aug] = x_curr[aug], so we append x[aug_sl]
+                to the discrete dynamics output.
+                """
+
+                def extended_f(x, u, node, params):
+                    out = orig_discrete_f(x, u, node, params)
+                    return jnp.concatenate([out, jnp.atleast_1d(x[aug_sl])])
+
+                return extended_f
+
             # Augment optimization dynamics
             # Jacobians are computed by the discretizer, not here.
             aug_f = _make_ctcs_new_state(dynamics.f, penalty_fns, td_slice)
@@ -367,6 +409,13 @@ def apply_byof(
             # Augment propagation dynamics
             aug_f_prop = _make_ctcs_new_state(dynamics_prop.f, penalty_fns, td_slice)
             dynamics_prop = Dynamics(f=aug_f_prop)
+
+            # Extend discrete dynamics so impulsive solver sees full state dimension
+            current_dim = x_unified.shape[0]
+            aug_slice = slice(current_dim, current_dim + 1)
+            dynamics_discrete = Dynamics(
+                f=_extend_discrete_dynamics(dynamics_discrete.f, aug_slice)
+            )
 
             # Create State objects for the new augmented states
             # This is necessary for CVXPy variable creation and other bookkeeping
@@ -420,4 +469,4 @@ def apply_byof(
                 augmented=True,
             )
 
-    return dynamics, dynamics_prop, jax_constraints, x_unified, x_prop_unified
+    return dynamics, dynamics_prop, dynamics_discrete, jax_constraints, x_unified, x_prop_unified

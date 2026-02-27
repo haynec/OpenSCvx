@@ -6,7 +6,7 @@ optimization problems through iterative convex approximation.
 
 import time
 import warnings
-from typing import TYPE_CHECKING, Dict, List, Union
+from typing import TYPE_CHECKING, Callable, Dict, List, Union
 
 import numpy as np
 import numpy.linalg as la
@@ -118,6 +118,7 @@ class PenalizedTrustRegion(Algorithm):
         # Compiled infrastructure (set by initialize())
         self._solver: "ConvexSolver" = None
         self._discretization_solver: callable = None
+        self._discretization_solver_impulsive: callable = None
         self._jax_constraints: "LoweredJaxConstraints" = None
         self._emitter: callable = None
 
@@ -157,6 +158,25 @@ class PenalizedTrustRegion(Algorithm):
     # on ``self.weights`` directly (e.g. ramping ``lam_prox``).  Those
     # in-flight changes are tracked in ``AlgorithmState`` weight histories
     # but do not affect the raw values returned here.
+
+    @staticmethod
+    def _invoke_solver(solver: callable, *args):
+        """Call either a compiled solver wrapper (.call) or a plain callable."""
+        if hasattr(solver, "call"):
+            return solver.call(*args)
+        return solver(*args)
+
+    def _recover_prior_node_from_initial(
+        self,
+        settings: Config,
+        x0_fallback: np.ndarray,
+    ) -> np.ndarray:
+        """Build node-0 prior state from initial conditions (fixed entries exact)."""
+        x0_prior = np.asarray(x0_fallback, dtype=float).reshape(-1).copy()
+        x0_init = np.asarray(settings.sim.x.initial, dtype=float).reshape(-1)
+        is_fixed = np.asarray(settings.sim.x.initial_type) == "Fix"
+        x0_prior[is_fixed] = x0_init[is_fixed]
+        return x0_prior.reshape(1, -1)
 
     @property
     def lam_prox(self) -> float:
@@ -267,6 +287,7 @@ class PenalizedTrustRegion(Algorithm):
         emitter: callable,
         params: dict,
         settings: Config,
+        discretization_solver_impulsive: Callable[..., object] | None = None,
     ) -> None:
         """Initialize PTR algorithm.
 
@@ -280,10 +301,13 @@ class PenalizedTrustRegion(Algorithm):
             emitter: Callback for emitting iteration progress
             params: Problem parameters dictionary (for warm-start)
             settings: Configuration object (for warm-start)
+            discretization_solver_impulsive: Optional impulsive/discrete
+                discretization solver used to populate W/x_prop_plus/D_d/E_d.
         """
         # Store immutable infrastructure
         self._solver = solver
         self._discretization_solver = discretization_solver
+        self._discretization_solver_impulsive = discretization_solver_impulsive
         self._jax_constraints = jax_constraints
         self._emitter = emitter
 
@@ -302,6 +326,19 @@ class PenalizedTrustRegion(Algorithm):
         )
 
         init_state.add_discretization(V_multi_shoot.__array__())
+        slice_imp = settings.sim.u.slice_impulsive
+        has_impulsive = bool(slice_imp.stop > slice_imp.start)
+        if has_impulsive and self._discretization_solver_impulsive is not None:
+            u_init = init_state.u.astype(float)
+            x0_prior = self._recover_prior_node_from_initial(settings, init_state.x[0])
+            x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
+            _, _, _, W_multi_shoot = self._invoke_solver(
+                self._discretization_solver_impulsive,
+                x_nodes_prior,
+                u_init,
+                params,
+            )
+            init_state.add_impulsive_discretization(W_multi_shoot.__array__())
         _ = self._subproblem(params, init_state, settings)
 
     def step(
@@ -339,9 +376,17 @@ class PenalizedTrustRegion(Algorithm):
             _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
                 state.x, state.u.astype(float), params
             )
+
+            u_state = state.u.astype(float)
+            x0_prior = self._recover_prior_node_from_initial(settings, state.x[0])
+            x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
+            _, _, _, W_multi_shoot = self._discretization_solver_impulsive.call(
+                x_nodes_prior, u_state, params
+            )
             dis_time = time.time() - t0
 
             state.add_discretization(V_multi_shoot.__array__())
+            state.add_impulsive_discretization(W_multi_shoot.__array__())
 
         # Run the subproblem
         (
@@ -367,10 +412,22 @@ class PenalizedTrustRegion(Algorithm):
         _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
             candidate.x, candidate.u.astype(float), params
         )
+
+        u_candidate = candidate.u.astype(float)
+        x0_prior = self._recover_prior_node_from_initial(settings, candidate.x[0])
+        x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
+        x_prop_plus, D_d, E_d, W_multi_shoot = self._discretization_solver_impulsive.call(
+            x_nodes_prior, u_candidate, params
+        )
+
         dis_time = time.time() - t0
 
         candidate.V = V_multi_shoot.__array__()
+        candidate.W = W_multi_shoot.__array__()
         candidate.x_prop = x_prop.__array__()
+        candidate.x_prop_plus = x_prop_plus.__array__()
+        candidate.D_d = D_d.__array__()
+        candidate.E_d = E_d.__array__()
 
         # Update state in place by appending to history
         # The x_guess/u_guess properties will automatically return the latest entry
@@ -472,6 +529,9 @@ class PenalizedTrustRegion(Algorithm):
             B_d=state.B_d(),
             C_d=state.C_d(),
             x_prop=state.x_prop(),
+            x_prop_plus=state.x_prop_plus(),
+            D_d=state.D_d(),
+            E_d=state.E_d(),
         )
 
         # Build constraint linearization data

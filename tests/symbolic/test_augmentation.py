@@ -221,7 +221,7 @@ def test_augment_no_ctcs_constraints():
     N = 1
     time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -255,7 +255,7 @@ def test_augment_single_ctcs_constraint():
     # CTCS constraint
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -295,7 +295,7 @@ def test_augment_multiple_ctcs_constraints():
     c2 = ctcs(x[1] >= -1.0, penalty="huber")
     c3 = ctcs(x[2] == 0.0, penalty="smooth_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -338,7 +338,7 @@ def test_augment_penalty_expression_structure():
     # Create CTCS with squared_relu penalty
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -379,7 +379,7 @@ def test_augment_single_penalty_no_add():
 
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -413,7 +413,7 @@ def test_augment_multiple_penalties_create_add():
     c1 = ctcs(x[0] <= 1.0, penalty="squared_relu")
     c2 = ctcs(x[1] <= 2.0, penalty="huber")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -444,7 +444,7 @@ def test_augment_empty_states_list():
     # CTCS constraint on a constant (unusual but valid)
     constraint = ctcs(Constant(1.0) <= 2.0)
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -478,7 +478,7 @@ def test_augment_with_different_penalties():
     penalties = ["squared_relu", "huber", "smooth_relu"]
     constraints = [ctcs(x <= float(i), penalty=p) for i, p in enumerate(penalties)]
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -517,7 +517,7 @@ def test_augment_preserves_original_controls():
 
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -802,7 +802,7 @@ def test_augmented_state_bounds():
 
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -835,7 +835,7 @@ def test_time_dilation_control_bounds():
 
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -880,7 +880,7 @@ def test_time_dilation_overrides_from_time_object():
 
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -917,7 +917,7 @@ def test_time_dilation_partial_override():
 
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
 
-    _, _, controls_aug = augment_dynamics_with_ctcs(
+    _, _, _, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -944,7 +944,7 @@ def test_time_dilation_live_propagation():
 
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
 
-    _, _, controls_aug = augment_dynamics_with_ctcs(
+    _, _, _, controls_aug = augment_dynamics_with_ctcs(
         x,
         states,
         [],
@@ -1081,7 +1081,7 @@ def test_ctcs_multiple_augmented_states():
     c2 = ctcs(x[1] <= 2.0, nodes=(0, 5), idx=0)  # Same group as c1
     c3 = ctcs(x[0] <= 3.0, nodes=(3, 8), idx=1)  # Different group
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,

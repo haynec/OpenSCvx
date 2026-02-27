@@ -41,7 +41,7 @@ Example:
         # Augment dynamics with CTCS
         from openscvx.symbolic.augmentation import augment_dynamics_with_ctcs
 
-        xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+        xdot_aug, xdelta_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
             xdot=xdot,
             states=[x],
             controls=[u],
@@ -49,11 +49,12 @@ Example:
             N=50
         )
         # xdot_aug now includes augmented state dynamics
+        # xdelta_aug includes augmented discrete dynamics (if provided)
         # states_aug includes original states + augmented states
         # controls_aug includes original controls + time dilation
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -439,9 +440,11 @@ def augment_dynamics_with_ctcs(
     controls: List[Control],
     constraints_ctcs: List[CTCS],
     N: int,
+    xdelta: Optional[Expr] = None,
+    *,
     licq_min: float = 0.0,
     licq_max: float = 1e-4,
-) -> Tuple[Expr, List[State], List[Control]]:
+) -> Tuple[Expr, Optional[Expr], List[State], List[Control]]:
     """Augment dynamics with continuous-time constraint satisfaction states.
 
     Implements the CTCS method by adding augmented states and time dilation control
@@ -469,7 +472,8 @@ def augment_dynamics_with_ctcs(
 
     Returns:
         Tuple of:
-            - Augmented dynamics expression (original + augmented state dynamics)
+            - Augmented continuous dynamics expression
+            - Augmented discrete dynamics expression (or None if not provided)
             - Updated states list (original + augmented states)
             - Updated controls list (original + time dilation control)
 
@@ -484,7 +488,7 @@ def augment_dynamics_with_ctcs(
             time = ox.State("time", shape=(1,))
             xdot = u @ A  # Some dynamics
             constraint = (ox.Norm(x) <= 1.0).over((0, 50))
-            xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+            xdot_aug, xdelta_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
                 xdot=xdot,
                 states=[x, time],
                 controls=[u],
@@ -495,9 +499,15 @@ def augment_dynamics_with_ctcs(
         states_aug includes x, time, and _ctcs_aug_0,
         controls_aug includes u and _time_dilation
     """
+    # Save if discrete dynamics is null
+    discrete_dynamics_set = xdelta is not None
+
     # Copy the original states and controls lists
     states_augmented = list(states)
     controls_augmented = list(controls)
+
+    if constraints_ctcs:
+        constraints_ctcs, _, _ = sort_ctcs_constraints(list(constraints_ctcs))
 
     if constraints_ctcs:
         # Group penalty expressions by idx (constraints should already be sorted)
@@ -515,8 +525,11 @@ def augment_dynamics_with_ctcs(
                 penalty_groups[ctcs.idx] = []
             penalty_groups[ctcs.idx].append(ctcs)
 
-        # Create augmented state expressions for each group
+        # Create augmented state expressions for each group and corresponding
+        # augmented state variables. For discrete dynamics, preserve these states
+        # by identity mapping across impulsive updates.
         augmented_state_exprs = []
+        augmented_state_exprs_discrete = []
         for idx in sorted(penalty_groups.keys()):
             penalty_terms = penalty_groups[idx]
             if len(penalty_terms) == 1:
@@ -525,11 +538,6 @@ def augment_dynamics_with_ctcs(
                 augmented_state_expr = Add(*penalty_terms)
             augmented_state_exprs.append(augmented_state_expr)
 
-        # Calculate number of augmented states from the penalty groups
-        num_augmented_states = len(penalty_groups)
-
-        # Create augmented state variables
-        for idx in range(num_augmented_states):
             aug_var = State(f"_ctcs_aug_{idx}", shape=(1,))
             aug_var.initial = np.array([licq_min])  # Set initial to respect bounds
             aug_var.final = [("free", 0)]
@@ -538,11 +546,17 @@ def augment_dynamics_with_ctcs(
             # Set guess to licq_min as well
             aug_var.guess = np.full([N, 1], licq_min)  # N x num augmented states
             states_augmented.append(aug_var)
+            augmented_state_exprs_discrete.append(aug_var)
 
         # Concatenate with original dynamics
         xdot_aug = Concat(xdot, *augmented_state_exprs)
+        if discrete_dynamics_set:
+            xdelta_aug = Concat(xdelta, *augmented_state_exprs_discrete)
+        else:
+            xdelta_aug = None
     else:
         xdot_aug = xdot
+        xdelta_aug = xdelta if discrete_dynamics_set else None
 
     time_dilation = Control("_time_dilation", shape=(1,))
 
@@ -604,4 +618,4 @@ def augment_dynamics_with_ctcs(
 
     controls_augmented.append(time_dilation)
 
-    return xdot_aug, states_augmented, controls_augmented
+    return xdot_aug, xdelta_aug, states_augmented, controls_augmented
