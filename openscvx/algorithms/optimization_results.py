@@ -102,12 +102,6 @@ class OptimizationResults:
         default_factory=list, metadata={"npz": "float_list"}
     )
 
-    # Convergence histories
-    lam_prox_history: list[float] = field(default_factory=list)
-    actual_reduction_history: list[float] = field(default_factory=list)
-    pred_reduction_history: list[float] = field(default_factory=list)
-    acceptance_ratio_history: list[float] = field(default_factory=list)
-
     @property
     def x(self) -> np.ndarray:
         """Optimal state trajectory at discretization nodes.
