@@ -413,7 +413,6 @@ class PenalizedTrustRegion(Algorithm):
             candidate.x, candidate.u.astype(float), params
         )
 
-
         u_candidate = candidate.u.astype(float)
         x0_prior = self._recover_prior_node_from_initial(settings, candidate.x[0])
         x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
@@ -429,8 +428,6 @@ class PenalizedTrustRegion(Algorithm):
         candidate.x_prop_pp = x_prop_pp.__array__()
         candidate.D_d = D_d.__array__()
         candidate.E_d = E_d.__array__()
-        
-        
 
         # Update state in place by appending to history
         # The x_guess/u_guess properties will automatically return the latest entry
