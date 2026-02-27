@@ -113,21 +113,17 @@ problem = Problem(
     constraints=constraints,
     N=n,
     licq_max=1e-8,
-    time_dilation_factor_min=0.02,
     byof=byof,  # Pass byof specification
-    autotuner=ox.ConstantProximalWeight()
+    algorithm={
+        "autotuner": {"type": "ConstantProximalWeight"},
+    }
 )
 
 # Set solver parameters
-problem.settings.prp.dt = 0.01
-problem.settings.scp.lam_prox = 0e0
-problem.settings.scp.lam_cost = 1e-1
-problem.settings.scp.lam_vc = 1e3
-problem.settings.scp.uniform_time_grid = True
-
-# Enable CLI printing for optimization iterations
-problem.settings.dev.printing = True
-problem.settings.cvx.solver_args = {}
+problem.algorithm.lam_prox = 0e0
+problem.algorithm.lam_cost = 1e-1
+problem.algorithm.lam_vc = 1e3
+problem.algorithm.uniform_time_grid = True
 
 # Set parameter for angular rate weight in convex cost
 problem.parameters["angular_rate_weight"] = 0.1
