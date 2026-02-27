@@ -70,6 +70,8 @@ Module Organization:
 """
 
 # Arithmetic operations
+from openscvx.symbolic.sparsity import discrete_sparsity, transitive_closure
+
 from .arithmetic import Add, Div, MatMul, Mul, Neg, Power, Sub
 
 # Array operations
@@ -122,6 +124,7 @@ from .logic import All, Any, Cond
 from .math import (
     Abs,
     Bilerp,
+    Cinterp,
     Cos,
     Exp,
     Huber,
@@ -129,6 +132,7 @@ from .math import (
     Log,
     LogSumExp,
     Max,
+    Min,
     PositivePart,
     Sin,
     SmoothReLU,
@@ -146,6 +150,9 @@ from .state import BoundaryType, Fixed, Free, Maximize, Minimize, State
 # STL operations
 from .stl import Or
 
+# Time
+from .time import Time
+
 # Variable
 from .variable import Variable
 
@@ -160,6 +167,8 @@ __all__ = [
     "Parameter",
     "to_expr",
     "traverse",
+    "transitive_closure",
+    "discrete_sparsity",
     "Add",
     "Sub",
     "Mul",
@@ -185,6 +194,8 @@ __all__ = [
     "Maximize",
     # Control
     "Control",
+    # Time
+    "Time",
     # Mathematical functions
     "Sin",
     "Cos",
@@ -199,7 +210,9 @@ __all__ = [
     "Log",
     "LogSumExp",
     "Max",
+    "Min",
     "Linterp",
+    "Cinterp",
     "Bilerp",
     # Logical/control flow operations
     "All",

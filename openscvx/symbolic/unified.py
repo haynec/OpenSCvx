@@ -269,11 +269,13 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     This function is the primary way to aggregate multiple symbolic Control objects into
     a single unified control vector for numerical optimization. It:
 
-    1. Sorts controls (user-defined first, augmented controls second)
-    2. Concatenates all control properties (bounds, guesses)
-    3. Assigns slices to each Control for extracting values from unified vector
-    4. Identifies special controls (time dilation)
-    5. Returns a UnifiedControl with all aggregated data
+    1. Reorders controls by actuation type: continuous first, impulsive second
+    2. Within each actuation-type group, places user-defined controls first and
+       augmented controls (names starting with ``"_"``) second
+    3. Concatenates all control properties (bounds, guesses)
+    4. Assigns slices to each Control for extracting values from unified vector
+    5. Identifies special controls (time dilation, impulsive masks/nodes)
+    6. Returns a UnifiedControl with all aggregated data
 
     Args:
         controls (List[Control]): List of Control objects to unify. Can include both
@@ -312,6 +314,25 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
             print(unified.true.shape)        # (6,)
             print(unified.augmented.shape)   # (1,) - time dilation
 
+        With both impulsive and augmented controls::
+
+            thrust = ox.Control("thrust", shape=(2,))  # continuous, user-defined
+            time_dilation = ox.Control("_time_dilation", shape=(1,))  # continuous, augmented
+            delta_v = ox.Control("delta_v", shape=(2,), impulsive=True, nodes=[0, 20])
+            delta_v_aug = ox.Control("_delta_v_bias", shape=(1,), impulsive=True, nodes=[0, 20])
+
+            unified = unify_controls([time_dilation, delta_v_aug, thrust, delta_v], name="u")
+
+            # Unified ordering is:
+            # [continuous true, continuous augmented | impulsive true, impulsive augmented]
+            # [thrust, _time_dilation | delta_v, _delta_v_bias]
+            print(thrust._slice)         # slice(0, 2)
+            print(time_dilation._slice)  # slice(2, 3)
+            print(delta_v._slice)        # slice(3, 5)
+            print(delta_v_aug._slice)    # slice(5, 6)
+            print(unified.slice_continuous)  # slice(0, 3)
+            print(unified.slice_impulsive)   # slice(3, 6)
+
     Note:
         After unification, each Control object has its `_slice` attribute set,
         which is used during JAX lowering to extract the correct values from
@@ -325,11 +346,32 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     if not controls:
         return UnifiedControl(name=name, shape=(0,))
 
-    # Sort controls: true controls (not starting with '_') first, then augmented controls
-    # (starting with '_')
-    true_controls = [control for control in controls if not control.name.startswith("_")]
-    augmented_controls = [control for control in controls if control.name.startswith("_")]
-    sorted_controls = true_controls + augmented_controls
+    def _is_impulsive_control(ctrl: Control) -> bool:
+        is_imp = getattr(ctrl, "is_impulsive", False)
+        is_imp_arr = np.asarray(is_imp, dtype=bool).reshape(-1)
+        return bool(np.any(is_imp_arr))
+
+    # Reorder controls to mirror unified control layout assumptions:
+    # 1) continuous controls first, 2) impulsive controls second.
+    # Inside each group keep user controls before augmented controls.
+    controls_continuous = [c for c in controls if not _is_impulsive_control(c)]
+    controls_impulsive = [c for c in controls if _is_impulsive_control(c)]
+
+    def _stable_true_then_aug(group: list[Control]) -> list[Control]:
+        true_controls = [c for c in group if not c.name.startswith("_")]
+        augmented_controls = [c for c in group if c.name.startswith("_")]
+        return true_controls + augmented_controls
+
+    sorted_controls = _stable_true_then_aug(controls_continuous) + _stable_true_then_aug(
+        controls_impulsive
+    )
+
+    # Assign slices in the new unified order.
+    offset = 0
+    for control in sorted_controls:
+        dim = int(control.shape[0])
+        control._slice = slice(offset, offset + dim)
+        offset += dim
 
     # Calculate total shape
     total_shape = sum(control.shape[0] for control in sorted_controls)
@@ -360,9 +402,15 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     unified_max = np.concatenate(max_arrays) if max_arrays else None
     unified_guess = np.concatenate(guess_arrays, axis=1) if guess_arrays else None
 
-    # Calculate true dimension (only from user-defined controls, not augmented ones)
-    # Since we simplified State/Control classes, all user controls are "true" dimensions
-    true_dim = sum(control.shape[0] for control in true_controls)
+    # Compute a true-control mask from the reordered controls.
+    true_mask_parts = []
+    for control in sorted_controls:
+        is_true_control = not control.name.startswith("_")
+        true_mask_parts.append(np.full(control.shape[0], is_true_control, dtype=bool))
+    true_mask = np.concatenate(true_mask_parts) if true_mask_parts else np.zeros((0,), dtype=bool)
+    true_dim = int(np.sum(true_mask))
+    true_slice = UnifiedControl._mask_to_selector(true_mask, empty_at_end=False)
+    augmented_slice = UnifiedControl._mask_to_selector(~true_mask, empty_at_end=True)
 
     # Find time dilation control slice
     time_dilation_control = next((c for c in sorted_controls if c.name == "_time_dilation"), None)
@@ -372,13 +420,13 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     # Build full arrays using scaling where available, min/max otherwise
     unified_scaling_min = None
     unified_scaling_max = None
+    unified_is_impulsive = np.zeros((total_shape,), dtype=bool)
 
     # Check if any control has scaling
     has_any_scaling = any(
         control.scaling_min is not None or control.scaling_max is not None
         for control in sorted_controls
     )
-
     if has_any_scaling:
         # Build full scaling arrays
         scaling_min_list = []
@@ -405,6 +453,32 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         unified_scaling_min = np.concatenate(scaling_min_list)
         unified_scaling_max = np.concatenate(scaling_max_list)
 
+    nodes = {}
+    is_impulsive_list = []
+    for control in sorted_controls:
+        is_impulsive_block = np.asarray(control.is_impulsive, dtype=bool).reshape(-1)
+        if is_impulsive_block.size != int(control.shape[0]):
+            raise ValueError(
+                f"Control '{control.name}' impulsive mask has size {is_impulsive_block.size}, "
+                f"expected {control.shape[0]}."
+            )
+
+        if np.any(is_impulsive_block):
+            if not np.all(is_impulsive_block):
+                raise ValueError(
+                    f"Control '{control.name}' mixes continuous and impulsive components. "
+                    "Use separate Control objects."
+                )
+            if control.nodes is not None:
+                nodes[control.name] = list(control.nodes)
+
+        is_impulsive_list.append(is_impulsive_block)
+
+    if is_impulsive_list:
+        unified_is_impulsive = np.concatenate(is_impulsive_list)
+    if not nodes:
+        nodes = None
+
     return UnifiedControl(
         name=name,
         shape=(total_shape,),
@@ -412,9 +486,11 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         max=unified_max,
         guess=unified_guess,
         _true_dim=true_dim,
-        _true_slice=slice(0, true_dim),
-        _augmented_slice=slice(true_dim, total_shape),
+        _true_slice=true_slice,
+        _augmented_slice=augmented_slice,
         time_dilation_slice=time_dilation_slice,
         scaling_min=unified_scaling_min,
         scaling_max=unified_scaling_max,
+        is_impulsive=unified_is_impulsive,
+        nodes=nodes,
     )

@@ -350,6 +350,39 @@ def test_unified_control_time_dilation_slice_none():
     assert unified.time_dilation_slice is None
 
 
+def test_unified_control_impulsive_order_and_true_selector():
+    """Continuous controls must precede impulsive controls in unified ordering."""
+    thrust = Control("thrust", (1,))
+    thrust.min = np.array([0.0])
+
+    time_dilation = Control("_time_dilation", (1,))
+    time_dilation.min = np.array([0.5])
+    time_dilation.max = np.array([2.0])
+
+    impulse = Control(
+        "impulse",
+        (1,),
+        impulsive=True,
+        nodes=[0],
+    )
+    impulse.min = np.array([-10.0])
+
+    # Pass controls in mixed order and verify canonical reordering.
+    _, controls = collect_and_assign_slices([], [impulse, time_dilation, thrust])
+    unified = unify_controls(controls)
+
+    # New order should be: thrust (continuous true), time_dilation (continuous augmented), impulse.
+    np.testing.assert_array_equal(unified.min, np.array([0.0, 0.5, -10.0]))
+    assert unified.slice_continuous == slice(0, 2)
+    assert unified.slice_impulsive == slice(2, 3)
+
+    # True controls are non-contiguous in this layout: [0] U [2].
+    assert isinstance(unified._true_slice, tuple)
+    assert unified._true_slice == (slice(0, 1), slice(2, 3))
+    assert unified._true_dim == 2
+    np.testing.assert_array_equal(unified.true.min, np.array([0.0, -10.0]))
+
+
 def test_metadata_slices_indexing():
     """Test that metadata slices can be used to index into arrays correctly."""
     pos = State("pos", (2,))

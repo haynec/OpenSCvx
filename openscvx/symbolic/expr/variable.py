@@ -113,8 +113,8 @@ class Variable(Leaf):
         arr = np.asarray(arr, dtype=float)
         if arr.ndim != 1 or arr.shape[0] != self.shape[0]:
             raise ValueError(
-                f"{self.__class__.__name__} min must be 1D with shape ({self.shape[0]},), got"
-                f" {arr.shape}"
+                f"{self.__class__.__name__} '{self.name}': min expected shape"
+                f" ({self.shape[0]},), got {arr.shape}"
             )
         self._min = arr
 
@@ -154,8 +154,8 @@ class Variable(Leaf):
         arr = np.asarray(arr, dtype=float)
         if arr.ndim != 1 or arr.shape[0] != self.shape[0]:
             raise ValueError(
-                f"{self.__class__.__name__} max must be 1D with shape ({self.shape[0]},), got"
-                f" {arr.shape}"
+                f"{self.__class__.__name__} '{self.name}': max expected shape"
+                f" ({self.shape[0]},), got {arr.shape}"
             )
         self._max = arr
 
@@ -230,13 +230,13 @@ class Variable(Leaf):
         arr = np.asarray(arr, dtype=float)
         if arr.ndim != 2:
             raise ValueError(
-                f"Guess must be a 2D array of shape (n_guess_points, {self.shape[0]}), got shape"
-                f" {arr.shape}"
+                f"{self.__class__.__name__} '{self.name}': guess expected 2D array of shape"
+                f" (N, {self.shape[0]}), got {arr.shape}"
             )
         if arr.shape[1] != self.shape[0]:
             raise ValueError(
-                f"Guess must have second dimension equal to variable dimension {self.shape[0]}, got"
-                f" {arr.shape[1]}"
+                f"{self.__class__.__name__} '{self.name}': guess expected second dimension"
+                f" {self.shape[0]}, got {arr.shape[1]}"
             )
         self._guess = arr
 

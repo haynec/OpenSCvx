@@ -4,7 +4,7 @@ This module tests mathematical function nodes:
 
 - Trigonometric: Sin, Cos, Tan
 - Exponential: Exp, Log, Sqrt
-- Nonlinear: Square, PositivePart, Huber, SmoothReLU, Max
+- Nonlinear: Square, PositivePart, Huber, SmoothReLU, Max, Min
 - Absolute value: Abs
 - Smooth maximum: LogSumExp
 
@@ -1444,6 +1444,331 @@ def test_max_with_zero_relu_pattern():
 
 
 # =============================================================================
+# Min
+# =============================================================================
+
+
+def test_min_creation():
+    """Test Min node creation and properties."""
+    from openscvx.symbolic.expr import Min
+
+    x = Variable("x", shape=(3,))
+    y = Variable("y", shape=(3,))
+
+    min_xy = Min(x, y)
+    assert repr(min_xy) == "min(Var('x'), Var('y'))"
+    assert min_xy.children() == [x, y]
+
+
+def test_min_creation_with_multiple_operands():
+    """Test Min node creation with more than two operands."""
+    from openscvx.symbolic.expr import Constant, Min
+
+    x = Variable("x", shape=(1,))
+    y = Variable("y", shape=(1,))
+    z = Constant(10.0)
+
+    min_xyz = Min(x, y, z)
+    assert len(min_xyz.children()) == 3
+    assert repr(min_xyz) == "min(Var('x'), Var('y'), Const(10.0))"
+
+
+def test_min_requires_at_least_two_operands():
+    """Test that Min raises ValueError with fewer than two operands."""
+    from openscvx.symbolic.expr import Min
+
+    x = Variable("x", shape=(1,))
+
+    with pytest.raises(ValueError, match="Min requires two or more operands"):
+        Min(x)
+
+
+# --- Min: Shape Checking ---
+
+
+def test_min_shape_with_same_shapes():
+    """Test Min shape when all operands have the same shape."""
+    from openscvx.symbolic.expr import Min
+
+    x = Variable("x", shape=(3,))
+    y = Variable("y", shape=(3,))
+    z = Variable("z", shape=(3,))
+
+    min_xyz = Min(x, y, z)
+    assert min_xyz.check_shape() == (3,)
+
+
+def test_min_shape_with_broadcasting():
+    """Test Min shape with broadcasting."""
+    from openscvx.symbolic.expr import Constant, Min
+
+    x = Variable("x", shape=(3, 4))
+    y = Constant(np.array([1.0, 2.0, 3.0, 4.0]))  # shape (4,)
+
+    min_xy = Min(x, y)
+    assert min_xy.check_shape() == (3, 4)
+
+
+def test_min_shape_with_scalar_broadcast():
+    """Test Min shape with scalar broadcasting."""
+    from openscvx.symbolic.expr import Constant, Min
+
+    x = Variable("x", shape=(5, 5))
+    scalar = Constant(10.0)  # scalar
+
+    min_x = Min(x, scalar)
+    assert min_x.check_shape() == (5, 5)
+
+
+def test_min_shape_incompatible_raises_error():
+    """Test that Min raises ValueError for incompatible shapes."""
+    from openscvx.symbolic.expr import Min
+
+    x = Variable("x", shape=(3,))
+    y = Variable("y", shape=(4,))
+
+    min_xy = Min(x, y)
+    with pytest.raises(ValueError, match="Min shapes not broadcastable"):
+        min_xy.check_shape()
+
+
+# --- Min: Canonicalization ---
+
+
+def test_min_canonicalize_flattens_nested_min():
+    """Test that Min canonicalization flattens nested Min operations."""
+    from openscvx.symbolic.expr import Min
+
+    x = Variable("x", shape=(3,))
+    y = Variable("y", shape=(3,))
+    z = Variable("z", shape=(3,))
+
+    # Min(x, Min(y, z)) should flatten to Min(x, y, z)
+    nested = Min(x, Min(y, z))
+    canonical = nested.canonicalize()
+
+    assert isinstance(canonical, Min)
+    assert len(canonical.operands) == 3
+    assert x in canonical.operands
+    assert y in canonical.operands
+    assert z in canonical.operands
+
+
+def test_min_canonicalize_folds_constants():
+    """Test that Min canonicalization folds constant values."""
+    from openscvx.symbolic.expr import Constant, Min
+
+    x = Variable("x", shape=(3,))
+    c1 = Constant(np.array([1.0, 2.0, 3.0]))
+    c2 = Constant(np.array([2.0, 1.0, 4.0]))
+
+    # Min(x, c1, c2) should fold c1 and c2 into a single constant
+    expr = Min(x, c1, c2)
+    canonical = expr.canonicalize()
+
+    assert isinstance(canonical, Min)
+    assert len(canonical.operands) == 2
+    # One should be x, one should be the folded constant
+    non_const = [op for op in canonical.operands if not isinstance(op, Constant)]
+    consts = [op for op in canonical.operands if isinstance(op, Constant)]
+    assert len(non_const) == 1
+    assert non_const[0] == x
+    assert len(consts) == 1
+    # Check that the constant is the element-wise min
+    expected = np.minimum(np.array([1.0, 2.0, 3.0]), np.array([2.0, 1.0, 4.0]))
+    assert np.allclose(consts[0].value, expected)
+
+
+def test_min_canonicalize_single_operand_collapses():
+    """Test that Min with single operand after canonicalization returns that operand."""
+    from openscvx.symbolic.expr import Constant, Min
+
+    # Min with only constants should fold to a single constant
+    c1 = Constant(np.array([1.0, 2.0]))
+    c2 = Constant(np.array([0.5, 3.0]))
+
+    expr = Min(c1, c2)
+    canonical = expr.canonicalize()
+
+    # Should collapse to just a constant
+    assert isinstance(canonical, Constant)
+    expected = np.minimum(np.array([1.0, 2.0]), np.array([0.5, 3.0]))
+    assert np.allclose(canonical.value, expected)
+
+
+def test_min_canonicalize_recursively():
+    """Test that Min canonicalization recurses into operands."""
+    from openscvx.symbolic.expr import Add, Constant, Min
+
+    x = Variable("x", shape=(3,))
+    y = Variable("y", shape=(3,))
+
+    # Min(x + 0, y + 0) should canonicalize to Min(x, y)
+    expr = Min(Add(x, Constant(0.0)), Add(y, Constant(0.0)))
+    canonical = expr.canonicalize()
+
+    assert isinstance(canonical, Min)
+    assert len(canonical.operands) == 2
+    assert x in canonical.operands
+    assert y in canonical.operands
+
+
+# --- Min: JAX Lowering ---
+
+
+def test_min_constant():
+    """Test Min with constant values."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Constant, Min
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = np.array([1.0, 5.0, 2.0])
+    y = np.array([3.0, 2.0, 4.0])
+
+    expr = Min(Constant(x), Constant(y))
+
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    expected = jnp.minimum(x, y)
+    assert jnp.allclose(result, expected)
+
+
+def test_min_state_variables():
+    """Test Min with state variables."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Min, State
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x_val = jnp.array([1.0, 2.0, 3.0])
+    y_val = jnp.array([2.0, 1.5, 3.5])
+
+    x = State("x", (3,))
+    x._slice = slice(0, 3)
+    y = State("y", (3,))
+    y._slice = slice(3, 6)
+
+    expr = Min(x, y)
+
+    state_vec = jnp.concatenate([x_val, y_val])
+    fn = lower_to_jax(expr)
+    result = fn(state_vec, None, None, None)
+
+    expected = jnp.minimum(x_val, y_val)
+    assert jnp.allclose(result, expected)
+
+
+def test_min_multiple_operands():
+    """Test Min with more than two operands."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Constant, Min
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = np.array([1.0, 5.0, 2.0])
+    y = np.array([3.0, 2.0, 4.0])
+    z = np.array([2.0, 6.0, 1.0])
+
+    expr = Min(Constant(x), Constant(y), Constant(z))
+
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    expected = jnp.minimum(jnp.minimum(x, y), z)
+    assert jnp.allclose(result, expected)
+
+
+def test_min_with_clipping_pattern():
+    """Test Min(x, max_value) which implements clipping/saturation."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Constant, Min, State
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = jnp.array([20.0, 50.0, 80.0, 100.0, 120.0])
+
+    state = State("s", (5,))
+    state._slice = slice(0, 5)
+
+    # Min(x, 100) clips values above 100
+    expr = Min(state, Constant(100.0))
+
+    fn = lower_to_jax(expr)
+    result = fn(x, None, None, None)
+
+    expected = jnp.minimum(x, 100.0)
+    assert jnp.allclose(result, expected)
+
+
+def test_min_max_combination():
+    """Test combining Min and Max for clamping values to a range."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Constant, Max, Min, State
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = jnp.array([-10.0, 0.0, 50.0, 100.0, 150.0])
+
+    state = State("s", (5,))
+    state._slice = slice(0, 5)
+
+    # Clamp to range [0, 100]: Min(Max(x, 0), 100)
+    expr = Min(Max(state, Constant(0.0)), Constant(100.0))
+
+    fn = lower_to_jax(expr)
+    result = fn(x, None, None, None)
+
+    # Expected: clip to [0, 100]
+    expected = jnp.clip(x, 0.0, 100.0)
+    assert jnp.allclose(result, expected)
+
+
+# --- Min: CVXPy Lowering ---
+
+
+def test_cvxpy_min():
+    """Test Min function with CVXPy."""
+    import cvxpy as cp
+
+    from openscvx.symbolic.expr import Min, State
+    from openscvx.symbolic.lowerers.cvxpy import CvxpyLowerer
+
+    x_cvx = cp.Variable((10, 3), name="x")
+    y_cvx = cp.Variable((10, 3), name="y")
+    variable_map = {"x": x_cvx, "y": y_cvx}
+    lowerer = CvxpyLowerer(variable_map)
+
+    x = State("x", shape=(3,))
+    y = State("y", shape=(3,))
+    expr = Min(x, y)
+
+    result = lowerer.lower(expr)
+    assert isinstance(result, cp.Expression)
+
+
+def test_cvxpy_min_multiple_operands():
+    """Test Min with multiple operands in CVXPy."""
+    import cvxpy as cp
+
+    from openscvx.symbolic.expr import Constant, Min, State
+    from openscvx.symbolic.lowerers.cvxpy import CvxpyLowerer
+
+    x_cvx = cp.Variable((10, 3), name="x")
+    variable_map = {"x": x_cvx}
+    lowerer = CvxpyLowerer(variable_map)
+
+    x = State("x", shape=(3,))
+    c1 = Constant(5.0)
+    c2 = Constant(10.0)
+    expr = Min(x, c1, c2)
+
+    result = lowerer.lower(expr)
+    assert isinstance(result, cp.Expression)
+
+
+# =============================================================================
 # LogSumExp
 # =============================================================================
 
@@ -2670,6 +2995,344 @@ def test_cvxpy_linterp_not_implemented():
     expr = Linterp(x[0], xp, fp)
 
     with pytest.raises(NotImplementedError, match="Linear interpolation"):
+        lowerer.lower(expr)
+
+
+# =============================================================================
+# Cinterp (1D Cubic Spline Interpolation)
+# =============================================================================
+
+
+def test_cinterp_creation():
+    """Test Cinterp node creation and properties."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0])
+    x = Variable("x", shape=())
+
+    interp = Cinterp(x, xp, fp)
+    assert len(interp.children()) == 1  # only x is a child
+    assert interp.coeffs.shape == (4, 3)  # 4 coefficients, 3 segments
+    assert interp.method == "cubic"
+    np.testing.assert_array_equal(interp.xp_np, xp)
+    np.testing.assert_array_equal(interp.fp_np, fp)
+
+
+def test_cinterp_creation_pchip():
+    """Test Cinterp node creation with PCHIP method."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0])
+    x = Variable("x", shape=())
+
+    interp = Cinterp(x, xp, fp, method="pchip")
+    assert interp.method == "pchip"
+    assert interp.coeffs.shape == (4, 3)
+
+
+def test_cinterp_creation_akima():
+    """Test Cinterp node creation with Akima method."""
+    from openscvx.symbolic.expr import Cinterp
+
+    # Akima needs at least 5 data points
+    xp = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0, 2.0])
+    x = Variable("x", shape=())
+
+    interp = Cinterp(x, xp, fp, method="akima")
+    assert interp.method == "akima"
+    assert interp.coeffs.shape == (4, 4)
+
+
+def test_cinterp_invalid_method():
+    """Test Cinterp raises error for invalid method."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0])
+    x = Variable("x", shape=())
+
+    with pytest.raises(ValueError, match="Cinterp method must be one of"):
+        Cinterp(x, xp, fp, method="quadratic")
+
+
+def test_cinterp_creation_with_expressions():
+    """Test Cinterp with symbolic query point."""
+    from openscvx.symbolic.expr import Cinterp, State
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([10.0, 20.0, 30.0])
+    state = State("alt", shape=(1,))
+
+    interp = Cinterp(state[0], xp, fp)
+    assert len(interp.children()) == 1
+
+
+# --- Cinterp: Shape Checking ---
+
+
+def test_cinterp_shape_scalar_query():
+    """Test Cinterp shape with scalar query point."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([1.0, 2.0, 3.0])
+    x = Variable("x", shape=())
+
+    interp = Cinterp(x, xp, fp)
+    assert interp.check_shape() == ()
+
+
+def test_cinterp_shape_vector_query():
+    """Test Cinterp shape with vector query points."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([1.0, 2.0, 3.0])
+    x = Variable("x", shape=(5,))
+
+    interp = Cinterp(x, xp, fp)
+    assert interp.check_shape() == (5,)
+
+
+def test_cinterp_shape_invalid_xp():
+    """Test Cinterp raises error for non-1D xp."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([[0.0, 1.0], [2.0, 3.0]])  # 2D - invalid
+    fp = np.array([1.0, 2.0])
+    x = Variable("x", shape=())
+
+    with pytest.raises(ValueError, match="Cinterp xp must be 1D"):
+        Cinterp(x, xp, fp)
+
+
+def test_cinterp_shape_invalid_fp():
+    """Test Cinterp raises error for non-1D fp."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([[1.0, 2.0], [3.0, 4.0]])  # 2D - invalid
+    x = Variable("x", shape=())
+
+    with pytest.raises(ValueError, match="Cinterp fp must be 1D"):
+        Cinterp(x, xp, fp)
+
+
+def test_cinterp_shape_mismatched_xp_fp():
+    """Test Cinterp raises error when xp and fp have different lengths."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([1.0, 2.0])  # Different length
+    x = Variable("x", shape=())
+
+    with pytest.raises(ValueError, match="Cinterp xp and fp must have same length"):
+        Cinterp(x, xp, fp)
+
+
+# --- Cinterp: Canonicalization ---
+
+
+def test_cinterp_canonicalize_preserves_structure():
+    """Test that Cinterp canonicalization preserves structure."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([1.0, 2.0, 3.0])
+    x = Variable("x", shape=())
+
+    interp = Cinterp(x, xp, fp)
+    canonical = interp.canonicalize()
+
+    assert isinstance(canonical, Cinterp)
+
+
+def test_cinterp_canonicalize_recursively():
+    """Test that Cinterp canonicalization recurses into operands."""
+    from openscvx.symbolic.expr import Add, Cinterp, Constant
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([1.0, 2.0, 3.0])
+    x = Variable("x", shape=())
+
+    # Cinterp with x + 0 should canonicalize to Cinterp with x
+    expr = Cinterp(Add(x, Constant(0.0)), xp, fp)
+    canonical = expr.canonicalize()
+
+    assert isinstance(canonical, Cinterp)
+    # The query should be canonicalized (x + 0 -> x)
+    assert canonical.x == x
+
+
+def test_cinterp_canonicalize_preserves_coefficients():
+    """Test that canonicalization reuses precomputed coefficients."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0])
+    x = Variable("x", shape=())
+
+    interp = Cinterp(x, xp, fp)
+    canonical = interp.canonicalize()
+
+    np.testing.assert_array_equal(interp.coeffs, canonical.coeffs)
+
+
+def test_cinterp_canonicalize_preserves_method():
+    """Test that canonicalization preserves the method."""
+    from openscvx.symbolic.expr import Cinterp
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0])
+    x = Variable("x", shape=())
+
+    for method in ("cubic", "pchip"):
+        interp = Cinterp(x, xp, fp, method=method)
+        canonical = interp.canonicalize()
+        assert canonical.method == method
+
+
+# --- Cinterp: JAX Lowering ---
+
+
+def test_cinterp_exact_data_points():
+    """Test Cinterp returns exact values at data points."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Cinterp, Constant
+    from openscvx.symbolic.lower import lower_to_jax
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([5.0, 10.0, 7.0, 12.0])
+
+    expr = Cinterp(Constant(xp), xp, fp)
+
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    assert jnp.allclose(result, fp)
+
+
+def test_cinterp_constant_query():
+    """Test Cinterp with constant query values against scipy."""
+    import jax.numpy as jnp
+    from scipy.interpolate import CubicSpline
+
+    from openscvx.symbolic.expr import Cinterp, Constant
+    from openscvx.symbolic.lower import lower_to_jax
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0])
+    query = np.array([0.5, 1.5, 2.5])
+
+    expr = Cinterp(Constant(query), xp, fp)
+
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    expected = CubicSpline(xp, fp)(query)
+    assert jnp.allclose(result, expected)
+
+
+def test_cinterp_pchip_monotonicity():
+    """Test that PCHIP preserves monotonicity of the data."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Cinterp, Constant
+    from openscvx.symbolic.lower import lower_to_jax
+
+    # Monotonically decreasing data (e.g., atmospheric density)
+    xp = np.array([0.0, 5000.0, 10000.0, 15000.0, 20000.0])
+    fp = np.array([1.225, 0.736, 0.414, 0.195, 0.089])
+
+    # Evaluate at many points
+    query = np.linspace(0.0, 20000.0, 200)
+    expr = Cinterp(Constant(query), xp, fp, method="pchip")
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    # All consecutive differences should be non-positive (monotonically decreasing)
+    diffs = jnp.diff(result)
+    assert jnp.all(diffs <= 0)
+
+
+def test_cinterp_state_query():
+    """Test Cinterp with state variable as query."""
+    import jax.numpy as jnp
+    from scipy.interpolate import CubicSpline
+
+    from openscvx.symbolic.expr import Cinterp, State
+    from openscvx.symbolic.lower import lower_to_jax
+
+    alt_data = np.array([0.0, 5000.0, 10000.0, 15000.0, 20000.0])
+    rho_data = np.array([1.225, 0.736, 0.414, 0.195, 0.089])
+
+    altitude = State("alt", (1,))
+    altitude._slice = slice(0, 1)
+
+    expr = Cinterp(altitude[0], alt_data, rho_data)
+
+    fn = lower_to_jax(expr)
+    cs = CubicSpline(alt_data, rho_data)
+
+    for alt_val in [0.0, 2500.0, 7500.0, 12500.0, 20000.0]:
+        x = jnp.array([alt_val])
+        result = fn(x, None, None, None)
+        expected = cs(alt_val)
+        assert jnp.allclose(result, expected)
+
+
+def test_cinterp_in_expression():
+    """Test Cinterp composed with other operations."""
+    import jax.numpy as jnp
+    from scipy.interpolate import CubicSpline
+
+    from openscvx.symbolic.expr import Cinterp, Mul, State
+    from openscvx.symbolic.lower import lower_to_jax
+
+    alt_data = np.array([0.0, 10000.0, 20000.0])
+    rho_data = np.array([1.225, 0.414, 0.089])
+
+    altitude = State("alt", (1,))
+    altitude._slice = slice(0, 1)
+    velocity = State("vel", (1,))
+    velocity._slice = slice(1, 2)
+
+    rho = Cinterp(altitude[0], alt_data, rho_data)
+    dynamic_pressure = Mul(0.5, Mul(rho, velocity[0] ** 2))
+
+    fn = lower_to_jax(dynamic_pressure)
+
+    x = jnp.array([0.0, 100.0])
+    result = fn(x, None, None, None)
+
+    expected = 0.5 * CubicSpline(alt_data, rho_data)(0.0) * 100.0**2
+    assert jnp.allclose(result, expected)
+
+
+# --- Cinterp: CVXPy Lowering ---
+
+
+def test_cvxpy_cinterp_not_implemented():
+    """Test that Cinterp raises NotImplementedError in CVXPy."""
+    import cvxpy as cp
+
+    from openscvx.symbolic.expr import Cinterp, State
+    from openscvx.symbolic.lowerers.cvxpy import CvxpyLowerer
+
+    x_cvx = cp.Variable((10, 3), name="x")
+    variable_map = {"x": x_cvx}
+    lowerer = CvxpyLowerer(variable_map)
+
+    xp = np.array([0.0, 1.0, 2.0])
+    fp = np.array([10.0, 20.0, 30.0])
+    x = State("x", shape=(3,))
+    expr = Cinterp(x[0], xp, fp)
+
+    with pytest.raises(NotImplementedError, match="Cubic spline interpolation"):
         lowerer.lower(expr)
 
 

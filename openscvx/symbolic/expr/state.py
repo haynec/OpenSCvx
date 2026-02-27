@@ -197,12 +197,25 @@ class State(Variable):
             pos.final = [10, ("free", 5), ("maximize", 150)]  # Maximize final altitude
     """
 
-    def __init__(self, name: str, shape: Tuple[int, ...]):
+    def __init__(
+        self,
+        name: str,
+        shape: Tuple[int, ...],
+        *,
+        min: Optional[np.ndarray] = None,
+        max: Optional[np.ndarray] = None,
+        initial: Optional[list] = None,
+        final: Optional[list] = None,
+    ):
         """Initialize a State object.
 
         Args:
             name: Name identifier for the state variable
             shape: Shape of the state vector (typically 1D tuple)
+            min: Optional minimum bounds array (keyword-only)
+            max: Optional maximum bounds array (keyword-only)
+            initial: Optional initial boundary conditions array (keyword-only)
+            final: Optional final boundary conditions array (keyword-only)
         """
         super().__init__(name, shape)
         self._initial = None
@@ -211,6 +224,25 @@ class State(Variable):
         self.final_type = None
         self._scaling_min = None
         self._scaling_max = None
+
+        if min is not None:
+            self.min = min
+        if max is not None:
+            self.max = max
+        if initial is not None:
+            self.initial = initial
+        if final is not None:
+            self.final = final
+
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Element-level exact sparsity: diagonal block at ``_slice``."""
+        n = self._shape[0]
+        S_x = np.zeros((n, n_x), dtype=bool)
+        S_u = np.zeros((n, n_u), dtype=bool)
+        if self._slice is not None:
+            for i in range(n):
+                S_x[i, self._slice.start + i] = True
+        return S_x, S_u
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash State including boundary condition types.
@@ -271,7 +303,9 @@ class State(Variable):
         """
         val = np.asarray(val, dtype=float)
         if val.shape != self.shape:
-            raise ValueError(f"Min shape {val.shape} does not match State shape {self.shape}")
+            raise ValueError(
+                f"State '{self.name}': min expected shape {self.shape}, got {val.shape}"
+            )
         self._min = val
         self._check_bounds_against_initial_final()
 
@@ -314,7 +348,9 @@ class State(Variable):
         """
         val = np.asarray(val, dtype=float)
         if val.shape != self.shape:
-            raise ValueError(f"Max shape {val.shape} does not match State shape {self.shape}")
+            raise ValueError(
+                f"State '{self.name}': max expected shape {self.shape}, got {val.shape}"
+            )
         self._max = val
         self._check_bounds_against_initial_final()
 
@@ -340,13 +376,13 @@ class State(Variable):
                 max_i = self._max[i] if self._max is not None else np.inf
                 if val < min_i:
                     raise ValueError(
-                        f"{field_name.capitalize()} Fixed value at index {i[0]} is lower then the "
-                        f"min: {val} < {min_i}"
+                        f"State '{self.name}': {field_name} fixed value at index {i[0]} "
+                        f"violates min bound: {val:.6g} < {min_i:.6g}"
                     )
                 if val > max_i:
                     raise ValueError(
-                        f"{field_name.capitalize()} Fixed value at index {i[0]} is greater then "
-                        f"the max: {val} > {max_i}"
+                        f"State '{self.name}': {field_name} fixed value at index {i[0]} "
+                        f"violates max bound: {val:.6g} > {max_i:.6g}"
                     )
 
     @property
@@ -408,12 +444,16 @@ class State(Variable):
         if not isinstance(arr, (list, tuple)):
             arr = np.asarray(arr)
             if arr.shape != self.shape:
-                raise ValueError(f"Shape mismatch: {arr.shape} != {self.shape}")
+                raise ValueError(
+                    f"State '{self.name}': initial expected shape {self.shape}, got {arr.shape}"
+                )
             arr = arr.tolist()
 
         # Ensure we have the right number of elements
         if len(arr) != self.shape[0]:
-            raise ValueError(f"Length mismatch: got {len(arr)} elements, expected {self.shape[0]}")
+            raise ValueError(
+                f"State '{self.name}': initial expected {self.shape[0]} elements, got {len(arr)}"
+            )
 
         self._initial = np.zeros(self.shape, dtype=float)
         self.initial_type = np.full(self.shape, "Fix", dtype=object)
@@ -427,7 +467,7 @@ class State(Variable):
                 except ValueError:
                     valid_types = [t.value for t in BoundaryType]
                     raise ValueError(
-                        f"Invalid boundary condition type: {bc_type_str}. "
+                        f"State '{self.name}': invalid boundary condition type: {bc_type_str}. "
                         f"Valid types are: {valid_types}"
                     )
                 self._initial[i] = float(bc_value)
@@ -438,7 +478,7 @@ class State(Variable):
                 self.initial_type[i] = "Fix"
             else:
                 raise ValueError(
-                    f"Invalid boundary condition format: {v}. "
+                    f"State '{self.name}': invalid boundary condition format: {v}. "
                     f"Use a number (defaults to fixed) or tuple ('type', value) "
                     f"where type is 'fixed', 'free', 'minimize', or 'maximize'."
                 )
@@ -504,12 +544,16 @@ class State(Variable):
         if not isinstance(arr, (list, tuple)):
             arr = np.asarray(arr)
             if arr.shape != self.shape:
-                raise ValueError(f"Shape mismatch: {arr.shape} != {self.shape}")
+                raise ValueError(
+                    f"State '{self.name}': final expected shape {self.shape}, got {arr.shape}"
+                )
             arr = arr.tolist()
 
         # Ensure we have the right number of elements
         if len(arr) != self.shape[0]:
-            raise ValueError(f"Length mismatch: got {len(arr)} elements, expected {self.shape[0]}")
+            raise ValueError(
+                f"State '{self.name}': final expected {self.shape[0]} elements, got {len(arr)}"
+            )
 
         self._final = np.zeros(self.shape, dtype=float)
         self.final_type = np.full(self.shape, "Fix", dtype=object)
@@ -523,7 +567,7 @@ class State(Variable):
                 except ValueError:
                     valid_types = [t.value for t in BoundaryType]
                     raise ValueError(
-                        f"Invalid boundary condition type: {bc_type_str}. "
+                        f"State '{self.name}': invalid boundary condition type: {bc_type_str}. "
                         f"Valid types are: {valid_types}"
                     )
                 self._final[i] = float(bc_value)
@@ -534,7 +578,7 @@ class State(Variable):
                 self.final_type[i] = "Fix"
             else:
                 raise ValueError(
-                    f"Invalid boundary condition format: {v}. "
+                    f"State '{self.name}': invalid boundary condition format: {v}. "
                     f"Use a number (defaults to fixed) or tuple ('type', value) "
                     f"where type is 'fixed', 'free', 'minimize', or 'maximize'."
                 )
@@ -566,7 +610,7 @@ class State(Variable):
         val = np.asarray(val, dtype=float)
         if val.shape != self.shape:
             raise ValueError(
-                f"Scaling min shape {val.shape} does not match State shape {self.shape}"
+                f"State '{self.name}': scaling_min expected shape {self.shape}, got {val.shape}"
             )
         self._scaling_min = val
 
@@ -595,7 +639,7 @@ class State(Variable):
         val = np.asarray(val, dtype=float)
         if val.shape != self.shape:
             raise ValueError(
-                f"Scaling max shape {val.shape} does not match State shape {self.shape}"
+                f"State '{self.name}': scaling_max expected shape {self.shape}, got {val.shape}"
             )
         self._scaling_max = val
 

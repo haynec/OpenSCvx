@@ -19,6 +19,7 @@ def validate_byof(
     n_x: int,
     n_u: int,
     N: int = None,
+    parameters: dict = None,
 ) -> None:
     """Validate byof function signatures and shapes.
 
@@ -45,16 +46,31 @@ def validate_byof(
     import jax.numpy as jnp
 
     # Validate byof keys
-    valid_keys = {"dynamics", "nodal_constraints", "cross_nodal_constraints", "ctcs_constraints", "convex_costs"}
+    valid_keys = {
+        "parameters",
+        "dynamics",
+        "dynamics_discrete",
+        "nodal_constraints",
+        "cross_nodal_constraints",
+        "ctcs_constraints",
+        "convex_costs",
+    }
     invalid_keys = set(byof.keys()) - valid_keys
     if invalid_keys:
         raise ValueError(f"Unknown byof keys: {invalid_keys}. Valid keys: {valid_keys}")
+
+    # Validate byof parameters
+    from openscvx.symbolic.expr.expr import Parameter
+
+    for i, param in enumerate(byof.get("parameters", [])):
+        if not isinstance(param, Parameter):
+            raise TypeError(f"byof parameters[{i}] must be a Parameter object, got {type(param)}")
 
     # Create dummy inputs for testing
     dummy_x = jnp.zeros(n_x)
     dummy_u = jnp.zeros(n_u)
     dummy_node = 0
-    dummy_params = {}
+    dummy_params = dict(parameters) if parameters else {}
 
     # Validate dynamics functions
     byof_dynamics = byof.get("dynamics", {})
@@ -103,6 +119,49 @@ def validate_byof(
             except Exception as e:
                 raise ValueError(
                     f"byof dynamics '{state_name}' is not differentiable with JAX. "
+                    f"Ensure the function uses JAX operations (jax.numpy, not numpy): {e}"
+                ) from e
+
+    # Validate dynamics_discrete functions (same signature and shape as dynamics)
+    byof_dynamics_discrete = byof.get("dynamics_discrete", {})
+    if byof_dynamics_discrete:
+        state_shapes = {state.name: state.shape for state in states}
+        for state_name, fn in byof_dynamics_discrete.items():
+            if state_name not in state_shapes:
+                raise ValueError(
+                    f"byof dynamics_discrete '{state_name}' does not match any state name. "
+                    f"Available states: {list(state_shapes.keys())}"
+                )
+            if not callable(fn):
+                raise TypeError(
+                    f"byof dynamics_discrete '{state_name}' must be callable, got {type(fn)}"
+                )
+            sig = inspect.signature(fn)
+            if len(sig.parameters) != 4:
+                raise ValueError(
+                    f"byof dynamics_discrete '{state_name}' must have signature "
+                    f"f(x, u, node, params), got {len(sig.parameters)} parameters: "
+                    f"{list(sig.parameters.keys())}"
+                )
+            try:
+                result = fn(dummy_x, dummy_u, dummy_node, dummy_params)
+            except Exception as e:
+                raise ValueError(
+                    f"byof dynamics_discrete '{state_name}' failed on test call with "
+                    f"x.shape={dummy_x.shape}, u.shape={dummy_u.shape}: {e}"
+                ) from e
+            expected_shape = state_shapes[state_name]
+            result_shape = jnp.asarray(result).shape
+            if result_shape != expected_shape:
+                raise ValueError(
+                    f"byof dynamics_discrete '{state_name}' returned shape {result_shape}, "
+                    f"expected {expected_shape} (state '{state_name}' shape)"
+                )
+            try:
+                jax.grad(lambda x: jnp.sum(fn(x, dummy_u, dummy_node, dummy_params)))(dummy_x)
+            except Exception as e:
+                raise ValueError(
+                    f"byof dynamics_discrete '{state_name}' is not differentiable with JAX. "
                     f"Ensure the function uses JAX operations (jax.numpy, not numpy): {e}"
                 ) from e
 
@@ -360,11 +419,9 @@ def validate_byof(
     for i, cost_fn in enumerate(byof.get("convex_costs", [])):
         if not callable(cost_fn):
             raise TypeError(f"byof convex_costs[{i}] must be callable, got {type(cost_fn)}")
-
-        # Check signature - should accept (ocp_vars, settings, params)
         sig = inspect.signature(cost_fn)
         if len(sig.parameters) != 3:
             raise ValueError(
                 f"byof convex_costs[{i}] must have signature f(ocp_vars, settings, params), "
                 f"got {len(sig.parameters)} parameters: {list(sig.parameters.keys())}"
-                    )
+            )

@@ -24,6 +24,12 @@ Function Signatures:
         - params: Dict of parameters
         - Returns: State derivative component (array matching state shape)
 
+    - dynamics_discrete: ``(x, u, node, params) -> x_next_component``
+        - Same arguments as dynamics
+        - Returns: Next-state component for impulsive/discrete update (array matching state shape)
+        - Used when controls include impulsive (e.g. delta-V).
+        - Can mix with symbolic dynamics_discrete.
+
     - nodal_constraints: ``(x, u, node, params) -> residual``
         - Same arguments as dynamics
         - Returns: Constraint residual (g <= 0: negative=satisfied, positive=violated)
@@ -92,6 +98,8 @@ from typing import TYPE_CHECKING, Any, Callable, List, Literal, Tuple, TypedDict
 
 if TYPE_CHECKING:
     from jax import Array as JaxArray
+
+    from openscvx.symbolic.expr.expr import Parameter
     import cvxpy as cp
     from openscvx.lowered.cvxpy_variables import CVXPyVariables
     from openscvx.config import Config
@@ -259,10 +267,18 @@ class ByofSpec(TypedDict, total=False):
         state/control vectors.
 
     Attributes:
+        parameters: List of :class:`~openscvx.symbolic.expr.expr.Parameter` objects that
+            are only used inside byof functions (not in any symbolic expression). Parameters
+            already referenced in symbolic dynamics or constraints are collected automatically
+            and do not need to be listed here. Duplicates are ignored.
         dynamics: Raw JAX functions for state derivatives. Maps state names to functions
             with signature ``(x, u, node, params) -> xdot_component``. States here should
             NOT appear in symbolic dynamics dict. You can mix: some states symbolic,
             some in byof.
+        dynamics_discrete: Raw JAX functions for discrete/impulsive state updates. Maps state
+            names to functions with signature ``(x, u, node, params) -> x_next_component``.
+            States here should NOT appear in symbolic dynamics_discrete dict. Use when you need
+            custom impulsive updates (e.g. delta-V) alongside or instead of symbolic ones.
         nodal_constraints: Point-wise constraints applied at specific nodes.
             Each item is a :class:`NodalConstraintSpec` dict with:
 
@@ -283,9 +299,7 @@ class ByofSpec(TypedDict, total=False):
             - ``settings``: Config object with problem settings
             - ``params``: Dict of user parameters (same as problem.parameters)
             - Returns: CVXPy expression to add to the cost (must be convex)
-            All parameters from ocp_vars are accessible (x, u, x_nonscaled, u_nonscaled, etc.).
-            See :class:`CVXPyVariables` for available variables and parameters.
-            Note: Uses CVXPy operations, not JAX (different from other byof functions).
+            See :class:`ConvexCostFunction`. Uses CVXPy operations, not JAX.
 
     Example:
         Custom dynamics and constraints::
@@ -299,14 +313,21 @@ class ByofSpec(TypedDict, total=False):
             velocity = ox.State("velocity", shape=(1,))
             theta = ox.Control("theta", shape=(1,))
 
+            # Parameters used by byof functions
+            g = ox.Parameter("g", shape=(), value=9.81)
+
             # Custom dynamics for one state using .slice property
             def custom_velocity_dynamics(x, u, node, params):
                 # Use .slice property for clean indexing
                 return params["g"] * jnp.cos(u[theta.slice][0])
 
             byof: ByofSpec = {
+                "parameters": [g],
                 "dynamics": {
                     "velocity": custom_velocity_dynamics,
+                },
+                "dynamics_discrete": {
+                    # Optional: e.g. "velocity": lambda x, u, node, params: x[vel_sl] + u[dv_sl]
                 },
                 "nodal_constraints": [
                     # Applied to all nodes (no "nodes" field)
@@ -336,7 +357,9 @@ class ByofSpec(TypedDict, total=False):
             }
     """
 
+    parameters: List["Parameter"]
     dynamics: dict[str, DynamicsFunction]
+    dynamics_discrete: dict[str, DynamicsFunction]
     nodal_constraints: List[NodalConstraintSpec]
     cross_nodal_constraints: List[CrossNodalConstraintFunction]
     ctcs_constraints: List[CtcsConstraintSpec]

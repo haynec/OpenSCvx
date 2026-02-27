@@ -135,9 +135,8 @@ problem = Problem(
     time=t,
     constraints=constraint_exprs,
     N=n,
+    algorithm={"ep_tr": 1e-3},
 )
-
-problem.settings.scp.ep_tr = 1e-3  # Trust Region Tolerance
 
 plotting_dict = {"vertices": vertices}
 

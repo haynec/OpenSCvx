@@ -59,16 +59,51 @@ class Control(Variable):
             steer.guess = np.linspace([0, 0], [0, 1], 50)  # Gradual acceleration
     """
 
-    def __init__(self, name: str, shape: Tuple[int, ...]):
+    def __init__(
+        self,
+        name: str,
+        shape: Tuple[int, ...],
+        *,
+        min: Optional[np.ndarray] = None,
+        max: Optional[np.ndarray] = None,
+        impulsive: bool = False,
+        nodes: Optional[list[int]] = None,
+    ):
         """Initialize a Control object.
 
         Args:
             name: Name identifier for the control variable
             shape: Shape of the control vector (typically 1D tuple like (3,))
+            min: Optional minimum bounds array (keyword-only)
+            max: Optional maximum bounds array (keyword-only)
+            impulsive: Whether this control is treated as impulsive
+            nodes: Optional list of node indices where impulsive control is enabled
         """
         super().__init__(name, shape)
         self._scaling_min = None
         self._scaling_max = None
+        self._is_impulsive = np.repeat(impulsive, shape[0])
+        if nodes is not None and not impulsive:
+            raise ValueError("nodes provided for a non-impulsive control.")
+        if nodes is not None:
+            self._nodes = [int(idx) for idx in nodes]
+        else:
+            self._nodes = None
+
+        if min is not None:
+            self.min = min
+        if max is not None:
+            self.max = max
+
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Element-level exact sparsity: diagonal block at ``_slice``."""
+        n = self._shape[0]
+        S_x = np.zeros((n, n_x), dtype=bool)
+        S_u = np.zeros((n, n_u), dtype=bool)
+        if self._slice is not None:
+            for i in range(n):
+                S_u[i, self._slice.start + i] = True
+        return S_x, S_u
 
     @property
     def scaling_min(self) -> Optional[np.ndarray]:
@@ -95,7 +130,7 @@ class Control(Variable):
         val = np.asarray(val, dtype=float)
         if val.shape != self.shape:
             raise ValueError(
-                f"Scaling min shape {val.shape} does not match Control shape {self.shape}"
+                f"Control '{self.name}': scaling_min expected shape {self.shape}, got {val.shape}"
             )
         self._scaling_min = val
 
@@ -124,14 +159,48 @@ class Control(Variable):
         val = np.asarray(val, dtype=float)
         if val.shape != self.shape:
             raise ValueError(
-                f"Scaling max shape {val.shape} does not match Control shape {self.shape}"
+                f"Control '{self.name}': scaling_max expected shape {self.shape}, got {val.shape}"
             )
         self._scaling_max = val
+
+    @property
+    def is_impulsive(self) -> Optional[bool]:
+        return self._is_impulsive
+
+    @is_impulsive.setter
+    def is_impulsive(self, val):
+        if val is None:
+            self._is_impulsive = np.repeat(False, self.shape)
+            return
+        val = np.repeat(val, self.shape)
+        if val.shape != self.shape:
+            raise ValueError(
+                f"Impulsive controls toggles shape {val.shape} "
+                f"does not match Control shape {self.shape}"
+            )
+        self._is_impulsive = val
+
+    @property
+    def nodes(self) -> Optional[list[int]]:
+        return self._nodes
+
+    @nodes.setter
+    def nodes(self, val: Optional[list[int]]):
+        if val is None:
+            self._nodes = None
+            return
+        if not np.any(self._is_impulsive):
+            raise ValueError("nodes can only be set for impulsive controls.")
+        self._nodes = [int(idx) for idx in val]
 
     def __repr__(self) -> str:
         """String representation of the Control object.
 
         Returns:
-            Concise string showing the control name and shape.
+            Concise string showing the control name, shape and type.
         """
-        return f"Control('{self.name}', shape={self.shape})"
+        return (
+            "Control("
+            f"'{self.name}', shape={self.shape}, impulsive={self._is_impulsive}, "
+            f"nodes={self._nodes})"
+        )

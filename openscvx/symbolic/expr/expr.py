@@ -316,6 +316,37 @@ class Expr:
         """
         raise NotImplementedError(f"check_shape() not implemented for {self.__class__.__name__}")
 
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Boolean Jacobian sparsity pattern for this expression.
+
+        Returns 2-D boolean arrays ``(S_x, S_u)`` of shapes
+        ``(n_out, n_x)`` and ``(n_out, n_u)`` where ``n_out`` is the
+        number of scalar output elements (product of ``check_shape()``).
+        Entry ``S_x[i, j] = True`` means output element *i* may depend
+        on state element *j*; likewise for ``S_u`` and controls.
+
+        The default implementation is *conservative*: it unions the
+        column masks of all children and broadcasts that mask to every
+        output row.  Subclasses override this to provide tighter
+        (sparser) patterns.
+
+        Args:
+            n_x: Total dimension of the unified state vector.
+            n_u: Total dimension of the unified control vector.
+
+        Returns:
+            Tuple ``(S_x, S_u)`` of bool ndarrays.
+        """
+        shape = self.check_shape()
+        n_out = int(np.prod(shape)) if shape else 1
+        x_mask = np.zeros(n_x, dtype=bool)
+        u_mask = np.zeros(n_u, dtype=bool)
+        for child in self.children():
+            child_sx, child_su = child.sparsity(n_x, n_u)
+            x_mask |= child_sx.any(axis=0)
+            u_mask |= child_su.any(axis=0)
+        return np.tile(x_mask, (n_out, 1)), np.tile(u_mask, (n_out, 1))
+
     def pretty(self, indent: int = 0) -> str:
         """Generate a pretty-printed string representation of the expression tree.
 
@@ -436,6 +467,14 @@ class Leaf(Expr):
         """
         return self._shape
 
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Leaf nodes with no decision-variable dependence return all-False."""
+        n_out = int(np.prod(self._shape)) if self._shape else 1
+        return (
+            np.zeros((n_out, n_x), dtype=bool),
+            np.zeros((n_out, n_u), dtype=bool),
+        )
+
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash leaf node by class name and shape.
 
@@ -533,7 +572,7 @@ def traverse(expr: Expr, visit: Callable[[Expr], None]):
         traverse(child, visit)
 
 
-class Constant(Expr):
+class Constant(Leaf):
     """Constant value expression.
 
     Represents a constant numeric value in the expression tree. Constants are
@@ -562,31 +601,7 @@ class Constant(Expr):
         if not isinstance(value, np.ndarray):
             value = np.array(value, dtype=float)
         self.value = np.squeeze(value)
-
-    def canonicalize(self) -> "Expr":
-        """Constants are already in canonical form.
-
-        Returns:
-            Expr: Returns self since constants are already canonical
-        """
-        return self
-
-    def check_shape(self) -> Tuple[int, ...]:
-        """Return the shape of this constant's value.
-
-        Returns:
-            tuple: The shape of the constant's numpy array value
-        """
-        # Verify the invariant: constants should already be squeezed during construction
-        original_shape = self.value.shape
-        squeezed_shape = np.squeeze(self.value).shape
-        if original_shape != squeezed_shape:
-            raise ValueError(
-                f"Constant not properly normalized: has shape {original_shape} "
-                "but should have shape {squeezed_shape}. "
-                "Constants should be squeezed during construction."
-            )
-        return self.value.shape
+        super().__init__(name="__constant__", shape=self.value.shape)
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash constant by its value.
@@ -706,6 +721,10 @@ class NodeReference(Expr):
             tuple: The shape of the base expression
         """
         return self.base.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int) -> Tuple[np.ndarray, np.ndarray]:
+        """Pass through the base expression's sparsity."""
+        return self.base.sparsity(n_x, n_u)
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash NodeReference including its node index.

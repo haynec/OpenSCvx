@@ -25,22 +25,24 @@ import jax
 os.environ["EQX_ON_ERROR"] = "nan"
 
 from openscvx.algorithms import (
+    Algorithm,
     AlgorithmState,
-    AugmentedLagrangian,
-    AutotuningBase,
     OptimizationResults,
     PenalizedTrustRegion,
+    _resolve_algorithm,
 )
 from openscvx.config import (
     Config,
-    ConvexSolverConfig,
     DevConfig,
-    DiscretizationConfig,
     PropagationConfig,
-    ScpConfig,
     SimConfig,
 )
-from openscvx.discretization import get_discretization_solver
+from openscvx.discretization import (
+    Discretizer,
+    LinearizeDiscretize,
+    _resolve_discretizer,
+    get_impulsive_discretization_solver,
+)
 from openscvx.expert import ByofSpec
 from openscvx.lowered import LoweredProblem, ParameterDict
 from openscvx.lowered.dynamics import Dynamics
@@ -50,14 +52,14 @@ from openscvx.lowered.jax_constraints import (
     LoweredNodalConstraint,
 )
 from openscvx.propagation import get_propagation_solver, propagate_trajectory_results
-from openscvx.solvers import PTRSolver
+from openscvx.solvers import ConvexSolver, PTRSolver, _resolve_solver
 from openscvx.symbolic.builder import preprocess_symbolic_problem
 from openscvx.symbolic.expr import CTCS, Constraint
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.expr.time import Time
 from openscvx.symbolic.lower import lower_symbolic_problem
 from openscvx.symbolic.problem import SymbolicProblem
-from openscvx.symbolic.time import Time
 from openscvx.utils import printing, profiling
 from openscvx.utils.caching import (
     get_solver_cache_paths,
@@ -77,15 +79,17 @@ class Problem:
         N: int,
         time: Time,
         *,
+        dynamics_discrete: Optional[dict] = None,
         dynamics_prop: Optional[dict] = None,
         states_prop: Optional[List[State]] = None,
         algebraic_prop: Optional[dict] = None,
         licq_min: float = 0.0,
         licq_max: float = 1e-4,
-        time_dilation_factor_min: float = 0.3,
-        time_dilation_factor_max: float = 3.0,
-        autotuner: Optional[AutotuningBase] = AugmentedLagrangian(),
+        algorithm: Optional[Union[Algorithm, dict]] = None,
+        discretizer: Optional[Union[Discretizer, dict]] = None,
+        solver: Optional[Union[ConvexSolver, dict]] = None,
         byof: Optional[ByofSpec] = None,
+        float_dtype: str = "float32",
     ):
         """The primary class in charge of compiling and exporting the solvers.
 
@@ -112,13 +116,103 @@ class Problem:
                 for outputs evaluated (not integrated) during propagation.
             licq_min (float): Minimum LICQ constraint value. Defaults to 0.0.
             licq_max (float): Maximum LICQ constraint value. Defaults to 1e-4.
-            time_dilation_factor_min (float): Minimum time dilation factor.
-                Defaults to 0.3.
-            time_dilation_factor_max (float): Maximum time dilation factor.
-                Defaults to 3.0.
+            algorithm: SCP algorithm configuration. Accepts:
+
+                - ``None`` — uses ``PenalizedTrustRegion()`` with defaults.
+                - An ``Algorithm`` instance — used directly.
+                - A ``dict`` — passed as kwargs to ``PenalizedTrustRegion()``.
+                  Supports a nested ``autotuner`` key in any of these forms:
+
+                  - **string** — class name with default parameters, e.g.
+                    ``"RampProximalWeight"``.
+                  - **dict** — class name via ``"type"`` key plus parameter
+                    overrides, e.g.
+                    ``{"type": "RampProximalWeight", "ramp_factor": 1.04}``.
+                  - **instance** — an already-constructed autotuner object,
+                    e.g. ``ox.RampProximalWeight(ramp_factor=1.04)``.
+
+                The ``lam_cost`` key accepts either a float (applied
+                uniformly to all minimize/maximize states) or a dict
+                mapping state names to per-state weights::
+
+                    # Uniform cost weight
+                    algorithm={"lam_cost": 5e-1}
+
+                    # Per-state cost weights
+                    algorithm={"lam_cost": {"velocity": 1e-1, "time": 1e0}}
+
+                    # Per-component weights for vector states
+                    algorithm={"lam_cost": {"position": [0, 0, 1e-6], "fuel": 1e0}}
+
+                When a dict is provided, every state that has a
+                minimize/maximize objective must have an entry.  Dict
+                values may be scalars (broadcast to all components) or
+                arrays matching the state's shape.  States without
+                objectives are automatically assigned weight 0.  The
+                dict is expanded to an array of shape ``(n_states,)``
+                during ``Problem`` construction.
+
+                Examples::
+
+                    # Just tweak weights (default algorithm & autotuner)
+                    algorithm={"lam_cost": 5e-1, "k_max": 50}
+
+                    # Autotuner by name (default parameters)
+                    algorithm={"autotuner": "RampProximalWeight"}
+
+                    # Autotuner as dict with overrides
+                    algorithm={
+                        "lam_cost": 5e-1,
+                        "autotuner": {"type": "RampProximalWeight", "ramp_factor": 1.04},
+                    }
+
+                    # Autotuner as instance
+                    algorithm={"autotuner": ox.RampProximalWeight(ramp_factor=1.04)}
+            discretizer: Discretization method configuration. Accepts:
+
+                - ``None`` — uses ``LinearizeDiscretize()`` with defaults
+                  (FOH, Tsit5).
+                - A ``Discretizer`` instance — used directly.
+                - A ``dict`` — passed as kwargs to ``LinearizeDiscretize()``.
+
+                Examples::
+
+                    # Change hold type and ODE solver
+                    discretizer={"dis_type": "ZOH", "ode_solver": "Dopri8"}
+
+                    # Use custom integrator
+                    discretizer={"custom_integrator": True}
+
+                    # Instance
+                    discretizer=ox.LinearizeDiscretize(dis_type="ZOH")
+            solver: Convex subproblem solver configuration. Accepts:
+
+                - ``None`` — uses ``PTRSolver()`` with defaults (QOCO backend).
+                - A ``ConvexSolver`` instance — used directly.
+                - A ``dict`` — passed as kwargs to ``PTRSolver()``.
+
+                Examples::
+
+                    # Change CVXPY backend solver and tolerances
+                    solver={"cvx_solver": "CLARABEL", "solver_args": {"tol_gap_abs": 1e-7}}
+
+                    # Just change solver_args
+                    solver={"solver_args": {"abstol": 1e-6, "reltol": 1e-9}}
+
+                    # Enable cvxpygen code generation
+                    solver={"cvxpygen": True}
+
+                    # Instance
+                    solver=ox.PTRSolver(cvx_solver="CLARABEL")
             byof (ByofSpec, optional): Expert mode only. Raw JAX functions to
                 bypass symbolic layer. See :class:`openscvx.expert.ByofSpec` for
                 detailed documentation.
+            float_dtype (str): Default floating-point dtype for JAX lowering.
+                Must be ``\"float32\"`` or ``\"float64\"``. This sets JAX's
+                ``jax_enable_x64`` config flag (True for float64, False for float32),
+                which controls the dtype used in all lowered JAX functions (including
+                both branches of ``jax.lax.cond``) to avoid dtype-mismatch errors
+                during integration.
 
         Note:
             There are two approaches for handling time:
@@ -127,9 +221,23 @@ class Problem:
                in dynamics dict, don't provide Time object
         """
 
+        # Configure JAX's default dtype (float32 vs float64) via jax_enable_x64.
+        # This must happen before lowering so that all JAX-based lowerers
+        # (including conditionals) produce tensors with a consistent dtype.
+        # jax_enable_x64=True means float64, jax_enable_x64=False means float32.
+        enable_x64 = float_dtype.lower() in ("float64", "f64", "double")
+        jax.config.update("jax_enable_x64", enable_x64)
+
+        # Also set the dtype in the JAX lowerer module so it's available during lowering
+        # This ensures conditionals use the correct dtype even if JAX config doesn't take effect
+        from openscvx.symbolic.lowerers.jax.logic import set_default_float_dtype
+
+        set_default_float_dtype(float_dtype)
+
         # Symbolic Preprocessing & Augmentation
         self.symbolic: SymbolicProblem = preprocess_symbolic_problem(
             dynamics=dynamics,
+            dynamics_discrete=dynamics_discrete,
             constraints=constraints,
             states=states,
             controls=controls,
@@ -137,8 +245,6 @@ class Problem:
             time=time,
             licq_min=licq_min,
             licq_max=licq_max,
-            time_dilation_factor_min=time_dilation_factor_min,
-            time_dilation_factor_max=time_dilation_factor_max,
             dynamics_prop_extra=dynamics_prop,
             states_prop_extra=states_prop,
             algebraic_prop=algebraic_prop,
@@ -160,13 +266,50 @@ class Problem:
                 for control in self.symbolic.controls
             )
 
-            validate_byof(byof, self.symbolic.states, n_x, n_u, N)
+            validate_byof(byof, self.symbolic.states, n_x, n_u, N, self.symbolic.parameters)
 
         # Store byof for cache hashing
         self._byof = byof
 
-        # Create solver before lowering (solver owns its variables)
-        self._solver: PTRSolver = PTRSolver()
+        # Resolve algorithm: None → default PTR, dict → PTR(**dict), instance → use directly
+        # Pass symbolic states so dict-valued lam_cost can be expanded eagerly.
+        if algorithm is None:
+            self._algorithm = PenalizedTrustRegion(states=self.symbolic.states)
+        elif isinstance(algorithm, dict):
+            self._algorithm = _resolve_algorithm(algorithm, states=self.symbolic.states)
+        else:
+            if not isinstance(algorithm, Algorithm):
+                raise TypeError(
+                    f"algorithm must be an Algorithm instance, dict, or None, "
+                    f"got {type(algorithm).__name__}"
+                )
+            self._algorithm = algorithm
+
+        # Resolve discretizer: None → default, dict → LinearizeDiscretize(**dict), instance → use
+        if discretizer is None:
+            self._discretizer = LinearizeDiscretize()
+        elif isinstance(discretizer, dict):
+            self._discretizer = _resolve_discretizer(discretizer)
+        else:
+            if not isinstance(discretizer, Discretizer):
+                raise TypeError(
+                    f"discretizer must be a Discretizer instance, dict, or None, "
+                    f"got {type(discretizer).__name__}"
+                )
+            self._discretizer = discretizer
+
+        # Resolve solver: None → default PTRSolver, dict → PTRSolver(**dict), instance → use
+        if solver is None:
+            self._solver = PTRSolver()
+        elif isinstance(solver, dict):
+            self._solver = _resolve_solver(solver)
+        else:
+            if not isinstance(solver, ConvexSolver):
+                raise TypeError(
+                    f"solver must be a ConvexSolver instance, dict, or None, "
+                    f"got {type(solver).__name__}"
+                )
+            self._solver = solver
 
         # Lower to JAX and CVXPy (byof handling happens inside lower_symbolic_problem)
         self._lowered: LoweredProblem = lower_symbolic_problem(
@@ -185,24 +328,22 @@ class Problem:
                 x_prop=self._lowered.x_prop_unified,
                 u=self._lowered.u_unified,
                 total_time=self._lowered.x_unified.initial[self._lowered.x_unified.time_slice][0],
+                n=N,
                 n_states=self._lowered.x_unified.initial.shape[0],
                 n_states_prop=self._lowered.x_prop_unified.initial.shape[0],
                 ctcs_node_intervals=self.symbolic.node_intervals,
             ),
-            scp=ScpConfig(
-                n=N,
-                n_states=self._lowered.x_unified.shape[0],
-                autotuner=autotuner,
-            ),
-            dis=DiscretizationConfig(),
             dev=DevConfig(),
-            cvx=ConvexSolverConfig(),
             prp=PropagationConfig(),
         )
 
-        # OCP construction happens in initialize() so users can modify
-        # settings (like uniform_time_grid) between __init__ and initialize()
+        # Copy time grid setting from Time to sim config so the solver can
+        # read it during constraint assembly.
+        if isinstance(time, Time):
+            self.settings.sim._uniform_time_grid = time.uniform_time_grid
+
         self._discretization_solver: callable = None
+        self._discretization_solver_impulsive: callable = None
 
         # Set up emitter & queue (thread started in initialize() after columns are known)
         if self.settings.dev.printing:
@@ -221,9 +362,9 @@ class Problem:
         self.timing_init = None
         self.timing_solve = None
         self.timing_post = None
+        self._profiling_session = None
 
         # Compiled dynamics (vmapped versions, set in initialize())
-        self._compiled_dynamics: Optional[Dynamics] = None
         self._compiled_dynamics_prop: Optional[Dynamics] = None
 
         # Compiled constraints (JIT-compiled versions, set in initialize())
@@ -235,8 +376,59 @@ class Problem:
         # Final solution state (saved after successful solve)
         self._solution: Optional[AlgorithmState] = None
 
-        # SCP algorithm (currently hardcoded to PTR)
-        self._algorithm = PenalizedTrustRegion()
+        # SCP algorithm (resolved from `algorithm` parameter above)
+
+    @property
+    def solver(self) -> ConvexSolver:
+        """Access the convex subproblem solver instance.
+
+        Attributes such as ``cvx_solver``, ``solver_args``, ``cvxpygen``, and
+        ``cvxpygen_override`` can be modified freely before ``initialize``
+        is called::
+
+            problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+            problem.solver.cvxpygen = True
+            problem.initialize()
+
+        !!! warning
+            Solver settings are compiled into the solve function during
+            ``initialize()``.  Changes made **after** ``initialize()``
+            will have no effect on subsequent solves.
+
+        Returns:
+            The solver instance (e.g., PTRSolver).
+        """
+        return self._solver
+
+    @property
+    def algorithm(self) -> Algorithm:
+        """Access the SCP algorithm instance.
+
+        Returns:
+            The algorithm instance (e.g., PenalizedTrustRegion).
+        """
+        return self._algorithm
+
+    @property
+    def discretizer(self) -> Discretizer:
+        """Access the discretizer instance.
+
+        Attributes such as `dis_type`, `ode_solver`, and `custom_integrator`
+        can be modified freely before `initialize` is called:
+
+            problem.discretizer.dis_type = "ZOH"
+            problem.discretizer.ode_solver = "Dopri8"
+            problem.initialize()
+
+        !!! warning
+            Discretizer settings are compiled into the JIT-cached solver
+            during `initialize`.  Changes made **after**
+            `initialize()` will have no effect on subsequent solves.
+
+        Returns:
+            The discretizer instance (e.g., LinearizeDiscretize).
+        """
+        return self._discretizer
 
     @property
     def parameters(self) -> ParameterDict:
@@ -264,10 +456,114 @@ class Problem:
 
     def _sync_parameters(self):
         """Sync all parameter values to CVXPy parameters."""
+        if self._lowered is None:
+            return
+
         if self._lowered.cvxpy_params is not None:
             for name, value in self._parameter_wrapper.items():
                 if name in self._lowered.cvxpy_params:
                     self._lowered.cvxpy_params[name].value = value
+
+    def _sync_boundary_conditions(self):
+        """Sync boundary conditions from State objects to lowered representation.
+
+        This method reads the current `.initial` and `.final` values and types
+        from the original State objects and updates both the unified state
+        representation and the CVXPy solver parameters. This enables workflows
+        where initial conditions change between solves.
+
+        Note:
+            Safe to call before initialize() - it will simply do nothing.
+        """
+        if self._lowered is None:
+            return
+
+        # Sync initial/final values and types from State objects to optimization unified
+        # representation
+        for state in self.symbolic.states:
+            if state.initial is not None:
+                self._lowered.x_unified.initial[state._slice] = state.initial
+                self._lowered.x_unified.initial_type[state._slice] = state.initial_type
+            if state.final is not None:
+                self._lowered.x_unified.final[state._slice] = state.final
+                self._lowered.x_unified.final_type[state._slice] = state.final_type
+
+        # Sync initial/final values and types to propagation unified representation
+        # (states_prop includes optimization states, so we sync those too)
+        for state in self.symbolic.states_prop:
+            if state.initial is not None:
+                self._lowered.x_prop_unified.initial[state._slice] = state.initial
+                self._lowered.x_prop_unified.initial_type[state._slice] = state.initial_type
+            if state.final is not None:
+                self._lowered.x_prop_unified.final[state._slice] = state.final
+                self._lowered.x_prop_unified.final_type[state._slice] = state.final_type
+
+        # Update CVXPy solver parameters (only if solver is initialized)
+        if self._solver._problem is not None:
+            self._solver.update_boundary_conditions(
+                x_init=self._lowered.x_unified.initial,
+                x_term=self._lowered.x_unified.final,
+            )
+
+    def _sync_guesses(self):
+        """Sync trajectory guesses from State/Control objects to lowered representation.
+
+        This method reads the current `.guess` values from the original State and
+        Control objects and updates the unified representations. This enables warm-starting
+        workflows where the initial trajectory guess is updated between solves (e.g., shifting
+        the previous solution).
+
+        Note:
+            This only updates the unified representation. The AlgorithmState is
+            created from these values in reset() or initialize(), so this must
+            be called before those methods to take effect.
+        """
+        if self._lowered is None:
+            return
+
+        # Sync optimization state guesses
+        for state in self.symbolic.states:
+            if state.guess is not None:
+                self._lowered.x_unified.guess[:, state._slice] = state.guess
+
+        # Sync propagation state guesses (includes optimization states)
+        for state in self.symbolic.states_prop:
+            if state.guess is not None:
+                self._lowered.x_prop_unified.guess[:, state._slice] = state.guess
+
+        # Sync control guesses
+        for control in self.symbolic.controls:
+            if control.guess is not None:
+                self._lowered.u_unified.guess[:, control._slice] = control.guess
+
+    def sync(self):
+        """Sync parameters and boundary conditions to the solver.
+
+        Call this after modifying State.initial/final or parameters when using
+        step() without reset(). This allows warm-starting from the previous
+        solution while updating problem data.
+
+        Note:
+            This is automatically called by solve() and reset(). Only needed
+            when using step() directly with modified parameters or boundary
+            conditions between iterations.
+
+        Example:
+            MPC with warm-starting::
+
+                problem.initialize()
+                while running:
+                    # Update initial condition from measurement
+                    pos.initial = measured_state
+                    problem.sync()  # Sync without resetting algorithm state
+
+                    # Continue from previous solution (warm-start)
+                    for _ in range(max_iters):
+                        if problem.step()["converged"]:
+                            break
+        """
+        self._sync_parameters()
+        self._sync_boundary_conditions()
 
     @property
     def state(self) -> Optional[AlgorithmState]:
@@ -356,10 +652,19 @@ class Problem:
         """
         # Build nodes dictionary with all states and controls
         nodes_dict = {}
+        has_impulsive_controls = any(
+            bool(control.is_impulsive.any())
+            if hasattr(control.is_impulsive, "any")
+            else bool(control.is_impulsive)
+            for control in self.symbolic.controls
+        )
 
         # Add all states (user-defined and augmented)
         for sym_state in self.symbolic.states:
-            nodes_dict[sym_state.name] = state.x[:, sym_state._slice]
+            state_nodes = state.x[:, sym_state._slice].copy()
+            if has_impulsive_controls:
+                state_nodes[0] = self.settings.sim.x.initial[sym_state._slice]
+            nodes_dict[sym_state.name] = state_nodes
 
         # Add all controls (user-defined and augmented)
         for control in self.symbolic.controls:
@@ -401,22 +706,18 @@ class Problem:
         """
         printing.intro()
 
-        # Enable the profiler
-        pr = profiling.profiling_start(self.settings.dev.profiling)
+        # Create a new profiling session (shared across initialize/solve/post_process)
+        self._profiling_session = (
+            profiling._create_session() if self.settings.dev.profiling else None
+        )
+        pr = profiling.profiling_start(self.settings.dev.profiling, self._profiling_session)
 
         t_0_while = time.time()
-        # Ensure parameter sizes and normalization are correct
-        self.settings.scp.__post_init__()
+        # Ensure scaling matrices are correct
         self.settings.sim.__post_init__()
 
-        # Create compiled (vmapped) dynamics as new instances
+        # Create compiled (vmapped) propagation dynamics
         # This preserves the original un-vmapped versions in _lowered
-        self._compiled_dynamics = Dynamics(
-            f=jax.vmap(self._lowered.dynamics.f, in_axes=(0, 0, 0, None)),
-            A=jax.vmap(self._lowered.dynamics.A, in_axes=(0, 0, 0, None)),
-            B=jax.vmap(self._lowered.dynamics.B, in_axes=(0, 0, 0, None)),
-        )
-
         self._compiled_dynamics_prop = Dynamics(
             f=jax.vmap(self._lowered.dynamics_prop.f, in_axes=(0, 0, 0, None)),
         )
@@ -449,19 +750,28 @@ class Problem:
             ctcs=self._lowered.jax_constraints.ctcs,  # CTCS aren't JIT-compiled here
         )
 
-        # Generate solvers using compiled (vmapped) dynamics
-        self._discretization_solver = get_discretization_solver(
-            self._compiled_dynamics, self.settings
+        # Generate discretization solver via the discretizer (handles Jacobians + vmapping)
+        self._discretization_solver = self._discretizer.get_solver(
+            self._lowered.dynamics, self.settings
+        )
+        self._discretization_solver_impulsive = get_impulsive_discretization_solver(
+            self._lowered.dynamics_discrete
         )
         self._propagation_solver = get_propagation_solver(
-            self._compiled_dynamics_prop.f, self.settings
+            self._compiled_dynamics_prop.f, self.settings, self._discretizer
         )
 
         # Build convex subproblem (solver was created in __init__, variables in lower)
         self._solver.initialize(self._lowered, self.settings)
 
         # Print problem summary (after solver is initialized so we can access problem stats)
-        printing.print_problem_summary(self.settings, self._lowered, self._solver)
+        printing.print_problem_summary(
+            self.settings,
+            self._lowered,
+            self._solver,
+            self._algorithm,
+            self._discretizer,
+        )
 
         # Get cache file paths using symbolic AST hashing
         # This is more stable than hashing lowered JAX code
@@ -477,15 +787,33 @@ class Problem:
             self._discretization_solver,
             dis_solver_file,
             self._parameters,  # Plain dict for JAX
-            self.settings.scp.n,
+            self.settings.sim.n,
             self.settings.sim.n_states,
             self.settings.sim.n_controls,
             save_compiled=self.settings.sim.save_compiled,
             debug=self.settings.dev.debug,
         )
 
+        # Compile the impulsive/discrete discretization solver with the same pipeline.
+        # This solver is evaluated on node-wise inputs (x_nodes, u_nodes), shape (N, ...).
+        # if has_impulsive and self._discretization_solver_impulsive is not None:
+        dis_imp_solver_file = dis_solver_file.with_name(
+            f"{dis_solver_file.stem}_impulsive{dis_solver_file.suffix}"
+        )
+        self._discretization_solver_impulsive = load_or_compile_discretization_solver(
+            self._discretization_solver_impulsive,
+            dis_imp_solver_file,
+            self._parameters,  # Plain dict for JAX
+            self.settings.sim.n,
+            self.settings.sim.n_states,
+            self.settings.sim.n_controls,
+            save_compiled=self.settings.sim.save_compiled,
+            debug=self.settings.dev.debug,
+            name="discrete",
+        )
+
         # Setup propagation solver parameters
-        dtau = 1.0 / (self.settings.scp.n - 1)
+        dtau = 1.0 / (self.settings.sim.n - 1)
         dt_max = self.settings.sim.u.max[self.settings.sim.time_dilation_slice][0] * dtau
         self.settings.prp.max_tau_len = int(dt_max / self.settings.prp.dt) + 2
 
@@ -509,6 +837,7 @@ class Problem:
             self.emitter_function,
             self._parameters,  # For warm-start only
             self.settings,  # For warm-start only
+            discretization_solver_impulsive=self._discretization_solver_impulsive,
         )
         print("✓ SCvx Subproblem Solver initialized")
 
@@ -526,7 +855,7 @@ class Problem:
             self.emitter_function = lambda data: None
 
         # Create fresh solver state
-        self._state = AlgorithmState.from_settings(self.settings)
+        self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
 
         t_f_while = time.time()
         self.timing_init = t_f_while - t_0_while
@@ -543,6 +872,10 @@ class Problem:
         Creates fresh AlgorithmState while preserving compiled dynamics and solvers.
         Use this to run multiple optimizations without re-initializing.
 
+        This method automatically syncs:
+            - Trajectory guesses from State/Control `.guess` attributes
+            - Boundary conditions from State `.initial` and `.final` attributes
+
         Raises:
             ValueError: If initialize() has not been called yet.
 
@@ -554,12 +887,30 @@ class Problem:
                 result1 = problem.step()
                 problem.reset()
                 result2 = problem.solve()  # Fresh run with same setup
+
+            MPC with warm-starting from previous solution::
+
+                for measured_state in measurements:
+                    # Update initial condition
+                    pos.initial = measured_state[:3]
+
+                    # Warm-start: shift previous solution as new guess
+                    pos.guess = np.roll(prev_result.nodes["pos"], -1, axis=0)
+
+                    problem.reset()  # Syncs guesses and boundary conditions
+                    result = problem.solve()
         """
-        if self._compiled_dynamics is None:
+        if self._compiled_dynamics_prop is None:
             raise ValueError("Problem has not been initialized. Call initialize() first")
 
+        # Sync guesses from State/Control objects (must happen before AlgorithmState creation)
+        self._sync_guesses()
+
+        # Sync boundary conditions from State objects
+        self._sync_boundary_conditions()
+
         # Create fresh solver state from settings
-        self._state = AlgorithmState.from_settings(self.settings)
+        self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
 
         # Reset solution
         self._solution = None
@@ -612,18 +963,19 @@ class Problem:
         """Run the SCP algorithm until convergence or iteration limit.
 
         Args:
-            max_iters: Maximum iterations (default: settings.scp.k_max)
+            max_iters: Maximum iterations (default: algorithm.k_max)
             continuous: If True, run all iterations regardless of convergence
 
         Returns:
             OptimizationResults with trajectory and convergence info
                 (call post_process() for full propagation)
         """
-        # Sync parameters before solving
+        # Sync parameters and boundary conditions before solving
         self._sync_parameters()
+        self._sync_boundary_conditions()
 
         required = [
-            self._compiled_dynamics,
+            self._compiled_dynamics_prop,
             self._compiled_constraints,
             self._solver,
             self._discretization_solver,
@@ -632,15 +984,15 @@ class Problem:
         if any(r is None for r in required):
             raise ValueError("Problem has not been initialized. Call initialize() before solve()")
 
-        # Enable the profiler
-        pr = profiling.profiling_start(self.settings.dev.profiling)
+        # Enable the profiler (reuse session from initialize)
+        pr = profiling.profiling_start(self.settings.dev.profiling, self._profiling_session)
 
         t_0_while = time.time()
         # Print top header for solver results
         if self.settings.dev.printing:
             printing.header(self._columns)
 
-        k_max = max_iters if max_iters is not None else self.settings.scp.k_max
+        k_max = max_iters if max_iters is not None else self._algorithm.k_max
 
         while self._state.k <= k_max:
             result = self.step()
@@ -681,11 +1033,11 @@ class Problem:
         if self._solution is None:
             raise ValueError("No solution available. Call solve() first.")
 
-        # Enable the profiler
-        pr = profiling.profiling_start(self.settings.dev.profiling)
+        # Enable the profiler (reuse session from initialize)
+        pr = profiling.profiling_start(self.settings.dev.profiling, self._profiling_session)
 
         # Create result from stored solution state
-        result = self._format_result(self._solution, self._solution.k <= self.settings.scp.k_max)
+        result = self._format_result(self._solution, self._solution.k <= self._algorithm.k_max)
 
         t_0_post = time.time()
         result = propagate_trajectory_results(
@@ -693,7 +1045,9 @@ class Problem:
             self.settings,
             result,
             self._propagation_solver,
+            dynamics_discrete=self._lowered.dynamics_discrete.f,
             algebraic_prop=self._lowered.algebraic_prop,
+            discretizer=self._discretizer,
         )
         t_f_post = time.time()
 
@@ -747,7 +1101,13 @@ class Problem:
             citations = "\n".join(solver_citations)
             sections.append(f"{header}\n\n{citations}")
 
-        # Future: add citations from discretization, constraint formulations, etc.
+        # Discretization citations
+        dis_citations = self._discretizer.citation()
+        if dis_citations:
+            dis_name = type(self._discretizer).__name__
+            header = f"% Discretization: {dis_name}"
+            citations = "\n".join(dis_citations)
+            sections.append(f"{header}\n\n{citations}")
 
         sections.append(r"% --- END AUTO-GENERATED CITATIONS")
 

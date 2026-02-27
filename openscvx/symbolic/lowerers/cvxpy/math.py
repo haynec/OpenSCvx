@@ -1,7 +1,7 @@
 """CVXPy visitors for math expressions.
 
 Visitors: Sin, Cos, Tan, Exp, Log, Abs, PositivePart, Square, Huber,
-          SmoothReLU, Sqrt, Max, LogSumExp, Linterp, Bilerp
+          SmoothReLU, Sqrt, Max, Min, LogSumExp, Linterp, Cinterp, Bilerp
 """
 
 import cvxpy as cp
@@ -10,6 +10,7 @@ import cvxpy as cp
 from openscvx.symbolic.expr.math import (
     Abs,
     Bilerp,
+    Cinterp,
     Cos,
     Exp,
     Huber,
@@ -17,6 +18,7 @@ from openscvx.symbolic.expr.math import (
     Log,
     LogSumExp,
     Max,
+    Min,
     PositivePart,
     Sin,
     SmoothReLU,
@@ -310,6 +312,34 @@ def _visit_max(lowerer, node: Max) -> cp.Expression:
         return result
 
 
+@visitor(Min)
+def _visit_min(lowerer, node: Min) -> cp.Expression:
+    """Lower element-wise minimum to CVXPy expression.
+
+    Minimum is concave (pointwise min of concave functions is concave).
+
+    Args:
+        node: Min expression node with multiple operands
+
+    Returns:
+        CVXPy expression representing element-wise minimum
+
+    Note:
+        For multiple operands, chains binary minimum operations.
+        Minimum preserves concavity.
+    """
+    operands = [lowerer.lower(op) for op in node.operands]
+    # CVXPy's minimum can take multiple arguments
+    if len(operands) == 2:
+        return cp.minimum(operands[0], operands[1])
+    else:
+        # For more than 2 operands, chain minimum calls
+        result = cp.minimum(operands[0], operands[1])
+        for op in operands[2:]:
+            result = cp.minimum(result, op)
+        return result
+
+
 @visitor(LogSumExp)
 def _visit_logsumexp(lowerer, node: LogSumExp) -> cp.Expression:
     """Lower log-sum-exp to CVXPy expression.
@@ -354,6 +384,18 @@ def _visit_linterp(lowerer, node: Linterp) -> cp.Expression:
         NotImplementedError: Always raised since Linterp is not DCP-compliant
     """
     raise NotImplementedError("Linear interpolation (Linterp) is not DCP-compliant in CVXPy.")
+
+
+@visitor(Cinterp)
+def _visit_cinterp(lowerer, node: Cinterp) -> cp.Expression:
+    """Raise NotImplementedError for cubic spline interpolation.
+
+    Cubic spline interpolation (Cinterp) is not DCP-compliant in CVXPy.
+
+    Raises:
+        NotImplementedError: Always raised since Cinterp is not DCP-compliant
+    """
+    raise NotImplementedError("Cubic spline interpolation (Cinterp) is not DCP-compliant in CVXPy.")
 
 
 @visitor(Bilerp)

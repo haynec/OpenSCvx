@@ -201,11 +201,11 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
+    algorithm={"lam_vb": 1e1},
 )
 
 # Solver settings
 problem.settings.prp.dt = 0.01
-problem.settings.scp.lam_vb = 1e1
 
 if __name__ == "__main__":
     print("3-Link Arm Trajectory Optimization with Product of Exponentials FK")

@@ -10,13 +10,18 @@ import openscvx.symbolic.expr.lie as lie
 import openscvx.symbolic.expr.linalg as linalg
 import openscvx.symbolic.expr.spatial as spatial
 import openscvx.symbolic.expr.stl as stl
-from openscvx.algorithms.autotuning import (
+from openscvx.algorithms import (
     AugmentedLagrangian,
     ConstantProximalWeight,
+    PenalizedTrustRegion,
     RampProximalWeight,
 )
+from openscvx.algorithms.optimization_results import OptimizationResults
+from openscvx.discretization import LinearizeDiscretize
 from openscvx.expert import ByofSpec
+from openscvx.loader import load_dict, load_json, load_yaml
 from openscvx.problem import Problem
+from openscvx.solvers import PTRSolver
 from openscvx.symbolic.expr import (
     CTCS,
     Abs,
@@ -25,6 +30,7 @@ from openscvx.symbolic.expr import (
     Any,
     Bilerp,
     Block,
+    Cinterp,
     Concat,
     Cond,
     Constant,
@@ -49,6 +55,7 @@ from openscvx.symbolic.expr import (
     MatMul,
     Max,
     Maximize,
+    Min,
     Minimize,
     Mul,
     Neg,
@@ -67,12 +74,21 @@ from openscvx.symbolic.expr import (
     Vstack,
     ctcs,
 )
-from openscvx.symbolic.time import Time
+from openscvx.symbolic.expr.time import Time
 from openscvx.utils.cache import clear_cache, get_cache_dir, get_cache_size
+
+load_results = OptimizationResults.load
 
 __all__ = [
     # Main Trajectory Optimization Entrypoint
     "Problem",
+    # Config file loading
+    "load_yaml",
+    "load_json",
+    "load_dict",
+    # Results I/O
+    "OptimizationResults",
+    "load_results",
     # Cache management
     "get_cache_dir",
     "clear_cache",
@@ -120,7 +136,9 @@ __all__ = [
     "Log",
     "LogSumExp",
     "Max",
+    "Min",
     "Linterp",
+    "Cinterp",
     "Bilerp",
     # Logical/control flow operations
     "All",
@@ -143,7 +161,12 @@ __all__ = [
     "lie",
     # Expert mode types
     "ByofSpec",
-    # Autotuning
+    # Discretization
+    "LinearizeDiscretize",
+    # Convex Solver
+    "PTRSolver",
+    # Algorithm & Autotuning
+    "PenalizedTrustRegion",
     "AugmentedLagrangian",
     "ConstantProximalWeight",
     "RampProximalWeight",

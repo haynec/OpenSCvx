@@ -1,11 +1,12 @@
 import copy
-from typing import Optional
+from typing import Callable, Optional
 
 import jax.numpy as jnp
 import numpy as np
 
 from openscvx.algorithms import OptimizationResults
 from openscvx.config import Config
+from openscvx.discretization import Discretizer
 from openscvx.utils import calculate_cost_from_boundaries
 
 from .propagation import s_to_t, simulate_nonlinear_time, t_to_tau
@@ -16,7 +17,9 @@ def propagate_trajectory_results(
     settings: Config,
     result: OptimizationResults,
     propagation_solver: callable,
+    dynamics_discrete: Optional[Callable] = None,
     algebraic_prop: Optional[dict] = None,
+    discretizer: Optional[Discretizer] = None,
 ) -> OptimizationResults:
     """Propagate the optimal trajectory and compute additional results.
 
@@ -28,7 +31,11 @@ def propagate_trajectory_results(
         settings (Config): Configuration settings.
         result (OptimizationResults): Optimization results object.
         propagation_solver (callable): Function for propagating the system state.
+        dynamics_discrete (callable, optional): Discrete dynamics map used to apply
+            node-wise impulsive/discrete updates before continuous propagation.
         algebraic_prop (dict, optional): Dictionary mapping output names to vmapped JAX functions.
+        discretizer: Discretizer instance (used for ``dis_type``).
+            Defaults to ``None`` which uses FOH.
 
     Returns:
         OptimizationResults: Updated results object containing:
@@ -43,11 +50,11 @@ def propagate_trajectory_results(
     x = result.x
     u = result.u
 
-    t = np.array(s_to_t(x, u, settings)).squeeze()
+    t = np.array(s_to_t(x, u, settings, discretizer)).squeeze()
 
     t_full = np.arange(t[0], t[-1], settings.prp.dt)
 
-    tau_vals, u_full = t_to_tau(u, t_full, t, settings)
+    tau_vals, u_full = t_to_tau(u, t_full, t, settings, discretizer)
 
     # Create a copy of x_prop for propagation to avoid mutating settings
     # Match free values from initial state to the initial value from the result
@@ -78,7 +85,16 @@ def propagate_trajectory_results(
     settings.sim.x_prop = x_prop_for_propagation
 
     try:
-        x_full = simulate_nonlinear_time(params, x, u, tau_vals, t, settings, propagation_solver)
+        x_full = simulate_nonlinear_time(
+            params,
+            x,
+            u,
+            tau_vals,
+            t,
+            settings,
+            propagation_solver,
+            dynamics_discrete=dynamics_discrete,
+        )
     finally:
         # Always restore original x_prop, even if propagation fails
         settings.sim.x_prop = original_x_prop

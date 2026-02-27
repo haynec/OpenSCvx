@@ -21,6 +21,28 @@ def _get_var_dim(result: OptimizationResults, var_name: str, var_list: list) -> 
     return 1
 
 
+def _is_impulsive_control(result: OptimizationResults, control_name: str) -> bool:
+    """Return True if the control is marked as impulsive."""
+    var = _get_var(result, control_name, result._controls)
+    is_imp = getattr(var, "is_impulsive", None)
+    if is_imp is None:
+        return False
+    try:
+        import numpy as np
+
+        return bool(np.any(is_imp))
+    except Exception:
+        return bool(is_imp)
+
+
+def _has_impulsive_controls(result: OptimizationResults) -> bool:
+    """Return True if any control is marked as impulsive."""
+    for control in result._controls:
+        if _is_impulsive_control(result, control.name):
+            return True
+    return False
+
+
 def _add_component_traces(
     fig: go.Figure,
     result: OptimizationResults,
@@ -31,6 +53,9 @@ def _add_component_traces(
     show_legend: bool,
     min_val: float | None = None,
     max_val: float | None = None,
+    impulsive: bool = False,
+    plot_trajectory: bool = True,
+    split_nodes: bool = False,
 ):
     """Add traces for a single component of a variable to a subplot.
 
@@ -52,7 +77,7 @@ def _add_component_traces(
     t_full = result.trajectory["time"].flatten() if has_trajectory else None
 
     # Plot propagated trajectory if available
-    if has_trajectory:
+    if has_trajectory and plot_trajectory:
         data = result.trajectory[var_name]
         y = data if data.ndim == 1 else data[:, component_idx]
         fig.add_trace(
@@ -73,19 +98,70 @@ def _add_component_traces(
     if var_name in result.nodes:
         data = result.nodes[var_name]
         y = data if data.ndim == 1 else data[:, component_idx]
-        fig.add_trace(
-            go.Scatter(
-                x=t_nodes,
-                y=y,
-                mode="markers",
-                name="Nodes",
-                showlegend=show_legend,
-                legendgroup="nodes",
-                marker={"color": "cyan", "size": 6, "symbol": "circle"},
-            ),
-            row=row,
-            col=col,
-        )
+        if split_nodes and len(t_nodes) > 0:
+            fig.add_trace(
+                go.Scatter(
+                    x=t_nodes[:1],
+                    y=y[:1],
+                    mode="markers",
+                    name="Prior state",
+                    showlegend=show_legend,
+                    legendgroup="nodes_prior",
+                    marker={"color": "#D98B8B", "size": 7, "symbol": "diamond"},
+                ),
+                row=row,
+                col=col,
+            )
+            if len(t_nodes) > 1:
+                fig.add_trace(
+                    go.Scatter(
+                        x=t_nodes[1:],
+                        y=y[1:],
+                        mode="markers",
+                        name="Posterior state",
+                        showlegend=show_legend,
+                        legendgroup="nodes_posterior",
+                        marker={"color": "cyan", "size": 6, "symbol": "circle"},
+                    ),
+                    row=row,
+                    col=col,
+                )
+        else:
+            fig.add_trace(
+                go.Scatter(
+                    x=t_nodes,
+                    y=y,
+                    mode="markers",
+                    name="Nodes",
+                    showlegend=show_legend,
+                    legendgroup="nodes",
+                    marker={"color": "cyan", "size": 6, "symbol": "circle"},
+                ),
+                row=row,
+                col=col,
+            )
+
+        if impulsive:
+            x_imp = []
+            y_imp = []
+            for k in range(len(t_nodes)):
+                if np.abs(y[k]) > 0:
+                    x_imp.extend([t_nodes[k], t_nodes[k], None])
+                    y_imp.extend([0.0, y[k], None])
+            if x_imp:
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_imp,
+                        y=y_imp,
+                        mode="lines",
+                        name="Impulses",
+                        showlegend=show_legend,
+                        legendgroup="impulses",
+                        line={"color": "orange", "width": 2, "dash": "dash"},
+                    ),
+                    row=row,
+                    col=col,
+                )
 
     # Add horizontal bound lines if provided
     # Only add if finite (skip -inf/inf bounds)
@@ -164,15 +240,36 @@ def plot_state_component(
     if state_name in result.nodes:
         data = result.nodes[state_name]
         y = data if data.ndim == 1 else data[:, component]
-        fig.add_trace(
-            go.Scatter(
-                x=t_nodes,
-                y=y,
-                mode="markers",
-                name="Nodes",
-                marker={"color": "cyan", "size": 6},
+        if _has_impulsive_controls(result) and len(t_nodes) > 0:
+            fig.add_trace(
+                go.Scatter(
+                    x=t_nodes[:1],
+                    y=y[:1],
+                    mode="markers",
+                    name="Prior state",
+                    marker={"color": "#D98B8B", "size": 7, "symbol": "diamond"},
+                )
             )
-        )
+            if len(t_nodes) > 1:
+                fig.add_trace(
+                    go.Scatter(
+                        x=t_nodes[1:],
+                        y=y[1:],
+                        mode="markers",
+                        name="Posterior state",
+                        marker={"color": "cyan", "size": 6, "symbol": "circle"},
+                    )
+                )
+        else:
+            fig.add_trace(
+                go.Scatter(
+                    x=t_nodes,
+                    y=y,
+                    mode="markers",
+                    name="Nodes",
+                    marker={"color": "cyan", "size": 6},
+                )
+            )
 
     fig.update_xaxes(title_text="Time (s)")
     fig.update_yaxes(title_text=label)
@@ -240,6 +337,8 @@ def plot_states(
     fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[c[0] for c in components])
     fig.update_layout(title_text="State Trajectories", template="plotly_dark")
 
+    has_impulsive_controls = _has_impulsive_controls(result)
+
     for idx, (_, var_name, comp_idx) in enumerate(components):
         row = (idx // n_cols) + 1
         col = (idx % n_cols) + 1
@@ -248,7 +347,6 @@ def plot_states(
         var = _get_var(result, var_name, result._states)
         min_val = var.min[comp_idx] if var.min is not None else None
         max_val = var.max[comp_idx] if var.max is not None else None
-
         _add_component_traces(
             fig,
             result,
@@ -259,6 +357,7 @@ def plot_states(
             show_legend=(idx == 0),
             min_val=min_val,
             max_val=max_val,
+            split_nodes=has_impulsive_controls,
         )
 
     # Add x-axis labels to bottom row
@@ -314,15 +413,16 @@ def plot_control_component(
     if has_trajectory:
         data = result.trajectory[control_name]
         y = data if data.ndim == 1 else data[:, component]
-        fig.add_trace(
-            go.Scatter(
-                x=t_full,
-                y=y,
-                mode="lines",
-                name="Trajectory",
-                line={"color": "green", "width": 2},
+        if not _is_impulsive_control(result, control_name):
+            fig.add_trace(
+                go.Scatter(
+                    x=t_full,
+                    y=y,
+                    mode="lines",
+                    name="Trajectory",
+                    line={"color": "green", "width": 2},
+                )
             )
-        )
 
     if control_name in result.nodes:
         data = result.nodes[control_name]
@@ -336,6 +436,23 @@ def plot_control_component(
                 marker={"color": "cyan", "size": 6},
             )
         )
+        if _is_impulsive_control(result, control_name):
+            x_imp = []
+            y_imp = []
+            for k in range(len(t_nodes)):
+                if abs(y[k]) > 0:
+                    x_imp.extend([t_nodes[k], t_nodes[k], None])
+                    y_imp.extend([0.0, y[k], None])
+            if x_imp:
+                fig.add_trace(
+                    go.Scatter(
+                        x=x_imp,
+                        y=y_imp,
+                        mode="lines",
+                        name="Impulses",
+                        line={"color": "orange", "width": 2, "dash": "dash"},
+                    )
+                )
 
     fig.update_xaxes(title_text="Time (s)")
     fig.update_yaxes(title_text=label)
@@ -410,6 +527,7 @@ def plot_controls(
         var = _get_var(result, var_name, result._controls)
         min_val = var.min[comp_idx] if var.min is not None else None
         max_val = var.max[comp_idx] if var.max is not None else None
+        is_impulsive = _is_impulsive_control(result, var_name)
 
         _add_component_traces(
             fig,
@@ -421,6 +539,8 @@ def plot_controls(
             show_legend=(idx == 0),
             min_val=min_val,
             max_val=max_val,
+            impulsive=is_impulsive,
+            plot_trajectory=not is_impulsive,
         )
 
     # Add x-axis labels to bottom row

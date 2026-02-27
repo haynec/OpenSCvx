@@ -68,7 +68,7 @@ def test_cvxpygen_disabled_by_default():
     )
 
     # Check that cvxpygen is disabled by default
-    assert not problem.settings.cvx.cvxpygen
+    assert not problem.solver.cvxpygen
 
 
 def test_cvxpygen_enabled_raises_error_without_install():
@@ -111,8 +111,8 @@ def test_cvxpygen_enabled_raises_error_without_install():
     )
 
     # Enable cvxpygen
-    problem.settings.cvx.cvxpygen = True
-    problem.settings.cvx.cvxpygen_override = True
+    problem.solver.cvxpygen = True
+    problem.solver.cvxpygen_override = True
 
     # This should raise an ImportError with a helpful message
     with pytest.raises(ImportError) as exc_info:

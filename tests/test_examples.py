@@ -14,6 +14,11 @@ import pytest
 
 IGNORED_FILES = ["__init__.py", "plotting.py"]
 
+# Examples excluded from CI (e.g. exceeds runner memory)
+EXCLUDED_EXAMPLES = {
+    "drone/logo.py",
+}
+
 # Timing bounds for specific examples (in seconds)
 # Format: "relative/path/to/example.py": {"init": max_init, "solve": max_solve, "post": max_post}
 TIMING_BOUNDS = {
@@ -44,6 +49,10 @@ TIMING_BOUNDS = {
     },
 }
 
+FLOAT_DATA_TYPES = {
+    "drone_logo": "float64",
+}
+
 
 def discover_examples():
     """Discover all runnable examples in the examples/ directory."""
@@ -62,6 +71,11 @@ def discover_examples():
 
         # Get relative path for naming
         rel_path = py_file.relative_to(examples_dir)
+
+        # Skip explicitly excluded examples
+        if str(rel_path) in EXCLUDED_EXAMPLES:
+            continue
+
         module_name = str(rel_path.with_suffix("")).replace("/", ".")
 
         try:
@@ -110,14 +124,19 @@ def test_example(name, metadata):
     5. Check timing bounds (if specified for this example)
     """
     problem = metadata["problem"]
+    if name in FLOAT_DATA_TYPES:
+        if "float64" == FLOAT_DATA_TYPES[name]:
+            jax.config.update("jax_enable_x64", True)
+        else:
+            jax.config.update("jax_enable_x64", False)
 
     # Disable printing for cleaner test output
     if hasattr(problem.settings, "dev"):
         problem.settings.dev.printing = False
 
     # Disable custom integrator for stability (used in some drone examples)
-    if hasattr(problem.settings, "dis"):
-        problem.settings.dis.custom_integrator = False
+    if hasattr(problem, "_discretizer") and hasattr(problem._discretizer, "custom_integrator"):
+        problem._discretizer.custom_integrator = False
 
     # Run the optimization pipeline
     problem.initialize()

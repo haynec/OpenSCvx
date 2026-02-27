@@ -29,6 +29,9 @@ def _hash_byof(byof: Optional["ByofSpec"]) -> bytes:
     for f in byof.get("dynamics", {}).values():
         codes.append(f.__code__.co_code)
         codes.append(repr(f.__code__.co_consts).encode())
+    for f in byof.get("dynamics_discrete", {}).values():
+        codes.append(f.__code__.co_code)
+        codes.append(repr(f.__code__.co_consts).encode())
     for c in byof.get("nodal_constraints", []):
         codes.append(c["constraint_fn"].__code__.co_code)
         codes.append(repr(c["constraint_fn"].__code__.co_consts).encode())
@@ -103,6 +106,7 @@ def load_or_compile_discretization_solver(
     n_states: int,
     n_controls: int,
     save_compiled: bool = False,
+    name: str = "continuous",
     debug: bool = False,
 ) -> callable:
     """Load discretization solver from cache or compile and cache it.
@@ -128,13 +132,13 @@ def load_or_compile_discretization_solver(
             with open(cache_file, "rb") as f:
                 serial_dis = f.read()
             compiled_solver = export.deserialize(serial_dis)
-            print("✓ Loaded existing discretization solver")
+            print(f"✓ Loaded existing {name} discretization solver")
             return compiled_solver
         except FileNotFoundError:
-            print("Compiling discretization solver...")
+            print(f"Compiling {name} discretization solver...")
 
     else:
-        print("Compiling discretization solver (not saving/loading from disk)...")
+        print(f"Compiling {name} discretization solver (not saving/loading from disk)...")
 
     # Pass parameters as a single dictionary
     compiled_solver = export.export(jax.jit(discretization_solver))(
@@ -146,7 +150,7 @@ def load_or_compile_discretization_solver(
     if save_compiled:
         with open(cache_file, "wb") as f:
             f.write(compiled_solver.serialize())
-        print("✓ Discretization solver compiled and saved")
+        print(f"✓ {name} discretization solver compiled and saved")
 
     return compiled_solver
 
@@ -195,7 +199,6 @@ def load_or_compile_propagation_solver(
         np.ones((1, n_controls)),  # controls_next
         np.ones((1, 1)),  # tau_0
         np.ones((1, 1)).astype("int"),  # segment index
-        0,  # idx_s_stop
         np.ones((max_tau_len,)),  # save_time (tau_cur_padded)
         np.ones((max_tau_len,), dtype=bool),  # mask_padded (boolean mask)
         params,  # additional parameters as dict
@@ -226,7 +229,8 @@ def prime_propagation_solver(
         controls_next = np.ones((1, settings.sim.u.shape[0]), dtype=settings.sim.u.guess.dtype)
         tau_init = np.array([[0.0]], dtype=np.float64)
         node = np.array([[0]], dtype=np.int64)
-        idx_s_stop = settings.sim.time_dilation_slice.stop
+        td_slice = getattr(settings.sim, "time_dilation_slice", None)
+        int(td_slice.start) if td_slice is not None else settings.sim.u.shape[0] - 1
         save_time = np.ones((settings.prp.max_tau_len,), dtype=np.float64)
         mask_padded = np.ones((settings.prp.max_tau_len,), dtype=bool)
         # Create dummy params dict with same structure
@@ -241,7 +245,6 @@ def prime_propagation_solver(
             controls_next,
             tau_init,
             node,
-            idx_s_stop,
             save_time,
             mask_padded,
             dummy_params,

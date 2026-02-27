@@ -99,6 +99,7 @@ time = ox.Time(
     final=ox.Minimize(total_time),
     min=0.0,
     max=20,
+    uniform_time_grid=True,
 )
 
 problem = Problem(
@@ -109,12 +110,8 @@ problem = Problem(
     constraints=constraints,
     N=n,
     licq_max=1e-6,
+    algorithm={"lam_vc": 1e3},
 )
-
-# Set solver parameters
-problem.settings.scp.lam_vc = 1e3
-problem.settings.scp.uniform_time_grid = True
-
 
 plotting_dict = {
     "obs_radius": problem.parameters["obs_radius"],

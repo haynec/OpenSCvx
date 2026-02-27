@@ -30,7 +30,7 @@ must follow for use within successive convexification algorithms.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any, List, Optional
 
 if TYPE_CHECKING:
     from openscvx.config import Config
@@ -87,6 +87,10 @@ class ConvexSolver(ABC):
                     return MyResult(...)
     """
 
+    #: Backend solver name (e.g., ``"QOCO"``, ``"CLARABEL"``).  Subclasses
+    #: must set this in ``__init__``.
+    cvx_solver: str
+
     @abstractmethod
     def create_variables(
         self,
@@ -94,6 +98,8 @@ class ConvexSolver(ABC):
         x_unified: "UnifiedState",
         u_unified: "UnifiedControl",
         jax_constraints: "LoweredJaxConstraints",
+        dynamics_sparsity: Optional[tuple] = None,
+        constraint_sparsity: Optional[list] = None,
     ) -> None:
         """Create backend-specific optimization variables.
 
@@ -109,8 +115,14 @@ class ConvexSolver(ABC):
             x_unified: Unified state interface with dimensions and scaling bounds
             u_unified: Unified control interface with dimensions and scaling bounds
             jax_constraints: Lowered JAX constraints (for sizing linearization params)
+            dynamics_sparsity: Optional tuple ``(A_d, B_d, C_d)`` of boolean
+                ndarrays giving the discrete-time Jacobian sparsity patterns.
+                ``A_d`` has shape ``(n_x, n_x)``; ``B_d`` and ``C_d`` have
+                shape ``(n_x, n_u)``.
+            constraint_sparsity: Optional list of ``(x_mask, u_mask)`` boolean
+                1-D arrays, one per nodal constraint.
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def initialize(
@@ -134,7 +146,7 @@ class ConvexSolver(ABC):
                 - ``x_unified``, ``u_unified``: State/control interfaces
             settings: Configuration object with solver settings
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def update_dynamics_linearization(self, **kwargs) -> None:
@@ -146,7 +158,7 @@ class ConvexSolver(ABC):
         The specific parameters depend on the solver implementation.
         See concrete solver classes for expected arguments.
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def update_constraint_linearizations(self, **kwargs) -> None:
@@ -158,7 +170,7 @@ class ConvexSolver(ABC):
         The specific parameters depend on the solver implementation.
         See concrete solver classes for expected arguments.
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def update_penalties(self, **kwargs) -> None:
@@ -170,7 +182,7 @@ class ConvexSolver(ABC):
         The specific parameters depend on the solver implementation.
         See concrete solver classes for expected arguments.
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def update_boundary_conditions(self, **kwargs) -> None:
@@ -182,7 +194,7 @@ class ConvexSolver(ABC):
         The specific parameters depend on the solver implementation.
         See concrete solver classes for expected arguments.
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def get_stats(self) -> dict:
@@ -194,7 +206,7 @@ class ConvexSolver(ABC):
                 - ``n_parameters``: Total number of parameters
                 - ``n_constraints``: Total number of constraints
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def solve(self) -> Any:
@@ -206,7 +218,7 @@ class ConvexSolver(ABC):
         Returns:
             Solver-specific result object (e.g., ``PTRSolveResult`` for PTR).
         """
-        ...
+        raise NotImplementedError
 
     @abstractmethod
     def citation(self) -> List[str]:
@@ -218,4 +230,4 @@ class ConvexSolver(ABC):
         Returns:
             List of BibTeX citation strings.
         """
-        ...
+        raise NotImplementedError

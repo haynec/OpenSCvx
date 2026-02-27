@@ -21,6 +21,7 @@ from openscvx.plotting.viser import (
     add_animated_vector_norm_plot,
     add_animation_controls,
     add_attitude_frame,
+    add_circular_orbit,
     add_ellipsoid_obstacles,
     add_gates,
     add_ghost_trajectory,
@@ -59,6 +60,7 @@ def create_animated_plotting_server(
     show_control_plot: str | None = None,
     show_control_norm_plot: str | None = None,
     show_grid: bool = True,
+    scene_scale: float = 1.0,
 ) -> viser.ViserServer:
     """Create an animated trajectory visualization server.
 
@@ -103,12 +105,16 @@ def create_animated_plotting_server(
         show_control_norm_plot: If provided with a control name, displays norm plot
             showing ‖control‖₂ vs time with animated marker
         show_grid: Whether to show the grid (default True)
+        scene_scale: Divide all positions (and lengths) by this factor. Use >1 for
+            large-scale trajectories (e.g., 100.0 for km-scale problems).
 
     Returns:
         ViserServer instance (animation runs in background thread)
     """
     # Extract data and convert to numpy (handles JAX arrays)
     pos = results.trajectory.get(position_key)
+    if pos is not None:
+        pos = np.asarray(pos, dtype=np.float64) / scene_scale
     vel = results.trajectory.get(velocity_key)
     thrust = results.trajectory.get(thrust_key)
     attitude = results.trajectory.get(attitude_key)
@@ -133,74 +139,547 @@ def create_animated_plotting_server(
     # Viewplanning target positions
     init_poses = results.get("init_poses")
 
+    # Logo/moving subject parameters
+    extend_boresight = results.get("extend_boresight", False)
+    moving_subject = results.get("moving_subject", False)
+    get_kp_pose = results.get("get_kp_pose")
+    total_time = results.get("total_time")
+    relative_vector = results.get("relative_vector", False)
+
     # Precompute colors
     colors = compute_velocity_colors(vel)
 
     # Create server
     server = create_server(pos, show_grid=show_grid)
 
-    # Add static elements
+    def _ray_plane_intersection(
+        ray_origin: np.ndarray,
+        ray_direction: np.ndarray,
+        plane_z: float,
+    ) -> np.ndarray | None:
+        """Intersection of a ray with a horizontal plane z=plane_z."""
+        if abs(ray_direction[2]) < 1e-10:
+            return None
+        t = (plane_z - ray_origin[2]) / ray_direction[2]
+        if t < 0:
+            return None
+        return ray_origin + t * ray_direction
+
+    def _ray_plane_intersection_general(
+        ray_origin: np.ndarray,
+        ray_direction: np.ndarray,
+        plane_point: np.ndarray,
+        plane_normal: np.ndarray,
+    ) -> np.ndarray | None:
+        """Intersection of a ray with a plane (point on plane + unit normal)."""
+        denom = float(np.dot(ray_direction, plane_normal))
+        if abs(denom) < 1e-10:
+            return None
+        t = float(np.dot(plane_point - ray_origin, plane_normal)) / denom
+        if t < 0:
+            return None
+        return ray_origin + t * ray_direction
+
+    def _add_relative_vector(
+        name: str,
+        drone_pos: np.ndarray,
+        target_pos: np.ndarray,
+        color: tuple[int, int, int] = (50, 255, 50),
+        line_width: float = 2.0,
+        opacity: float = 0.8,
+    ):
+        """Add an animated line segment from drone -> target."""
+        handle = server.scene.add_line_segments(
+            name,
+            points=np.array([[drone_pos[0], target_pos[0]]], dtype=np.float32),
+            colors=(color[0], color[1], color[2]),
+            line_width=line_width,
+        )
+
+        def update(frame_idx: int) -> None:
+            handle.points = np.array(
+                [[drone_pos[frame_idx], target_pos[frame_idx]]], dtype=np.float32
+            )
+
+        return handle, update
+
+    def _add_attitude_axes_lines(
+        name: str,
+        pos_: np.ndarray,
+        attitude_: np.ndarray,
+        axes_length: float,
+        boresight_multiplier: float = 1.0,
+        line_width: float = 3.0,
+    ):
+        """Custom attitude axes (supports extending x-axis/"boresight")."""
+
+        def q_to_R_wxyz(q: np.ndarray) -> np.ndarray:
+            w, x, y, z = q
+            return np.array(
+                [
+                    [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                    [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                    [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+                ],
+                dtype=np.float32,
+            )
+
+        # Axis unit vectors scaled by desired lengths (x can be extended)
+        lengths = np.array(
+            [axes_length * boresight_multiplier, axes_length, axes_length], dtype=np.float32
+        )
+        # viser expects colors shape (N, 2, 3) for N segments, 2 endpoints each, 3 RGB per point
+        rgb_per_axis = np.array([[255, 0, 0], [0, 255, 0], [0, 0, 255]], dtype=np.uint8)
+        colors = np.stack(
+            [np.stack([rgb_per_axis[i], rgb_per_axis[i]], axis=0) for i in range(3)], axis=0
+        )
+
+        R0 = q_to_R_wxyz(attitude_[0])
+        axes_world_0 = (
+            R0 @ (np.eye(3, dtype=np.float32) * lengths)
+        ).T  # (3, 3): each row is axis vec
+        points0 = np.stack([[pos_[0], pos_[0] + axes_world_0[i]] for i in range(3)], axis=0)
+
+        handle = server.scene.add_line_segments(
+            name,
+            points=points0,
+            colors=colors,
+            line_width=line_width,
+        )
+
+        def update(frame_idx: int) -> None:
+            Rk = q_to_R_wxyz(attitude_[frame_idx])
+            axes_world = (Rk @ (np.eye(3, dtype=np.float32) * lengths)).T
+            pts = np.stack(
+                [[pos_[frame_idx], pos_[frame_idx] + axes_world[i]] for i in range(3)],
+                axis=0,
+            )
+            handle.points = pts
+
+        return handle, update
+
+    # Add static elements (scale positions/lengths by scene_scale)
     if "vertices" in results:
-        add_gates(server, results["vertices"])
+        add_gates(
+            server,
+            [np.asarray(v) / scene_scale for v in results["vertices"]],
+        )
 
     # Add ellipsoidal obstacles if present
     if "obstacles_centers" in results:
         add_ellipsoid_obstacles(
             server,
-            centers=results["obstacles_centers"],
-            radii=results.get("obstacles_radii", [np.ones(3)] * len(results["obstacles_centers"])),
+            centers=[np.asarray(c) / scene_scale for c in results["obstacles_centers"]],
+            radii=[
+                np.asarray(r) / scene_scale
+                for r in results.get(
+                    "obstacles_radii",
+                    [np.ones(3)] * len(results["obstacles_centers"]),
+                )
+            ],
             axes=results.get("obstacles_axes"),
         )
-
-    add_ghost_trajectory(server, pos, colors)
 
     # Add animated elements (collect update callbacks)
     update_callbacks = []
 
-    _, update_trail = add_animated_trail(server, pos, colors)
-    update_callbacks.append(update_trail)
+    # Trajectory primitives and position-dependent elements only when pos is available
+    if pos is not None:
+        add_ghost_trajectory(server, pos, colors)
 
-    # Use position marker for point-mass, attitude frame for 6DOF
-    if attitude is not None:
-        _, update_attitude = add_attitude_frame(
-            server, pos, attitude, axes_length=attitude_axes_length
+        _, update_trail = add_animated_trail(server, pos, colors)
+        update_callbacks.append(update_trail)
+
+        # Use position marker for point-mass, attitude frame for 6DOF
+        if attitude is not None:
+            if extend_boresight:
+                # Plane: use logo plane (point + normal) if provided, else horizontal plane from
+                # path_offset
+                path_offset = results.get("path_offset")
+                plane_z = None
+                logo_plane_point = results.get("logo_plane_point")
+                logo_plane_normal = results.get("logo_plane_normal")
+                if path_offset is not None:
+                    path_offset = np.asarray(path_offset)
+                    plane_z = float(path_offset[2] / scene_scale) if len(path_offset) > 2 else None
+                use_logo_plane = (
+                    logo_plane_point is not None
+                    and logo_plane_normal is not None
+                    and len(np.asarray(logo_plane_point).flatten()) >= 3
+                    and len(np.asarray(logo_plane_normal).flatten()) >= 3
+                )
+                if use_logo_plane:
+                    plane_pt = (
+                        np.asarray(logo_plane_point, dtype=np.float32).reshape(3) / scene_scale
+                    )
+                    plane_n = np.asarray(logo_plane_normal, dtype=np.float32).reshape(3)
+                    plane_n = plane_n / (np.linalg.norm(plane_n) + 1e-10)
+                elif plane_z is not None:
+                    plane_pt = None
+                    plane_n = None
+                else:
+                    plane_pt = None
+                    plane_n = None
+
+                if plane_z is not None or use_logo_plane:
+
+                    def q_to_R_wxyz(q: np.ndarray) -> np.ndarray:
+                        w, x, y, z = q
+                        return np.array(
+                            [
+                                [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+                                [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+                                [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+                            ],
+                            dtype=np.float32,
+                        )
+
+                    boresight_body = results.get("boresight_body", np.array([1.0, 0.0, 0.0]))
+                    boresight_body = np.asarray(boresight_body, dtype=np.float32)
+                    if boresight_body.shape[0] >= 3:
+                        boresight_body = boresight_body[:3]
+                    boresight_body = boresight_body / np.linalg.norm(boresight_body)
+
+                    R0 = q_to_R_wxyz(attitude[0])
+                    boresight_world_0 = R0 @ boresight_body
+                    if use_logo_plane:
+                        boresight_intersection_0 = _ray_plane_intersection_general(
+                            pos[0], boresight_world_0, plane_pt, plane_n
+                        )
+                    else:
+                        boresight_intersection_0 = _ray_plane_intersection(
+                            pos[0], boresight_world_0, plane_z
+                        )
+
+                    if boresight_intersection_0 is not None:
+                        n_frames = len(pos)
+                        boresight_intersection_points = []
+                        for i in range(n_frames):
+                            Rk = q_to_R_wxyz(attitude[i])
+                            boresight_world = Rk @ boresight_body
+                            if use_logo_plane:
+                                intersection = _ray_plane_intersection_general(
+                                    pos[i], boresight_world, plane_pt, plane_n
+                                )
+                            else:
+                                intersection = _ray_plane_intersection(
+                                    pos[i], boresight_world, plane_z
+                                )
+                            if intersection is not None:
+                                boresight_intersection_points.append(intersection)
+                            else:
+                                boresight_intersection_points.append(
+                                    boresight_intersection_0
+                                )  # Fallback
+
+                        boresight_intersection_points = np.array(
+                            boresight_intersection_points, dtype=np.float32
+                        )
+
+                        # Draw extended boresight to plane intersection
+                        boresight_handle = server.scene.add_line_segments(
+                            "/boresight_extended",
+                            points=np.array([[pos[0], boresight_intersection_0]], dtype=np.float32),
+                            colors=(255, 0, 0),  # Red for boresight
+                            line_width=3.0,
+                        )
+
+                        # Add intersection point marker
+                        intersection_handle = server.scene.add_icosphere(
+                            "/boresight_intersection",
+                            radius=0.06,
+                            color=(255, 100, 100),
+                            position=boresight_intersection_0,
+                        )
+
+                        # Add trail for boresight intersection point
+                        boresight_trail_handle = server.scene.add_line_segments(
+                            "/boresight_intersection_trail",
+                            points=np.array([], dtype=np.float32).reshape(0, 2, 3),
+                            colors=(200, 50, 50),
+                            line_width=2.0,
+                        )
+
+                        def update_boresight(frame_idx: int) -> None:
+                            idx = min(frame_idx, len(boresight_intersection_points) - 1)
+                            boresight_handle.points = np.array(
+                                [[pos[idx], boresight_intersection_points[idx]]], dtype=np.float32
+                            )
+                            intersection_handle.position = boresight_intersection_points[idx]
+
+                            # Update trail to show up to current frame
+                            if idx > 0:
+                                trail_segments = np.array(
+                                    [
+                                        [
+                                            boresight_intersection_points[i],
+                                            boresight_intersection_points[i + 1],
+                                        ]
+                                        for i in range(idx)
+                                    ],
+                                    dtype=np.float32,
+                                )
+                                boresight_trail_handle.points = trail_segments
+                            else:
+                                boresight_trail_handle.points = np.array(
+                                    [], dtype=np.float32
+                                ).reshape(0, 2, 3)
+
+                        update_callbacks.append(update_boresight)
+                    else:
+                        # Fallback to fixed multiplier if intersection fails
+                        boresight_multiplier = 3.0
+                        _, update_axes = _add_attitude_axes_lines(
+                            "/body_axes",
+                            pos,
+                            attitude,
+                            axes_length=attitude_axes_length,
+                            boresight_multiplier=boresight_multiplier,
+                        )
+                        update_callbacks.append(update_axes)
+                else:
+                    # Fallback to fixed multiplier if plane_z not available
+                    boresight_multiplier = 3.0
+                    _, update_axes = _add_attitude_axes_lines(
+                        "/body_axes",
+                        pos,
+                        attitude,
+                        axes_length=attitude_axes_length,
+                        boresight_multiplier=boresight_multiplier,
+                    )
+                    update_callbacks.append(update_axes)
+            else:
+                _, update_attitude = add_attitude_frame(
+                    server, pos, attitude, axes_length=attitude_axes_length
+                )
+                update_callbacks.append(update_attitude)
+        else:
+            _, update_marker = add_position_marker(server, pos)
+            update_callbacks.append(update_marker)
+
+        _, update_thrust = add_thrust_vector(
+            server, pos, thrust, attitude=attitude, scale=thrust_scale
         )
-        update_callbacks.append(update_attitude)
-    else:
-        _, update_marker = add_position_marker(server, pos)
-        update_callbacks.append(update_marker)
+        update_callbacks.append(update_thrust)  # Will be filtered out if None
 
-    _, update_thrust = add_thrust_vector(server, pos, thrust, attitude=attitude, scale=thrust_scale)
-    update_callbacks.append(update_thrust)  # Will be filtered out if None
+        # Add viewcone mesh if R_sb is available and enabled
+        if show_viewcone and R_sb is not None and attitude is not None:
+            # Compute viewcone color from viridis colormap (fallback if matplotlib missing)
+            global plt
+            if plt is None:
+                try:  # pragma: no cover
+                    import matplotlib.pyplot as _plt
 
-    # Add viewcone mesh if R_sb is available and enabled
-    if show_viewcone and R_sb is not None and attitude is not None:
-        # Compute viewcone color from viridis colormap
-        cmap = plt.get_cmap("viridis")
-        rgb = cmap(0.4)[:3]
-        viewcone_color = tuple(int(c * 255) for c in rgb)
+                    plt = _plt
+                except Exception:
+                    plt = None
 
-        _, update_viewcone = add_viewcone(
-            server,
-            pos,
-            attitude,
-            half_angle_x=half_angle_x,
-            half_angle_y=half_angle_y,
-            scale=viewcone_scale,
-            norm_type=norm_type,
-            R_sb=R_sb,
-            color=viewcone_color,
-            wireframe=False,
-            opacity=0.4,
-        )
-        update_callbacks.append(update_viewcone)
+            if plt is not None:
+                cmap = plt.get_cmap("viridis")
+                rgb = cmap(0.4)[:3]
+                viewcone_color = tuple(int(c * 255) for c in rgb)
+            else:
+                viewcone_color = (80, 180, 200)
+
+            _, update_viewcone = add_viewcone(
+                server,
+                pos,
+                attitude,
+                half_angle_x=half_angle_x,
+                half_angle_y=half_angle_y,
+                scale=viewcone_scale,
+                norm_type=norm_type,
+                R_sb=R_sb,
+                color=viewcone_color,
+                wireframe=False,
+                opacity=0.4,
+            )
+            update_callbacks.append(update_viewcone)
 
     # Add target markers for viewplanning problems
     if init_poses is not None:
-        target_results = add_target_markers(server, init_poses, radius=target_radius)
+        scaled_init_poses = [np.asarray(p) / scene_scale for p in init_poses]
+        target_results = add_target_markers(
+            server, scaled_init_poses, radius=target_radius / scene_scale
+        )
         for _, update in target_results:
             if update is not None:
                 update_callbacks.append(update)
+
+    # Add "logo" moving subject (single moving target + optional drone->target vector)
+    if moving_subject and get_kp_pose is not None and total_time is not None:
+        # Build target trajectory aligned with results.trajectory["time"]
+        tt = np.asarray(traj_time).reshape(-1)
+        total_time_f = float(np.asarray(total_time).reshape(-1)[0])
+        target_traj = np.stack(
+            [np.asarray(get_kp_pose(float(t) / total_time_f), dtype=np.float32) for t in tt],
+            axis=0,
+        )
+        target_traj = target_traj / scene_scale
+
+        logo_target_results = add_target_markers(
+            server,
+            [target_traj],
+            colors=[(255, 50, 50)],
+            radius=target_radius / scene_scale,
+            show_trails=True,
+        )
+        for _, update in logo_target_results:
+            if update is not None:
+                update_callbacks.append(update)
+
+        if relative_vector and pos is not None:
+            _, update_rel = _add_relative_vector(
+                "/relative_vector/target_0",
+                drone_pos=np.asarray(pos, dtype=np.float32),
+                target_pos=target_traj,
+            )
+            update_callbacks.append(update_rel)
+
+            # Plot precomputed traced path (relative vector ∩ plane) when provided
+            traced_path_on_plane = results.get("traced_path_on_plane")
+            if traced_path_on_plane is None:
+                intersection_points = None
+                n_frames = 0
+            else:
+                intersection_points = (
+                    np.asarray(traced_path_on_plane, dtype=np.float32) / scene_scale
+                )
+                n_frames = len(intersection_points)
+
+            path_offset = results.get("path_offset")
+            plane_z = None
+            if path_offset is not None:
+                path_offset = np.asarray(path_offset)
+                plane_z = float(path_offset[2] / scene_scale) if len(path_offset) > 2 else None
+
+            if intersection_points is not None and n_frames > 0:
+                # Static line: full "traced" path (relative vector ∩ plane over entire trajectory)
+                if len(intersection_points) > 1:
+                    traced_path_segments = np.array(
+                        [
+                            [intersection_points[i], intersection_points[i + 1]]
+                            for i in range(len(intersection_points) - 1)
+                        ],
+                        dtype=np.float32,
+                    )
+                    server.scene.add_line_segments(
+                        "/traced_path_on_plane",
+                        points=traced_path_segments,
+                        colors=(0, 255, 255),  # Cyan: what the drone traced on the plane
+                        line_width=2.5,
+                    )
+
+                # Add intersection point marker (slightly above plane so visible when it coincides
+                # with target)
+                rel_int_pos_0 = intersection_points[0].copy()
+                rel_int_pos_0[2] += (
+                    0.08  # Small offset above plane so it's not hidden under target sphere
+                )
+                rel_intersection_handle = server.scene.add_icosphere(
+                    "/relative_vector_intersection",
+                    radius=0.08,
+                    color=(50, 255, 50),  # Green for relative vector intersection
+                    position=rel_int_pos_0,
+                )
+
+                # Add trail for intersection point (grows with animation)
+                intersection_trail_handle = server.scene.add_line_segments(
+                    "/relative_vector_intersection_trail",
+                    points=np.array([], dtype=np.float32).reshape(0, 2, 3),
+                    colors=(50, 200, 50),
+                    line_width=2.0,
+                )
+
+                # Line on plane from boresight intersection to relative-vector intersection
+                # (if both exist)
+                plane_segment_handle = None
+                if (
+                    extend_boresight
+                    and pos is not None
+                    and attitude is not None
+                    and plane_z is not None
+                ):
+                    path_offset_boresight = results.get("path_offset")
+                    plane_z_boresight = None
+                    if path_offset_boresight is not None:
+                        path_offset_boresight = np.asarray(path_offset_boresight)
+                        plane_z_boresight = (
+                            float(path_offset_boresight[2] / scene_scale)
+                            if len(path_offset_boresight) > 2
+                            else None
+                        )
+                    if plane_z_boresight is not None and abs(plane_z_boresight - plane_z) < 1e-9:
+                        # Precompute boresight intersections for plane segment
+                        boresight_body_arr = results.get(
+                            "boresight_body", np.array([1.0, 0.0, 0.0])
+                        )
+                        boresight_body_arr = np.asarray(boresight_body_arr, dtype=np.float32)
+                        if boresight_body_arr.shape[0] >= 3:
+                            boresight_body_arr = boresight_body_arr[:3]
+                        boresight_body_arr = boresight_body_arr / (
+                            np.linalg.norm(boresight_body_arr) + 1e-10
+                        )
+                        boresight_pts = []
+                        for i in range(n_frames):
+                            w, x, y, z = attitude[i]
+                            R = np.array(
+                                [
+                                    [
+                                        1 - 2 * (y * y + z * z),
+                                        2 * (x * y - z * w),
+                                        2 * (x * z + y * w),
+                                    ],
+                                    [
+                                        2 * (x * y + z * w),
+                                        1 - 2 * (x * x + z * z),
+                                        2 * (y * z - x * w),
+                                    ],
+                                    [
+                                        2 * (x * z - y * w),
+                                        2 * (y * z + x * w),
+                                        1 - 2 * (x * x + y * y),
+                                    ],
+                                ],
+                                dtype=np.float32,
+                            )
+                            bw = R @ boresight_body_arr
+                            bi = _ray_plane_intersection(pos[i], bw, plane_z)
+                            boresight_pts.append(bi if bi is not None else intersection_points[i])
+                        boresight_pts = np.array(boresight_pts, dtype=np.float32)
+                        plane_segment_handle = server.scene.add_line_segments(
+                            "/plane_segment_boresight_to_rel",
+                            points=np.array(
+                                [[boresight_pts[0], intersection_points[0]]], dtype=np.float32
+                            ),
+                            colors=(200, 200, 0),  # Yellow: segment on plane
+                            line_width=2.5,
+                        )
+
+                def update_intersection(frame_idx: int) -> None:
+                    idx = min(frame_idx, len(intersection_points) - 1)
+                    p = intersection_points[idx].copy()
+                    p[2] += 0.08
+                    rel_intersection_handle.position = p
+                    if idx > 0:
+                        trail_segments = np.array(
+                            [
+                                [intersection_points[i], intersection_points[i + 1]]
+                                for i in range(idx)
+                            ],
+                            dtype=np.float32,
+                        )
+                        intersection_trail_handle.points = trail_segments
+                    else:
+                        intersection_trail_handle.points = np.array([], dtype=np.float32).reshape(
+                            0, 2, 3
+                        )
+                    if plane_segment_handle is not None and idx < len(boresight_pts):
+                        plane_segment_handle.points = np.array(
+                            [[boresight_pts[idx], intersection_points[idx]]], dtype=np.float32
+                        )
+
+                update_callbacks.append(update_intersection)
 
     # Add control norm plot if requested
     if show_control_norm_plot is not None:
@@ -469,8 +948,8 @@ def create_pdg_animated_plotting_server(
         glideslope_height = float(results.trajectory["position"][0, 2]) * 0.1
     glideslope_height_scaled = glideslope_height / scene_scale
 
-    # Precompute colors
-    colors = compute_velocity_colors(vel)
+    # Precompute colors (fallback when velocity key is missing)
+    colors = compute_velocity_colors(vel, fallback_length=len(pos))
 
     # Create server
     server = create_server(pos)
@@ -696,3 +1175,83 @@ def compute_velocity_colors_realtime(vel: np.ndarray, cmap) -> np.ndarray:
         dtype=np.uint8,
     )
     return colors
+
+
+def _as_3d(points: np.ndarray) -> np.ndarray:
+    """Ensure points are shape (..., 3) by appending z=0 when needed."""
+    points = np.asarray(points, dtype=np.float64)
+    if points.ndim == 1:
+        if points.shape[0] == 2:
+            return np.array([points[0], points[1], 0.0], dtype=np.float64)
+        if points.shape[0] == 3:
+            return points
+        raise ValueError(f"Expected 2D or 3D point, got shape {points.shape}")
+    if points.ndim == 2:
+        if points.shape[1] == 2:
+            z = np.zeros((points.shape[0], 1), dtype=np.float64)
+            return np.concatenate([points, z], axis=1)
+        if points.shape[1] == 3:
+            return points
+        raise ValueError(f"Expected points with 2 or 3 columns, got shape {points.shape}")
+    raise ValueError(f"Expected points with ndim 1 or 2, got ndim {points.ndim}")
+
+
+def create_hohmann_transfer_server(
+    results: OptimizationResults,
+    *,
+    r1: float,
+    r2: float,
+    position_key: str = "position",
+    velocity_key: str = "velocity",
+    loop_animation: bool = True,
+    show_grid: bool = False,
+    scene_scale: float = 1.0,
+    orbit_n_points: int = 512,
+    orbit_color_inner: tuple[int, int, int] = (120, 180, 255),
+    orbit_color_outer: tuple[int, int, int] = (255, 180, 120),
+    transfer_point_size: float = 0.10,
+    marker_radius: float = 0.6,
+) -> viser.ViserServer:
+    """Create an animated viser server for a planar Hohmann transfer.
+
+    Draws two static circular orbit rings (r1, r2) and animates the transfer
+    trajectory stored in ``results.trajectory``.
+    """
+    pos = results.trajectory.get(position_key)
+    if pos is None:
+        raise KeyError(f"results.trajectory is missing '{position_key}'")
+    pos_3d = _as_3d(pos) / scene_scale
+
+    vel = results.trajectory.get(velocity_key)
+    vel_3d = None if vel is None else _as_3d(vel)
+    colors = compute_velocity_colors(vel_3d, fallback_length=pos_3d.shape[0])
+
+    traj_time = np.asarray(results.trajectory["time"], dtype=np.float64).flatten()
+
+    server = create_server(pos_3d, show_grid=show_grid)
+
+    # Static orbit rings
+    add_circular_orbit(
+        server,
+        r1 / scene_scale,
+        name="inner_orbit",
+        n_points=orbit_n_points,
+        color=orbit_color_inner,
+        line_width=2.5,
+    )
+    add_circular_orbit(
+        server,
+        r2 / scene_scale,
+        name="outer_orbit",
+        n_points=orbit_n_points,
+        color=orbit_color_outer,
+        line_width=2.5,
+    )
+
+    # Static ghost + animated trail + marker
+    add_ghost_trajectory(server, pos_3d, colors, opacity=0.25, point_size=transfer_point_size)
+    _, update_trail = add_animated_trail(server, pos_3d, colors, point_size=transfer_point_size)
+    _, update_marker = add_position_marker(server, pos_3d, radius=marker_radius)
+
+    add_animation_controls(server, traj_time, [update_trail, update_marker], loop=loop_animation)
+    return server

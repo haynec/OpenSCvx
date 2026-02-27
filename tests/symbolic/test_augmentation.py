@@ -15,6 +15,7 @@ from openscvx.symbolic.expr import (
     Concat,
     Constant,
     Control,
+    Equality,
     Huber,
     Index,
     Inequality,
@@ -220,7 +221,7 @@ def test_augment_no_ctcs_constraints():
     N = 1
     time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -254,7 +255,7 @@ def test_augment_single_ctcs_constraint():
     # CTCS constraint
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -294,7 +295,7 @@ def test_augment_multiple_ctcs_constraints():
     c2 = ctcs(x[1] >= -1.0, penalty="huber")
     c3 = ctcs(x[2] == 0.0, penalty="smooth_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -337,7 +338,7 @@ def test_augment_penalty_expression_structure():
     # Create CTCS with squared_relu penalty
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -378,13 +379,16 @@ def test_augment_single_penalty_no_add():
 
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
         [constraint],
         N,
     )
+
+    # Augmented dynamics should be Concat
+    assert isinstance(xdot_aug, Concat)
 
     # Single penalty should not be wrapped in Add
     # But it should be wrapped in CTCS
@@ -409,13 +413,16 @@ def test_augment_multiple_penalties_create_add():
     c1 = ctcs(x[0] <= 1.0, penalty="squared_relu")
     c2 = ctcs(x[1] <= 2.0, penalty="huber")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
         [c1, c2],
         N,
     )
+
+    # Augmented dynamics should be Concat
+    assert isinstance(xdot_aug, Concat)
 
     # Multiple penalties should be wrapped in Add
     penalty_expr = xdot_aug.exprs[1]
@@ -437,7 +444,7 @@ def test_augment_empty_states_list():
     # CTCS constraint on a constant (unusual but valid)
     constraint = ctcs(Constant(1.0) <= 2.0)
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -471,7 +478,7 @@ def test_augment_with_different_penalties():
     penalties = ["squared_relu", "huber", "smooth_relu"]
     constraints = [ctcs(x <= float(i), penalty=p) for i, p in enumerate(penalties)]
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -510,7 +517,7 @@ def test_augment_preserves_original_controls():
 
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -795,7 +802,7 @@ def test_augmented_state_bounds():
 
     constraint = ctcs(x <= 1.0, penalty="squared_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -828,20 +835,18 @@ def test_time_dilation_control_bounds():
 
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
         [constraint],
         N,
-        time_dilation_factor_min=0.5,
-        time_dilation_factor_max=2.5,
     )
 
-    # Check time dilation control bounds
+    # Check time dilation control bounds (default factors: 0.3 / 3.0)
     time_dilation = controls_aug[0]  # should be the only control
-    expected_min = 0.5 * 15.0  # min_factor * time_final
-    expected_max = 2.5 * 15.0  # max_factor * time_final
+    expected_min = 0.3 * 15.0  # default min_factor * time_final
+    expected_max = 3.0 * 15.0  # default max_factor * time_final
     expected_guess = 15.0  # time_final
 
     assert time_dilation.min[0] == expected_min, (
@@ -854,6 +859,129 @@ def test_time_dilation_control_bounds():
     assert np.allclose(time_dilation.guess, expected_guess), (
         f"Expected guess {expected_guess}, got {time_dilation.guess}"
     )
+
+
+def test_time_dilation_overrides_from_time_object():
+    """Test that Time's time_dilation_* attrs override factor-based defaults."""
+    from openscvx.symbolic.expr.time import Time
+
+    time = Time(initial=0.0, final=15.0, min=0.0, max=30.0)
+    time.guess = np.linspace(0, 15, 3).reshape(-1, 1)
+    time.time_dilation_min = 1.0
+    time.time_dilation_max = 50.0
+    time.time_dilation_guess = np.full((3, 1), 15.0)
+
+    x = State("x", (2,))
+    x.final = np.array([0.0, 0.0])
+    xdot = x
+    states = [x, time]
+    controls = []
+    N = 3
+
+    constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
+
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
+        xdot,
+        states,
+        controls,
+        [constraint],
+        N,
+    )
+
+    time_dilation = controls_aug[0]
+    assert time_dilation.min[0] == 1.0, (
+        f"Expected user-provided min 1.0, got {time_dilation.min[0]}"
+    )
+    assert time_dilation.max[0] == 50.0, (
+        f"Expected user-provided max 50.0, got {time_dilation.max[0]}"
+    )
+    assert np.allclose(time_dilation.guess, 15.0), (
+        f"Expected user-provided guess 15.0, got {time_dilation.guess}"
+    )
+
+
+def test_time_dilation_partial_override():
+    """Test that partial overrides work (e.g. only min, not max)."""
+    from openscvx.symbolic.expr.time import Time
+
+    time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    time.guess = np.linspace(0, 10, 5).reshape(-1, 1)
+    time.time_dilation_min = 0.5  # override min only
+
+    x = State("x", (2,))
+    x.final = np.array([0.0, 0.0])
+    xdot = x
+    states = [x, time]
+    controls = []
+    N = 5
+
+    constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
+
+    _, _, _, controls_aug = augment_dynamics_with_ctcs(
+        xdot,
+        states,
+        controls,
+        [constraint],
+        N,
+    )
+
+    time_dilation = controls_aug[0]
+    assert time_dilation.min[0] == 0.5, "User-provided min should override"
+    assert time_dilation.max[0] == 3.0 * 10.0, "Max should use default factor fallback"
+
+
+def test_time_dilation_live_propagation():
+    """Test that mutating Time.time_dilation_* after augmentation propagates to the control."""
+    from openscvx.symbolic.expr.time import Time
+
+    time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    time.guess = np.linspace(0, 10, 5).reshape(-1, 1)
+
+    x = State("x", (2,))
+    x.final = np.array([0.0, 0.0])
+    states = [x, time]
+    N = 5
+
+    constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
+
+    _, _, _, controls_aug = augment_dynamics_with_ctcs(
+        x,
+        states,
+        [],
+        [constraint],
+        N,
+    )
+
+    td_control = controls_aug[0]
+
+    # After augmentation, Time holds a reference to the _time_dilation control
+    assert time._time_dilation_control is td_control
+
+    # Mutate via Time — should propagate to the control
+    time.time_dilation_min = 0.5
+    assert td_control.min[0] == 0.5
+
+    time.time_dilation_max = 99.0
+    assert td_control.max[0] == 99.0
+
+    new_guess = np.full((5, 1), 7.0)
+    time.time_dilation_guess = new_guess
+    assert np.allclose(td_control.guess, 7.0)
+
+
+def test_time_dilation_no_propagation_before_augmentation():
+    """Test that setters work fine before augmentation (no control yet)."""
+    from openscvx.symbolic.expr.time import Time
+
+    t = Time()
+    t.time_dilation_min = 1.0
+    t.time_dilation_max = 50.0
+    t.time_dilation_guess = np.ones((10, 1))
+
+    # No error, values stored locally
+    assert t.time_dilation_min == 1.0
+    assert t.time_dilation_max == 50.0
+    assert t._time_dilation_control is None
 
 
 def test_ctcs_idx_grouping_auto_assignment():
@@ -953,7 +1081,7 @@ def test_ctcs_multiple_augmented_states():
     c2 = ctcs(x[1] <= 2.0, nodes=(0, 5), idx=0)  # Same group as c1
     c3 = ctcs(x[0] <= 3.0, nodes=(3, 8), idx=1)  # Different group
 
-    xdot_aug, states_aug, controls_aug = augment_dynamics_with_ctcs(
+    xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
         controls,
@@ -1208,3 +1336,120 @@ def test_regular_convex_constraint_without_node_reference_accepted():
     assert len(result.cross_node) == 0
     assert len(result.cross_node_convex) == 0
     assert len(result.ctcs) == 0
+
+
+# =============================================================================
+# Non-convex equality constraint validation tests
+# =============================================================================
+
+
+def test_nonconvex_cross_node_equality_rejected():
+    """Test that non-convex cross-node equality constraints are rejected with helpful error."""
+    n_nodes = 10
+    velocity = State("vel", shape=(3,))
+
+    # Create a non-convex cross-node equality (periodic boundary condition without .convex())
+    cross_node_equality = velocity.at(0) == velocity.at(9)
+
+    # Verify it's an Equality and not marked convex
+    assert isinstance(cross_node_equality, Equality)
+    assert not cross_node_equality.is_convex
+
+    # Should raise a helpful error
+    constraint_set = ConstraintSet(unsorted=[cross_node_equality])
+    with pytest.raises(ValueError) as exc_info:
+        separate_constraints(constraint_set, n_nodes=n_nodes)
+
+    # Check error message is helpful
+    msg = str(exc_info.value)
+    assert "Non-convex equality constraint" in msg
+    assert ".convex()" in msg
+    assert "cross-node" in msg
+
+
+def test_convex_cross_node_equality_accepted():
+    """Test that convex cross-node equality constraints are accepted."""
+    n_nodes = 10
+    velocity = State("vel", shape=(3,))
+
+    # Create a convex cross-node equality (marked with .convex())
+    cross_node_equality = (velocity.at(0) == velocity.at(9)).convex()
+
+    # Verify it's marked convex
+    assert cross_node_equality.is_convex
+
+    # Should NOT raise error
+    constraint_set = ConstraintSet(unsorted=[cross_node_equality])
+    result = separate_constraints(constraint_set, n_nodes=n_nodes)
+
+    # Should be in convex cross-node constraints
+    assert len(result.cross_node_convex) == 1
+    assert len(result.cross_node) == 0
+
+
+def test_nonconvex_nodal_equality_rejected():
+    """Test that non-convex nodal equality constraints are rejected with helpful error."""
+    n_nodes = 10
+    position = State("pos", shape=(3,))
+
+    # Create a non-convex nodal equality (without .convex())
+    nodal_equality = (position == np.zeros(3)).at([0, 5, 9])
+
+    # Verify it's an Equality and not marked convex
+    assert isinstance(nodal_equality.constraint, Equality)
+    assert not nodal_equality.constraint.is_convex
+
+    # Should raise a helpful error
+    constraint_set = ConstraintSet(unsorted=[nodal_equality])
+    with pytest.raises(ValueError) as exc_info:
+        separate_constraints(constraint_set, n_nodes=n_nodes)
+
+    # Check error message is helpful
+    msg = str(exc_info.value)
+    assert "Non-convex equality constraint" in msg
+    assert ".convex()" in msg
+    assert "nodal" in msg
+
+
+def test_ctcs_equality_rejected():
+    """Test that CTCS constraints with equality are rejected."""
+    n_nodes = 10
+    position = State("pos", shape=(3,))
+
+    # Create a CTCS constraint with equality (not valid for CTCS)
+    ctcs_equality = (position == np.zeros(3)).over((0, 10))
+
+    # Verify the inner constraint is an Equality
+    assert isinstance(ctcs_equality.constraint, Equality)
+
+    # Should raise a helpful error
+    constraint_set = ConstraintSet(unsorted=[ctcs_equality])
+    with pytest.raises(ValueError) as exc_info:
+        separate_constraints(constraint_set, n_nodes=n_nodes)
+
+    # Check error message is helpful
+    msg = str(exc_info.value)
+    assert "CTCS constraints cannot be equality" in msg
+
+
+def test_nonconvex_inequality_still_accepted():
+    """Regression test: non-convex inequality constraints should still work."""
+    n_nodes = 10
+    position = State("pos", shape=(3,))
+
+    # Import linalg for Norm
+    from openscvx.symbolic.expr import linalg
+
+    # Create a non-convex inequality (norm constraint)
+    nonconvex_inequality = linalg.Norm(position, ord=2) <= 10.0
+
+    # Verify it's not marked convex
+    assert not nonconvex_inequality.is_convex
+
+    # Should NOT raise error - inequalities are fine
+    constraint_set = ConstraintSet(unsorted=[nonconvex_inequality])
+    result = separate_constraints(constraint_set, n_nodes=n_nodes)
+
+    # Should be in non-convex nodal constraints
+    assert len(result.nodal) == 1
+    assert len(result.nodal_convex) == 0

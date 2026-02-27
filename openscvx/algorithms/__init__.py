@@ -77,21 +77,103 @@ Current Implementations:
 - :class:`PenalizedTrustRegion`: Penalized Trust Region (PTR) algorithm
 """
 
-from .autotuning import (
-    AugmentedLagrangian,
-    AutotuningBase,
-    ConstantProximalWeight,
-    RampProximalWeight,
-)
-from .base import Algorithm, AlgorithmState, DiscretizationResult
+import inspect
+from typing import Any, Dict
+
+from .augmented_lagrangian import AugmentedLagrangian
+from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult, Weights
+from .constant_proximal_weight import ConstantProximalWeight
 from .optimization_results import OptimizationResults
 from .penalized_trust_region import PenalizedTrustRegion
+from .ramp_proximal_weight import RampProximalWeight
+
+# ---------------------------------------------------------------------------
+# Spec resolvers — turn dicts/strings into algorithm/autotuner instances
+# ---------------------------------------------------------------------------
+
+_AUTOTUNER_MAP: Dict[str, type] = {
+    "AugmentedLagrangian": AugmentedLagrangian,
+    "ConstantProximalWeight": ConstantProximalWeight,
+    "RampProximalWeight": RampProximalWeight,
+}
+
+
+def _resolve_autotuner(val: Any) -> Any:
+    """Resolve an autotuner specification into an instance.
+
+    Accepted forms:
+
+    * **string** — class name only, default parameters::
+
+          "RampProximalWeight"
+
+    * **dict** — class name + parameter overrides::
+
+          {"type": "RampProximalWeight", "ramp_factor": 1.04}
+
+    * **instance** — already-constructed autotuner (pass-through).
+    """
+    if not isinstance(val, (str, dict)):
+        return val
+
+    if isinstance(val, str):
+        name = val
+        kwargs: dict = {}
+    else:
+        kwargs = dict(val)  # copy to avoid mutating the input
+        name = kwargs.pop("type", None)
+        if name is None:
+            raise ValueError(
+                "autotuner dict must include a 'type' key (e.g. type: RampProximalWeight)"
+            )
+
+    cls = _AUTOTUNER_MAP.get(name)
+    if cls is None:
+        raise ValueError(f"Unknown autotuner {name!r}; expected one of {sorted(_AUTOTUNER_MAP)}")
+
+    try:
+        return cls(**kwargs)
+    except TypeError as e:
+        valid = list(inspect.signature(cls.__init__).parameters.keys())
+        valid.remove("self")
+        raise TypeError(f"Invalid autotuner keyword argument: {e}. Valid keys: {valid}") from None
+
+
+def _resolve_algorithm(kwargs: dict, states: list = None) -> "PenalizedTrustRegion":
+    """Build a :class:`PenalizedTrustRegion` from a user-supplied dict.
+
+    Supports a nested ``autotuner`` key that is resolved via
+    :func:`_resolve_autotuner` (string, dict, or instance).
+
+    Args:
+        kwargs: Algorithm keyword arguments (e.g. ``lam_cost``, ``autotuner``).
+        states: Symbolic State objects, forwarded to the algorithm constructor
+            so that dict-valued ``lam_cost`` can be expanded immediately.
+    """
+    kwargs = dict(kwargs)  # copy to avoid mutating the caller's dict
+
+    # Resolve nested autotuner spec if present
+    if "autotuner" in kwargs:
+        kwargs["autotuner"] = _resolve_autotuner(kwargs["autotuner"])
+
+    # Forward states so dict lam_cost can be expanded eagerly
+    if states is not None:
+        kwargs.setdefault("states", states)
+
+    try:
+        return PenalizedTrustRegion(**kwargs)
+    except TypeError as e:
+        valid = list(inspect.signature(PenalizedTrustRegion.__init__).parameters.keys())
+        valid.remove("self")
+        raise TypeError(f"Invalid algorithm keyword argument: {e}. Valid keys: {valid}") from None
+
 
 __all__ = [
     # Base class
     "Algorithm",
     "AlgorithmState",
     "DiscretizationResult",
+    "Weights",
     # Core results
     "OptimizationResults",
     # PTR algorithm

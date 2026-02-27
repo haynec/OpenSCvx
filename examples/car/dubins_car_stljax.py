@@ -57,7 +57,9 @@ angular_rate.guess = np.zeros((n, 1))
 
 # Define time (needed for time-dependent constraints)
 # Time is a State subclass, so it can be used directly in expressions
-time = ox.Time(initial=0.0, final=("minimize", total_time), min=0.0, max=10.0)
+time = ox.Time(
+    initial=0.0, final=("minimize", total_time), min=0.0, max=10.0, uniform_time_grid=True
+)
 
 
 # Define list of all states and controls
@@ -103,10 +105,9 @@ problem = Problem(
     time=time,  # Time is already defined above as ox.Time
     constraints=constraints,
     N=n,
+    algorithm={"lam_vc": 6e2},
 )
-# Set solver parameters
-problem.settings.scp.lam_vc = 6e2
-problem.settings.scp.uniform_time_grid = True
+
 # Extract parameter values from problem.parameters (not Parameter objects)
 plotting_dict = {
     "wp1_center": problem.parameters.get("wp1_center", None),

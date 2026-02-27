@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from openscvx.symbolic.expr import Control, State
-from openscvx.symbolic.time import Time
+from openscvx.symbolic.expr.time import Time
 from openscvx.symbolic.unified import unify_controls, unify_states
 
 # =============================================================================
@@ -51,10 +51,10 @@ def test_state_scaling_shape_validation():
     state = State("pos", shape=(3,))
 
     # Should raise ValueError for wrong shape
-    with pytest.raises(ValueError, match="does not match State shape"):
+    with pytest.raises(ValueError, match="State 'pos': scaling_min expected shape"):
         state.scaling_min = [1.0, 2.0]  # Wrong length
 
-    with pytest.raises(ValueError, match="does not match State shape"):
+    with pytest.raises(ValueError, match="State 'pos': scaling_max expected shape"):
         state.scaling_max = [1.0]  # Wrong length
 
     # Should work with correct shape
@@ -102,10 +102,10 @@ def test_control_scaling_shape_validation():
     control = Control("u", shape=(2,))
 
     # Should raise ValueError for wrong shape
-    with pytest.raises(ValueError, match="does not match Control shape"):
+    with pytest.raises(ValueError, match="Control 'u': scaling_min expected shape"):
         control.scaling_min = [1.0]  # Wrong length
 
-    with pytest.raises(ValueError, match="does not match Control shape"):
+    with pytest.raises(ValueError, match="Control 'u': scaling_max expected shape"):
         control.scaling_max = [1.0, 2.0, 3.0]  # Wrong length
 
 
@@ -299,6 +299,7 @@ def test_simconfig_uses_scaling_when_provided():
         x_prop=unified_state,
         u=unified_control,
         total_time=1.0,
+        n=10,
     )
 
     # Check that scaling matrices use scaling_min/max
@@ -337,6 +338,7 @@ def test_simconfig_falls_back_to_min_max():
         x_prop=unified_state,
         u=unified_control,
         total_time=1.0,
+        n=10,
     )
 
     # Should use regular min/max for scaling
@@ -372,6 +374,7 @@ def test_simconfig_partial_scaling():
         x_prop=unified_state,
         u=unified_control,
         total_time=1.0,
+        n=10,
     )
 
     # Should use scaling for state1, min/max for state2

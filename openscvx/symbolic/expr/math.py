@@ -12,7 +12,7 @@ Function Categories:
     - **Absolute Value:** `Abs` - Element-wise absolute value function
     - **Smooth Approximations:** `PositivePart`, `Huber`, `SmoothReLU` - Smooth, differentiable
         approximations of non-smooth functions like max(0, x) and absolute value
-    - **Reductions:** `Max` - Maximum over elements
+    - **Reductions:** `Max`, `Min` - Maximum and minimum over elements
     - **Smooth Maximum:** `LogSumExp` - Log-sum-exp function, a smooth approximation to maximum
 
 Example:
@@ -39,6 +39,11 @@ import struct
 from typing import Tuple, Union
 
 import numpy as np
+from scipy.interpolate import Akima1DInterpolator as _Akima
+from scipy.interpolate import CubicSpline as _CubicSpline
+from scipy.interpolate import PchipInterpolator as _Pchip
+
+from openscvx.symbolic.sparsity import _broadcast_sparsity
 
 from .expr import Expr, to_expr
 
@@ -78,6 +83,9 @@ class Sin(Expr):
         """Sin preserves the shape of its operand."""
         return self.operand.check_shape()
 
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
+
     def __repr__(self) -> str:
         return f"(sin({self.operand!r}))"
 
@@ -116,6 +124,9 @@ class Cos(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Cos preserves the shape of its operand."""
         return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
 
     def __repr__(self) -> str:
         return f"(cos({self.operand!r}))"
@@ -160,6 +171,9 @@ class Tan(Expr):
         """Tan preserves the shape of its operand."""
         return self.operand.check_shape()
 
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
+
     def __repr__(self) -> str:
         return f"(tan({self.operand!r}))"
 
@@ -200,6 +214,9 @@ class Square(Expr):
         """x^2 preserves the shape of x."""
         return self.x.check_shape()
 
+    def sparsity(self, n_x: int, n_u: int):
+        return self.x.sparsity(n_x, n_u)
+
     def __repr__(self) -> str:
         return f"({self.x!r})^2"
 
@@ -238,6 +255,9 @@ class Sqrt(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Sqrt preserves the shape of its operand."""
         return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
 
     def __repr__(self) -> str:
         return f"sqrt({self.operand!r})"
@@ -278,6 +298,9 @@ class Exp(Expr):
         """Exp preserves the shape of its operand."""
         return self.operand.check_shape()
 
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
+
     def __repr__(self) -> str:
         return f"exp({self.operand!r})"
 
@@ -316,6 +339,9 @@ class Log(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Log preserves the shape of its operand."""
         return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
 
     def __repr__(self) -> str:
         return f"log({self.operand!r})"
@@ -356,6 +382,9 @@ class Abs(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Abs preserves the shape of its operand."""
         return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
 
     def __repr__(self) -> str:
         return f"abs({self.operand!r})"
@@ -430,9 +459,105 @@ class Max(Expr):
         except ValueError as e:
             raise ValueError(f"Max shapes not broadcastable: {shapes}") from e
 
+    def sparsity(self, n_x: int, n_u: int):
+        out_shape = self.check_shape()
+        n_out = int(np.prod(out_shape)) if out_shape else 1
+        S_x = np.zeros((n_out, n_x), dtype=bool)
+        S_u = np.zeros((n_out, n_u), dtype=bool)
+        for op in self.operands:
+            o_sx, o_su = op.sparsity(n_x, n_u)
+            S_x |= _broadcast_sparsity(o_sx, op.check_shape(), out_shape, n_x)
+            S_u |= _broadcast_sparsity(o_su, op.check_shape(), out_shape, n_u)
+        return S_x, S_u
+
     def __repr__(self) -> str:
         inner = ", ".join(repr(op) for op in self.operands)
         return f"max({inner})"
+
+
+class Min(Expr):
+    """Element-wise minimum function for symbolic expressions.
+
+    Computes the element-wise minimum across two or more operands. Supports
+    broadcasting following NumPy rules. During canonicalization, nested Min
+    operations are flattened and constants are folded.
+
+    Attributes:
+        operands: List of expressions to compute minimum over
+
+    Example:
+        Define a Min expression:
+
+            x = Variable("x", shape=(3,))
+            y = Variable("y", shape=(3,))
+            min_xy = Min(x, y, 10)  # Element-wise min(x, y, 10)
+    """
+
+    def __init__(self, *args: Union[Expr, float, int, np.ndarray]):
+        """Initialize a minimum operation.
+
+        Args:
+            *args: Two or more expressions to compute minimum over
+
+        Raises:
+            ValueError: If fewer than two operands are provided
+        """
+        if len(args) < 2:
+            raise ValueError("Min requires two or more operands")
+        self.operands = [to_expr(a) for a in args]
+
+    def children(self):
+        return list(self.operands)
+
+    def canonicalize(self) -> "Expr":
+        """Canonicalize min: flatten nested Min, fold constants."""
+        from .expr import Constant
+
+        operands = []
+        const_vals = []
+
+        for op in self.operands:
+            c = op.canonicalize()
+            if isinstance(c, Min):
+                operands.extend(c.operands)
+            elif isinstance(c, Constant):
+                const_vals.append(c.value)
+            else:
+                operands.append(c)
+
+        # If we have constants, compute their min and keep it
+        if const_vals:
+            min_const = np.minimum.reduce(const_vals)
+            operands.append(Constant(min_const))
+
+        if not operands:
+            raise ValueError("Min must have at least one operand after canonicalization")
+        if len(operands) == 1:
+            return operands[0]
+        return Min(*operands)
+
+    def check_shape(self) -> Tuple[int, ...]:
+        """Min broadcasts shapes like NumPy."""
+        shapes = [child.check_shape() for child in self.children()]
+        try:
+            return np.broadcast_shapes(*shapes)
+        except ValueError as e:
+            raise ValueError(f"Min shapes not broadcastable: {shapes}") from e
+
+    def sparsity(self, n_x: int, n_u: int):
+        out_shape = self.check_shape()
+        n_out = int(np.prod(out_shape)) if out_shape else 1
+        S_x = np.zeros((n_out, n_x), dtype=bool)
+        S_u = np.zeros((n_out, n_u), dtype=bool)
+        for op in self.operands:
+            o_sx, o_su = op.sparsity(n_x, n_u)
+            S_x |= _broadcast_sparsity(o_sx, op.check_shape(), out_shape, n_x)
+            S_u |= _broadcast_sparsity(o_su, op.check_shape(), out_shape, n_u)
+        return S_x, S_u
+
+    def __repr__(self) -> str:
+        inner = ", ".join(repr(op) for op in self.operands)
+        return f"min({inner})"
 
 
 # Penalty function building blocks
@@ -472,6 +597,9 @@ class PositivePart(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """pos(x) = max(x, 0) preserves the shape of x."""
         return self.x.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.x.sparsity(n_x, n_u)
 
     def __repr__(self) -> str:
         return f"pos({self.x!r})"
@@ -521,6 +649,9 @@ class Huber(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Huber penalty preserves the shape of x."""
         return self.x.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.x.sparsity(n_x, n_u)
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash Huber including its delta parameter.
@@ -583,6 +714,9 @@ class SmoothReLU(Expr):
     def check_shape(self) -> Tuple[int, ...]:
         """Smooth ReLU preserves the shape of x."""
         return self.x.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.x.sparsity(n_x, n_u)
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash SmoothReLU including its c parameter.
@@ -694,6 +828,17 @@ class LogSumExp(Expr):
         except ValueError as e:
             raise ValueError(f"LogSumExp shapes not broadcastable: {shapes}") from e
 
+    def sparsity(self, n_x: int, n_u: int):
+        out_shape = self.check_shape()
+        n_out = int(np.prod(out_shape)) if out_shape else 1
+        S_x = np.zeros((n_out, n_x), dtype=bool)
+        S_u = np.zeros((n_out, n_u), dtype=bool)
+        for op in self.operands:
+            o_sx, o_su = op.sparsity(n_x, n_u)
+            S_x |= _broadcast_sparsity(o_sx, op.check_shape(), out_shape, n_x)
+            S_u |= _broadcast_sparsity(o_su, op.check_shape(), out_shape, n_u)
+        return S_x, S_u
+
     def __repr__(self) -> str:
         inner = ", ".join(repr(op) for op in self.operands)
         return f"logsumexp({inner})"
@@ -794,6 +939,123 @@ class Linterp(Expr):
 
     def __repr__(self) -> str:
         return f"linterp({self.x!r}, {self.xp!r}, {self.fp!r})"
+
+
+_CINTERP_METHODS = {
+    "cubic": _CubicSpline,
+    "pchip": _Pchip,
+    "akima": _Akima,
+}
+
+
+class Cinterp(Expr):
+    """1D cubic spline interpolation for symbolic expressions.
+
+    Computes a cubic spline through data points (xp, fp) and evaluates it at
+    query point x.  Spline coefficients are precomputed at construction time
+    via scipy so that JAX evaluation reduces to a segment lookup and
+    polynomial eval.
+
+    Attributes:
+        x: Query point at which to evaluate the spline (symbolic expression).
+        xp: 1D array of breakpoints (must be strictly increasing).
+        fp: 1D array of values at the breakpoints (same length as xp).
+        method: Spline method used — ``"cubic"`` (not-a-knot, C2),
+            ``"pchip"`` (monotonicity-preserving, C1), or ``"akima"`` (C1).
+        coeffs: Precomputed polynomial coefficients, shape (4, n_segments).
+            Row k contains the degree-k coefficients, so the value in segment i
+            at local coordinate t = x - xp[i] is
+            ``coeffs[0, i] + coeffs[1, i]*t + coeffs[2, i]*t**2 + coeffs[3, i]*t**3``.
+
+    Example:
+        Interpolate a discrete reference path::
+
+            import openscvx as ox
+            import numpy as np
+
+            s_data = np.linspace(0, 2 * np.pi, 20)
+            px_data = np.cos(s_data)
+
+            progress = ox.State("progress", shape=(1,))
+            px = ox.Cinterp(progress[0], s_data, px_data)
+
+        Use PCHIP for monotonicity-preserving interpolation::
+
+            alt_data = np.array([0, 5000, 10000, 15000, 20000])
+            rho_data = np.array([1.225, 0.736, 0.414, 0.195, 0.089])
+
+            altitude = ox.State("altitude", shape=(1,))
+            rho = ox.Cinterp(altitude[0], alt_data, rho_data, method="pchip")
+
+    !!! note
+        `xp` must be strictly increasing.
+
+    !!! warning "Extrapolation behavior"
+        For query points outside `[xp[0], xp[-1]]`, boundary segment
+        polynomials are extrapolated (consistent with scipy defaults).
+    """
+
+    def __init__(
+        self,
+        x: Union[Expr, float, int, np.ndarray],
+        xp: Union[np.ndarray, list],
+        fp: Union[np.ndarray, list],
+        *,
+        method: str = "cubic",
+        _coeffs: Union[np.ndarray, None] = None,
+    ):
+        self.x = to_expr(x)
+        xp = np.asarray(xp, dtype=float)
+        fp = np.asarray(fp, dtype=float)
+
+        if method not in _CINTERP_METHODS:
+            raise ValueError(
+                f"Cinterp method must be one of {set(_CINTERP_METHODS)}, got {method!r}"
+            )
+
+        if xp.ndim != 1:
+            raise ValueError(f"Cinterp xp must be 1D, got shape {xp.shape}")
+        if fp.ndim != 1:
+            raise ValueError(f"Cinterp fp must be 1D, got shape {fp.shape}")
+        if xp.shape != fp.shape:
+            raise ValueError(
+                f"Cinterp xp and fp must have same length, got {xp.shape} vs {fp.shape}"
+            )
+
+        self.xp_np = xp
+        self.fp_np = fp
+        self.method = method
+
+        if _coeffs is not None:
+            self.coeffs = _coeffs
+        else:
+            # Precompute spline coefficients via scipy.
+            # scipy returns shape (4, n_seg) with c[0]=cubic, c[1]=quadratic, ...
+            # We reorder to ascending-degree layout for Horner evaluation.
+            cs = _CINTERP_METHODS[method](xp, fp)
+            self.coeffs = cs.c[::-1].copy()  # row 0 = const, row 3 = cubic
+
+    def children(self):
+        return [self.x]
+
+    def canonicalize(self) -> "Expr":
+        x = self.x.canonicalize()
+        return Cinterp(x, self.xp_np, self.fp_np, method=self.method, _coeffs=self.coeffs)
+
+    def check_shape(self) -> Tuple[int, ...]:
+        return self.x.check_shape()
+
+    def _hash_into(self, hasher: "hashlib._Hash") -> None:
+        hasher.update(b"Cinterp")
+        hasher.update(self.method.encode())
+        hasher.update(self.xp_np.tobytes())
+        hasher.update(self.fp_np.tobytes())
+        self.x._hash_into(hasher)
+
+    def __repr__(self) -> str:
+        if self.method == "cubic":
+            return f"cinterp({self.x!r})"
+        return f"cinterp({self.x!r}, method={self.method!r})"
 
 
 class Bilerp(Expr):

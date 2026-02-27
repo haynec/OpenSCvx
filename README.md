@@ -16,248 +16,173 @@
 <!-- PROJECT LOGO -->
 <br />
 
-<!-- GETTING STARTED -->
-## Getting Started
+## What is OpenSCvx
 
-### Installation
+OpenSCvx is a general python-based successive convexification implementation which uses a JAX backend.
+It is designed to be easy to use for anyone and fast enough for everyone, all while being open and modular for contributors.
 
-<details>
-<summary>Stable</summary>
+OpenSCvx provides a clean symbolic interface for problem definition which should be intuitive to users of NumPy, JAX, and CVXPY. This allows us to hide a lot of the under-the-hood magic away from the user while also providing a modular architecture, enabling contributors to focus on the algorithms without worrying about interface design.
 
-To grab the latest stable release simply run
+OpenSCvx makes heavy use of [JAX](https://github.com/jax-ml/jax) to efficiently perform calculations in the successive convex programming loop through automatic differentiation, ahead-of-time (AOT) compilation, vectorization, and GPU acceleration. Behind this is a [CVXPY](https://github.com/cvxpy/cvxpy/)-based backend to solve the convex subproblems.
 
-```sh
+This is an open project and is under active development. Try it out, give us feedback, and help contribute.
+
+```python
+import openscvx as ox
+
+g = 9.81
+
+# Define states
+position = ox.State("position", shape=(2,))
+position.min = [0.0, 0.0]
+position.max = [10.0, 10.0]
+position.initial = [0.0, 10.0]
+position.final = [10.0, 5.0]
+
+velocity = ox.State("velocity", shape=(1,))
+velocity.min = [0.0]
+velocity.max = [10.0]
+velocity.initial = [0.0]
+velocity.final = [ox.Free(10.0)]
+
+# Define control (angle from vertical)
+theta = ox.Control("theta", shape=(1,))
+theta.min = [0.0]
+theta.max = [1.755]
+theta.guess = [[0.09], [1.755]]
+
+# Define dynamics
+dynamics = {
+    "position": ox.Concat(
+        velocity * ox.Sin(theta),
+        -velocity * ox.Cos(theta),
+    ),
+    "velocity": g * ox.Cos(theta),
+}
+
+constraints = []
+for state in [position, velocity]:
+    constraints.append(ox.ctcs(state <= state.max))
+    constraints.append(ox.ctcs(state.min <= state))
+
+# Build and solve
+problem = ox.Problem(
+    dynamics=dynamics,
+    constraints=constraints,
+    states=[position, velocity],
+    controls=[theta],
+    time=ox.Time(initial=0.0, final=ox.Minimize(2.0), min=0.0, max=2.0),
+    N=2,
+)
+
+
+problem.initialize()
+results = problem.solve()
+results = problem.post_process()
+```
+
+## Installation
+
+OpenSCvx is available on [PyPI](https://pypi.org/project/openscvx/) and can be trivially installed with pip.
+
+It is recommended to install OpenSCvx inside a virtual environment (venv, conda, uv, *etc.*). If you don't already have one set up:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+### Using pip
+
+```bash
 pip install openscvx
 ```
 
-to install OpenSCVx in your python environment.
+### Using uv
 
-Or using uv:
+If you have [uv installed](https://docs.astral.sh/uv/getting-started/installation/) you can prefix the commands with `uv` for faster installation:
 
-```sh
+```bash
 uv pip install openscvx
 ```
 
-For optional dependencies:
+> [!TIP]
+> **Optional Dependencies**
+>
+> For GUI support or CVXPYGen code generation:
+> ```bash
+> pip install openscvx[gui,cvxpygen]
+> ```
 
-```sh
-pip install openscvx[gui,cvxpygen]
-# or with uv
-uv pip install openscvx[gui,cvxpygen]
-```
-</details>
+> [!TIP]
+> **Nightly Builds**
+>
+> To install the latest development version (nightly), use the `--pre` flag:
+> ```bash
+> pip install --pre openscvx
+> ```
 
-<details>
-<summary>Nightly</summary>
+## Installing From Source
 
-To install the latest development version (nightly):
+### Using pip
 
-```sh
-pip install --pre openscvx
-```
-
-With optional dependencies:
-
-```sh
-pip install --pre openscvx[gui,cvxpygen]
-```
-
-Or using uv:
-
-```sh
-uv pip install --pre openscvx
-# With optional dependencies
-uv pip install --pre openscvx[gui,cvxpygen]
-```
-
-**Note:** The `--pre` flag tells pip/uv to install pre-release versions (e.g., `1.2.4.dev3`) from PyPI.
-
-Alternatively, for local development with the latest source:
-
-```sh
-# Clone the repo
+```bash
 git clone https://github.com/OpenSCvx/OpenSCvx.git
 cd OpenSCvx
 
-# Install in editable/development mode
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
-# or with uv
+```
+
+### Using uv
+
+```bash
+git clone https://github.com/OpenSCvx/OpenSCvx.git
+cd OpenSCvx
+
+uv venv
+source .venv/bin/activate
 uv pip install -e .
 ```
 
-</details>
+## Getting Started
 
-### Dependencies
+Check out the OpenSCvx documentation to help you get started
 
-The main packages are:
+- [Getting Started Docs](https://openscvx.github.io/OpenSCvx/latest/getting-started/)
+- [Users Guide](https://openscvx.github.io/OpenSCvx/latest/UsersGuide/00_introduction/)
+- [API Reference](https://openscvx.github.io/OpenSCvx/latest/Reference/problem/)
 
-- `cvxpy` - is used to formulate and solve the convex subproblems
-- `jax` - is used for determining the Jacobians using automatic differentiation, vectorization, and ahead-of-time (AOT) compilation of the dynamics and their Jacobians 
-- `numpy` - is used for numerical operations
-- `diffrax` - is used for the numerical integration of the dynamics
-- `termcolor` - is used for pretty command line output
-- `plotly` - is used for all visualizations
+### Running the Examples
 
-These will be installed automatically, but can be installed via conda or pip if you are building from source.
+We also have a selection of problems in the `examples/` folder as well as on the [Examples page](https://openscvx.github.io/OpenSCvx/latest/Examples/abstract/brachistochrone/) of the documentation. The example trajectory optimization problems are grouped by application and represent some of the problem types that can be solved by OpenSCvx.
 
-#### GUI Dependencies (Optional)
+> [!Note]
+> To run the examples, you'll need to clone this repository and install OpenSCvx in editable mode (`pip install -e .`). See the [Installing From Source](#installing-from-source) section above for detailed installation instructions.
 
-For interactive 3D plotting and real-time visualization, additional packages are required:
-
-- `pyqtgraph` - is used for interactive 3D plotting and real-time visualization
-- `PyQt5` - provides the Qt5 GUI framework for pyqtgraph
-- `scipy` - is used for spatial transformations in plotting functions
-- `PyOpenGL` - provides OpenGL bindings for Python, required for 3D plotting
-- `PyOpenGL_accelerate` - (optional) speeds up PyOpenGL
-
-
-For local development:
-
-```sh
-pip install -e ".[gui]"
-```
-
-#### CVXPYGen Dependencies (Optional)
-
-For code generation and faster solver performance, CVXPYGen can be installed:
-
-- `cvxpygen` - enables code generation for faster solver performance
-- `qocogen` - custom solver backend for CVXPYGen (included with cvxpygen extras)
-
-To install with CVXPYGen support:
-
-```sh
-pip install openscvx[cvxpygen]
-```
-
-Or for both GUI and CVXPYGen:
-
-```sh
-pip install openscvx[gui,cvxpygen]
-```
-
-CVXPYGen features include:
-- Automatic C++ code generation for optimization problems
-- Faster solver performance through compiled code
-- Support for custom solver backends like QOCOGen
-
-### Local Development
-
-This git repository can be installed using https
-
-```sh
-git clone https://github.com/OpenSCvx/OpenSCvx.git
-```
-
-or ssh
-
-```sh
-git clone git@github.com:OpenSCvx/OpenSCvx.git
-```
-
-Dependencies can then be installed using Conda or Pip
-
-<details>
-<summary>Via Conda</summary>
-
-1. Clone the repo using https or ssh
-2. Create a conda environment with Python:
-   ```sh
-   conda create -n openscvx python>=3.9
-   ```
-3. Activate the environment:
-   ```sh
-   conda activate openscvx
-   ```
-4. Install the package with dependencies:
-   ```sh
-   pip install -e .
-   ```
-
-   Or install with optional dependencies:
-   ```sh
-   pip install -e ".[gui,cvxpygen]"
-   ```
-</details>
-
-<details>
-<summary>Via uv</summary>
-
-1. Prerequisites
-   - Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
-2. Clone the repo using https or ssh
-3. Create virtual environment and install the package:
-   ```sh
-   uv venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   uv pip install -e .
-   ```
-
-   Or install with optional dependencies:
-   ```sh
-   uv pip install -e ".[gui,cvxpygen]"
-   ```
-</details>
-
-<details>
-<summary>Via pip</summary>
-
-1. Prerequisites
-   Python >= 3.9
-2. Clone the repo using https or ssh
-3. Create virtual environment (called `venv` here) and source it
-   ```sh
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-4. Install the package with dependencies:
-   ```sh
-   pip install -e .
-   ```
-
-   Or install with optional dependencies:
-   ```sh
-   pip install -e ".[gui,cvxpygen]"
-   ```
-</details>
-
-### Running Trajectory Optimization
-
-See `examples/` folder for several example trajectory optimization problems grouped by application.
 To run a problem simply run any of the examples directly, for example:
 
 ```sh
 python3 examples/abstract/brachistochrone.py
 ```
 
-> **Note:** To run the examples, you'll need to clone this repository and install OpenSCvx in editable mode (`pip install -e .`). See the [Local Development](#local-development) section above for detailed installation instructions.
-
 and adjust the plotting as needed.
 
 Check out the problem definitions inside `examples/` to see how to define your own problems.
 
 ## Code Structure
+
 <img src="figures/oscvx_structure_full_dark.svg" width="1200"/>
-
-## ToDos
-
-- [X] Standardized Vehicle and Constraint classes
-- [X] Implement QOCOGen with CVPYGEN
-- [X] Non-Dilated Time Propagation
-- [X] Save and reload the compiled JAX code
-- [x] Unified Mathematical Interface
-- [ ] Auto-SCvx Weight Tuning
-- [ ] Compiled at the subproblem level with JAX
-- [ ] Single Shot propagation
 
 ## What is implemented
 
 This repo has the following features:
 
 1. Free Final Time
-2. Fully adaptive time dilation (```s``` is appended to the control vector)
+2. Fully adaptive time dilation (`s` is appended to the control vector)
 3. Continuous-Time Constraint Satisfaction
-4. FOH and ZOH exact discretization (```t``` is a state so you can bring your own scheme)
+4. FOH and ZOH exact discretization (`t` is a state so you can bring your own scheme)
 6. Vectorized and Ahead-of-Time (AOT) Compiled Multishooting Discretization
 7. JAX Autodiff for Jacobians
 
@@ -265,7 +190,7 @@ This repo has the following features:
 
 ## Acknowledgements
 
-This work was supported by a NASA Space Technology Graduate Research Opportunity and the Office of Naval Research under grant N00014-17-1-2433. The authors would like to acknowledge Natalia Pavlasek, Samuel Buckner, Abhi Kamath, Govind Chari, and Purnanand Elango as well as the other Autonomous Controls Laboratory members, for their many helpful discussions and support throughout this work.
+This work was supported by a NASA Space Technology Graduate Research Opportunity and the Office of Naval Research under grant N00014-17-1-2433. The authors would like to acknowledge Natalia Pavlasek, Fabio Spada, Samuel Buckner, Abhi Kamath, Govind Chari, and Purnanand Elango as well as the other Autonomous Controls Laboratory members, for their many helpful discussions and support throughout this work.
 
 ## Citation
 

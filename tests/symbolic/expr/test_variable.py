@@ -10,6 +10,7 @@ Tests are organized by node type, with each section containing:
 5. CVXPY lowering tests
 """
 
+import numpy as np
 import pytest
 
 # =============================================================================
@@ -34,7 +35,6 @@ def test_variable_creation():
 
 def test_variable_min_max_bounds():
     """Test setting min/max bounds on Variable."""
-    import numpy as np
 
     from openscvx.symbolic.expr.variable import Variable
 
@@ -47,7 +47,6 @@ def test_variable_min_max_bounds():
 
 def test_variable_guess():
     """Test setting initial guess trajectory."""
-    import numpy as np
 
     from openscvx.symbolic.expr.variable import Variable
 
@@ -66,7 +65,7 @@ def test_variable_min_shape_validation():
     from openscvx.symbolic.expr.variable import Variable
 
     v = Variable("x", shape=(3,))
-    with pytest.raises(ValueError, match="min must be 1D with shape"):
+    with pytest.raises(ValueError, match="min expected shape"):
         v.min = [1.0, 2.0]  # Wrong shape
 
 
@@ -75,21 +74,20 @@ def test_variable_max_shape_validation():
     from openscvx.symbolic.expr.variable import Variable
 
     v = Variable("x", shape=(3,))
-    with pytest.raises(ValueError, match="max must be 1D with shape"):
+    with pytest.raises(ValueError, match="max expected shape"):
         v.max = [1.0, 2.0, 3.0, 4.0]  # Wrong shape
 
 
 def test_variable_guess_shape_validation():
     """Test that guess must be 2D with correct second dimension."""
-    import numpy as np
 
     from openscvx.symbolic.expr.variable import Variable
 
     v = Variable("x", shape=(3,))
-    with pytest.raises(ValueError, match="Guess must be a 2D array"):
+    with pytest.raises(ValueError, match="guess expected 2D array"):
         v.guess = np.array([1.0, 2.0, 3.0])  # 1D instead of 2D
 
-    with pytest.raises(ValueError, match="Guess must have second dimension"):
+    with pytest.raises(ValueError, match="guess expected second dimension"):
         v.guess = np.zeros((10, 2))  # Wrong second dimension
 
 
@@ -124,9 +122,51 @@ def test_state_creation():
     assert s._final is None
 
 
+def test_state_creation_with_kwargs():
+    """Test State creation with constructor kwargs matches setter style."""
+
+    from openscvx.symbolic.expr import State
+    from openscvx.symbolic.expr.state import Free, Minimize
+
+    # Constructor style
+    s1 = State(
+        "pos",
+        shape=(3,),
+        min=[0.0, 0.0, 0.0],
+        max=[10.0, 10.0, 10.0],
+        initial=[0.0, 1.0, 2.0],
+        final=[10.0, ("free", 5.0), Minimize(8.0)],
+    )
+
+    # Setter style
+    s2 = State("pos", shape=(3,))
+    s2.min = [0.0, 0.0, 0.0]
+    s2.max = [10.0, 10.0, 10.0]
+    s2.initial = [0.0, 1.0, 2.0]
+    s2.final = [10.0, Free(5.0), Minimize(8.0)]
+
+    assert np.allclose(s1.min, s2.min)
+    assert np.allclose(s1.max, s2.max)
+    assert np.allclose(s1.initial, s2.initial)
+    assert np.allclose(s1.final, s2.final)
+    assert list(s1.initial_type) == list(s2.initial_type)
+    assert list(s1.final_type) == list(s2.final_type)
+
+
+def test_state_creation_partial_kwargs():
+    """Test State creation with only some kwargs."""
+
+    from openscvx.symbolic.expr import State
+
+    s = State("vel", shape=(2,), min=[-5.0, -5.0], max=[5.0, 5.0])
+    assert np.allclose(s.min, [-5.0, -5.0])
+    assert np.allclose(s.max, [5.0, 5.0])
+    assert s._initial is None
+    assert s._final is None
+
+
 def test_state_boundary_conditions_fixed():
     """Test setting fixed boundary conditions on State."""
-    import numpy as np
 
     from openscvx.symbolic.expr import State
 
@@ -144,7 +184,6 @@ def test_state_boundary_conditions_fixed():
 
 def test_state_boundary_conditions_mixed():
     """Test mixed boundary condition types."""
-    import numpy as np
 
     from openscvx.symbolic.expr import State
 
@@ -166,7 +205,6 @@ def test_state_boundary_conditions_mixed():
 
 def test_boundary_condition_helpers():
     """Test the Free, Fixed, Minimize, Maximize helper functions."""
-    import numpy as np
 
     import openscvx as ox
     from openscvx.symbolic.expr import Fixed, Free, Maximize, Minimize, State
@@ -252,10 +290,10 @@ def test_state_min_max_shape_validation():
     from openscvx.symbolic.expr import State
 
     s = State("x", shape=(3,))
-    with pytest.raises(ValueError, match="Min shape .* does not match State shape"):
+    with pytest.raises(ValueError, match="State 'x': min expected shape"):
         s.min = [1.0, 2.0]  # Wrong shape
 
-    with pytest.raises(ValueError, match="Max shape .* does not match State shape"):
+    with pytest.raises(ValueError, match="State 'x': max expected shape"):
         s.max = [1.0, 2.0, 3.0, 4.0]  # Wrong shape
 
 
@@ -264,10 +302,10 @@ def test_state_initial_final_shape_validation():
     from openscvx.symbolic.expr import State
 
     s = State("x", shape=(3,))
-    with pytest.raises(ValueError, match="Length mismatch"):
+    with pytest.raises(ValueError, match="State 'x': initial expected 3 elements"):
         s.initial = [0.0, 1.0]  # Wrong length
 
-    with pytest.raises(ValueError, match="Length mismatch"):
+    with pytest.raises(ValueError, match="State 'x': final expected 3 elements"):
         s.final = [0.0, 1.0, 2.0, 3.0]  # Wrong length
 
 
@@ -279,14 +317,14 @@ def test_state_bounds_validation():
     s1 = State("x", shape=(2,))
     s1.min = [0.0, 0.0]
     s1.max = [10.0, 10.0]
-    with pytest.raises(ValueError, match="Initial Fixed value .* is lower then the min"):
+    with pytest.raises(ValueError, match="State 'x': initial fixed value .* violates min bound"):
         s1.initial = [-1.0, 5.0]  # -1 < 0
 
     # Test final bounds violation
     s2 = State("x", shape=(2,))
     s2.min = [0.0, 0.0]
     s2.max = [10.0, 10.0]
-    with pytest.raises(ValueError, match="Final Fixed value .* is greater then the max"):
+    with pytest.raises(ValueError, match="State 'x': final fixed value .* violates max bound"):
         s2.final = [5.0, 15.0]  # 15 > 10
 
 
@@ -313,18 +351,35 @@ def test_control_creation():
     """Test basic Control creation and properties."""
     from openscvx.symbolic.expr import Control
 
-    c = Control("thrust", shape=(3,))
+    c = Control("thrust", shape=(2,))
     assert c.name == "thrust"
-    assert c.shape == (3,)
-    assert repr(c) == "Control('thrust', shape=(3,))"
+    assert c.shape == (2,)
+    expected = "Control('thrust', shape=(2,), impulsive=[False False], nodes=None)"
+    assert repr(c) == expected
     assert c._min is None
     assert c._max is None
     assert c._guess is None
 
 
+def test_control_creation_with_kwargs():
+    """Test Control creation with constructor kwargs matches setter style."""
+
+    from openscvx.symbolic.expr import Control
+
+    # Constructor style
+    c1 = Control("thrust", shape=(3,), min=[-10, -10, 0], max=[10, 10, 50])
+
+    # Setter style
+    c2 = Control("thrust", shape=(3,))
+    c2.min = [-10, -10, 0]
+    c2.max = [10, 10, 50]
+
+    assert np.allclose(c1.min, c2.min)
+    assert np.allclose(c1.max, c2.max)
+
+
 def test_control_bounds():
     """Test setting min/max bounds on Control."""
-    import numpy as np
 
     from openscvx.symbolic.expr import Control
 
@@ -343,10 +398,10 @@ def test_control_min_max_shape_validation():
     from openscvx.symbolic.expr import Control
 
     c = Control("u", shape=(3,))
-    with pytest.raises(ValueError, match="min must be 1D with shape"):
+    with pytest.raises(ValueError, match="min expected shape"):
         c.min = [1.0, 2.0]  # Wrong shape
 
-    with pytest.raises(ValueError, match="max must be 1D with shape"):
+    with pytest.raises(ValueError, match="max expected shape"):
         c.max = [1.0, 2.0, 3.0, 4.0]  # Wrong shape
 
 
@@ -502,3 +557,281 @@ def test_cvxpy_missing_control_variable_error():
 
     with pytest.raises(ValueError, match="Control vector 'u' not found"):
         lowerer.lower(u)
+
+
+# =============================================================================
+# Time
+# =============================================================================
+
+# --- Time: Creation ---
+
+
+def test_time_constructor_style():
+    """Test Time creation with all constructor args (existing API)."""
+
+    from openscvx import Time
+    from openscvx.symbolic.expr.state import Minimize
+
+    t = Time(initial=0.0, final=Minimize(10.0), min=0.0, max=20.0)
+    assert np.allclose(t.initial, [0.0])
+    assert np.allclose(t.final, [10.0])
+    assert np.allclose(t.min, [0.0])
+    assert np.allclose(t.max, [20.0])
+    assert t.initial_type[0] == "Fix"
+    assert t.final_type[0] == "Minimize"
+
+
+def test_time_setter_style():
+    """Test Time creation with setter-based API."""
+
+    from openscvx import Time
+    from openscvx.symbolic.expr.state import Minimize
+
+    t = Time()
+    t.min = 0.0
+    t.max = 20.0
+    t.initial = 0.0
+    t.final = Minimize(10.0)
+
+    assert np.allclose(t.initial, [0.0])
+    assert np.allclose(t.final, [10.0])
+    assert np.allclose(t.min, [0.0])
+    assert np.allclose(t.max, [20.0])
+    assert t.initial_type[0] == "Fix"
+    assert t.final_type[0] == "Minimize"
+
+
+def test_time_setter_and_constructor_equivalent():
+    """Test that constructor and setter styles produce identical results."""
+
+    from openscvx import Time
+    from openscvx.symbolic.expr.state import Free
+
+    # Constructor style
+    t1 = Time(initial=0.0, final=Free(5.0), min=0.0, max=10.0)
+
+    # Setter style
+    t2 = Time()
+    t2.min = 0.0
+    t2.max = 10.0
+    t2.initial = 0.0
+    t2.final = Free(5.0)
+
+    assert np.allclose(t1.min, t2.min)
+    assert np.allclose(t1.max, t2.max)
+    assert np.allclose(t1.initial, t2.initial)
+    assert np.allclose(t1.final, t2.final)
+    assert list(t1.initial_type) == list(t2.initial_type)
+    assert list(t1.final_type) == list(t2.final_type)
+
+
+def test_time_partial_construction():
+    """Test Time with partial constructor args then setters for the rest."""
+
+    from openscvx import Time
+
+    t = Time(min=0.0, max=20.0)
+    assert np.allclose(t.min, [0.0])
+    assert np.allclose(t.max, [20.0])
+    assert t._initial is None
+    assert t._final is None
+
+    t.initial = 0.0
+    t.final = 10.0
+    assert np.allclose(t.initial, [0.0])
+    assert np.allclose(t.final, [10.0])
+
+
+def test_time_setter_accepts_arrays():
+    """Test that Time setters also accept array-form values."""
+
+    from openscvx import Time
+
+    t = Time()
+    t.min = [0.0]
+    t.max = [20.0]
+    t.initial = [0.0]
+    t.final = [10.0]
+    assert np.allclose(t.min, [0.0])
+    assert np.allclose(t.max, [20.0])
+    assert np.allclose(t.initial, [0.0])
+    assert np.allclose(t.final, [10.0])
+
+
+def test_time_repr():
+    """Test Time repr for constructed, partial, and empty."""
+    from openscvx import Time
+
+    t1 = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    assert repr(t1) == "Time(initial=0.0, final=10.0, min=0.0, max=20.0)"
+
+    t2 = Time()
+    assert repr(t2) == "Time()"
+
+    t3 = Time(min=0.0, max=20.0)
+    assert repr(t3) == "Time(min=0.0, max=20.0)"
+
+
+# --- Time: Guess ---
+
+
+def test_time_guess_constructor_1d():
+    """Test Time guess via constructor with 1D array (auto-reshaped)."""
+
+    from openscvx import Time
+
+    guess = np.linspace(0, 10, 50)
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0, guess=guess)
+    assert t.guess.shape == (50, 1)
+    assert np.allclose(t.guess.flatten(), guess)
+
+
+def test_time_guess_constructor_2d():
+    """Test Time guess via constructor with 2D array."""
+
+    from openscvx import Time
+
+    guess = np.linspace(0, 10, 50).reshape(-1, 1)
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0, guess=guess)
+    assert t.guess.shape == (50, 1)
+    assert np.allclose(t.guess, guess)
+
+
+def test_time_guess_setter():
+    """Test Time guess via setter (1D auto-reshaped)."""
+
+    from openscvx import Time
+
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    t.guess = np.linspace(0, 10, 50)
+    assert t.guess.shape == (50, 1)
+
+
+def test_time_guess_overrides_default():
+    """Test that user-provided guess prevents _generate_default_guess."""
+
+    from openscvx import Time
+
+    custom_guess = np.array([0, 2, 5, 8, 10]).reshape(-1, 1)
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0, guess=custom_guess)
+    # guess is already set, so _generate_default_guess should not be needed
+    assert np.allclose(t.guess, custom_guess)
+
+
+# --- Time: Time Dilation ---
+
+
+def test_time_dilation_min_max_constructor():
+    """Test time_dilation_min/max via constructor."""
+    from openscvx import Time
+
+    t = Time(
+        initial=0.0,
+        final=10.0,
+        min=0.0,
+        max=20.0,
+        time_dilation_min=1.0,
+        time_dilation_max=30.0,
+    )
+    assert t.time_dilation_min == 1.0
+    assert t.time_dilation_max == 30.0
+
+
+def test_time_dilation_min_max_setter():
+    """Test time_dilation_min/max via setters."""
+    from openscvx import Time
+
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    assert t.time_dilation_min is None
+    assert t.time_dilation_max is None
+
+    t.time_dilation_min = 2.0
+    t.time_dilation_max = 25.0
+    assert t.time_dilation_min == 2.0
+    assert t.time_dilation_max == 25.0
+
+
+def test_time_dilation_guess_constructor_1d():
+    """Test time_dilation_guess via constructor with 1D array."""
+
+    from openscvx import Time
+
+    td_guess = np.full(50, 10.0)
+    t = Time(
+        initial=0.0,
+        final=10.0,
+        min=0.0,
+        max=20.0,
+        time_dilation_guess=td_guess,
+    )
+    assert t.time_dilation_guess.shape == (50, 1)
+    assert np.allclose(t.time_dilation_guess.flatten(), 10.0)
+
+
+def test_time_dilation_guess_setter():
+    """Test time_dilation_guess via setter."""
+
+    from openscvx import Time
+
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    assert t.time_dilation_guess is None
+
+    t.time_dilation_guess = np.full((50, 1), 10.0)
+    assert t.time_dilation_guess.shape == (50, 1)
+
+
+def test_time_dilation_guess_bad_shape():
+    """Test time_dilation_guess rejects bad shapes."""
+    import pytest
+
+    from openscvx import Time
+
+    t = Time()
+    with pytest.raises(ValueError, match="time_dilation_guess expected shape"):
+        t.time_dilation_guess = np.ones((10, 2))
+
+
+def test_time_dilation_constructor_setter_equivalent():
+    """Test constructor and setter styles produce identical time_dilation results."""
+
+    from openscvx import Time
+
+    td_guess = np.linspace(8, 12, 50)
+
+    t1 = Time(
+        initial=0.0,
+        final=10.0,
+        min=0.0,
+        max=20.0,
+        time_dilation_min=1.0,
+        time_dilation_max=30.0,
+        time_dilation_guess=td_guess,
+    )
+
+    t2 = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    t2.time_dilation_min = 1.0
+    t2.time_dilation_max = 30.0
+    t2.time_dilation_guess = td_guess
+
+    assert t1.time_dilation_min == t2.time_dilation_min
+    assert t1.time_dilation_max == t2.time_dilation_max
+    assert np.allclose(t1.time_dilation_guess, t2.time_dilation_guess)
+
+
+# --- Time: Uniform Time Grid ---
+
+
+def test_time_uniform_time_grid_default():
+    """Test that uniform_time_grid defaults to False."""
+    from openscvx import Time
+
+    t = Time()
+    assert t.uniform_time_grid is False
+
+
+def test_time_uniform_time_grid_constructor():
+    """Test setting uniform_time_grid via constructor."""
+    from openscvx import Time
+
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0, uniform_time_grid=True)
+    assert t.uniform_time_grid is True

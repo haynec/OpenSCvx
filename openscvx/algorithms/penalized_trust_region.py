@@ -6,7 +6,7 @@ optimization problems through iterative convex approximation.
 
 import time
 import warnings
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Callable, Dict, List, Union
 
 import numpy as np
 import numpy.linalg as la
@@ -21,14 +21,17 @@ from openscvx.utils.printing import (
     color_prob_stat,
 )
 
-from .autotuning import ConstantProximalWeight, RampProximalWeight
-from .base import Algorithm, AlgorithmState, CandidateIterate
+from .augmented_lagrangian import AugmentedLagrangian
+from .base import Algorithm, AlgorithmState, CandidateIterate, Weights
+from .constant_proximal_weight import ConstantProximalWeight
+from .ramp_proximal_weight import RampProximalWeight
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
     from openscvx.solvers import ConvexSolver
+    from openscvx.symbolic.expr.state import State
 
-    from .autotuning import AutotuningBase
+    from .base import AutotuningBase
 
 warnings.filterwarnings("ignore")
 
@@ -78,35 +81,182 @@ class PenalizedTrustRegion(Algorithm):
         Column("prob_stat", "Cvx Status", 11, "{}", color_prob_stat),
     ]
 
-    def __init__(self):
-        """Initialize PTR with unset infrastructure.
+    def __init__(
+        self,
+        autotuner: "AutotuningBase" = None,
+        k_max: int = 200,
+        lam_prox: float = 1e0,
+        lam_vc: float = 1e1,
+        lam_cost: Union[float, Dict[str, float]] = 1e-1,
+        lam_vb: float = 0.0,
+        ep_tr: float = 1e-4,
+        ep_vb: float = 1e-4,
+        ep_vc: float = 1e-8,
+        states: List["State"] = None,
+    ):
+        """Initialize PTR with algorithm parameters and optional autotuner.
 
-        Call initialize() before step() to set up compiled components.
+        Args:
+            autotuner: Weight adaptation strategy. Defaults to
+                :class:`AugmentedLagrangian` when ``None``.
+            k_max: Maximum SCP iterations. Defaults to 200.
+            lam_prox: Trust region (proximal) weight. Defaults to 1.0.
+            lam_vc: Virtual control penalty weight. Defaults to 10.0.
+            lam_cost: Cost weight. Either a float (applied to all
+                minimize/maximize states) or a dict mapping state names
+                to per-state weights, e.g.
+                ``{"velocity": 1e-1, "time": 1e0}``.  Dict values may
+                be arrays for per-component weighting, e.g.
+                ``{"position": [0, 0, 1e-6]}``. Defaults to 0.1.
+            lam_vb: Virtual buffer penalty weight. Defaults to 0.0.
+            ep_tr: Trust region convergence tolerance. Defaults to 1e-4.
+            ep_vb: Virtual buffer convergence tolerance. Defaults to 1e-4.
+            ep_vc: Virtual control convergence tolerance. Defaults to 1e-8.
+            states: Symbolic State objects (required when *lam_cost* is a
+                dict). Normally provided automatically by :class:`Problem`.
         """
+        # Compiled infrastructure (set by initialize())
         self._solver: "ConvexSolver" = None
         self._discretization_solver: callable = None
+        self._discretization_solver_impulsive: callable = None
         self._jax_constraints: "LoweredJaxConstraints" = None
         self._emitter: callable = None
-        self._autotuner: "AutotuningBase" = None
+
+        # Autotuner
+        self.autotuner: "AutotuningBase" = (
+            autotuner if autotuner is not None else AugmentedLagrangian()
+        )
+
+        # Store states for later re-resolution (e.g. user sets lam_cost to a
+        # new dict via the property setter after construction).
+        self._states: List["State"] = states
+
+        # Resolve dict lam_cost → ndarray (requires states)
+        resolved_lam_cost = self._resolve_lam_cost(lam_cost, states)
+
+        # SCP weights (grouped dataclass, normalized for numerical conditioning)
+        self.weights = Weights(
+            lam_prox=lam_prox,
+            lam_vc=lam_vc,
+            lam_cost=resolved_lam_cost,
+            lam_vb=lam_vb,
+        )
+        self.weights.normalize()
+
+        # SCP convergence parameters
+        self.k_max = k_max
+        self.ep_tr = ep_tr
+        self.ep_vb = ep_vb
+        self.ep_vc = ep_vc
+
+    # -- Weight properties ---------------------------------------------------
+    # These properties are the **source of truth** for user-facing weight
+    # values.  Getters return the raw (user-specified, pre-normalization)
+    # value.  Setters update the raw value and re-normalize ``self.weights``.
+    #
+    # During SCP iteration the autotuner may mutate the *normalized* values
+    # on ``self.weights`` directly (e.g. ramping ``lam_prox``).  Those
+    # in-flight changes are tracked in ``AlgorithmState`` weight histories
+    # but do not affect the raw values returned here.
+
+    @staticmethod
+    def _invoke_solver(solver: callable, *args):
+        """Call either a compiled solver wrapper (.call) or a plain callable."""
+        if hasattr(solver, "call"):
+            return solver.call(*args)
+        return solver(*args)
+
+    def _recover_prior_node_from_initial(
+        self,
+        settings: Config,
+        x0_fallback: np.ndarray,
+    ) -> np.ndarray:
+        """Build node-0 prior state from initial conditions (fixed entries exact)."""
+        x0_prior = np.asarray(x0_fallback, dtype=float).reshape(-1).copy()
+        x0_init = np.asarray(settings.sim.x.initial, dtype=float).reshape(-1)
+        is_fixed = np.asarray(settings.sim.x.initial_type) == "Fix"
+        x0_prior[is_fixed] = x0_init[is_fixed]
+        return x0_prior.reshape(1, -1)
 
     @property
-    def autotuner(self) -> "AutotuningBase":
-        """Access the autotuner instance for configuring parameters.
+    def lam_prox(self) -> float:
+        """Trust region (proximal) weight.
 
-        For AugmentedLagrangian method, parameters can be modified via:
-            algorithm.autotuner.rho_max = 1e7
-            algorithm.autotuner.mu_max = 1e7
-            etc.
+        This is the user-specified value before normalization. Setting this
+        property triggers automatic re-normalization of all weights.
 
-        Returns:
-            AutotuningBase: The autotuner instance
-
-        Raises:
-            AttributeError: If algorithm has not been initialized yet
+        !!! note
+            The autotuner may modify the normalized weight in
+            ``self.weights.lam_prox`` during iteration. Those changes are
+            internal and do not alter the value returned here.
         """
-        if self._autotuner is None:
-            raise AttributeError("Autotuner not yet initialized. Call initialize() first.")
-        return self._autotuner
+        return self.weights._raw_lam_prox
+
+    @lam_prox.setter
+    def lam_prox(self, value: float) -> None:
+        self.weights._raw_lam_prox = value
+        self.weights.normalize()
+
+    @property
+    def lam_vc(self) -> float:
+        """Virtual control penalty weight.
+
+        This is the user-specified value before normalization. Setting this
+        property triggers automatic re-normalization of all weights.
+
+        !!! note
+            The autotuner may modify the normalized weight in
+            ``self.weights.lam_vc`` during iteration. Those changes are
+            internal and do not alter the value returned here.
+        """
+        return self.weights._raw_lam_vc
+
+    @lam_vc.setter
+    def lam_vc(self, value: float) -> None:
+        self.weights._raw_lam_vc = value
+        self.weights.normalize()
+
+    @property
+    def lam_cost(self) -> Union[float, np.ndarray]:
+        """Cost weight (pre-normalization).
+
+        This is the user-specified value before normalization. Setting this
+        property triggers automatic re-normalization of all weights.
+
+        Returns a float when a uniform scalar was provided, or an ndarray
+        of shape ``(n_states,)`` when per-state weights were given (via dict
+        or array).
+
+        !!! note
+            The autotuner may modify the normalized weight in
+            ``self.weights.lam_cost`` during iteration. Those changes are
+            internal and do not alter the value returned here.
+        """
+        return self.weights._raw_lam_cost
+
+    @lam_cost.setter
+    def lam_cost(self, value: Union[float, Dict[str, float]]) -> None:
+        self.weights._raw_lam_cost = self._resolve_lam_cost(value, self._states)
+        self.weights.normalize()
+
+    @property
+    def lam_vb(self) -> float:
+        """Virtual buffer penalty weight.
+
+        This is the user-specified value before normalization. Setting this
+        property triggers automatic re-normalization of all weights.
+
+        !!! note
+            The autotuner may modify the normalized weight in
+            ``self.weights.lam_vb`` during iteration. Those changes are
+            internal and do not alter the value returned here.
+        """
+        return self.weights._raw_lam_vb
+
+    @lam_vb.setter
+    def lam_vb(self, value: float) -> None:
+        self.weights._raw_lam_vb = value
+        self.weights.normalize()
 
     def get_columns(self, verbosity: int = Verbosity.STANDARD) -> List[Column]:
         """Get the columns to display for iteration output.
@@ -126,10 +276,7 @@ class PenalizedTrustRegion(Algorithm):
         Raises:
             AttributeError: If algorithm has not been initialized yet.
         """
-        if self._autotuner is None:
-            raise AttributeError("Autotuner not yet initialized. Call initialize() first.")
-
-        all_columns = self.BASE_COLUMNS + self._autotuner.COLUMNS + self.TAIL_COLUMNS
+        all_columns = self.BASE_COLUMNS + self.autotuner.COLUMNS + self.TAIL_COLUMNS
         return [col for col in all_columns if col.min_verbosity <= verbosity]
 
     def initialize(
@@ -140,6 +287,7 @@ class PenalizedTrustRegion(Algorithm):
         emitter: callable,
         params: dict,
         settings: Config,
+        discretization_solver_impulsive: Callable[..., object] | None = None,
     ) -> None:
         """Initialize PTR algorithm.
 
@@ -153,17 +301,15 @@ class PenalizedTrustRegion(Algorithm):
             emitter: Callback for emitting iteration progress
             params: Problem parameters dictionary (for warm-start)
             settings: Configuration object (for warm-start)
+            discretization_solver_impulsive: Optional impulsive/discrete
+                discretization solver used to populate W/x_prop_plus/D_d/E_d.
         """
         # Store immutable infrastructure
         self._solver = solver
         self._discretization_solver = discretization_solver
+        self._discretization_solver_impulsive = discretization_solver_impulsive
         self._jax_constraints = jax_constraints
         self._emitter = emitter
-
-        # Initialize autotuner based on settings
-        # The autotuner is configured on ``settings.scp.autotuner`` with a default
-        # of :class:`AugmentedLagrangian` when no custom instance is provided.
-        self._autotuner = settings.scp.autotuner
 
         # Set boundary conditions
         self._solver.update_boundary_conditions(
@@ -172,7 +318,7 @@ class PenalizedTrustRegion(Algorithm):
         )
 
         # Create temporary state for initialization solve
-        init_state = AlgorithmState.from_settings(settings)
+        init_state = AlgorithmState.from_settings(settings, self.weights)
 
         # Solve a dumb problem to initialize DPP and JAX jacobians
         _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
@@ -180,6 +326,19 @@ class PenalizedTrustRegion(Algorithm):
         )
 
         init_state.add_discretization(V_multi_shoot.__array__())
+        slice_imp = settings.sim.u.slice_impulsive
+        has_impulsive = bool(slice_imp.stop > slice_imp.start)
+        if has_impulsive and self._discretization_solver_impulsive is not None:
+            u_init = init_state.u.astype(float)
+            x0_prior = self._recover_prior_node_from_initial(settings, init_state.x[0])
+            x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
+            _, _, _, W_multi_shoot = self._invoke_solver(
+                self._discretization_solver_impulsive,
+                x_nodes_prior,
+                u_init,
+                params,
+            )
+            init_state.add_impulsive_discretization(W_multi_shoot.__array__())
         _ = self._subproblem(params, init_state, settings)
 
     def step(
@@ -217,9 +376,17 @@ class PenalizedTrustRegion(Algorithm):
             _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
                 state.x, state.u.astype(float), params
             )
+
+            u_state = state.u.astype(float)
+            x0_prior = self._recover_prior_node_from_initial(settings, state.x[0])
+            x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
+            _, _, _, W_multi_shoot = self._discretization_solver_impulsive.call(
+                x_nodes_prior, u_state, params
+            )
             dis_time = time.time() - t0
 
             state.add_discretization(V_multi_shoot.__array__())
+            state.add_impulsive_discretization(W_multi_shoot.__array__())
 
         # Run the subproblem
         (
@@ -245,10 +412,22 @@ class PenalizedTrustRegion(Algorithm):
         _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
             candidate.x, candidate.u.astype(float), params
         )
+
+        u_candidate = candidate.u.astype(float)
+        x0_prior = self._recover_prior_node_from_initial(settings, candidate.x[0])
+        x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
+        x_prop_plus, D_d, E_d, W_multi_shoot = self._discretization_solver_impulsive.call(
+            x_nodes_prior, u_candidate, params
+        )
+
         dis_time = time.time() - t0
 
         candidate.V = V_multi_shoot.__array__()
+        candidate.W = W_multi_shoot.__array__()
         candidate.x_prop = x_prop.__array__()
+        candidate.x_prop_plus = x_prop_plus.__array__()
+        candidate.D_d = D_d.__array__()
+        candidate.E_d = E_d.__array__()
 
         # Update state in place by appending to history
         # The x_guess/u_guess properties will automatically return the latest entry
@@ -260,14 +439,14 @@ class PenalizedTrustRegion(Algorithm):
         state.J_vc = np.sum(np.array(J_vc_vec))
 
         # Update weights in state using configured autotuning method
-        adaptive_state = self._autotuner.update_weights(
-            state, candidate, self._jax_constraints, settings, params
+        adaptive_state = self.autotuner.update_weights(
+            state, candidate, self._jax_constraints, settings, params, self.weights
         )
 
         # Build emission data - only include nonlinear/reduction metrics when
         # the autotuner actually uses them (constant/ramp methods don't)
         use_full_metrics = not isinstance(
-            self._autotuner, (ConstantProximalWeight, RampProximalWeight)
+            self.autotuner, (ConstantProximalWeight, RampProximalWeight)
         )
 
         emission_data = {
@@ -281,6 +460,9 @@ class PenalizedTrustRegion(Algorithm):
             "lam_prox": state.lam_prox,
             "prob_stat": prob_stat,
             "adaptive_state": adaptive_state,
+            "ep_tr": self.ep_tr,
+            "ep_vb": self.ep_vb,
+            "ep_vc": self.ep_vc,
         }
 
         # Only include nonlinear/reduction metrics when autotuner uses them
@@ -316,11 +498,7 @@ class PenalizedTrustRegion(Algorithm):
         state.k += 1
 
         # Return convergence status
-        return (
-            (state.J_tr < settings.scp.ep_tr)
-            and (state.J_vb < settings.scp.ep_vb)
-            and (state.J_vc < settings.scp.ep_vc)
-        )
+        return (state.J_tr < self.ep_tr) and (state.J_vb < self.ep_vb) and (state.J_vc < self.ep_vc)
 
     def _subproblem(
         self,
@@ -351,6 +529,9 @@ class PenalizedTrustRegion(Algorithm):
             B_d=state.B_d(),
             C_d=state.C_d(),
             x_prop=state.x_prop(),
+            x_prop_plus=state.x_prop_plus(),
+            D_d=state.D_d(),
+            E_d=state.E_d(),
         )
 
         # Build constraint linearization data

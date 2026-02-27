@@ -31,6 +31,7 @@ def apply_byof(
     byof: dict,
     dynamics: Dynamics,
     dynamics_prop: Dynamics,
+    dynamics_discrete: Dynamics,
     jax_constraints: LoweredJaxConstraints,
     x_unified: "UnifiedState",
     x_prop_unified: "UnifiedState",
@@ -38,7 +39,7 @@ def apply_byof(
     states: List["State"],
     states_prop: List["State"],
     N: int,
-) -> Tuple[Dynamics, Dynamics, LoweredJaxConstraints, "UnifiedState", "UnifiedState"]:
+) -> Tuple[Dynamics, Dynamics, Dynamics, LoweredJaxConstraints, "UnifiedState", "UnifiedState"]:
     """Apply bring-your-own-functions (byof) to augment lowered problem.
 
     Handles raw JAX functions provided by expert users, including:
@@ -52,6 +53,8 @@ def apply_byof(
             "ctcs_constraints"
         dynamics: Lowered optimization dynamics to potentially augment
         dynamics_prop: Lowered propagation dynamics to potentially augment
+        dynamics_discrete: Lowered discrete dynamics (for impulsive solver); extended when
+            new CTCS states are added so its output dimension matches the unified state.
         jax_constraints: Lowered JAX constraints to append to
         x_unified: Unified optimization state interface to potentially augment
         x_prop_unified: Unified propagation state interface to potentially augment
@@ -61,11 +64,13 @@ def apply_byof(
         N: Number of nodes in the trajectory
 
     Returns:
-        Tuple of (dynamics, dynamics_prop, jax_constraints, x_unified, x_prop_unified)
+        Tuple of (dynamics, dynamics_prop, dynamics_discrete, jax_constraints,
+        x_unified, x_prop_unified)
 
     Example:
-        >>> dynamics, dynamics_prop, constraints, x_unified, x_prop_unified = apply_byof(
-        ...     byof, dynamics, dynamics_prop, jax_constraints,
+        >>> (dynamics, dynamics_prop, dynamics_discrete, constraints, x_unified,
+        ...     x_prop_unified) = apply_byof(
+        ...     byof, dynamics, dynamics_prop, dynamics_discrete, jax_constraints,
         ...     x_unified, x_prop_unified, u_unified, states, states_prop, N
         ... )
     """
@@ -78,17 +83,23 @@ def apply_byof(
         state_slices = {state.name: state._slice for state in states}
         state_slices_prop = {state.name: state._slice for state in states_prop}
 
-        def _make_composite_dynamics(orig_f, byof_fns, slices_map):
+        # Time-dilation slice for multiplying byof outputs by s
+        td_slice = u_unified.time_dilation_slice
+
+        def _make_composite_dynamics(orig_f, byof_fns, slices_map, td_sl):
             """Create composite dynamics combining symbolic and byof state derivatives.
 
             This factory splices user-provided byof dynamics into the unified dynamics
             function at the appropriate slice indices, replacing the symbolic dynamics
-            for specific states while preserving the rest.
+            for specific states while preserving the rest. The byof outputs are
+            multiplied by the time-dilation factor s to match the symbolic dynamics
+            which already include s * f(x, u) via the Mul node.
 
             Args:
                 orig_f: Original unified dynamics (x, u, node, params) -> xdot
                 byof_fns: Dict mapping state names to byof dynamics functions
                 slices_map: Dict mapping state names to slice objects for indexing
+                td_sl: Slice for the time-dilation control in the unified u vector
 
             Returns:
                 Composite dynamics function with byof derivatives spliced in
@@ -98,32 +109,51 @@ def apply_byof(
                 # Start with symbolic/default dynamics for all states
                 xdot = orig_f(x, u, node, params)
 
-                # Splice in byof dynamics for specific states
+                # Time-dilation factor (symbolic dynamics already include s *)
+                s = u[td_sl]
+
+                # Splice in byof dynamics for specific states, multiplied by s
                 for state_name, byof_fn in byof_fns.items():
                     sl = slices_map[state_name]
-                    # Replace the derivative for this state with the byof result
-                    xdot = xdot.at[sl].set(byof_fn(x, u, node, params))
+                    # Replace the derivative for this state with s * byof result
+                    xdot = xdot.at[sl].set(s * byof_fn(x, u, node, params))
 
                 return xdot
 
             return composite_f
 
         # Create composite optimization dynamics
-        composite_f = _make_composite_dynamics(dynamics.f, byof_dynamics, state_slices)
-        dynamics = Dynamics(
-            f=composite_f,
-            A=jacfwd(composite_f, argnums=0),
-            B=jacfwd(composite_f, argnums=1),
-        )
+        # Jacobians are computed by the discretizer, not here.
+        composite_f = _make_composite_dynamics(dynamics.f, byof_dynamics, state_slices, td_slice)
+        dynamics = Dynamics(f=composite_f)
 
         # Create composite propagation dynamics
         composite_f_prop = _make_composite_dynamics(
-            dynamics_prop.f, byof_dynamics, state_slices_prop
+            dynamics_prop.f, byof_dynamics, state_slices_prop, td_slice
         )
-        dynamics_prop = Dynamics(
-            f=composite_f_prop,
-            A=jacfwd(composite_f_prop, argnums=0),
-            B=jacfwd(composite_f_prop, argnums=1),
+        dynamics_prop = Dynamics(f=composite_f_prop)
+
+    # Handle byof dynamics_discrete by splicing in raw JAX functions at the correct slices
+    byof_dynamics_discrete = byof.get("dynamics_discrete", {})
+    if byof_dynamics_discrete:
+        state_slices = {state.name: state._slice for state in states}
+
+        def _make_composite_dynamics_discrete(orig_f, byof_fns, slices_map):
+            """Create composite discrete dynamics combining symbolic and byof state updates."""
+
+            def composite_f(x, u, node, params):
+                x_next = orig_f(x, u, node, params)
+                for state_name, byof_fn in byof_fns.items():
+                    sl = slices_map[state_name]
+                    x_next = x_next.at[sl].set(byof_fn(x, u, node, params))
+                return x_next
+
+            return composite_f
+
+        dynamics_discrete = Dynamics(
+            f=_make_composite_dynamics_discrete(
+                dynamics_discrete.f, byof_dynamics_discrete, state_slices
+            )
         )
 
     # Handle nodal constraints
@@ -280,17 +310,24 @@ def apply_byof(
 
             penalty_fns.append(_make_penalty_fn(constraint_fn, penalty_func, over_interval))
 
+        # Time-dilation slice for multiplying byof CTCS penalties by s
+        td_slice = u_unified.time_dilation_slice
+
         if idx in idx_to_aug_slice:
             # This idx already exists from symbolic CTCS - add penalties to existing state
             aug_slice = idx_to_aug_slice[idx]
 
-            def _make_ctcs_addition(orig_f, pen_fns, aug_sl):
+            def _make_ctcs_addition(orig_f, pen_fns, aug_sl, td_sl):
                 """Create dynamics that adds penalties to existing augmented state.
+
+                The penalty is multiplied by the time-dilation factor s to match
+                the symbolic dynamics which already include s * f(x, u).
 
                 Args:
                     orig_f: Original dynamics function
                     pen_fns: List of penalty functions to add
                     aug_sl: Slice of the augmented state to modify
+                    td_sl: Slice for the time-dilation control
 
                 Returns:
                     Modified dynamics function
@@ -299,8 +336,9 @@ def apply_byof(
                 def modified_f(x, u, node, params):
                     xdot = orig_f(x, u, node, params)
 
-                    # Sum all penalties for this idx
-                    total_penalty = sum(pen_fn(x, u, node, params) for pen_fn in pen_fns)
+                    # Sum all penalties for this idx, scaled by time-dilation
+                    s = u[td_sl]
+                    total_penalty = s * sum(pen_fn(x, u, node, params) for pen_fn in pen_fns)
 
                     # Add to existing augmented state derivative
                     current_deriv = xdot[aug_sl]
@@ -311,13 +349,9 @@ def apply_byof(
                 return modified_f
 
             # Modify both optimization and propagation dynamics
-            dynamics.f = _make_ctcs_addition(dynamics.f, penalty_fns, aug_slice)
-            dynamics.A = jacfwd(dynamics.f, argnums=0)
-            dynamics.B = jacfwd(dynamics.f, argnums=1)
-
-            dynamics_prop.f = _make_ctcs_addition(dynamics_prop.f, penalty_fns, aug_slice)
-            dynamics_prop.A = jacfwd(dynamics_prop.f, argnums=0)
-            dynamics_prop.B = jacfwd(dynamics_prop.f, argnums=1)
+            # Jacobians are computed by the discretizer, not here.
+            dynamics.f = _make_ctcs_addition(dynamics.f, penalty_fns, aug_slice, td_slice)
+            dynamics_prop.f = _make_ctcs_addition(dynamics_prop.f, penalty_fns, aug_slice, td_slice)
 
         else:
             # New idx - create new augmented state
@@ -326,12 +360,16 @@ def apply_byof(
             bounds = first_spec.get("bounds", (0.0, 1e-4))
             initial = first_spec.get("initial", bounds[0])
 
-            def _make_ctcs_new_state(orig_f, pen_fns):
+            def _make_ctcs_new_state(orig_f, pen_fns, td_sl):
                 """Create dynamics augmented with new CTCS state.
+
+                The penalty is multiplied by the time-dilation factor s to match
+                the symbolic dynamics which already include s * f(x, u).
 
                 Args:
                     orig_f: Original dynamics function
                     pen_fns: List of penalty functions to sum
+                    td_sl: Slice for the time-dilation control
 
                 Returns:
                     Augmented dynamics function
@@ -340,28 +378,43 @@ def apply_byof(
                 def augmented_f(x, u, node, params):
                     xdot = orig_f(x, u, node, params)
 
-                    # Sum all penalties for this new idx
-                    total_penalty = sum(pen_fn(x, u, node, params) for pen_fn in pen_fns)
+                    # Sum all penalties for this new idx, scaled by time-dilation
+                    s = u[td_sl]
+                    total_penalty = s * sum(pen_fn(x, u, node, params) for pen_fn in pen_fns)
 
                     # Append as new augmented state derivative
                     return jnp.concatenate([xdot, jnp.atleast_1d(total_penalty)])
 
                 return augmented_f
 
+            def _extend_discrete_dynamics(orig_discrete_f, aug_sl):
+                """Extend discrete dynamics so output dim matches unified state.
+
+                For impulsive/discrete updates, new CTCS augmented states are
+                pass-through: x_next[aug] = x_curr[aug], so we append x[aug_sl]
+                to the discrete dynamics output.
+                """
+
+                def extended_f(x, u, node, params):
+                    out = orig_discrete_f(x, u, node, params)
+                    return jnp.concatenate([out, jnp.atleast_1d(x[aug_sl])])
+
+                return extended_f
+
             # Augment optimization dynamics
-            aug_f = _make_ctcs_new_state(dynamics.f, penalty_fns)
-            dynamics = Dynamics(
-                f=aug_f,
-                A=jacfwd(aug_f, argnums=0),
-                B=jacfwd(aug_f, argnums=1),
-            )
+            # Jacobians are computed by the discretizer, not here.
+            aug_f = _make_ctcs_new_state(dynamics.f, penalty_fns, td_slice)
+            dynamics = Dynamics(f=aug_f)
 
             # Augment propagation dynamics
-            aug_f_prop = _make_ctcs_new_state(dynamics_prop.f, penalty_fns)
-            dynamics_prop = Dynamics(
-                f=aug_f_prop,
-                A=jacfwd(aug_f_prop, argnums=0),
-                B=jacfwd(aug_f_prop, argnums=1),
+            aug_f_prop = _make_ctcs_new_state(dynamics_prop.f, penalty_fns, td_slice)
+            dynamics_prop = Dynamics(f=aug_f_prop)
+
+            # Extend discrete dynamics so impulsive solver sees full state dimension
+            current_dim = x_unified.shape[0]
+            aug_slice = slice(current_dim, current_dim + 1)
+            dynamics_discrete = Dynamics(
+                f=_extend_discrete_dynamics(dynamics_discrete.f, aug_slice)
             )
 
             # Create State objects for the new augmented states
@@ -416,4 +469,4 @@ def apply_byof(
                 augmented=True,
             )
 
-    return dynamics, dynamics_prop, jax_constraints, x_unified, x_prop_unified
+    return dynamics, dynamics_prop, dynamics_discrete, jax_constraints, x_unified, x_prop_unified

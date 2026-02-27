@@ -1,7 +1,7 @@
 """JAX visitors for math expressions.
 
-Visitors: Sin, Cos, Tan, Square, Sqrt, Exp, Log, Abs, Max,
-          PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Bilerp
+Visitors: Sin, Cos, Tan, Square, Sqrt, Exp, Log, Abs, Max, Min,
+          PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Cinterp, Bilerp
 """
 
 import jax
@@ -12,6 +12,7 @@ from jax.scipy.special import logsumexp
 from openscvx.symbolic.expr.math import (
     Abs,
     Bilerp,
+    Cinterp,
     Cos,
     Exp,
     Huber,
@@ -19,6 +20,7 @@ from openscvx.symbolic.expr.math import (
     Log,
     LogSumExp,
     Max,
+    Min,
     PositivePart,
     Sin,
     SmoothReLU,
@@ -110,6 +112,22 @@ def _visit_max(lowerer, node: Max):
     return fn
 
 
+@visitor(Min)
+def _visit_min(lowerer, node: Min):
+    """Lower element-wise minimum to JAX function."""
+    fs = [lowerer.lower(op) for op in node.operands]
+
+    def fn(x, u, node, params):
+        values = [f(x, u, node, params) for f in fs]
+        # jnp.minimum can take multiple arguments
+        result = values[0]
+        for val in values[1:]:
+            result = jnp.minimum(result, val)
+        return result
+
+    return fn
+
+
 @visitor(PositivePart)
 def _visit_pos(lowerer, node):
     """Lower positive part function to JAX.
@@ -165,8 +183,8 @@ def _visit_srelu(lowerer, node):
     f = lowerer.lower(node.x)
     c = node.c
     # smooth_relu(pos(x)) = sqrt(pos(x)^2 + c^2) - c ; here f already includes pos inside node
-    return (
-        lambda x, u, node, params: jnp.sqrt(jnp.maximum(f(x, u, node, params), 0.0) ** 2 + c**2) - c
+    return lambda x, u, node, params: (
+        jnp.sqrt(jnp.maximum(f(x, u, node, params), 0.0) ** 2 + c**2) - c
     )
 
 
@@ -221,6 +239,38 @@ def _visit_linterp(lowerer, node: Linterp):
         return jnp.interp(x_val, xp_val, fp_val)
 
     return linterp_fn
+
+
+@visitor(Cinterp)
+def _visit_cinterp(lowerer, node: Cinterp):
+    """Lower 1D cubic spline interpolation to JAX function.
+
+    Evaluates a precomputed cubic spline via segment lookup and Horner's
+    method.  Coefficients are baked in as constants; only the query point
+    is symbolic.  For queries outside the data range the boundary segment
+    polynomial is extrapolated.
+
+    Args:
+        node: Cinterp expression node with precomputed coeffs and xp_np.
+
+    Returns:
+        Function (x, u, node_idx, params) -> interpolated value(s)
+    """
+    f_x = lowerer.lower(node.x)
+    xp = jnp.asarray(node.xp_np)
+    coeffs = jnp.asarray(node.coeffs)  # (4, n_seg)
+
+    def cinterp_fn(x, u, node_idx, params):
+        x_val = f_x(x, u, node_idx, params)
+        # Segment index (clamp to valid range)
+        idx = jnp.searchsorted(xp, x_val, side="right") - 1
+        idx = jnp.clip(idx, 0, xp.shape[0] - 2)
+        t = x_val - xp[idx]
+        # Horner evaluation: c0 + t*(c1 + t*(c2 + t*c3))
+        c = coeffs[:, idx]
+        return c[0] + t * (c[1] + t * (c[2] + t * c[3]))
+
+    return cinterp_fn
 
 
 @visitor(Bilerp)

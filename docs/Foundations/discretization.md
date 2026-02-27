@@ -35,10 +35,10 @@ def dVdt(self,
         V = V.reshape(-1, self.i5)
 
         # Compute the interpolation factor based on the discretization type
-        if self.params.dis.dis_type == 'ZOH':
+        if self.dis_type == 'ZOH':
             beta = 0.
-        elif self.params.dis.dis_type == 'FOH':
-            beta = (tau) * self.params.scp.n
+        elif self.dis_type == 'FOH':
+            beta = (tau) * self.params.sim.n
         alpha = 1 - beta
 
         # Interpolate the control input
