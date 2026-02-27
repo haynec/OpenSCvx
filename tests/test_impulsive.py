@@ -39,7 +39,7 @@ def test_hohmann_transfer():
     # Disable printing for cleaner test output
     if hasattr(problem.settings, "dev"):
         problem.settings.dev.printing = False
-    
+
     # Increase propagation dt to speedup post-processing
     problem.settings.prp.dt = 100.0
 
