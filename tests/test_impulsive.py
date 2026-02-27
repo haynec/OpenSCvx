@@ -32,13 +32,16 @@ a_transfer = 0.5 * (r1 + r2)
 T_transfer = np.pi * np.sqrt(a_transfer**3 / mu)
 
 
-def test_hohmann_impulsive():
+def test_hohmann_transfer():
     """Check that optimized impulsive Δv matches analytical Hohmann Δv."""
     from examples.spacecraft.hohmann_impulsive import problem
 
     # Disable printing for cleaner test output
     if hasattr(problem.settings, "dev"):
         problem.settings.dev.printing = False
+    
+    # Increase propagation dt to speedup post-processing
+    problem.settings.prp.dt = 100.0
 
     # Run optimization
     problem.initialize()
@@ -68,7 +71,7 @@ def test_hohmann_impulsive():
     jax.clear_caches()
 
 
-def test_hohmann_impulsive_byof():
+def test_hohmann_transfer_byof():
     """Check that optimized impulsive Δv matches analytical Hohmann Δv using the byof interface."""
     import jax.numpy as jnp
 
@@ -176,6 +179,9 @@ def test_hohmann_impulsive_byof():
     )
 
     problem.discretizer.ode_solver = "Dopri8"
+
+    # Increase propagation dt to speedup post-processing
+    problem.settings.prp.dt = 100.0
 
     problem.initialize()
     result = problem.solve()
