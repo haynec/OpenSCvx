@@ -2,7 +2,14 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from openscvx.symbolic.expr import Add, Concat, Constant, Control, CrossNodeConstraint, State
+from openscvx.symbolic.expr import (
+    Add,
+    Concat,
+    Constant,
+    Control,
+    CrossNodeConstraint,
+    State,
+)
 from openscvx.symbolic.preprocessing import (
     collect_and_assign_slices,
     convert_dynamics_dict_to_expr,
@@ -550,7 +557,9 @@ def test_convert_dynamics_dict_to_expr_basic():
         "y": y_dyn,
     }
 
-    dynamics_converted, dynamics_concat = convert_dynamics_dict_to_expr(dynamics, states)
+    dynamics_converted, dynamics_concat = convert_dynamics_dict_to_expr(
+        dynamics, states
+    )
 
     # Check that dict is returned with same expressions
     assert len(dynamics_converted) == 2
@@ -575,7 +584,9 @@ def test_convert_dynamics_dict_to_expr_scalar_conversion():
         "y": Constant(2.0),  # Already an Expr
     }
 
-    dynamics_converted, dynamics_concat = convert_dynamics_dict_to_expr(dynamics, states)
+    dynamics_converted, dynamics_concat = convert_dynamics_dict_to_expr(
+        dynamics, states
+    )
 
     # Check that scalar was converted to Constant
     assert isinstance(dynamics_converted["x"], Constant)
@@ -601,7 +612,9 @@ def test_convert_dynamics_dict_to_expr_ordering():
         "b": Constant(2.0),
     }
 
-    dynamics_converted, dynamics_concat = convert_dynamics_dict_to_expr(dynamics, states)
+    dynamics_converted, dynamics_concat = convert_dynamics_dict_to_expr(
+        dynamics, states
+    )
 
     # Concatenation should follow states order: a, b, c
     assert isinstance(dynamics_concat, Concat)
@@ -1010,7 +1023,8 @@ def test_validate_input_types_bare_control(valid_inputs):
     u = Control("thrust", shape=(2,))
 
     with pytest.raises(
-        TypeError, match=r"'controls' must be a list.*Control.*Hint.*controls=\[thrust\]"
+        TypeError,
+        match=r"'controls' must be a list.*Control.*Hint.*controls=\[thrust\]",
     ):
         validate_input_types(dynamics, states, u, constraints, N, time)
 
@@ -1062,7 +1076,9 @@ def test_validate_input_types_constraints_invalid_element(valid_inputs):
     """Test that non-constraint elements raise TypeError."""
     dynamics, states, controls, _, N, time = valid_inputs
 
-    with pytest.raises(TypeError, match=r"constraints\[0\] must be a Constraint.*got int"):
+    with pytest.raises(
+        TypeError, match=r"constraints\[0\] must be a Constraint.*got int"
+    ):
         validate_input_types(dynamics, states, controls, [42], N, time)
 
 
@@ -1071,7 +1087,9 @@ def test_validate_input_types_constraints_mixed_valid_and_invalid(valid_inputs):
     dynamics, states, controls, _, N, time = valid_inputs
     x = State("x", shape=(3,))
 
-    with pytest.raises(TypeError, match=r"constraints\[1\] must be a Constraint.*got str"):
+    with pytest.raises(
+        TypeError, match=r"constraints\[1\] must be a Constraint.*got str"
+    ):
         validate_input_types(dynamics, states, controls, [x <= 5, "bad"], N, time)
 
 
@@ -1145,7 +1163,12 @@ def test_validate_input_types_impulsive_with_dynamics_discrete_dict_passes():
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
 
     validate_input_types(
-        dynamics, [x], [u_impulsive], constraints, 20, time,
+        dynamics,
+        [x],
+        [u_impulsive],
+        constraints,
+        20,
+        time,
         dynamics_discrete=dynamics_discrete,
         byof=None,
     )
@@ -1158,12 +1181,19 @@ def test_validate_input_types_impulsive_with_byof_dynamics_discrete_passes():
     x = State("x", shape=(2,))
     u_impulsive = Control("dv", shape=(1,), impulsive=True)
     dynamics = {"x": x}
-    byof = {"dynamics_discrete": {"x": lambda x, u, node, params: x}}  # placeholder for validation
+    byof = {
+        "dynamics_discrete": {"x": lambda x, u, node, params: x}
+    }  # placeholder for validation
     constraints = [x <= 5]
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
 
     validate_input_types(
-        dynamics, [x], [u_impulsive], constraints, 20, time,
+        dynamics,
+        [x],
+        [u_impulsive],
+        constraints,
+        20,
+        time,
         dynamics_discrete=None,
         byof=byof,
     )
@@ -1208,7 +1238,12 @@ def test_validate_input_types_dynamics_discrete_must_be_dict():
 
     with pytest.raises(TypeError, match="'dynamics_discrete' must be a dict"):
         validate_input_types(
-            dynamics, [x], [u_impulsive], constraints, 20, time,
+            dynamics,
+            [x],
+            [u_impulsive],
+            constraints,
+            20,
+            time,
             dynamics_discrete=[("x", x)],  # wrong type
             byof=None,
         )
@@ -1289,14 +1324,18 @@ def test_validate_propagation_input_types_both_valid():
 
 def test_validate_propagation_input_types_only_dynamics():
     """Test that providing dynamics_prop without states_prop raises ValueError."""
-    with pytest.raises(ValueError, match="'dynamics_prop' was provided but 'states_prop' was not"):
+    with pytest.raises(
+        ValueError, match="'dynamics_prop' was provided but 'states_prop' was not"
+    ):
         validate_propagation_input_types({"distance": 1.0}, None)
 
 
 def test_validate_propagation_input_types_only_states():
     """Test that providing states_prop without dynamics_prop raises ValueError."""
     distance = State("distance", shape=(1,))
-    with pytest.raises(ValueError, match="'states_prop' was provided but 'dynamics_prop' was not"):
+    with pytest.raises(
+        ValueError, match="'states_prop' was provided but 'dynamics_prop' was not"
+    ):
         validate_propagation_input_types(None, [distance])
 
 

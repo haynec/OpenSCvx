@@ -33,10 +33,16 @@ class AugmentedLagrangian(AutotuningBase):
     """
 
     COLUMNS: List[Column] = [
-        Column("J_nonlin", "J_nonlin", 8, "{: .1e}", color_J_nonlin, Verbosity.STANDARD),
+        Column(
+            "J_nonlin", "J_nonlin", 8, "{: .1e}", color_J_nonlin, Verbosity.STANDARD
+        ),
         Column("J_lin", "J_lin", 8, "{: .1e}", color_J_nonlin, Verbosity.STANDARD),
-        Column("pred_reduction", "pred_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL),
-        Column("actual_reduction", "act_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL),
+        Column(
+            "pred_reduction", "pred_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL
+        ),
+        Column(
+            "actual_reduction", "act_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL
+        ),
         Column(
             "acceptance_ratio",
             "acc_ratio",
@@ -46,7 +52,9 @@ class AugmentedLagrangian(AutotuningBase):
             Verbosity.STANDARD,
         ),
         Column("lam_prox", "lam_prox", 8, "{: .1e}", min_verbosity=Verbosity.FULL),
-        Column("adaptive_state", "Adaptive", 16, "{}", color_adaptive_state, Verbosity.FULL),
+        Column(
+            "adaptive_state", "Adaptive", 16, "{}", color_adaptive_state, Verbosity.FULL
+        ),
     ]
 
     def __init__(
@@ -131,9 +139,15 @@ class AugmentedLagrangian(AutotuningBase):
         """
         # Calculate nonlinear penalty for current candidate
         candidate_x_prop = (
-            candidate.x_prop_plus[1:] if candidate.x_prop_plus is not None else candidate.x_prop
+            candidate.x_prop_plus[1:]
+            if candidate.x_prop_plus is not None
+            else candidate.x_prop
         )
-        nonlinear_cost, nonlinear_penalty, nodal_penalty = self.calculate_nonlinear_penalty(
+        (
+            nonlinear_cost,
+            nonlinear_penalty,
+            nodal_penalty,
+        ) = self.calculate_nonlinear_penalty(
             candidate_x_prop,
             candidate.x,
             candidate.u,
@@ -164,21 +178,25 @@ class AugmentedLagrangian(AutotuningBase):
                 if state_x_prop_plus is not None
                 else state.x_prop()
             )
-            prev_nonlinear_cost, prev_nonlinear_penalty, prev_nodal_penalty = (
-                self.calculate_nonlinear_penalty(
-                    state_x_prop,
-                    state.x,
-                    state.u,
-                    state.lam_vc,
-                    state.lam_vb,
-                    state.lam_cost,
-                    nodal_constraints,
-                    params,
-                    settings,
-                )
+            (
+                prev_nonlinear_cost,
+                prev_nonlinear_penalty,
+                prev_nodal_penalty,
+            ) = self.calculate_nonlinear_penalty(
+                state_x_prop,
+                state.x,
+                state.u,
+                state.lam_vc,
+                state.lam_vb,
+                state.lam_cost,
+                nodal_constraints,
+                params,
+                settings,
             )
 
-            J_nonlin_prev = prev_nonlinear_cost + prev_nonlinear_penalty + prev_nodal_penalty
+            J_nonlin_prev = (
+                prev_nonlinear_cost + prev_nonlinear_penalty + prev_nodal_penalty
+            )
 
             actual_reduction = J_nonlin_prev - candidate.J_nonlin
             predicted_reduction = J_nonlin_prev - candidate.J_lin

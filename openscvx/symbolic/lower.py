@@ -86,6 +86,7 @@ __all__ = [
     "lower_symbolic_problem",
 ]
 
+
 def lower(expr: Expr, lowerer: Any) -> Any:
     """Dispatch an expression node to the appropriate lowerer backend.
 
@@ -317,12 +318,18 @@ def create_cvxpy_variables(
             g_u_sp = _tile_sparsity_2d(u_mask, N)
         g.append(cp.Parameter(N, name="g_" + str(idx_ncvx)))
         grad_g_x.append(
-            cp.Parameter((N, n_states), name="grad_g_x_" + str(idx_ncvx), sparsity=g_x_sp)
+            cp.Parameter(
+                (N, n_states), name="grad_g_x_" + str(idx_ncvx), sparsity=g_x_sp
+            )
         )
         grad_g_u.append(
-            cp.Parameter((N, n_controls), name="grad_g_u_" + str(idx_ncvx), sparsity=g_u_sp)
+            cp.Parameter(
+                (N, n_controls), name="grad_g_u_" + str(idx_ncvx), sparsity=g_u_sp
+            )
         )
-        nu_vb.append(cp.Variable(N, name="nu_vb_" + str(idx_ncvx)))  # Virtual Control for VB
+        nu_vb.append(
+            cp.Variable(N, name="nu_vb_" + str(idx_ncvx))
+        )  # Virtual Control for VB
 
     # Linearized Cross-Node Constraints
     g_cross = []
@@ -332,7 +339,9 @@ def create_cvxpy_variables(
     for idx_cross in range(n_cross_node_constraints):
         # Cross-node constraints are single constraints with fixed node references
         g_cross.append(cp.Parameter(name="g_cross_" + str(idx_cross)))
-        grad_g_X_cross.append(cp.Parameter((N, n_states), name="grad_g_X_cross_" + str(idx_cross)))
+        grad_g_X_cross.append(
+            cp.Parameter((N, n_states), name="grad_g_X_cross_" + str(idx_cross))
+        )
         grad_g_U_cross.append(
             cp.Parameter((N, n_controls), name="grad_g_U_cross_" + str(idx_cross))
         )
@@ -443,7 +452,9 @@ def lower_cvxpy_constraints(
     from openscvx.symbolic.expr.state import State
     from openscvx.symbolic.lowerers.cvxpy import lower_to_cvxpy
 
-    all_constraints = list(constraints.nodal_convex) + list(constraints.cross_node_convex)
+    all_constraints = list(constraints.nodal_convex) + list(
+        constraints.cross_node_convex
+    )
 
     if not all_constraints:
         return [], {}
