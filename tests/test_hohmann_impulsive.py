@@ -8,12 +8,10 @@ against the analytical LEO → GEO Hohmann transfer from:
 
 from __future__ import annotations
 
-import numpy as np
 import jax
+import numpy as np
 
-from tests.hohmann_analytical import (
-    compute_hohmann_delta_v_and_mass
-)
+from tests.hohmann_analytical import compute_hohmann_delta_v_and_mass
 
 # Problem configuration (match Weber's LEO → GEO example)
 n = 15
@@ -148,9 +146,10 @@ def test_hohmann_impulsive_byof():
     byof: ByofSpec = {
         "dynamics_discrete": {
             "position": lambda x, u, node, params: x[position.slice],
-            "velocity": lambda x, u, node, params: x[velocity.slice]
-            + u[dv.slice],
-            "cost": lambda x, u, node, params: x[cost.slice] + jnp.linalg.norm(u[dv.slice] + eps_impulse),
+            "velocity": lambda x, u, node, params: x[velocity.slice] + u[dv.slice],
+            "cost": lambda x, u, node, params: (
+                x[cost.slice] + jnp.linalg.norm(u[dv.slice] + eps_impulse)
+            ),
         }
     }
 
