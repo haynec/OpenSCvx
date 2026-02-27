@@ -63,7 +63,7 @@ from .animated import (
     add_thrust_vector,
     add_viewcone,
 )
-from .orbits import add_circular_orbit, create_hohmann_transfer_server
+from .orbits import add_circular_orbit
 from .plotly_integration import (
     add_animated_plotly_marker,
     add_animated_plotly_vline,
@@ -97,7 +97,6 @@ __all__ = [
     "add_ghost_trajectory",
     # Orbit helpers
     "add_circular_orbit",
-    "create_hohmann_transfer_server",
     # Animated components
     "UpdateCallback",
     "add_animated_trail",

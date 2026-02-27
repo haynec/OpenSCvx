@@ -1,9 +1,8 @@
 """Hohmann transfer with impulsive delta-v controls (LEO → GEO).
 
 This example mirrors the Hohmann transfer calculation from
-`Orbital Mechanics & Astrodynamics` by Bryan Weber
-(`https://orbital-mechanics.space/orbital-maneuvers/hohmann-transfer-example.html`)
-and embeds it in a trajectory optimization problem that uses impulsive
+[_Orbital Mechanics & Astrodynamics_](https://orbital-mechanics.space/orbital-maneuvers/hohmann-transfer-example.html)
+by Bryan Weber and embeds it in a trajectory optimization problem that uses impulsive
 delta-v controls.
 
 We consider a planar, two-body Earth-centered problem:
@@ -45,8 +44,9 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 import openscvx as ox
+from examples.plotting_viser import create_hohmann_transfer_server
 from openscvx import Problem
-from openscvx.plotting import plot_controls, plot_states, plot_scp_iterations
+from openscvx.plotting import plot_controls, plot_scp_iterations, plot_states
 
 # Problem configuration (match Weber's LEO → GEO example)
 n = 15
@@ -124,8 +124,8 @@ r = ox.linalg.Norm(position)
 dynamics = {
     "position": velocity,
     "velocity": ox.Concat(
-        -mu * position[0] / r ** 3,
-        -mu * position[1] / r ** 3,
+        -mu * position[0] / r**3,
+        -mu * position[1] / r**3,
     ),
     "cost": 0.0,
 }
@@ -164,6 +164,7 @@ problem = Problem(
 )
 
 problem.discretizer.ode_solver = "Dopri8"
+problem.settings.prp.dt = 10.0
 
 plotting_dict = {}
 
@@ -180,9 +181,7 @@ if __name__ == "__main__":
     Delta_v_analytic = abs(v_geo - v_ta) + abs(v_tp - v_leo)
     I_sp = 450.5  # s
     goes_mass = 5192.0  # kg
-    Delta_m_analytic = goes_mass * (
-        1.0 - np.exp(-Delta_v_analytic / (I_sp * 9.81e-3))
-    )
+    Delta_m_analytic = goes_mass * (1.0 - np.exp(-Delta_v_analytic / (I_sp * 9.81e-3)))
 
     print(f"Analytic Hohmann Δv ≈ {Delta_v_analytic:.3f} km/s")
     print(f"Analytic propellant mass ≈ {Delta_m_analytic:.3f} kg")
@@ -197,9 +196,7 @@ if __name__ == "__main__":
     plot_controls(results).show()
     plot_scp_iterations(results).show()
 
-    from openscvx.plotting import viser
-
-    server = viser.create_hohmann_transfer_server(
+    server = create_hohmann_transfer_server(
         results,
         r1=r1,
         r2=r2,
