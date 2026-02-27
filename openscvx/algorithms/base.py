@@ -168,7 +168,7 @@ class CandidateIterate:
     V: Optional[np.ndarray] = None
     W: Optional[np.ndarray] = None
     x_prop: Optional[np.ndarray] = None
-    x_prop_pp: Optional[np.ndarray] = None
+    x_prop_plus: Optional[np.ndarray] = None
     D_d: Optional[np.ndarray] = None
     E_d: Optional[np.ndarray] = None
     VC: Optional[np.ndarray] = None
@@ -195,9 +195,9 @@ class DiscretizationResult:
     A_d: np.ndarray  # (N-1, n_x, n_x)
     B_d: np.ndarray  # (N-1, n_x, n_u)
     C_d: np.ndarray  # (N-1, n_x, n_u)
-    x_prop_pp: Optional[np.ndarray] = None  # (N, n_x), discrete dynamics on node states
-    D_d: Optional[np.ndarray] = None  # (N, n_x, n_x), d(x_prop_pp)/d(x_node)
-    E_d: Optional[np.ndarray] = None  # (N, n_x, n_u), d(x_prop_pp)/d(u_node)
+    x_prop_plus: Optional[np.ndarray] = None  # (N, n_x), discrete dynamics on node states
+    D_d: Optional[np.ndarray] = None  # (N, n_x, n_x), d(x_prop_plus)/d(x_node)
+    E_d: Optional[np.ndarray] = None  # (N, n_x, n_u), d(x_prop_plus)/d(u_node)
 
     @classmethod
     def from_V(
@@ -245,7 +245,7 @@ class DiscretizationResult:
             A_d=base.A_d,
             B_d=base.B_d,
             C_d=base.C_d,
-            x_prop_pp=W_final[:, :i1],
+            x_prop_plus=W_final[:, :i1],
             D_d=W_final[:, i1:i2].reshape(W_final.shape[0], n_x, n_x),
             E_d=W_final[:, i2:i3].reshape(W_final.shape[0], n_x, n_u),
         )
@@ -641,20 +641,20 @@ class AlgorithmState:
             return None
         return self.discretizations[index].C_d
 
-    def x_prop_pp(self, index: int = -1) -> np.ndarray:
+    def x_prop_plus(self, index: int = -1) -> np.ndarray:
         """Extract discrete dynamics evaluated at x_prop."""
         if not self.discretizations:
             return None
-        return self.discretizations[index].x_prop_pp
+        return self.discretizations[index].x_prop_plus
 
     def D_d(self, index: int = -1) -> np.ndarray:
-        """Extract Jacobian of x_prop_pp w.r.t. x_prop."""
+        """Extract Jacobian of x_prop_plus w.r.t. x_prop."""
         if not self.discretizations:
             return None
         return self.discretizations[index].D_d
 
     def E_d(self, index: int = -1) -> np.ndarray:
-        """Extract Jacobian of x_prop_pp w.r.t. discrete controls."""
+        """Extract Jacobian of x_prop_plus w.r.t. discrete controls."""
         if not self.discretizations:
             return None
         return self.discretizations[index].E_d

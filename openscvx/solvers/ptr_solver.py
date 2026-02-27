@@ -443,7 +443,7 @@ class PTRSolver(ConvexSolver):
         B_d = ocp_vars.B_d
         C_d = ocp_vars.C_d
         x_prop = ocp_vars.x_prop
-        x_prop_pp = ocp_vars.x_prop_pp
+        x_prop_plus = ocp_vars.x_prop_plus
         E_d = ocp_vars.E_d
         nu = ocp_vars.nu
         g = ocp_vars.g
@@ -510,7 +510,7 @@ class PTRSolver(ConvexSolver):
                 if has_impulsive:
                     constr += [
                         x_nonscaled[0][i]
-                        == x_prop_pp[0][i] + E_d[0][i, slice_imp] @ du_nonscaled[0][slice_imp]
+                        == x_prop_plus[0][i] + E_d[0][i, slice_imp] @ du_nonscaled[0][slice_imp]
                     ]
                 else:
                     constr += [x_nonscaled[0][i] == x_init[i]]  # Initial Boundary Conditions
@@ -545,7 +545,7 @@ class PTRSolver(ConvexSolver):
                 )
                 + (C_d[i - 1][:, slice_cont] @ du_nonscaled[i][slice_cont] if has_continuous else 0)
                 + (E_d[i][:, slice_imp] @ du_nonscaled[i][slice_imp] if has_impulsive else 0)
-                + (x_prop_pp[i] if has_impulsive else x_prop[i - 1])
+                + (x_prop_plus[i] if has_impulsive else x_prop[i - 1])
                 - c_x
             )
             + nu[i - 1]
@@ -629,7 +629,7 @@ class PTRSolver(ConvexSolver):
         B_d: np.ndarray,
         C_d: np.ndarray,
         x_prop: np.ndarray,
-        x_prop_pp: np.ndarray | None = None,
+        x_prop_plus: np.ndarray | None = None,
         D_d: np.ndarray | None = None,
         E_d: np.ndarray | None = None,
     ) -> None:
@@ -645,7 +645,7 @@ class PTRSolver(ConvexSolver):
             B_d: Discretized control Jacobian (current node), shape (N-1, n_states, n_controls)
             C_d: Discretized control Jacobian (next node), shape (N-1, n_states, n_controls)
             x_prop: Propagated state from continuous dynamics, shape (N-1, n_states)
-            x_prop_pp: Optional impulsive/discrete propagated state, shape (N, n_states)
+            x_prop_plus: Optional impulsive/discrete propagated state, shape (N, n_states)
             D_d: Optional impulsive/discrete Jacobian wrt state, shape (N, n_states, n_states)
             E_d: Optional impulsive/discrete Jacobian wrt control, shape (N, n_states, n_controls)
         """
@@ -683,8 +683,8 @@ class PTRSolver(ConvexSolver):
             self._set_param("x_prop", x_prop)
         elif self._ocp_vars.x_prop is not None:
             self._ocp_vars.x_prop.value = np.asarray(x_prop)
-        if x_prop_pp is not None and self._ocp_vars.x_prop_pp is not None:
-            self._ocp_vars.x_prop_pp.value = np.asarray(x_prop_pp)
+        if x_prop_plus is not None and self._ocp_vars.x_prop_plus is not None:
+            self._ocp_vars.x_prop_plus.value = np.asarray(x_prop_plus)
         if E_d is not None and self._ocp_vars.E_d is not None:
             self._ocp_vars.E_d.value = np.asarray(E_d)
 

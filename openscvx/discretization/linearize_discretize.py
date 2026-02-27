@@ -366,20 +366,20 @@ def calculate_impulsive_discretization(
     n_x = x_nodes.shape[1]
     n_u = u_nodes.shape[1]
 
-    x_prop_pp = state_dot_discrete(x_nodes, u_nodes, nodes, params)
+    x_prop_plus = state_dot_discrete(x_nodes, u_nodes, nodes, params)
     D_d = A_discrete(x_nodes, u_nodes, nodes, params)
     E_d = B_discrete(x_nodes, u_nodes, nodes, params)
 
     W_end = jnp.concatenate(
         (
-            x_prop_pp,
+            x_prop_plus,
             D_d.reshape(n_nodes, n_x * n_x),
             E_d.reshape(n_nodes, n_x * n_u),
         ),
         axis=1,
     )
     W = W_end.reshape(-1, 1)
-    return x_prop_pp, D_d, E_d, W
+    return x_prop_plus, D_d, E_d, W
 
 
 def get_impulsive_discretization_solver(dyn_discrete: "Dynamics") -> callable:

@@ -302,7 +302,7 @@ class PenalizedTrustRegion(Algorithm):
             params: Problem parameters dictionary (for warm-start)
             settings: Configuration object (for warm-start)
             discretization_solver_impulsive: Optional impulsive/discrete
-                discretization solver used to populate W/x_prop_pp/D_d/E_d.
+                discretization solver used to populate W/x_prop_plus/D_d/E_d.
         """
         # Store immutable infrastructure
         self._solver = solver
@@ -416,7 +416,7 @@ class PenalizedTrustRegion(Algorithm):
         u_candidate = candidate.u.astype(float)
         x0_prior = self._recover_prior_node_from_initial(settings, candidate.x[0])
         x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
-        x_prop_pp, D_d, E_d, W_multi_shoot = self._discretization_solver_impulsive.call(
+        x_prop_plus, D_d, E_d, W_multi_shoot = self._discretization_solver_impulsive.call(
             x_nodes_prior, u_candidate, params
         )
 
@@ -425,7 +425,7 @@ class PenalizedTrustRegion(Algorithm):
         candidate.V = V_multi_shoot.__array__()
         candidate.W = W_multi_shoot.__array__()
         candidate.x_prop = x_prop.__array__()
-        candidate.x_prop_pp = x_prop_pp.__array__()
+        candidate.x_prop_plus = x_prop_plus.__array__()
         candidate.D_d = D_d.__array__()
         candidate.E_d = E_d.__array__()
 
@@ -529,7 +529,7 @@ class PenalizedTrustRegion(Algorithm):
             B_d=state.B_d(),
             C_d=state.C_d(),
             x_prop=state.x_prop(),
-            x_prop_pp=state.x_prop_pp(),
+            x_prop_plus=state.x_prop_plus(),
             D_d=state.D_d(),
             E_d=state.E_d(),
         )
