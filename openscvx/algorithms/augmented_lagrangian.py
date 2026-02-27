@@ -159,7 +159,11 @@ class AugmentedLagrangian(AutotuningBase):
 
         if state.k > 1:
             state_x_prop_plus = state.x_prop_plus()
-            state_x_prop = state_x_prop_plus[1:] if state_x_prop_plus is not None else state.x_prop()
+            state_x_prop = (
+                state_x_prop_plus[1:]
+                if state_x_prop_plus is not None
+                else state.x_prop()
+            )
             prev_nonlinear_cost, prev_nonlinear_penalty, prev_nodal_penalty = (
                 self.calculate_nonlinear_penalty(
                     state_x_prop,

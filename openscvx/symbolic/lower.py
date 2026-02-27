@@ -72,6 +72,7 @@ from openscvx.lowered import (
 from openscvx.symbolic.constraint_set import ConstraintSet
 from openscvx.symbolic.expr import Expr, NodeReference, traverse
 from openscvx.symbolic.expr.control import Control
+from openscvx.symbolic.unified import unify_controls, unify_states
 
 if TYPE_CHECKING:
     from openscvx.solvers import ConvexSolver
@@ -84,7 +85,6 @@ __all__ = [
     "create_cvxpy_variables",
     "lower_symbolic_problem",
 ]
-from openscvx.symbolic.unified import unify_controls, unify_states
 
 def lower(expr: Expr, lowerer: Any) -> Any:
     """Dispatch an expression node to the appropriate lowerer backend.

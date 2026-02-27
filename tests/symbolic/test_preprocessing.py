@@ -1108,7 +1108,7 @@ def test_validate_input_types_time_not_time(valid_inputs):
 
 
 def test_validate_input_types_impulsive_requires_dynamics_discrete():
-    """When any control is impulsive, dynamics_discrete or byof['dynamics_discrete'] must be provided."""
+    """Impulsive controls require discrete dynamics via dynamics_discrete or byof."""
     from openscvx.symbolic.expr.time import Time
 
     x = State("x", shape=(2,))
@@ -1117,9 +1117,17 @@ def test_validate_input_types_impulsive_requires_dynamics_discrete():
     constraints = [x <= 5]
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
 
-    with pytest.raises(ValueError, match="'dynamics_discrete' must be provided when at least one control"):
+    with pytest.raises(
+        ValueError,
+        match="'dynamics_discrete' must be provided when at least one control",
+    ):
         validate_input_types(
-            dynamics, [x], [u_impulsive], constraints, 20, time,
+            dynamics,
+            [x],
+            [u_impulsive],
+            constraints,
+            20,
+            time,
             dynamics_discrete=None,
             byof=None,
         )
@@ -1172,9 +1180,17 @@ def test_validate_input_types_no_impulsive_with_dynamics_discrete_raises():
     constraints = [x <= 5]
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
 
-    with pytest.raises(ValueError, match="'dynamics_discrete' must not be provided when no control is marked as 'impulsive'"):
+    with pytest.raises(
+        ValueError,
+        match="'dynamics_discrete' must not be provided when no control is marked",
+    ):
         validate_input_types(
-            dynamics, [x], [u], constraints, 20, time,
+            dynamics,
+            [x],
+            [u],
+            constraints,
+            20,
+            time,
             dynamics_discrete=dynamics_discrete,
             byof=None,
         )
@@ -1205,8 +1221,8 @@ def test_validate_input_types_dynamics_discrete_must_be_dict():
 
 def test_preprocess_symbolic_problem_with_dynamics_discrete_builds():
     """Preprocessing pipeline accepts and processes dynamics_discrete for impulsive control."""
-    from openscvx.symbolic.expr.time import Time
     from openscvx.symbolic.builder import preprocess_symbolic_problem
+    from openscvx.symbolic.expr.time import Time
 
     N = 5
     p = State("position", shape=(1,))
