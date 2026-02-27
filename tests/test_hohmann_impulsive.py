@@ -148,8 +148,9 @@ def test_hohmann_impulsive_byof():
         "dynamics_discrete": {
             "position": lambda x, u, node, params: x[position.slice],
             "velocity": lambda x, u, node, params: x[velocity.slice] + u[dv.slice],
-            "cost": lambda x, u, node, params: x[cost.slice]
-            + jnp.linalg.norm(u[dv.slice] + eps_impulse),
+            "cost": lambda x, u, node, params: (
+                x[cost.slice] + jnp.linalg.norm(u[dv.slice] + eps_impulse)
+            ),
         }
     }
 
