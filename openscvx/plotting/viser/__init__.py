@@ -79,6 +79,7 @@ from .primitives import (
     add_ghost_trajectory,
     add_glideslope_cone,
 )
+from .orbits import add_circular_orbit, create_hohmann_transfer_server
 
 # SCP iteration visualization
 from .scp import (
@@ -101,6 +102,9 @@ __all__ = [
     "add_ellipsoid_obstacles",
     "add_glideslope_cone",
     "add_ghost_trajectory",
+    # Orbit helpers
+    "add_circular_orbit",
+    "create_hohmann_transfer_server",
     # Animated components
     "UpdateCallback",
     "add_animated_trail",
