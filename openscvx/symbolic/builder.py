@@ -242,9 +242,7 @@ def preprocess_symbolic_problem(
     if dynamics_discrete is None:
         byof_dd = byof.get("dynamics_discrete", {}) if byof else {}
         if byof_dd:
-            dynamics_discrete = {
-                state.name: state for state in states if state.name not in byof_dd
-            }
+            dynamics_discrete = {state.name: state for state in states if state.name not in byof_dd}
         else:
             dynamics_discrete = {state.name: state for state in states}
     else:
@@ -270,8 +268,8 @@ def preprocess_symbolic_problem(
         if state.name in byof_dynamics:
             dynamics[state.name] = Constant(np.zeros(state.shape))
 
-    # Inject identity placeholders for byof dynamics_discrete states (x_next = x for those components)
-    # These will be replaced with the actual byof functions at lowering time
+    # Inject identity placeholders for byof dynamics_discrete states (x_next = x for those
+    # components). These will be replaced with the actual byof functions at lowering time
     for state in states:
         if state.name in byof_dynamics_discrete:
             dynamics_discrete[state.name] = state

@@ -27,7 +27,8 @@ Function Signatures:
     - dynamics_discrete: ``(x, u, node, params) -> x_next_component``
         - Same arguments as dynamics
         - Returns: Next-state component for impulsive/discrete update (array matching state shape)
-        - Used when controls include impulsive (e.g. delta-V); can mix with symbolic dynamics_discrete.
+        - Used when controls include impulsive (e.g. delta-V).
+        - Can mix with symbolic dynamics_discrete.
 
     - nodal_constraints: ``(x, u, node, params) -> residual``
         - Same arguments as dynamics
