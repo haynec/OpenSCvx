@@ -52,6 +52,8 @@ constraints, etc.), see ``examples/plotting_viser.py``.
 """
 
 # Server setup
+from .server import compute_grid_size, compute_velocity_colors, create_server
+
 # Animated components
 from .animated import (
     UpdateCallback,
@@ -73,13 +75,13 @@ from .plotly_integration import (
 )
 
 # Static primitives
+from .orbits import add_circular_orbit, create_hohmann_transfer_server
 from .primitives import (
     add_ellipsoid_obstacles,
     add_gates,
     add_ghost_trajectory,
     add_glideslope_cone,
 )
-from .orbits import add_circular_orbit, create_hohmann_transfer_server
 
 # SCP iteration visualization
 from .scp import (
@@ -90,7 +92,6 @@ from .scp import (
     add_scp_propagation_lines,
     extract_propagation_positions,
 )
-from .server import compute_grid_size, compute_velocity_colors, create_server
 
 __all__ = [
     # Server
