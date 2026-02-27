@@ -8,10 +8,12 @@ against the analytical LEO → GEO Hohmann transfer from:
 
 from __future__ import annotations
 
-import jax
 import numpy as np
+import jax
 
-from tests.hohmann_analytical import compute_hohmann_delta_v_and_mass
+from tests.hohmann_analytical import (
+    compute_hohmann_delta_v_and_mass
+)
 
 # Problem configuration (match Weber's LEO → GEO example)
 n = 15
@@ -70,10 +72,10 @@ def test_hohmann_impulsive():
 
 def test_hohmann_impulsive_byof():
     """Check that optimized impulsive Δv matches analytical Hohmann Δv using the byof interface."""
+    import jax.numpy as jnp
     import openscvx as ox
     from openscvx import Problem
     from openscvx.expert import ByofSpec
-    import jax.numpy as jnp
 
     # States: planar position, planar velocity, and scalar accumulated cost
     position = ox.State("position", shape=(2,))
@@ -146,10 +148,9 @@ def test_hohmann_impulsive_byof():
     byof: ByofSpec = {
         "dynamics_discrete": {
             "position": lambda x, u, node, params: x[position.slice],
-            "velocity": lambda x, u, node, params: x[velocity.slice] + u[dv.slice],
-            "cost": lambda x, u, node, params: (
-                x[cost.slice] + jnp.linalg.norm(u[dv.slice] + eps_impulse)
-            ),
+            "velocity": lambda x, u, node, params: x[velocity.slice]
+            + u[dv.slice],
+            "cost": lambda x, u, node, params: x[cost.slice] + jnp.linalg.norm(u[dv.slice] + eps_impulse),
         }
     }
 

@@ -64,7 +64,6 @@ from .animated import (
     add_thrust_vector,
     add_viewcone,
 )
-from .orbits import add_circular_orbit, create_hohmann_transfer_server
 
 # Plotly integration
 from .plotly_integration import (
@@ -80,6 +79,7 @@ from .primitives import (
     add_ghost_trajectory,
     add_glideslope_cone,
 )
+from .orbits import add_circular_orbit, create_hohmann_transfer_server
 
 # SCP iteration visualization
 from .scp import (
