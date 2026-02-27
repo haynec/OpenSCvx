@@ -32,8 +32,7 @@ def hohmann_leo_to_geo_parameters():
     return mu, r_leo, r_geo
 
 
-def compute_hohmann_delta_v_and_mass(
-) -> dict:
+def compute_hohmann_delta_v_and_mass() -> dict:
     """Compute analytical Hohmann Δv and propellant mass for LEO → GEO."""
     mu, r_leo, r_geo = hohmann_leo_to_geo_parameters()
 

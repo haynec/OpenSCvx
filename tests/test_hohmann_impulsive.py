@@ -32,7 +32,6 @@ a_transfer = 0.5 * (r1 + r2)
 T_transfer = np.pi * np.sqrt(a_transfer**3 / mu)
 
 
-
 def test_hohmann_impulsive():
     """Check that optimized impulsive Δv matches analytical Hohmann Δv."""
     from examples.spacecraft.hohmann_impulsive import problem
@@ -67,6 +66,7 @@ def test_hohmann_impulsive():
 
     # Clean up JAX caches
     jax.clear_caches()
+
 
 def test_hohmann_impulsive_byof():
     """Check that optimized impulsive Δv matches analytical Hohmann Δv using the byof interface."""
@@ -134,8 +134,8 @@ def test_hohmann_impulsive_byof():
     dynamics = {
         "position": velocity,
         "velocity": ox.Concat(
-            -mu * position[0] / r ** 3,
-            -mu * position[1] / r ** 3,
+            -mu * position[0] / r**3,
+            -mu * position[1] / r**3,
         ),
         "cost": 0.0,
     }

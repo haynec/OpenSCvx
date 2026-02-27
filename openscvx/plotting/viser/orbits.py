@@ -150,4 +150,3 @@ def create_hohmann_transfer_server(
 
     add_animation_controls(server, traj_time, [update_trail, update_marker], loop=loop_animation)
     return server
-
