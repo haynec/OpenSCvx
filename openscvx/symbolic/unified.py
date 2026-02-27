@@ -269,11 +269,13 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     This function is the primary way to aggregate multiple symbolic Control objects into
     a single unified control vector for numerical optimization. It:
 
-    1. Sorts controls (user-defined first, augmented controls second)
-    2. Concatenates all control properties (bounds, guesses)
-    3. Assigns slices to each Control for extracting values from unified vector
-    4. Identifies special controls (time dilation)
-    5. Returns a UnifiedControl with all aggregated data
+    1. Reorders controls by actuation type: continuous first, impulsive second
+    2. Within each actuation-type group, places user-defined controls first and
+       augmented controls (names starting with ``"_"``) second
+    3. Concatenates all control properties (bounds, guesses)
+    4. Assigns slices to each Control for extracting values from unified vector
+    5. Identifies special controls (time dilation, impulsive masks/nodes)
+    6. Returns a UnifiedControl with all aggregated data
 
     Args:
         controls (List[Control]): List of Control objects to unify. Can include both
@@ -311,6 +313,25 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
             print(unified._true_dim)         # 6 (thrust + torque)
             print(unified.true.shape)        # (6,)
             print(unified.augmented.shape)   # (1,) - time dilation
+
+        With both impulsive and augmented controls::
+
+            thrust = ox.Control("thrust", shape=(2,))  # continuous, user-defined
+            time_dilation = ox.Control("_time_dilation", shape=(1,))  # continuous, augmented
+            delta_v = ox.Control("delta_v", shape=(2,), impulsive=True, nodes=[0, 20])
+            delta_v_aug = ox.Control("_delta_v_bias", shape=(1,), impulsive=True, nodes=[0, 20])
+
+            unified = unify_controls([time_dilation, delta_v_aug, thrust, delta_v], name="u")
+
+            # Unified ordering is:
+            # [continuous true, continuous augmented | impulsive true, impulsive augmented]
+            # [thrust, _time_dilation | delta_v, _delta_v_bias]
+            print(thrust._slice)         # slice(0, 2)
+            print(time_dilation._slice)  # slice(2, 3)
+            print(delta_v._slice)        # slice(3, 5)
+            print(delta_v_aug._slice)    # slice(5, 6)
+            print(unified.slice_continuous)  # slice(0, 3)
+            print(unified.slice_impulsive)   # slice(3, 6)
 
     Note:
         After unification, each Control object has its `_slice` attribute set,
