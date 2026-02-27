@@ -1,9 +1,8 @@
 """Hohmann transfer with impulsive delta-v controls (LEO → GEO).
 
 This example mirrors the Hohmann transfer calculation from
-`Orbital Mechanics & Astrodynamics` by Bryan Weber
-(`https://orbital-mechanics.space/orbital-maneuvers/hohmann-transfer-example.html`)
-and embeds it in a trajectory optimization problem that uses impulsive
+[_Orbital Mechanics & Astrodynamics_](https://orbital-mechanics.space/orbital-maneuvers/hohmann-transfer-example.html)
+by Bryan Weber and embeds it in a trajectory optimization problem that uses impulsive
 delta-v controls.
 
 We consider a planar, two-body Earth-centered problem:
@@ -165,6 +164,7 @@ problem = Problem(
 )
 
 problem.discretizer.ode_solver = "Dopri8"
+problem.settings.prp.dt = 10.0
 
 plotting_dict = {}
 

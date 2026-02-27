@@ -34,7 +34,7 @@ T_transfer = np.pi * np.sqrt(a_transfer**3 / mu)
 
 def test_hohmann_transfer():
     """Check that optimized impulsive Δv matches analytical Hohmann Δv."""
-    from examples.spacecraft.hohmann_impulsive import problem
+    from examples.spacecraft.hohmann_transfer import problem
 
     # Disable printing for cleaner test output
     if hasattr(problem.settings, "dev"):
