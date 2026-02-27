@@ -525,8 +525,6 @@ def augment_dynamics_with_ctcs(
                 penalty_groups[ctcs.idx] = []
             penalty_groups[ctcs.idx].append(ctcs)
 
-        len(penalty_groups)
-
         # Create augmented state expressions for each group and corresponding
         # augmented state variables. For discrete dynamics, preserve these states
         # by identity mapping across impulsive updates.

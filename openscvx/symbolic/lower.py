@@ -86,29 +86,6 @@ __all__ = [
 ]
 from openscvx.symbolic.unified import unify_controls, unify_states
 
-
-def _sync_control_slices_in_expr(expr: Expr, controls: Sequence[Any]) -> None:
-    """Sync Control node slices in an expression from canonical control objects.
-
-    This is needed when an expression tree contains copied Control nodes
-    (e.g., deep-copied propagation dynamics). After unification reassigns slices,
-    copied nodes may still carry stale `_slice` values.
-    """
-    from openscvx.symbolic.expr import traverse
-    from openscvx.symbolic.expr.control import Control
-
-    control_slices = {control.name: control._slice for control in controls}
-
-    def _sync(node: Expr) -> None:
-        if not isinstance(node, Control):
-            return
-        canonical_slice = control_slices.get(node.name)
-        if canonical_slice is not None:
-            node._slice = canonical_slice
-
-    traverse(expr, _sync)
-
-
 def lower(expr: Expr, lowerer: Any) -> Any:
     """Dispatch an expression node to the appropriate lowerer backend.
 

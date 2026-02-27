@@ -175,10 +175,8 @@ class Control(Variable):
         val = np.repeat(val, self.shape)
         if val.shape != self.shape:
             raise ValueError(
-                (
-                    f"Impulsive controls toggles shape {val.shape} ",
-                    f" does not match Control shape {self.shape}",
-                )
+                f"Impulsive controls toggles shape {val.shape} "
+                f"does not match Control shape {self.shape}"
             )
         self._is_impulsive = val
 
