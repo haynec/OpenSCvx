@@ -71,6 +71,7 @@ def test_hohmann_impulsive():
 def test_hohmann_impulsive_byof():
     """Check that optimized impulsive Δv matches analytical Hohmann Δv using the byof interface."""
     import jax.numpy as jnp
+
     import openscvx as ox
     from openscvx import Problem
     from openscvx.expert import ByofSpec
