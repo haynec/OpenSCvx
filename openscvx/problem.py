@@ -754,7 +754,9 @@ class Problem:
         self._discretization_solver = self._discretizer.get_solver(
             self._lowered.dynamics, self.settings
         )
-        self._discretization_solver_impulsive =  get_impulsive_discretization_solver(self._lowered.dynamics_discrete)
+        self._discretization_solver_impulsive = get_impulsive_discretization_solver(
+            self._lowered.dynamics_discrete
+        )
         self._propagation_solver = get_propagation_solver(
             self._compiled_dynamics_prop.f, self.settings, self._discretizer
         )

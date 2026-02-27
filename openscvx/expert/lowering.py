@@ -64,10 +64,12 @@ def apply_byof(
         N: Number of nodes in the trajectory
 
     Returns:
-        Tuple of (dynamics, dynamics_prop, dynamics_discrete, jax_constraints, x_unified, x_prop_unified)
+        Tuple of (dynamics, dynamics_prop, dynamics_discrete, jax_constraints,
+        x_unified, x_prop_unified)
 
     Example:
-        >>> dynamics, dynamics_prop, dynamics_discrete, constraints, x_unified, x_prop_unified = apply_byof(
+        >>> (dynamics, dynamics_prop, dynamics_discrete, constraints, x_unified,
+        ...     x_prop_unified) = apply_byof(
         ...     byof, dynamics, dynamics_prop, dynamics_discrete, jax_constraints,
         ...     x_unified, x_prop_unified, u_unified, states, states_prop, N
         ... )
