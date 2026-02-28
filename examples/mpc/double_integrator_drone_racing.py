@@ -61,7 +61,7 @@ initial_control = np.array([0.0, 0, 10])
 force_traj.guess = np.repeat(initial_control[np.newaxis, :], n_traj, axis=0)
 
 m = 1.0  # Mass of the drone
-g_const = -9.18
+g_const = -9.81
 
 ### Gate Parameters ###
 n_gates = 10
