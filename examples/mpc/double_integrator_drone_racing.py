@@ -372,15 +372,25 @@ if __name__ == "__main__":
         """Shift previous solution by one node for warm-starting."""
         dt = horizon_duration / (n_mpc - 1)
 
-        # Extrapolate a new final node
-        pos_last = nodes["position"][-1]
-        vel_last = nodes["velocity"][-1]
-        force_last = nodes["force"][-1]
+        # Extrapolate progress for the new final node from the reference path
         pr_last = nodes["progress_rate"][-1, 0]
-
-        ext_pos = pos_last + dt * vel_last
-        ext_vel = vel_last + dt * ((1 / m) * force_last + np.array([0, 0, g_const]))
         ext_prog = nodes["progress"][-1, 0] + dt * pr_last
+
+        ext_pos = np.array([
+            np.interp(ext_prog, s_data, px_data),
+            np.interp(ext_prog, s_data, py_data),
+            np.interp(ext_prog, s_data, pz_data),
+        ])
+        ext_tangent = np.array([
+            np.interp(ext_prog, s_data, tx_data),
+            np.interp(ext_prog, s_data, ty_data),
+            np.interp(ext_prog, s_data, tz_data),
+        ])
+        ext_vel = ext_tangent * pr_last
+
+        # Force: back out from velocity difference at the tail
+        vel_prev = nodes["velocity"][-1]
+        ext_force = m * (ext_vel - vel_prev) / dt - np.array([0, 0, g_const])
 
         shifted_progress = np.vstack([nodes["progress"][1:], [[ext_prog]]])
         wrap_offset = (nodes["progress"][1, 0] // total_arc_length) * total_arc_length
@@ -392,7 +402,7 @@ if __name__ == "__main__":
         lag_sum.guess = np.zeros((n_mpc, 1))
         contour_sum.guess = np.zeros((n_mpc, 1))
 
-        force.guess = np.vstack([nodes["force"][1:], [0.0, 0.0, 9.81]])
+        force.guess = np.vstack([nodes["force"][1:], [ext_force]])
         progress_rate.guess = np.vstack([nodes["progress_rate"][1:], nodes["progress_rate"][-1:]])
 
     def update_initial_conditions(nodes: dict):
