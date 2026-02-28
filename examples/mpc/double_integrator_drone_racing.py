@@ -392,7 +392,7 @@ if __name__ == "__main__":
         lag_sum.guess = np.zeros((n_mpc, 1))
         contour_sum.guess = np.zeros((n_mpc, 1))
 
-        force.guess = np.vstack([nodes["force"][1:], nodes["force"][-1:]])
+        force.guess = np.vstack([nodes["force"][1:], [0.0, 0.0, 9.81]])
         progress_rate.guess = np.vstack([nodes["progress_rate"][1:], nodes["progress_rate"][-1:]])
 
     def update_initial_conditions(nodes: dict):
