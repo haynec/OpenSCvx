@@ -24,6 +24,7 @@ from openscvx.plotting import plot_scp_iterations, plot_states
 from openscvx.plotting.viser import (
     add_animated_trail,
     add_animation_controls,
+    add_gates,
     add_ghost_trajectory,
     add_position_marker,
     compute_velocity_colors,
@@ -336,9 +337,7 @@ if __name__ == "__main__":
         ref_speed: float = ref_speeds.mean(),
     ):
         """Set guesses by interpolating the discrete reference path."""
-        arc_guess = np.linspace(
-            theta_start, theta_start + ref_speed * horizon_duration, n_mpc
-        )
+        arc_guess = np.linspace(theta_start, theta_start + ref_speed * horizon_duration, n_mpc)
 
         # Position: interpolate from reference sample nodes
         pos_guess = np.column_stack(
@@ -394,9 +393,7 @@ if __name__ == "__main__":
         contour_sum.guess = np.zeros((n_mpc, 1))
 
         force.guess = np.vstack([nodes["force"][1:], nodes["force"][-1:]])
-        progress_rate.guess = np.vstack(
-            [nodes["progress_rate"][1:], nodes["progress_rate"][-1:]]
-        )
+        progress_rate.guess = np.vstack([nodes["progress_rate"][1:], nodes["progress_rate"][-1:]])
 
     def update_initial_conditions(nodes: dict):
         """Set initial conditions from node 1 of previous solution (simulate one step)."""
@@ -481,35 +478,27 @@ if __name__ == "__main__":
     # --- Viser visualization ---
     server = create_server(actual_path)
 
-    # Reference trajectory from time-optimal solve (static)
+    # Reference trajectory from time-optimal solve (static, faint red)
     ref_colors = np.full((len(ref_pos), 3), fill_value=[255, 80, 80], dtype=np.uint8)
     server.scene.add_point_cloud(
         "/reference",
         points=ref_pos.astype(np.float32),
-        colors=(ref_colors * 0.5).astype(np.uint8),
-        point_size=0.5,
+        colors=(ref_colors * 0.3).astype(np.uint8),
+        point_size=0.05,
     )
 
-    # Gate markers
-    for i, verts in enumerate(vertices):
-        gate_loop = np.vstack([verts, verts[:1]])
-        gate_colors_arr = np.full((len(gate_loop), 3), fill_value=[255, 200, 50], dtype=np.uint8)
-        server.scene.add_point_cloud(
-            f"/gates/gate_{i}",
-            points=gate_loop.astype(np.float32),
-            colors=gate_colors_arr,
-            point_size=1.0,
-        )
+    # Gate markers (wireframe, consistent with non-MPC examples)
+    add_gates(server, vertices)
 
     # Ghost of all MPC horizons (faint background)
     all_horizon_points = np.concatenate(horizon_trajectories, axis=0)
-    add_ghost_trajectory(server, all_horizon_points, all_horizon_colors, point_size=0.1)
+    add_ghost_trajectory(server, all_horizon_points, all_horizon_colors)
 
     # Animated actual trail (grows as drone flies)
-    _, update_trail = add_animated_trail(server, actual_path, actual_colors, point_size=0.5)
+    _, update_trail = add_animated_trail(server, actual_path, actual_colors)
 
     # Position marker at current drone position
-    _, update_marker = add_position_marker(server, actual_path, radius=0.5)
+    _, update_marker = add_position_marker(server, actual_path)
 
     # Horizon rollout pop-in: shows the current planned horizon
     horizon_handle = server.scene.add_point_cloud(
