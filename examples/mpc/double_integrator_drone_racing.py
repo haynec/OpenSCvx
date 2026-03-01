@@ -421,8 +421,8 @@ if __name__ == "__main__":
         position.guess = np.vstack([nodes["position"][1:], [ext_pos]])
         velocity.guess = np.vstack([nodes["velocity"][1:], [ext_vel]])
         progress.guess = shifted_progress
-        lag_sum.guess = np.zeros((n_mpc, 1))
-        contour_sum.guess = np.zeros((n_mpc, 1))
+        lag_sum.guess = np.vstack([nodes["lag_sum"][1:], nodes["lag_sum"][-1:]])
+        contour_sum.guess = np.vstack([nodes["contour_sum"][1:], nodes["contour_sum"][-1:]])
 
         force.guess = np.vstack([nodes["force"][1:], [ext_force]])
         ext_speed = np.interp(ext_prog, s_data, speed_data)
