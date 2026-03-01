@@ -24,6 +24,7 @@ from openscvx.plotting import plot_scp_iterations, plot_states
 from openscvx.plotting.viser import (
     add_animated_trail,
     add_animation_controls,
+    add_ellipsoid_obstacles,
     add_gates,
     add_ghost_trajectory,
     add_position_marker,
@@ -147,11 +148,16 @@ problem_traj = Problem(
     algorithm={"ep_tr": 1e-3},
 )
 
+### Obstacle Parameters ###
+obstacle_center = np.array([76.2, -8.5, 22.762])
+obstacle_radius = 5.0
+### End Obstacle Parameters ###
+
 ###############################################################################
 # MPCC parameters
 ###############################################################################
-n_mpc = 10  # Horizon nodes
-horizon_duration = 1.0  # Horizon length [s]
+n_mpc = 11  # Horizon nodes
+horizon_duration = 2.0  # Horizon length [s]
 
 Q_LAG = 1e0  # Lag error weight (high -> accurate progress tracking)
 Q_CONTOUR = 1e-1  # Contour error weight
@@ -260,7 +266,7 @@ if __name__ == "__main__":
 
     contour_sum = ox.State("contour_sum", shape=(1,))  # Integrated contour cost
     contour_sum.min = np.array([0.0])
-    contour_sum.max = np.array([1e1])
+    contour_sum.max = np.array([1e2])
     contour_sum.initial = np.array([0.0])
     contour_sum.final = [ox.Minimize(0.0)]
 
@@ -315,6 +321,11 @@ if __name__ == "__main__":
     constraints = []
     for state in [position, velocity]:
         constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
+
+    # Obstacle avoidance: ||position - center|| >= radius
+    constraints.append(
+        ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obstacle_center))
+    )
 
     # --- Time ---
     t = ox.Time(
@@ -533,6 +544,13 @@ if __name__ == "__main__":
 
     # Gate markers (wireframe, consistent with non-MPC examples)
     add_gates(server, vertices)
+
+    # Obstacle (spherical, semi-transparent)
+    add_ellipsoid_obstacles(
+        server,
+        centers=[obstacle_center],
+        radii=[np.array([1/obstacle_radius, 1/obstacle_radius, 1/obstacle_radius])],
+    )
 
     # Ghost of all MPC horizons (faint background)
     all_horizon_points = np.concatenate(horizon_trajectories, axis=0)
