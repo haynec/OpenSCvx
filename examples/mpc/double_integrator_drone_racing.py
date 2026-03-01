@@ -322,8 +322,10 @@ if __name__ == "__main__":
         final=horizon_duration,
         min=0.0,
         max=horizon_duration,
-        uniform_time_grid=True,
+        # uniform_time_grid=True,
     )
+
+    constraints.append((t == horizon_duration/(n_mpc-1)).convex().at(1))
 
     # --- Problem ---
     problem_mpc = Problem(
@@ -425,6 +427,17 @@ if __name__ == "__main__":
         force.guess = np.vstack([nodes["force"][1:], [ext_force]])
         ext_speed = np.interp(ext_prog, s_data, speed_data)
         progress_rate.guess = np.vstack([nodes["progress_rate"][1:], [[ext_speed]]])
+
+        # Time: shift and renormalize so horizon starts at t=0
+        dtau = 1.0 / (n_mpc - 1)
+        ext_time = nodes["time"][-1, 0] + nodes["_time_dilation"][-1, 0] * dtau
+        shifted_time = np.vstack([nodes["time"][1:], [[ext_time]]])
+        shifted_time -= shifted_time[0]
+        t.guess = shifted_time
+
+        t._time_dilation_control.guess = np.vstack(
+            [nodes["_time_dilation"][1:], nodes["_time_dilation"][-1:]]
+        )
 
     def update_initial_conditions(nodes: dict):
         """Set initial conditions from node 1 of previous solution (simulate one step)."""
