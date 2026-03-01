@@ -340,7 +340,7 @@ def shift_guess(nodes: dict):
     lag_sum.guess = np.zeros((n_mpc, 1))
     contour_sum.guess = np.zeros((n_mpc, 1))
 
-    force.guess = np.vstack([nodes["force"][1:], nodes["force"][-1:]])
+    force.guess = np.vstack([nodes["force"][1:], [0, 0, 0]])
     progress_rate.guess = np.vstack([nodes["progress_rate"][1:], nodes["progress_rate"][-1:]])
 
 
@@ -366,7 +366,7 @@ if __name__ == "__main__":
     problem_mpc.initialize()
 
     max_steps = 100
-    dt_mpc = horizon_duration / n_mpc  # Time between MPC steps
+    dt_mpc = horizon_duration / (n_mpc - 1)  # Time between MPC steps
     node1_time = dt_mpc  # Time of node 1 in each horizon
 
     # --- Run MPC loop, collecting data ---

@@ -422,7 +422,7 @@ if __name__ == "__main__":
     problem_mpc.initialize()
 
     max_steps = 1000
-    dt_mpc = horizon_duration / n_mpc  # Time between MPC steps
+    dt_mpc = horizon_duration / (n_mpc-1)  # Time between MPC steps
     node1_time = dt_mpc  # Time of node 1 in each horizon
 
     # --- Run MPC loop, collecting data ---
