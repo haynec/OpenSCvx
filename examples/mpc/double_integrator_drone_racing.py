@@ -218,6 +218,8 @@ if __name__ == "__main__":
     fy_data = np.tile(ref_force[:-1, 1], len(tile_laps))
     fz_data = np.tile(ref_force[:-1, 2], len(tile_laps))
 
+    speed_data = np.tile(ref_speeds[:-1], len(tile_laps))
+
     # Tangent field: derivative of cubic spline, sampled at breakpoints
     _dpx = _CS(s_data, px_data)(s_data, 1)
     _dpy = _CS(s_data, py_data)(s_data, 1)
@@ -382,7 +384,7 @@ if __name__ == "__main__":
         lag_sum.guess = np.zeros((n_mpc, 1))
         contour_sum.guess = np.zeros((n_mpc, 1))
 
-        progress_rate.guess = np.full((n_mpc, 1), ref_speed)
+        progress_rate.guess = np.interp(arc_guess, s_data, speed_data).reshape(-1, 1)
 
     # =================================================================
     # Closed-loop simulation
@@ -421,7 +423,8 @@ if __name__ == "__main__":
         contour_sum.guess = np.zeros((n_mpc, 1))
 
         force.guess = np.vstack([nodes["force"][1:], [ext_force]])
-        progress_rate.guess = np.vstack([nodes["progress_rate"][1:], nodes["progress_rate"][-1:]])
+        ext_speed = np.interp(ext_prog, s_data, speed_data)
+        progress_rate.guess = np.vstack([nodes["progress_rate"][1:], [[ext_speed]]])
 
     def update_initial_conditions(nodes: dict):
         """Set initial conditions from node 1 of previous solution (simulate one step)."""
