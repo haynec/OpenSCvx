@@ -243,13 +243,13 @@ if __name__ == "__main__":
 
     lag_sum = ox.State("lag_sum", shape=(1,))  # Integrated lag cost
     lag_sum.min = np.array([0.0])
-    lag_sum.max = np.array([1e-2])
+    lag_sum.max = np.array([1e0])
     lag_sum.initial = np.array([0.0])
     lag_sum.final = [ox.Minimize(0.0)]
 
     contour_sum = ox.State("contour_sum", shape=(1,))  # Integrated contour cost
     contour_sum.min = np.array([0.0])
-    contour_sum.max = np.array([1e-2])
+    contour_sum.max = np.array([1e1])
     contour_sum.initial = np.array([0.0])
     contour_sum.final = [ox.Minimize(0.0)]
 
