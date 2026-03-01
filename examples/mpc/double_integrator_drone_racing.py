@@ -175,6 +175,7 @@ if __name__ == "__main__":
     # =================================================================
     ref_pos = results_traj.trajectory["position"]  # (N_dense, 3)
     ref_vel = results_traj.trajectory["velocity"]  # (N_dense, 3)
+    ref_force = results_traj.trajectory["force"]  # (N_dense, 3)
     ref_time = results_traj.trajectory["time"].flatten()
 
     # Arc-length parametrization via cumulative speed integral
@@ -208,6 +209,14 @@ if __name__ == "__main__":
     px_data = np.tile(px_lap, len(tile_laps))
     py_data = np.tile(py_lap, len(tile_laps))
     pz_data = np.tile(pz_lap, len(tile_laps))
+
+    vx_data = np.tile(ref_vel[:-1, 0], len(tile_laps))
+    vy_data = np.tile(ref_vel[:-1, 1], len(tile_laps))
+    vz_data = np.tile(ref_vel[:-1, 2], len(tile_laps))
+
+    fx_data = np.tile(ref_force[:-1, 0], len(tile_laps))
+    fy_data = np.tile(ref_force[:-1, 1], len(tile_laps))
+    fz_data = np.tile(ref_force[:-1, 2], len(tile_laps))
 
     # Tangent field: derivative of cubic spline, sampled at breakpoints
     _dpx = _CS(s_data, px_data)(s_data, 1)
@@ -261,7 +270,7 @@ if __name__ == "__main__":
 
     progress_rate = ox.Control("progress_rate", shape=(1,))  # d(theta_hat)/dt
     progress_rate.min = np.array([0.0])  # Forward only
-    progress_rate.max = np.array([10.0])  # High enough for racing speeds
+    progress_rate.max = np.array([100.0])  # High enough for racing speeds
     progress_rate.guess = np.full((n_mpc, 1), ref_speeds.mean())
 
     # --- Reference trajectory (discrete, via Cinterp) ---
@@ -349,15 +358,25 @@ if __name__ == "__main__":
         )
         position.guess = pos_guess
 
-        # Velocity: finite-difference of position guess
-        dt = horizon_duration / (n_mpc - 1)
-        vel_guess = np.gradient(pos_guess, dt, axis=0)
+        # Velocity: interpolate from reference trajectory
+        vel_guess = np.column_stack(
+            [
+                np.interp(arc_guess, s_data, vx_data),
+                np.interp(arc_guess, s_data, vy_data),
+                np.interp(arc_guess, s_data, vz_data),
+            ]
+        )
         velocity.guess = vel_guess
         velocity.initial = vel_guess[0]
 
-        # Force: finite-difference of velocity (mass * acceleration)
-        acc_guess = np.gradient(vel_guess, dt, axis=0)
-        force.guess = m * acc_guess
+        # Force: interpolate from reference trajectory
+        force.guess = np.column_stack(
+            [
+                np.interp(arc_guess, s_data, fx_data),
+                np.interp(arc_guess, s_data, fy_data),
+                np.interp(arc_guess, s_data, fz_data),
+            ]
+        )
 
         progress.guess = arc_guess.reshape(-1, 1)
         lag_sum.guess = np.zeros((n_mpc, 1))
@@ -370,27 +389,26 @@ if __name__ == "__main__":
     # =================================================================
     def shift_guess(nodes: dict):
         """Shift previous solution by one node for warm-starting."""
-        dt = horizon_duration / (n_mpc - 1)
-
         # Extrapolate progress for the new final node from the reference path
         pr_last = nodes["progress_rate"][-1, 0]
-        ext_prog = nodes["progress"][-1, 0] + dt * pr_last
+        ext_prog = nodes["progress"][-1, 0] + dt_mpc * pr_last
 
         ext_pos = np.array([
             np.interp(ext_prog, s_data, px_data),
             np.interp(ext_prog, s_data, py_data),
             np.interp(ext_prog, s_data, pz_data),
         ])
-        ext_tangent = np.array([
-            np.interp(ext_prog, s_data, tx_data),
-            np.interp(ext_prog, s_data, ty_data),
-            np.interp(ext_prog, s_data, tz_data),
+        ext_vel = np.array([
+            np.interp(ext_prog, s_data, vx_data),
+            np.interp(ext_prog, s_data, vy_data),
+            np.interp(ext_prog, s_data, vz_data),
         ])
-        ext_vel = ext_tangent * pr_last
 
-        # Force: back out from velocity difference at the tail
-        vel_prev = nodes["velocity"][-1]
-        ext_force = m * (ext_vel - vel_prev) / dt - np.array([0, 0, g_const])
+        ext_force = np.array([
+            np.interp(ext_prog, s_data, fx_data),
+            np.interp(ext_prog, s_data, fy_data),
+            np.interp(ext_prog, s_data, fz_data),
+        ])
 
         shifted_progress = np.vstack([nodes["progress"][1:], [[ext_prog]]])
         wrap_offset = (nodes["progress"][1, 0] // total_arc_length) * total_arc_length
