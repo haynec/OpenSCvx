@@ -323,9 +323,7 @@ if __name__ == "__main__":
         constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
     # Obstacle avoidance: ||position - center|| >= radius
-    constraints.append(
-        ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obstacle_center))
-    )
+    constraints.append(ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obstacle_center)))
 
     # --- Time ---
     t = ox.Time(
@@ -336,7 +334,7 @@ if __name__ == "__main__":
         # uniform_time_grid=True,
     )
 
-    constraints.append((t == horizon_duration/(n_mpc-1)).convex().at(1))
+    constraints.append((t == horizon_duration / (n_mpc - 1)).convex().at(1))
 
     # --- Problem ---
     problem_mpc = Problem(
@@ -408,22 +406,28 @@ if __name__ == "__main__":
         pr_last = nodes["progress_rate"][-1, 0]
         ext_prog = nodes["progress"][-1, 0] + dt_mpc * pr_last
 
-        ext_pos = np.array([
-            np.interp(ext_prog, s_data, px_data),
-            np.interp(ext_prog, s_data, py_data),
-            np.interp(ext_prog, s_data, pz_data),
-        ])
-        ext_vel = np.array([
-            np.interp(ext_prog, s_data, vx_data),
-            np.interp(ext_prog, s_data, vy_data),
-            np.interp(ext_prog, s_data, vz_data),
-        ])
+        ext_pos = np.array(
+            [
+                np.interp(ext_prog, s_data, px_data),
+                np.interp(ext_prog, s_data, py_data),
+                np.interp(ext_prog, s_data, pz_data),
+            ]
+        )
+        ext_vel = np.array(
+            [
+                np.interp(ext_prog, s_data, vx_data),
+                np.interp(ext_prog, s_data, vy_data),
+                np.interp(ext_prog, s_data, vz_data),
+            ]
+        )
 
-        ext_force = np.array([
-            np.interp(ext_prog, s_data, fx_data),
-            np.interp(ext_prog, s_data, fy_data),
-            np.interp(ext_prog, s_data, fz_data),
-        ])
+        ext_force = np.array(
+            [
+                np.interp(ext_prog, s_data, fx_data),
+                np.interp(ext_prog, s_data, fy_data),
+                np.interp(ext_prog, s_data, fz_data),
+            ]
+        )
 
         shifted_progress = np.vstack([nodes["progress"][1:], [[ext_prog]]])
         wrap_offset = (nodes["progress"][1, 0] // total_arc_length) * total_arc_length
@@ -467,7 +471,7 @@ if __name__ == "__main__":
     problem_mpc.initialize()
 
     max_steps = 1000
-    dt_mpc = horizon_duration / (n_mpc-1)  # Time between MPC steps
+    dt_mpc = horizon_duration / (n_mpc - 1)  # Time between MPC steps
     node1_time = dt_mpc  # Time of node 1 in each horizon
 
     # --- Run MPC loop, collecting data ---
@@ -549,7 +553,7 @@ if __name__ == "__main__":
     add_ellipsoid_obstacles(
         server,
         centers=[obstacle_center],
-        radii=[np.array([1/obstacle_radius, 1/obstacle_radius, 1/obstacle_radius])],
+        radii=[np.array([1 / obstacle_radius, 1 / obstacle_radius, 1 / obstacle_radius])],
     )
 
     # Ghost of all MPC horizons (faint background)
