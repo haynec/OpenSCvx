@@ -226,6 +226,9 @@ if __name__ == "__main__":
 
     speed_data = np.tile(ref_speeds[:-1], len(tile_laps))
 
+    lap_time = ref_time[-1]
+    t_data = np.concatenate([ref_time[:-1] + k * lap_time for k in tile_laps])
+
     # Tangent field: derivative of cubic spline, sampled at breakpoints
     _dpx = _CS(s_data, px_data)(s_data, 1)
     _dpy = _CS(s_data, py_data)(s_data, 1)
@@ -354,12 +357,11 @@ if __name__ == "__main__":
     # =================================================================
     # Initial guesses
     # =================================================================
-    def set_initial_guess(
-        theta_start: float = 0.0,
-        ref_speed: float = ref_speeds.mean(),
-    ):
-        """Set guesses by interpolating the discrete reference path."""
-        arc_guess = np.linspace(theta_start, theta_start + ref_speed * horizon_duration, n_mpc)
+    def set_initial_guess(theta_start: float = 0.0):
+        """Set guesses by interpolating the reference trajectory via time lookup."""
+        t_start = np.interp(theta_start, s_data, t_data)
+        t_guess = np.linspace(t_start, t_start + horizon_duration, n_mpc)
+        arc_guess = np.interp(t_guess, t_data, s_data)
 
         # Position: interpolate from reference sample nodes
         pos_guess = np.column_stack(
@@ -402,9 +404,9 @@ if __name__ == "__main__":
     # =================================================================
     def shift_guess(nodes: dict):
         """Shift previous solution by one node for warm-starting."""
-        # Extrapolate progress for the new final node from the reference path
-        pr_last = nodes["progress_rate"][-1, 0]
-        ext_prog = nodes["progress"][-1, 0] + dt_mpc * pr_last
+        # Horizon time is local (zeroed each solve), so map progress -> ref time first
+        t_last = np.interp(nodes["progress"][-1, 0], s_data, t_data)
+        ext_prog = np.interp(t_last + dt_mpc, t_data, s_data)
 
         ext_pos = np.array(
             [
