@@ -100,7 +100,9 @@ def propagate_trajectory_results(
         settings.sim.x_prop = original_x_prop
 
     # Calculate cost using utility function and metadata from settings
-    cost = calculate_cost_from_boundaries(x, settings.sim.x.initial_type, settings.sim.x.final_type)
+    cost = calculate_cost_from_boundaries(
+        x_full, settings.sim.x.initial_type, settings.sim.x.final_type
+    )
 
     # Calculate CTCS constraint violation
     ctcs_violation = x_full[-1, settings.sim.ctcs_slice_prop]
