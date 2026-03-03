@@ -14,15 +14,43 @@ if TYPE_CHECKING:
 
 
 class DiscretizeLinearize(Discretizer):
+    """Discretize-then-linearize by differentiating through the integrator.
+
+    Integrates the nonlinear dynamics over a batch of trajectory segments,
+    then computes Jacobians of the integrated solutions (dF/dx, dF/du) via
+    JAX forward-mode to produce discrete-time Jacobians.
+
+    Supports ZOH (zero-order hold) and FOH (first-order hold) control
+    interpolation between nodes.
+
+    Use this integration scheme when the nonlinear dynamics are challenging
+    (e.g. stiff/sensitive, badly scaled, or with long time horizons) or when
+    tight tolerances are desired.
+
+    Args:
+        dis_type: Control hold type. ``"FOH"`` (first-order hold) or
+            ``"ZOH"`` (zero-order hold). Defaults to ``"FOH"``.
+        ode_solver: Diffrax solver name. Any solver from
+            `Diffrax <https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/>`_
+            is valid. Defaults to ``"Tsit5"``.
+        custom_integrator: Use the built-in fixed-step RK45 integrator
+            instead of Diffrax. Faster but less robust. Defaults to ``False``.
+        atol: Absolute tolerance for the ODE solver. Defaults to ``1e-3``.
+        rtol: Relative tolerance for the ODE solver. Defaults to ``1e-6``.
+        vectorize_last: Integrate and linearize the dynamics before batching
+            across nodes. Slower but more accurate. Defaults to ``False``.
+        args: Extra keyword arguments forwarded to
+            :func:`diffrax.diffeqsolve`. Defaults to ``{}``.
+    """
 
     def __init__(
         self,
         dis_type: str = "FOH",
-        ode_solver: str = "Dopri8",
+        ode_solver: str = "Tsit5",
         custom_integrator: bool = False,
         atol: float = 1e-3,
         rtol: float = 1e-6,
-        do_discretize_then_vectorize=False,
+        vectorize_last = False,
         args: Optional[dict] = None,
     ):
         self.dis_type = dis_type
@@ -30,7 +58,7 @@ class DiscretizeLinearize(Discretizer):
         self.custom_integrator = custom_integrator
         self.atol = atol
         self.rtol = rtol
-        self.do_discretize_then_vectorize = do_discretize_then_vectorize
+        self.vectorize_last = vectorize_last
         self.args = args | {"adjoint": dfx.ForwardMode()} if args is not None else {"adjoint": dfx.ForwardMode()}
 
     def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
@@ -49,7 +77,7 @@ class DiscretizeLinearize(Discretizer):
             Callable ``(x, u, params) -> (A_d, B_d, C_d, x_prop, V)``.
         """
 
-        discretization = get_discretize_then_vectorize_solver if self.do_discretize_then_vectorize else get_vectorize_then_discretize_solver
+        discretization = get_discretize_then_vectorize_solver if self.vectorize_last else get_vectorize_then_discretize_solver
 
         # Capture discretizer settings for the returned closure
         discretizer = self
@@ -106,21 +134,23 @@ def get_discretize_then_vectorize_solver(
     ) -> jnp.ndarray:
 
         if discretizer.custom_integrator:
-            sol = solve_ivp_rk45(single_dxdt,
-                                 1.0 / (N - 1),
-                                 x,
-                                 args=(u_cur, u_next, node, params),
-                                 is_not_compiled=settings.dev.debug,
+            sol = solve_ivp_rk45(
+                single_dxdt,
+                1.0 / (N - 1),
+                x,
+                args=(u_cur, u_next, node, params),
+                is_not_compiled=settings.dev.debug,
             )
         else:
-            sol = solve_ivp_diffrax(single_dxdt,
-                                    1.0 / (N - 1),
-                                    x,
-                                    solver_name=discretizer.ode_solver,
-                                    rtol=discretizer.rtol,
-                                    atol=discretizer.atol,
-                                    args=(u_cur, u_next, node, params),
-                                    extra_kwargs=discretizer.args,
+            sol = solve_ivp_diffrax(
+                single_dxdt,
+                1.0 / (N - 1),
+                x,
+                solver_name=discretizer.ode_solver,
+                rtol=discretizer.rtol,
+                atol=discretizer.atol,
+                args=(u_cur, u_next, node, params),
+                extra_kwargs=discretizer.args,
             )
         return sol[-1]
 
@@ -131,12 +161,12 @@ def get_discretize_then_vectorize_solver(
     nodes = jnp.arange(0, N - 1)
 
     def solver(x, u, params):
-        A_bar, B_bar, C_bar = discretize_then_linearize_then_vectorize(x[:-1], u[:-1], u[1:], nodes, params)
+        A_d, B_d, C_d = discretize_then_linearize_then_vectorize(x[:-1], u[:-1], u[1:], nodes, params)
         x_prop = discretize_then_vectorize(x[:-1], u[:-1], u[1:], nodes, params)
 
-        V_multi = jnp.concatenate([x_prop, A_bar.reshape(N-1, n_x*n_x), B_bar.reshape(N-1, n_x*n_u), C_bar.reshape(N-1, n_x*n_u)], axis=1).reshape(-1, 1)
+        V_multi = jnp.concatenate([x_prop, A_d.reshape(N-1, n_x*n_x), B_d.reshape(N-1, n_x*n_u), C_d.reshape(N-1, n_x*n_u)], axis=1).reshape(-1, 1)  # TODO: return full nonlinear propagation of state
 
-        return A_bar, B_bar, C_bar, x_prop, V_multi
+        return A_d, B_d, C_d, x_prop, V_multi
 
     return solver
 
@@ -168,7 +198,7 @@ def get_vectorize_then_discretize_solver(
         elif discretizer.dis_type == "FOH":
             beta = (tau) * N
 
-        x = x.reshape(N - 1, -1)
+        x = x.reshape(N - 1, n_x)
 
         # Interpolate the control input
         u = u_cur + beta * (u_next - u_cur)
@@ -184,23 +214,44 @@ def get_vectorize_then_discretize_solver(
         u_next: np.ndarray,
         params: dict,
     ) -> jnp.ndarray:
+        """
+        Propagates all segments of a multiple-shooting trajectory.
+
+        Parameters:
+            x (jax.Array, shape (N-1, n_x)): Reference value of the vehicle state at the start of each
+                segment. Here N is the number of nodes and n_x is the number of states.
+            u_cur (jax.Array, shape (N-1, n_u)): Reference value of the vehicle control at the start of
+                each segment. Here m is the number of controls.
+            u_next (jax.Array, shape(N-1, n_u)): Reference value of the vehicle control at the end of
+                each segment.
+            settings:
+            params:
+            discretize_then_vectorize (bool, optional): If True, segments are propagated individually,
+                which is slower but more accurate. If False (default), segments are stacked and
+                propagated with one integrator, which is faster but less accurate.
+
+        Returns:
+            x_prop (jax.Array, shape (N-1, n_x)): Stack of end states of each propagated segment.
+        """
 
         if discretizer.custom_integrator:
-            sol = solve_ivp_rk45(multiple_dxdt,
-                                 1.0 / (N - 1),
-                                 x.flatten(),
-                                 args=(u_cur, u_next, params),
-                                 is_not_compiled=settings.dev.debug,
+            sol = solve_ivp_rk45(
+                multiple_dxdt,
+                1.0 / (N - 1),
+                x.flatten(),
+                args=(u_cur, u_next, params),
+                is_not_compiled=settings.dev.debug,
             )
         else:
-            sol = solve_ivp_diffrax(multiple_dxdt,
-                                    1.0 / (N - 1),
-                                    x.flatten(),
-                                    solver_name=discretizer.ode_solver,
-                                    rtol=discretizer.rtol,
-                                    atol=discretizer.atol,
-                                    args=(u_cur, u_next, params),
-                                    extra_kwargs=discretizer.args,
+            sol = solve_ivp_diffrax(
+                multiple_dxdt,
+                1.0 / (N - 1),
+                x.flatten(),
+                solver_name=discretizer.ode_solver,
+                rtol=discretizer.rtol,
+                atol=discretizer.atol,
+                args=(u_cur, u_next, params),
+                extra_kwargs=discretizer.args,
             )
         return sol[-1].reshape(N - 1, -1)
 
@@ -223,18 +274,18 @@ def get_vectorize_then_discretize_solver(
         x_tangents = jnp.tile(jnp.eye(n_x)[:, None, :], (1, N - 1, 1))
         u_tangents = jnp.tile(jnp.eye(n_u)[:, None, :], (1, N - 1, 1))
 
-        A_bar = multiple_shot_jvp_wrt_x(x_tangents)
-        B_bar = multiple_shot_jvp_wrt_u_cur(u_tangents)
-        C_bar = multiple_shot_jvp_wrt_u_next(u_tangents)
+        A_d = multiple_shot_jvp_wrt_x(x_tangents)
+        B_d = multiple_shot_jvp_wrt_u_cur(u_tangents)
+        C_d = multiple_shot_jvp_wrt_u_next(u_tangents)
 
-        return A_bar, B_bar, C_bar
+        return A_d, B_d, C_d
 
     def solver(x, u, params):
-        A_bar, B_bar, C_bar = vectorize_and_discretize_then_linearize(x[:-1], u[:-1], u[1:], params)
+        A_d, B_d, C_d = vectorize_and_discretize_then_linearize(x[:-1], u[:-1], u[1:], params)
         x_prop = vectorize_then_discretize(x[:-1], u[:-1], u[1:], params)
 
-        V_multi = jnp.concatenate([x_prop, A_bar.reshape(N-1, n_x*n_x), B_bar.reshape(N-1, n_x*n_u), C_bar.reshape(N-1, n_x*n_u)], axis=1).reshape(-1, 1)
+        V_multi = jnp.concatenate([x_prop, A_d.reshape(N-1, n_x*n_x), B_d.reshape(N-1, n_x*n_u), C_d.reshape(N-1, n_x*n_u)], axis=1).reshape(-1, 1)  # TODO: return full nonlinear propagation of state
 
-        return A_bar, B_bar, C_bar, x_prop, V_multi
+        return A_d, B_d, C_d, x_prop, V_multi
 
     return solver
