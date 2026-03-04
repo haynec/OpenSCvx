@@ -99,8 +99,6 @@ time = ox.Time(
     final=ox.Minimize(total_time),
     min=0.0,
     max=5.0,
-    # time_dilation_min=0.02 * total_time,
-    # time_dilation_max=3.0 * total_time,
     uniform_time_grid=True,
 )
 
