@@ -24,10 +24,11 @@ sys.path.append(grandparent_dir)
 
 import openscvx as ox
 from examples.plotting import plot_dubins_car, plot_velocity_vs_distance
+from openscvx.plotting import plot_states, plot_controls
 from openscvx import Problem
 
 n = 8
-total_time = 3.0  # Total simulation time
+total_time = 0.8  # Total simulation time
 
 # Define state components
 position = ox.State("position", shape=(2,))  # 2D position [x, y]
@@ -98,7 +99,7 @@ time = ox.Time(
     initial=0.0,
     final=ox.Minimize(total_time),
     min=0.0,
-    max=20,
+    max=5.0,
     uniform_time_grid=True,
 )
 
@@ -109,7 +110,6 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    licq_max=1e-6,
     algorithm={"lam_vc": 1e3},
 )
 
@@ -132,6 +132,8 @@ if __name__ == "__main__":
 
     # Plot trajectory
     plot_dubins_car(results, problem.settings).show()
+    plot_states(results).show()
+    plot_controls(results).show()
 
     # Plot velocity vs distance to obstacle
     plot_velocity_vs_distance(results, problem.settings).show()

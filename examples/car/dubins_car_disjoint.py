@@ -16,6 +16,8 @@ import sys
 import jax.numpy as jnp
 import numpy as np
 
+from openscvx.plotting import plot_states, plot_controls, plot_scp_iterations, plot_virtual_control_heatmap
+
 # Add grandparent directory to path to import examples.plotting
 current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
@@ -33,8 +35,7 @@ position = ox.State("position", shape=(2,))  # 2D position [x, y]
 position.min = np.array([-5.0, -5.0])
 position.max = np.array([5.0, 5.0])
 position.initial = np.array([0, -2])
-position.final = [ox.Free(0), ox.Free(-1.5)]
-position.guess = np.linspace(position.initial, [0, 2], n)
+position.final = [ox.Free(0.0), ox.Free(-1.75)]
 
 theta = ox.State("theta", shape=(1,))  # Heading angle
 theta.min = np.array([-2 * jnp.pi])
@@ -46,7 +47,7 @@ theta.final = [("free", 0)]
 speed = ox.Control("speed", shape=(1,))  # Forward speed
 speed.min = np.array([0])
 speed.max = np.array([10])
-speed.guess = np.zeros((n, 1))
+speed.guess = np.ones((n, 1)) * 10.0
 
 angular_rate = ox.Control("angular_rate", shape=(1,))  # Angular velocity
 angular_rate.min = np.array([-5])
@@ -92,7 +93,7 @@ for state in states:
     constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
 # Visit waypoint constraints using smooth max
-constraints.append(ox.ctcs(visit_wp_expr <= 0.0).over((3, 5)))
+constraints.append(ox.ctcs(visit_wp_expr <= 0.0, penalty="smooth_relu").over((3, 5)))
 
 constraints.append((ox.linalg.Norm(position.at(0) - position.at(-1)) <= 1.0).convex())
 
@@ -112,8 +113,9 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"lam_vc": 6e2},
+    algorithm={"autotuner": ox.AugmentedLagrangian()},
 )
+
 
 plotting_dict = {
     "wp1_radius": problem.parameters["wp1_radius"],
@@ -126,4 +128,9 @@ if __name__ == "__main__":
     results = problem.solve()
     results = problem.post_process()
     results.update(plotting_dict)
+    
+    plot_states(results).show()
+    plot_controls(results).show()
+    plot_scp_iterations(results).show()
+    plot_virtual_control_heatmap(results).show()
     plot_dubins_car_disjoint(results, problem.settings).show()

@@ -110,6 +110,28 @@ class AugmentedLagrangian(AutotuningBase):
         self.lam_cost_drop = lam_cost_drop
         self.lam_cost_relax = lam_cost_relax
 
+    def _update_virtual_control_weights(
+        self,
+        candidate: "CandidateIterate",
+        candidate_x_prop: np.ndarray,
+        settings: Config,
+        lam_vc: np.ndarray,
+        lam_prox: float,
+    ) -> np.ndarray:
+        """Update virtual control penalty weights from state violation.
+
+        Computes scaled violation nu = inv_S_x @ |x[1:] - x_prop|, then applies
+        two update rules: when nu > ep (linear in nu), else quadratic in nu.
+        Result is clipped to lam_vc_max.
+        """
+        nu = (settings.sim.inv_S_x @ abs(candidate.x[1:] - candidate_x_prop).T).T
+        mask = nu > self.ep
+        scale = self.eta_lambda * (1 / (2 * lam_prox))
+        case1 = lam_vc + nu * scale
+        case2 = lam_vc + (nu**2) / self.ep * scale
+        vc_new = np.where(mask, case1, case2)
+        return np.minimum(self.lam_vc_max, vc_new)
+
     def update_weights(
         self,
         state: "AlgorithmState",
@@ -205,35 +227,39 @@ class AugmentedLagrangian(AutotuningBase):
                 # Accept Solution with heigher weight
                 lam_prox_k1 = min(self.lam_prox_max, self.gamma_1 * lam_prox_k)
                 state.lam_prox_history.append(lam_prox_k1)
+
+                # Update virtual control weight matrix
+                candidate.lam_vc = self._update_virtual_control_weights(
+                    candidate, candidate_x_prop, settings, state.lam_vc, state.lam_prox
+                )
+                candidate.lam_vb = weights.lam_vb
+
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Higher"
             elif rho >= self.eta_1 and rho < self.eta_2:
                 # Accept Solution with constant weight
                 lam_prox_k1 = lam_prox_k
                 state.lam_prox_history.append(lam_prox_k1)
+
+                # Update virtual control weight matrix
+                candidate.lam_vc = self._update_virtual_control_weights(
+                    candidate, candidate_x_prop, settings, state.lam_vc, state.lam_prox
+                )
+                candidate.lam_vb = weights.lam_vb
+
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Constant"
             else:
                 # Accept Solution with lower weight
                 lam_prox_k1 = max(self.lam_prox_min, self.gamma_2 * lam_prox_k)
                 state.lam_prox_history.append(lam_prox_k1)
+                # Update virtual control weight matrix
+                candidate.lam_vc = self._update_virtual_control_weights(
+                    candidate, candidate_x_prop, settings, state.lam_vc, state.lam_prox
+                )
+                candidate.lam_vb = weights.lam_vb
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Lower"
-
-            # Update virtual control weight matrix
-            nu = (settings.sim.inv_S_x @ abs(candidate.x[1:] - candidate_x_prop).T).T
-
-            # Vectorized update: use mask to select between two update rules
-            mask = nu > self.ep
-            # when abs(nu) > ep
-            scale = self.eta_lambda * (1 / (2 * state.lam_prox))
-            case1 = state.lam_vc + nu * scale
-            # when abs(nu) <= ep
-            case2 = state.lam_vc + (nu**2) / self.ep * scale
-            vc_new = np.where(mask, case1, case2)
-            vc_new = np.minimum(self.lam_vc_max, vc_new)
-            candidate.lam_vc = vc_new
-            candidate.lam_vb = weights.lam_vb
 
         else:
             state.lam_prox_history.append(lam_prox_k)

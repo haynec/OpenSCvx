@@ -712,7 +712,7 @@ def test_parameters():
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e1},
+        algorithm={"lam_prox": 1e0, "lam_cost": 6e-1, "lam_vc": 1e1},
     )
 
     problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}

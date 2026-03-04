@@ -491,9 +491,15 @@ def test_update_scp_weights_initial_iteration(
     # Should accept solution
     assert len(algorithm_state.X) == initial_x_len + 1  # Original + accepted candidate
 
-    # Should set initial weights
+    # Should set initial weights on candidate and persist them into state histories
     assert candidate.lam_vc is not None
     assert candidate.lam_vb == weights.lam_vb
+    assert len(algorithm_state.lam_vc_history) == 2
+    assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
+    assert len(algorithm_state.lam_vb_history) == 2
+    assert algorithm_state.lam_vb_history[-1] == pytest.approx(candidate.lam_vb)
+    assert len(algorithm_state.lam_cost_history) == 2
+    assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
 
 def test_update_scp_weights_reject_higher(
@@ -626,88 +632,72 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
     candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
     candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
     candidate.u = np.array([[0.0], [0.5], [1.0]])
-    candidate.J_lin = 10.0
-
     params = {}
 
-    autotuner.update_weights(
+    # Design J_lin so the step is accepted (rho >= eta_1),
+    # then compute the expected virtual control update explicitly.
+    state_x_prop = algorithm_state.x_prop()
+    lam_vc_prev = algorithm_state.lam_vc
+    lam_vb_prev = algorithm_state.lam_vb
+    lam_cost_prev = algorithm_state.lam_cost
+
+    prev_cost, prev_penalty, prev_nodal = AutotuningBase.calculate_nonlinear_penalty(
+        state_x_prop,
+        algorithm_state.x,
+        algorithm_state.u,
+        lam_vc_prev,
+        lam_vb_prev,
+        lam_cost_prev,
+        empty_nodal_constraints,
+        params,
+        settings,
+    )
+    J_nonlin_prev = prev_cost + prev_penalty + prev_nodal
+
+    cand_cost, cand_penalty, cand_nodal = AutotuningBase.calculate_nonlinear_penalty(
+        candidate.x_prop,
+        candidate.x,
+        candidate.u,
+        lam_vc_prev,
+        lam_vb_prev,
+        lam_cost_prev,
+        empty_nodal_constraints,
+        params,
+        settings,
+    )
+    J_nonlin_cand = cand_cost + cand_penalty + cand_nodal
+
+    actual_reduction = J_nonlin_prev - J_nonlin_cand
+    # Choose J_lin so predicted_reduction = actual_reduction / 2 -> rho = 2 > eta_2
+    predicted_reduction = actual_reduction / 2.0
+    candidate.J_lin = J_nonlin_prev - predicted_reduction
+
+    # Expected virtual control update from helper
+    lam_prox_prev = algorithm_state.lam_prox
+
+    adaptive_state = autotuner.update_weights(
         algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
     )
 
-    # Cost should be relaxed when k > cost_drop
+    # With the constructed J_lin we have rho > eta_2, so we must be in
+    # the "Accept Lower" branch:
+    # - lam_prox is decreased by gamma_2
+    # - the candidate is accepted
+    assert adaptive_state == "Accept Lower"
+    assert len(algorithm_state.lam_prox_history) == 2
+    assert algorithm_state.lam_prox_history[0] == pytest.approx(lam_prox_prev)
+    assert algorithm_state.lam_prox_history[1] == pytest.approx(
+        max(autotuner.lam_prox_min, autotuner.gamma_2 * lam_prox_prev)
+    )
+
+    # Cost should be relaxed when k > cost_drop and written back to state
     expected_lam_cost = 2.0 * 0.8
     assert candidate.lam_cost == pytest.approx(expected_lam_cost, rel=1e-6)
-
-
-def test_update_scp_weights_before_cost_drop(settings, algorithm_state, empty_nodal_constraints):
-    """Test that cost relaxation does NOT happen before cost_drop iterations."""
-    weights = Weights(lam_prox=1.0, lam_vc=1.0, lam_vb=1.0, lam_cost=2.0)
-
-    # Create autotuner with cost relaxation parameters
-    autotuner = AugmentedLagrangian(lam_cost_drop=5, lam_cost_relax=0.8)
-
-    algorithm_state.k = 1  # Use k=1 to avoid needing previous iteration data
-    algorithm_state.lam_cost_history = [2.0]
-    candidate = CandidateIterate()
-    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])  # Must set x_prop
-    candidate.u = np.array([[0.0], [0.5], [1.0]])
-    candidate.J_lin = 10.0
-
-    params = {}
-
-    autotuner.update_weights(
-        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
-    )
-
-    # Cost should remain at initial value (k=1 uses initial settings, not relaxed)
-    assert candidate.lam_cost == weights.lam_cost
-
-
-def test_update_scp_weights_virtual_control_update(
-    settings, algorithm_state, empty_nodal_constraints, weights
-):
-    """Test that virtual control weights are updated based on nu."""
-    algorithm_state.k = 2
-    algorithm_state.lam_prox_history = [1.0]
-    algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
-
-    # Set up previous iteration
-    algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
-    algorithm_state.U.append(np.array([[0.0], [0.5], [1.0]]))
-
-    # Create discretization entry
-    i4 = 2 + 4 + 4  # n_x=2, n_u=1
-    flattened_size = (3 - 1) * i4
-    V_dummy = np.zeros((flattened_size, 5))
-    V_final = V_dummy[:, -1].reshape(-1, i4)
-    V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
-    V_dummy[:, -1] = V_final.flatten()
-    algorithm_state.discretizations.append(
-        DiscretizationResult.from_V(
-            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
-        )
-    )
-
-    # Create large difference to trigger virtual control update
-    candidate = CandidateIterate()
-    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [5.0, 5.0]])  # Large difference
-    candidate.x_prop = np.array([[0.0, 0.0], [1.0, 1.0]])  # Small propagated
-    candidate.u = np.array([[0.0], [0.5], [1.0]])
-    candidate.J_lin = 10.0
-
-    params = {}
-
-    autotuner = AugmentedLagrangian()
-    autotuner.update_weights(
-        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
-    )
-
-    # Virtual control should be updated (increased due to large nu)
-    assert candidate.lam_vc is not None
-    # Should be array with shape (N-1, n_x) = (2, 2) due to broadcasting
-    assert isinstance(candidate.lam_vc, np.ndarray)
-    assert candidate.lam_vc.shape == (2, 2)  # (N-1, n_x)
+    assert len(algorithm_state.lam_cost_history) == 2
+    assert algorithm_state.lam_cost_history[-1] == pytest.approx(expected_lam_cost)
+    # Virtual control weights should also be stored in the state history
+    assert len(algorithm_state.lam_vc_history) == 2
+    assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
 
 
 def test_update_scp_weights_history_tracking(
@@ -884,10 +874,10 @@ def test_augmented_lagrangian_multiplier_update(
     assert adaptive_state in ["Reject Higher", "Accept Higher", "Accept Constant", "Accept Lower"]
 
 
-def test_augmented_lagrangian_penalty_increase(
+def test_augmented_lagrangian_accept_decrease(
     settings, algorithm_state, nodal_constraints_with_violations, weights
 ):
-    """Test that AugmentedLagrangian uses PTR method (no penalty parameters)."""
+    """Explicitly realize the 'Accept Lower' branch with constraint violations."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
     algorithm_state.lam_prox_history = [1.0]
@@ -915,11 +905,50 @@ def test_augmented_lagrangian_penalty_increase(
     candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])  # Violation
     candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
     candidate.u = np.array([[0.0], [0.5], [1.0]])
-    candidate.J_lin = 10.0
-
     params = {}
 
-    autotuner.update_weights(
+    # Compute previous and candidate nonlinear objectives explicitly, then
+    # choose J_lin so that rho > eta_2, guaranteeing "Accept Lower".
+    state_x_prop = algorithm_state.x_prop()
+    lam_vc_prev = algorithm_state.lam_vc
+    lam_vb_prev = algorithm_state.lam_vb
+    lam_cost_prev = algorithm_state.lam_cost
+
+    prev_cost, prev_penalty, prev_nodal = AutotuningBase.calculate_nonlinear_penalty(
+        state_x_prop,
+        algorithm_state.x,
+        algorithm_state.u,
+        lam_vc_prev,
+        lam_vb_prev,
+        lam_cost_prev,
+        nodal_constraints_with_violations,
+        params,
+        settings,
+    )
+    J_nonlin_prev = prev_cost + prev_penalty + prev_nodal
+
+    cand_cost, cand_penalty, cand_nodal = AutotuningBase.calculate_nonlinear_penalty(
+        candidate.x_prop,
+        candidate.x,
+        candidate.u,
+        lam_vc_prev,
+        lam_vb_prev,
+        lam_cost_prev,
+        nodal_constraints_with_violations,
+        params,
+        settings,
+    )
+    J_nonlin_cand = cand_cost + cand_penalty + cand_nodal
+
+    actual_reduction = J_nonlin_prev - J_nonlin_cand
+    rho_target = autotuner.eta_2 + 0.1 * (1.0 - autotuner.eta_2)  # strictly > eta_2, < 1
+    predicted_reduction = actual_reduction / rho_target
+    candidate.J_lin = J_nonlin_prev - predicted_reduction
+
+    lam_prox_prev = algorithm_state.lam_prox
+    initial_x_len = len(algorithm_state.X)
+
+    adaptive_state = autotuner.update_weights(
         algorithm_state,
         candidate,
         nodal_constraints_with_violations,
@@ -928,17 +957,28 @@ def test_augmented_lagrangian_penalty_increase(
         weights,
     )
 
-    # Should use PTR method (no penalty parameters)
-    assert not hasattr(algorithm_state, "rho")
-    assert not hasattr(algorithm_state, "mu")
-    # Should update trust region weights based on acceptance ratio
-    assert len(algorithm_state.lam_prox_history) >= 2
+    # We should be in the "Accept Lower" branch:
+    # - lam_prox is decreased by gamma_2 (but not below lam_prox_min)
+    # - candidate is accepted and its weights recorded in the state histories
+    assert adaptive_state == "Accept Lower"
+    assert len(algorithm_state.lam_prox_history) == 2
+    assert algorithm_state.lam_prox_history[0] == pytest.approx(lam_prox_prev)
+    assert algorithm_state.lam_prox_history[1] == pytest.approx(
+        max(autotuner.lam_prox_min, autotuner.gamma_2 * lam_prox_prev)
+    )
+    assert len(algorithm_state.X) == initial_x_len + 1
+    assert len(algorithm_state.lam_vc_history) == 2
+    assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
+    assert len(algorithm_state.lam_vb_history) == 2
+    assert algorithm_state.lam_vb_history[-1] == pytest.approx(candidate.lam_vb)
+    assert len(algorithm_state.lam_cost_history) == 2
+    assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
 
-def test_augmented_lagrangian_penalty_decrease(
+def test_augmented_lagrangian_reject_increase(
     settings, algorithm_state, empty_nodal_constraints, weights
 ):
-    """Test that AugmentedLagrangian uses PTR method (no penalty parameters)."""
+    """Test that AugmentedLagrangian rejects and does not update lam_vc."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
     algorithm_state.lam_prox_history = [1.0]
@@ -970,9 +1010,23 @@ def test_augmented_lagrangian_penalty_decrease(
 
     params = {}
 
-    autotuner.update_weights(
+    lam_prox_prev = algorithm_state.lam_prox
+    lam_vc_prev = algorithm_state.lam_vc
+
+    adaptive_state = autotuner.update_weights(
         algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
     )
+
+    # With this setup the step is rejected (rho < eta_0), so:
+    # - lam_prox is increased
+    # - lam_vc is NOT updated on the candidate or in the state history
+    assert adaptive_state == "Reject Higher"
+    assert candidate.lam_vc is None
+    assert len(algorithm_state.lam_prox_history) == 2
+    assert algorithm_state.lam_prox_history[0] == pytest.approx(lam_prox_prev)
+    assert algorithm_state.lam_prox_history[1] == pytest.approx(autotuner.gamma_1 * lam_prox_prev)
+    assert len(algorithm_state.lam_vc_history) == 1
+    assert np.allclose(algorithm_state.lam_vc_history[0], lam_vc_prev)
 
     # Should use PTR method (no penalty parameters)
     assert not hasattr(algorithm_state, "rho")
@@ -981,10 +1035,204 @@ def test_augmented_lagrangian_penalty_decrease(
     assert len(algorithm_state.lam_prox_history) >= 2
 
 
+def test_augmented_lagrangian_accept_higher(
+    settings, algorithm_state, empty_nodal_constraints, weights
+):
+    """Explicitly realize the 'Accept Higher' adaptive_state branch."""
+    autotuner = AugmentedLagrangian()
+    algorithm_state.k = 2
+    algorithm_state.lam_prox_history = [1.0]
+    algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
+
+    # Set up previous iteration
+    algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
+    algorithm_state.U.append(np.array([[0.0], [0.5], [1.0]]))
+
+    # Create discretization entry so x_prop() is defined
+    i4 = 2 + 4 + 4
+    flattened_size = (3 - 1) * i4
+    V_dummy = np.zeros((flattened_size, 5))
+    V_final = V_dummy[:, -1].reshape(-1, i4)
+    V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
+    V_dummy[:, -1] = V_final.flatten()
+    algorithm_state.discretizations.append(
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
+    )
+
+    # Candidate that improves the nonlinear objective (smaller virtual control penalty)
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+
+    params = {}
+
+    # Compute previous and candidate nonlinear objectives explicitly, then
+    # choose J_lin so that eta_0 < rho < eta_1, guaranteeing "Accept Higher".
+    state_x_prop = algorithm_state.x_prop()
+    lam_vc_prev = algorithm_state.lam_vc
+    lam_vb_prev = algorithm_state.lam_vb
+    lam_cost_prev = algorithm_state.lam_cost
+
+    prev_cost, prev_penalty, prev_nodal = AutotuningBase.calculate_nonlinear_penalty(
+        state_x_prop,
+        algorithm_state.x,
+        algorithm_state.u,
+        lam_vc_prev,
+        lam_vb_prev,
+        lam_cost_prev,
+        empty_nodal_constraints,
+        params,
+        settings,
+    )
+    J_nonlin_prev = prev_cost + prev_penalty + prev_nodal
+
+    cand_cost, cand_penalty, cand_nodal = AutotuningBase.calculate_nonlinear_penalty(
+        candidate.x_prop,
+        candidate.x,
+        candidate.u,
+        lam_vc_prev,
+        lam_vb_prev,
+        lam_cost_prev,
+        empty_nodal_constraints,
+        params,
+        settings,
+    )
+    J_nonlin_cand = cand_cost + cand_penalty + cand_nodal
+
+    actual_reduction = J_nonlin_prev - J_nonlin_cand
+    rho_target = 0.5 * (autotuner.eta_0 + autotuner.eta_1)  # in (eta_0, eta_1)
+    predicted_reduction = actual_reduction / rho_target
+    candidate.J_lin = J_nonlin_prev - predicted_reduction
+
+    initial_x_len = len(algorithm_state.X)
+    lam_prox_prev = algorithm_state.lam_prox
+
+    adaptive_state = autotuner.update_weights(
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
+    )
+
+    assert adaptive_state == "Accept Higher"
+    # Trust-region weight should be increased by gamma_1
+    assert len(algorithm_state.lam_prox_history) == 2
+    assert algorithm_state.lam_prox_history[0] == pytest.approx(lam_prox_prev)
+    assert algorithm_state.lam_prox_history[1] == pytest.approx(
+        min(autotuner.lam_prox_max, autotuner.gamma_1 * lam_prox_prev)
+    )
+    # Candidate should have updated virtual control weights and be accepted,
+    # and those weights must be recorded back into the algorithm_state histories.
+    assert candidate.lam_vc is not None
+    assert candidate.lam_vb == weights.lam_vb
+    assert len(algorithm_state.X) == initial_x_len + 1
+    assert len(algorithm_state.lam_vc_history) == 2
+    assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
+    assert len(algorithm_state.lam_vb_history) == 2
+    assert algorithm_state.lam_vb_history[-1] == pytest.approx(candidate.lam_vb)
+    assert len(algorithm_state.lam_cost_history) == 2
+    assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
+
+
+def test_augmented_lagrangian_accept_constant(
+    settings, algorithm_state, empty_nodal_constraints, weights
+):
+    """Explicitly realize the 'Accept Constant' adaptive_state branch."""
+    autotuner = AugmentedLagrangian()
+    algorithm_state.k = 2
+    algorithm_state.lam_prox_history = [1.0]
+    algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
+
+    # Set up previous iteration
+    algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
+    algorithm_state.U.append(np.array([[0.0], [0.5], [1.0]]))
+
+    # Create discretization entry so x_prop() is defined
+    i4 = 2 + 4 + 4
+    flattened_size = (3 - 1) * i4
+    V_dummy = np.zeros((flattened_size, 5))
+    V_final = V_dummy[:, -1].reshape(-1, i4)
+    V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
+    V_dummy[:, -1] = V_final.flatten()
+    algorithm_state.discretizations.append(
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
+    )
+
+    # Candidate that improves the nonlinear objective (same pattern as above)
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+
+    params = {}
+
+    state_x_prop = algorithm_state.x_prop()
+    lam_vc_prev = algorithm_state.lam_vc
+    lam_vb_prev = algorithm_state.lam_vb
+    lam_cost_prev = algorithm_state.lam_cost
+
+    prev_cost, prev_penalty, prev_nodal = AutotuningBase.calculate_nonlinear_penalty(
+        state_x_prop,
+        algorithm_state.x,
+        algorithm_state.u,
+        lam_vc_prev,
+        lam_vb_prev,
+        lam_cost_prev,
+        empty_nodal_constraints,
+        params,
+        settings,
+    )
+    J_nonlin_prev = prev_cost + prev_penalty + prev_nodal
+
+    cand_cost, cand_penalty, cand_nodal = AutotuningBase.calculate_nonlinear_penalty(
+        candidate.x_prop,
+        candidate.x,
+        candidate.u,
+        lam_vc_prev,
+        lam_vb_prev,
+        lam_cost_prev,
+        empty_nodal_constraints,
+        params,
+        settings,
+    )
+    J_nonlin_cand = cand_cost + cand_penalty + cand_nodal
+
+    actual_reduction = J_nonlin_prev - J_nonlin_cand
+    rho_target = 0.5 * (autotuner.eta_1 + autotuner.eta_2)  # in [eta_1, eta_2)
+    predicted_reduction = actual_reduction / rho_target
+    candidate.J_lin = J_nonlin_prev - predicted_reduction
+
+    initial_x_len = len(algorithm_state.X)
+    lam_prox_prev = algorithm_state.lam_prox
+
+    adaptive_state = autotuner.update_weights(
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
+    )
+
+    assert adaptive_state == "Accept Constant"
+    # Trust-region weight should remain constant
+    assert len(algorithm_state.lam_prox_history) == 2
+    assert algorithm_state.lam_prox_history[0] == pytest.approx(lam_prox_prev)
+    assert algorithm_state.lam_prox_history[1] == pytest.approx(lam_prox_prev)
+    # Candidate should have updated virtual control weights and be accepted,
+    # and those weights must be recorded back into the algorithm_state histories.
+    assert candidate.lam_vc is not None
+    assert candidate.lam_vb == weights.lam_vb
+    assert len(algorithm_state.X) == initial_x_len + 1
+    assert len(algorithm_state.lam_vc_history) == 2
+    assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
+    assert len(algorithm_state.lam_vb_history) == 2
+    assert algorithm_state.lam_vb_history[-1] == pytest.approx(candidate.lam_vb)
+    assert len(algorithm_state.lam_cost_history) == 2
+    assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
+
+
 def test_augmented_lagrangian_virtual_control_update(
     settings, algorithm_state, empty_nodal_constraints, weights
 ):
-    """Test that virtual control weights are updated using PTR method."""
+    """Test AL rejects this step and does not update virtual control weights."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
     algorithm_state.lam_prox_history = [1.0]
@@ -1019,11 +1267,18 @@ def test_augmented_lagrangian_virtual_control_update(
         algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
     )
 
-    # Virtual control should be updated based on nu (PTR method)
-    assert candidate.lam_vc is not None
-    assert isinstance(candidate.lam_vc, np.ndarray)
-    # Should have shape (N-1, n_x) = (2, 2)
-    assert candidate.lam_vc.shape == (2, 2)
+    # With this setup, the acceptance ratio rho is negative (about -0.02),
+    # so the AL logic enters the \"Reject Higher\" branch:
+    # - lam_prox is increased by gamma_1
+    # - lam_vc is NOT updated on the candidate
+    assert candidate.lam_vc is None
+    # Trust-region weight history should have grown by one entry and increased
+    assert len(algorithm_state.lam_prox_history) == 2
+    assert algorithm_state.lam_prox_history[0] == pytest.approx(1.0)
+    assert algorithm_state.lam_prox_history[1] == pytest.approx(autotuner.gamma_1 * 1.0)
+    # Virtual control history in the state should remain unchanged
+    assert len(algorithm_state.lam_vc_history) == 1
+    assert np.allclose(algorithm_state.lam_vc_history[0], np.array([1.0, 1.0]))
 
 
 def test_augmented_lagrangian_base_class_methods(settings):
