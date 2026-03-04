@@ -1101,9 +1101,7 @@ def test_augmented_lagrangian_virtual_control_update(
     # Trust-region weight history should have grown by one entry and increased
     assert len(algorithm_state.lam_prox_history) == 2
     assert algorithm_state.lam_prox_history[0] == pytest.approx(1.0)
-    assert algorithm_state.lam_prox_history[1] == pytest.approx(
-        autotuner.gamma_1 * 1.0
-    )
+    assert algorithm_state.lam_prox_history[1] == pytest.approx(autotuner.gamma_1 * 1.0)
     # Virtual control history in the state should remain unchanged
     assert len(algorithm_state.lam_vc_history) == 1
     assert np.allclose(algorithm_state.lam_vc_history[0], np.array([1.0, 1.0]))
