@@ -1,7 +1,7 @@
 """Tests for parser math function handlers.
 
 This module tests parsing of mathematical functions:
-Sin, Cos, Tan, Sqrt, Square, Exp, Log, Abs, Max, Min,
+Sin, Cos, Tan, Asin, Acos, Atan, Atan2, Sqrt, Square, Exp, Log, Abs, Max, Min,
 PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Bilerp
 """
 
@@ -10,6 +10,10 @@ import pytest
 
 from openscvx.symbolic.expr import (
     Abs,
+    Acos,
+    Asin,
+    Atan,
+    Atan2,
     Bilerp,
     Constant,
     Cos,
@@ -62,6 +66,26 @@ def test_parse_tan():
     assert isinstance(expr, Tan)
 
 
+def test_parse_asin():
+    expr = _parser().parse("Asin(x)")
+    assert isinstance(expr, Asin)
+
+
+def test_parse_acos():
+    expr = _parser().parse("Acos(x)")
+    assert isinstance(expr, Acos)
+
+
+def test_parse_atan():
+    expr = _parser().parse("Atan(x)")
+    assert isinstance(expr, Atan)
+
+
+def test_parse_atan2():
+    expr = _parser().parse("Atan2(x[0], x[1])")
+    assert isinstance(expr, Atan2)
+
+
 def test_parse_sqrt():
     expr = _parser().parse("Sqrt(x)")
     assert isinstance(expr, Sqrt)
@@ -110,6 +134,11 @@ def test_cos_wrong_args():
 def test_sqrt_wrong_args():
     with pytest.raises(ValueError, match="exactly 1"):
         _parser().parse("Sqrt(x, x)")
+
+
+def test_atan2_wrong_args():
+    with pytest.raises(ValueError, match="exactly 2"):
+        _parser().parse("Atan2(x)")
 
 
 # =============================================================================
