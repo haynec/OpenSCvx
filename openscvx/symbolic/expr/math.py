@@ -352,12 +352,12 @@ class Atan2(Expr):
         out_shape = self.check_shape()
         y_sx, y_su = self.y.sparsity(n_x, n_u)
         x_sx, x_su = self.x.sparsity(n_x, n_u)
-        S_x = _broadcast_sparsity(
-            y_sx, self.y.check_shape(), out_shape, n_x
-        ) | _broadcast_sparsity(x_sx, self.x.check_shape(), out_shape, n_x)
-        S_u = _broadcast_sparsity(
-            y_su, self.y.check_shape(), out_shape, n_u
-        ) | _broadcast_sparsity(x_su, self.x.check_shape(), out_shape, n_u)
+        S_x = _broadcast_sparsity(y_sx, self.y.check_shape(), out_shape, n_x) | _broadcast_sparsity(
+            x_sx, self.x.check_shape(), out_shape, n_x
+        )
+        S_u = _broadcast_sparsity(y_su, self.y.check_shape(), out_shape, n_u) | _broadcast_sparsity(
+            x_su, self.x.check_shape(), out_shape, n_u
+        )
         return S_x, S_u
 
     def __repr__(self) -> str:

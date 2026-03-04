@@ -83,9 +83,7 @@ def _visit_atan2(lowerer, node: Atan2):
     """Lower two-argument arctangent function to JAX function."""
     f_y = lowerer.lower(node.y)
     f_x = lowerer.lower(node.x)
-    return lambda x, u, node, params: jnp.arctan2(
-        f_y(x, u, node, params), f_x(x, u, node, params)
-    )
+    return lambda x, u, node, params: jnp.arctan2(f_y(x, u, node, params), f_x(x, u, node, params))
 
 
 @visitor(Square)
