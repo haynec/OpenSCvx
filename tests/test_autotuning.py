@@ -674,13 +674,6 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
 
     # Expected virtual control update from helper
     lam_prox_prev = algorithm_state.lam_prox
-    nu = (settings.sim.inv_S_x @ abs(candidate.x[1:] - candidate.x_prop).T).T
-    mask = nu > autotuner.ep
-    scale = autotuner.eta_lambda * (1 / (2 * lam_prox_prev))
-    case1 = lam_vc_prev + nu * scale
-    case2 = lam_vc_prev + (nu**2) / autotuner.ep * scale
-    vc_expected = np.where(mask, case1, case2)
-    vc_expected = np.minimum(autotuner.lam_vc_max, vc_expected)
 
     adaptive_state = autotuner.update_weights(
         algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
