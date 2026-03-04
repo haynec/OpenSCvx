@@ -491,9 +491,15 @@ def test_update_scp_weights_initial_iteration(
     # Should accept solution
     assert len(algorithm_state.X) == initial_x_len + 1  # Original + accepted candidate
 
-    # Should set initial weights
+    # Should set initial weights on candidate and persist them into state histories
     assert candidate.lam_vc is not None
     assert candidate.lam_vb == weights.lam_vb
+    assert len(algorithm_state.lam_vc_history) == 2
+    assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
+    assert len(algorithm_state.lam_vb_history) == 2
+    assert algorithm_state.lam_vb_history[-1] == pytest.approx(candidate.lam_vb)
+    assert len(algorithm_state.lam_cost_history) == 2
+    assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
 
 def test_update_scp_weights_reject_higher(
@@ -691,9 +697,14 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
         max(autotuner.lam_prox_min, autotuner.gamma_2 * lam_prox_prev)
     )
 
-    # Cost should be relaxed when k > cost_drop
+    # Cost should be relaxed when k > cost_drop and written back to state
     expected_lam_cost = 2.0 * 0.8
     assert candidate.lam_cost == pytest.approx(expected_lam_cost, rel=1e-6)
+    assert len(algorithm_state.lam_cost_history) == 2
+    assert algorithm_state.lam_cost_history[-1] == pytest.approx(expected_lam_cost)
+    # Virtual control weights should also be stored in the state history
+    assert len(algorithm_state.lam_vc_history) == 2
+    assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
 
 
 def test_update_scp_weights_before_cost_drop(settings, algorithm_state, empty_nodal_constraints):
@@ -955,7 +966,7 @@ def test_augmented_lagrangian_multiplier_update(
     assert adaptive_state in ["Reject Higher", "Accept Higher", "Accept Constant", "Accept Lower"]
 
 
-def test_augmented_lagrangian_penalty_accept_decrease(
+def test_augmented_lagrangian_accept_decrease(
     settings, algorithm_state, nodal_constraints_with_violations, weights
 ):
     """Explicitly realize the 'Accept Lower' branch with constraint violations."""
@@ -1040,7 +1051,7 @@ def test_augmented_lagrangian_penalty_accept_decrease(
 
     # We should be in the "Accept Lower" branch:
     # - lam_prox is decreased by gamma_2 (but not below lam_prox_min)
-    # - candidate is accepted
+    # - candidate is accepted and its weights recorded in the state histories
     assert adaptive_state == "Accept Lower"
     assert len(algorithm_state.lam_prox_history) == 2
     assert algorithm_state.lam_prox_history[0] == pytest.approx(lam_prox_prev)
@@ -1048,9 +1059,15 @@ def test_augmented_lagrangian_penalty_accept_decrease(
         max(autotuner.lam_prox_min, autotuner.gamma_2 * lam_prox_prev)
     )
     assert len(algorithm_state.X) == initial_x_len + 1
+    assert len(algorithm_state.lam_vc_history) == 2
+    assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
+    assert len(algorithm_state.lam_vb_history) == 2
+    assert algorithm_state.lam_vb_history[-1] == pytest.approx(candidate.lam_vb)
+    assert len(algorithm_state.lam_cost_history) == 2
+    assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
 
-def test_augmented_lagrangian_penalty_reject_increase(
+def test_augmented_lagrangian_reject_increase(
     settings, algorithm_state, empty_nodal_constraints, weights
 ):
     """Test that AugmentedLagrangian rejects and does not update lam_vc."""
@@ -1196,10 +1213,17 @@ def test_augmented_lagrangian_accept_higher(
     assert algorithm_state.lam_prox_history[1] == pytest.approx(
         min(autotuner.lam_prox_max, autotuner.gamma_1 * lam_prox_prev)
     )
-    # Candidate should have updated virtual control weights and be accepted
+    # Candidate should have updated virtual control weights and be accepted,
+    # and those weights must be recorded back into the algorithm_state histories.
     assert candidate.lam_vc is not None
     assert candidate.lam_vb == weights.lam_vb
     assert len(algorithm_state.X) == initial_x_len + 1
+    assert len(algorithm_state.lam_vc_history) == 2
+    assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
+    assert len(algorithm_state.lam_vb_history) == 2
+    assert algorithm_state.lam_vb_history[-1] == pytest.approx(candidate.lam_vb)
+    assert len(algorithm_state.lam_cost_history) == 2
+    assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
 
 def test_augmented_lagrangian_accept_constant(
@@ -1284,10 +1308,17 @@ def test_augmented_lagrangian_accept_constant(
     assert len(algorithm_state.lam_prox_history) == 2
     assert algorithm_state.lam_prox_history[0] == pytest.approx(lam_prox_prev)
     assert algorithm_state.lam_prox_history[1] == pytest.approx(lam_prox_prev)
-    # Candidate should have updated virtual control weights and be accepted
+    # Candidate should have updated virtual control weights and be accepted,
+    # and those weights must be recorded back into the algorithm_state histories.
     assert candidate.lam_vc is not None
     assert candidate.lam_vb == weights.lam_vb
     assert len(algorithm_state.X) == initial_x_len + 1
+    assert len(algorithm_state.lam_vc_history) == 2
+    assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
+    assert len(algorithm_state.lam_vb_history) == 2
+    assert algorithm_state.lam_vb_history[-1] == pytest.approx(candidate.lam_vb)
+    assert len(algorithm_state.lam_cost_history) == 2
+    assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
 
 def test_augmented_lagrangian_virtual_control_update(
