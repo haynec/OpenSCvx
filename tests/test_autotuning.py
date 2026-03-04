@@ -626,9 +626,55 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
     candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
     candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
     candidate.u = np.array([[0.0], [0.5], [1.0]])
-    candidate.J_lin = 10.0
-
     params = {}
+
+    # Design J_lin so the step is accepted (rho >= eta_1),
+    # then compute the expected virtual control update explicitly.
+    state_x_prop = algorithm_state.x_prop()
+    lam_vc_prev = algorithm_state.lam_vc
+    lam_vb_prev = algorithm_state.lam_vb
+    lam_cost_prev = algorithm_state.lam_cost
+
+    prev_cost, prev_penalty, prev_nodal = AutotuningBase.calculate_nonlinear_penalty(
+        state_x_prop,
+        algorithm_state.x,
+        algorithm_state.u,
+        lam_vc_prev,
+        lam_vb_prev,
+        lam_cost_prev,
+        empty_nodal_constraints,
+        params,
+        settings,
+    )
+    J_nonlin_prev = prev_cost + prev_penalty + prev_nodal
+
+    cand_cost, cand_penalty, cand_nodal = AutotuningBase.calculate_nonlinear_penalty(
+        candidate.x_prop,
+        candidate.x,
+        candidate.u,
+        lam_vc_prev,
+        lam_vb_prev,
+        lam_cost_prev,
+        empty_nodal_constraints,
+        params,
+        settings,
+    )
+    J_nonlin_cand = cand_cost + cand_penalty + cand_nodal
+
+    actual_reduction = J_nonlin_prev - J_nonlin_cand
+    # Choose J_lin so predicted_reduction = actual_reduction / 2 -> rho = 2 > eta_2
+    predicted_reduction = actual_reduction / 2.0
+    candidate.J_lin = J_nonlin_prev - predicted_reduction
+
+    # Expected virtual control update from helper
+    lam_prox_prev = algorithm_state.lam_prox
+    nu = (settings.sim.inv_S_x @ abs(candidate.x[1:] - candidate.x_prop).T).T
+    mask = nu > autotuner.ep
+    scale = autotuner.eta_lambda * (1 / (2 * lam_prox_prev))
+    case1 = lam_vc_prev + nu * scale
+    case2 = lam_vc_prev + (nu**2) / autotuner.ep * scale
+    vc_expected = np.where(mask, case1, case2)
+    vc_expected = np.minimum(autotuner.lam_vc_max, vc_expected)
 
     autotuner.update_weights(
         algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
@@ -655,6 +701,20 @@ def test_update_scp_weights_before_cost_drop(settings, algorithm_state, empty_no
     candidate.J_lin = 10.0
 
     params = {}
+
+    # Snapshot pre-update weights used by the helper
+    lam_vc_prev = algorithm_state.lam_vc  # shape (n_x,)
+    lam_prox_prev = algorithm_state.lam_prox
+    candidate_x_prop = candidate.x_prop  # x_prop_plus is None in this test
+
+    # Expected update from helper (before calling update_weights, while state is unchanged)
+    nu = (settings.sim.inv_S_x @ abs(candidate.x[1:] - candidate_x_prop).T).T
+    mask = nu > autotuner.ep
+    scale = autotuner.eta_lambda * (1 / (2 * lam_prox_prev))
+    case1 = lam_vc_prev + nu * scale
+    case2 = lam_vc_prev + (nu**2) / autotuner.ep * scale
+    vc_expected = np.where(mask, case1, case2)
+    vc_expected = np.minimum(autotuner.lam_vc_max, vc_expected)
 
     autotuner.update_weights(
         algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
@@ -970,6 +1030,20 @@ def test_augmented_lagrangian_penalty_decrease(
 
     params = {}
 
+    # Snapshot pre-update weights used by the helper
+    lam_vc_prev = algorithm_state.lam_vc  # shape (n_x,)
+    lam_prox_prev = algorithm_state.lam_prox
+    candidate_x_prop = candidate.x_prop  # x_prop_plus is None in this test
+
+    # Expected update from helper (before calling update_weights, while state is unchanged)
+    nu = (settings.sim.inv_S_x @ abs(candidate.x[1:] - candidate_x_prop).T).T
+    mask = nu > autotuner.ep
+    scale = autotuner.eta_lambda * (1 / (2 * lam_prox_prev))
+    case1 = lam_vc_prev + nu * scale
+    case2 = lam_vc_prev + (nu**2) / autotuner.ep * scale
+    vc_expected = np.where(mask, case1, case2)
+    vc_expected = np.minimum(autotuner.lam_vc_max, vc_expected)
+
     autotuner.update_weights(
         algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
     )
@@ -984,7 +1058,7 @@ def test_augmented_lagrangian_penalty_decrease(
 def test_augmented_lagrangian_virtual_control_update(
     settings, algorithm_state, empty_nodal_constraints, weights
 ):
-    """Test that virtual control weights are updated using PTR method."""
+    """Test AL rejects this step and does not update virtual control weights."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
     algorithm_state.lam_prox_history = [1.0]
@@ -1019,11 +1093,20 @@ def test_augmented_lagrangian_virtual_control_update(
         algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
     )
 
-    # Virtual control should be updated based on nu (PTR method)
-    assert candidate.lam_vc is not None
-    assert isinstance(candidate.lam_vc, np.ndarray)
-    # Should have shape (N-1, n_x) = (2, 2)
-    assert candidate.lam_vc.shape == (2, 2)
+    # With this setup, the acceptance ratio rho is negative (about -0.02),
+    # so the AL logic enters the \"Reject Higher\" branch:
+    # - lam_prox is increased by gamma_1
+    # - lam_vc is NOT updated on the candidate
+    assert candidate.lam_vc is None
+    # Trust-region weight history should have grown by one entry and increased
+    assert len(algorithm_state.lam_prox_history) == 2
+    assert algorithm_state.lam_prox_history[0] == pytest.approx(1.0)
+    assert algorithm_state.lam_prox_history[1] == pytest.approx(
+        autotuner.gamma_1 * 1.0
+    )
+    # Virtual control history in the state should remain unchanged
+    assert len(algorithm_state.lam_vc_history) == 1
+    assert np.allclose(algorithm_state.lam_vc_history[0], np.array([1.0, 1.0]))
 
 
 def test_augmented_lagrangian_base_class_methods(settings):
