@@ -1,7 +1,8 @@
 """JAX visitors for math expressions.
 
-Visitors: Sin, Cos, Tan, Square, Sqrt, Exp, Log, Abs, Max, Min,
-          PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Cinterp, Bilerp
+Visitors: Sin, Cos, Tan, Asin, Acos, Atan, Atan2, Square, Sqrt, Exp, Log, Abs,
+          Max, Min, PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Cinterp,
+          Bilerp
 """
 
 import jax
@@ -11,6 +12,10 @@ from jax.scipy.special import logsumexp
 # Expression types to handle — uncomment as you paste visitors:
 from openscvx.symbolic.expr.math import (
     Abs,
+    Acos,
+    Asin,
+    Atan,
+    Atan2,
     Bilerp,
     Cinterp,
     Cos,
@@ -50,6 +55,35 @@ def _visit_tan(lowerer, node: Tan):
     """Lower tangent function to JAX function."""
     fO = lowerer.lower(node.operand)
     return lambda x, u, node, params: jnp.tan(fO(x, u, node, params))
+
+
+@visitor(Asin)
+def _visit_asin(lowerer, node: Asin):
+    """Lower arcsine function to JAX function."""
+    fO = lowerer.lower(node.operand)
+    return lambda x, u, node, params: jnp.arcsin(fO(x, u, node, params))
+
+
+@visitor(Acos)
+def _visit_acos(lowerer, node: Acos):
+    """Lower arccosine function to JAX function."""
+    fO = lowerer.lower(node.operand)
+    return lambda x, u, node, params: jnp.arccos(fO(x, u, node, params))
+
+
+@visitor(Atan)
+def _visit_atan(lowerer, node: Atan):
+    """Lower arctangent function to JAX function."""
+    fO = lowerer.lower(node.operand)
+    return lambda x, u, node, params: jnp.arctan(fO(x, u, node, params))
+
+
+@visitor(Atan2)
+def _visit_atan2(lowerer, node: Atan2):
+    """Lower two-argument arctangent function to JAX function."""
+    f_y = lowerer.lower(node.y)
+    f_x = lowerer.lower(node.x)
+    return lambda x, u, node, params: jnp.arctan2(f_y(x, u, node, params), f_x(x, u, node, params))
 
 
 @visitor(Square)

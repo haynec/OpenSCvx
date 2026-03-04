@@ -42,9 +42,9 @@ Module Organization:
         in trajectory problems, and `Control` for control inputs.
 
     Mathematical Functions (math.py):
-        Trigonometric functions (`Sin`, `Cos`), exponential functions (`Exp`, `Log`,
-        `Sqrt`, `Square`), and nonlinear functions (`PositivePart`, `Huber`,
-        `SmoothReLU`, `Max`).
+        Trigonometric functions (`Sin`, `Cos`, `Tan`, `Asin`, `Acos`, `Atan`,
+        `Atan2`), exponential functions (`Exp`, `Log`, `Sqrt`, `Square`), and
+        nonlinear functions (`PositivePart`, `Huber`, `SmoothReLU`, `Max`).
 
     Linear Algebra (linalg.py):
         Matrix operations (`Transpose`, `Diag`) and reductions (`Sum`, `Norm`).
@@ -123,6 +123,10 @@ from .logic import All, Any, Cond
 # Mathematical functions
 from .math import (
     Abs,
+    Acos,
+    Asin,
+    Atan,
+    Atan2,
     Bilerp,
     Cinterp,
     Cos,
@@ -200,6 +204,10 @@ __all__ = [
     "Sin",
     "Cos",
     "Tan",
+    "Asin",
+    "Acos",
+    "Atan",
+    "Atan2",
     "Sqrt",
     "Abs",
     "PositivePart",
