@@ -699,6 +699,7 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
     assert len(algorithm_state.lam_vc_history) == 2
     assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
 
+
 def test_update_scp_weights_history_tracking(
     settings, algorithm_state, empty_nodal_constraints, weights
 ):
