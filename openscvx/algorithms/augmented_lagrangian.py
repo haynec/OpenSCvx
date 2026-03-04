@@ -233,20 +233,20 @@ class AugmentedLagrangian(AutotuningBase):
                     candidate, candidate_x_prop, settings, state.lam_vc, state.lam_prox
                 )
                 candidate.lam_vb = weights.lam_vb
-                
+
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Higher"
             elif rho >= self.eta_1 and rho < self.eta_2:
                 # Accept Solution with constant weight
                 lam_prox_k1 = lam_prox_k
                 state.lam_prox_history.append(lam_prox_k1)
-                
+
                 # Update virtual control weight matrix
                 candidate.lam_vc = self._update_virtual_control_weights(
                     candidate, candidate_x_prop, settings, state.lam_vc, state.lam_prox
                 )
                 candidate.lam_vb = weights.lam_vb
-                
+
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Constant"
             else:
