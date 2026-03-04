@@ -7,9 +7,11 @@ on:
   pull_request:
     branches:
       - main
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   unit-tests:
+    if: ${{ !github.event.pull_request.draft }}
     name: Unit Tests (Python ${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15  # Unit tests should be fast
