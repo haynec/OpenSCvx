@@ -100,12 +100,25 @@ def propagate_trajectory_results(
         settings.sim.x_prop = original_x_prop
 
     # Calculate cost using utility function and metadata from settings
+    x_after_final_impulse = np.asarray(
+        dynamics_discrete(
+            np.asarray(x_full[-1]),
+            np.asarray(u[-1]),
+            int(settings.sim.n - 1),
+            params,
+        )
+    ).reshape(-1)
+    x_for_cost = np.concatenate([x_full[:-1], x_after_final_impulse[None, :]], axis=0)
+
     cost = calculate_cost_from_boundaries(
-        x_full, settings.sim.x.initial_type, settings.sim.x.final_type
+        x_for_cost, settings.sim.x.initial_type, settings.sim.x.final_type
     )
 
-    # Calculate CTCS constraint violation
-    ctcs_violation = x_full[-1, settings.sim.ctcs_slice_prop]
+    # Calculate CTCS constraint violation (use state after final impulse when applicable)
+    if dynamics_discrete is not None and np.any(settings.sim.u.is_impulsive):
+        ctcs_violation = x_after_final_impulse[settings.sim.ctcs_slice_prop]
+    else:
+        ctcs_violation = x_full[-1, settings.sim.ctcs_slice_prop]
 
     # Build trajectory dictionary with all states and controls
     trajectory_dict = {}
