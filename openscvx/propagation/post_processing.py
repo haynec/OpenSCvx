@@ -26,6 +26,12 @@ def propagate_trajectory_results(
     This function takes the optimal control solution and propagates it through the
     nonlinear dynamics to compute the actual state trajectory and other metrics.
 
+    When ``states_prop`` includes propagation-only states (e.g. via ``dynamics_prop`` /
+    ``states_prop``), ``x_full`` has shape ``(n_times, n_prop_states)`` with
+    ``n_prop_states > n_opt_states``. The discrete dynamics and cost use only the
+    optimization-state portion; propagation-only states are preserved from the last
+    propagated step and included in ``trajectory``.
+
     Args:
         params (dict): System parameters.
         settings (Config): Configuration settings.
@@ -100,27 +106,39 @@ def propagate_trajectory_results(
         settings.sim.x_prop = original_x_prop
 
     # Calculate cost using utility function and metadata from settings
-    x_after_final_impulse = np.asarray(
+    # dynamics_discrete operates on optimization states only; when propagation has
+    # extra states, pass only the opt-state portion and then reattach the prop-only tail
+    x_minus = np.asarray(x_full[-1, :n_opt_states])
+    x_plus = np.asarray(
         dynamics_discrete(
-            np.asarray(x_full[-1]),
+            x_minus,
             np.asarray(u[-1]),
             int(settings.sim.n - 1),
             params,
         )
     ).reshape(-1)
-    x_for_cost = np.concatenate([x_full[:-1], x_after_final_impulse[None, :]], axis=0)
+    if n_prop_states > n_opt_states:
+        # Preserve propagation-only states (not updated by discrete dynamics)
+        full_final = np.concatenate([x_plus, np.asarray(x_full[-1, n_opt_states:])], axis=0)
+    else:
+        full_final = x_plus
+    x_for_cost = np.concatenate([x_full[:-1], full_final[None, :]], axis=0)
 
     cost = calculate_cost_from_boundaries(
-        x_for_cost, settings.sim.x.initial_type, settings.sim.x.final_type
+        x_for_cost[:, :n_opt_states],
+        settings.sim.x.initial_type,
+        settings.sim.x.final_type,
     )
 
     # Calculate CTCS constraint violation (use state after final impulse when applicable)
     if dynamics_discrete is not None and np.any(settings.sim.u.is_impulsive):
-        ctcs_violation = x_after_final_impulse[settings.sim.ctcs_slice_prop]
+        ctcs_violation = full_final[settings.sim.ctcs_slice_prop]
     else:
         ctcs_violation = x_full[-1, settings.sim.ctcs_slice_prop]
 
-    # Build trajectory dictionary with all states and controls
+    # Build trajectory dictionary with all states and controls.
+    # result._states is states_prop (opt + propagation-only); each state._slice
+    # indexes into the full propagation state, so propagation-only states are included.
     trajectory_dict = {}
 
     # Add all states (user-defined and augmented)
