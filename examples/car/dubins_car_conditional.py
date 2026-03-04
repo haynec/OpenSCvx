@@ -24,6 +24,7 @@ sys.path.append(grandparent_dir)
 
 import openscvx as ox
 from examples.plotting import plot_dubins_car, plot_velocity_vs_distance
+from openscvx.plotting import plot_states, plot_controls
 from openscvx import Problem
 
 n = 8
@@ -131,8 +132,6 @@ if __name__ == "__main__":
 
     # Plot trajectory
     plot_dubins_car(results, problem.settings).show()
-
-    from openscvx.plotting import plot_states, plot_controls
     plot_states(results).show()
     plot_controls(results).show()
 

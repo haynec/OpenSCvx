@@ -16,7 +16,7 @@ import sys
 import jax.numpy as jnp
 import numpy as np
 
-from openscvx.plotting import plot_scp_convergence_histories
+from openscvx.plotting import plot_states, plot_controls, plot_scp_iterations, plot_virtual_control_heatmap
 
 # Add grandparent directory to path to import examples.plotting
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -128,10 +128,9 @@ if __name__ == "__main__":
     results = problem.solve()
     results = problem.post_process()
     results.update(plotting_dict)
-    from openscvx.plotting import plot_states, plot_controls, plot_scp_convergence_histories, plot_scp_iterations, plot_virtual_control_heatmap
+    
     plot_states(results).show()
     plot_controls(results).show()
     plot_scp_iterations(results).show()
-    # plot_scp_convergence_histories(results).show()
     plot_virtual_control_heatmap(results).show()
     plot_dubins_car_disjoint(results, problem.settings).show()
