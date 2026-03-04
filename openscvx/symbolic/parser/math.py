@@ -1,12 +1,17 @@
 """Parser handlers for mathematical functions.
 
-Handlers: Sin, Cos, Tan, Sqrt, Square, Exp, Log, Abs, Max, Min,
-          PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Cinterp, Bilerp
+Handlers: Sin, Cos, Tan, Asin, Acos, Atan, Atan2, Sqrt, Square, Exp, Log, Abs,
+          Max, Min, PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Cinterp,
+          Bilerp
 """
 
 from openscvx.symbolic.expr.expr import Constant
 from openscvx.symbolic.expr.math import (
     Abs,
+    Acos,
+    Asin,
+    Atan,
+    Atan2,
     Bilerp,
     Cinterp,
     Cos,
@@ -53,6 +58,34 @@ def _parse_tan(args, kwargs):
     if len(args) != 1:
         raise ValueError("Tan() takes exactly 1 argument")
     return Tan(args[0])
+
+
+@function("Asin")
+def _parse_asin(args, kwargs):
+    if len(args) != 1:
+        raise ValueError("Asin() takes exactly 1 argument")
+    return Asin(args[0])
+
+
+@function("Acos")
+def _parse_acos(args, kwargs):
+    if len(args) != 1:
+        raise ValueError("Acos() takes exactly 1 argument")
+    return Acos(args[0])
+
+
+@function("Atan")
+def _parse_atan(args, kwargs):
+    if len(args) != 1:
+        raise ValueError("Atan() takes exactly 1 argument")
+    return Atan(args[0])
+
+
+@function("Atan2")
+def _parse_atan2(args, kwargs):
+    if len(args) != 2:
+        raise ValueError("Atan2() takes exactly 2 arguments (y, x)")
+    return Atan2(args[0], args[1])
 
 
 @function("Sqrt")
