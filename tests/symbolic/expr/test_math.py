@@ -3,6 +3,7 @@
 This module tests mathematical function nodes:
 
 - Trigonometric: Sin, Cos, Tan
+- Inverse Trigonometric: Asin, Acos, Atan, Atan2
 - Exponential: Exp, Log, Sqrt
 - Nonlinear: Square, PositivePart, Huber, SmoothReLU, Max, Min
 - Absolute value: Abs
@@ -2587,6 +2588,202 @@ def test_cvxpy_tan_not_implemented():
 
     with pytest.raises(NotImplementedError, match="Trigonometric functions like Tan"):
         lowerer.lower(expr)
+
+
+# =============================================================================
+# Inverse Trigonometric Functions
+# =============================================================================
+
+
+def test_asin_creation():
+    """Test Asin node creation and properties."""
+    from openscvx.symbolic.expr import Asin
+
+    x = Variable("x", shape=(1,))
+
+    asin_x = Asin(x)
+    assert repr(asin_x) == "(asin(Var('x')))"
+    assert asin_x.children() == [x]
+
+
+def test_acos_creation():
+    """Test Acos node creation and properties."""
+    from openscvx.symbolic.expr import Acos
+
+    x = Variable("x", shape=(1,))
+
+    acos_x = Acos(x)
+    assert repr(acos_x) == "(acos(Var('x')))"
+    assert acos_x.children() == [x]
+
+
+def test_atan_creation():
+    """Test Atan node creation and properties."""
+    from openscvx.symbolic.expr import Atan
+
+    x = Variable("x", shape=(1,))
+
+    atan_x = Atan(x)
+    assert repr(atan_x) == "(atan(Var('x')))"
+    assert atan_x.children() == [x]
+
+
+def test_atan2_creation():
+    """Test Atan2 node creation and properties."""
+    from openscvx.symbolic.expr import Atan2
+
+    y = Variable("y", shape=(1,))
+    x = Variable("x", shape=(1,))
+
+    atan2_yx = Atan2(y, x)
+    assert repr(atan2_yx) == "(atan2(Var('y'), Var('x')))"
+    assert atan2_yx.children() == [y, x]
+
+
+# --- Inverse Trigonometric: Shape Checking ---
+
+
+def test_asin_shape_preserves_input():
+    """Test that Asin preserves the shape of its input."""
+    from openscvx.symbolic.expr import Asin
+
+    x = Variable("x", shape=(2, 3))
+    asin_x = Asin(x)
+    assert asin_x.check_shape() == (2, 3)
+
+
+def test_acos_shape_preserves_input():
+    """Test that Acos preserves the shape of its input."""
+    from openscvx.symbolic.expr import Acos
+
+    x = Variable("x", shape=(4,))
+    acos_x = Acos(x)
+    assert acos_x.check_shape() == (4,)
+
+
+def test_atan_shape_preserves_input():
+    """Test that Atan preserves the shape of its input."""
+    from openscvx.symbolic.expr import Atan
+
+    x = Variable("x", shape=())
+    atan_x = Atan(x)
+    assert atan_x.check_shape() == ()
+
+
+def test_atan2_shape_with_broadcasting():
+    """Test Atan2 shape with NumPy-style broadcasting."""
+    from openscvx.symbolic.expr import Atan2
+
+    y = Variable("y", shape=(3, 1))
+    x = Variable("x", shape=(1, 4))
+    atan2_yx = Atan2(y, x)
+    assert atan2_yx.check_shape() == (3, 4)
+
+
+# --- Inverse Trigonometric: Canonicalization ---
+
+
+def test_atan_canonicalize_recursively():
+    """Test that Atan canonicalization recurses into operands."""
+    from openscvx.symbolic.expr import Add, Atan, Constant
+
+    x = Variable("x", shape=(3,))
+    expr = Atan(Add(x, Constant(0.0)))
+    canonical = expr.canonicalize()
+
+    assert isinstance(canonical, Atan)
+    assert canonical.operand == x
+
+
+def test_atan2_canonicalize_recursively():
+    """Test that Atan2 canonicalization recurses into both operands."""
+    from openscvx.symbolic.expr import Add, Atan2, Constant
+
+    y = Variable("y", shape=(3,))
+    x = Variable("x", shape=(3,))
+    expr = Atan2(Add(y, Constant(0.0)), Add(x, Constant(0.0)))
+    canonical = expr.canonicalize()
+
+    assert isinstance(canonical, Atan2)
+    assert canonical.y == y
+    assert canonical.x == x
+
+
+# --- Inverse Trigonometric: JAX Lowering ---
+
+
+def test_asin_constant():
+    """Test Asin with constant values."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Asin, Constant
+    from openscvx.symbolic.lower import lower_to_jax
+
+    values = np.array([-1.0, -0.5, 0.0, 0.5, 1.0])
+    expr = Asin(Constant(values))
+
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    expected = jnp.arcsin(values)
+    assert jnp.allclose(result, expected, atol=1e-6)
+
+
+def test_acos_constant():
+    """Test Acos with constant values."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Acos, Constant
+    from openscvx.symbolic.lower import lower_to_jax
+
+    values = np.array([-1.0, -0.5, 0.0, 0.5, 1.0])
+    expr = Acos(Constant(values))
+
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    expected = jnp.arccos(values)
+    assert jnp.allclose(result, expected, atol=1e-6)
+
+
+def test_atan_constant():
+    """Test Atan with constant values."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Atan, Constant
+    from openscvx.symbolic.lower import lower_to_jax
+
+    values = np.array([-10.0, -1.0, 0.0, 1.0, 10.0])
+    expr = Atan(Constant(values))
+
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    expected = jnp.arctan(values)
+    assert jnp.allclose(result, expected, atol=1e-6)
+
+
+def test_atan2_state():
+    """Test Atan2 with state variables."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Atan2, State
+    from openscvx.symbolic.lower import lower_to_jax
+
+    y_values = jnp.array([0.0, 1.0, -1.0, 2.0])
+    x_values = jnp.array([1.0, 1.0, 1.0, -2.0])
+
+    y_state = State("y", (4,))
+    y_state._slice = slice(0, 4)
+    x_state = State("x", (4,))
+    x_state._slice = slice(4, 8)
+
+    expr = Atan2(y_state, x_state)
+    fn = lower_to_jax(expr)
+    result = fn(jnp.concatenate([y_values, x_values]), None, None, None)
+
+    expected = jnp.arctan2(y_values, x_values)
+    assert jnp.allclose(result, expected, atol=1e-6)
 
 
 # =============================================================================
