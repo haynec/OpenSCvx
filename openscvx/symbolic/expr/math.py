@@ -7,6 +7,7 @@ shape of their inputs.
 
 Function Categories:
     - **Trigonometric:** `Sin`, `Cos`, `Tan` - Standard trigonometric functions
+    - **Inverse Trigonometric:** `Asin`, `Acos`, `Atan`, `Atan2` - Inverse trig functions
     - **Exponential and Roots:** `Exp`, `Log`, `Sqrt`, `Square` - Exponential, logarithm, square
         root, and squaring operations
     - **Absolute Value:** `Abs` - Element-wise absolute value function
@@ -176,6 +177,191 @@ class Tan(Expr):
 
     def __repr__(self) -> str:
         return f"(tan({self.operand!r}))"
+
+
+class Asin(Expr):
+    """Element-wise arcsine (inverse sine) function for symbolic expressions.
+
+    Computes the arcsine of each element in the operand. Preserves the shape
+    of the input expression.
+
+    Attributes:
+        operand: Expression to apply arcsine function to
+
+    Note:
+        Asin is only supported for JAX lowering. CVXPy lowering will raise
+        NotImplementedError since inverse trigonometric functions are not
+        DCP-compliant.
+    """
+
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
+        """Initialize an arcsine operation.
+
+        Args:
+            operand: Expression to apply arcsine function to
+        """
+        self.operand = to_expr(operand)
+
+    def children(self):
+        return [self.operand]
+
+    def canonicalize(self) -> "Expr":
+        operand = self.operand.canonicalize()
+        return Asin(operand)
+
+    def check_shape(self) -> Tuple[int, ...]:
+        """Asin preserves the shape of its operand."""
+        return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
+
+    def __repr__(self) -> str:
+        return f"(asin({self.operand!r}))"
+
+
+class Acos(Expr):
+    """Element-wise arccosine (inverse cosine) function for symbolic expressions.
+
+    Computes the arccosine of each element in the operand. Preserves the shape
+    of the input expression.
+
+    Attributes:
+        operand: Expression to apply arccosine function to
+
+    Note:
+        Acos is only supported for JAX lowering. CVXPy lowering will raise
+        NotImplementedError since inverse trigonometric functions are not
+        DCP-compliant.
+    """
+
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
+        """Initialize an arccosine operation.
+
+        Args:
+            operand: Expression to apply arccosine function to
+        """
+        self.operand = to_expr(operand)
+
+    def children(self):
+        return [self.operand]
+
+    def canonicalize(self) -> "Expr":
+        operand = self.operand.canonicalize()
+        return Acos(operand)
+
+    def check_shape(self) -> Tuple[int, ...]:
+        """Acos preserves the shape of its operand."""
+        return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
+
+    def __repr__(self) -> str:
+        return f"(acos({self.operand!r}))"
+
+
+class Atan(Expr):
+    """Element-wise arctangent (inverse tangent) function for symbolic expressions.
+
+    Computes the arctangent of each element in the operand. Preserves the shape
+    of the input expression.
+
+    Attributes:
+        operand: Expression to apply arctangent function to
+
+    Note:
+        Atan is only supported for JAX lowering. CVXPy lowering will raise
+        NotImplementedError since inverse trigonometric functions are not
+        DCP-compliant.
+    """
+
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
+        """Initialize an arctangent operation.
+
+        Args:
+            operand: Expression to apply arctangent function to
+        """
+        self.operand = to_expr(operand)
+
+    def children(self):
+        return [self.operand]
+
+    def canonicalize(self) -> "Expr":
+        operand = self.operand.canonicalize()
+        return Atan(operand)
+
+    def check_shape(self) -> Tuple[int, ...]:
+        """Atan preserves the shape of its operand."""
+        return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
+
+    def __repr__(self) -> str:
+        return f"(atan({self.operand!r}))"
+
+
+class Atan2(Expr):
+    """Element-wise two-argument arctangent for symbolic expressions.
+
+    Computes ``atan2(y, x)`` element-wise using two operands and supports
+    broadcasting like NumPy.
+
+    Attributes:
+        y: Y-coordinate expression (numerator)
+        x: X-coordinate expression (denominator)
+
+    Note:
+        Atan2 is only supported for JAX lowering. CVXPy lowering will raise
+        NotImplementedError since inverse trigonometric functions are not
+        DCP-compliant.
+    """
+
+    def __init__(
+        self,
+        y: Union[Expr, float, int, np.ndarray],
+        x: Union[Expr, float, int, np.ndarray],
+    ):
+        """Initialize a two-argument arctangent operation.
+
+        Args:
+            y: Y-coordinate expression (numerator)
+            x: X-coordinate expression (denominator)
+        """
+        self.y = to_expr(y)
+        self.x = to_expr(x)
+
+    def children(self):
+        return [self.y, self.x]
+
+    def canonicalize(self) -> "Expr":
+        y = self.y.canonicalize()
+        x = self.x.canonicalize()
+        return Atan2(y, x)
+
+    def check_shape(self) -> Tuple[int, ...]:
+        """Atan2 broadcasts input shapes like NumPy."""
+        shapes = [child.check_shape() for child in self.children()]
+        try:
+            return np.broadcast_shapes(*shapes)
+        except ValueError as e:
+            raise ValueError(f"Atan2 shapes not broadcastable: {shapes}") from e
+
+    def sparsity(self, n_x: int, n_u: int):
+        out_shape = self.check_shape()
+        y_sx, y_su = self.y.sparsity(n_x, n_u)
+        x_sx, x_su = self.x.sparsity(n_x, n_u)
+        S_x = _broadcast_sparsity(
+            y_sx, self.y.check_shape(), out_shape, n_x
+        ) | _broadcast_sparsity(x_sx, self.x.check_shape(), out_shape, n_x)
+        S_u = _broadcast_sparsity(
+            y_su, self.y.check_shape(), out_shape, n_u
+        ) | _broadcast_sparsity(x_su, self.x.check_shape(), out_shape, n_u)
+        return S_x, S_u
+
+    def __repr__(self) -> str:
+        return f"(atan2({self.y!r}, {self.x!r}))"
 
 
 class Square(Expr):
