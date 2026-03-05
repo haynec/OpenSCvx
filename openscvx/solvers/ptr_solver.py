@@ -385,14 +385,16 @@ class PTRSolver(ConvexSolver):
         idx_ncvx = 0
         if jax_constraints.nodal:
             for constraint in jax_constraints.nodal:
-                cost += lam_vb * cp.sum(cp.pos(nu_vb[idx_ncvx]))
+                w = constraint.lam_vb if constraint.lam_vb is not None else lam_vb
+                cost += w * cp.sum(cp.pos(nu_vb[idx_ncvx]))
                 idx_ncvx += 1
 
         # Virtual slack penalty for cross-node constraints
         idx_cross = 0
         if jax_constraints.cross_node:
             for constraint in jax_constraints.cross_node:
-                cost += lam_vb * cp.pos(nu_vb_cross[idx_cross])
+                w = constraint.lam_vb if constraint.lam_vb is not None else lam_vb
+                cost += w * cp.pos(nu_vb_cross[idx_cross])
                 idx_cross += 1
 
         return cost
