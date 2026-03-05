@@ -43,6 +43,7 @@ class LoweredNodalConstraint:
     grad_g_x: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
     grad_g_u: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
     nodes: Optional[List[int]] = None
+    lam_vb: Optional[float] = None
 
 
 @dataclass
