@@ -383,13 +383,24 @@ def decompose_vector_nodal_constraints(
                 # Vector constraint - decompose into scalar constraints
                 total_elements = int(np.prod(residual_shape))
 
+                # Validate per-element weight length if provided
+                w = nodal_constraint._lam_vb
+                if w is not None and len(w) != 1 and len(w) != total_elements:
+                    raise ValueError(
+                        f"lam_vb has length {len(w)} but constraint has "
+                        f"{total_elements} elements. Must be length 1 (broadcast) "
+                        f"or {total_elements} (per-element)."
+                    )
+
                 for i in range(total_elements):
                     # Create indexed version: residual[i] <= 0 or residual[i] == 0
                     indexed_lhs = Index(constraint.lhs, i)
                     indexed_rhs = constraint.rhs  # Should be Constant(0)
                     indexed_constraint = constraint.__class__(indexed_lhs, indexed_rhs)
+                    # Broadcast length-1, otherwise index per-element
+                    elem_w = None if w is None else [w[0]] if len(w) == 1 else [w[i]]
                     decomposed_constraints.append(
-                        NodalConstraint(indexed_constraint, nodes, lam_vb=nodal_constraint._lam_vb)
+                        NodalConstraint(indexed_constraint, nodes, lam_vb=elem_w)
                     )
             else:
                 # Scalar constraint - keep as is

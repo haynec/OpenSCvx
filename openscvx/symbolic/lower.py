@@ -633,7 +633,7 @@ def _lower_jax_constraints(
                 grad_g_x=jax.vmap(jacfwd(fn, argnums=0), in_axes=(0, 0, None, None)),
                 grad_g_u=jax.vmap(jacfwd(fn, argnums=1), in_axes=(0, 0, None, None)),
                 nodes=constraints.nodal[i].nodes,
-                lam_vb=constraints.nodal[i]._lam_vb,
+                lam_vb=constraints.nodal[i]._lam_vb[0] if constraints.nodal[i]._lam_vb else None,
             )
             lowered_nodal.append(constraint)
 

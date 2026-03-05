@@ -230,16 +230,23 @@ class NodalConstraint(Expr):
             constraint2 = (vel <= 100).at(list(range(n_nodes)))
     """
 
-    def __init__(self, constraint: Constraint, nodes: list[int], lam_vb: Optional[float] = None):
+    def __init__(
+        self,
+        constraint: Constraint,
+        nodes: list[int],
+        lam_vb: Optional[Union[float, List[float]]] = None,
+    ):
         """Initialize a NodalConstraint.
 
         Args:
             constraint: The Constraint (Equality or Inequality) to enforce at specified nodes
             nodes: List of integer node indices where the constraint should be enforced.
                 Automatically converts numpy integers to Python integers.
-            lam_vb: Optional per-constraint virtual buffer penalty weight. If None,
-                the global ``lam_vb`` from the algorithm weights is used. Setting this
-                overrides the global weight for this specific constraint.
+            lam_vb: Optional per-constraint virtual buffer penalty weight(s). If None,
+                the global ``lam_vb`` from the algorithm weights is used. A scalar
+                applies the same weight to all elements of a vector constraint. A list
+                assigns per-element weights (length must match the constraint dimension).
+                Scalars are normalized to a single-element list internally.
 
         Raises:
             TypeError: If constraint is not a Constraint instance
@@ -268,7 +275,10 @@ class NodalConstraint(Expr):
 
         self.constraint = constraint
         self.nodes = converted_nodes
-        self._lam_vb = lam_vb
+        if isinstance(lam_vb, (int, float)):
+            self._lam_vb: Optional[List[float]] = [float(lam_vb)]
+        else:
+            self._lam_vb = lam_vb
 
     def children(self) -> List["Expr"]:
         """Return the wrapped constraint as the only child.
@@ -303,7 +313,7 @@ class NodalConstraint(Expr):
         # NodalConstraint produces a scalar like any constraint
         return ()
 
-    def weight(self, lam_vb: float) -> "NodalConstraint":
+    def weight(self, lam_vb: Union[float, List[float]]) -> "NodalConstraint":
         """Set the virtual buffer penalty weight for this constraint.
 
         Overrides the global ``lam_vb`` from the algorithm for this specific
@@ -311,7 +321,10 @@ class NodalConstraint(Expr):
         weights, e.g. giving obstacle avoidance a higher weight than box constraints.
 
         Args:
-            lam_vb: Virtual buffer penalty weight for this constraint.
+            lam_vb: Virtual buffer penalty weight(s) for this constraint.
+                A scalar applies the same weight to every element of a vector
+                constraint. A list assigns per-element weights (validated during
+                lowering to match the constraint dimension).
 
         Returns:
             Self with per-constraint weight set (enables method chaining).
@@ -321,8 +334,15 @@ class NodalConstraint(Expr):
 
                 obstacle = (distance >= radius).at(nodes).weight(1e2)
                 box = (x <= x_max).at(nodes).weight(1e0)
+
+            Per-element weights on a vector constraint::
+
+                pos_bound = (pos <= pos_max).at(nodes).weight([1e1, 1e1, 1e3])
         """
-        self._lam_vb = lam_vb
+        if isinstance(lam_vb, (int, float)):
+            self._lam_vb = [float(lam_vb)]
+        else:
+            self._lam_vb = list(lam_vb)
         return self
 
     def convex(self) -> "NodalConstraint":
