@@ -240,11 +240,15 @@ class PenalizedTrustRegion(Algorithm):
         self.weights.normalize()
 
     @property
-    def lam_vb(self) -> float:
-        """Virtual buffer penalty weight.
+    def lam_vb(self) -> Union[float, np.ndarray]:
+        """Virtual buffer penalty weight (pre-normalization).
 
         This is the user-specified value before normalization. Setting this
         property triggers automatic re-normalization of all weights.
+
+        After ``problem.initialize()``, this is expanded to a per-constraint
+        array incorporating any ``.weight()`` overrides on individual
+        constraints.
 
         !!! note
             The autotuner may modify the normalized weight in
@@ -254,8 +258,8 @@ class PenalizedTrustRegion(Algorithm):
         return self.weights._raw_lam_vb
 
     @lam_vb.setter
-    def lam_vb(self, value: float) -> None:
-        self.weights._raw_lam_vb = value
+    def lam_vb(self, value: Union[float, np.ndarray]) -> None:
+        self.weights._raw_lam_vb = self._resolve_lam_vb(value, self._jax_constraints)
         self.weights.normalize()
 
     def get_columns(self, verbosity: int = Verbosity.STANDARD) -> List[Column]:
@@ -310,6 +314,11 @@ class PenalizedTrustRegion(Algorithm):
         self._discretization_solver_impulsive = discretization_solver_impulsive
         self._jax_constraints = jax_constraints
         self._emitter = emitter
+
+        # Merge per-constraint .weight() overrides with global lam_vb
+        resolved_vb = self._resolve_lam_vb(self.weights._raw_lam_vb, jax_constraints)
+        self.weights._raw_lam_vb = resolved_vb
+        self.weights.normalize()
 
         # Set boundary conditions
         self._solver.update_boundary_conditions(

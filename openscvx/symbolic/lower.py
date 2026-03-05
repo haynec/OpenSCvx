@@ -280,7 +280,8 @@ def create_cvxpy_variables(
     lam_prox = cp.Parameter(nonneg=True, name="lam_prox")
     lam_cost = cp.Parameter(n_states, nonneg=True, name="lam_cost")
     lam_vc = cp.Parameter((N - 1, n_states), nonneg=True, name="lam_vc")
-    lam_vb = cp.Parameter(nonneg=True, name="lam_vb")
+    n_constraints = n_nodal_constraints + n_cross_node_constraints
+    lam_vb = cp.Parameter(max(n_constraints, 1), nonneg=True, name="lam_vb")
 
     # State
     x = cp.Variable((N, n_states), name="x")  # Current State

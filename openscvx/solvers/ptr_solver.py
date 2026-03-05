@@ -359,7 +359,7 @@ class PTRSolver(ConvexSolver):
         nu_vb_cross = ocp_vars.nu_vb_cross
 
         cost = cp.sum(lam_cost) * 0
-        cost += lam_vb * 0
+        cost += cp.sum(lam_vb) * 0
 
         # Boundary condition cost terms (use scaled x for numerical conditioning)
         x = ocp_vars.x
@@ -385,16 +385,15 @@ class PTRSolver(ConvexSolver):
         idx_ncvx = 0
         if jax_constraints.nodal:
             for constraint in jax_constraints.nodal:
-                w = constraint.lam_vb if constraint.lam_vb is not None else lam_vb
-                cost += w * cp.sum(cp.pos(nu_vb[idx_ncvx]))
+                cost += lam_vb[idx_ncvx] * cp.sum(cp.pos(nu_vb[idx_ncvx]))
                 idx_ncvx += 1
 
         # Virtual slack penalty for cross-node constraints
+        n_nodal = len(jax_constraints.nodal) if jax_constraints.nodal else 0
         idx_cross = 0
         if jax_constraints.cross_node:
             for constraint in jax_constraints.cross_node:
-                w = constraint.lam_vb if constraint.lam_vb is not None else lam_vb
-                cost += w * cp.pos(nu_vb_cross[idx_cross])
+                cost += lam_vb[n_nodal + idx_cross] * cp.pos(nu_vb_cross[idx_cross])
                 idx_cross += 1
 
         return cost
@@ -727,7 +726,7 @@ class PTRSolver(ConvexSolver):
         lam_prox: float,
         lam_cost: Union[float, np.ndarray],
         lam_vc: np.ndarray,
-        lam_vb: float,
+        lam_vb: Union[float, np.ndarray],
     ) -> None:
         """Update SCP penalty weights.
 
@@ -739,7 +738,8 @@ class PTRSolver(ConvexSolver):
             lam_cost: Cost function weight. Scalar or array of shape
                 ``(n_states,)`` for per-state weighting.
             lam_vc: Virtual control penalty weights, shape (N-1, n_states)
-            lam_vb: Virtual buffer penalty weight (for constraint violations)
+            lam_vb: Virtual buffer penalty weight(s). Scalar (broadcast to
+                all constraints) or array of shape ``(n_constraints,)``.
         """
         self._set_param("lam_prox", lam_prox)
         self._set_param("lam_cost", lam_cost)
