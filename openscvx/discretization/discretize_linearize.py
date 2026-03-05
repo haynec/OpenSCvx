@@ -224,11 +224,7 @@ def get_vectorize_then_discretize_solver(
                 each segment. Here m is the number of controls.
             u_next (jax.Array, shape(N-1, n_u)): Reference value of the vehicle control at the end of
                 each segment.
-            settings:
-            params:
-            discretize_then_vectorize (bool, optional): If True, segments are propagated individually,
-                which is slower but more accurate. If False (default), segments are stacked and
-                propagated with one integrator, which is faster but less accurate.
+            params: Parameters forwarded to ``state_dot``.
 
         Returns:
             x_prop (jax.Array, shape (N-1, n_x)): Stack of end states of each propagated segment.
@@ -253,7 +249,25 @@ def get_vectorize_then_discretize_solver(
                 args=(u_cur, u_next, params),
                 extra_kwargs=discretizer.args,
             )
-        return sol[-1].reshape(N - 1, -1)
+        return sol[-1].reshape(N - 1, n_x)
+
+    def get_propagation_history(
+        x: jnp.ndarray,
+        u_cur: np.ndarray,
+        u_next: np.ndarray,
+        params: dict,
+    ) -> jnp.ndarray:
+        sol = solve_ivp_diffrax(
+            multiple_dxdt,
+            1.0 / (N - 1),
+            x.flatten(),
+            solver_name=discretizer.ode_solver,
+            rtol=discretizer.rtol,
+            atol=discretizer.atol,
+            args=(u_cur, u_next, params),
+            extra_kwargs=discretizer.args,
+        )
+        return sol.reshape(-1, N - 1, n_x)
 
     def vectorize_and_discretize_then_linearize(
         x: jnp.ndarray,
@@ -262,29 +276,39 @@ def get_vectorize_then_discretize_solver(
         params: dict,
     ):
 
-        # TODO: Reduce code duplication using partial functions (jax.argnums_partial?)
-        multiple_shot_partial_wrt_x = lambda x : vectorize_then_discretize(x, u_cur, u_next, params)
-        multiple_shot_partial_wrt_u_cur = lambda u_cur : vectorize_then_discretize(x, u_cur, u_next, params)
-        multiple_shot_partial_wrt_u_next = lambda u_next : vectorize_then_discretize(x, u_cur, u_next, params)
+        partial_in_x = lambda x : vectorize_then_discretize(x, u_cur, u_next, params)
+        partial_in_u_cur = lambda u_cur : vectorize_then_discretize(x, u_cur, u_next, params)
+        partial_in_u_next = lambda u_next : vectorize_then_discretize(x, u_cur, u_next, params)
 
-        multiple_shot_jvp_wrt_x = jax.vmap(lambda x_tangent : jax.jvp(multiple_shot_partial_wrt_x, (x,), (x_tangent,))[1], in_axes=0, out_axes=-1)  # zeroth output of jvp is function value, which can be discarded
-        multiple_shot_jvp_wrt_u_cur = jax.vmap(lambda u_cur_tangent : jax.jvp(multiple_shot_partial_wrt_u_cur, (u_cur,), (u_cur_tangent,))[1], in_axes=0, out_axes=-1)
-        multiple_shot_jvp_wrt_u_next = jax.vmap(lambda u_next_tangent : jax.jvp(multiple_shot_partial_wrt_u_next, (u_next,), (u_next_tangent,))[1], in_axes=0, out_axes=-1)
+        mapped_jvp = lambda f, primal : jax.vmap(lambda tangent : jax.jvp(f, (primal,), (tangent,))[1], in_axes=0, out_axes=-1)  # zeroth output of jvp is function value, which can be discarded
 
-        x_tangents = jnp.tile(jnp.eye(n_x)[:, None, :], (1, N - 1, 1))
-        u_tangents = jnp.tile(jnp.eye(n_u)[:, None, :], (1, N - 1, 1))
+        x_tangents = jnp.repeat(jnp.eye(n_x)[:, None, :], N - 1, axis=1)  # array of (repeated arrays of (one-hot vectors))
+        u_tangents = jnp.repeat(jnp.eye(n_u)[:, None, :], N - 1, axis=1)
 
-        A_d = multiple_shot_jvp_wrt_x(x_tangents)
-        B_d = multiple_shot_jvp_wrt_u_cur(u_tangents)
-        C_d = multiple_shot_jvp_wrt_u_next(u_tangents)
+        A_d = mapped_jvp(partial_in_x, x)(x_tangents)
+        B_d = mapped_jvp(partial_in_u_cur, u_cur)(u_tangents)
+        C_d = mapped_jvp(partial_in_u_next, u_next)(u_tangents)
 
         return A_d, B_d, C_d
 
     def solver(x, u, params):
         A_d, B_d, C_d = vectorize_and_discretize_then_linearize(x[:-1], u[:-1], u[1:], params)
         x_prop = vectorize_then_discretize(x[:-1], u[:-1], u[1:], params)
+        x_prop_history = get_propagation_history(x[:-1], u[:-1], u[1:], params)
 
-        V_multi = jnp.concatenate([x_prop, A_d.reshape(N-1, n_x*n_x), B_d.reshape(N-1, n_x*n_u), C_d.reshape(N-1, n_x*n_u)], axis=1).reshape(-1, 1)  # TODO: return full nonlinear propagation of state
+        # TODO: This is a kludge. The V_multi output doesn't make sense for discretize-then-linearize, since the time
+        # histories of the Jacobians are never constructed. In fact, nothing downstream even uses those time histories,
+        # which is why I can get away with this. V_multi should be replaced with an output that only includes the
+        # propagation history of the state. Furthermore, A_d, B_d, C_d, and x_prop may then be used instead of V_multi.
+        # This is preferable because they are more descriptively named.
+        i1 = n_x
+        i2 = i1 + n_x * n_x
+        i3 = i2 + n_x * n_u
+        i4 = i3 + n_x * n_u
+        V_multi = jnp.pad(x_prop_history, ((0, 0), (0, 0), (0, i4 - i1))).reshape(-1, (N - 1) * i4)
+        V_multi = V_multi.at[-1].set(jnp.concatenate([x_prop, A_d.reshape(N-1, n_x*n_x), B_d.reshape(N-1, n_x*n_u), C_d.reshape(N-1, n_x*n_u)], axis=1).flatten())
+        V_multi = V_multi.T
+        # </kludge>
 
         return A_d, B_d, C_d, x_prop, V_multi
 
