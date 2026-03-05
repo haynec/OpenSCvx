@@ -650,6 +650,7 @@ def _lower_jax_constraints(
             func=constraint_fn,
             grad_g_X=grad_g_X,
             grad_g_U=grad_g_U,
+            lam_vb=cross_node_constraint._lam_vb[0] if cross_node_constraint._lam_vb else None,
         )
         lowered_cross_node.append(cross_node_lowered)
 

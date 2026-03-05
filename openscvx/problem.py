@@ -741,6 +741,7 @@ class Problem:
                 func=jax.jit(c.func),
                 grad_g_X=jax.jit(c.grad_g_X),
                 grad_g_U=jax.jit(c.grad_g_U),
+                lam_vb=c.lam_vb,
             )
             for c in self._lowered.jax_constraints.cross_node
         ]

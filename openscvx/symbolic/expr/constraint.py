@@ -432,12 +432,19 @@ class CrossNodeConstraint(Expr):
         an error during constraint separation.
     """
 
-    def __init__(self, constraint: Constraint):
+    def __init__(
+        self,
+        constraint: Constraint,
+        lam_vb: Optional[Union[float, List[float]]] = None,
+    ):
         """Initialize a CrossNodeConstraint.
 
         Args:
             constraint: The Constraint containing NodeReference nodes.
                 Must contain at least one NodeReference (from .at(k) calls).
+            lam_vb: Optional per-constraint virtual buffer penalty weight.
+                If None, the global ``lam_vb`` from the algorithm weights is
+                used. A scalar overrides the global weight for this constraint.
 
         Raises:
             TypeError: If constraint is not a Constraint instance
@@ -446,6 +453,10 @@ class CrossNodeConstraint(Expr):
             raise TypeError("CrossNodeConstraint must wrap a Constraint")
 
         self.constraint = constraint
+        if isinstance(lam_vb, (int, float)):
+            self._lam_vb: Optional[List[float]] = [float(lam_vb)]
+        else:
+            self._lam_vb = lam_vb
 
     @property
     def is_convex(self) -> bool:
@@ -471,7 +482,7 @@ class CrossNodeConstraint(Expr):
             CrossNodeConstraint: A new CrossNodeConstraint with canonicalized inner constraint
         """
         canon_constraint = self.constraint.canonicalize()
-        return CrossNodeConstraint(canon_constraint)
+        return CrossNodeConstraint(canon_constraint, lam_vb=self._lam_vb)
 
     def check_shape(self) -> Tuple[int, ...]:
         """Validate the wrapped constraint's shape.
@@ -481,6 +492,29 @@ class CrossNodeConstraint(Expr):
         """
         self.constraint.check_shape()
         return ()
+
+    def weight(self, lam_vb: Union[float, List[float]]) -> "CrossNodeConstraint":
+        """Set the virtual buffer penalty weight for this constraint.
+
+        Overrides the global ``lam_vb`` from the algorithm for this specific
+        constraint.
+
+        Args:
+            lam_vb: Virtual buffer penalty weight for this constraint.
+
+        Returns:
+            Self with per-constraint weight set (enables method chaining).
+
+        Example:
+            Give a rate-limit constraint a higher penalty::
+
+                rate = (pos.at(k) - pos.at(k-1) <= max_step).weight(1e2)
+        """
+        if isinstance(lam_vb, (int, float)):
+            self._lam_vb = [float(lam_vb)]
+        else:
+            self._lam_vb = list(lam_vb)
+        return self
 
     def convex(self) -> "CrossNodeConstraint":
         """Mark the underlying constraint as convex for CVXPy lowering.

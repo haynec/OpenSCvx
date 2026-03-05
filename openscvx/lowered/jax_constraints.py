@@ -111,6 +111,7 @@ class LoweredCrossNodeConstraint:
     func: Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]
     grad_g_X: Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]
     grad_g_U: Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]
+    lam_vb: Optional[float] = None
 
 
 @dataclass
