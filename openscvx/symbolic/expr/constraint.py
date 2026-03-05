@@ -230,13 +230,16 @@ class NodalConstraint(Expr):
             constraint2 = (vel <= 100).at(list(range(n_nodes)))
     """
 
-    def __init__(self, constraint: Constraint, nodes: list[int]):
+    def __init__(self, constraint: Constraint, nodes: list[int], lam_vb: Optional[float] = None):
         """Initialize a NodalConstraint.
 
         Args:
             constraint: The Constraint (Equality or Inequality) to enforce at specified nodes
             nodes: List of integer node indices where the constraint should be enforced.
                 Automatically converts numpy integers to Python integers.
+            lam_vb: Optional per-constraint virtual buffer penalty weight. If None,
+                the global ``lam_vb`` from the algorithm weights is used. Setting this
+                overrides the global weight for this specific constraint.
 
         Raises:
             TypeError: If constraint is not a Constraint instance
@@ -265,6 +268,7 @@ class NodalConstraint(Expr):
 
         self.constraint = constraint
         self.nodes = converted_nodes
+        self._lam_vb = lam_vb
 
     def children(self) -> List["Expr"]:
         """Return the wrapped constraint as the only child.
@@ -281,7 +285,7 @@ class NodalConstraint(Expr):
             NodalConstraint: A new NodalConstraint with canonicalized inner constraint
         """
         canon_constraint = self.constraint.canonicalize()
-        return NodalConstraint(canon_constraint, self.nodes)
+        return NodalConstraint(canon_constraint, self.nodes, lam_vb=self._lam_vb)
 
     def check_shape(self) -> Tuple[int, ...]:
         """Validate the wrapped constraint's shape.
@@ -298,6 +302,28 @@ class NodalConstraint(Expr):
 
         # NodalConstraint produces a scalar like any constraint
         return ()
+
+    def weight(self, lam_vb: float) -> "NodalConstraint":
+        """Set the virtual buffer penalty weight for this constraint.
+
+        Overrides the global ``lam_vb`` from the algorithm for this specific
+        constraint. This allows different constraints to have different penalty
+        weights, e.g. giving obstacle avoidance a higher weight than box constraints.
+
+        Args:
+            lam_vb: Virtual buffer penalty weight for this constraint.
+
+        Returns:
+            Self with per-constraint weight set (enables method chaining).
+
+        Example:
+            Give obstacle avoidance a higher penalty::
+
+                obstacle = (distance >= radius).at(nodes).weight(1e2)
+                box = (x <= x_max).at(nodes).weight(1e0)
+        """
+        self._lam_vb = lam_vb
+        return self
 
     def convex(self) -> "NodalConstraint":
         """Mark the underlying constraint as convex for CVXPy lowering.

@@ -388,7 +388,9 @@ def decompose_vector_nodal_constraints(
                     indexed_lhs = Index(constraint.lhs, i)
                     indexed_rhs = constraint.rhs  # Should be Constant(0)
                     indexed_constraint = constraint.__class__(indexed_lhs, indexed_rhs)
-                    decomposed_constraints.append(NodalConstraint(indexed_constraint, nodes))
+                    decomposed_constraints.append(
+                        NodalConstraint(indexed_constraint, nodes, lam_vb=nodal_constraint._lam_vb)
+                    )
             else:
                 # Scalar constraint - keep as is
                 decomposed_constraints.append(nodal_constraint)
