@@ -943,11 +943,8 @@ class Algorithm(ABC):
         # array dimensions match the post-decomposition constraint count.
         n_nodal = 0
         for nc in nodal_constraints:
-            try:
-                shape = nc.constraint.lhs.check_shape()
-                n_nodal += int(np.prod(shape)) if len(shape) > 0 else 1
-            except Exception:
-                n_nodal += 1
+            shape = nc.constraint.lhs.check_shape()
+            n_nodal += int(np.prod(shape)) if len(shape) > 0 else 1
 
         n_cross = len(cross_node_constraints)
 
@@ -961,11 +958,8 @@ class Algorithm(ABC):
         # Apply per-constraint .weight() overrides for nodal constraints.
         col = 0
         for nc in nodal_constraints:
-            try:
-                shape = nc.constraint.lhs.check_shape()
-                n_elem = int(np.prod(shape)) if len(shape) > 0 else 1
-            except Exception:
-                n_elem = 1
+            shape = nc.constraint.lhs.check_shape()
+            n_elem = int(np.prod(shape)) if len(shape) > 0 else 1
 
             w = nc._lam_vb
             if w is not None:
