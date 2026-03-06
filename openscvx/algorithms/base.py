@@ -920,6 +920,8 @@ class Algorithm(ABC):
         N: int,
         nodal_constraints: list,
         cross_node_constraints: list,
+        n_byof_nodal: int = 0,
+        n_byof_cross: int = 0,
     ) -> None:
         """Resolve per-constraint virtual buffer weight arrays and re-normalize.
 
@@ -933,6 +935,10 @@ class Algorithm(ABC):
             nodal_constraints: Symbolic ``NodalConstraint`` objects (post-
                 preprocessing, pre-lowering).
             cross_node_constraints: Symbolic ``CrossNodeConstraint`` objects.
+            n_byof_nodal: Number of byof nodal constraints (each adds one
+                column with the default weight).
+            n_byof_cross: Number of byof cross-node constraints (each adds
+                one entry with the default weight).
         """
         default_vb = float(self.weights._raw_lam_vb)
 
@@ -946,7 +952,9 @@ class Algorithm(ABC):
             shape = nc.constraint.lhs.check_shape()
             n_nodal += int(np.prod(shape)) if len(shape) > 0 else 1
 
-        n_cross = len(cross_node_constraints)
+        # Byof constraints are scalar (one column each), added after symbolic.
+        n_nodal += n_byof_nodal
+        n_cross = len(cross_node_constraints) + n_byof_cross
 
         # max(..., 1) avoids size-0 CVXPy parameters.
         n_nodal_param = max(n_nodal, 1)
