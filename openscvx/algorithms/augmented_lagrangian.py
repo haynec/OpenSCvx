@@ -164,7 +164,8 @@ class AugmentedLagrangian(AutotuningBase):
             candidate.x,
             candidate.u,
             state.lam_vc,
-            state.lam_vb,
+            state.lam_vb_nodal,
+            state.lam_vb_cross,
             state.lam_cost,
             nodal_constraints,
             params,
@@ -197,7 +198,8 @@ class AugmentedLagrangian(AutotuningBase):
                 state.x,
                 state.u,
                 state.lam_vc,
-                state.lam_vb,
+                state.lam_vb_nodal,
+                state.lam_vb_cross,
                 state.lam_cost,
                 nodal_constraints,
                 params,
@@ -232,7 +234,8 @@ class AugmentedLagrangian(AutotuningBase):
                 candidate.lam_vc = self._update_virtual_control_weights(
                     candidate, candidate_x_prop, settings, state.lam_vc, state.lam_prox
                 )
-                candidate.lam_vb = weights.lam_vb
+                candidate.lam_vb_nodal = state.lam_vb_nodal
+                candidate.lam_vb_cross = state.lam_vb_cross
 
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Higher"
@@ -245,7 +248,8 @@ class AugmentedLagrangian(AutotuningBase):
                 candidate.lam_vc = self._update_virtual_control_weights(
                     candidate, candidate_x_prop, settings, state.lam_vc, state.lam_prox
                 )
-                candidate.lam_vb = weights.lam_vb
+                candidate.lam_vb_nodal = state.lam_vb_nodal
+                candidate.lam_vb_cross = state.lam_vb_cross
 
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Constant"
@@ -257,14 +261,16 @@ class AugmentedLagrangian(AutotuningBase):
                 candidate.lam_vc = self._update_virtual_control_weights(
                     candidate, candidate_x_prop, settings, state.lam_vc, state.lam_prox
                 )
-                candidate.lam_vb = weights.lam_vb
+                candidate.lam_vb_nodal = state.lam_vb_nodal
+                candidate.lam_vb_cross = state.lam_vb_cross
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Lower"
 
         else:
             state.lam_prox_history.append(lam_prox_k)
             candidate.lam_vc = state.lam_vc
-            candidate.lam_vb = weights.lam_vb
+            candidate.lam_vb_nodal = state.lam_vb_nodal
+            candidate.lam_vb_cross = state.lam_vb_cross
             state.accept_solution(candidate)
             adaptive_state = "Initial"
 

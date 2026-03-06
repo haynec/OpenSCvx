@@ -350,7 +350,8 @@ class PTRSolver(ConvexSolver):
         lam_prox = ocp_vars.lam_prox
         lam_cost = ocp_vars.lam_cost
         lam_vc = ocp_vars.lam_vc
-        lam_vb = ocp_vars.lam_vb
+        lam_vb_nodal = ocp_vars.lam_vb_nodal
+        lam_vb_cross = ocp_vars.lam_vb_cross
         _ = ocp_vars.x_nonscaled
         dx = ocp_vars.dx
         du = ocp_vars.du
@@ -359,7 +360,8 @@ class PTRSolver(ConvexSolver):
         nu_vb_cross = ocp_vars.nu_vb_cross
 
         cost = cp.sum(lam_cost) * 0
-        cost += lam_vb * 0
+        cost += cp.sum(lam_vb_nodal) * 0
+        cost += cp.sum(lam_vb_cross) * 0
 
         # Boundary condition cost terms (use scaled x for numerical conditioning)
         x = ocp_vars.x
@@ -381,18 +383,18 @@ class PTRSolver(ConvexSolver):
         # Virtual Control Slack
         cost += sum(cp.sum(lam_vc[i - 1] * cp.abs(nu[i - 1])) for i in range(1, settings.sim.n))
 
-        # Virtual buffer penalty for nodal constraints
+        # Virtual buffer penalty for nodal constraints (per-node weighting)
         idx_ncvx = 0
         if jax_constraints.nodal:
             for constraint in jax_constraints.nodal:
-                cost += lam_vb * cp.sum(cp.pos(nu_vb[idx_ncvx]))
+                cost += lam_vb_nodal[:, idx_ncvx] @ cp.pos(nu_vb[idx_ncvx])
                 idx_ncvx += 1
 
         # Virtual slack penalty for cross-node constraints
         idx_cross = 0
         if jax_constraints.cross_node:
             for constraint in jax_constraints.cross_node:
-                cost += lam_vb * cp.pos(nu_vb_cross[idx_cross])
+                cost += lam_vb_cross[idx_cross] * cp.pos(nu_vb_cross[idx_cross])
                 idx_cross += 1
 
         return cost
@@ -725,7 +727,8 @@ class PTRSolver(ConvexSolver):
         lam_prox: float,
         lam_cost: Union[float, np.ndarray],
         lam_vc: np.ndarray,
-        lam_vb: float,
+        lam_vb_nodal: np.ndarray,
+        lam_vb_cross: np.ndarray,
     ) -> None:
         """Update SCP penalty weights.
 
@@ -737,12 +740,16 @@ class PTRSolver(ConvexSolver):
             lam_cost: Cost function weight. Scalar or array of shape
                 ``(n_states,)`` for per-state weighting.
             lam_vc: Virtual control penalty weights, shape (N-1, n_states)
-            lam_vb: Virtual buffer penalty weight (for constraint violations)
+            lam_vb_nodal: Virtual buffer penalty weights for nodal constraints,
+                shape ``(N, n_nodal_constraints)``.
+            lam_vb_cross: Virtual buffer penalty weights for cross-node
+                constraints, shape ``(n_cross_node_constraints,)``.
         """
         self._set_param("lam_prox", lam_prox)
         self._set_param("lam_cost", lam_cost)
         self._set_param("lam_vc", lam_vc)
-        self._set_param("lam_vb", lam_vb)
+        self._set_param("lam_vb_nodal", lam_vb_nodal)
+        self._set_param("lam_vb_cross", lam_vb_cross)
 
     def update_boundary_conditions(
         self,

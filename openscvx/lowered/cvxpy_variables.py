@@ -31,7 +31,8 @@ class CVXPyVariables:
         lam_prox: Trust region weight parameter (scalar, nonneg)
         lam_cost: Cost function weight parameter (n_states, nonneg)
         lam_vc: Virtual control penalty weights (N-1 x n_states, nonneg)
-        lam_vb: Virtual buffer penalty weight (scalar, nonneg)
+        lam_vb_nodal: Virtual buffer penalty weights for nodal constraints (N x n_nodal, nonneg)
+        lam_vb_cross: Virtual buffer penalty weights for cross-node constraints (n_cross, nonneg)
 
         x: State variable (N x n_states)
         dx: State error variable (N x n_states)
@@ -79,7 +80,8 @@ class CVXPyVariables:
     lam_prox: "cp.Parameter"
     lam_cost: "cp.Parameter"
     lam_vc: "cp.Parameter"
-    lam_vb: "cp.Parameter"
+    lam_vb_nodal: "cp.Parameter"
+    lam_vb_cross: "cp.Parameter"
 
     # State variables and parameters
     x: "cp.Variable"

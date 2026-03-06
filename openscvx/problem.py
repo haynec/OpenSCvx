@@ -285,6 +285,20 @@ class Problem:
                 )
             self._algorithm = algorithm
 
+        # Build per-constraint lam_vb arrays from symbolic constraints and
+        # re-normalize so that per-constraint .weight() overrides participate
+        # in the normalization scale.  Include byof constraint counts so the
+        # arrays are sized to match the post-lowering constraint list.
+        n_byof_nodal = len(byof.get("nodal_constraints", [])) if byof else 0
+        n_byof_cross = len(byof.get("cross_nodal_constraints", [])) if byof else 0
+        self._algorithm._resolve_lam_vb(
+            N=self.symbolic.N,
+            nodal_constraints=self.symbolic.constraints.nodal,
+            cross_node_constraints=self.symbolic.constraints.cross_node,
+            n_byof_nodal=n_byof_nodal,
+            n_byof_cross=n_byof_cross,
+        )
+
         # Resolve discretizer: None → default, dict → LinearizeDiscretize(**dict), instance → use
         if discretizer is None:
             self._discretizer = LinearizeDiscretize()

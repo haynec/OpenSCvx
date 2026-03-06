@@ -241,21 +241,18 @@ class PenalizedTrustRegion(Algorithm):
 
     @property
     def lam_vb(self) -> float:
-        """Virtual buffer penalty weight.
+        """Global virtual buffer penalty weight (pre-normalization).
 
-        This is the user-specified value before normalization. Setting this
-        property triggers automatic re-normalization of all weights.
-
-        !!! note
-            The autotuner may modify the normalized weight in
-            ``self.weights.lam_vb`` during iteration. Those changes are
-            internal and do not alter the value returned here.
+        This is the user-specified scalar default before normalization.
+        Setting this property triggers automatic re-normalization.
+        Per-constraint overrides are set via ``.weight()`` on individual
+        constraints.
         """
         return self.weights._raw_lam_vb
 
     @lam_vb.setter
     def lam_vb(self, value: float) -> None:
-        self.weights._raw_lam_vb = value
+        self.weights._raw_lam_vb = float(value)
         self.weights.normalize()
 
     def get_columns(self, verbosity: int = Verbosity.STANDARD) -> List[Column]:
@@ -614,7 +611,8 @@ class PenalizedTrustRegion(Algorithm):
             lam_prox=state.lam_prox,
             lam_cost=state.lam_cost,
             lam_vc=state.lam_vc,
-            lam_vb=state.lam_vb,
+            lam_vb_nodal=state.lam_vb_nodal,
+            lam_vb_cross=state.lam_vb_cross,
         )
 
         # Solve the convex subproblem

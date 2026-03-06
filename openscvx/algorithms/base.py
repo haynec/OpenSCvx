@@ -124,22 +124,38 @@ class Weights:
         lam_vc: Virtual control penalty weight (normalized).
         lam_cost: Cost weight per state (normalized). Scalar or array of
             shape ``(n_states,)`` for per-state weighting.
-        lam_vb: Virtual buffer penalty weight (normalized).
+        lam_vb: Global virtual buffer penalty weight (normalized). Scalar
+            default applied to every constraint. Use ``.weight()`` on
+            individual constraints for per-constraint or per-node overrides.
+        lam_vb_nodal: Virtual buffer penalty weights for nodal constraints
+            (normalized), shape ``(N, n_nodal)``. Set by
+            :meth:`set_vb_arrays`.
+        lam_vb_cross: Virtual buffer penalty weights for cross-node
+            constraints (normalized), shape ``(n_cross,)``. Set by
+            :meth:`set_vb_arrays`.
     """
 
     lam_prox: float = 1e0
     lam_vc: float = 1e1
     lam_cost: Union[float, np.ndarray] = 1e-1
     lam_vb: float = 0.0
+    lam_vb_nodal: Optional[np.ndarray] = None
+    lam_vb_cross: Optional[np.ndarray] = None
 
     def __post_init__(self):
+        # Coerce lists/lists-of-lists to numpy arrays.
+        if isinstance(self.lam_cost, (list, tuple)):
+            self.lam_cost = np.asarray(self.lam_cost, dtype=float)
+
         # Snapshot the user-specified values so normalize() is idempotent.
         self._raw_lam_prox = self.lam_prox
         self._raw_lam_vc = self.lam_vc
         self._raw_lam_cost = (
             self.lam_cost.copy() if isinstance(self.lam_cost, np.ndarray) else self.lam_cost
         )
-        self._raw_lam_vb = self.lam_vb
+        self._raw_lam_vb = float(self.lam_vb)
+        self._raw_lam_vb_nodal: Optional[np.ndarray] = None
+        self._raw_lam_vb_cross: Optional[np.ndarray] = None
 
     def normalize(self) -> None:
         """Normalize weights so the largest equals 1.0.
@@ -153,12 +169,42 @@ class Weights:
             if isinstance(self._raw_lam_cost, np.ndarray)
             else self._raw_lam_cost
         )
-        scale = max(self._raw_lam_prox, self._raw_lam_vc, raw_cost_max, self._raw_lam_vb)
+        if self._raw_lam_vb_nodal is not None:
+            raw_vb_max = max(
+                float(np.max(self._raw_lam_vb_nodal)),
+                float(np.max(self._raw_lam_vb_cross)),
+            )
+        else:
+            raw_vb_max = self._raw_lam_vb
+        scale = max(self._raw_lam_prox, self._raw_lam_vc, raw_cost_max, raw_vb_max)
         if scale > 0:
             self.lam_prox = self._raw_lam_prox / scale
             self.lam_vc = self._raw_lam_vc / scale
             self.lam_cost = self._raw_lam_cost / scale
             self.lam_vb = self._raw_lam_vb / scale
+            if self._raw_lam_vb_nodal is not None:
+                self.lam_vb_nodal = self._raw_lam_vb_nodal / scale
+                self.lam_vb_cross = self._raw_lam_vb_cross / scale
+
+    def set_vb_arrays(
+        self,
+        lam_vb_nodal: np.ndarray,
+        lam_vb_cross: np.ndarray,
+    ) -> None:
+        """Set pre-built virtual buffer weight arrays.
+
+        Stores the given arrays as both the current (normalized) and raw
+        (pre-normalization) values. Call :meth:`normalize` afterwards to
+        rescale all weights consistently.
+
+        Args:
+            lam_vb_nodal: Weight array of shape ``(N, n_nodal)``.
+            lam_vb_cross: Weight array of shape ``(n_cross,)``.
+        """
+        self.lam_vb_nodal = lam_vb_nodal
+        self.lam_vb_cross = lam_vb_cross
+        self._raw_lam_vb_nodal = lam_vb_nodal.copy()
+        self._raw_lam_vb_cross = lam_vb_cross.copy()
 
 
 @dataclass
@@ -175,7 +221,8 @@ class CandidateIterate:
     TR: Optional[np.ndarray] = None
     lam_vc: Optional[Union[float, np.ndarray]] = None
     lam_cost: Optional[Union[float, np.ndarray]] = None
-    lam_vb: Optional[float] = None
+    lam_vb_nodal: Optional[np.ndarray] = None
+    lam_vb_cross: Optional[np.ndarray] = None
     J_lin: Optional[float] = None
     J_nonlin: Optional[float] = None
 
@@ -306,7 +353,8 @@ class AutotuningBase(ABC):
         x_bar: np.ndarray,
         u_bar: np.ndarray,
         lam_vc: np.ndarray,
-        lam_vb: float,
+        lam_vb_nodal: np.ndarray,
+        lam_vb_cross: np.ndarray,
         lam_cost: Union[float, np.ndarray],
         nodal_constraints: "LoweredJaxConstraints",
         params: dict,
@@ -324,7 +372,10 @@ class AutotuningBase(ABC):
             x_bar: Previous iteration state (n_nodes, n_states)
             u_bar: Solution control (n_nodes, n_controls)
             lam_vc: Virtual control weight (scalar or matrix)
-            lam_vb: Virtual buffer penalty weight (scalar)
+            lam_vb_nodal: Virtual buffer penalty weights for nodal
+                constraints, shape ``(N, n_nodal)``.
+            lam_vb_cross: Virtual buffer penalty weights for cross-node
+                constraints, shape ``(n_cross,)``.
             lam_cost: Cost weight. Scalar (applied uniformly) or
                 array of shape ``(n_states,)`` for per-state weighting.
             nodal_constraints: Lowered JAX constraints
@@ -340,28 +391,28 @@ class AutotuningBase(ABC):
         nodal_penalty = 0.0
 
         # Evaluate nodal constraints
-        for constraint in nodal_constraints.nodal:
+        for idx, constraint in enumerate(nodal_constraints.nodal):
             # Nodal constraint function is vmapped: func(x, u, node, params)
             # When called with arrays, it evaluates at all nodes
             g = constraint.func(x_bar, u_bar, 0, params)
             # Only sum violations at nodes where constraint is enforced
             if constraint.nodes is not None:
-                # Filter to only specified nodes
-                # Convert to numpy array for JAX compatibility
                 nodes_array = np.array(constraint.nodes)
                 g_filtered = g[nodes_array]
+                w = lam_vb_nodal[nodes_array, idx]
             else:
-                # If no nodes specified, check all nodes
                 g_filtered = g
-            nodal_penalty += lam_vb * np.sum(np.maximum(0, g_filtered))
+                w = lam_vb_nodal[:, idx]
+            nodal_penalty += np.sum(w * np.maximum(0, g_filtered))
 
         # Evaluate cross-node constraints
-        for constraint in nodal_constraints.cross_node:
+        for idx, constraint in enumerate(nodal_constraints.cross_node):
+            w = lam_vb_cross[idx]
             # Cross-node constraint function signature: func(X, U, params)
             # No node argument - operates on full trajectory
             g = constraint.func(x_bar, u_bar, params)
             # Cross-node constraints return scalar or array, sum all violations
-            nodal_penalty += lam_vb * np.sum(np.maximum(0, g))
+            nodal_penalty += w * np.sum(np.maximum(0, g))
 
         # lam_cost weighting is applied inside calculate_cost_from_state,
         # so the returned cost is already weighted (no outer multiplication).
@@ -421,7 +472,8 @@ class AlgorithmState:
         lam_prox: Current trust region weight (may adapt during solve)
         lam_cost: Current cost weight (may relax during solve)
         lam_vc: Current virtual control penalty weight
-        lam_vb: Current virtual buffer penalty weight
+        lam_vb_nodal: Current per-node nodal virtual buffer penalty weights
+        lam_vb_cross: Current cross-node virtual buffer penalty weights
         n_x: Number of states (for unpacking V vectors)
         n_u: Number of controls (for unpacking V vectors)
         N: Number of trajectory nodes (for unpacking V vectors)
@@ -455,7 +507,8 @@ class AlgorithmState:
     TR_history: List[np.ndarray] = field(default_factory=list)
     lam_vc_history: List[Union[float, np.ndarray]] = field(default_factory=list)
     lam_cost_history: List[Union[float, np.ndarray]] = field(default_factory=list)
-    lam_vb_history: List[float] = field(default_factory=list)
+    lam_vb_nodal_history: List[np.ndarray] = field(default_factory=list)
+    lam_vb_cross_history: List[np.ndarray] = field(default_factory=list)
     lam_prox_history: List[float] = field(default_factory=list)
     x_full: List[np.ndarray] = field(default_factory=list)
     x_prop_full: List[np.ndarray] = field(default_factory=list)
@@ -501,8 +554,10 @@ class AlgorithmState:
             self.lam_vc_history.append(cand.lam_vc)
         if cand.lam_cost is not None:
             self.lam_cost_history.append(cand.lam_cost)
-        if cand.lam_vb is not None:
-            self.lam_vb_history.append(cand.lam_vb)
+        if cand.lam_vb_nodal is not None:
+            self.lam_vb_nodal_history.append(cand.lam_vb_nodal)
+        if cand.lam_vb_cross is not None:
+            self.lam_vb_cross_history.append(cand.lam_vb_cross)
 
         if cand.J_nonlin is not None:
             self.J_nonlin_history.append(cand.J_nonlin)
@@ -694,18 +749,37 @@ class AlgorithmState:
         return self.lam_vc_history[-1]
 
     @property
-    def lam_vb(self) -> float:
-        """Get current virtual buffer penalty weight.
+    def lam_vb_nodal(self) -> np.ndarray:
+        """Get current virtual buffer penalty weights for nodal constraints.
 
         Returns:
-            Current virtual buffer penalty weight (latest entry in lam_vb_history)
+            Array of shape ``(N, n_nodal_constraints)``.
         """
-        if not self.lam_vb_history:
-            raise ValueError("lam_vb_history is empty. Initialize state using from_settings().")
-        return self.lam_vb_history[-1]
+        if not self.lam_vb_nodal_history:
+            raise ValueError(
+                "lam_vb_nodal_history is empty. Initialize state using from_settings()."
+            )
+        return self.lam_vb_nodal_history[-1]
+
+    @property
+    def lam_vb_cross(self) -> np.ndarray:
+        """Get current virtual buffer penalty weights for cross-node constraints.
+
+        Returns:
+            Array of shape ``(n_cross_node_constraints,)``.
+        """
+        if not self.lam_vb_cross_history:
+            raise ValueError(
+                "lam_vb_cross_history is empty. Initialize state using from_settings()."
+            )
+        return self.lam_vb_cross_history[-1]
 
     @classmethod
-    def from_settings(cls, settings: "Config", weights: "Weights") -> "AlgorithmState":
+    def from_settings(
+        cls,
+        settings: "Config",
+        weights: "Weights",
+    ) -> "AlgorithmState":
         """Create initial algorithm state from configuration.
 
         Copies only the trajectory arrays from settings, leaving all metadata
@@ -749,7 +823,8 @@ class AlgorithmState:
             TR_history=[],
             lam_vc_history=[lam_vc_array],
             lam_cost_history=[lam_cost_init],
-            lam_vb_history=[weights.lam_vb],
+            lam_vb_nodal_history=[weights.lam_vb_nodal.copy()],
+            lam_vb_cross_history=[weights.lam_vb_cross.copy()],
             lam_prox_history=[weights.lam_prox],
         )
 
@@ -839,6 +914,87 @@ class Algorithm(ABC):
                 )
             return _expand_lam_cost_dict(lam_cost, states)
         return lam_cost
+
+    def _resolve_lam_vb(
+        self,
+        N: int,
+        nodal_constraints: list,
+        cross_node_constraints: list,
+        n_byof_nodal: int = 0,
+        n_byof_cross: int = 0,
+    ) -> None:
+        """Resolve per-constraint virtual buffer weight arrays and re-normalize.
+
+        Inspects each symbolic constraint's shape (to account for vector
+        decomposition) and ``.weight()`` overrides, populates
+        ``weights.lam_vb_nodal`` and ``weights.lam_vb_cross``, then
+        re-normalizes all weights so the overrides participate in the scale.
+
+        Args:
+            N: Number of trajectory nodes.
+            nodal_constraints: Symbolic ``NodalConstraint`` objects (post-
+                preprocessing, pre-lowering).
+            cross_node_constraints: Symbolic ``CrossNodeConstraint`` objects.
+            n_byof_nodal: Number of byof nodal constraints (each adds one
+                column with the default weight).
+            n_byof_cross: Number of byof cross-node constraints (each adds
+                one entry with the default weight).
+        """
+        default_vb = float(self.weights._raw_lam_vb)
+
+        # Count decomposed nodal constraints (vector → multiple scalars).
+        # Vector constraints are decomposed element-wise during lowering
+        # (see decompose_vector_nodal_constraints), so each element gets its
+        # own column.  We mirror that here via check_shape() to ensure the
+        # array dimensions match the post-decomposition constraint count.
+        n_nodal = 0
+        for nc in nodal_constraints:
+            shape = nc.constraint.lhs.check_shape()
+            n_nodal += int(np.prod(shape)) if len(shape) > 0 else 1
+
+        # Byof constraints are scalar (one column each), added after symbolic.
+        n_nodal += n_byof_nodal
+        n_cross = len(cross_node_constraints) + n_byof_cross
+
+        # max(..., 1) avoids size-0 CVXPy parameters.
+        n_nodal_param = max(n_nodal, 1)
+        n_cross_param = max(n_cross, 1)
+
+        lam_vb_nodal = np.full((N, n_nodal_param), default_vb)
+        lam_vb_cross = np.full(n_cross_param, default_vb)
+
+        # Apply per-constraint .weight() overrides for nodal constraints.
+        col = 0
+        for nc in nodal_constraints:
+            shape = nc.constraint.lhs.check_shape()
+            n_elem = int(np.prod(shape)) if len(shape) > 0 else 1
+
+            w = nc._lam_vb
+            if w is not None:
+                nodes = nc.nodes if nc.nodes is not None else list(range(N))
+                if isinstance(w, (int, float)):
+                    lam_vb_nodal[nodes, col : col + n_elem] = float(w)
+                elif isinstance(w, np.ndarray):
+                    if w.ndim == 1:
+                        # (n_elem,) — broadcast across nodes
+                        for i in range(n_elem):
+                            val = float(w[0]) if len(w) == 1 else float(w[i])
+                            lam_vb_nodal[nodes, col + i] = val
+                    elif w.ndim == 2:
+                        # (n_nodes, n_elem) — per-node-per-element
+                        for i in range(n_elem):
+                            c_i = 0 if w.shape[1] == 1 else i
+                            lam_vb_nodal[nodes, col + i] = w[:, c_i]
+
+            col += n_elem
+
+        # Apply per-constraint .weight() overrides for cross-node constraints.
+        for idx, cc in enumerate(cross_node_constraints):
+            if cc._lam_vb is not None:
+                lam_vb_cross[idx] = float(cc._lam_vb)
+
+        self.weights.set_vb_arrays(lam_vb_nodal, lam_vb_cross)
+        self.weights.normalize()
 
     @abstractmethod
     def initialize(
