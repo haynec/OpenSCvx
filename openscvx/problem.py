@@ -285,6 +285,16 @@ class Problem:
                 )
             self._algorithm = algorithm
 
+        # Build per-constraint lam_vb arrays from symbolic constraints and
+        # re-normalize so that per-constraint .weight() overrides participate
+        # in the normalization scale.
+        self._algorithm.weights.build_vb_arrays(
+            N=self.symbolic.N,
+            nodal_constraints=self.symbolic.constraints.nodal,
+            cross_node_constraints=self.symbolic.constraints.cross_node,
+        )
+        self._algorithm.weights.normalize()
+
         # Resolve discretizer: None → default, dict → LinearizeDiscretize(**dict), instance → use
         if discretizer is None:
             self._discretizer = LinearizeDiscretize()
@@ -857,15 +867,7 @@ class Problem:
             self.emitter_function = lambda data: None
 
         # Create fresh solver state
-        n_nodal = len(self._compiled_constraints.nodal)
-        n_cross = len(self._compiled_constraints.cross_node)
-        self._state = AlgorithmState.from_settings(
-            self.settings,
-            self._algorithm.weights,
-            n_nodal=n_nodal,
-            n_cross=n_cross,
-            jax_constraints=self._compiled_constraints,
-        )
+        self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
 
         t_f_while = time.time()
         self.timing_init = t_f_while - t_0_while
@@ -920,15 +922,7 @@ class Problem:
         self._sync_boundary_conditions()
 
         # Create fresh solver state from settings
-        n_nodal = len(self._compiled_constraints.nodal)
-        n_cross = len(self._compiled_constraints.cross_node)
-        self._state = AlgorithmState.from_settings(
-            self.settings,
-            self._algorithm.weights,
-            n_nodal=n_nodal,
-            n_cross=n_cross,
-            jax_constraints=self._compiled_constraints,
-        )
+        self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
 
         # Reset solution
         self._solution = None

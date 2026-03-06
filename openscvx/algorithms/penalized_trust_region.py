@@ -315,15 +315,7 @@ class PenalizedTrustRegion(Algorithm):
         )
 
         # Create temporary state for initialization solve
-        n_nodal = len(jax_constraints.nodal) if jax_constraints.nodal else 0
-        n_cross = len(jax_constraints.cross_node) if jax_constraints.cross_node else 0
-        init_state = AlgorithmState.from_settings(
-            settings,
-            self.weights,
-            n_nodal=n_nodal,
-            n_cross=n_cross,
-            jax_constraints=jax_constraints,
-        )
+        init_state = AlgorithmState.from_settings(settings, self.weights)
 
         # Solve a dumb problem to initialize DPP and JAX jacobians
         _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
