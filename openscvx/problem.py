@@ -288,12 +288,11 @@ class Problem:
         # Build per-constraint lam_vb arrays from symbolic constraints and
         # re-normalize so that per-constraint .weight() overrides participate
         # in the normalization scale.
-        self._algorithm.weights.build_vb_arrays(
+        self._algorithm.build_vb_weights(
             N=self.symbolic.N,
             nodal_constraints=self.symbolic.constraints.nodal,
             cross_node_constraints=self.symbolic.constraints.cross_node,
         )
-        self._algorithm.weights.normalize()
 
         # Resolve discretizer: None → default, dict → LinearizeDiscretize(**dict), instance → use
         if discretizer is None:

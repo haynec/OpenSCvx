@@ -969,6 +969,27 @@ class Algorithm(ABC):
             return _expand_lam_cost_dict(lam_cost, states)
         return lam_cost
 
+    def build_vb_weights(
+        self,
+        N: int,
+        nodal_constraints: list,
+        cross_node_constraints: list,
+    ) -> None:
+        """Build per-constraint virtual buffer weight arrays and re-normalize.
+
+        Inspects each symbolic constraint's shape and ``.weight()`` overrides,
+        populates ``weights.lam_vb_nodal`` and ``weights.lam_vb_cross``, then
+        re-normalizes all weights so the overrides participate in the scale.
+
+        Args:
+            N: Number of trajectory nodes.
+            nodal_constraints: Symbolic ``NodalConstraint`` objects (post-
+                preprocessing, pre-lowering).
+            cross_node_constraints: Symbolic ``CrossNodeConstraint`` objects.
+        """
+        self.weights.build_vb_arrays(N, nodal_constraints, cross_node_constraints)
+        self.weights.normalize()
+
     @abstractmethod
     def initialize(
         self,
