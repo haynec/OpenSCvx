@@ -201,6 +201,10 @@ class Weights:
         default_vb = float(self.lam_vb)
 
         # Count decomposed nodal constraints (vector → multiple scalars).
+        # Vector constraints are decomposed element-wise during lowering
+        # (see decompose_vector_nodal_constraints), so each element gets its
+        # own column. We mirror that here via check_shape() to ensure the
+        # array dimensions match the post-decomposition constraint count.
         n_nodal = 0
         for nc in nodal_constraints:
             try:

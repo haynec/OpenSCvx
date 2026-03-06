@@ -1,10 +1,9 @@
 """JAX-lowered constraint dataclass."""
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, List, Optional, Union
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 import jax.numpy as jnp
-import numpy as np
 
 if TYPE_CHECKING:
     from openscvx.symbolic.expr import CTCS
@@ -44,7 +43,6 @@ class LoweredNodalConstraint:
     grad_g_x: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
     grad_g_u: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
     nodes: Optional[List[int]] = None
-    lam_vb: Optional[Union[float, np.ndarray]] = None
 
 
 @dataclass
@@ -112,7 +110,6 @@ class LoweredCrossNodeConstraint:
     func: Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]
     grad_g_X: Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]
     grad_g_U: Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]
-    lam_vb: Optional[float] = None
 
 
 @dataclass
