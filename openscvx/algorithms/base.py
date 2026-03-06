@@ -129,10 +129,10 @@ class Weights:
             individual constraints for per-constraint or per-node overrides.
         lam_vb_nodal: Virtual buffer penalty weights for nodal constraints
             (normalized), shape ``(N, n_nodal)``. Set by
-            :meth:`build_vb_arrays`.
+            :meth:`set_vb_arrays`.
         lam_vb_cross: Virtual buffer penalty weights for cross-node
             constraints (normalized), shape ``(n_cross,)``. Set by
-            :meth:`build_vb_arrays`.
+            :meth:`set_vb_arrays`.
     """
 
     lam_prox: float = 1e0
@@ -186,81 +186,21 @@ class Weights:
                 self.lam_vb_nodal = self._raw_lam_vb_nodal / scale
                 self.lam_vb_cross = self._raw_lam_vb_cross / scale
 
-    def build_vb_arrays(
+    def set_vb_arrays(
         self,
-        N: int,
-        nodal_constraints: list,
-        cross_node_constraints: list,
+        lam_vb_nodal: np.ndarray,
+        lam_vb_cross: np.ndarray,
     ) -> None:
-        """Build per-constraint ``lam_vb`` arrays from symbolic constraints.
+        """Set pre-built virtual buffer weight arrays.
 
-        Inspects each constraint's shape (to account for vector decomposition)
-        and ``.weight()`` overrides, then populates ``lam_vb_nodal`` and
-        ``lam_vb_cross``. Must be called before :meth:`normalize`.
+        Stores the given arrays as both the current (normalized) and raw
+        (pre-normalization) values. Call :meth:`normalize` afterwards to
+        rescale all weights consistently.
 
         Args:
-            N: Number of trajectory nodes.
-            nodal_constraints: Symbolic ``NodalConstraint`` objects (post-
-                preprocessing, pre-lowering).
-            cross_node_constraints: Symbolic ``CrossNodeConstraint`` objects.
+            lam_vb_nodal: Weight array of shape ``(N, n_nodal)``.
+            lam_vb_cross: Weight array of shape ``(n_cross,)``.
         """
-        default_vb = float(self._raw_lam_vb)
-
-        # Count decomposed nodal constraints (vector → multiple scalars).
-        # Vector constraints are decomposed element-wise during lowering
-        # (see decompose_vector_nodal_constraints), so each element gets its
-        # own column. We mirror that here via check_shape() to ensure the
-        # array dimensions match the post-decomposition constraint count.
-        n_nodal = 0
-        for nc in nodal_constraints:
-            try:
-                shape = nc.constraint.lhs.check_shape()
-                n_nodal += int(np.prod(shape)) if len(shape) > 0 else 1
-            except Exception:
-                n_nodal += 1
-
-        n_cross = len(cross_node_constraints)
-
-        # max(..., 1) avoids size-0 CVXPy parameters.
-        n_nodal_param = max(n_nodal, 1)
-        n_cross_param = max(n_cross, 1)
-
-        lam_vb_nodal = np.full((N, n_nodal_param), default_vb)
-        lam_vb_cross = np.full(n_cross_param, default_vb)
-
-        # Apply per-constraint .weight() overrides for nodal constraints.
-        col = 0
-        for nc in nodal_constraints:
-            try:
-                shape = nc.constraint.lhs.check_shape()
-                n_elem = int(np.prod(shape)) if len(shape) > 0 else 1
-            except Exception:
-                n_elem = 1
-
-            w = nc._lam_vb
-            if w is not None:
-                nodes = nc.nodes if nc.nodes is not None else list(range(N))
-                if isinstance(w, (int, float)):
-                    lam_vb_nodal[nodes, col : col + n_elem] = float(w)
-                elif isinstance(w, np.ndarray):
-                    if w.ndim == 1:
-                        # (n_elem,) — broadcast across nodes
-                        for i in range(n_elem):
-                            val = float(w[0]) if len(w) == 1 else float(w[i])
-                            lam_vb_nodal[nodes, col + i] = val
-                    elif w.ndim == 2:
-                        # (n_nodes, n_elem) — per-node-per-element
-                        for i in range(n_elem):
-                            c_i = 0 if w.shape[1] == 1 else i
-                            lam_vb_nodal[nodes, col + i] = w[:, c_i]
-
-            col += n_elem
-
-        # Apply per-constraint .weight() overrides for cross-node constraints.
-        for idx, cc in enumerate(cross_node_constraints):
-            if cc._lam_vb is not None:
-                lam_vb_cross[idx] = float(cc._lam_vb)
-
         self.lam_vb_nodal = lam_vb_nodal
         self.lam_vb_cross = lam_vb_cross
         self._raw_lam_vb_nodal = lam_vb_nodal.copy()
@@ -975,16 +915,17 @@ class Algorithm(ABC):
             return _expand_lam_cost_dict(lam_cost, states)
         return lam_cost
 
-    def build_vb_weights(
+    def _resolve_lam_vb(
         self,
         N: int,
         nodal_constraints: list,
         cross_node_constraints: list,
     ) -> None:
-        """Build per-constraint virtual buffer weight arrays and re-normalize.
+        """Resolve per-constraint virtual buffer weight arrays and re-normalize.
 
-        Inspects each symbolic constraint's shape and ``.weight()`` overrides,
-        populates ``weights.lam_vb_nodal`` and ``weights.lam_vb_cross``, then
+        Inspects each symbolic constraint's shape (to account for vector
+        decomposition) and ``.weight()`` overrides, populates
+        ``weights.lam_vb_nodal`` and ``weights.lam_vb_cross``, then
         re-normalizes all weights so the overrides participate in the scale.
 
         Args:
@@ -993,7 +934,64 @@ class Algorithm(ABC):
                 preprocessing, pre-lowering).
             cross_node_constraints: Symbolic ``CrossNodeConstraint`` objects.
         """
-        self.weights.build_vb_arrays(N, nodal_constraints, cross_node_constraints)
+        default_vb = float(self.weights._raw_lam_vb)
+
+        # Count decomposed nodal constraints (vector → multiple scalars).
+        # Vector constraints are decomposed element-wise during lowering
+        # (see decompose_vector_nodal_constraints), so each element gets its
+        # own column.  We mirror that here via check_shape() to ensure the
+        # array dimensions match the post-decomposition constraint count.
+        n_nodal = 0
+        for nc in nodal_constraints:
+            try:
+                shape = nc.constraint.lhs.check_shape()
+                n_nodal += int(np.prod(shape)) if len(shape) > 0 else 1
+            except Exception:
+                n_nodal += 1
+
+        n_cross = len(cross_node_constraints)
+
+        # max(..., 1) avoids size-0 CVXPy parameters.
+        n_nodal_param = max(n_nodal, 1)
+        n_cross_param = max(n_cross, 1)
+
+        lam_vb_nodal = np.full((N, n_nodal_param), default_vb)
+        lam_vb_cross = np.full(n_cross_param, default_vb)
+
+        # Apply per-constraint .weight() overrides for nodal constraints.
+        col = 0
+        for nc in nodal_constraints:
+            try:
+                shape = nc.constraint.lhs.check_shape()
+                n_elem = int(np.prod(shape)) if len(shape) > 0 else 1
+            except Exception:
+                n_elem = 1
+
+            w = nc._lam_vb
+            if w is not None:
+                nodes = nc.nodes if nc.nodes is not None else list(range(N))
+                if isinstance(w, (int, float)):
+                    lam_vb_nodal[nodes, col : col + n_elem] = float(w)
+                elif isinstance(w, np.ndarray):
+                    if w.ndim == 1:
+                        # (n_elem,) — broadcast across nodes
+                        for i in range(n_elem):
+                            val = float(w[0]) if len(w) == 1 else float(w[i])
+                            lam_vb_nodal[nodes, col + i] = val
+                    elif w.ndim == 2:
+                        # (n_nodes, n_elem) — per-node-per-element
+                        for i in range(n_elem):
+                            c_i = 0 if w.shape[1] == 1 else i
+                            lam_vb_nodal[nodes, col + i] = w[:, c_i]
+
+            col += n_elem
+
+        # Apply per-constraint .weight() overrides for cross-node constraints.
+        for idx, cc in enumerate(cross_node_constraints):
+            if cc._lam_vb is not None:
+                lam_vb_cross[idx] = float(cc._lam_vb)
+
+        self.weights.set_vb_arrays(lam_vb_nodal, lam_vb_cross)
         self.weights.normalize()
 
     @abstractmethod

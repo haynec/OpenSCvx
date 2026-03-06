@@ -288,7 +288,7 @@ class Problem:
         # Build per-constraint lam_vb arrays from symbolic constraints and
         # re-normalize so that per-constraint .weight() overrides participate
         # in the normalization scale.
-        self._algorithm.build_vb_weights(
+        self._algorithm._resolve_lam_vb(
             N=self.symbolic.N,
             nodal_constraints=self.symbolic.constraints.nodal,
             cross_node_constraints=self.symbolic.constraints.cross_node,
