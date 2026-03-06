@@ -327,7 +327,11 @@ class PenalizedTrustRegion(Algorithm):
         )
 
         # Create temporary state for initialization solve
-        init_state = AlgorithmState.from_settings(settings, self.weights)
+        n_nodal = len(jax_constraints.nodal) if jax_constraints.nodal else 0
+        n_cross = len(jax_constraints.cross_node) if jax_constraints.cross_node else 0
+        init_state = AlgorithmState.from_settings(
+            settings, self.weights, n_nodal=n_nodal, n_cross=n_cross
+        )
 
         # Solve a dumb problem to initialize DPP and JAX jacobians
         _, _, _, x_prop, V_multi_shoot = self._discretization_solver.call(
@@ -623,7 +627,8 @@ class PenalizedTrustRegion(Algorithm):
             lam_prox=state.lam_prox,
             lam_cost=state.lam_cost,
             lam_vc=state.lam_vc,
-            lam_vb=state.lam_vb,
+            lam_vb_nodal=state.lam_vb_nodal,
+            lam_vb_cross=state.lam_vb_cross,
         )
 
         # Solve the convex subproblem

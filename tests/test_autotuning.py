@@ -117,7 +117,8 @@ def algorithm_state(settings):
         discretizations=[],
         lam_vc_history=[np.array([1.0, 1.0])],  # Array for virtual control
         lam_cost_history=[1.0],
-        lam_vb_history=[1.0],
+        lam_vb_nodal_history=[np.full((3, 0), 1.0)],  # (N, n_nodal=0)
+        lam_vb_cross_history=[np.full(0, 1.0)],  # (n_cross=0,)
         lam_prox_history=[1.0],
     )
     return state
@@ -341,12 +342,22 @@ def test_calculate_nonlinear_penalty_no_constraints(settings, empty_nodal_constr
     x_bar = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
     u_bar = np.array([[0.0], [0.5], [1.0]])
     lam_vc = np.array([1.0, 1.0])
-    lam_vb = 1.0
+    lam_vb_nodal = np.full((3, 0), 1.0)
+    lam_vb_cross = np.full(0, 1.0)
     lam_cost = 1.0
     params = {}
 
     nonlinear_cost, nonlinear_penalty, nodal_penalty = AutotuningBase.calculate_nonlinear_penalty(
-        x_prop, x_bar, u_bar, lam_vc, lam_vb, lam_cost, empty_nodal_constraints, params, settings
+        x_prop,
+        x_bar,
+        u_bar,
+        lam_vc,
+        lam_vb_nodal,
+        lam_vb_cross,
+        lam_cost,
+        empty_nodal_constraints,
+        params,
+        settings,
     )
 
     # Should have cost component
@@ -365,7 +376,8 @@ def test_calculate_nonlinear_penalty_with_nodal_violations(
     x_bar = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])  # x[0] = 2.0 > 1.5, violation
     u_bar = np.array([[0.0], [0.5], [1.0]])
     lam_vc = np.array([1.0, 1.0])
-    lam_vb = 1.0
+    lam_vb_nodal = np.full((3, 1), 1.0)  # 1 nodal constraint
+    lam_vb_cross = np.full(0, 1.0)
     lam_cost = 1.0
     params = {}
 
@@ -374,7 +386,8 @@ def test_calculate_nonlinear_penalty_with_nodal_violations(
         x_bar,
         u_bar,
         lam_vc,
-        lam_vb,
+        lam_vb_nodal,
+        lam_vb_cross,
         lam_cost,
         nodal_constraints_with_violations,
         params,
@@ -393,12 +406,22 @@ def test_calculate_nonlinear_penalty_with_cross_node_violations(settings, cross_
     x_bar = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])  # x[1,0] - x[0,0] = 1.0 > 0.5, violation
     u_bar = np.array([[0.0], [0.5], [1.0]])
     lam_vc = np.array([1.0, 1.0])
-    lam_vb = 1.0
+    lam_vb_nodal = np.full((3, 0), 1.0)  # 0 nodal constraints
+    lam_vb_cross = np.full(1, 1.0)  # 1 cross-node constraint
     lam_cost = 1.0
     params = {}
 
     nonlinear_cost, nonlinear_penalty, nodal_penalty = AutotuningBase.calculate_nonlinear_penalty(
-        x_prop, x_bar, u_bar, lam_vc, lam_vb, lam_cost, cross_node_constraints, params, settings
+        x_prop,
+        x_bar,
+        u_bar,
+        lam_vc,
+        lam_vb_nodal,
+        lam_vb_cross,
+        lam_cost,
+        cross_node_constraints,
+        params,
+        settings,
     )
 
     # Should have positive nodal penalty due to cross-node violation
@@ -428,12 +451,22 @@ def test_calculate_nonlinear_penalty_nodal_with_node_filter(settings):
     x_bar = np.array([[2.0, 0.0], [0.0, 1.0], [2.0, 2.0]])  # Nodes 0 and 2 violate
     u_bar = np.array([[0.0], [0.5], [1.0]])
     lam_vc = np.array([1.0, 1.0])
-    lam_vb = 1.0
+    lam_vb_nodal = np.full((3, 1), 1.0)  # 1 nodal constraint
+    lam_vb_cross = np.full(0, 1.0)
     lam_cost = 1.0
     params = {}
 
     nonlinear_cost, nonlinear_penalty, nodal_penalty = AutotuningBase.calculate_nonlinear_penalty(
-        x_prop, x_bar, u_bar, lam_vc, lam_vb, lam_cost, nodal_constraints, params, settings
+        x_prop,
+        x_bar,
+        u_bar,
+        lam_vc,
+        lam_vb_nodal,
+        lam_vb_cross,
+        lam_cost,
+        nodal_constraints,
+        params,
+        settings,
     )
 
     # Should have positive penalty from filtered nodes
@@ -446,12 +479,22 @@ def test_calculate_nonlinear_penalty_virtual_control_component(settings, empty_n
     x_bar = np.array([[0.0, 0.0], [1.0, 1.0], [3.0, 3.0]])  # Large difference at end
     u_bar = np.array([[0.0], [0.5], [1.0]])
     lam_vc = np.array([2.0, 2.0])  # Higher weight
-    lam_vb = 1.0
+    lam_vb_nodal = np.full((3, 0), 1.0)
+    lam_vb_cross = np.full(0, 1.0)
     lam_cost = 1.0
     params = {}
 
     nonlinear_cost, nonlinear_penalty, nodal_penalty = AutotuningBase.calculate_nonlinear_penalty(
-        x_prop, x_bar, u_bar, lam_vc, lam_vb, lam_cost, empty_nodal_constraints, params, settings
+        x_prop,
+        x_bar,
+        u_bar,
+        lam_vc,
+        lam_vb_nodal,
+        lam_vb_cross,
+        lam_cost,
+        empty_nodal_constraints,
+        params,
+        settings,
     )
 
     # Virtual control penalty should be positive and larger with larger differences
@@ -493,11 +536,12 @@ def test_update_scp_weights_initial_iteration(
 
     # Should set initial weights on candidate and persist them into state histories
     assert candidate.lam_vc is not None
-    assert candidate.lam_vb == weights.lam_vb
+    assert candidate.lam_vb_nodal is not None
+    assert candidate.lam_vb_cross is not None
     assert len(algorithm_state.lam_vc_history) == 2
     assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
-    assert len(algorithm_state.lam_vb_history) == 2
-    assert algorithm_state.lam_vb_history[-1] == pytest.approx(candidate.lam_vb)
+    assert len(algorithm_state.lam_vb_nodal_history) == 2
+    assert len(algorithm_state.lam_vb_cross_history) == 2
     assert len(algorithm_state.lam_cost_history) == 2
     assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
@@ -638,7 +682,8 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
     # then compute the expected virtual control update explicitly.
     state_x_prop = algorithm_state.x_prop()
     lam_vc_prev = algorithm_state.lam_vc
-    lam_vb_prev = algorithm_state.lam_vb
+    lam_vb_nodal_prev = algorithm_state.lam_vb_nodal
+    lam_vb_cross_prev = algorithm_state.lam_vb_cross
     lam_cost_prev = algorithm_state.lam_cost
 
     prev_cost, prev_penalty, prev_nodal = AutotuningBase.calculate_nonlinear_penalty(
@@ -646,7 +691,8 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
         algorithm_state.x,
         algorithm_state.u,
         lam_vc_prev,
-        lam_vb_prev,
+        lam_vb_nodal_prev,
+        lam_vb_cross_prev,
         lam_cost_prev,
         empty_nodal_constraints,
         params,
@@ -659,7 +705,8 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
         candidate.x,
         candidate.u,
         lam_vc_prev,
-        lam_vb_prev,
+        lam_vb_nodal_prev,
+        lam_vb_cross_prev,
         lam_cost_prev,
         empty_nodal_constraints,
         params,
@@ -823,7 +870,8 @@ def test_augmented_lagrangian_initial_iteration(
     assert len(algorithm_state.X) == initial_x_len + 1
     # Should set initial weights
     assert candidate.lam_vc is not None
-    assert candidate.lam_vb == weights.lam_vb
+    assert candidate.lam_vb_nodal is not None
+    assert candidate.lam_vb_cross is not None
 
 
 def test_augmented_lagrangian_multiplier_update(
@@ -834,6 +882,9 @@ def test_augmented_lagrangian_multiplier_update(
     algorithm_state.k = 2
     algorithm_state.lam_prox_history = [1.0]
     algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
+    # 1 nodal constraint, 0 cross-node
+    algorithm_state.lam_vb_nodal_history = [np.full((3, 1), 1.0)]
+    algorithm_state.lam_vb_cross_history = [np.full(0, 1.0)]
 
     # Set up previous iteration
     algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
@@ -882,6 +933,9 @@ def test_augmented_lagrangian_accept_decrease(
     algorithm_state.k = 2
     algorithm_state.lam_prox_history = [1.0]
     algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
+    # 1 nodal constraint, 0 cross-node
+    algorithm_state.lam_vb_nodal_history = [np.full((3, 1), 1.0)]
+    algorithm_state.lam_vb_cross_history = [np.full(0, 1.0)]
 
     # Set up previous iteration
     algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
@@ -911,7 +965,8 @@ def test_augmented_lagrangian_accept_decrease(
     # choose J_lin so that rho > eta_2, guaranteeing "Accept Lower".
     state_x_prop = algorithm_state.x_prop()
     lam_vc_prev = algorithm_state.lam_vc
-    lam_vb_prev = algorithm_state.lam_vb
+    lam_vb_nodal_prev = algorithm_state.lam_vb_nodal
+    lam_vb_cross_prev = algorithm_state.lam_vb_cross
     lam_cost_prev = algorithm_state.lam_cost
 
     prev_cost, prev_penalty, prev_nodal = AutotuningBase.calculate_nonlinear_penalty(
@@ -919,7 +974,8 @@ def test_augmented_lagrangian_accept_decrease(
         algorithm_state.x,
         algorithm_state.u,
         lam_vc_prev,
-        lam_vb_prev,
+        lam_vb_nodal_prev,
+        lam_vb_cross_prev,
         lam_cost_prev,
         nodal_constraints_with_violations,
         params,
@@ -932,7 +988,8 @@ def test_augmented_lagrangian_accept_decrease(
         candidate.x,
         candidate.u,
         lam_vc_prev,
-        lam_vb_prev,
+        lam_vb_nodal_prev,
+        lam_vb_cross_prev,
         lam_cost_prev,
         nodal_constraints_with_violations,
         params,
@@ -969,8 +1026,8 @@ def test_augmented_lagrangian_accept_decrease(
     assert len(algorithm_state.X) == initial_x_len + 1
     assert len(algorithm_state.lam_vc_history) == 2
     assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
-    assert len(algorithm_state.lam_vb_history) == 2
-    assert algorithm_state.lam_vb_history[-1] == pytest.approx(candidate.lam_vb)
+    assert len(algorithm_state.lam_vb_nodal_history) == 2
+    assert len(algorithm_state.lam_vb_cross_history) == 2
     assert len(algorithm_state.lam_cost_history) == 2
     assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
@@ -1073,7 +1130,8 @@ def test_augmented_lagrangian_accept_higher(
     # choose J_lin so that eta_0 < rho < eta_1, guaranteeing "Accept Higher".
     state_x_prop = algorithm_state.x_prop()
     lam_vc_prev = algorithm_state.lam_vc
-    lam_vb_prev = algorithm_state.lam_vb
+    lam_vb_nodal_prev = algorithm_state.lam_vb_nodal
+    lam_vb_cross_prev = algorithm_state.lam_vb_cross
     lam_cost_prev = algorithm_state.lam_cost
 
     prev_cost, prev_penalty, prev_nodal = AutotuningBase.calculate_nonlinear_penalty(
@@ -1081,7 +1139,8 @@ def test_augmented_lagrangian_accept_higher(
         algorithm_state.x,
         algorithm_state.u,
         lam_vc_prev,
-        lam_vb_prev,
+        lam_vb_nodal_prev,
+        lam_vb_cross_prev,
         lam_cost_prev,
         empty_nodal_constraints,
         params,
@@ -1094,7 +1153,8 @@ def test_augmented_lagrangian_accept_higher(
         candidate.x,
         candidate.u,
         lam_vc_prev,
-        lam_vb_prev,
+        lam_vb_nodal_prev,
+        lam_vb_cross_prev,
         lam_cost_prev,
         empty_nodal_constraints,
         params,
@@ -1124,12 +1184,13 @@ def test_augmented_lagrangian_accept_higher(
     # Candidate should have updated virtual control weights and be accepted,
     # and those weights must be recorded back into the algorithm_state histories.
     assert candidate.lam_vc is not None
-    assert candidate.lam_vb == weights.lam_vb
+    assert candidate.lam_vb_nodal is not None
+    assert candidate.lam_vb_cross is not None
     assert len(algorithm_state.X) == initial_x_len + 1
     assert len(algorithm_state.lam_vc_history) == 2
     assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
-    assert len(algorithm_state.lam_vb_history) == 2
-    assert algorithm_state.lam_vb_history[-1] == pytest.approx(candidate.lam_vb)
+    assert len(algorithm_state.lam_vb_nodal_history) == 2
+    assert len(algorithm_state.lam_vb_cross_history) == 2
     assert len(algorithm_state.lam_cost_history) == 2
     assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
@@ -1170,7 +1231,8 @@ def test_augmented_lagrangian_accept_constant(
 
     state_x_prop = algorithm_state.x_prop()
     lam_vc_prev = algorithm_state.lam_vc
-    lam_vb_prev = algorithm_state.lam_vb
+    lam_vb_nodal_prev = algorithm_state.lam_vb_nodal
+    lam_vb_cross_prev = algorithm_state.lam_vb_cross
     lam_cost_prev = algorithm_state.lam_cost
 
     prev_cost, prev_penalty, prev_nodal = AutotuningBase.calculate_nonlinear_penalty(
@@ -1178,7 +1240,8 @@ def test_augmented_lagrangian_accept_constant(
         algorithm_state.x,
         algorithm_state.u,
         lam_vc_prev,
-        lam_vb_prev,
+        lam_vb_nodal_prev,
+        lam_vb_cross_prev,
         lam_cost_prev,
         empty_nodal_constraints,
         params,
@@ -1191,7 +1254,8 @@ def test_augmented_lagrangian_accept_constant(
         candidate.x,
         candidate.u,
         lam_vc_prev,
-        lam_vb_prev,
+        lam_vb_nodal_prev,
+        lam_vb_cross_prev,
         lam_cost_prev,
         empty_nodal_constraints,
         params,
@@ -1219,12 +1283,13 @@ def test_augmented_lagrangian_accept_constant(
     # Candidate should have updated virtual control weights and be accepted,
     # and those weights must be recorded back into the algorithm_state histories.
     assert candidate.lam_vc is not None
-    assert candidate.lam_vb == weights.lam_vb
+    assert candidate.lam_vb_nodal is not None
+    assert candidate.lam_vb_cross is not None
     assert len(algorithm_state.X) == initial_x_len + 1
     assert len(algorithm_state.lam_vc_history) == 2
     assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
-    assert len(algorithm_state.lam_vb_history) == 2
-    assert algorithm_state.lam_vb_history[-1] == pytest.approx(candidate.lam_vb)
+    assert len(algorithm_state.lam_vb_nodal_history) == 2
+    assert len(algorithm_state.lam_vb_cross_history) == 2
     assert len(algorithm_state.lam_cost_history) == 2
     assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 

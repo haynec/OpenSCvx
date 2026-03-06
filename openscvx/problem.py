@@ -857,7 +857,11 @@ class Problem:
             self.emitter_function = lambda data: None
 
         # Create fresh solver state
-        self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
+        n_nodal = len(self._compiled_constraints.nodal)
+        n_cross = len(self._compiled_constraints.cross_node)
+        self._state = AlgorithmState.from_settings(
+            self.settings, self._algorithm.weights, n_nodal=n_nodal, n_cross=n_cross
+        )
 
         t_f_while = time.time()
         self.timing_init = t_f_while - t_0_while
@@ -912,7 +916,11 @@ class Problem:
         self._sync_boundary_conditions()
 
         # Create fresh solver state from settings
-        self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
+        n_nodal = len(self._compiled_constraints.nodal)
+        n_cross = len(self._compiled_constraints.cross_node)
+        self._state = AlgorithmState.from_settings(
+            self.settings, self._algorithm.weights, n_nodal=n_nodal, n_cross=n_cross
+        )
 
         # Reset solution
         self._solution = None

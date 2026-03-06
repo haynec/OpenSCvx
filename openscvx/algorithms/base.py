@@ -183,7 +183,8 @@ class CandidateIterate:
     TR: Optional[np.ndarray] = None
     lam_vc: Optional[Union[float, np.ndarray]] = None
     lam_cost: Optional[Union[float, np.ndarray]] = None
-    lam_vb: Optional[Union[float, np.ndarray]] = None
+    lam_vb_nodal: Optional[np.ndarray] = None
+    lam_vb_cross: Optional[np.ndarray] = None
     J_lin: Optional[float] = None
     J_nonlin: Optional[float] = None
 
@@ -314,7 +315,8 @@ class AutotuningBase(ABC):
         x_bar: np.ndarray,
         u_bar: np.ndarray,
         lam_vc: np.ndarray,
-        lam_vb: Union[float, np.ndarray],
+        lam_vb_nodal: np.ndarray,
+        lam_vb_cross: np.ndarray,
         lam_cost: Union[float, np.ndarray],
         nodal_constraints: "LoweredJaxConstraints",
         params: dict,
@@ -332,10 +334,10 @@ class AutotuningBase(ABC):
             x_bar: Previous iteration state (n_nodes, n_states)
             u_bar: Solution control (n_nodes, n_controls)
             lam_vc: Virtual control weight (scalar or matrix)
-            lam_vb: Virtual buffer penalty weight. Scalar (applied to
-                all constraints) or array of shape
-                ``(n_nodal + n_cross_node,)`` for per-constraint
-                weighting.
+            lam_vb_nodal: Virtual buffer penalty weights for nodal
+                constraints, shape ``(N, n_nodal)``.
+            lam_vb_cross: Virtual buffer penalty weights for cross-node
+                constraints, shape ``(n_cross,)``.
             lam_cost: Cost weight. Scalar (applied uniformly) or
                 array of shape ``(n_states,)`` for per-state weighting.
             nodal_constraints: Lowered JAX constraints
@@ -349,28 +351,25 @@ class AutotuningBase(ABC):
                 - nodal_penalty: Constraint violation penalty
         """
         nodal_penalty = 0.0
-        n_nodal = len(nodal_constraints.nodal)
 
         # Evaluate nodal constraints
         for idx, constraint in enumerate(nodal_constraints.nodal):
-            w = lam_vb[idx] if isinstance(lam_vb, np.ndarray) else lam_vb
             # Nodal constraint function is vmapped: func(x, u, node, params)
             # When called with arrays, it evaluates at all nodes
             g = constraint.func(x_bar, u_bar, 0, params)
             # Only sum violations at nodes where constraint is enforced
             if constraint.nodes is not None:
-                # Filter to only specified nodes
-                # Convert to numpy array for JAX compatibility
                 nodes_array = np.array(constraint.nodes)
                 g_filtered = g[nodes_array]
+                w = lam_vb_nodal[nodes_array, idx]
             else:
-                # If no nodes specified, check all nodes
                 g_filtered = g
-            nodal_penalty += w * np.sum(np.maximum(0, g_filtered))
+                w = lam_vb_nodal[:, idx]
+            nodal_penalty += np.sum(w * np.maximum(0, g_filtered))
 
         # Evaluate cross-node constraints
         for idx, constraint in enumerate(nodal_constraints.cross_node):
-            w = lam_vb[n_nodal + idx] if isinstance(lam_vb, np.ndarray) else lam_vb
+            w = lam_vb_cross[idx]
             # Cross-node constraint function signature: func(X, U, params)
             # No node argument - operates on full trajectory
             g = constraint.func(x_bar, u_bar, params)
@@ -435,7 +434,8 @@ class AlgorithmState:
         lam_prox: Current trust region weight (may adapt during solve)
         lam_cost: Current cost weight (may relax during solve)
         lam_vc: Current virtual control penalty weight
-        lam_vb: Current virtual buffer penalty weight
+        lam_vb_nodal: Current per-node nodal virtual buffer penalty weights
+        lam_vb_cross: Current cross-node virtual buffer penalty weights
         n_x: Number of states (for unpacking V vectors)
         n_u: Number of controls (for unpacking V vectors)
         N: Number of trajectory nodes (for unpacking V vectors)
@@ -469,7 +469,8 @@ class AlgorithmState:
     TR_history: List[np.ndarray] = field(default_factory=list)
     lam_vc_history: List[Union[float, np.ndarray]] = field(default_factory=list)
     lam_cost_history: List[Union[float, np.ndarray]] = field(default_factory=list)
-    lam_vb_history: List[Union[float, np.ndarray]] = field(default_factory=list)
+    lam_vb_nodal_history: List[np.ndarray] = field(default_factory=list)
+    lam_vb_cross_history: List[np.ndarray] = field(default_factory=list)
     lam_prox_history: List[float] = field(default_factory=list)
     x_full: List[np.ndarray] = field(default_factory=list)
     x_prop_full: List[np.ndarray] = field(default_factory=list)
@@ -515,8 +516,10 @@ class AlgorithmState:
             self.lam_vc_history.append(cand.lam_vc)
         if cand.lam_cost is not None:
             self.lam_cost_history.append(cand.lam_cost)
-        if cand.lam_vb is not None:
-            self.lam_vb_history.append(cand.lam_vb)
+        if cand.lam_vb_nodal is not None:
+            self.lam_vb_nodal_history.append(cand.lam_vb_nodal)
+        if cand.lam_vb_cross is not None:
+            self.lam_vb_cross_history.append(cand.lam_vb_cross)
 
         if cand.J_nonlin is not None:
             self.J_nonlin_history.append(cand.J_nonlin)
@@ -708,19 +711,39 @@ class AlgorithmState:
         return self.lam_vc_history[-1]
 
     @property
-    def lam_vb(self) -> Union[float, np.ndarray]:
-        """Get current virtual buffer penalty weight.
+    def lam_vb_nodal(self) -> np.ndarray:
+        """Get current virtual buffer penalty weights for nodal constraints.
 
         Returns:
-            Current virtual buffer penalty weight (latest entry in lam_vb_history).
-            Scalar or array of shape ``(n_constraints,)``.
+            Array of shape ``(N, n_nodal_constraints)``.
         """
-        if not self.lam_vb_history:
-            raise ValueError("lam_vb_history is empty. Initialize state using from_settings().")
-        return self.lam_vb_history[-1]
+        if not self.lam_vb_nodal_history:
+            raise ValueError(
+                "lam_vb_nodal_history is empty. Initialize state using from_settings()."
+            )
+        return self.lam_vb_nodal_history[-1]
+
+    @property
+    def lam_vb_cross(self) -> np.ndarray:
+        """Get current virtual buffer penalty weights for cross-node constraints.
+
+        Returns:
+            Array of shape ``(n_cross_node_constraints,)``.
+        """
+        if not self.lam_vb_cross_history:
+            raise ValueError(
+                "lam_vb_cross_history is empty. Initialize state using from_settings()."
+            )
+        return self.lam_vb_cross_history[-1]
 
     @classmethod
-    def from_settings(cls, settings: "Config", weights: "Weights") -> "AlgorithmState":
+    def from_settings(
+        cls,
+        settings: "Config",
+        weights: "Weights",
+        n_nodal: int = 0,
+        n_cross: int = 0,
+    ) -> "AlgorithmState":
         """Create initial algorithm state from configuration.
 
         Copies only the trajectory arrays from settings, leaving all metadata
@@ -730,6 +753,8 @@ class AlgorithmState:
             settings: Configuration object containing initial guesses and SCP parameters
             weights: Normalized initial weights from the algorithm. The scalar
                 ``lam_vc`` is expanded to an ``(N-1, n_states)`` array here.
+            n_nodal: Number of nodal constraints (for expanding lam_vb).
+            n_cross: Number of cross-node constraints (for expanding lam_vb).
 
         Returns:
             Fresh AlgorithmState initialized from settings with copied arrays
@@ -743,6 +768,17 @@ class AlgorithmState:
             lam_cost_init = weights.lam_cost.copy()
         else:
             lam_cost_init = np.full(n_states, weights.lam_cost)
+
+        # Expand lam_vb to (N, n_nodal) for nodal and (n_cross,) for cross-node.
+        # weights.lam_vb is either a scalar or 1D array of (n_nodal + n_cross,).
+        lam_vb = weights.lam_vb
+        if isinstance(lam_vb, np.ndarray):
+            # First n_nodal entries → broadcast across N nodes
+            lam_vb_nodal_init = np.tile(lam_vb[:n_nodal], (n, 1))  # (N, n_nodal)
+            lam_vb_cross_init = lam_vb[n_nodal:]  # (n_cross,)
+        else:
+            lam_vb_nodal_init = np.full((n, n_nodal), float(lam_vb))
+            lam_vb_cross_init = np.full(n_cross, float(lam_vb))
 
         return cls(
             k=1,
@@ -764,7 +800,8 @@ class AlgorithmState:
             TR_history=[],
             lam_vc_history=[lam_vc_array],
             lam_cost_history=[lam_cost_init],
-            lam_vb_history=[weights.lam_vb],
+            lam_vb_nodal_history=[lam_vb_nodal_init],
+            lam_vb_cross_history=[lam_vb_cross_init],
             lam_prox_history=[weights.lam_prox],
         )
 

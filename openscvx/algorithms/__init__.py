@@ -50,7 +50,8 @@ Note:
         lam_prox: float
         lam_cost: float
         lam_vc: ...
-        lam_vb: float
+        lam_vb_nodal: np.ndarray  # (N, n_nodal)
+        lam_vb_cross: np.ndarray  # (n_cross,)
 
     @dataclass
     class TrajectoryHistory:
