@@ -240,26 +240,19 @@ class PenalizedTrustRegion(Algorithm):
         self.weights.normalize()
 
     @property
-    def lam_vb(self) -> Union[float, np.ndarray]:
-        """Virtual buffer penalty weight (pre-normalization).
+    def lam_vb(self) -> float:
+        """Global virtual buffer penalty weight (pre-normalization).
 
-        This is the user-specified value before normalization. Setting this
-        property triggers automatic re-normalization of all weights.
-
-        After ``problem.initialize()``, this is expanded to a per-constraint
-        array incorporating any ``.weight()`` overrides on individual
+        This is the user-specified scalar default before normalization.
+        Setting this property triggers automatic re-normalization.
+        Per-constraint overrides are set via ``.weight()`` on individual
         constraints.
-
-        !!! note
-            The autotuner may modify the normalized weight in
-            ``self.weights.lam_vb`` during iteration. Those changes are
-            internal and do not alter the value returned here.
         """
         return self.weights._raw_lam_vb
 
     @lam_vb.setter
-    def lam_vb(self, value: Union[float, np.ndarray]) -> None:
-        self.weights._raw_lam_vb = self._resolve_lam_vb(value, self._jax_constraints)
+    def lam_vb(self, value: float) -> None:
+        self.weights._raw_lam_vb = float(value)
         self.weights.normalize()
 
     def get_columns(self, verbosity: int = Verbosity.STANDARD) -> List[Column]:
@@ -315,11 +308,6 @@ class PenalizedTrustRegion(Algorithm):
         self._jax_constraints = jax_constraints
         self._emitter = emitter
 
-        # Merge per-constraint .weight() overrides with global lam_vb
-        resolved_vb = self._resolve_lam_vb(self.weights._raw_lam_vb, jax_constraints)
-        self.weights._raw_lam_vb = resolved_vb
-        self.weights.normalize()
-
         # Set boundary conditions
         self._solver.update_boundary_conditions(
             x_init=settings.sim.x.initial,
@@ -330,7 +318,11 @@ class PenalizedTrustRegion(Algorithm):
         n_nodal = len(jax_constraints.nodal) if jax_constraints.nodal else 0
         n_cross = len(jax_constraints.cross_node) if jax_constraints.cross_node else 0
         init_state = AlgorithmState.from_settings(
-            settings, self.weights, n_nodal=n_nodal, n_cross=n_cross
+            settings,
+            self.weights,
+            n_nodal=n_nodal,
+            n_cross=n_cross,
+            jax_constraints=jax_constraints,
         )
 
         # Solve a dumb problem to initialize DPP and JAX jacobians

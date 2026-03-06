@@ -365,6 +365,24 @@ def decompose_vector_nodal_constraints(
             decomposed = decompose_vector_nodal_constraints([constraint])
             # Returns 3 constraints: x[0] <= 5, x[1] <= 5, x[2] <= 5
     """
+
+    def _slice_element_weight(w, i, total_elements):
+        """Extract weight for element *i* during vector constraint decomposition.
+
+        Returns None | float | 1-D ndarray(n_nodes,) suitable for a scalar
+        sub-constraint's ``_lam_vb``.
+        """
+        if w is None:
+            return None
+        if isinstance(w, (int, float)):
+            return w  # scalar broadcasts to all elements
+        # w is np.ndarray — 1-D (n_elem,) or 2-D (n_nodes, n_elem)
+        if w.ndim == 1:
+            return float(w[0]) if len(w) == 1 else float(w[i])
+        # 2-D (n_nodes, n_elem)
+        col = w[:, 0] if w.shape[1] == 1 else w[:, i]
+        return col  # 1-D (n_nodes,) → per-node weight for this scalar constraint
+
     decomposed_constraints = []
 
     for nodal_constraint in constraints_nodal:
@@ -383,22 +401,31 @@ def decompose_vector_nodal_constraints(
                 # Vector constraint - decompose into scalar constraints
                 total_elements = int(np.prod(residual_shape))
 
-                # Validate per-element weight length if provided
+                # Decompose weight for each element.
+                # _lam_vb is None | float | 1-D (n_elem,) | 2-D (n_nodes, n_elem)
                 w = nodal_constraint._lam_vb
-                if w is not None and len(w) != 1 and len(w) != total_elements:
-                    raise ValueError(
-                        f"lam_vb has length {len(w)} but constraint has "
-                        f"{total_elements} elements. Must be length 1 (broadcast) "
-                        f"or {total_elements} (per-element)."
-                    )
+                if isinstance(w, np.ndarray):
+                    n_elem_w = w.shape[-1] if w.ndim >= 1 else 1
+                    if n_elem_w != 1 and n_elem_w != total_elements:
+                        raise ValueError(
+                            f".weight() got {n_elem_w} element weights but "
+                            f"constraint '{constraint.lhs}' has "
+                            f"{total_elements} elements. Pass a scalar or "
+                            f"match the constraint dimension."
+                        )
+                    if w.ndim == 2 and w.shape[0] != len(nodes):
+                        raise ValueError(
+                            f".weight() got {w.shape[0]} rows but constraint "
+                            f"has {len(nodes)} nodes."
+                        )
 
                 for i in range(total_elements):
                     # Create indexed version: residual[i] <= 0 or residual[i] == 0
                     indexed_lhs = Index(constraint.lhs, i)
                     indexed_rhs = constraint.rhs  # Should be Constant(0)
                     indexed_constraint = constraint.__class__(indexed_lhs, indexed_rhs)
-                    # Broadcast length-1, otherwise index per-element
-                    elem_w = None if w is None else [w[0]] if len(w) == 1 else [w[i]]
+                    # Extract per-element weight slice for element i
+                    elem_w = _slice_element_weight(w, i, total_elements)
                     decomposed_constraints.append(
                         NodalConstraint(indexed_constraint, nodes, lam_vb=elem_w)
                     )
@@ -406,6 +433,8 @@ def decompose_vector_nodal_constraints(
                 # Scalar constraint - keep as is
                 decomposed_constraints.append(nodal_constraint)
 
+        except ValueError:
+            raise
         except Exception:
             # If shape analysis fails, keep original constraint for backward compatibility
             decomposed_constraints.append(nodal_constraint)

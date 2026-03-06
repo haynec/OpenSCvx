@@ -234,7 +234,7 @@ class NodalConstraint(Expr):
         self,
         constraint: Constraint,
         nodes: list[int],
-        lam_vb: Optional[Union[float, List[float]]] = None,
+        lam_vb: Optional[Union[float, np.ndarray]] = None,
     ):
         """Initialize a NodalConstraint.
 
@@ -242,11 +242,11 @@ class NodalConstraint(Expr):
             constraint: The Constraint (Equality or Inequality) to enforce at specified nodes
             nodes: List of integer node indices where the constraint should be enforced.
                 Automatically converts numpy integers to Python integers.
-            lam_vb: Optional per-constraint virtual buffer penalty weight(s). If None,
-                the global ``lam_vb`` from the algorithm weights is used. A scalar
-                applies the same weight to all elements of a vector constraint. A list
-                assigns per-element weights (length must match the constraint dimension).
-                Scalars are normalized to a single-element list internally.
+            lam_vb: Optional per-constraint virtual buffer penalty weight.
+                ``None`` uses the global ``lam_vb``. A scalar applies uniformly.
+                A 1-D array ``(n_elements,)`` gives per-element weights for
+                vector constraints. A 2-D array ``(n_nodes, n_elements)`` gives
+                per-node-per-element weights.
 
         Raises:
             TypeError: If constraint is not a Constraint instance
@@ -275,10 +275,7 @@ class NodalConstraint(Expr):
 
         self.constraint = constraint
         self.nodes = converted_nodes
-        if isinstance(lam_vb, (int, float)):
-            self._lam_vb: Optional[List[float]] = [float(lam_vb)]
-        else:
-            self._lam_vb = lam_vb
+        self._lam_vb: Optional[Union[float, np.ndarray]] = lam_vb
 
     def children(self) -> List["Expr"]:
         """Return the wrapped constraint as the only child.
@@ -313,7 +310,7 @@ class NodalConstraint(Expr):
         # NodalConstraint produces a scalar like any constraint
         return ()
 
-    def weight(self, lam_vb: Union[float, List[float]]) -> "NodalConstraint":
+    def weight(self, lam_vb: Union[float, List[float], np.ndarray]) -> "NodalConstraint":
         """Set the virtual buffer penalty weight for this constraint.
 
         Overrides the global ``lam_vb`` from the algorithm for this specific
@@ -322,9 +319,12 @@ class NodalConstraint(Expr):
 
         Args:
             lam_vb: Virtual buffer penalty weight(s) for this constraint.
-                A scalar applies the same weight to every element of a vector
-                constraint. A list assigns per-element weights (validated during
-                lowering to match the constraint dimension).
+
+                * Scalar — same weight at every node and element.
+                * 1-D ``(n_elements,)`` — per-element weights for a vector
+                  constraint, uniform across nodes.
+                * 2-D ``(n_nodes, n_elements)`` — per-node-per-element weights
+                  (rows correspond to the nodes passed to ``.at()``).
 
         Returns:
             Self with per-constraint weight set (enables method chaining).
@@ -338,11 +338,36 @@ class NodalConstraint(Expr):
             Per-element weights on a vector constraint::
 
                 pos_bound = (pos <= pos_max).at(nodes).weight([1e1, 1e1, 1e3])
+
+            Per-node weights on a scalar constraint::
+
+                keep_out = (dist >= r).at([0, 5, 10]).weight([[1.0], [2.0], [5.0]])
         """
         if isinstance(lam_vb, (int, float)):
-            self._lam_vb = [float(lam_vb)]
+            self._lam_vb = float(lam_vb)
+        elif isinstance(lam_vb, (list, tuple, np.ndarray)):
+            arr = np.asarray(lam_vb, dtype=float)
+            if arr.ndim == 0:
+                self._lam_vb = float(arr)
+            elif arr.ndim in (1, 2):
+                if np.any(arr < 0):
+                    raise ValueError(".weight() values must be non-negative.")
+                if arr.ndim == 2 and len(self.nodes) and arr.shape[0] != len(self.nodes):
+                    raise ValueError(
+                        f".weight() got {arr.shape[0]} rows but constraint has "
+                        f"{len(self.nodes)} nodes."
+                    )
+                self._lam_vb = arr
+            else:
+                raise ValueError(
+                    f".weight() expected a scalar, 1-D, or 2-D array, got {arr.ndim}-D."
+                )
         else:
-            self._lam_vb = list(lam_vb)
+            raise TypeError(
+                f".weight() expected a float, list, or array, got {type(lam_vb).__name__}."
+            )
+        if isinstance(self._lam_vb, float) and self._lam_vb < 0:
+            raise ValueError(".weight() values must be non-negative.")
         return self
 
     def convex(self) -> "NodalConstraint":
@@ -435,7 +460,7 @@ class CrossNodeConstraint(Expr):
     def __init__(
         self,
         constraint: Constraint,
-        lam_vb: Optional[Union[float, List[float]]] = None,
+        lam_vb: Optional[float] = None,
     ):
         """Initialize a CrossNodeConstraint.
 
@@ -453,10 +478,7 @@ class CrossNodeConstraint(Expr):
             raise TypeError("CrossNodeConstraint must wrap a Constraint")
 
         self.constraint = constraint
-        if isinstance(lam_vb, (int, float)):
-            self._lam_vb: Optional[List[float]] = [float(lam_vb)]
-        else:
-            self._lam_vb = lam_vb
+        self._lam_vb: Optional[float] = float(lam_vb) if lam_vb is not None else None
 
     @property
     def is_convex(self) -> bool:
@@ -493,14 +515,14 @@ class CrossNodeConstraint(Expr):
         self.constraint.check_shape()
         return ()
 
-    def weight(self, lam_vb: Union[float, List[float]]) -> "CrossNodeConstraint":
+    def weight(self, lam_vb: float) -> "CrossNodeConstraint":
         """Set the virtual buffer penalty weight for this constraint.
 
         Overrides the global ``lam_vb`` from the algorithm for this specific
         constraint.
 
         Args:
-            lam_vb: Virtual buffer penalty weight for this constraint.
+            lam_vb: Scalar virtual buffer penalty weight for this constraint.
 
         Returns:
             Self with per-constraint weight set (enables method chaining).
@@ -510,10 +532,10 @@ class CrossNodeConstraint(Expr):
 
                 rate = (pos.at(k) - pos.at(k-1) <= max_step).weight(1e2)
         """
-        if isinstance(lam_vb, (int, float)):
-            self._lam_vb = [float(lam_vb)]
-        else:
-            self._lam_vb = list(lam_vb)
+        lam_vb = float(lam_vb)
+        if lam_vb < 0:
+            raise ValueError(".weight() value must be non-negative.")
+        self._lam_vb = lam_vb
         return self
 
     def convex(self) -> "CrossNodeConstraint":

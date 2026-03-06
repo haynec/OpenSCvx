@@ -860,7 +860,11 @@ class Problem:
         n_nodal = len(self._compiled_constraints.nodal)
         n_cross = len(self._compiled_constraints.cross_node)
         self._state = AlgorithmState.from_settings(
-            self.settings, self._algorithm.weights, n_nodal=n_nodal, n_cross=n_cross
+            self.settings,
+            self._algorithm.weights,
+            n_nodal=n_nodal,
+            n_cross=n_cross,
+            jax_constraints=self._compiled_constraints,
         )
 
         t_f_while = time.time()
@@ -919,7 +923,11 @@ class Problem:
         n_nodal = len(self._compiled_constraints.nodal)
         n_cross = len(self._compiled_constraints.cross_node)
         self._state = AlgorithmState.from_settings(
-            self.settings, self._algorithm.weights, n_nodal=n_nodal, n_cross=n_cross
+            self.settings,
+            self._algorithm.weights,
+            n_nodal=n_nodal,
+            n_cross=n_cross,
+            jax_constraints=self._compiled_constraints,
         )
 
         # Reset solution

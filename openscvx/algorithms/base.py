@@ -124,25 +124,28 @@ class Weights:
         lam_vc: Virtual control penalty weight (normalized).
         lam_cost: Cost weight per state (normalized). Scalar or array of
             shape ``(n_states,)`` for per-state weighting.
-        lam_vb: Virtual buffer penalty weight (normalized). Scalar or
-            array of shape ``(n_constraints,)`` for per-constraint weighting.
+        lam_vb: Global virtual buffer penalty weight (normalized). Scalar
+            default applied to every constraint. Use ``.weight()`` on
+            individual constraints for per-constraint or per-node overrides.
     """
 
     lam_prox: float = 1e0
     lam_vc: float = 1e1
     lam_cost: Union[float, np.ndarray] = 1e-1
-    lam_vb: Union[float, np.ndarray] = 0.0
+    lam_vb: float = 0.0
 
     def __post_init__(self):
+        # Coerce lists/lists-of-lists to numpy arrays.
+        if isinstance(self.lam_cost, (list, tuple)):
+            self.lam_cost = np.asarray(self.lam_cost, dtype=float)
+
         # Snapshot the user-specified values so normalize() is idempotent.
         self._raw_lam_prox = self.lam_prox
         self._raw_lam_vc = self.lam_vc
         self._raw_lam_cost = (
             self.lam_cost.copy() if isinstance(self.lam_cost, np.ndarray) else self.lam_cost
         )
-        self._raw_lam_vb = (
-            self.lam_vb.copy() if isinstance(self.lam_vb, np.ndarray) else self.lam_vb
-        )
+        self._raw_lam_vb = float(self.lam_vb)
 
     def normalize(self) -> None:
         """Normalize weights so the largest equals 1.0.
@@ -156,12 +159,7 @@ class Weights:
             if isinstance(self._raw_lam_cost, np.ndarray)
             else self._raw_lam_cost
         )
-        raw_vb_max = (
-            float(np.max(self._raw_lam_vb))
-            if isinstance(self._raw_lam_vb, np.ndarray)
-            else self._raw_lam_vb
-        )
-        scale = max(self._raw_lam_prox, self._raw_lam_vc, raw_cost_max, raw_vb_max)
+        scale = max(self._raw_lam_prox, self._raw_lam_vc, raw_cost_max, self._raw_lam_vb)
         if scale > 0:
             self.lam_prox = self._raw_lam_prox / scale
             self.lam_vc = self._raw_lam_vc / scale
@@ -743,6 +741,7 @@ class AlgorithmState:
         weights: "Weights",
         n_nodal: int = 0,
         n_cross: int = 0,
+        jax_constraints: Optional["LoweredJaxConstraints"] = None,
     ) -> "AlgorithmState":
         """Create initial algorithm state from configuration.
 
@@ -755,6 +754,10 @@ class AlgorithmState:
                 ``lam_vc`` is expanded to an ``(N-1, n_states)`` array here.
             n_nodal: Number of nodal constraints (for expanding lam_vb).
             n_cross: Number of cross-node constraints (for expanding lam_vb).
+            jax_constraints: Lowered JAX constraints. When provided, per-node
+                ``.weight()`` overrides (stored as arrays on the lowered
+                constraint objects) are applied on top of the global
+                ``lam_vb``.
 
         Returns:
             Fresh AlgorithmState initialized from settings with copied arrays
@@ -769,21 +772,27 @@ class AlgorithmState:
         else:
             lam_cost_init = np.full(n_states, weights.lam_cost)
 
-        # Expand lam_vb to (N, n_nodal) for nodal and (n_cross,) for cross-node.
-        # weights.lam_vb is either a scalar or 1D array of (n_nodal + n_cross,).
-        # Use max(..., 1) to match CVXPy parameter sizing (some backends reject size-0).
+        # Expand global lam_vb scalar to (N, n_nodal) and (n_cross,).
+        # max(..., 1) avoids size-0 CVXPy parameters.
         n_nodal_param = max(n_nodal, 1)
         n_cross_param = max(n_cross, 1)
-        lam_vb = weights.lam_vb
-        if isinstance(lam_vb, np.ndarray):
-            # First n_nodal entries → broadcast across N nodes
-            nodal_slice = lam_vb[:n_nodal] if n_nodal > 0 else np.zeros(1)
-            cross_slice = lam_vb[n_nodal:] if n_cross > 0 else np.zeros(1)
-            lam_vb_nodal_init = np.tile(nodal_slice, (n, 1))  # (N, n_nodal_param)
-            lam_vb_cross_init = cross_slice
-        else:
-            lam_vb_nodal_init = np.full((n, n_nodal_param), float(lam_vb))
-            lam_vb_cross_init = np.full(n_cross_param, float(lam_vb))
+        default_vb = float(weights.lam_vb)
+        lam_vb_nodal_init = np.full((n, n_nodal_param), default_vb)
+        lam_vb_cross_init = np.full(n_cross_param, default_vb)
+
+        # Apply per-constraint .weight() overrides
+        if jax_constraints is not None:
+            for idx, c in enumerate(jax_constraints.nodal or []):
+                if c.lam_vb is None:
+                    continue
+                nodes = c.nodes if c.nodes is not None else list(range(n))
+                if isinstance(c.lam_vb, np.ndarray):
+                    lam_vb_nodal_init[nodes, idx] = c.lam_vb
+                else:
+                    lam_vb_nodal_init[nodes, idx] = c.lam_vb
+            for idx, c in enumerate(jax_constraints.cross_node or []):
+                if c.lam_vb is not None:
+                    lam_vb_cross_init[idx] = c.lam_vb
 
         return cls(
             k=1,
@@ -896,52 +905,6 @@ class Algorithm(ABC):
                 )
             return _expand_lam_cost_dict(lam_cost, states)
         return lam_cost
-
-    @staticmethod
-    def _resolve_lam_vb(
-        lam_vb: Union[float, np.ndarray],
-        jax_constraints: Optional["LoweredJaxConstraints"] = None,
-    ) -> Union[float, np.ndarray]:
-        """Merge global ``lam_vb`` with per-constraint ``.weight()`` overrides.
-
-        If there are no constraints or *jax_constraints* is ``None``, the
-        value is returned as-is.  Otherwise a per-constraint array is built
-        using the global value as the default, with per-constraint overrides
-        (stored on the lowered constraint objects) taking precedence.
-
-        Args:
-            lam_vb: Scalar or array global virtual-buffer weight.
-            jax_constraints: Lowered JAX constraints (may carry per-constraint
-                ``lam_vb`` overrides from ``.weight()``).
-
-        Returns:
-            float (no constraints) or np.ndarray of shape ``(n_constraints,)``.
-        """
-        if jax_constraints is None:
-            return lam_vb
-
-        n_nodal = len(jax_constraints.nodal) if jax_constraints.nodal else 0
-        n_cross = len(jax_constraints.cross_node) if jax_constraints.cross_node else 0
-        n_constraints = n_nodal + n_cross
-
-        if n_constraints == 0:
-            return lam_vb
-
-        # Scalar default from global weight
-        if isinstance(lam_vb, np.ndarray):
-            default_vb = float(np.max(lam_vb))
-        else:
-            default_vb = float(lam_vb)
-
-        lam_vb_vec = np.full(n_constraints, default_vb)
-        for i, c in enumerate(jax_constraints.nodal or []):
-            if c.lam_vb is not None:
-                lam_vb_vec[i] = c.lam_vb
-        for i, c in enumerate(jax_constraints.cross_node or []):
-            if c.lam_vb is not None:
-                lam_vb_vec[n_nodal + i] = c.lam_vb
-
-        return lam_vb_vec
 
     @abstractmethod
     def initialize(

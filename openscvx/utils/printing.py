@@ -254,11 +254,7 @@ def print_problem_summary(
 
     # Add λ_vb only if there are nodal nonconvex constraints
     if n_nodal_nonconvex > 0:
-        vb = weights.lam_vb
-        if isinstance(vb, np.ndarray):
-            weights_parts.append(f"λ_vb={np.array2string(vb, precision=1, separator=',')}")
-        else:
-            weights_parts.append(f"λ_vb={vb:4.1f}")
+        weights_parts.append(f"λ_vb={weights.lam_vb:4.1f}")
 
     weights_str = ", ".join(weights_parts)
 
