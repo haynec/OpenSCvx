@@ -128,17 +128,19 @@ class Weights:
             default applied to every constraint. Use ``.weight()`` on
             individual constraints for per-constraint or per-node overrides.
         lam_vb_nodal: Virtual buffer penalty weights for nodal constraints
-            (normalized), shape ``(N, n_nodal)``.
+            (normalized), shape ``(N, n_nodal)``. Set by
+            :meth:`build_vb_arrays`.
         lam_vb_cross: Virtual buffer penalty weights for cross-node
-            constraints (normalized), shape ``(n_cross,)``.
+            constraints (normalized), shape ``(n_cross,)``. Set by
+            :meth:`build_vb_arrays`.
     """
 
     lam_prox: float = 1e0
     lam_vc: float = 1e1
     lam_cost: Union[float, np.ndarray] = 1e-1
     lam_vb: float = 0.0
-    lam_vb_nodal: np.ndarray = field(default_factory=lambda: np.full((1, 1), 0.0))
-    lam_vb_cross: np.ndarray = field(default_factory=lambda: np.full(1, 0.0))
+    lam_vb_nodal: Optional[np.ndarray] = None
+    lam_vb_cross: Optional[np.ndarray] = None
 
     def __post_init__(self):
         # Coerce lists/lists-of-lists to numpy arrays.
@@ -152,8 +154,8 @@ class Weights:
             self.lam_cost.copy() if isinstance(self.lam_cost, np.ndarray) else self.lam_cost
         )
         self._raw_lam_vb = float(self.lam_vb)
-        self._raw_lam_vb_nodal = self.lam_vb_nodal.copy()
-        self._raw_lam_vb_cross = self.lam_vb_cross.copy()
+        self._raw_lam_vb_nodal: Optional[np.ndarray] = None
+        self._raw_lam_vb_cross: Optional[np.ndarray] = None
 
     def normalize(self) -> None:
         """Normalize weights so the largest equals 1.0.
@@ -167,18 +169,22 @@ class Weights:
             if isinstance(self._raw_lam_cost, np.ndarray)
             else self._raw_lam_cost
         )
-        raw_vb_max = max(
-            float(np.max(self._raw_lam_vb_nodal)),
-            float(np.max(self._raw_lam_vb_cross)),
-        )
+        if self._raw_lam_vb_nodal is not None:
+            raw_vb_max = max(
+                float(np.max(self._raw_lam_vb_nodal)),
+                float(np.max(self._raw_lam_vb_cross)),
+            )
+        else:
+            raw_vb_max = self._raw_lam_vb
         scale = max(self._raw_lam_prox, self._raw_lam_vc, raw_cost_max, raw_vb_max)
         if scale > 0:
             self.lam_prox = self._raw_lam_prox / scale
             self.lam_vc = self._raw_lam_vc / scale
             self.lam_cost = self._raw_lam_cost / scale
             self.lam_vb = self._raw_lam_vb / scale
-            self.lam_vb_nodal = self._raw_lam_vb_nodal / scale
-            self.lam_vb_cross = self._raw_lam_vb_cross / scale
+            if self._raw_lam_vb_nodal is not None:
+                self.lam_vb_nodal = self._raw_lam_vb_nodal / scale
+                self.lam_vb_cross = self._raw_lam_vb_cross / scale
 
     def build_vb_arrays(
         self,
@@ -198,7 +204,7 @@ class Weights:
                 preprocessing, pre-lowering).
             cross_node_constraints: Symbolic ``CrossNodeConstraint`` objects.
         """
-        default_vb = float(self.lam_vb)
+        default_vb = float(self._raw_lam_vb)
 
         # Count decomposed nodal constraints (vector → multiple scalars).
         # Vector constraints are decomposed element-wise during lowering
