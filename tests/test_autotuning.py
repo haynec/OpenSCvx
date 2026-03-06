@@ -117,8 +117,8 @@ def algorithm_state(settings):
         discretizations=[],
         lam_vc_history=[np.array([1.0, 1.0])],  # Array for virtual control
         lam_cost_history=[1.0],
-        lam_vb_nodal_history=[np.full((3, 0), 1.0)],  # (N, n_nodal=0)
-        lam_vb_cross_history=[np.full(0, 1.0)],  # (n_cross=0,)
+        lam_vb_nodal_history=[np.full((3, 1), 1.0)],  # (N, max(n_nodal,1))
+        lam_vb_cross_history=[np.full(1, 1.0)],  # (max(n_cross,1),)
         lam_prox_history=[1.0],
     )
     return state
@@ -342,8 +342,8 @@ def test_calculate_nonlinear_penalty_no_constraints(settings, empty_nodal_constr
     x_bar = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
     u_bar = np.array([[0.0], [0.5], [1.0]])
     lam_vc = np.array([1.0, 1.0])
-    lam_vb_nodal = np.full((3, 0), 1.0)
-    lam_vb_cross = np.full(0, 1.0)
+    lam_vb_nodal = np.full((3, 1), 1.0)
+    lam_vb_cross = np.full(1, 1.0)
     lam_cost = 1.0
     params = {}
 
@@ -377,7 +377,7 @@ def test_calculate_nonlinear_penalty_with_nodal_violations(
     u_bar = np.array([[0.0], [0.5], [1.0]])
     lam_vc = np.array([1.0, 1.0])
     lam_vb_nodal = np.full((3, 1), 1.0)  # 1 nodal constraint
-    lam_vb_cross = np.full(0, 1.0)
+    lam_vb_cross = np.full(1, 1.0)
     lam_cost = 1.0
     params = {}
 
@@ -406,7 +406,7 @@ def test_calculate_nonlinear_penalty_with_cross_node_violations(settings, cross_
     x_bar = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])  # x[1,0] - x[0,0] = 1.0 > 0.5, violation
     u_bar = np.array([[0.0], [0.5], [1.0]])
     lam_vc = np.array([1.0, 1.0])
-    lam_vb_nodal = np.full((3, 0), 1.0)  # 0 nodal constraints
+    lam_vb_nodal = np.full((3, 1), 1.0)
     lam_vb_cross = np.full(1, 1.0)  # 1 cross-node constraint
     lam_cost = 1.0
     params = {}
@@ -452,7 +452,7 @@ def test_calculate_nonlinear_penalty_nodal_with_node_filter(settings):
     u_bar = np.array([[0.0], [0.5], [1.0]])
     lam_vc = np.array([1.0, 1.0])
     lam_vb_nodal = np.full((3, 1), 1.0)  # 1 nodal constraint
-    lam_vb_cross = np.full(0, 1.0)
+    lam_vb_cross = np.full(1, 1.0)
     lam_cost = 1.0
     params = {}
 
@@ -479,8 +479,8 @@ def test_calculate_nonlinear_penalty_virtual_control_component(settings, empty_n
     x_bar = np.array([[0.0, 0.0], [1.0, 1.0], [3.0, 3.0]])  # Large difference at end
     u_bar = np.array([[0.0], [0.5], [1.0]])
     lam_vc = np.array([2.0, 2.0])  # Higher weight
-    lam_vb_nodal = np.full((3, 0), 1.0)
-    lam_vb_cross = np.full(0, 1.0)
+    lam_vb_nodal = np.full((3, 1), 1.0)
+    lam_vb_cross = np.full(1, 1.0)
     lam_cost = 1.0
     params = {}
 

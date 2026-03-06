@@ -771,14 +771,19 @@ class AlgorithmState:
 
         # Expand lam_vb to (N, n_nodal) for nodal and (n_cross,) for cross-node.
         # weights.lam_vb is either a scalar or 1D array of (n_nodal + n_cross,).
+        # Use max(..., 1) to match CVXPy parameter sizing (some backends reject size-0).
+        n_nodal_param = max(n_nodal, 1)
+        n_cross_param = max(n_cross, 1)
         lam_vb = weights.lam_vb
         if isinstance(lam_vb, np.ndarray):
             # First n_nodal entries → broadcast across N nodes
-            lam_vb_nodal_init = np.tile(lam_vb[:n_nodal], (n, 1))  # (N, n_nodal)
-            lam_vb_cross_init = lam_vb[n_nodal:]  # (n_cross,)
+            nodal_slice = lam_vb[:n_nodal] if n_nodal > 0 else np.zeros(1)
+            cross_slice = lam_vb[n_nodal:] if n_cross > 0 else np.zeros(1)
+            lam_vb_nodal_init = np.tile(nodal_slice, (n, 1))  # (N, n_nodal_param)
+            lam_vb_cross_init = cross_slice
         else:
-            lam_vb_nodal_init = np.full((n, n_nodal), float(lam_vb))
-            lam_vb_cross_init = np.full(n_cross, float(lam_vb))
+            lam_vb_nodal_init = np.full((n, n_nodal_param), float(lam_vb))
+            lam_vb_cross_init = np.full(n_cross_param, float(lam_vb))
 
         return cls(
             k=1,
