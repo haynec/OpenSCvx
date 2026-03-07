@@ -101,6 +101,100 @@ def _expand_lam_cost_dict(
     return lam_arr
 
 
+def _expand_lam_vc_dict(
+    lam_vc_dict: Dict[str, Union[float, list, np.ndarray]],
+    states: List["State"],
+) -> np.ndarray:
+    """Expand a ``{state_name: weight}`` dict to a per-state VC weight array.
+
+    Maps user-provided per-state virtual control weights to a dense array
+    using each state's ``_slice``.  States not present in the dict default
+    to ``1.0`` (neutral weight — dynamics violations are still penalised at
+    the base rate).
+
+    Per-state values may be:
+
+    * **scalar** — broadcast to every component and every node.
+    * **1-D array** of length ``n_components`` — per-component weight,
+      same for every node.
+    * **2-D array** of shape ``(K, n_components)`` — per-node-per-component.
+      When any state supplies a 2-D value the output is 2-D with first
+      dimension *K* (all 2-D entries must agree on *K*).
+
+    Args:
+        lam_vc_dict: Mapping from state names to VC weights.
+        states: List of State objects (must already have ``_slice`` assigned).
+
+    Returns:
+        np.ndarray of shape ``(n_states,)`` when all entries are scalar/1-D,
+        or ``(K, n_states)`` when any entry is 2-D.
+
+    Raises:
+        ValueError: If the dict contains unknown state names or 2-D entries
+            disagree on the number of nodes.
+    """
+    n_states = sum(s.shape[0] if len(s.shape) > 0 else 1 for s in states)
+
+    valid_names = {s.name for s in states}
+    unknown = set(lam_vc_dict.keys()) - valid_names
+    if unknown:
+        raise ValueError(
+            f"lam_vc dict contains unknown state name(s): {unknown}. "
+            f"Valid state names: {sorted(valid_names)}"
+        )
+
+    # First pass: determine if any entry is 2-D and infer K.
+    n_nodes: Optional[int] = None
+    for state in states:
+        if state.name not in lam_vc_dict:
+            continue
+        val = np.asarray(lam_vc_dict[state.name], dtype=float)
+        if val.ndim == 2:
+            if n_nodes is None:
+                n_nodes = val.shape[0]
+            elif val.shape[0] != n_nodes:
+                raise ValueError(
+                    f"lam_vc['{state.name}'] has {val.shape[0]} rows, but a "
+                    f"previous entry had {n_nodes} rows. All 2-D entries "
+                    f"must have the same number of rows (n_nodes-1)."
+                )
+
+    # Build the output array.
+    if n_nodes is not None:
+        lam_arr = np.ones((n_nodes, n_states))
+    else:
+        lam_arr = np.ones(n_states)
+
+    for state in states:
+        if state.name not in lam_vc_dict:
+            continue
+        val = np.asarray(lam_vc_dict[state.name], dtype=float)
+        n_components = state.shape[0] if len(state.shape) > 0 else 1
+
+        if val.ndim == 0:
+            # Scalar — broadcast to all components (and all nodes if 2-D).
+            lam_arr[..., state._slice] = float(val)
+        elif val.ndim == 1:
+            if val.shape[0] != n_components:
+                raise ValueError(
+                    f"lam_vc['{state.name}'] has length {val.shape[0]}, "
+                    f"expected scalar or length {n_components}"
+                )
+            lam_arr[..., state._slice] = val
+        elif val.ndim == 2:
+            if val.shape[1] != n_components:
+                raise ValueError(
+                    f"lam_vc['{state.name}'] has {val.shape[1]} columns, expected {n_components}"
+                )
+            lam_arr[:, state._slice] = val
+        else:
+            raise ValueError(
+                f"lam_vc['{state.name}'] has {val.ndim} dimensions, expected scalar, 1-D, or 2-D"
+            )
+
+    return lam_arr
+
+
 @dataclass
 class Weights:
     """Normalized SCP weights used internally by the algorithm and autotuner.
@@ -121,7 +215,9 @@ class Weights:
 
     Attributes:
         lam_prox: Trust region (proximal) weight (normalized).
-        lam_vc: Virtual control penalty weight (normalized).
+        lam_vc: Virtual control penalty weight (normalized). Scalar or
+            array of shape ``(n_states,)`` or ``(n_nodes-1, n_states)``
+            for per-state / per-node weighting.
         lam_cost: Cost weight per state (normalized). Scalar or array of
             shape ``(n_states,)`` for per-state weighting.
         lam_vb: Global virtual buffer penalty weight (normalized). Scalar
@@ -136,7 +232,7 @@ class Weights:
     """
 
     lam_prox: float = 1e0
-    lam_vc: float = 1e1
+    lam_vc: Union[float, np.ndarray] = 1e1
     lam_cost: Union[float, np.ndarray] = 1e-1
     lam_vb: float = 0.0
     lam_vb_nodal: Optional[np.ndarray] = None
@@ -144,12 +240,16 @@ class Weights:
 
     def __post_init__(self):
         # Coerce lists/lists-of-lists to numpy arrays.
+        if isinstance(self.lam_vc, (list, tuple)):
+            self.lam_vc = np.asarray(self.lam_vc, dtype=float)
         if isinstance(self.lam_cost, (list, tuple)):
             self.lam_cost = np.asarray(self.lam_cost, dtype=float)
 
         # Snapshot the user-specified values so normalize() is idempotent.
         self._raw_lam_prox = self.lam_prox
-        self._raw_lam_vc = self.lam_vc
+        self._raw_lam_vc = (
+            self.lam_vc.copy() if isinstance(self.lam_vc, np.ndarray) else self.lam_vc
+        )
         self._raw_lam_cost = (
             self.lam_cost.copy() if isinstance(self.lam_cost, np.ndarray) else self.lam_cost
         )
@@ -164,6 +264,11 @@ class Weights:
         making this method idempotent and safe to call after updating
         any individual raw weight.
         """
+        raw_vc_max = (
+            float(np.max(self._raw_lam_vc))
+            if isinstance(self._raw_lam_vc, np.ndarray)
+            else self._raw_lam_vc
+        )
         raw_cost_max = (
             float(np.max(self._raw_lam_cost))
             if isinstance(self._raw_lam_cost, np.ndarray)
@@ -176,7 +281,7 @@ class Weights:
             )
         else:
             raw_vb_max = self._raw_lam_vb
-        scale = max(self._raw_lam_prox, self._raw_lam_vc, raw_cost_max, raw_vb_max)
+        scale = max(self._raw_lam_prox, raw_vc_max, raw_cost_max, raw_vb_max)
         if scale > 0:
             self.lam_prox = self._raw_lam_prox / scale
             self.lam_vc = self._raw_lam_vc / scale
@@ -787,8 +892,9 @@ class AlgorithmState:
 
         Args:
             settings: Configuration object containing initial guesses and SCP parameters
-            weights: Normalized initial weights from the algorithm. The scalar
-                ``lam_vc`` is expanded to an ``(N-1, n_states)`` array here.
+            weights: Normalized initial weights from the algorithm.
+                ``lam_vc`` is expanded to an ``(N-1, n_states)`` array here
+                (scalar or per-state values are broadcast).
 
         Returns:
             Fresh AlgorithmState initialized from settings with copied arrays
@@ -914,6 +1020,39 @@ class Algorithm(ABC):
                 )
             return _expand_lam_cost_dict(lam_cost, states)
         return lam_cost
+
+    @staticmethod
+    def _resolve_lam_vc(
+        lam_vc: Union[float, Dict[str, Union[float, list, np.ndarray]]],
+        states: Optional[List["State"]] = None,
+    ) -> Union[float, np.ndarray]:
+        """Resolve a ``lam_vc`` spec to a numeric value.
+
+        If *lam_vc* is a float it is returned as-is.  If it is a dict
+        mapping state names to weights, *states* must be provided so the
+        dict can be expanded to a per-state array via
+        :func:`_expand_lam_vc_dict`.
+
+        Args:
+            lam_vc: Scalar weight or ``{state_name: weight}`` dict.
+            states: Symbolic State objects (required when *lam_vc* is a dict).
+
+        Returns:
+            float or np.ndarray of shape ``(n_states,)`` or
+            ``(K, n_states)``.
+
+        Raises:
+            ValueError: If *lam_vc* is a dict and *states* is ``None``.
+        """
+        if isinstance(lam_vc, dict):
+            if states is None:
+                raise ValueError(
+                    "lam_vc was specified as a dict but no states were "
+                    "provided. Pass states so the dict can be expanded to "
+                    "a per-state weight array."
+                )
+            return _expand_lam_vc_dict(lam_vc, states)
+        return lam_vc
 
     def _resolve_lam_vb(
         self,
