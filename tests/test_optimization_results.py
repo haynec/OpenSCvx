@@ -28,7 +28,7 @@ def _make_result(include_optional=False, include_plotting=False):
         J_vc_history=[np.array(float(i) * 0.01) for i in range(n_iters)],
         TR_history=[np.array(1.0 / (i + 1)) for i in range(n_iters)],
         VC_history=[np.array(10.0 / (i + 1)) for i in range(n_iters)],
-        lam_prox_history=[0.1, 0.2, 0.3],
+        lam_prox_history=[np.array(0.1), np.array(0.2), np.array(0.3)],
         actual_reduction_history=[1.0, 0.5, 0.1],
         pred_reduction_history=[1.2, 0.6, 0.15],
         acceptance_ratio_history=[0.83, 0.83, 0.67],
