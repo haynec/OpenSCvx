@@ -375,9 +375,10 @@ class PTRSolver(ConvexSolver):
             if settings.sim.x.final_type[i] == "Maximize":
                 cost -= lam_cost[i] * x[-1][i]
 
-        # Trust Region Cost
+        # Trust Region Cost (per-variable weighting)
         cost += sum(
-            lam_prox * cp.sum_squares(cp.hstack((dx[i], du[i]))) for i in range(settings.sim.n)
+            cp.sum(cp.multiply(lam_prox[i], cp.square(cp.hstack((dx[i], du[i])))))
+            for i in range(settings.sim.n)
         )
 
         # Virtual Control Slack
@@ -724,7 +725,7 @@ class PTRSolver(ConvexSolver):
 
     def update_penalties(
         self,
-        lam_prox: float,
+        lam_prox: np.ndarray,
         lam_cost: Union[float, np.ndarray],
         lam_vc: np.ndarray,
         lam_vb_nodal: np.ndarray,
@@ -736,7 +737,7 @@ class PTRSolver(ConvexSolver):
         PTR convex subproblem.
 
         Args:
-            lam_prox: Trust region weight (penalizes deviation from linearization point)
+            lam_prox: Trust region weights, shape ``(N, n_states + n_controls)``.
             lam_cost: Cost function weight. Scalar or array of shape
                 ``(n_states,)`` for per-state weighting.
             lam_vc: Virtual control penalty weights, shape (N-1, n_states)

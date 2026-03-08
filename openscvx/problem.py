@@ -272,11 +272,15 @@ class Problem:
         self._byof = byof
 
         # Resolve algorithm: None → default PTR, dict → PTR(**dict), instance → use directly
-        # Pass symbolic states so dict-valued lam_cost can be expanded eagerly.
+        # Pass symbolic states/controls so dict-valued weights can be expanded eagerly.
         if algorithm is None:
-            self._algorithm = PenalizedTrustRegion(states=self.symbolic.states)
+            self._algorithm = PenalizedTrustRegion(
+                states=self.symbolic.states, controls=self.symbolic.controls
+            )
         elif isinstance(algorithm, dict):
-            self._algorithm = _resolve_algorithm(algorithm, states=self.symbolic.states)
+            self._algorithm = _resolve_algorithm(
+                algorithm, states=self.symbolic.states, controls=self.symbolic.controls
+            )
         else:
             if not isinstance(algorithm, Algorithm):
                 raise TypeError(

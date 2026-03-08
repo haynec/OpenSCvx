@@ -29,6 +29,7 @@ from .ramp_proximal_weight import RampProximalWeight
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
     from openscvx.solvers import ConvexSolver
+    from openscvx.symbolic.expr.control import Control
     from openscvx.symbolic.expr.state import State
 
     from .base import AutotuningBase
@@ -85,7 +86,7 @@ class PenalizedTrustRegion(Algorithm):
         self,
         autotuner: "AutotuningBase" = None,
         k_max: int = 200,
-        lam_prox: float = 1e0,
+        lam_prox: Union[float, Dict[str, Union[float, list]]] = 1e0,
         lam_vc: Union[float, Dict[str, Union[float, list]]] = 1e1,
         lam_cost: Union[float, Dict[str, float]] = 1e-1,
         lam_vb: float = 0.0,
@@ -93,6 +94,7 @@ class PenalizedTrustRegion(Algorithm):
         ep_vb: float = 1e-4,
         ep_vc: float = 1e-8,
         states: List["State"] = None,
+        controls: List["Control"] = None,
     ):
         """Initialize PTR with algorithm parameters and optional autotuner.
 
@@ -100,7 +102,14 @@ class PenalizedTrustRegion(Algorithm):
             autotuner: Weight adaptation strategy. Defaults to
                 :class:`AugmentedLagrangian` when ``None``.
             k_max: Maximum SCP iterations. Defaults to 200.
-            lam_prox: Trust region (proximal) weight. Defaults to 1.0.
+            lam_prox: Trust region (proximal) weight. Either a float
+                (applied uniformly to all states and controls) or a dict
+                mapping state/control names to weights, e.g.
+                ``{"velocity": 1e0, "thrust": 5e-1}``.  Dict values may
+                be scalars, 1-D arrays for per-component weighting, or
+                2-D arrays of shape ``(n_nodes, n_components)`` for
+                per-node-per-component weighting.  Variables not in the
+                dict default to ``1.0``. Defaults to 1.0.
             lam_vc: Virtual control penalty weight. Either a float
                 (applied uniformly to all states) or a dict mapping state
                 names to per-state weights, e.g.
@@ -119,8 +128,12 @@ class PenalizedTrustRegion(Algorithm):
             ep_tr: Trust region convergence tolerance. Defaults to 1e-4.
             ep_vb: Virtual buffer convergence tolerance. Defaults to 1e-4.
             ep_vc: Virtual control convergence tolerance. Defaults to 1e-8.
-            states: Symbolic State objects (required when *lam_cost* is a
-                dict). Normally provided automatically by :class:`Problem`.
+            states: Symbolic State objects (required when *lam_cost* or
+                *lam_prox* is a dict). Normally provided automatically by
+                :class:`Problem`.
+            controls: Symbolic Control objects (required when *lam_prox*
+                is a dict). Normally provided automatically by
+                :class:`Problem`.
         """
         # Compiled infrastructure (set by initialize())
         self._solver: "ConvexSolver" = None
@@ -134,17 +147,20 @@ class PenalizedTrustRegion(Algorithm):
             autotuner if autotuner is not None else AugmentedLagrangian()
         )
 
-        # Store states for later re-resolution (e.g. user sets lam_cost to a
-        # new dict via the property setter after construction).
+        # Store states/controls for later re-resolution (e.g. user sets
+        # lam_cost or lam_prox to a new dict via the property setter after
+        # construction).
         self._states: List["State"] = states
+        self._controls: List["Control"] = controls
 
-        # Resolve dict lam_vc / lam_cost → ndarray (requires states)
+        # Resolve dict lam_prox / lam_vc / lam_cost → ndarray (requires states/controls)
+        resolved_lam_prox = self._resolve_lam_prox(lam_prox, states, controls)
         resolved_lam_vc = self._resolve_lam_vc(lam_vc, states)
         resolved_lam_cost = self._resolve_lam_cost(lam_cost, states)
 
         # SCP weights (grouped dataclass, normalized for numerical conditioning)
         self.weights = Weights(
-            lam_prox=lam_prox,
+            lam_prox=resolved_lam_prox,
             lam_vc=resolved_lam_vc,
             lam_cost=resolved_lam_cost,
             lam_vb=lam_vb,
@@ -187,11 +203,12 @@ class PenalizedTrustRegion(Algorithm):
         return x0_prior.reshape(1, -1)
 
     @property
-    def lam_prox(self) -> float:
+    def lam_prox(self) -> Union[float, np.ndarray]:
         """Trust region (proximal) weight.
 
         This is the user-specified value before normalization. Setting this
-        property triggers automatic re-normalization of all weights.
+        property triggers automatic re-normalization of all weights.  May be
+        a scalar or array for per-variable / per-node weighting.
 
         !!! note
             The autotuner may modify the normalized weight in
@@ -201,8 +218,9 @@ class PenalizedTrustRegion(Algorithm):
         return self.weights._raw_lam_prox
 
     @lam_prox.setter
-    def lam_prox(self, value: float) -> None:
-        self.weights._raw_lam_prox = value
+    def lam_prox(self, value: Union[float, Dict[str, Union[float, list]]]) -> None:
+        resolved = self._resolve_lam_prox(value, self._states, self._controls)
+        self.weights._raw_lam_prox = resolved
         self.weights.normalize()
 
     @property
@@ -465,7 +483,7 @@ class PenalizedTrustRegion(Algorithm):
             "J_vb": state.J_vb,
             "J_vc": state.J_vc,
             "cost": cost[-1],
-            "lam_prox": state.lam_prox,
+            "lam_prox": float(np.max(state.lam_prox)),
             "prob_stat": prob_stat,
             "adaptive_state": adaptive_state,
             "ep_tr": self.ep_tr,

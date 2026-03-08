@@ -91,7 +91,7 @@ class OptimizationResults:
     VC_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
 
     # Convergence histories
-    lam_prox_history: list[float] = field(default_factory=list, metadata={"npz": "float_list"})
+    lam_prox_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
     actual_reduction_history: list[float] = field(
         default_factory=list, metadata={"npz": "float_list"}
     )

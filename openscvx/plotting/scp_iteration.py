@@ -339,12 +339,13 @@ def plot_scp_convergence_histories(result: OptimizationResults) -> go.Figure:
     iterations_reduction = np.arange(len(result.actual_reduction_history))
     iterations_ratio = np.arange(len(result.acceptance_ratio_history))
 
-    # Plot 1: Trust region weight history
+    # Plot 1: Trust region weight history (plot max across all variables)
     if len(result.lam_prox_history) > 0:
+        lam_prox_max_per_iter = [float(np.max(lp)) for lp in result.lam_prox_history]
         fig.add_trace(
             go.Scatter(
                 x=iterations_lam_prox,
-                y=result.lam_prox_history,
+                y=lam_prox_max_per_iter,
                 mode="lines+markers",
                 name="lam_prox",
                 line={"color": "cyan", "width": 2},

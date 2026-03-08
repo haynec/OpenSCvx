@@ -2,6 +2,8 @@
 
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from openscvx.config import Config
 
 from .base import AutotuningBase
@@ -61,10 +63,10 @@ class RampProximalWeight(AutotuningBase):
             candidate.lam_cost = weights.lam_cost
 
         # Check if we're already at max before updating
-        was_at_max = state.lam_prox >= self.lam_prox_max
+        was_at_max = np.all(state.lam_prox >= self.lam_prox_max)
 
         # Calculate and append new value
-        new_lam_prox = min(state.lam_prox * self.ramp_factor, self.lam_prox_max)
+        new_lam_prox = np.minimum(state.lam_prox * self.ramp_factor, self.lam_prox_max)
         state.lam_prox_history.append(new_lam_prox)
 
         # If we were already at max, or if we just reached it and it's staying constant

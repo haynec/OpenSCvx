@@ -116,7 +116,7 @@ class AugmentedLagrangian(AutotuningBase):
         candidate_x_prop: np.ndarray,
         settings: Config,
         lam_vc: np.ndarray,
-        lam_prox: float,
+        lam_prox: np.ndarray,
     ) -> np.ndarray:
         """Update virtual control penalty weights from state violation.
 
@@ -126,7 +126,8 @@ class AugmentedLagrangian(AutotuningBase):
         """
         nu = (settings.sim.inv_S_x @ abs(candidate.x[1:] - candidate_x_prop).T).T
         mask = nu > self.ep
-        scale = self.eta_lambda * (1 / (2 * lam_prox))
+        lam_prox_scalar = float(np.max(lam_prox))
+        scale = self.eta_lambda * (1 / (2 * lam_prox_scalar))
         case1 = lam_vc + nu * scale
         case2 = lam_vc + (nu**2) / self.ep * scale
         vc_new = np.where(mask, case1, case2)
@@ -222,12 +223,12 @@ class AugmentedLagrangian(AutotuningBase):
 
             if rho < self.eta_0:
                 # Reject Solution and higher weight
-                lam_prox_k1 = min(self.lam_prox_max, self.gamma_1 * lam_prox_k)
+                lam_prox_k1 = np.minimum(self.lam_prox_max, self.gamma_1 * lam_prox_k)
                 state.lam_prox_history.append(lam_prox_k1)
                 adaptive_state = "Reject Higher"
             elif rho >= self.eta_0 and rho < self.eta_1:
                 # Accept Solution with heigher weight
-                lam_prox_k1 = min(self.lam_prox_max, self.gamma_1 * lam_prox_k)
+                lam_prox_k1 = np.minimum(self.lam_prox_max, self.gamma_1 * lam_prox_k)
                 state.lam_prox_history.append(lam_prox_k1)
 
                 # Update virtual control weight matrix
@@ -255,7 +256,7 @@ class AugmentedLagrangian(AutotuningBase):
                 adaptive_state = "Accept Constant"
             else:
                 # Accept Solution with lower weight
-                lam_prox_k1 = max(self.lam_prox_min, self.gamma_2 * lam_prox_k)
+                lam_prox_k1 = np.maximum(self.lam_prox_min, self.gamma_2 * lam_prox_k)
                 state.lam_prox_history.append(lam_prox_k1)
                 # Update virtual control weight matrix
                 candidate.lam_vc = self._update_virtual_control_weights(
