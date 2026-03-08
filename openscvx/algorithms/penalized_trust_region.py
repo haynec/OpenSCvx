@@ -483,6 +483,7 @@ class PenalizedTrustRegion(Algorithm):
             "J_vb": state.J_vb,
             "J_vc": state.J_vc,
             "cost": cost[-1],
+            # TODO: (haynec) log per-variable lam_prox detail (e.g. min/max range)
             "lam_prox": float(np.max(state.lam_prox)),
             "prob_stat": prob_stat,
             "adaptive_state": adaptive_state,

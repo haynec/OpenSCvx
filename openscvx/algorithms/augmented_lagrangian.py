@@ -126,6 +126,7 @@ class AugmentedLagrangian(AutotuningBase):
         """
         nu = (settings.sim.inv_S_x @ abs(candidate.x[1:] - candidate_x_prop).T).T
         mask = nu > self.ep
+        # TODO: (haynec) use per-variable lam_prox to scale VC updates proportionally
         lam_prox_scalar = float(np.max(lam_prox))
         scale = self.eta_lambda * (1 / (2 * lam_prox_scalar))
         case1 = lam_vc + nu * scale
