@@ -65,8 +65,8 @@ Module Organization:
         `NodalConstraint` for enforcing constraints at discrete nodes and `CTCS` for
         continuous-time constraint satisfaction.
 
-    Signal Temporal Logic (stl.py):
-        `Or` for logical disjunction in task specifications.
+    Signal Temporal Logic (stljax.py):
+        `Or` for logical disjunction in task specifications (stljax-backed).
 """
 
 # Arithmetic operations
@@ -152,7 +152,7 @@ from .spatial import QDCM, SSM, SSMP
 from .state import BoundaryType, Fixed, Free, Maximize, Minimize, State
 
 # STL operations
-from .stl import Or
+from .stljax import Or
 
 # Time
 from .time import Time

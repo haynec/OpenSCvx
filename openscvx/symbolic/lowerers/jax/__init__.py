@@ -33,6 +33,7 @@ from openscvx.symbolic.lowerers.jax import (
     spatial,  # noqa: F401
     state,  # noqa: F401
     stl,  # noqa: F401
+    stljax,  # noqa: F401
     vmap,  # noqa: F401
 )
 from openscvx.symbolic.lowerers.jax._lowerer import JaxLowerer
