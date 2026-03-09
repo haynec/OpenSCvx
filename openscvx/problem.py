@@ -18,7 +18,7 @@ import os
 import queue
 import threading
 import time
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import jax
 
@@ -83,8 +83,8 @@ class Problem:
         dynamics_prop: Optional[dict] = None,
         states_prop: Optional[List[State]] = None,
         algebraic_prop: Optional[dict] = None,
-        licq_min: float = 0.0,
-        licq_max: float = 1e-4,
+        licq_min: Union[float, Dict[int, float]] = 0.0,
+        licq_max: Union[float, Dict[int, float]] = 1e-4,
         algorithm: Optional[Union[Algorithm, dict]] = None,
         discretizer: Optional[Union[Discretizer, dict]] = None,
         solver: Optional[Union[ConvexSolver, dict]] = None,
@@ -114,8 +114,12 @@ class Problem:
                 Only specify additional states beyond optimization states. Used with dynamics_prop.
             algebraic_prop (dict, optional): Dictionary mapping names to symbolic expressions
                 for outputs evaluated (not integrated) during propagation.
-            licq_min (float): Minimum LICQ constraint value. Defaults to 0.0.
-            licq_max (float): Maximum LICQ constraint value. Defaults to 1e-4.
+            licq_min: Minimum LICQ constraint value. Defaults to 0.0.
+                Either a scalar (applied to all CTCS groups) or a dict
+                mapping CTCS group ``idx`` to per-group bounds.
+            licq_max: Maximum LICQ constraint value. Defaults to 1e-4.
+                Either a scalar (applied to all CTCS groups) or a dict
+                mapping CTCS group ``idx`` to per-group bounds.
             algorithm: SCP algorithm configuration. Accepts:
 
                 - ``None`` — uses ``PenalizedTrustRegion()`` with defaults.
