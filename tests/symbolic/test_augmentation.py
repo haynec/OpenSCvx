@@ -821,6 +821,105 @@ def test_augmented_state_bounds():
     assert np.allclose(aug_state.guess, 0.001), "Augmented state guess should be licq_min"
 
 
+def test_augmented_state_bounds_per_group_dict():
+    """Per-group LICQ bounds via dict keyed by idx."""
+    x = State("x", (1,))
+    time = State("time", (1,))
+    time.final = np.array([10.0])
+    xdot = x
+    states = [time, x]
+    controls = []
+    N = 5
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
+
+    # Two constraints with different node intervals → two groups (idx 0 and 1)
+    c0 = ctcs(x <= 1.0, penalty="squared_relu", nodes=(0, 3))
+    c1 = ctcs(x <= 2.0, penalty="squared_relu", nodes=(3, 5))
+
+    _, _, states_aug, _ = augment_dynamics_with_ctcs(
+        xdot,
+        states,
+        controls,
+        [c0, c1],
+        N,
+        licq_min={0: 0.0, 1: 0.001},
+        licq_max={0: 1e-8, 1: 0.01},
+    )
+
+    aug0 = states_aug[2]  # _ctcs_aug_0
+    aug1 = states_aug[3]  # _ctcs_aug_1
+
+    assert aug0.min[0] == 0.0
+    assert aug0.max[0] == 1e-8
+    assert aug0.initial[0] == 0.0
+    assert np.allclose(aug0.guess, 0.0)
+
+    assert aug1.min[0] == 0.001
+    assert aug1.max[0] == 0.01
+    assert aug1.initial[0] == 0.001
+    assert np.allclose(aug1.guess, 0.001)
+
+
+def test_augmented_state_bounds_scalar_with_multiple_groups():
+    """Scalar LICQ bounds broadcast to all groups."""
+    x = State("x", (1,))
+    time = State("time", (1,))
+    time.final = np.array([10.0])
+    xdot = x
+    states = [time, x]
+    controls = []
+    N = 5
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
+
+    c0 = ctcs(x <= 1.0, penalty="squared_relu", nodes=(0, 3))
+    c1 = ctcs(x <= 2.0, penalty="squared_relu", nodes=(3, 5))
+
+    _, _, states_aug, _ = augment_dynamics_with_ctcs(
+        xdot,
+        states,
+        controls,
+        [c0, c1],
+        N,
+        licq_min=0.002,
+        licq_max=0.05,
+    )
+
+    for i in [2, 3]:
+        aug = states_aug[i]
+        assert aug.min[0] == 0.002
+        assert aug.max[0] == 0.05
+        assert aug.initial[0] == 0.002
+
+
+def test_licq_dict_unknown_idx_raises():
+    """Dict licq with unknown idx raises helpful error."""
+    x = State("x", (1,))
+    time = State("time", (1,))
+    time.final = np.array([10.0])
+    states = [time, x]
+    N = 5
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
+    c0 = ctcs(x <= 1.0, penalty="squared_relu", nodes=(0, 5))
+
+    with pytest.raises(ValueError, match="unknown CTCS group idx.*5"):
+        augment_dynamics_with_ctcs(x, states, [], [c0], N, licq_max={0: 1e-8, 5: 1e-4})
+
+
+def test_licq_dict_missing_idx_raises():
+    """Dict licq missing a group idx raises helpful error."""
+    x = State("x", (1,))
+    time = State("time", (1,))
+    time.final = np.array([10.0])
+    states = [time, x]
+    N = 5
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
+    c0 = ctcs(x <= 1.0, penalty="squared_relu", nodes=(0, 3))
+    c1 = ctcs(x <= 2.0, penalty="squared_relu", nodes=(3, 5))
+
+    with pytest.raises(ValueError, match="missing entries for CTCS group idx.*1"):
+        augment_dynamics_with_ctcs(x, states, [], [c0, c1], N, licq_max={0: 1e-8})
+
+
 def test_time_dilation_control_bounds():
     """Test that time dilation control has correct min/max bounds based on time."""
     x = State("x", (2,))

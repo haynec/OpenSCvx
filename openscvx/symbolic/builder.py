@@ -29,7 +29,7 @@ Pipeline stages:
 See `preprocess_symbolic_problem()` for the main entry point.
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -71,8 +71,8 @@ def preprocess_symbolic_problem(
     controls: List[Control],
     N: int,
     time: Time,
-    licq_min: float = 0.0,
-    licq_max: float = 1e-4,
+    licq_min: Union[float, Dict[int, float]] = 0.0,
+    licq_max: Union[float, Dict[int, float]] = 1e-4,
     dynamics_prop_extra: dict = None,
     dynamics_discrete: dict = None,
     states_prop_extra: List[State] = None,
@@ -106,8 +106,12 @@ def preprocess_symbolic_problem(
         controls: List of user-defined Control objects (should NOT include time dilation)
         N: Number of discretization nodes in the trajectory
         time: Time configuration object specifying time bounds and constraints
-        licq_min: Minimum bound for CTCS augmented states (default: 0.0)
-        licq_max: Maximum bound for CTCS augmented states (default: 1e-4)
+        licq_min: Minimum bound for CTCS augmented states (default: 0.0).
+            Either a scalar (applied to all groups) or a dict mapping
+            CTCS group ``idx`` to per-group bounds.
+        licq_max: Maximum bound for CTCS augmented states (default: 1e-4).
+            Either a scalar (applied to all groups) or a dict mapping
+            CTCS group ``idx`` to per-group bounds.
         dynamics_prop_extra: Optional dictionary of additional dynamics for propagation-only
             states (default: None)
         states_prop_extra: Optional list of additional State objects for propagation only

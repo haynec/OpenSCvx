@@ -54,7 +54,7 @@ Example:
         # controls_aug includes original controls + time dilation
 """
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -484,8 +484,8 @@ def augment_dynamics_with_ctcs(
     N: int,
     xdelta: Optional[Expr] = None,
     *,
-    licq_min: float = 0.0,
-    licq_max: float = 1e-4,
+    licq_min: Union[float, Dict[int, float]] = 0.0,
+    licq_max: Union[float, Dict[int, float]] = 1e-4,
 ) -> Tuple[Expr, Optional[Expr], List[State], List[Control]]:
     """Augment dynamics with continuous-time constraint satisfaction states.
 
@@ -509,8 +509,12 @@ def augment_dynamics_with_ctcs(
         controls: List of control variables
         constraints_ctcs: List of CTCS constraints (should be sorted and grouped)
         N: Number of discretization nodes
-        licq_min: Minimum bound for augmented states (default: 0.0)
-        licq_max: Maximum bound for augmented states (default: 1e-4)
+        licq_min: Minimum bound for augmented states (default: 0.0).
+            Either a scalar (applied to all groups) or a dict mapping
+            CTCS group ``idx`` to per-group bounds.
+        licq_max: Maximum bound for augmented states (default: 1e-4).
+            Either a scalar (applied to all groups) or a dict mapping
+            CTCS group ``idx`` to per-group bounds.
 
     Returns:
         Tuple of:
@@ -567,6 +571,24 @@ def augment_dynamics_with_ctcs(
                 penalty_groups[ctcs.idx] = []
             penalty_groups[ctcs.idx].append(ctcs)
 
+        # Validate dict-valued licq_min / licq_max keys against actual groups.
+        valid_ids = set(penalty_groups.keys())
+        for name, val in [("licq_min", licq_min), ("licq_max", licq_max)]:
+            if isinstance(val, dict):
+                unknown = set(val.keys()) - valid_ids
+                if unknown:
+                    raise ValueError(
+                        f"{name} dict contains unknown CTCS group idx: {unknown}. "
+                        f"Valid idx values: {sorted(valid_ids)}"
+                    )
+                missing = valid_ids - set(val.keys())
+                if missing:
+                    raise ValueError(
+                        f"{name} dict is missing entries for CTCS group idx: "
+                        f"{sorted(missing)}. When using a dict, all groups must "
+                        f"have an entry. Valid idx values: {sorted(valid_ids)}"
+                    )
+
         # Create augmented state expressions for each group and corresponding
         # augmented state variables. For discrete dynamics, preserve these states
         # by identity mapping across impulsive updates.
@@ -580,13 +602,17 @@ def augment_dynamics_with_ctcs(
                 augmented_state_expr = Add(*penalty_terms)
             augmented_state_exprs.append(augmented_state_expr)
 
+            # Resolve per-group LICQ bounds
+            idx_min = licq_min[idx] if isinstance(licq_min, dict) else licq_min
+            idx_max = licq_max[idx] if isinstance(licq_max, dict) else licq_max
+
             aug_var = State(f"_ctcs_aug_{idx}", shape=(1,))
-            aug_var.initial = np.array([licq_min])  # Set initial to respect bounds
+            aug_var.initial = np.array([idx_min])  # Set initial to respect bounds
             aug_var.final = [("free", 0)]
-            aug_var.min = np.array([licq_min])
-            aug_var.max = np.array([licq_max])
-            # Set guess to licq_min as well
-            aug_var.guess = np.full([N, 1], licq_min)  # N x num augmented states
+            aug_var.min = np.array([idx_min])
+            aug_var.max = np.array([idx_max])
+            # Set guess to idx_min as well
+            aug_var.guess = np.full([N, 1], idx_min)  # N x num augmented states
             states_augmented.append(aug_var)
             augmented_state_exprs_discrete.append(aug_var)
 
