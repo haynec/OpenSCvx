@@ -7033,7 +7033,7 @@ untyped dictionary approach with a typed, self-documenting structure.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Trust region weight parameter (scalar, nonneg)</p>
+                <p>Trust region weight parameter (N x (n_states+n_controls), nonneg)</p>
               </div>
             </td>
           </tr>
@@ -7606,7 +7606,7 @@ untyped dictionary approach with a typed, self-documenting structure.</p>
 </span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28"></a><span class="sd">        - Scaled expressions: CVXPy expressions for scaled state/control at each node</span>
 </span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29"></a>
 </span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30"></a><span class="sd">    Attributes:</span>
-</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31"></a><span class="sd">        lam_prox: Trust region weight parameter (scalar, nonneg)</span>
+</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31"></a><span class="sd">        lam_prox: Trust region weight parameter (N x (n_states+n_controls), nonneg)</span>
 </span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32"></a><span class="sd">        lam_cost: Cost function weight parameter (n_states, nonneg)</span>
 </span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33"></a><span class="sd">        lam_vc: Virtual control penalty weights (N-1 x n_states, nonneg)</span>
 </span><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34"></a><span class="sd">        lam_vb_nodal: Virtual buffer penalty weights for nodal constraints (N x n_nodal, nonneg)</span>
