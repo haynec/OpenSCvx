@@ -93,6 +93,41 @@ for center in gate_centers:
     vertices.append(gen_vertices(center, radii))
 ### End Gate Parameters ###
 
+### Gate Cone Parameters ###
+gate_cone_indices = [1]  # which gates get cone constraints
+gate_normals = [
+    np.array([-1, 0, 0]),  # gate 1: fly in -y direction
+]
+cone_half_angle = np.deg2rad(45)
+tan_a = np.tan(cone_half_angle)
+gate_half_width = 2.5
+apex_offset = gate_half_width / tan_a
+
+A_cone = np.diag([1.0, 1.0, 0.0])
+c_cone = np.array([0.0, 0.0, 1.0])
+
+gate_cone_rotations = []
+gate_cone_apexes = []
+for center, n in zip([gate_centers[i] for i in gate_cone_indices], gate_normals):
+    n_hat = n / np.linalg.norm(n)
+    up = np.array([0, 0, 1.0])
+    if abs(np.dot(n_hat, up)) > 0.99:
+        up = np.array([0, 1.0, 0])
+    y = np.cross(n_hat, up)
+    y /= np.linalg.norm(y)
+    x = np.cross(y, n_hat)
+    R = np.column_stack([x, y, n_hat])
+    gate_cone_rotations.append(R)
+    gate_cone_apexes.append(center - apex_offset * n_hat)
+
+
+def g_gate_cone(apex, R_gate, x_pos):
+    p_local = R_gate.T @ (x_pos - apex)
+    return ox.linalg.Norm(A_cone @ p_local) - tan_a * (c_cone.T @ p_local)
+
+
+### End Gate Cone Parameters ###
+
 # Define list of all states (needed for Problem and constraints)
 states_traj = [position_traj, velocity_traj]
 controls_traj = [force_traj]
@@ -327,6 +362,10 @@ if __name__ == "__main__":
 
     # Obstacle avoidance: ||position - center|| >= radius
     constraints.append(ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obstacle_center)))
+
+    # Gate cone constraint (gate 0 only for now)
+    for apex, R_gate in zip(gate_cone_apexes, gate_cone_rotations):
+        constraints.append(ox.ctcs(g_gate_cone(apex, R_gate, position) <= 0.0))
 
     # --- Time ---
     t = ox.Time(
