@@ -51,7 +51,7 @@ class STLExpr(Expr):
     def over(
         self,
         interval: tuple[int, int],
-        penalty: str = "squared_relu",
+        penalty: str = "smooth_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
     ) -> "CTCS":

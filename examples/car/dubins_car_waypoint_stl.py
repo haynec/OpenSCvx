@@ -126,12 +126,13 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"autotuner": ox.ConstantProximalWeight()},
+    algorithm={"autotuner": ox.RampProximalWeight()},
     float_dtype="float64",
     licq_max=1e-8,
 )
 
 problem.algorithm.ep_vc = 1e-6
+problem.algorithm.ep_tr = 5e-4
 problem.algorithm.lam_vc = 1e3
 
 plotting_dict = {

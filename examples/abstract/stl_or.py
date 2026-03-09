@@ -72,7 +72,7 @@ reach_b = ox.linalg.Norm(x - x_b) <= radius
 
 reach_either = ox.stl.Or(reach_a, reach_b)
 # Enforce the STL Or condition over the whole horizon
-constraints.append(reach_either.over((N - 2, N - 1)))
+constraints.append(reach_either.over((N - 2, N - 1), penalty="squared_relu"))
 
 # Time configuration (auto-created "time" trajectory)
 time = ox.Time(
