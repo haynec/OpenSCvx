@@ -119,7 +119,7 @@ def algorithm_state(settings):
         lam_cost_history=[1.0],
         lam_vb_nodal_history=[np.full((3, 1), 1.0)],  # (N, max(n_nodal,1))
         lam_vb_cross_history=[np.full(1, 1.0)],  # (max(n_cross,1),)
-        lam_prox_history=[1.0],
+        lam_prox_history=[np.ones((3, 3))],  # (N, n_x + n_u)
     )
     return state
 
@@ -530,7 +530,7 @@ def test_update_scp_weights_initial_iteration(
 
     assert adaptive_state == "Initial"
     assert len(algorithm_state.lam_prox_history) == 2  # Initial + new entry
-    assert algorithm_state.lam_prox_history[-1] == algorithm_state.lam_prox
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[-1], algorithm_state.lam_prox)
     # Should accept solution
     assert len(algorithm_state.X) == initial_x_len + 1  # Original + accepted candidate
 
@@ -552,7 +552,7 @@ def test_update_scp_weights_reject_higher(
     """Test weight update when rho < eta_0 (reject solution, higher weight)."""
     algorithm_state.k = 2
     # Ensure lam_prox_history has the current weight
-    algorithm_state.lam_prox_history = [1.0]
+    algorithm_state.lam_prox_history = [np.full((3, 3), 1.0)]
 
     # Set up previous iteration data
     algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
@@ -602,7 +602,7 @@ def test_update_scp_weights_accept_lower(
 ):
     """Test weight update when rho >= eta_2 (accept solution, lower weight)."""
     algorithm_state.k = 2
-    algorithm_state.lam_prox_history = [10.0]  # Start with higher weight
+    algorithm_state.lam_prox_history = [np.full((3, 3), 10.0)]  # Start with higher weight
 
     # Set up previous iteration
     algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
@@ -653,7 +653,7 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
 
     algorithm_state.k = 4  # After cost_drop
     algorithm_state.lam_cost_history = [2.0]  # Current cost weight
-    algorithm_state.lam_prox_history = [1.0]
+    algorithm_state.lam_prox_history = [np.full((3, 3), 1.0)]
 
     # Set up previous iteration data for k > 1
     algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
@@ -732,10 +732,9 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
     # - the candidate is accepted
     assert adaptive_state == "Accept Lower"
     assert len(algorithm_state.lam_prox_history) == 2
-    assert algorithm_state.lam_prox_history[0] == pytest.approx(lam_prox_prev)
-    assert algorithm_state.lam_prox_history[1] == pytest.approx(
-        max(autotuner.lam_prox_min, autotuner.gamma_2 * lam_prox_prev)
-    )
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[0], lam_prox_prev)
+    expected = np.maximum(autotuner.lam_prox_min, autotuner.gamma_2 * lam_prox_prev)
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[1], expected)
 
     # Cost should be relaxed when k > cost_drop and written back to state
     expected_lam_cost = 2.0 * 0.8
@@ -803,7 +802,7 @@ def test_update_scp_weights_weight_bounds(
 ):
     """Test that trust region weights respect min/max bounds."""
     algorithm_state.k = 2
-    algorithm_state.lam_prox_history = [1e5]  # Very high weight
+    algorithm_state.lam_prox_history = [np.full((3, 3), 1e5)]  # Very high weight
 
     # Set up previous iteration
     algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
@@ -839,8 +838,8 @@ def test_update_scp_weights_weight_bounds(
     lam_prox_min = 1e-3
     lam_prox_max = 2e5
     final_weight = algorithm_state.lam_prox_history[-1]
-    assert final_weight >= lam_prox_min
-    assert final_weight <= lam_prox_max
+    assert np.all(final_weight >= lam_prox_min)
+    assert np.all(final_weight <= lam_prox_max)
 
 
 # --- Tests for AugmentedLagrangianAutotuning ---------------------------------
@@ -880,7 +879,7 @@ def test_augmented_lagrangian_multiplier_update(
     """Test that AugmentedLagrangian uses PTR method (no multiplier updates)."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
-    algorithm_state.lam_prox_history = [1.0]
+    algorithm_state.lam_prox_history = [np.full((3, 3), 1.0)]
     algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
     # 1 nodal constraint, 0 cross-node
     algorithm_state.lam_vb_nodal_history = [np.full((3, 1), 1.0)]
@@ -931,7 +930,7 @@ def test_augmented_lagrangian_accept_decrease(
     """Explicitly realize the 'Accept Lower' branch with constraint violations."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
-    algorithm_state.lam_prox_history = [1.0]
+    algorithm_state.lam_prox_history = [np.full((3, 3), 1.0)]
     algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
     # 1 nodal constraint, 0 cross-node
     algorithm_state.lam_vb_nodal_history = [np.full((3, 1), 1.0)]
@@ -1019,10 +1018,9 @@ def test_augmented_lagrangian_accept_decrease(
     # - candidate is accepted and its weights recorded in the state histories
     assert adaptive_state == "Accept Lower"
     assert len(algorithm_state.lam_prox_history) == 2
-    assert algorithm_state.lam_prox_history[0] == pytest.approx(lam_prox_prev)
-    assert algorithm_state.lam_prox_history[1] == pytest.approx(
-        max(autotuner.lam_prox_min, autotuner.gamma_2 * lam_prox_prev)
-    )
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[0], lam_prox_prev)
+    expected = np.maximum(autotuner.lam_prox_min, autotuner.gamma_2 * lam_prox_prev)
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[1], expected)
     assert len(algorithm_state.X) == initial_x_len + 1
     assert len(algorithm_state.lam_vc_history) == 2
     assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
@@ -1038,7 +1036,7 @@ def test_augmented_lagrangian_reject_increase(
     """Test that AugmentedLagrangian rejects and does not update lam_vc."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
-    algorithm_state.lam_prox_history = [1.0]
+    algorithm_state.lam_prox_history = [np.full((3, 3), 1.0)]
     algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
 
     # Set up previous iteration
@@ -1080,8 +1078,10 @@ def test_augmented_lagrangian_reject_increase(
     assert adaptive_state == "Reject Higher"
     assert candidate.lam_vc is None
     assert len(algorithm_state.lam_prox_history) == 2
-    assert algorithm_state.lam_prox_history[0] == pytest.approx(lam_prox_prev)
-    assert algorithm_state.lam_prox_history[1] == pytest.approx(autotuner.gamma_1 * lam_prox_prev)
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[0], lam_prox_prev)
+    np.testing.assert_allclose(
+        algorithm_state.lam_prox_history[1], autotuner.gamma_1 * lam_prox_prev
+    )
     assert len(algorithm_state.lam_vc_history) == 1
     assert np.allclose(algorithm_state.lam_vc_history[0], lam_vc_prev)
 
@@ -1098,7 +1098,7 @@ def test_augmented_lagrangian_accept_higher(
     """Explicitly realize the 'Accept Higher' adaptive_state branch."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
-    algorithm_state.lam_prox_history = [1.0]
+    algorithm_state.lam_prox_history = [np.full((3, 3), 1.0)]
     algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
 
     # Set up previous iteration
@@ -1177,10 +1177,9 @@ def test_augmented_lagrangian_accept_higher(
     assert adaptive_state == "Accept Higher"
     # Trust-region weight should be increased by gamma_1
     assert len(algorithm_state.lam_prox_history) == 2
-    assert algorithm_state.lam_prox_history[0] == pytest.approx(lam_prox_prev)
-    assert algorithm_state.lam_prox_history[1] == pytest.approx(
-        min(autotuner.lam_prox_max, autotuner.gamma_1 * lam_prox_prev)
-    )
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[0], lam_prox_prev)
+    expected = np.minimum(autotuner.lam_prox_max, autotuner.gamma_1 * lam_prox_prev)
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[1], expected)
     # Candidate should have updated virtual control weights and be accepted,
     # and those weights must be recorded back into the algorithm_state histories.
     assert candidate.lam_vc is not None
@@ -1201,7 +1200,7 @@ def test_augmented_lagrangian_accept_constant(
     """Explicitly realize the 'Accept Constant' adaptive_state branch."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
-    algorithm_state.lam_prox_history = [1.0]
+    algorithm_state.lam_prox_history = [np.full((3, 3), 1.0)]
     algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
 
     # Set up previous iteration
@@ -1278,8 +1277,8 @@ def test_augmented_lagrangian_accept_constant(
     assert adaptive_state == "Accept Constant"
     # Trust-region weight should remain constant
     assert len(algorithm_state.lam_prox_history) == 2
-    assert algorithm_state.lam_prox_history[0] == pytest.approx(lam_prox_prev)
-    assert algorithm_state.lam_prox_history[1] == pytest.approx(lam_prox_prev)
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[0], lam_prox_prev)
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[1], lam_prox_prev)
     # Candidate should have updated virtual control weights and be accepted,
     # and those weights must be recorded back into the algorithm_state histories.
     assert candidate.lam_vc is not None
@@ -1300,7 +1299,7 @@ def test_augmented_lagrangian_virtual_control_update(
     """Test AL rejects this step and does not update virtual control weights."""
     autotuner = AugmentedLagrangian()
     algorithm_state.k = 2
-    algorithm_state.lam_prox_history = [1.0]
+    algorithm_state.lam_prox_history = [np.full((3, 3), 1.0)]
     algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
 
     # Set up previous iteration
@@ -1339,8 +1338,8 @@ def test_augmented_lagrangian_virtual_control_update(
     assert candidate.lam_vc is None
     # Trust-region weight history should have grown by one entry and increased
     assert len(algorithm_state.lam_prox_history) == 2
-    assert algorithm_state.lam_prox_history[0] == pytest.approx(1.0)
-    assert algorithm_state.lam_prox_history[1] == pytest.approx(autotuner.gamma_1 * 1.0)
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[0], 1.0)
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[1], autotuner.gamma_1 * 1.0)
     # Virtual control history in the state should remain unchanged
     assert len(algorithm_state.lam_vc_history) == 1
     assert np.allclose(algorithm_state.lam_vc_history[0], np.array([1.0, 1.0]))
@@ -1442,7 +1441,7 @@ def test_constant_proximal_weight_appends_history_and_accepts(
     assert len(algorithm_state.X) == initial_x_len + 1
     # Proximal weight history should append the current value, but not change it
     assert len(algorithm_state.lam_prox_history) == initial_lam_prox_history_len + 1
-    assert algorithm_state.lam_prox_history[-1] == pytest.approx(initial_lam_prox)
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[-1], initial_lam_prox)
     # Before cost_drop we use the configured lam_cost
     assert len(algorithm_state.lam_cost_history) == initial_lam_cost_history_len + 1
     assert algorithm_state.lam_cost_history[-1] == pytest.approx(weights.lam_cost)
@@ -1500,7 +1499,7 @@ def test_ramp_proximal_weight_increases_until_max(
     )
     # 1.0 -> 2.0, still below max
     assert state_str == "Accept Higher"
-    assert algorithm_state.lam_prox_history[-1] == pytest.approx(2.0)
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[-1], 2.0)
 
     # Next iteration: 2.0 -> 4.0 == max, still reported as higher
     candidate = set_candidate()
@@ -1513,7 +1512,7 @@ def test_ramp_proximal_weight_increases_until_max(
         weights,
     )
     assert state_str == "Accept Higher"
-    assert algorithm_state.lam_prox_history[-1] == pytest.approx(4.0)
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[-1], 4.0)
 
     # Once lam_prox == lam_prox_max, it should stop increasing and report constant
     candidate = set_candidate()
@@ -1527,4 +1526,4 @@ def test_ramp_proximal_weight_increases_until_max(
     )
     assert state_str == "Accept Constant"
     # Still at the maximum and not exceeded
-    assert algorithm_state.lam_prox_history[-1] == pytest.approx(4.0)
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[-1], 4.0)

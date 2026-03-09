@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from openscvx.config import Config
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
     from openscvx.solvers import ConvexSolver
+    from openscvx.symbolic.expr.control import Control
     from openscvx.symbolic.expr.state import State
 
 
@@ -195,6 +196,113 @@ def _expand_lam_vc_dict(
     return lam_arr
 
 
+def _expand_lam_prox_dict(
+    lam_prox_dict: Dict[str, Union[float, list, np.ndarray]],
+    states: List["State"],
+    controls: List["Control"],
+) -> np.ndarray:
+    """Expand a ``{name: weight}`` dict to a per-variable proximal weight array.
+
+    Maps user-provided per-state/per-control trust region weights to a dense
+    array using each variable's ``_slice``.  Variables not present in the dict
+    default to ``1.0``.
+
+    Per-variable values may be:
+
+    * **scalar** — broadcast to every component and every node.
+    * **1-D array** of length ``n_components`` — per-component weight,
+      same for every node.
+    * **2-D array** of shape ``(K, n_components)`` — per-node-per-component.
+      When any variable supplies a 2-D value the output is 2-D with first
+      dimension *K* (all 2-D entries must agree on *K*).
+
+    Args:
+        lam_prox_dict: Mapping from state/control names to proximal weights.
+        states: List of State objects (must already have ``_slice`` assigned).
+        controls: List of Control objects (must already have ``_slice`` assigned).
+
+    Returns:
+        np.ndarray of shape ``(n_states + n_controls,)`` when all entries are
+        scalar/1-D, or ``(K, n_states + n_controls)`` when any entry is 2-D.
+
+    Raises:
+        ValueError: If the dict contains unknown names or 2-D entries disagree
+            on the number of nodes.
+    """
+    n_states = sum(s.shape[0] if len(s.shape) > 0 else 1 for s in states)
+    n_controls = sum(c.shape[0] if len(c.shape) > 0 else 1 for c in controls)
+    n_total = n_states + n_controls
+
+    valid_state_names = {s.name for s in states}
+    valid_control_names = {c.name for c in controls}
+    valid_names = valid_state_names | valid_control_names
+    unknown = set(lam_prox_dict.keys()) - valid_names
+    if unknown:
+        raise ValueError(
+            f"lam_prox dict contains unknown name(s): {unknown}. Valid names: {sorted(valid_names)}"
+        )
+
+    # Build a unified list of (name, n_components, slice_in_output).
+    # States occupy columns [0, n_states), controls occupy [n_states, n_total).
+    variables: list = []
+    for s in states:
+        nc = s.shape[0] if len(s.shape) > 0 else 1
+        variables.append((s.name, nc, s._slice))
+    for c in controls:
+        nc = c.shape[0] if len(c.shape) > 0 else 1
+        out_slice = slice(n_states + c._slice.start, n_states + c._slice.stop)
+        variables.append((c.name, nc, out_slice))
+
+    # First pass: determine if any entry is 2-D and infer K.
+    n_nodes: Optional[int] = None
+    for name, n_comp, _ in variables:
+        if name not in lam_prox_dict:
+            continue
+        val = np.asarray(lam_prox_dict[name], dtype=float)
+        if val.ndim == 2:
+            if n_nodes is None:
+                n_nodes = val.shape[0]
+            elif val.shape[0] != n_nodes:
+                raise ValueError(
+                    f"lam_prox['{name}'] has {val.shape[0]} rows, but a "
+                    f"previous entry had {n_nodes} rows. All 2-D entries "
+                    f"must have the same number of rows (n_nodes)."
+                )
+
+    # Build the output array.
+    if n_nodes is not None:
+        lam_arr = np.ones((n_nodes, n_total))
+    else:
+        lam_arr = np.ones(n_total)
+
+    for name, n_comp, out_slice in variables:
+        if name not in lam_prox_dict:
+            continue
+        val = np.asarray(lam_prox_dict[name], dtype=float)
+
+        if val.ndim == 0:
+            lam_arr[..., out_slice] = float(val)
+        elif val.ndim == 1:
+            if val.shape[0] != n_comp:
+                raise ValueError(
+                    f"lam_prox['{name}'] has length {val.shape[0]}, "
+                    f"expected scalar or length {n_comp}"
+                )
+            lam_arr[..., out_slice] = val
+        elif val.ndim == 2:
+            if val.shape[1] != n_comp:
+                raise ValueError(
+                    f"lam_prox['{name}'] has {val.shape[1]} columns, expected {n_comp}"
+                )
+            lam_arr[:, out_slice] = val
+        else:
+            raise ValueError(
+                f"lam_prox['{name}'] has {val.ndim} dimensions, expected scalar, 1-D, or 2-D"
+            )
+
+    return lam_arr
+
+
 @dataclass
 class Weights:
     """Normalized SCP weights used internally by the algorithm and autotuner.
@@ -214,7 +322,10 @@ class Weights:
     drift.
 
     Attributes:
-        lam_prox: Trust region (proximal) weight (normalized).
+        lam_prox: Trust region (proximal) weight (normalized). Scalar or
+            array of shape ``(n_states + n_controls,)`` or
+            ``(N, n_states + n_controls)`` for per-variable / per-node
+            weighting.
         lam_vc: Virtual control penalty weight (normalized). Scalar or
             array of shape ``(n_states,)`` or ``(n_nodes-1, n_states)``
             for per-state / per-node weighting.
@@ -231,7 +342,7 @@ class Weights:
             :meth:`set_vb_arrays`.
     """
 
-    lam_prox: float = 1e0
+    lam_prox: Union[float, np.ndarray] = 1e0
     lam_vc: Union[float, np.ndarray] = 1e1
     lam_cost: Union[float, np.ndarray] = 1e-1
     lam_vb: float = 0.0
@@ -240,13 +351,17 @@ class Weights:
 
     def __post_init__(self):
         # Coerce lists/lists-of-lists to numpy arrays.
+        if isinstance(self.lam_prox, (list, tuple)):
+            self.lam_prox = np.asarray(self.lam_prox, dtype=float)
         if isinstance(self.lam_vc, (list, tuple)):
             self.lam_vc = np.asarray(self.lam_vc, dtype=float)
         if isinstance(self.lam_cost, (list, tuple)):
             self.lam_cost = np.asarray(self.lam_cost, dtype=float)
 
         # Snapshot the user-specified values so normalize() is idempotent.
-        self._raw_lam_prox = self.lam_prox
+        self._raw_lam_prox = (
+            self.lam_prox.copy() if isinstance(self.lam_prox, np.ndarray) else self.lam_prox
+        )
         self._raw_lam_vc = (
             self.lam_vc.copy() if isinstance(self.lam_vc, np.ndarray) else self.lam_vc
         )
@@ -264,6 +379,11 @@ class Weights:
         making this method idempotent and safe to call after updating
         any individual raw weight.
         """
+        raw_prox_max = (
+            float(np.max(self._raw_lam_prox))
+            if isinstance(self._raw_lam_prox, np.ndarray)
+            else self._raw_lam_prox
+        )
         raw_vc_max = (
             float(np.max(self._raw_lam_vc))
             if isinstance(self._raw_lam_vc, np.ndarray)
@@ -281,7 +401,7 @@ class Weights:
             )
         else:
             raw_vb_max = self._raw_lam_vb
-        scale = max(self._raw_lam_prox, raw_vc_max, raw_cost_max, raw_vb_max)
+        scale = max(raw_prox_max, raw_vc_max, raw_cost_max, raw_vb_max)
         if scale > 0:
             self.lam_prox = self._raw_lam_prox / scale
             self.lam_vc = self._raw_lam_vc / scale
@@ -614,7 +734,7 @@ class AlgorithmState:
     lam_cost_history: List[Union[float, np.ndarray]] = field(default_factory=list)
     lam_vb_nodal_history: List[np.ndarray] = field(default_factory=list)
     lam_vb_cross_history: List[np.ndarray] = field(default_factory=list)
-    lam_prox_history: List[float] = field(default_factory=list)
+    lam_prox_history: List[np.ndarray] = field(default_factory=list)
     x_full: List[np.ndarray] = field(default_factory=list)
     x_prop_full: List[np.ndarray] = field(default_factory=list)
 
@@ -820,11 +940,11 @@ class AlgorithmState:
         return self.discretizations[index].E_d
 
     @property
-    def lam_prox(self) -> float:
+    def lam_prox(self) -> np.ndarray:
         """Get current trust region weight.
 
         Returns:
-            Current trust region weight (latest entry in lam_prox_history)
+            Array of shape ``(N, n_states + n_controls)``.
         """
         if not self.lam_prox_history:
             raise ValueError("lam_prox_history is empty. Initialize state using from_settings().")
@@ -901,7 +1021,12 @@ class AlgorithmState:
         """
         n = settings.sim.n
         n_states = settings.sim.n_states
+        n_controls = settings.sim.n_controls
+        n_total = n_states + n_controls
         lam_vc_array = np.ones((n - 1, n_states)) * weights.lam_vc
+
+        # Expand lam_prox to (N, n_states + n_controls) array
+        lam_prox_array = np.ones((n, n_total)) * weights.lam_prox
 
         # Expand scalar lam_cost to per-state array
         if isinstance(weights.lam_cost, np.ndarray):
@@ -931,7 +1056,7 @@ class AlgorithmState:
             lam_cost_history=[lam_cost_init],
             lam_vb_nodal_history=[weights.lam_vb_nodal.copy()],
             lam_vb_cross_history=[weights.lam_vb_cross.copy()],
-            lam_prox_history=[weights.lam_prox],
+            lam_prox_history=[lam_prox_array],
         )
 
 
@@ -988,6 +1113,41 @@ class Algorithm(ABC):
 
     #: Maximum number of SCP iterations. Subclasses must set this in ``__init__``.
     k_max: int
+
+    @staticmethod
+    def _resolve_lam_prox(
+        lam_prox: Union[float, Dict[str, Union[float, list, np.ndarray]]],
+        states: Optional[List["State"]] = None,
+        controls: Optional[List["Control"]] = None,
+    ) -> Union[float, np.ndarray]:
+        """Resolve a ``lam_prox`` spec to a numeric value.
+
+        If *lam_prox* is a float it is returned as-is.  If it is a dict
+        mapping state/control names to weights, *states* and *controls*
+        must be provided so the dict can be expanded to a per-variable
+        array via :func:`_expand_lam_prox_dict`.
+
+        Args:
+            lam_prox: Scalar weight or ``{name: weight}`` dict.
+            states: Symbolic State objects (required when *lam_prox* is a dict).
+            controls: Symbolic Control objects (required when *lam_prox* is a dict).
+
+        Returns:
+            float or np.ndarray of shape ``(n_states + n_controls,)`` or
+            ``(K, n_states + n_controls)``.
+
+        Raises:
+            ValueError: If *lam_prox* is a dict and *states*/*controls* is ``None``.
+        """
+        if isinstance(lam_prox, dict):
+            if states is None or controls is None:
+                raise ValueError(
+                    "lam_prox was specified as a dict but states and/or "
+                    "controls were not provided. Pass both so the dict can "
+                    "be expanded to a per-variable weight array."
+                )
+            return _expand_lam_prox_dict(lam_prox, states, controls)
+        return lam_prox
 
     @staticmethod
     def _resolve_lam_cost(

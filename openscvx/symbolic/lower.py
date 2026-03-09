@@ -277,7 +277,7 @@ def create_cvxpy_variables(
     inv_S_u = np.linalg.inv(S_u)
 
     # Parameters
-    lam_prox = cp.Parameter(nonneg=True, name="lam_prox")
+    lam_prox = cp.Parameter((N, n_states + n_controls), nonneg=True, name="lam_prox")
     lam_cost = cp.Parameter(n_states, nonneg=True, name="lam_cost")
     lam_vc = cp.Parameter((N - 1, n_states), nonneg=True, name="lam_vc")
     lam_vb_nodal = cp.Parameter((N, max(n_nodal_constraints, 1)), nonneg=True, name="lam_vb_nodal")
