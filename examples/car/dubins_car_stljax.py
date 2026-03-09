@@ -105,7 +105,6 @@ problem = Problem(
     time=time,  # Time is already defined above as ox.Time
     constraints=constraints,
     N=n,
-    algorithm={"lam_vc": 6e2},
 )
 
 # Extract parameter values from problem.parameters (not Parameter objects)
@@ -122,4 +121,5 @@ if __name__ == "__main__":
     results = problem.solve()
     results = problem.post_process()
     results.update(plotting_dict)
+
     plot_dubins_car_disjoint(results, problem.settings).show()
