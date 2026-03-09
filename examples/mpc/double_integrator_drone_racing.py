@@ -94,9 +94,18 @@ for center in gate_centers:
 ### End Gate Parameters ###
 
 ### Gate Cone Parameters ###
-gate_cone_indices = [1]  # which gates get cone constraints
+gate_cone_indices = list(range(n_gates))
 gate_normals = [
-    np.array([-1, 0, 0]),  # gate 1: fly in -y direction
+    np.array([-1, 0, 0]),  # gate 0: -x
+    np.array([-1, 0, 0]),  # gate 1: -x
+    np.array([+1, 0, 0]),  # gate 2: +x
+    np.array([-1, 0, 0]),  # gate 3: -x
+    np.array([-1, 0, 0]),  # gate 4: -x
+    np.array([+1, 0, 0]),  # gate 5: +x
+    np.array([+1, 0, 0]),  # gate 6: +x
+    np.array([-1, 0, 0]),  # gate 7: -x
+    np.array([+1, 0, 0]),  # gate 8: +x
+    np.array([+1, 0, 0]),  # gate 9: +x
 ]
 cone_half_angle = np.deg2rad(45)
 tan_a = np.tan(cone_half_angle)
@@ -108,7 +117,7 @@ c_cone = np.array([0.0, 0.0, 1.0])
 
 gate_cone_rotations = []
 gate_cone_apexes = []
-for center, n in zip([gate_centers[i] for i in gate_cone_indices], gate_normals):
+for center, n in zip(gate_centers, gate_normals):
     n_hat = n / np.linalg.norm(n)
     up = np.array([0, 0, 1.0])
     if abs(np.dot(n_hat, up)) > 0.99:
@@ -274,6 +283,16 @@ if __name__ == "__main__":
     tz_data = _dpz / _tnorm
 
     # =================================================================
+    # Gate crossing progress (arc-length where reference is closest to each gate)
+    # =================================================================
+    gate_crossing_progress = []
+    for j, center in enumerate(gate_centers):
+        dists = np.linalg.norm(ref_pos_lap - center, axis=1)
+        closest_idx = np.argmin(dists)
+        gate_crossing_progress.append(s_lap[closest_idx])
+        print(f"  Gate {j}: crossing progress s = {s_lap[closest_idx]:.1f} m")
+
+    # =================================================================
     # Phase 2: Build MPCC problem (needs reference data from Phase 1)
     # =================================================================
 
@@ -363,9 +382,15 @@ if __name__ == "__main__":
     # Obstacle avoidance: ||position - center|| >= radius
     constraints.append(ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obstacle_center)))
 
-    # Gate cone constraint (gate 0 only for now)
-    for apex, R_gate in zip(gate_cone_apexes, gate_cone_rotations):
-        constraints.append(ox.ctcs(g_gate_cone(apex, R_gate, position) <= 0.0))
+    # Gate cone constraints — active only when progress is between prev and current gate
+    for i, (apex, R_gate) in enumerate(zip(gate_cone_apexes, gate_cone_rotations)):
+        gate_idx = gate_cone_indices[i]
+        s_gate = gate_crossing_progress[gate_idx]
+        s_prev = gate_crossing_progress[(gate_idx - 1) % n_gates]
+
+        pred = ox.All([progress[0] >= s_prev, progress[0] <= s_gate])
+        cone_expr = ox.Cond(pred, g_gate_cone(apex, R_gate, position), -1.0)
+        constraints.append(ox.ctcs(cone_expr <= 0.0))
 
     # --- Time ---
     t = ox.Time(
