@@ -330,7 +330,7 @@ def plot_velocity_vs_distance(results: OptimizationResults, params: Config):
     """
     fig = go.Figure()
 
-    # Extract position and velocity
+    # Extract position and velocity along the propagated trajectory
     position = results.trajectory["position"]
     velocity = results.trajectory.get("speed")
 
@@ -352,7 +352,7 @@ def plot_velocity_vs_distance(results: OptimizationResults, params: Config):
     # Distance = ||position - obs_center||
     distance_from_center = np.linalg.norm(position - obs_center, axis=1)
 
-    # Plot velocity vs distance
+    # Plot velocity vs distance for the full trajectory
     fig.add_trace(
         go.Scatter(
             x=distance_from_center,
@@ -360,9 +360,27 @@ def plot_velocity_vs_distance(results: OptimizationResults, params: Config):
             mode="lines+markers",
             line={"color": "blue", "width": 2},
             marker={"size": 5},
-            name="Velocity",
+            name="Velocity (trajectory)",
         )
     )
+
+    # If node-level data is available, overlay the nodes as separate markers
+    node_position = results.nodes.get("position")
+    node_velocity = results.nodes.get("speed")
+
+    if node_position is not None and node_velocity is not None:
+        node_velocity = np.asarray(node_velocity).flatten()
+        node_distance_from_center = np.linalg.norm(node_position - obs_center, axis=1)
+
+        fig.add_trace(
+            go.Scatter(
+                x=node_distance_from_center,
+                y=node_velocity,
+                mode="markers",
+                marker={"size": 9, "color": "cyan", "symbol": "x"},
+                name="Velocity (nodes)",
+            )
+        )
 
     # Add vertical line at safety threshold if available
     if "safety_threshold" in results.plotting_data:
@@ -394,6 +412,115 @@ def plot_velocity_vs_distance(results: OptimizationResults, params: Config):
     fig.update_layout(
         title="Velocity vs Distance to Obstacle",
         xaxis_title="Distance from Obstacle Center",
+        yaxis_title="Velocity",
+        template="plotly_dark",
+        title_x=0.5,
+    )
+
+    return fig
+
+
+def plot_velocity_vs_waypoint(results: OptimizationResults, params: Config):
+    """Plot velocity against distance to the waypoint ball, using stored parameters.
+
+    This is tailored for STL waypoint examples where a 2-norm ball acts as a
+    waypoint and a reduced speed limit is imposed (e.g., inside a safety radius).
+    """
+    fig = go.Figure()
+
+    # Extract position and velocity along the propagated trajectory
+    position = results.trajectory["position"]
+    velocity = results.trajectory.get("speed")
+
+    if velocity is None:
+        # If speed is not available, try to get it from controls
+        velocity = results.controls.get("speed")
+
+    if velocity is None:
+        raise ValueError("Velocity data not found in results")
+
+    # Flatten velocity to 1D array
+    velocity = np.asarray(velocity).flatten()
+
+    # Get waypoint / obstacle center and radius from plotting data
+    obs_center = results.plotting_data["obs_center"]
+    obs_radius = results.plotting_data["obs_radius"]
+
+    # Optional reduced-speed level (e.g., inside safety radius). If not provided,
+    # fall back to the minimum of the speed data for a reasonable default.
+    reduced_speed = results.plotting_data.get("reduced_speed", float(np.min(velocity)))
+
+    # Optional safety radius at which reduced speed begins to apply
+    safety_radius = results.plotting_data.get("safety_threshold", float(obs_radius))
+
+    # Distance to waypoint center for each point
+    distance_from_center = np.linalg.norm(position - obs_center, axis=1)
+
+    # Plot velocity vs distance for the full trajectory
+    fig.add_trace(
+        go.Scatter(
+            x=distance_from_center,
+            y=velocity,
+            mode="lines+markers",
+            line={"color": "blue", "width": 2},
+            marker={"size": 5},
+            name="Velocity (trajectory)",
+        )
+    )
+
+    # Overlay node data if available
+    node_position = results.nodes.get("position")
+    node_velocity = results.nodes.get("speed")
+
+    if node_position is not None and node_velocity is not None:
+        node_velocity = np.asarray(node_velocity).flatten()
+        node_distance_from_center = np.linalg.norm(node_position - obs_center, axis=1)
+
+        fig.add_trace(
+            go.Scatter(
+                x=node_distance_from_center,
+                y=node_velocity,
+                mode="markers",
+                marker={"size": 9, "color": "cyan", "symbol": "x"},
+                name="Velocity (nodes)",
+            )
+        )
+
+    # Mark the safety radius where reduced speed applies
+    fig.add_vline(
+        x=safety_radius,
+        line_dash="dash",
+        line_color="red",
+        annotation_text=f"Safety radius ({safety_radius:.2f})",
+        annotation_position="top",
+    )
+
+    # Mark the reduced speed level
+    fig.add_hline(
+        y=reduced_speed,
+        line_dash="dot",
+        line_color="orange",
+        annotation_text=f"Reduced speed ({reduced_speed:.2f})",
+        annotation_position="right",
+    )
+
+    # Also show the global maximum speed if available from control/state bounds
+    global_speed_max = None
+    if hasattr(results, "controls") and "speed" in results.controls:
+        # Try to infer a reasonable max from data
+        global_speed_max = float(np.max(velocity))
+    if global_speed_max is not None and global_speed_max > reduced_speed:
+        fig.add_hline(
+            y=global_speed_max,
+            line_dash="dot",
+            line_color="green",
+            annotation_text=f"Global speed (max ≈ {global_speed_max:.2f})",
+            annotation_position="right",
+        )
+
+    fig.update_layout(
+        title="Velocity vs Distance to Waypoint",
+        xaxis_title="Distance from Waypoint Center",
         yaxis_title="Velocity",
         template="plotly_dark",
         title_x=0.5,
