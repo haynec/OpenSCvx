@@ -388,7 +388,9 @@ if __name__ == "__main__":
         s_gate = gate_crossing_progress[gate_idx]
         s_prev = gate_crossing_progress[(gate_idx - 1) % n_gates]
 
-        pred = ox.All([progress[0] >= s_prev, progress[0] <= s_gate])
+        n_hat = gate_normals[gate_idx].astype(float)
+        approaching = ox.Sum(velocity * n_hat) <= 0.0  # v opposes cone normal when approaching
+        pred = ox.All([progress[0] >= s_prev, progress[0] <= s_gate, approaching])
         cone_expr = ox.Cond(pred, g_gate_cone(apex, R_gate, position), -1.0)
         constraints.append(ox.ctcs(cone_expr <= 0.0))
 
