@@ -12,6 +12,8 @@ GMSR Robustness Convention:
     The expression nodes in this module follow the standard STL convention where
     robustness is positive when satisfied. The conversion happens during lowering.
 
+Author: Samet Uzun and Chris Hayner
+
 Reference:
     https://doi.org/10.48550/arxiv.2405.10996
     https://doi.org/10.2514/6.2025-1895
