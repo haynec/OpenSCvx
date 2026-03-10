@@ -51,6 +51,10 @@ TIMING_BOUNDS = {
 
 FLOAT_DATA_TYPES = {
     "drone_logo": "float64",
+    "abstract_stl_integer_variable": "float64",
+    "car_dubins_car_obstacle_stl": "float64",
+    "car_dubins_car_waypoint_stl": "float64",
+    "car_dubins_car_stl_or": "float64",
 }
 
 

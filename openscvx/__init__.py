@@ -10,6 +10,7 @@ import openscvx.symbolic.expr.lie as lie
 import openscvx.symbolic.expr.linalg as linalg
 import openscvx.symbolic.expr.spatial as spatial
 import openscvx.symbolic.expr.stl as stl
+import openscvx.symbolic.expr.stljax as stljax
 from openscvx.algorithms import (
     AugmentedLagrangian,
     ConstantProximalWeight,
@@ -164,6 +165,7 @@ __all__ = [
     # Submodules
     "init",
     "stl",
+    "stljax",
     "spatial",
     "linalg",
     "lie",

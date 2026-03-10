@@ -93,7 +93,7 @@ wp2_pred = ox.linalg.Norm(position - wp2_center) <= wp2_radius
 
 # Visit waypoint constraints using symbolic Or
 # Note: visit_wp_or_expr is already a constraint, so we can use .over() directly
-constraints.append(ox.stl.Or(wp1_pred, wp2_pred).over((3, 5)))
+constraints.append(ox.stl.Or(wp1_pred, wp2_pred).over((3, 5), penalty="squared_relu"))
 
 # Build the problem
 constraints.append((time.at(5) - time.at(3) == 1.23).convex())
@@ -105,7 +105,7 @@ problem = Problem(
     time=time,  # Time is already defined above as ox.Time
     constraints=constraints,
     N=n,
-    algorithm={"lam_vc": 6e2},
+    float_dtype="float64",
 )
 
 # Extract parameter values from problem.parameters (not Parameter objects)
@@ -122,4 +122,5 @@ if __name__ == "__main__":
     results = problem.solve()
     results = problem.post_process()
     results.update(plotting_dict)
+
     plot_dubins_car_disjoint(results, problem.settings).show()
