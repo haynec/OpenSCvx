@@ -20,7 +20,6 @@ from jax.typing import ArrayLike
 from openscvx.symbolic.expr.stl import And, IfThen, IntegerVariable, Or, STLExpr
 from openscvx.symbolic.lowerers.jax._registry import visitor
 
-
 # ---------------------------------------------------------------------------
 # GMSR primitive functions
 # ---------------------------------------------------------------------------
