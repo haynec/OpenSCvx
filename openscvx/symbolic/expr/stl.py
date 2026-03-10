@@ -344,9 +344,7 @@ class IntegerVariable(STLExpr):
 
     def __init__(self, expr: Expr, values, c: float = 1e-4):
         if not isinstance(expr, Expr):
-            raise TypeError(
-                f"IntegerVariable requires an Expr, got {type(expr).__name__}"
-            )
+            raise TypeError(f"IntegerVariable requires an Expr, got {type(expr).__name__}")
         self.expr = expr
         self.values = np.asarray(values)
         self.c = c
@@ -367,5 +365,3 @@ class IntegerVariable(STLExpr):
 
     def __repr__(self) -> str:
         return f"IntegerVariable({self.expr!r}, values={self.values.tolist()})"
-
-

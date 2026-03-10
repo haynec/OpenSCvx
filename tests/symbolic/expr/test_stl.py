@@ -454,8 +454,8 @@ class TestIfThenJaxLowering:
     def _setup(self):
         x_sym = State("x", shape=(2,))
         x_sym._slice = slice(0, 2)
-        cond = x_sym[0] <= Constant(np.array(1.0))   # condition: x[0] <= 1.0
-        conseq = x_sym[1] <= Constant(np.array(2.0)) # consequent: x[1] <= 2.0
+        cond = x_sym[0] <= Constant(np.array(1.0))  # condition: x[0] <= 1.0
+        conseq = x_sym[1] <= Constant(np.array(2.0))  # consequent: x[1] <= 2.0
         fn = _lower_stl(IfThen(cond, conseq))
         return fn
 
