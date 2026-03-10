@@ -7,6 +7,5 @@
 
 - [API Reference: Logic operators](../Reference/symbolic/expr/logic.md)
 - [API Reference: STL operators](../Reference/symbolic/expr/stl.md)
-- [Dubin's Car with conditional logic Example](../Examples/car/dubins_car_conditional.md)
+- [Dubin's Car with obstacle avoidance (conditional) Example](../Examples/car/dubins_car_obstacle_conditional.md)
 - [Dubin's Car with direct STL implementation Example](../Examples/car/dubins_car_disjoint.md)
-- [Dubin's Car with STLJAX Example](../Examples/car/dubins_car_stljax.md)

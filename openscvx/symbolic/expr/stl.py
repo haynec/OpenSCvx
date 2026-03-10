@@ -13,8 +13,8 @@ GMSR Robustness Convention:
     robustness is positive when satisfied. The conversion happens during lowering.
 
 Reference:
-    [https://doi.org/10.48550/arxiv.2405.10996]
-    [https://doi.org/10.2514/6.2025-1895]
+    https://doi.org/10.48550/arxiv.2405.10996
+    https://doi.org/10.2514/6.2025-1895
 """
 
 from typing import TYPE_CHECKING, Optional, Tuple, Union
@@ -342,7 +342,7 @@ class IntegerVariable(STLExpr):
         constraints = [discrete_gear.over((0, 10))]
     """
 
-    def __init__(self, expr: Expr, values, c: float = 1e-4):
+    def __init__(self, expr: Expr, values: Union[list, np.ndarray], c: float = 1e-4):
         if not isinstance(expr, Expr):
             raise TypeError(f"IntegerVariable requires an Expr, got {type(expr).__name__}")
         self.expr = expr
