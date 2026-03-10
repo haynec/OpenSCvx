@@ -35,17 +35,25 @@ class STLExpr(Expr):
     helper methods `.over()` and `.at()` to convert STL expressions
     to constraints for trajectory optimization.
 
-    All subclasses evaluate to a scalar robustness value (positive when
-    satisfied), consistent with the stljax module's convention.
+    STL Robustness Convention:
+        STL uses "robustness" values that are positive when constraints are satisfied.
+        For an Inequality constraint `lhs <= rhs`:
+        - Constraint residual: `lhs - rhs` (should be <= 0 when satisfied)
+        - STL robustness: `rhs - lhs` (should be >= 0 when satisfied)
 
     Example:
-        STL operators can be converted to constraints using helper methods::
+        STL operators can be converted to constraints using helper methods:
 
             wp1 = Norm(pos - c_1) <= r_1
             wp2 = Norm(pos - c_2) <= r_2
-            visit_either = ox.stl.Or(wp1, wp2)
+            visit_either = ox.stl.Or(wp1, wp2) # STL Operator
 
+            # Convert to constraint with .over()
             constraints = [visit_either.over((3, 5))]
+    
+    Note:
+        This is a base class. Use concrete subclasses like Or, And,
+        Eventually, Always, or Until for actual STL specifications.
     """
 
     def over(
@@ -89,10 +97,15 @@ class STLExpr(Expr):
         Returns:
             Nodal constraint wrapper
 
-        Example::
+        Example:
+            Enforce STL expression over an interval:
 
-            visit_either = ox.stl.Or(wp1, wp2)
-            constraint = visit_either.at([0, 5, 10])
+                visit_either = ox.stl.Or(wp1, wp2)
+                constraint = visit_either.at([0, 5, 10])
+
+        Note:
+            This is a base class. Use concrete subclasses like Or, And,
+            Eventually, Always, or Until for actual STL specifications.
         """
         from .arithmetic import Neg
         from .constraint import Inequality, NodalConstraint

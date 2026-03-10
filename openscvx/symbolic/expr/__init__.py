@@ -151,9 +151,6 @@ from .spatial import QDCM, SSM, SSMP
 # State
 from .state import BoundaryType, Fixed, Free, Maximize, Minimize, State
 
-# STL operations
-from .stljax import Or
-
 # Time
 from .time import Time
 
@@ -253,8 +250,6 @@ __all__ = [
     "CrossNodeConstraint",
     "CTCS",
     "ctcs",
-    # STL operations
-    "Or",
     # Vmap
     "Vmap",
 ]

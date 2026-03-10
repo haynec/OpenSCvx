@@ -135,8 +135,8 @@ def test_example(name, metadata):
             jax.config.update("jax_enable_x64", False)
 
     # Disable printing for cleaner test output
-    # if hasattr(problem.settings, "dev"):
-    #     problem.settings.dev.printing = False
+    if hasattr(problem.settings, "dev"):
+        problem.settings.dev.printing = False
 
     # Disable custom integrator for stability (used in some drone examples)
     if hasattr(problem, "_discretizer") and hasattr(problem._discretizer, "custom_integrator"):

@@ -12,7 +12,6 @@ in constraint expressions.
 """
 
 import os
-from shutil import SpecialFileError
 import sys
 
 import jax.numpy as jnp
@@ -23,7 +22,6 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
-from examples.car.dubins_car_waypoint_stl import acceleration
 import openscvx as ox
 from examples.plotting import plot_dubins_car, plot_velocity_vs_distance
 from openscvx.plotting import plot_states, plot_controls

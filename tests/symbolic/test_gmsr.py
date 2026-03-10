@@ -1,7 +1,7 @@
 """Tests for GMSR (Generalized Mean-based Smooth Robustness) math functions.
 
 This module tests all primitive functions in:
-    openscvx/symbolic/lowerers/jax/gmsr.py
+    openscvx/symbolic/lowerers/jax/stl.py
 
 Each function is tested for:
 - Exact boundary / zero-crossing semantics
@@ -14,16 +14,16 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from openscvx.symbolic.lowerers.jax.gmsr import (
+from openscvx.symbolic.lowerers.jax.stl import (
     AND,
     OR,
     AND_lite,
-    IfThen,
-    IfThen_lite,
     OR_lite,
     _smooth_equality,
     integer_variable,
 )
+from openscvx.symbolic.lowerers.jax.stl import gmsr_IfThen as IfThen
+from openscvx.symbolic.lowerers.jax.stl import gmsr_IfThen_lite as IfThen_lite
 
 # =============================================================================
 # Helpers
