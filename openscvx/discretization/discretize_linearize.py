@@ -152,11 +152,11 @@ def get_discretize_then_vectorize_solver(
                 args=(u_cur, u_next, node, params),
                 extra_kwargs=discretizer.args,
             )
-        return sol[-1]
+        return sol
 
-    discretize_then_vectorize = jax.vmap(single_shot, in_axes=(0, 0, 0, 0, None))
+    discretize_then_vectorize = jax.vmap(single_shot, in_axes=(0, 0, 0, 0, None), out_axes=1)
     discretize_then_linearize = jax.jacfwd(single_shot, argnums=(0, 1, 2))
-    discretize_then_linearize_then_vectorize = jax.vmap(discretize_then_linearize, in_axes=(0, 0, 0, 0, None))
+    discretize_then_linearize_then_vectorize = jax.vmap(discretize_then_linearize, in_axes=(0, 0, 0, 0, None), out_axes=1)
 
     nodes = jnp.arange(0, N - 1)
 
@@ -164,9 +164,11 @@ def get_discretize_then_vectorize_solver(
         A_d, B_d, C_d = discretize_then_linearize_then_vectorize(x[:-1], u[:-1], u[1:], nodes, params)
         x_prop = discretize_then_vectorize(x[:-1], u[:-1], u[1:], nodes, params)
 
-        V_multi = jnp.concatenate([x_prop, A_d.reshape(N-1, n_x*n_x), B_d.reshape(N-1, n_x*n_u), C_d.reshape(N-1, n_x*n_u)], axis=1).reshape(-1, 1)  # TODO: return full nonlinear propagation of state
+        V_multi = jnp.concatenate([x_prop, A_d.reshape(-1, N-1, n_x*n_x), B_d.reshape(-1, N-1, n_x*n_u), C_d.reshape(-1, N-1, n_x*n_u)], axis=2)
+        i4 = V_multi.shape[2]
+        V_multi = V_multi.reshape(-1, (N-1)*i4).T
 
-        return A_d, B_d, C_d, x_prop, V_multi
+        return A_d[-1], B_d[-1], C_d[-1], x_prop[-1], V_multi
 
     return solver
 
@@ -249,27 +251,9 @@ def get_vectorize_then_discretize_solver(
                 args=(u_cur, u_next, params),
                 extra_kwargs=discretizer.args,
             )
-        return sol[-1].reshape(N - 1, n_x)
-
-    def get_propagation_history(
-        x: jnp.ndarray,
-        u_cur: np.ndarray,
-        u_next: np.ndarray,
-        params: dict,
-    ) -> jnp.ndarray:
-        sol = solve_ivp_diffrax(
-            multiple_dxdt,
-            1.0 / (N - 1),
-            x.flatten(),
-            solver_name=discretizer.ode_solver,
-            rtol=discretizer.rtol,
-            atol=discretizer.atol,
-            args=(u_cur, u_next, params),
-            extra_kwargs=discretizer.args,
-        )
         return sol.reshape(-1, N - 1, n_x)
 
-    def vectorize_and_discretize_then_linearize(
+    def vectorize_then_discretize_then_linearize(
         x: jnp.ndarray,
         u_cur: np.ndarray,
         u_next: np.ndarray,
@@ -292,24 +276,13 @@ def get_vectorize_then_discretize_solver(
         return A_d, B_d, C_d
 
     def solver(x, u, params):
-        A_d, B_d, C_d = vectorize_and_discretize_then_linearize(x[:-1], u[:-1], u[1:], params)
+        A_d, B_d, C_d = vectorize_then_discretize_then_linearize(x[:-1], u[:-1], u[1:], params)
         x_prop = vectorize_then_discretize(x[:-1], u[:-1], u[1:], params)
-        x_prop_history = get_propagation_history(x[:-1], u[:-1], u[1:], params)
 
-        # TODO: This is a kludge. The V_multi output doesn't make sense for discretize-then-linearize, since the time
-        # histories of the Jacobians are never constructed. In fact, nothing downstream even uses those time histories,
-        # which is why I can get away with this. V_multi should be replaced with an output that only includes the
-        # propagation history of the state. Furthermore, A_d, B_d, C_d, and x_prop may then be used instead of V_multi.
-        # This is preferable because they are more descriptively named.
-        i1 = n_x
-        i2 = i1 + n_x * n_x
-        i3 = i2 + n_x * n_u
-        i4 = i3 + n_x * n_u
-        V_multi = jnp.pad(x_prop_history, ((0, 0), (0, 0), (0, i4 - i1))).reshape(-1, (N - 1) * i4)
-        V_multi = V_multi.at[-1].set(jnp.concatenate([x_prop, A_d.reshape(N-1, n_x*n_x), B_d.reshape(N-1, n_x*n_u), C_d.reshape(N-1, n_x*n_u)], axis=1).flatten())
-        V_multi = V_multi.T
-        # </kludge>
+        V_multi = jnp.concatenate([x_prop, A_d.reshape(-1, N-1, n_x*n_x), B_d.reshape(-1, N-1, n_x*n_u), C_d.reshape(-1, N-1, n_x*n_u)], axis=2)
+        i4 = V_multi.shape[2]
+        V_multi = V_multi.reshape(-1, (N-1)*i4).T
 
-        return A_d, B_d, C_d, x_prop, V_multi
+        return A_d[-1], B_d[-1], C_d[-1], x_prop[-1], V_multi
 
     return solver
