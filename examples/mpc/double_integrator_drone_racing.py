@@ -193,7 +193,11 @@ problem_traj = Problem(
 )
 
 ### Obstacle Parameters ###
-obstacle_center = np.array([76.2, -8.5, 22.762])
+obstacle_centers = [
+    np.array([76.2, -8.5, 22.762]),
+    np.array([151.8, -48.5, 22.5]),
+    np.array([40.3, -62.0, 22.5]),
+]
 obstacle_radius = 5.0
 ### End Obstacle Parameters ###
 
@@ -380,7 +384,8 @@ if __name__ == "__main__":
         constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
     # Obstacle avoidance: ||position - center|| >= radius
-    constraints.append(ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obstacle_center)))
+    for obs_center in obstacle_centers:
+        constraints.append(ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obs_center)))
 
     # Gate cone constraints — active only when progress is between prev and current gate
     for i, (apex, R_gate) in enumerate(zip(gate_cone_apexes, gate_cone_rotations)):
@@ -631,11 +636,11 @@ if __name__ == "__main__":
     # Gate markers (wireframe, consistent with non-MPC examples)
     add_gates(server, vertices)
 
-    # Obstacle (spherical, semi-transparent)
+    # Obstacles (spherical, semi-transparent)
     add_ellipsoid_obstacles(
         server,
-        centers=[obstacle_center],
-        radii=[np.array([1 / obstacle_radius, 1 / obstacle_radius, 1 / obstacle_radius])],
+        centers=obstacle_centers,
+        radii=[np.array([1 / obstacle_radius] * 3) for _ in obstacle_centers],
     )
 
     # Ghost of all MPC horizons (faint background)
