@@ -107,7 +107,7 @@ gate_normals = [
     np.array([+1, 0, 0]),  # gate 8: +x
     np.array([+1, 0, 0]),  # gate 9: +x
 ]
-cone_half_angle = np.deg2rad(45)
+cone_half_angle = np.deg2rad(60)
 tan_a = np.tan(cone_half_angle)
 gate_half_width = 2.5
 apex_offset = gate_half_width / tan_a
@@ -208,7 +208,7 @@ n_mpc = 11  # Horizon nodes
 horizon_duration = 2.0  # Horizon length [s]
 
 Q_LAG = 1e0  # Lag error weight (high -> accurate progress tracking)
-Q_CONTOUR = 1e-1  # Contour error weight
+Q_CONTOUR = 5e-2  # Contour error weight
 Q_PROGRESS = 1e-1
 
 ###############################################################################
@@ -327,7 +327,7 @@ if __name__ == "__main__":
 
     contour_sum = ox.State("contour_sum", shape=(1,))  # Integrated contour cost
     contour_sum.min = np.array([0.0])
-    contour_sum.max = np.array([1e2])
+    contour_sum.max = np.array([2e2])
     contour_sum.initial = np.array([0.0])
     contour_sum.final = [ox.Minimize(0.0)]
 
