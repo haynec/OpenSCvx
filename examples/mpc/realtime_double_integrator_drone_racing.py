@@ -19,7 +19,6 @@ sys.path.append(grandparent_dir)
 import openscvx as ox
 from openscvx import Problem
 from openscvx.plotting.viser import (
-    add_ellipsoid_obstacles,
     add_gates,
     create_server,
 )
@@ -185,11 +184,16 @@ problem_traj = Problem(
 )
 
 ### Obstacle Parameters ###
-obstacle_centers = [
+obstacle_center_positions = [
     np.array([76.2, -8.5, 22.762]),
     np.array([151.8, -48.5, 22.5]),
     np.array([40.3, -62.0, 22.5]),
 ]
+obstacle_centers = [
+    ox.Parameter(f"obstacle_center_{i}", shape=(3,), value=pos)
+    for i, pos in enumerate(obstacle_center_positions)
+]
+n_obstacles = len(obstacle_centers)
 obstacle_radius = 5.0
 ### End Obstacle Parameters ###
 
@@ -568,11 +572,106 @@ if __name__ == "__main__":
 
     add_gates(server, vertices)
 
-    add_ellipsoid_obstacles(
-        server,
-        centers=obstacle_centers,
-        radii=[np.array([1 / obstacle_radius] * 3) for _ in obstacle_centers],
-    )
+    # --- Interactive obstacles (click to select, drag to move) ---
+    obstacle_handles = []
+    for i in range(n_obstacles):
+        handle = server.scene.add_icosphere(
+            f"/obstacles/sphere_{i}",
+            radius=obstacle_radius,
+            color=(255, 100, 100),
+            position=tuple(obstacle_centers[i].value),
+        )
+        obstacle_handles.append(handle)
+
+    obstacle_drag_handles = []
+    for i in range(n_obstacles):
+        drag_handle = server.scene.add_transform_controls(
+            f"/obstacles/drag_{i}",
+            position=tuple(obstacle_centers[i].value),
+            scale=12.0,
+            disable_rotations=True,
+            visible=False,
+        )
+        obstacle_drag_handles.append(drag_handle)
+
+    selected_obstacle = {"index": None}
+
+    def select_obstacle(obs_idx: int | None) -> None:
+        """Select an obstacle and show its transform control, hiding others."""
+        if selected_obstacle["index"] is not None:
+            obstacle_drag_handles[selected_obstacle["index"]].visible = False
+            obstacle_handles[selected_obstacle["index"]].color = (255, 100, 100)
+        if obs_idx is not None:
+            obstacle_drag_handles[obs_idx].visible = True
+            obstacle_handles[obs_idx].color = (255, 150, 150)
+            selected_obstacle["index"] = obs_idx
+        else:
+            selected_obstacle["index"] = None
+
+    def make_obstacle_click_handler(obs_idx: int):
+        @obstacle_handles[obs_idx].on_click
+        def _(_) -> None:
+            if selected_obstacle["index"] == obs_idx:
+                select_obstacle(None)
+            else:
+                select_obstacle(obs_idx)
+        return _
+
+    for i in range(n_obstacles):
+        make_obstacle_click_handler(i)
+
+    # GUI folder for obstacle positions
+    obstacle_vector_inputs = []
+    with server.gui.add_folder("Obstacle Positions", expand_by_default=False):
+        server.gui.add_markdown("*Click an obstacle in 3D view to select and drag it*")
+
+        reset_obstacles_button = server.gui.add_button("Reset All Obstacles")
+
+        @reset_obstacles_button.on_click
+        def _(_) -> None:
+            select_obstacle(None)
+            for i, vec_input in enumerate(obstacle_vector_inputs):
+                original = obstacle_center_positions[i]
+                vec_input.value = tuple(original)
+                obstacle_centers[i].value = np.array(original)
+                problem_mpc.parameters[obstacle_centers[i].name] = np.array(original)
+                obstacle_drag_handles[i].position = tuple(original)
+                obstacle_handles[i].position = tuple(original)
+            print("Obstacles reset to initial positions")
+
+        for i in range(n_obstacles):
+            initial_pos = obstacle_centers[i].value
+            vec_input = server.gui.add_vector3(
+                f"Obstacle {i + 1}",
+                initial_value=tuple(initial_pos),
+                step=0.5,
+            )
+            obstacle_vector_inputs.append(vec_input)
+
+            def make_obstacle_gui_callback(obs_idx: int, input_handle):
+                @input_handle.on_update
+                def _(_) -> None:
+                    new_center = np.array(input_handle.value)
+                    obstacle_centers[obs_idx].value = new_center
+                    problem_mpc.parameters[obstacle_centers[obs_idx].name] = new_center
+                    obstacle_drag_handles[obs_idx].position = tuple(new_center)
+                    obstacle_handles[obs_idx].position = tuple(new_center)
+                return _
+
+            make_obstacle_gui_callback(i, vec_input)
+
+    def make_drag_callback(obs_idx: int, drag_handle):
+        @drag_handle.on_update
+        def _(_) -> None:
+            new_center = np.array(drag_handle.position)
+            obstacle_centers[obs_idx].value = new_center
+            problem_mpc.parameters[obstacle_centers[obs_idx].name] = new_center
+            obstacle_vector_inputs[obs_idx].value = tuple(new_center)
+            obstacle_handles[obs_idx].position = tuple(new_center)
+        return _
+
+    for i in range(n_obstacles):
+        make_drag_callback(i, obstacle_drag_handles[i])
 
     # --- Fixed-range velocity colormap (avoids recomputing min/max each frame) ---
     import matplotlib.pyplot as plt
@@ -665,9 +764,13 @@ if __name__ == "__main__":
         horizon_handle.points = horizon_pos.astype(np.float32)
         horizon_handle.colors = (velocity_colors(horizon_vel) * 0.6).astype(np.uint8)
 
+        # --- Prepare next step (before animation so overhead is included in budget) ---
+        update_initial_conditions(nodes)
+        shift_guess(nodes)
+
         # --- Animate through the executed segment in realtime ---
         t_anim_start = time.perf_counter()
-        anim_budget = dt_mpc - (t_anim_start - t_step_start)
+        anim_budget = dt_mpc - (t_anim_start - t_prev_step)
         n_seg = len(seg_pos)
         n_committed = len(committed["pos"])
 
@@ -713,9 +816,6 @@ if __name__ == "__main__":
             f"dt={dt_wall:.3f}/{dt_mpc:.3f} ({dt_wall / dt_mpc * 100:.0f}%)"
         )
 
-        # --- Prepare next step ---
-        update_initial_conditions(nodes)
-        shift_guess(nodes)
         step += 1
 
     server.sleep_forever()
