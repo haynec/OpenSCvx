@@ -50,13 +50,13 @@ def _root_sum_of_product_terms(terms: ArrayLike, c: float) -> Array:
     return jnp.where(k == 0, _empty_case(), _nonempty_case())
 
 
-def _smooth_equality(y: ArrayLike, c: float = 1e-4) -> Array:
+def _smooth_equality(y: ArrayLike, c: float = 1e-8) -> Array:
     """Smooth penalty for equality constraints: returns 0 iff y = 0."""
     y = jnp.asarray(y)
     return jnp.sqrt(y**2 + c**2) - c
 
 
-def AND(y: ArrayLike, c: float = 1e-4) -> Array:
+def AND(y: ArrayLike, c: float = 1e-8) -> Array:
     """Smooth conjunction: AND(y) <= 0  iff  y_i <= 0 for all i."""
     y = jnp.asarray(y)
 
@@ -69,26 +69,26 @@ def AND(y: ArrayLike, c: float = 1e-4) -> Array:
     return jnp.sqrt(mp) - jnp.sqrt(m0)
 
 
-def OR(y: ArrayLike, c: float = 1e-4) -> Array:
+def OR(y: ArrayLike, c: float = 1e-8) -> Array:
     """Smooth disjunction: OR(y) <= 0  iff  y_i <= 0 for some i."""
     y = jnp.asarray(y)
     return -AND(-y, c=c)
 
 
-def IfThen(y: ArrayLike, c: float = 1e-4) -> Array:
+def IfThen(y: ArrayLike, c: float = 1e-8) -> Array:
     """Smooth implication: IfThen(y) <= 0  iff  (y_0 <= 0 => y_1 <= 0)."""
     y = jnp.asarray(y)
     return OR(jnp.array([-y[0], y[1]]), c=c)
 
 
-def integer_variable(y: ArrayLike, values: ArrayLike, c: float = 1e-4) -> Array:
+def integer_variable(y: ArrayLike, values: ArrayLike, c: float = 1e-8) -> Array:
     """Smooth discrete constraint: returns 0 iff y equals one of values."""
     y = jnp.asarray(y)
     values = jnp.asarray(values)
     return OR(_smooth_equality(y - values, c=c), c=c)
 
 
-def AND_lite(y: ArrayLike, c: float = 1e-4) -> Array:
+def AND_lite(y: ArrayLike, c: float = 1e-8) -> Array:
     """Lite conjunction (positive part only): AND_lite(y) = 0  iff  y_i <= 0 for all i."""
     y = jnp.asarray(y)
 
@@ -96,7 +96,7 @@ def AND_lite(y: ArrayLike, c: float = 1e-4) -> Array:
     return jnp.sqrt(mp) - jnp.sqrt(c)
 
 
-def OR_lite(y: ArrayLike, c: float = 1e-4) -> Array:
+def OR_lite(y: ArrayLike, c: float = 1e-8) -> Array:
     """Lite disjunction (positive part only): OR_lite(y) = 0  iff  y_i <= 0 for some i."""
     y = jnp.asarray(y)
 
@@ -104,7 +104,7 @@ def OR_lite(y: ArrayLike, c: float = 1e-4) -> Array:
     return jnp.sqrt(m0) - jnp.sqrt(c)
 
 
-def IfThen_lite(y: ArrayLike, c: float = 1e-4) -> Array:
+def IfThen_lite(y: ArrayLike, c: float = 1e-8) -> Array:
     """Lite implication: IfThen_lite(y) = 0  iff  (y_0 <= 0 => y_1 <= 0).
 
     Can enforce continuous-time implication via periodic auxiliary state:
