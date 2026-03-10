@@ -50,7 +50,7 @@ class STLExpr(Expr):
 
             # Convert to constraint with .over()
             constraints = [visit_either.over((3, 5))]
-    
+
     Note:
         This is a base class. Use concrete subclasses like Or, And,
         Eventually, Always, or Until for actual STL specifications.
