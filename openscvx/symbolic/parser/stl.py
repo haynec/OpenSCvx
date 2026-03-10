@@ -3,8 +3,6 @@
 Handlers: Or, And, IfThen, IntegerVariable
 """
 
-import numpy as np
-
 from openscvx.symbolic.expr.expr import Constant
 from openscvx.symbolic.expr.stl import And, IfThen, IntegerVariable, Or
 from openscvx.symbolic.parser._registry import function

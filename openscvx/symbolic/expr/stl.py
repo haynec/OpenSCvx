@@ -140,7 +140,9 @@ class Or(STLExpr):
         constraints = [reach_either.over((3, 5))]
     """
 
-    def __init__(self, *predicates: Union[Constraint, "STLExpr"], c: float = 1e-4, lite: bool = False):
+    def __init__(
+        self, *predicates: Union[Constraint, "STLExpr"], c: float = 1e-4, lite: bool = False
+    ):
         _validate_predicates(predicates, 2, "Or")
         self.predicates = list(predicates)
         self.c = c
@@ -153,7 +155,11 @@ class Or(STLExpr):
         predicates = []
         for pred in self.predicates:
             canonicalized = pred.canonicalize()
-            if isinstance(canonicalized, Or) and canonicalized.c == self.c and canonicalized.lite == self.lite:
+            if (
+                isinstance(canonicalized, Or)
+                and canonicalized.c == self.c
+                and canonicalized.lite == self.lite
+            ):
                 predicates.extend(canonicalized.predicates)
             else:
                 predicates.append(canonicalized)
@@ -203,7 +209,9 @@ class And(STLExpr):
         constraints = [avoid_both.over((0, 10))]
     """
 
-    def __init__(self, *predicates: Union[Constraint, "STLExpr"], c: float = 1e-4, lite: bool = False):
+    def __init__(
+        self, *predicates: Union[Constraint, "STLExpr"], c: float = 1e-4, lite: bool = False
+    ):
         _validate_predicates(predicates, 2, "And")
         self.predicates = list(predicates)
         self.c = c
@@ -216,7 +224,11 @@ class And(STLExpr):
         predicates = []
         for pred in self.predicates:
             canonicalized = pred.canonicalize()
-            if isinstance(canonicalized, And) and canonicalized.c == self.c and canonicalized.lite == self.lite:
+            if (
+                isinstance(canonicalized, And)
+                and canonicalized.c == self.c
+                and canonicalized.lite == self.lite
+            ):
                 predicates.extend(canonicalized.predicates)
             else:
                 predicates.append(canonicalized)

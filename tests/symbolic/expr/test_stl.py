@@ -24,7 +24,6 @@ from openscvx.symbolic.expr.constraint import CTCS, Inequality, NodalConstraint
 from openscvx.symbolic.expr.stl import And, IfThen, IntegerVariable, Or, STLExpr
 from openscvx.symbolic.lowerers.jax import JaxLowerer
 
-
 # =============================================================================
 # Helpers
 # =============================================================================

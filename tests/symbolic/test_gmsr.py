@@ -12,20 +12,18 @@ Each function is tested for:
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import pytest
 
 from openscvx.symbolic.lowerers.jax.gmsr import (
     AND,
     OR,
     AND_lite,
-    OR_lite,
     IfThen,
     IfThen_lite,
+    OR_lite,
     _smooth_equality,
     integer_variable,
 )
-
 
 # =============================================================================
 # Helpers
@@ -73,12 +71,16 @@ class TestSmoothEquality:
         assert val_large_c < val_small_c  # large c over-estimates less aggressively
 
     def test_differentiable_at_zero(self):
-        fn = lambda y: _smooth_equality(y, c=C)
+        def fn(y):
+            return _smooth_equality(y, c=C)
+
         g = jax.grad(fn)(jnp.array(0.0))
         assert jnp.isfinite(g)
 
     def test_differentiable_away_from_zero(self):
-        fn = lambda y: _smooth_equality(y, c=C)
+        def fn(y):
+            return _smooth_equality(y, c=C)
+
         assert _grad_ok(fn, jnp.array(1.5))
 
 
@@ -117,7 +119,9 @@ class TestAND:
         assert jnp.isfinite(val)
 
     def test_differentiable(self):
-        fn = lambda y: AND(y, c=C)
+        def fn(y):
+            return AND(y, c=C)
+
         g = jax.grad(fn)(jnp.array([-1.0, 1.0, 0.5]))
         assert jnp.all(jnp.isfinite(g))
 
@@ -156,7 +160,9 @@ class TestOR:
         assert float(OR(y, c=C)) <= 0.0 + 1e-6
 
     def test_differentiable(self):
-        fn = lambda y: OR(y, c=C)
+        def fn(y):
+            return OR(y, c=C)
+
         g = jax.grad(fn)(jnp.array([0.5, -0.3]))
         assert jnp.all(jnp.isfinite(g))
 
@@ -193,7 +199,9 @@ class TestIfThen:
         assert actual == pytest.approx(expected, rel=1e-5)
 
     def test_differentiable(self):
-        fn = lambda y: IfThen(y, c=C)
+        def fn(y):
+            return IfThen(y, c=C)
+
         g = jax.grad(fn)(jnp.array([-0.3, 0.7]))
         assert jnp.all(jnp.isfinite(g))
 
@@ -228,12 +236,16 @@ class TestIntegerVariable:
         assert val_off > 0.0
 
     def test_differentiable_away_from_values(self):
-        fn = lambda y: integer_variable(y, jnp.array([0.0, 1.0, 2.0]), c=C)
+        def fn(y):
+            return integer_variable(y, jnp.array([0.0, 1.0, 2.0]), c=C)
+
         g = jax.grad(fn)(jnp.array(0.5))
         assert jnp.isfinite(g)
 
     def test_differentiable_at_exact_value(self):
-        fn = lambda y: integer_variable(y, jnp.array([0.0, 1.0]), c=C)
+        def fn(y):
+            return integer_variable(y, jnp.array([0.0, 1.0]), c=C)
+
         g = jax.grad(fn)(jnp.array(1.0))
         assert jnp.isfinite(g)
 
@@ -260,7 +272,9 @@ class TestANDLite:
         assert float(AND_lite(y_pos)) > float(AND_lite(y_neg))
 
     def test_differentiable(self):
-        fn = lambda y: AND_lite(y, c=C)
+        def fn(y):
+            return AND_lite(y, c=C)
+
         g = jax.grad(fn)(jnp.array([-0.5, 0.3]))
         assert jnp.all(jnp.isfinite(g))
 
@@ -287,7 +301,9 @@ class TestORLite:
         assert float(OR_lite(y_small)) < float(OR_lite(y_large))
 
     def test_differentiable(self):
-        fn = lambda y: OR_lite(y, c=C)
+        def fn(y):
+            return OR_lite(y, c=C)
+
         g = jax.grad(fn)(jnp.array([0.5, -0.3]))
         assert jnp.all(jnp.isfinite(g))
 
@@ -323,6 +339,8 @@ class TestIfThenLite:
         assert actual == pytest.approx(expected, rel=1e-5)
 
     def test_differentiable(self):
-        fn = lambda y: IfThen_lite(y, c=C)
+        def fn(y):
+            return IfThen_lite(y, c=C)
+
         g = jax.grad(fn)(jnp.array([-0.3, 0.7]))
         assert jnp.all(jnp.isfinite(g))
