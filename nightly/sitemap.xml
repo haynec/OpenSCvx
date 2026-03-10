@@ -29,6 +29,14 @@
          <lastmod>2026-03-10</lastmod>
     </url>
     <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/abstract/stl_integer_variable/</loc>
+         <lastmod>2026-03-10</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/abstract/stl_or/</loc>
+         <lastmod>2026-03-10</lastmod>
+    </url>
+    <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/arm/three_link_arm/</loc>
          <lastmod>2026-03-10</lastmod>
     </url>
@@ -37,15 +45,23 @@
          <lastmod>2026-03-10</lastmod>
     </url>
     <url>
-         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/car/dubins_car_conditional/</loc>
-         <lastmod>2026-03-10</lastmod>
-    </url>
-    <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/car/dubins_car_disjoint/</loc>
          <lastmod>2026-03-10</lastmod>
     </url>
     <url>
-         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/car/dubins_car_stljax/</loc>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/car/dubins_car_obstacle_conditional/</loc>
+         <lastmod>2026-03-10</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/car/dubins_car_obstacle_stl/</loc>
+         <lastmod>2026-03-10</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/car/dubins_car_stl_or/</loc>
+         <lastmod>2026-03-10</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/car/dubins_car_waypoint_stl/</loc>
          <lastmod>2026-03-10</lastmod>
     </url>
     <url>
@@ -429,6 +445,10 @@
          <lastmod>2026-03-10</lastmod>
     </url>
     <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/stljax/</loc>
+         <lastmod>2026-03-10</lastmod>
+    </url>
+    <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/expr/time/</loc>
          <lastmod>2026-03-10</lastmod>
     </url>
@@ -553,6 +573,10 @@
          <lastmod>2026-03-10</lastmod>
     </url>
     <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/stljax/</loc>
+         <lastmod>2026-03-10</lastmod>
+    </url>
+    <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/lowerers/jax/vmap/</loc>
          <lastmod>2026-03-10</lastmod>
     </url>
@@ -594,6 +618,10 @@
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/parser/stl/</loc>
+         <lastmod>2026-03-10</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/symbolic/parser/stljax/</loc>
          <lastmod>2026-03-10</lastmod>
     </url>
     <url>
