@@ -58,7 +58,11 @@ def propagate_trajectory_results(
 
     t = np.array(s_to_t(x, u, settings, discretizer)).squeeze()
 
+    # Build dense output times and always include the exact terminal time.
+    # This ensures trajectory[..., -1] corresponds to the true final state.
     t_full = np.arange(t[0], t[-1], settings.prp.dt)
+    if t_full.size == 0 or not np.isclose(t_full[-1], t[-1]):
+        t_full = np.concatenate([t_full, np.array([t[-1]])])
 
     tau_vals, u_full = t_to_tau(u, t_full, t, settings, discretizer)
 

@@ -247,8 +247,12 @@ def simulate_nonlinear_time(
         count = np.sum(mask)
 
         tau_cur = tau_vals[prev_count : prev_count + count]
-        tau_cur = np.concatenate([tau_cur, np.array([tau[k + 1]])])  # Always include final point
-        count += 1
+        # Ensure integration reaches the segment endpoint.
+        # If tau_cur already contains tau[k+1], avoid duplicating it.
+        append_endpoint = tau_cur.size == 0 or not np.isclose(tau_cur[-1], tau[k + 1])
+        if append_endpoint:
+            tau_cur = np.concatenate([tau_cur, np.array([tau[k + 1]])])
+            count += 1
 
         # Pad to fixed length
         pad_len = settings.prp.max_tau_len - count
@@ -281,11 +285,13 @@ def simulate_nonlinear_time(
             params,
         )
 
-        # Only store the valid portion (excluding the final point which becomes next x_0)
-        states[:, out_idx : out_idx + count - 1] = sol[: count - 1].T
-        out_idx += count - 1
+        # Store requested samples; exclude endpoint only when it was appended
+        # solely for continuity propagation to the next segment.
+        n_store = count - 1 if append_endpoint else count
+        states[:, out_idx : out_idx + n_store] = sol[:n_store].T
+        out_idx += n_store
         x_0 = sol[count - 1]  # Last value used as next x_0
 
-        prev_count += count - 1
+        prev_count += n_store
 
     return states.T
