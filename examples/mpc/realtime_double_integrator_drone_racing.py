@@ -638,8 +638,11 @@ if __name__ == "__main__":
     import time
 
     step = 0
+    t_prev_step = time.perf_counter()
     while True:
         t_step_start = time.perf_counter()
+        dt_wall = t_step_start - t_prev_step
+        t_prev_step = t_step_start
 
         problem_mpc.reset()
         results = problem_mpc.solve()
@@ -706,7 +709,8 @@ if __name__ == "__main__":
             f"({laps_done:.2f} laps), "
             f"lag={cur_lag:.4f}, contour={cur_contour:.4f}, "
             f"pos=[{cur_pos[0]:+7.2f}, {cur_pos[1]:+7.2f}, {cur_pos[2]:+7.2f}], "
-            f"solve={t_solve:.3f}s"
+            f"solve={t_solve:.3f}s, "
+            f"dt={dt_wall:.3f}/{dt_mpc:.3f} ({dt_wall / dt_mpc * 100:.0f}%)"
         )
 
         # --- Prepare next step ---
