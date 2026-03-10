@@ -17,7 +17,6 @@ import os
 import sys
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 import openscvx as ox
 from openscvx import Problem
@@ -88,14 +87,12 @@ problem = Problem(
     controls=controls,
     N=N,
     time=time,
-    algorithm={"autotuner": ox.ConstantProximalWeight()},
+    algorithm={"autotuner": ox.ConstantProximalWeight(), "ep_vc": 1e-3, "lam_cost": 1e1},
     discretizer={"dis_type": "ZOH"},
     float_dtype="float64",
 )
 
-problem.algorithm.ep_vc = 1e-3
 problem.settings.prp.dt = 0.001
-problem.algorithm.lam_cost = 1e1
 
 
 
@@ -103,8 +100,3 @@ if __name__ == "__main__":
     problem.initialize()
     results = problem.solve()
     results = problem.post_process()
-
-    from openscvx.plotting import plot_states, plot_controls, plot_virtual_control_heatmap
-    plot_states(results).show()
-    plot_controls(results).show()
-    plot_virtual_control_heatmap(results).show()
