@@ -57,6 +57,6 @@ class ConstantProximalWeight(AutotuningBase):
         else:
             candidate.lam_cost = weights.lam_cost
 
-        state.lam_prox_history.append(state.lam_prox)
+        candidate.lam_prox = state.lam_prox
         state.accept_solution(candidate)
         return "Accept Constant"

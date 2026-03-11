@@ -67,7 +67,7 @@ class RampProximalWeight(AutotuningBase):
 
         # Calculate and append new value
         new_lam_prox = np.minimum(state.lam_prox * self.ramp_factor, self.lam_prox_max)
-        state.lam_prox_history.append(new_lam_prox)
+        candidate.lam_prox = new_lam_prox
 
         # If we were already at max, or if we just reached it and it's staying constant
         if was_at_max:
