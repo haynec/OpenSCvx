@@ -293,20 +293,6 @@ class Problem:
                 )
             self._algorithm = algorithm
 
-        # Build per-constraint lam_vb arrays from symbolic constraints and
-        # re-normalize so that per-constraint .weight() overrides participate
-        # in the normalization scale.  Include byof constraint counts so the
-        # arrays are sized to match the post-lowering constraint list.
-        n_byof_nodal = len(byof.get("nodal_constraints", [])) if byof else 0
-        n_byof_cross = len(byof.get("cross_nodal_constraints", [])) if byof else 0
-        self._algorithm._resolve_lam_vb(
-            N=self.symbolic.N,
-            nodal_constraints=self.symbolic.constraints.nodal,
-            cross_node_constraints=self.symbolic.constraints.cross_node,
-            n_byof_nodal=n_byof_nodal,
-            n_byof_cross=n_byof_cross,
-        )
-
         # Resolve discretizer: None → default, dict → LinearizeDiscretize(**dict), instance → use
         if discretizer is None:
             self._discretizer = LinearizeDiscretize()
@@ -848,6 +834,19 @@ class Problem:
             self.settings.sim.n_controls,
             self.settings.prp.max_tau_len,
             save_compiled=self.settings.sim.save_compiled,
+        )
+
+        # Build per-constraint lam_vb arrays from symbolic constraints and
+        # re-normalize. Deferred to initialize() so that user-set lam_vb
+        # values (assigned after Problem construction) are picked up.
+        n_byof_nodal = len(self._byof.get("nodal_constraints", [])) if self._byof else 0
+        n_byof_cross = len(self._byof.get("cross_nodal_constraints", [])) if self._byof else 0
+        self._algorithm._resolve_lam_vb(
+            N=self.symbolic.N,
+            nodal_constraints=self.symbolic.constraints.nodal,
+            cross_node_constraints=self.symbolic.constraints.cross_node,
+            n_byof_nodal=n_byof_nodal,
+            n_byof_cross=n_byof_cross,
         )
 
         # Initialize the SCP algorithm
