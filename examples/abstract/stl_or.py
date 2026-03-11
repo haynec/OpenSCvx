@@ -89,13 +89,8 @@ problem = Problem(
     controls=controls,
     N=N,
     time=time,
-    algorithm={"autotuner": ox.ConstantProximalWeight()},
     float_dtype="float64",
 )
-
-problem.algorithm.lam_vb = 1e2
-
-problem.algorithm.lam_vc = 1e1
 
 if __name__ == "__main__":
     problem.initialize()
