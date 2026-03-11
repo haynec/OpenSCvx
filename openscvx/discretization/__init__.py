@@ -27,7 +27,7 @@ from .linearize_discretize import (
 )
 from .linearize_discretize_sparse import LinearizeDiscretizeSparse
 from .sparse_utils import color_columns, make_sparse_jacobian_fns
-from .discretize_linearize import DiscretizeLinearize
+from .discretize_linearize import VectorizeDiscretizeLinearize, DiscretizeLinearizeVectorize
 
 # ---------------------------------------------------------------------------
 # Spec resolver — turn a dict into a Discretizer instance
@@ -36,7 +36,8 @@ from .discretize_linearize import DiscretizeLinearize
 _DISCRETIZER_MAP = {
     "LinearizeDiscretize": LinearizeDiscretize,
     "LinearizeDiscretizeSparse": LinearizeDiscretizeSparse,
-    "DiscretizeLinearize": DiscretizeLinearize,
+    "VectorizeDiscretizeLinearize": VectorizeDiscretizeLinearize,
+    "DiscretizeLinearizeVectorize": DiscretizeLinearizeVectorize,
 }
 
 
@@ -88,7 +89,8 @@ __all__ = [
     "Discretizer",
     "LinearizeDiscretize",
     "LinearizeDiscretizeSparse",
-    "DiscretizeLinearize",
+    "VectorizeDiscretizeLinearize",
+    "DiscretizeLinearizeVectorize",
     "_resolve_discretizer",
     "calculate_impulsive_discretization",
     "color_columns",
