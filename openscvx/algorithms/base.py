@@ -773,7 +773,7 @@ class AlgorithmState:
             self.VC_history.append(cand.VC)
         if cand.TR is not None:
             self.TR_history.append(cand.TR)
-        
+
         if cand.lam_prox is not None:
             self.lam_prox_history.append(cand.lam_prox)
         if cand.lam_vc is not None:
