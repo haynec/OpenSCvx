@@ -153,9 +153,6 @@ This tells OpenSCvx to maximize the final value of this state, which is how we e
 Third, `lag_sum.final` and `contour_sum.final` are set to `ox.Minimize(0.0)`.
 Since these states integrate the squared errors over the horizon, minimizing their final values is equivalent to the running cost we defined above.
 
-!!! note
-    `ox.Minimize` and `ox.Maximize` are the preferred way to set final state conditions for optimization. The older tuple syntax `("minimize", guess)` and `("maximize", guess)` also works, but the class-based syntax is cleaner and we will use it throughout this tutorial.
-
 ### Controls
 
 ```python
@@ -202,9 +199,6 @@ tangent = ox.Concat(
 The error decomposition follows the formulation exactly:
 
 ```python
-Q_LAG = 1e2
-Q_CONTOUR = 1e1
-
 e = position - p_ref
 
 # Lag: projection onto tangent
@@ -228,14 +222,15 @@ dynamics = {
     ),
     "heading": angular_rate[0],
     "progress": progress_rate,
-    "lag_sum": Q_LAG * lag_cost,
-    "contour_sum": Q_CONTOUR * contour_cost,
+    "lag_sum": lag_cost,
+    "contour_sum": contour_cost,
 }
 ```
 
 The first three lines are the physical dynamics and the progress kinematics.
-The last two lines are the cost integrators: `lag_sum` accumulates the weighted lag cost, and `contour_sum` accumulates the weighted contour cost.
+The last two lines are the cost integrators: `lag_sum` accumulates the lag cost, and `contour_sum` accumulates the contour cost.
 Because these states have `ox.Minimize` finals, the optimizer will drive these integrals down while simultaneously maximizing `progress`.
+The relative weighting between these objectives is handled separately via `lam_cost` in the problem setup, keeping the dynamics clean.
 
 ### Problem Setup
 
@@ -258,6 +253,10 @@ t = ox.Time(
     uniform_time_grid=True,
 )
 
+Q_LAG = 1e0
+Q_CONTOUR = 1e-1
+Q_PROGRESS = 1e-1
+
 problem_mpc = ox.Problem(
     dynamics=dynamics,
     states=states,
@@ -265,15 +264,25 @@ problem_mpc = ox.Problem(
     time=t,
     constraints=constraints,
     N=n_mpc,
-    algorithm={"autotuner": ox.ConstantProximalWeight()},
+    algorithm={
+        "autotuner": ox.ConstantProximalWeight(),
+        "lam_cost": {
+            "lag_sum": Q_LAG,
+            "contour_sum": Q_CONTOUR,
+            "progress": Q_PROGRESS,
+        },
+    },
 )
 ```
 
-Two differences from the single-shot problems in earlier tutorials.
+Three differences from the single-shot problems in earlier tutorials.
 First, the time is _fixed_ — `final=horizon_duration` with no `"minimize"` — because the horizon length is a design parameter, not something to optimize.
 Second, we use `ox.ConstantProximalWeight()` as the autotuner.
 For MPC where we warm-start each solve from the previous solution, we don't need the aggressive weight scheduling that helps cold-start convergence.
 A constant proximal weight keeps the solver predictable and fast.
+Third, the `lam_cost` dictionary assigns a weight to each cost state's Mayer contribution.
+The lag weight `Q_LAG` is highest to keep the progress approximation accurate, while `Q_CONTOUR` and `Q_PROGRESS` are tuned lower.
+This separates the cost tuning from the dynamics formulation — you can adjust these weights without touching the dynamics dictionary.
 
 ### The MPC Loop
 
@@ -377,8 +386,7 @@ The progress state bounds are set wide enough (here $[-0.5L, 1.5L]$) to accommod
 
 ### Per-State Cost Weighting
 
-With discrete references, you may want finer control over the relative weight of each cost term.
-The `lam_cost` algorithm parameter accepts a dictionary mapping state names to weights:
+As we saw in the simple example, `lam_cost` keeps the cost weights separate from the dynamics formulation:
 
 ```python
 problem_mpc = ox.Problem(
@@ -394,8 +402,7 @@ problem_mpc = ox.Problem(
 )
 ```
 
-This multiplies the Mayer cost contribution of each named state by the given factor.
-It provides a convenient way to tune the trade-off between progress maximization and tracking accuracy without modifying the dynamics weights $q_l$ and $q_c$.
+This is especially useful when iterating on a discrete-reference MPCC: you can re-tune the trade-off between progress maximization and tracking accuracy without touching the dynamics or re-deriving the error decomposition.
 
 ## Drone Racing MPCC
 
