@@ -383,17 +383,32 @@ if __name__ == "__main__":
     for obs_center in obstacle_centers:
         constraints.append(ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obs_center)))
 
-    # Gate cone constraints — active only when progress is between prev and current gate
-    for i, (apex, R_gate) in enumerate(zip(gate_cone_apexes, gate_cone_rotations)):
-        gate_idx = gate_cone_indices[i]
-        s_gate = gate_crossing_progress[gate_idx]
-        s_prev = gate_crossing_progress[(gate_idx - 1) % n_gates]
+    # Gate cone constraints (vectorized) — active only when progress is between prev and current gate
+    all_apexes = np.array(gate_cone_apexes)  # (n_gates, 3)
+    all_rotations = np.array(gate_cone_rotations)  # (n_gates, 3, 3)
+    all_n_hats = np.array(
+        [gate_normals[i].astype(float) for i in gate_cone_indices]
+    )  # (n_gates, 3)
+    all_s_gates = np.array([gate_crossing_progress[i] for i in gate_cone_indices])  # (n_gates,)
+    all_s_prevs = np.array(
+        [gate_crossing_progress[(i - 1) % n_gates] for i in gate_cone_indices]
+    )  # (n_gates,)
 
-        n_hat = gate_normals[gate_idx].astype(float)
-        approaching = ox.Sum(velocity * n_hat) <= 0.0  # v opposes cone normal when approaching
-        pred = ox.All([progress[0] >= s_prev, progress[0] <= s_gate, approaching])
-        cone_expr = ox.Cond(pred, g_gate_cone(apex, R_gate, position), -1.0)
-        constraints.append(ox.ctcs(cone_expr <= 0.0))
+    cone_constraints = ox.Vmap(
+        lambda apex, R_gate, n_hat, s_gate, s_prev: ox.Cond(
+            ox.All(
+                [
+                    progress[0] >= s_prev,
+                    progress[0] <= s_gate,
+                    ox.Sum(velocity * n_hat) <= 0.0,
+                ]
+            ),
+            g_gate_cone(apex, R_gate, position),
+            -1.0,
+        ),
+        batch=[all_apexes, all_rotations, all_n_hats, all_s_gates, all_s_prevs],
+    )
+    constraints.append(ox.ctcs(cone_constraints <= 0.0))
 
     # --- Time ---
     t = ox.Time(
@@ -615,6 +630,7 @@ if __name__ == "__main__":
                 select_obstacle(None)
             else:
                 select_obstacle(obs_idx)
+
         return _
 
     for i in range(n_obstacles):
@@ -656,6 +672,7 @@ if __name__ == "__main__":
                     problem_mpc.parameters[obstacle_centers[obs_idx].name] = new_center
                     obstacle_drag_handles[obs_idx].position = tuple(new_center)
                     obstacle_handles[obs_idx].position = tuple(new_center)
+
                 return _
 
             make_obstacle_gui_callback(i, vec_input)
@@ -668,14 +685,16 @@ if __name__ == "__main__":
             problem_mpc.parameters[obstacle_centers[obs_idx].name] = new_center
             obstacle_vector_inputs[obs_idx].value = tuple(new_center)
             obstacle_handles[obs_idx].position = tuple(new_center)
+
         return _
 
     for i in range(n_obstacles):
         make_drag_callback(i, obstacle_drag_handles[i])
 
     # --- Fixed-range velocity colormap (avoids recomputing min/max each frame) ---
-    import matplotlib.pyplot as plt
     from collections import deque
+
+    import matplotlib.pyplot as plt
 
     vel_max_norm = 0.25 * np.linalg.norm(velocity_traj.max)
     _cmap = plt.get_cmap("viridis")
