@@ -175,6 +175,7 @@ nav:
       - 'UsersGuide/05_visualization.md'
       - 'UsersGuide/06_logic.md'
       - 'UsersGuide/07_lie.md'
+      - 'UsersGuide/08_mpcc.md'
     - Examples: Examples/
     - Reference: Reference/
     - Foundations:
