@@ -115,34 +115,34 @@ total_arc_length = 2 * np.pi * R_circle
 
 # Physical states
 position = ox.State("position", shape=(2,))
-position.min = np.array([-10.0, -10.0])
-position.max = np.array([10.0, 10.0])
-position.initial = np.array([R_circle, 0.0])
+position.min = [-10.0, -10.0]
+position.max = [10.0, 10.0]
+position.initial = [R_circle, 0.0]
 position.final = [ox.Free(0.0), ox.Free(0.0)]
 
 heading = ox.State("heading", shape=(1,))
-heading.min = np.array([-4 * np.pi])
-heading.max = np.array([4 * np.pi])
+heading.min = [-4 * np.pi]
+heading.max = [4 * np.pi]
 heading.initial = [0.0]
 heading.final = [ox.Free(0.0)]
 
 # MPCC states
 progress = ox.State("progress", shape=(1,))
-progress.min = np.array([-0.5 * total_arc_length])
-progress.max = np.array([1.5 * total_arc_length])
-progress.initial = np.array([0.0])
+progress.min = [-0.5 * total_arc_length]
+progress.max = [1.5 * total_arc_length]
+progress.initial = [0.0]
 progress.final = [ox.Maximize(0.0)]
 
 lag_sum = ox.State("lag_sum", shape=(1,))
-lag_sum.min = np.array([0.0])
-lag_sum.max = np.array([1e1])
-lag_sum.initial = np.array([0.0])
+lag_sum.min = [0.0]
+lag_sum.max = [1e1]
+lag_sum.initial = [0.0]
 lag_sum.final = [ox.Minimize(0.0)]
 
 contour_sum = ox.State("contour_sum", shape=(1,))
-contour_sum.min = np.array([0.0])
-contour_sum.max = np.array([1e1])
-contour_sum.initial = np.array([0.0])
+contour_sum.min = [0.0]
+contour_sum.max = [1e1]
+contour_sum.initial = [0.0]
 contour_sum.final = [ox.Minimize(0.0)]
 ```
 
@@ -160,17 +160,17 @@ Since these states integrate the squared errors over the horizon, minimizing the
 
 ```python
 speed = ox.Control("speed", shape=(1,))
-speed.min = np.array([0.0])
-speed.max = np.array([10.0])
+speed.min = [0.0]
+speed.max = [10.0]
 speed.guess = np.full((n_mpc, 1), 5.0)
 
 angular_rate = ox.Control("angular_rate", shape=(1,))
-angular_rate.min = np.array([-5.0])
-angular_rate.max = np.array([5.0])
+angular_rate.min = [-5.0]
+angular_rate.max = [5.0]
 
 progress_rate = ox.Control("progress_rate", shape=(1,))
-progress_rate.min = np.array([0.0])
-progress_rate.max = np.array([10.0])
+progress_rate.min = [0.0]
+progress_rate.max = [10.0]
 progress_rate.guess = np.full((n_mpc, 1), 5.0)
 ```
 
@@ -293,8 +293,8 @@ for step in range(max_steps):
     position.initial = nodes["position"][1]
     heading.initial = nodes["heading"][1]
     progress.initial = nodes["progress"][1]
-    lag_sum.initial = np.array([0.0])      # Reset integrators
-    contour_sum.initial = np.array([0.0])  # each horizon
+    lag_sum.initial = [0.0]      # Reset integrators
+    contour_sum.initial = [0.0]  # each horizon
 
     # Warm-start: shift guess by one node
     # (shift states forward, extrapolate a new final node)
@@ -458,7 +458,7 @@ The MPCC problem uses 3D double-integrator dynamics with gravity, matching the o
 ```python
 dynamics = {
     "position": velocity,
-    "velocity": (1 / m) * force + np.array([0, 0, g_const]),
+    "velocity": (1 / m) * force + [0, 0, g_const],
     "progress": progress_rate,
     "lag_sum": lag_cost,
     "contour_sum": contour_cost,
@@ -547,8 +547,8 @@ for step in range(max_steps):
     progress.initial = np.array([
         nodes["progress"][1, 0] - wrap_offset
     ])
-    lag_sum.initial = np.array([0.0])
-    contour_sum.initial = np.array([0.0])
+    lag_sum.initial = [0.0]
+    contour_sum.initial = [0.0]
 
     # Shift guess forward for warm-starting
     shift_guess(nodes)
