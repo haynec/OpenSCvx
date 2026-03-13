@@ -16,75 +16,95 @@ This tutorial covers:
 
 ### The Problem
 
-Before jumping into the MPCC implementation, let us first introduce the key concepts of the formulation.
+Before jumping into the MPCC implementation, let us first introduce the key concepts of the formulation. Readers in a hurry can jump straight to the [Dubins Car](#a-simple-example-dubins-car-on-a-circle) and [drone racing](#drone-racing-mpcc) sections and get to coding.
 
 In the previous tutorials we solved trajectory optimization problems offline and obtained high-performance solutions.
 In practice, however, we may need a closed-loop controller to _execute_ these trajectories in the presence of unmodeled dynamics, unseen obstacles, _etc._
 A natural approach is to track the pre-solved trajectory using a receding-horizon controller to allow for replanning to account for changes in the environment in a closed-loop fashion.
-In this tutorial we will implement _model predictive contouring control_ (MPCC), following the excellent implementations from [Romero _et al._ 2022](https://arxiv.org/abs/2108.13205) and [Krinner _et al._ 2024](https://arxiv.org/abs/2403.17551v2).
+In this tutorial we will implement _model predictive contouring control_ (MPCC), a formulation originally introduced by [Lam _et al._ 2010](https://doi.org/10.1016/j.automatica.2009.10.027) and applied to drone racing by [Romero _et al._ 2022](https://arxiv.org/abs/2108.13205) (see also [Krinner _et al._ 2024](https://arxiv.org/abs/2403.17551v2)). We will follow along with the implementation of Romero.
 
-Following the formulation of Romero, the key idea is to introduce a virtual _progress_ variable $\hat{\theta}$ that parametrizes the reference path by arc length.
-We can then formulate the optimization problem to minimize deviations between the actual position and the corresponding progress along the reference trajectory.
-This ensures close tracking of the reference path.
-To generate efficient, fast trajectories we simply maximize progress under these constraints.
+Standard MPC formulations track a trajectory sampled at fixed times; the controller iteratively tries to be at a specific position at a specific moment.
+MPCC instead works with a spatial reference _path_ and lets the optimizer decide how fast to traverse it.
+This decoupling of _where_ from _when_ gives the controller freedom to choose the best speed profile rather than being locked to a pre-determined time schedule or heuristic.
 
-### Error Decomposition
+### The Ideal Cost
 
-Given a reference path $\mathbf{p}^d(\theta)$ parametrized by arc length $\theta$, the true contour error at time $k$ is:
-
-$$
-e_k^c = \min_\theta \lVert \mathbf{p}_k - \mathbf{p}^d(\theta) \rVert_2
-$$
-
-This is poorly suited for optimization since it is itself a minimization.
-To get around this, we introduce an _approximation_ of the progress $\hat{\theta}$ with its own dynamics:
+Consider a desired reference path $\mathbf{p}^d(\theta)$ parametrized by arc length $\theta$, and denote the system's position at time step $k$ as $\mathbf{p}_k$.
+The _contour error_, the shortest distance from the current position to the reference path, is defined as:
 
 $$
-\dot{\hat{\theta}} = v_{\hat{\theta}}
+e_k^c = \min_{\theta} \| \mathbf{p}_k - \mathbf{p}^d(\theta) \|_2
 $$
 
-where $v_{\hat{\theta}}$ is a new virtual control determined by the optimizer.
-This lets us evaluate the reference path at $\hat{\theta}_k$ and decompose the position error $\mathbf{e}(\hat{\theta}_k) = \mathbf{p}_k - \mathbf{p}^d(\hat{\theta}_k)$ into two components using the tangent vector $\mathbf{t}(\hat{\theta}_k)$ of the reference path:
+The ideal MPCC cost minimizes this contour error while maximizing progress $\theta_N$ along the path:
 
-- **Lag error** $\hat{e}^l$: the projection of $\mathbf{e}$ onto the tangent direction, measuring how far ahead or behind the reference point we are
-- **Contour error** $\hat{e}^c$: the component of $\mathbf{e}$ orthogonal to the tangent, measuring the lateral deviation from the path
+$$
+J_{\text{MPCC}} = \sum_{k=0}^{N} q_c \, (e_k^c)^2 - q_\theta \, \theta_N
+$$
 
-The lag error is computed as:
+where $q_c > 0$ is the contour weight and $q_\theta > 0$ weights progress maximization (we will minimize our cost term so a negative sign incentivizes progress).
+However, this formulation is not computationally tractable. Computing $e_k^c$ requires solving a nested optimization at every time step, making it unsuitable for use inside an online controller.
+
+### Approximating the Contour Error
+
+To avoid the nested minimization, Romero _et al._ introduce an _approximate progress_ variable $\hat{\theta}$ with its own dynamics:
+
+$$
+\hat{\theta}_{k+1} = \hat{\theta}_k + v_{\hat{\theta}} \, \Delta t
+$$
+
+where $v_{\hat{\theta}}$ is a new virtual control input determined by the optimizer.
+Instead of searching for the closest point on the path, we simply evaluate the reference at $\hat{\theta}_k$ and work with the resulting position error:
+
+$$
+\mathbf{e}(\hat{\theta}_k) = \mathbf{p}_k - \mathbf{p}^d(\hat{\theta}_k)
+$$
+
+This error vector can be decomposed into two orthogonal components using the unit tangent $\mathbf{t}(\hat{\theta}_k)$ of the reference path (which has unit norm because the path is arc-length parametrized):
+
+- **Lag error** $\hat{\mathbf{e}}^l$: the projection of $\mathbf{e}$ onto the tangent direction $\mathbf{t}$, measuring how far the approximate progress $\hat{\theta}$ is from the true closest point
+- **Contour error** $\hat{\mathbf{e}}^c$: the component of $\mathbf{e}$ in the normal plane, approximating the true contour error $e_k^c$
+
+The scalar lag error is the dot product:
 
 $$
 \hat{e}^l = \mathbf{e} \cdot \mathbf{t}(\hat{\theta}_k)
 $$
 
-and the contour error follows from the Pythagorean decomposition:
+and the contour error magnitude follows from the Pythagorean relationship $\mathbf{e} = \hat{\mathbf{e}}^l + \hat{\mathbf{e}}^c$ with the two components orthogonal:
 
 $$
-\lVert \hat{e}^c \rVert^2 = \lVert \mathbf{e} \rVert^2 - (\hat{e}^l)^2
+\lVert \hat{\mathbf{e}}^c \rVert^2 = \lVert \mathbf{e} \rVert^2 - (\hat{e}^l)^2
 $$
 
-The quality of the progress approximation $\hat{\theta}$ is linked to the lag error: when the lag is small, $\hat{\theta}$ is close to the true optimal progress $\theta^*$, and the contour error approximation is accurate.
-This is why we weight the lag error heavily in the cost — it keeps the progress estimate honest.
+### Why the Lag Error Must Be Small
 
-### The MPCC Cost
+These are approximations — $\hat{\mathbf{e}}^c$ is not the same as the true contour error $e_k^c$, and $\hat{\theta}_k$ is not the same as the true optimal progress $\theta_k^* = \arg\min_\theta \lVert \mathbf{p}_k - \mathbf{p}^d(\theta) \rVert$.
+How good are they?
 
-The MPCC cost over a horizon of $N$ steps is:
+It turns out the approximation quality is controlled entirely by the lag error.
+When $\hat{\mathbf{e}}^l = \mathbf{0}$, the position $\mathbf{p}_k$ lies in the normal plane at $\hat{\theta}_k$, which means $\hat{\theta}_k$ is exactly the closest point on the path — so $\hat{\theta}_k = \theta_k^*$ and $\lVert \hat{\mathbf{e}}^c \rVert = e_k^c$ (see the proof in [Romero _et al._ 2022, Proposition 1](https://arxiv.org/abs/2108.13205)).
+
+This gives us a practical recipe: if we keep the lag error small, the contour error approximation stays accurate.
+We enforce this by adding the lag error to the cost function with a high weight $q_l$:
 
 $$
-J = \sum_{k=0}^{N} q_c \lVert \hat{e}^c(\hat{\theta}_k) \rVert^2 + q_l \lVert \hat{e}^l(\hat{\theta}_k) \rVert^2 - \mu \, v_{\hat{\theta},k}
+J = \sum_{k=0}^{N} q_c \lVert \hat{\mathbf{e}}^c(\hat{\theta}_k) \rVert^2 + q_l (\hat{e}^l(\hat{\theta}_k))^2 - q_\theta \, v_{\hat{\theta},k}
 $$
 
-where $q_c$ is the contour weight, $q_l$ is the lag weight (chosen high to ensure accurate progress tracking), and $\mu$ weights the progress maximization.
-The negative sign on the progress rate term means the optimizer is _rewarded_ for making progress along the path.
+The lag term is not just another tracking objective — it is what makes the entire approximation scheme valid.
+The progress rate $v_{\hat{\theta}}$ replaces the terminal progress $\theta_N$ from the ideal cost (since $\hat{\theta}_N = \hat{\theta}_0 + \sum v_{\hat{\theta},k} \Delta t$, maximizing the sum of progress rates is equivalent to maximizing final progress).
 
 ### Encoding as a Multi-Objective Mayer Cost
 
 As we saw in [Tutorial 01](01_hello_world_brachistochrone.md), OpenSCvx always works in Mayer form: the cost is expressed purely as a function of the final state.
 So far our problems have had a single cost term — typically minimizing $t_f$.
-MPCC is more interesting: we have _three_ competing objectives (minimize lag, minimize contour error, maximize progress) that must be balanced against each other.
+MPCC requires balancing _three_ competing objectives: minimize contour error, minimize lag error, and maximize progress.
 
-To encode the running costs as terminal costs, we introduce _integrator states_ that accumulate the lag and contour costs over the horizon:
+To encode the running costs as terminal costs, we will simply include the cost terms as _integrator states_ that accumulate each component over the horizon:
 
 $$
-\dot{s}_l = q_l (\hat{e}^l)^2, \qquad \dot{s}_c = q_c \lVert \hat{e}^c \rVert^2
+\dot{s}_l = (\hat{e}^l)^2, \qquad \dot{s}_c = \lVert \hat{\mathbf{e}}^c \rVert^2
 $$
 
 with $s_l(0) = s_c(0) = 0$.
