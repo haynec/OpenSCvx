@@ -54,6 +54,12 @@ $$
 $$
 
 where $v_{\hat{\theta}}$ is a new virtual control input determined by the optimizer.
+Since $\hat{\theta}_N = \hat{\theta}_0 + \sum v_{\hat{\theta},k} \Delta t$, maximizing final progress is equivalent to maximizing the sum of progress rates, giving us the progress cost:
+
+$$
+J_\theta = \sum_{k=0}^{N} \left( -q_\theta \cdot v_{\hat{\theta},k} \right)
+$$
+
 Instead of searching for the closest point on the path, we simply evaluate the reference at $\hat{\theta}_k$ and work with the resulting position error:
 
 $$
@@ -74,26 +80,39 @@ $$
 and the contour error magnitude follows from the Pythagorean relationship $\mathbf{e} = \hat{\mathbf{e}}^l + \hat{\mathbf{e}}^c$ with the two components orthogonal:
 
 $$
-\lVert \hat{\mathbf{e}}^c \rVert^2 = \lVert \mathbf{e} \rVert^2 - (\hat{e}^l)^2
+\| \hat{\mathbf{e}}^c \|^2 = \| \mathbf{e} \|^2 - (\hat{e}^l)^2
+$$
+
+Then the contour cost can be written as
+
+$$
+J_c = \sum_{k=0}^{N} \left( q_c \cdot \| \hat{\mathbf{e}}^c(\hat{\theta}_k) \|^2 \right)
 $$
 
 ### Why the Lag Error Must Be Small
 
-These are approximations — $\hat{\mathbf{e}}^c$ is not the same as the true contour error $e_k^c$, and $\hat{\theta}_k$ is not the same as the true optimal progress $\theta_k^* = \arg\min_\theta \lVert \mathbf{p}_k - \mathbf{p}^d(\theta) \rVert$.
+These are approximations — $\hat{\mathbf{e}}^c$ is not the same as the true contour error $e_k^c$, and $\hat{\theta}_k$ is not the same as the true optimal progress $\theta_k^* = \arg\min_\theta \| \mathbf{p}_k - \mathbf{p}^d(\theta) \|$.
 How good are they?
 
-It turns out the approximation quality is controlled entirely by the lag error.
-When $\hat{\mathbf{e}}^l = \mathbf{0}$, the position $\mathbf{p}_k$ lies in the normal plane at $\hat{\theta}_k$, which means $\hat{\theta}_k$ is exactly the closest point on the path — so $\hat{\theta}_k = \theta_k^*$ and $\lVert \hat{\mathbf{e}}^c \rVert = e_k^c$ (see the proof in [Romero _et al._ 2022, Proposition 1](https://arxiv.org/abs/2108.13205)).
+Intuitively, the approximation quality is controlled entirely by the lag error.
+When $\hat{\mathbf{e}}^l = \mathbf{0}$, the position $\mathbf{p}_k$ lies in the normal plane at $\hat{\theta}_k$, which means $\hat{\theta}_k$ is exactly the closest point on the path  $\hat{\theta}_k = \theta_k^*$ and $\| \hat{\mathbf{e}}^c \| = e_k^c$ (see the proof in [Romero _et al._ 2022, Proposition 1](https://arxiv.org/abs/2108.13205)).
 
-This gives us a practical recipe: if we keep the lag error small, the contour error approximation stays accurate.
+This gives us a practical recipe: by minimizing the lag error term, we keep the optimizer "honest", preventing it from simply choosing a high $v_\theta$. By keeping the lag error small, the contour error approximation stays accurate.
 We enforce this by adding the lag error to the cost function with a high weight $q_l$:
 
 $$
-J = \sum_{k=0}^{N} q_c \lVert \hat{\mathbf{e}}^c(\hat{\theta}_k) \rVert^2 + q_l (\hat{e}^l(\hat{\theta}_k))^2 - q_\theta \, v_{\hat{\theta},k}
+J_l = \sum_{k=0}^{N} \left( q_l \cdot (\hat{e}^l(\hat{\theta}_k))^2 \right)
 $$
 
 The lag term is not just another tracking objective — it is what makes the entire approximation scheme valid.
-The progress rate $v_{\hat{\theta}}$ replaces the terminal progress $\theta_N$ from the ideal cost (since $\hat{\theta}_N = \hat{\theta}_0 + \sum v_{\hat{\theta},k} \Delta t$, maximizing the sum of progress rates is equivalent to maximizing final progress).
+
+### The MPCC Cost
+
+Combining the contour error, lag error, and progress maximization gives us the full MPCC cost.
+
+$$
+J = J_c + J_l + J_\theta = \sum_{k=0}^{N} \left( q_c \| \hat{\mathbf{e}}^c(\hat{\theta}_k) \|^2 + q_l (\hat{e}^l(\hat{\theta}_k))^2 - q_\theta \, v_{\hat{\theta},k} \right)
+$$
 
 ### Encoding as a Multi-Objective Mayer Cost
 
@@ -104,7 +123,7 @@ MPCC requires balancing _three_ competing objectives: minimize contour error, mi
 To encode the running costs as terminal costs, we will simply include the cost terms as _integrator states_ that accumulate each component over the horizon:
 
 $$
-\dot{s}_l = (\hat{e}^l)^2, \qquad \dot{s}_c = \lVert \hat{\mathbf{e}}^c \rVert^2
+\dot{s}_l = (\hat{e}^l)^2, \qquad \dot{s}_c = \| \hat{\mathbf{e}}^c \|^2
 $$
 
 with $s_l(0) = s_c(0) = 0$.
@@ -229,7 +248,7 @@ lag_cost = lag_scalar**2
 contour_cost = ox.Max(ox.Sum(e * e) - lag_scalar**2, 0.0)
 ```
 
-We use `ox.Sum(e * e)` rather than `ox.linalg.Norm(e)**2` to avoid the derivative singularity $\partial \lVert \mathbf{e} \rVert / \partial \mathbf{e} = \mathbf{e} / \lVert \mathbf{e} \rVert$ at $\mathbf{e} = 0$, which would be a problem since the whole point is to drive the error to zero.
+We use `ox.Sum(e * e)` rather than `ox.linalg.Norm(e)**2` to avoid the derivative singularity $\partial \| \mathbf{e} \| / \partial \mathbf{e} = \mathbf{e} / \| \mathbf{e} \|$ at $\mathbf{e} = 0$, which would be a problem since the whole point is to drive the error to zero.
 The `ox.Max(..., 0.0)` clamp handles floating-point cases where the subtraction goes slightly negative.
 
 ### Dynamics
@@ -583,6 +602,10 @@ for step in range(max_steps):
 
 The progress wrapping deserves a mention: as the drone completes laps, the raw progress grows beyond the tiled range.
 We subtract full-lap offsets to keep the progress within `[progress.min, progress.max]` where the `ox.Cinterp` data is defined.
+
+
+!!! warning
+    Should talk about the free time-dilation. Make sure to mention that we don't have any hard evidence (yet) on this improving performance
 
 ## Key Takeaways
 
