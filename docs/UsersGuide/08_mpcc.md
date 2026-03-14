@@ -159,8 +159,8 @@ $$
 
 ## A Simple Example: Dubins Car on a Circle
 
-Let's start with the simplest possible MPCC: a 2D Dubins car tracking a circular reference path.
-The reference is analytical (no discrete points needed), so we can focus entirely on the MPCC structure.
+Let's build up the MPCC step by step, starting from a simple case: a 2D Dubins car tracking a circular reference path.
+In this case, the reference is analytical (no discrete points needed), so we can focus entirely on getting the MPCC structure correct before expanding to the more general case.
 
 ### States
 
@@ -210,12 +210,14 @@ contour_sum.initial = [0.0]
 contour_sum.final = [ox.Minimize(0.0)]
 ```
 
-Three things to note here.
-First, all the physical states have `ox.Free` finals — in a receding horizon setting, there is no fixed terminal condition.
-Second, `progress.final` is set to `ox.Maximize(0.0)`.
-This tells OpenSCvx to maximize the final value of this state, which is how we encode the $-\mu\, v_{\hat{\theta}}$ term: maximizing the integral of the progress rate is the same as maximizing the final progress.
-Third, `lag_sum.final` and `contour_sum.final` are set to `ox.Minimize(0.0)`.
+A few things to note here.
+
+1. All the physical states have `ox.Free` finals — in a receding horizon setting, there is no fixed terminal condition.
+2. `progress.final` is set to `ox.Maximize(0.0)`.
+This tells OpenSCvx to maximize the final value of this state, which is how we encode the $-q_\theta \cdot v_{\hat{\theta}}$ term: maximizing the integral of the progress rate is the same as maximizing the final progress.
+3. `lag_sum.final` and `contour_sum.final` are set to `ox.Minimize(0.0)`.
 Since these states integrate the squared errors over the horizon, minimizing their final values is equivalent to the running cost we defined above.
+1. The bounds on `progress` and `heading` are padded beyond a single lap: progress ranges from $-0.5L$ to $1.5L$ and heading allows multiple full rotations. This extra room is needed for the warm-starting and guess-shifting strategy in the MPC loop, which we will explain in detail in a [later section](#the-mpc-loop).
 
 ### Controls
 
@@ -273,8 +275,10 @@ lag_cost = lag_scalar**2
 contour_cost = ox.Max(ox.Sum(e * e) - lag_scalar**2, 0.0)
 ```
 
-We use `ox.Sum(e * e)` rather than `ox.linalg.Norm(e)**2` to avoid the derivative singularity $\partial \| \mathbf{e} \| / \partial \mathbf{e} = \mathbf{e} / \| \mathbf{e} \|$ at $\mathbf{e} = 0$, which would be a problem since the whole point is to drive the error to zero.
-The `ox.Max(..., 0.0)` clamp handles floating-point cases where the subtraction goes slightly negative.
+!!! note
+    We use `ox.Sum(e * e)` rather than `ox.linalg.Norm(e)**2` to avoid the derivative singularity $\partial \| \mathbf{e} \| / \partial \mathbf{e} = \mathbf{e} / \| \mathbf{e} \|$ at $\mathbf{e} = 0$
+    
+    The `ox.Max(..., 0.0)` clamp handles floating-point cases where the subtraction goes slightly negative.
 
 ### Dynamics
 
@@ -340,13 +344,17 @@ problem_mpc = ox.Problem(
 ```
 
 Three differences from the single-shot problems in earlier tutorials.
-First, the time is _fixed_ — `final=horizon_duration` with no `"minimize"` — because the horizon length is a design parameter, not something to optimize.
-Second, we use `ox.ConstantProximalWeight()` as the autotuner.
+
+1. The time is _fixed_ — `final=horizon_duration` with no `"minimize"` — because the horizon length is a design parameter, not something to optimize.
+2. We use `ox.ConstantProximalWeight()` as the autotuner.
 For MPC where we warm-start each solve from the previous solution, we don't need the aggressive weight scheduling that helps cold-start convergence.
 A constant proximal weight keeps the solver predictable and fast.
-Third, the `lam_cost` dictionary assigns a weight to each cost state's Mayer contribution.
+3. The `lam_cost` dictionary assigns a weight to each cost state's Mayer contribution.
 The lag weight `Q_LAG` is highest to keep the progress approximation accurate, while `Q_CONTOUR` and `Q_PROGRESS` are tuned lower.
 This separates the cost tuning from the dynamics formulation — you can adjust these weights without touching the dynamics dictionary.
+
+!!! note
+    We use `ox.ConstantProximalWeight` as the autotuner here to keep the weights constant. This simplifies tuning and reliability during development. You may see better performance with other autotuning methods depending on your problem
 
 ### The MPC Loop
 
