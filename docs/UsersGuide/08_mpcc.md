@@ -358,47 +358,167 @@ This separates the cost tuning from the dynamics formulation — you can adjust 
 Now we get to the receding-horizon loop itself.
 The pattern is: solve the problem, extract the solution, advance the initial conditions by one step, and shift the guess forward for warm-starting.
 
+#### Initialization
+
+Before the first solve we need a feasible initial guess.
+For the analytical circle we assume a constant speed along the reference and compute position, heading, and controls directly:
+
+```python
+def set_initial_guess(theta_start: float = 0.0):
+    ref_speed = 5.0
+    arc_guess = np.linspace(
+        theta_start, theta_start + ref_speed * horizon_duration, n_mpc
+    )
+    angle_guess = arc_guess / R_circle
+
+    position.guess = np.column_stack([
+        R_circle * np.cos(angle_guess),
+        R_circle * np.sin(angle_guess),
+    ])
+    heading.guess = (-angle_guess + np.pi / 2).reshape(-1, 1)
+    progress.guess = arc_guess.reshape(-1, 1)
+    lag_sum.guess = np.zeros((n_mpc, 1))
+    contour_sum.guess = np.zeros((n_mpc, 1))
+
+    speed.guess = np.full((n_mpc, 1), ref_speed)
+    angular_rate.guess = np.full((n_mpc, 1), -ref_speed / R_circle)
+    progress_rate.guess = np.full((n_mpc, 1), ref_speed)
+```
+
+!!! note
+    While this demonstrates the fundamentals of creating the initial guess, this will change once we swap to a discrete reference trajectory.
+
+#### The Core Loop
+
+Solving the MPC problem follows the familiar pattern of initialize -> solve -> post process, except now the solving is done in a loop.
+For this initial example we will simply repeat this `max_steps` times:
+
 ```python
 problem_mpc.initialize()
 
 for step in range(max_steps):
-    problem_mpc.reset()
+    problem_mpc.reset() # Clear SCP history
     results = problem_mpc.solve()
     results = problem_mpc.post_process()
     nodes = results.nodes
 
-    # Advance: set initial conditions from node 1 of previous solution
-    position.initial = nodes["position"][1]
-    heading.initial = nodes["heading"][1]
-    progress.initial = nodes["progress"][1]
-    lag_sum.initial = [0.0]      # Reset integrators
-    contour_sum.initial = [0.0]  # each horizon
-
-    # Warm-start: shift guess by one node
-    # (shift states forward, extrapolate a new final node)
-    ...
+    # Update initial conditions and warm-start for next iteration
+    update_initial_conditions(nodes)
+    shift_guess(nodes)
 ```
 
-A few things to call out.
-`problem_mpc.reset()` clears the SCP iteration history so each MPC solve starts fresh from the current guess, rather than continuing from the previous SCP state.
-The cost integrator states (`lag_sum`, `contour_sum`) are always reset to zero at the start of each horizon — they measure the cost _within_ this horizon, not cumulatively.
-The warm-starting shift (elided above for brevity) takes the solution from nodes $[1, \ldots, N]$ as the guess for nodes $[0, \ldots, N-1]$ and extrapolates a new final node.
-This is critical for MPC performance: without it, each solve starts from scratch and convergence is much slower.
+The `update_initial_conditions(...)` and `shift_guess(...)` functions handle the all-important tasks of preparing the previous solution as the next solve's warm-start and are explained below.
 
-!!! warning
-    Need to explicitly talk about the different parts of the MPC loop: the progress looping, the shifting, the warm starting!
+#### Advancing Initial Conditions and Wrapping
 
-## Discrete Reference Paths with `ox.Cinterp`
+To update the initial condition, we take node 1 of the previous solution as the new initial state.
+Because we are building up towards a racing example, which may run many laps, we will need to "wrap" the periodic values (`progress`, `heading`).
+Otherwise, these would accumulate lap over lap and eventually reach their maximum values.
+While we _could_ simply set the bounds high enough that we do not reach them within our expected lap count, this is not good engineering and could lead to numerical issues.
 
-The analytical circle is nice for exposition, but in practice our reference path will be a set of discrete points — perhaps from a pre-solved trajectory, a motion capture recording, or hand-placed waypoints.
+To handle this, we subtract complete laps via floor division to keep progress in range.
+
+```python
+wrap_offset = (nodes["progress"][1, 0] // total_arc_length) * total_arc_length
+progress.initial = np.array([nodes["progress"][1, 0] - wrap_offset])
+```
+
+The state bounds cover $[-0.5L, 1.5L]$, allowing the tail of the MPC horizon to exceed a single lap before the system crosses the lap threshold and is reset.
+
+Heading is wrapped similarly (to the nearest $2\pi$) to avoid numerical issues in trig functions.
+
+```python
+hdg_wrap = np.round(nodes["heading"][1, 0] / (2 * np.pi)) * (2 * np.pi)
+heading.initial = nodes["heading"][1] - hdg_wrap
+```
+
+!!! note
+    We use `np.round` for heading (which can be negative) and `//` (floor division) for progress (monotonically increasing). The same wrapping is applied in `shift_guess` below to keep the entire horizon consistent.
+
+The cost integrators are reset to zero each horizon as they measure error _within_ the current horizon, not cumulatively.
+
+Combining all of this results in:
+
+```python
+def update_initial_conditions(nodes: dict):
+    position.initial = nodes["position"][1]
+
+    hdg_wrap = np.round(nodes["heading"][1, 0] / (2 * np.pi)) * (2 * np.pi)
+    heading.initial = nodes["heading"][1] - hdg_wrap
+
+    wrap_offset = (nodes["progress"][1, 0] // total_arc_length) * total_arc_length
+    progress.initial = np.array([nodes["progress"][1, 0] - wrap_offset])
+
+    lag_sum.initial = np.array([0.0])
+    contour_sum.initial = np.array([0.0])
+```
+
+#### Warm-Starting: Shifting the Guess
+
+Since we advanced by one time step, the solution at nodes $[1, \ldots, N-1]$ is a good guess for nodes $[0, \ldots, N-2]$ of the next problem.
+For the final node we will need a heuristic approach to append a new guess.
+While this doesn't need to be perfect, the SCP algorithm will do its thing, it can have a large effect on convergence performance.
+It can be worthwhile to think of a good strategy for _your_ specific problem.
+For this analytical example, we fill in the new final node with an Euler extrapolation from the last node's state and control.
+
+```python
+def shift_guess(nodes: dict):
+    dt = horizon_duration / (n_mpc - 1)
+
+    # Extrapolate a new final node
+    pos_last = nodes["position"][-1]
+    hdg_last = nodes["heading"][-1, 0]
+    spd_last = nodes["speed"][-1, 0]
+    ar_last = nodes["angular_rate"][-1, 0]
+    pr_last = nodes["progress_rate"][-1, 0]
+
+    ext_pos = pos_last + dt * spd_last * np.array([
+        np.sin(hdg_last), np.cos(hdg_last)
+    ])
+    ext_hdg = hdg_last + dt * ar_last
+    ext_prog = nodes["progress"][-1, 0] + dt * pr_last
+
+    # Shift states forward and apply wrapping
+    shifted_progress = np.vstack([nodes["progress"][1:], [[ext_prog]]])
+    wrap_offset = (nodes["progress"][1, 0] // total_arc_length) * total_arc_length
+    shifted_progress -= wrap_offset
+
+    shifted_heading = np.vstack([nodes["heading"][1:], [[ext_hdg]]])
+    hdg_wrap = np.round(nodes["heading"][1, 0] / (2 * np.pi)) * (2 * np.pi)
+    shifted_heading -= hdg_wrap
+
+    position.guess = np.vstack([nodes["position"][1:], [ext_pos]])
+    heading.guess = shifted_heading
+    progress.guess = shifted_progress
+    lag_sum.guess = np.zeros((n_mpc, 1))
+    contour_sum.guess = np.zeros((n_mpc, 1))
+
+    # Controls: shift forward, repeat last value for the new final node
+    speed.guess = np.vstack([nodes["speed"][1:], nodes["speed"][-1:]])
+    angular_rate.guess = np.vstack([
+        nodes["angular_rate"][1:], nodes["angular_rate"][-1:]
+    ])
+    progress_rate.guess = np.vstack([
+        nodes["progress_rate"][1:], nodes["progress_rate"][-1:]
+    ])
+```
+
+The wrap offsets are computed from node 1 of the previous solution (which becomes node 0 of the new problem) so the whole horizon shifts consistently.
+Controls are shifted forward with the last value repeated; cost integrator guesses are reset to zero.
+
+## Discrete Reference Paths
+
+We've now set up the core elements of the MPC(C) problem: initializing, solving, and shifting the initial condition and guess.
+However, in the general case we will not have an analytical reference path.
+Instead, we may have a set of discrete points from a pre-solved trajectory, a motion capture recording, or hand-placed waypoints.
 We need a way to evaluate the reference position and tangent at arbitrary progress values within the symbolic expression graph.
 
 Linear interpolation between sparse points creates kinks in the tangent field, which cause oscillations in the contour error.
 We need something smoother: cubic spline interpolation.
 
-### `ox.Cinterp`
+### Cubic Splines
 
-`ox.Cinterp(x, xp, fp)` is a symbolic cubic spline interpolation node.
+OpenSCvx supports cubic splines via the `ox.Cinterp(x, xp, fp)` operator.
 Given breakpoints `xp` and values `fp` (both NumPy arrays, known at problem construction time), it evaluates the natural cubic spline at the symbolic query point `x`.
 This is the symbolic analog of `scipy.interpolate.CubicSpline` — in fact, it uses the same coefficients under the hood.
 
@@ -437,6 +557,43 @@ We could, but pre-computing the tangent at the breakpoints and re-interpolating 
 
 The rest of the MPCC formulation — error decomposition, cost integrators, dynamics, MPC loop — is identical to the analytical case.
 This is the beauty of the approach: swapping from an analytical reference to a discrete one is purely a matter of changing how `p_ref` and `tangent` are constructed.
+
+### Initialization with Discrete References
+
+With an analytical reference we could compute position and heading guesses from closed-form expressions.
+With a discrete reference we no longer have that luxury — instead we interpolate the reference data arrays directly.
+
+```python
+def set_initial_guess(theta_start: float = 0.0, ref_speed: float = 5.0):
+    arc_guess = np.linspace(
+        theta_start, theta_start + ref_speed * horizon_duration, n_mpc
+    )
+
+    # Position: interpolate from reference sample arrays
+    position.guess = np.column_stack([
+        np.interp(arc_guess, s_data, px_data),
+        np.interp(arc_guess, s_data, py_data),
+    ])
+
+    # Heading: infer from reference segment directions
+    seg_idx = np.searchsorted(s_data, arc_guess, side="right") - 1
+    seg_idx = np.clip(seg_idx, 0, len(s_data) - 2)
+    seg_dp = np.column_stack([
+        px_data[seg_idx + 1] - px_data[seg_idx],
+        py_data[seg_idx + 1] - py_data[seg_idx],
+    ])
+    hdg_guess = np.arctan2(seg_dp[:, 0], seg_dp[:, 1])
+    heading.guess = hdg_guess.reshape(-1, 1)
+    heading.initial = np.array([hdg_guess[0]])
+
+    progress.guess = arc_guess.reshape(-1, 1)
+    progress_rate.guess = np.full((n_mpc, 1), ref_speed)
+    lag_sum.guess = np.zeros((n_mpc, 1))
+    contour_sum.guess = np.zeros((n_mpc, 1))
+```
+
+Position is looked up via `np.interp` (linear is fine for the _guess_); heading is inferred from the reference segment direction at each node via `np.searchsorted`.
+The `shift_guess` and `update_initial_conditions` functions are structurally identical to the analytical case — wrapping and extrapolation depend on the dynamics, not the reference representation.
 
 ### Periodicity via Tiling
 
