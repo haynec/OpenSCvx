@@ -39,7 +39,7 @@ $$
 The ideal MPCC cost minimizes this contour error while maximizing progress $\theta_N$ along the path:
 
 $$
-J_{\text{MPCC}} = \sum_{k=0}^{N} q_c \, (e_k^c)^2 - q_\theta \, \theta_N
+J = \sum_{k=0}^{N} q_c \, (e_k^c)^2 - q_\theta \, \theta_N
 $$
 
 where $q_c > 0$ is the contour weight and $q_\theta > 0$ weights progress maximization (we will minimize our cost term so a negative sign incentivizes progress).
@@ -111,26 +111,51 @@ The lag term is not just another tracking objective — it is what makes the ent
 Combining the contour error, lag error, and progress maximization gives us the full MPCC cost.
 
 $$
-J = J_c + J_l + J_\theta = \sum_{k=0}^{N} \left( q_c \| \hat{\mathbf{e}}^c(\hat{\theta}_k) \|^2 + q_l (\hat{e}^l(\hat{\theta}_k))^2 - q_\theta \, v_{\hat{\theta},k} \right)
+J_{\textrm{MPCC}} = J_c + J_l + J_\theta = \sum_{k=0}^{N} \left( q_c \| \hat{\mathbf{e}}^c(\hat{\theta}_k) \|^2 + q_l (\hat{e}^l(\hat{\theta}_k))^2 - q_\theta \, v_{\hat{\theta},k} \right)
 $$
 
-### Encoding as a Multi-Objective Mayer Cost
+### Encoding as a Multi-Objective Mayer Cost in OpenSCvx
 
-As we saw in [Tutorial 01](01_hello_world_brachistochrone.md), OpenSCvx always works in Mayer form: the cost is expressed purely as a function of the final state.
-So far our problems have had a single cost term — typically minimizing $t_f$.
+As we saw in [Tutorial 01](01_hello_world_brachistochrone.md), OpenSCvx uses the Mayer form, expressing the cost purely as a function of the final state rather than as running Lagrange costs.
+The transformation from one form to the other is trivial; we will simply include the cost terms as _integrator states_ which are summed continuously over the time horizon rather than just at the discrete nodes.
+We define these new states as the integrated lag error $s_l$ and integrated contour error $s_c$
+
+$$
+\dot{s}_l = \left(\hat{e}^l\right)^2, \qquad \dot{s}_c = \| \hat{\mathbf{e}}^c \|^2
+$$
+
+with $s_l(0) = s_c(0) = 0$ and add these to the state vector.
+Similarly, we track the progress $\hat{\theta}$ as a continuous state defined as the integral of the progress rate $v_{\hat\theta}$, which is appended to the control vector:
+
+$$
+\dot{\hat\theta} = v_{\hat\theta}
+$$
+
+with $\hat\theta(0)$ initialized to match the current arc-length position along the reference path at $t=0$.
+
+So far our problems have had a single cost term, typically minimizing $t_f$.
 MPCC requires balancing _three_ competing objectives: minimize contour error, minimize lag error, and maximize progress.
-
-To encode the running costs as terminal costs, we will simply include the cost terms as _integrator states_ that accumulate each component over the horizon:
-
-$$
-\dot{s}_l = (\hat{e}^l)^2, \qquad \dot{s}_c = \| \hat{\mathbf{e}}^c \|^2
-$$
-
-with $s_l(0) = s_c(0) = 0$.
 Minimizing $s_l(t_f)$ and $s_c(t_f)$ in the Mayer cost is then equivalent to minimizing the running integrals.
 Similarly, we maximize the final progress $\hat{\theta}(t_f)$ to encourage forward motion.
+We can write the full MPCC cost as follows.
 
-This technique of converting Lagrange (running) costs to Mayer (terminal) costs via integrator states is general, but MPCC is a particularly clean application of it because the cost components have distinct physical meanings and naturally competing objectives.
+$$
+\begin{align*}
+J_{\textrm{MPCC, OpenSCvx}} &=  q_c \cdot s_c + q_l \cdot s_l- q_\theta \cdot \hat{\theta} \\
+&= \int_0^{t_f} \left( q_c \cdot \| \hat{\mathbf{e}}^c(t) \|^2 + q_l \cdot \left(\hat{e}^l(t)\right)^2  - q_\theta \cdot v_{\hat\theta}(t) \right) dt
+\end{align*}
+$$
+
+!!! tip
+    The cost could mathematically equivalently be constructed as a single integrated state appended to the state vector.
+    We could define a single state $s$ defined as:
+    
+    $$
+    \dot{s} = q_c \cdot \| \hat{\mathbf{e}}^c \|^2 + q_l \cdot \left(\hat{e}^l\right)^2  - q_\theta \cdot v_{\hat\theta}
+    $$
+
+    and append _that_ to the state vector instead.
+    However, for convenience and for ease of tuning we will separate out the individual terms.
 
 ## A Simple Example: Dubins Car on a Circle
 
