@@ -343,14 +343,11 @@ problem_mpc = ox.Problem(
 )
 ```
 
-Three differences from the single-shot problems in earlier tutorials.
+Two differences from the single-shot problems in earlier tutorials.
 
-1. The time is _fixed_ — `final=horizon_duration` with no `"minimize"` — because the horizon length is a design parameter, not something to optimize.
-2. We use `ox.ConstantProximalWeight()` as the autotuner.
-For MPC where we warm-start each solve from the previous solution, we don't need the aggressive weight scheduling that helps cold-start convergence.
-A constant proximal weight keeps the solver predictable and fast.
-3. The `lam_cost` dictionary assigns a weight to each cost state's Mayer contribution.
-The lag weight `Q_LAG` is highest to keep the progress approximation accurate, while `Q_CONTOUR` and `Q_PROGRESS` are tuned lower.
+1. The time is _fixed_ (`final=horizon_duration` with no `"minimize"`), in this case the horizon length is a design parameter, not an optimization variable.
+2. The `lam_cost` dictionary assigns a weight to each cost state's Mayer contribution.
+Following Romero _et al._ the lag weight `Q_LAG` is highest to keep the progress approximation accurate, while `Q_CONTOUR` and `Q_PROGRESS` are tuned lower.
 This separates the cost tuning from the dynamics formulation — you can adjust these weights without touching the dynamics dictionary.
 
 !!! note
@@ -387,6 +384,9 @@ A few things to call out.
 The cost integrator states (`lag_sum`, `contour_sum`) are always reset to zero at the start of each horizon — they measure the cost _within_ this horizon, not cumulatively.
 The warm-starting shift (elided above for brevity) takes the solution from nodes $[1, \ldots, N]$ as the guess for nodes $[0, \ldots, N-1]$ and extrapolates a new final node.
 This is critical for MPC performance: without it, each solve starts from scratch and convergence is much slower.
+
+!!! warning
+    Need to explicitly talk about the different parts of the MPC loop: the progress looping, the shifting, the warm starting!
 
 ## Discrete Reference Paths with `ox.Cinterp`
 
