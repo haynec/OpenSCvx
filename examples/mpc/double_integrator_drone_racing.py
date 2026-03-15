@@ -31,6 +31,7 @@ from openscvx.plotting.viser import (
     add_gates,
     add_ghost_trajectory,
     add_position_marker,
+    add_thrust_vector,
     compute_velocity_colors,
     create_server,
 )
@@ -583,6 +584,7 @@ if __name__ == "__main__":
     # --- Run MPC loop, collecting data ---
     actual_segments = []
     actual_vel_segments = []
+    actual_force_segments = []
     actual_time_segments = []
     horizon_trajectories = []
     horizon_velocities = []
@@ -598,6 +600,7 @@ if __name__ == "__main__":
         seg_end = np.searchsorted(traj_time, node1_time, side="right")
         actual_segments.append(results.trajectory["position"][:seg_end].copy())
         actual_vel_segments.append(results.trajectory["velocity"][:seg_end].copy())
+        actual_force_segments.append(results.trajectory["force"][:seg_end].copy())
         actual_time_segments.append(traj_time[:seg_end].copy())
 
         horizon_trajectories.append(results.trajectory["position"].copy())
@@ -623,6 +626,7 @@ if __name__ == "__main__":
     # Visualization
     # =================================================================
     actual_path = np.concatenate(actual_segments, axis=0)
+    actual_force = np.concatenate(actual_force_segments, axis=0)
     actual_vel_cat = np.concatenate(actual_vel_segments, axis=0)
     actual_colors = compute_velocity_colors(actual_vel_cat)
 
@@ -672,6 +676,9 @@ if __name__ == "__main__":
     # Position marker at current drone position
     _, update_marker = add_position_marker(server, actual_path)
 
+    # Thrust vector at current drone position
+    _, update_thrust = add_thrust_vector(server, actual_path, actual_force, scale=0.3)
+
     # Horizon rollout pop-in: shows the current planned horizon
     horizon_handle = server.scene.add_point_cloud(
         "/horizon_rollout",
@@ -690,7 +697,7 @@ if __name__ == "__main__":
     add_animation_controls(
         server,
         actual_time,
-        [update_trail, update_marker, update_horizon],
+        [update_trail, update_marker, update_thrust, update_horizon],
     )
 
     plot_states(results).show()

@@ -726,6 +726,14 @@ if __name__ == "__main__":
         position=ref_pos[0],
     )
 
+    thrust_scale = 0.3
+    thrust_handle = server.scene.add_line_segments(
+        "/thrust_vector",
+        points=np.array([[ref_pos[0], ref_pos[0]]]),  # (1, 2, 3)
+        colors=(255, 100, 100),
+        line_width=4.0,
+    )
+
     horizon_handle = server.scene.add_point_cloud(
         "/horizon_rollout",
         points=ref_pos[:1].astype(np.float32),
@@ -778,6 +786,7 @@ if __name__ == "__main__":
         seg_end = np.searchsorted(traj_time, node1_time, side="right")
         seg_pos = results.trajectory["position"][:seg_end].copy().astype(np.float32)
         seg_vel = results.trajectory["velocity"][:seg_end].copy()
+        seg_force = results.trajectory["force"][:seg_end].copy()
         seg_time = traj_time[:seg_end].copy()
         seg_colors = velocity_colors(seg_vel)
 
@@ -810,6 +819,8 @@ if __name__ == "__main__":
             trail_handle.points = frame_pos
             trail_handle.colors = frame_colors
             marker_handle.position = seg_pos[i]
+            thrust_end = seg_pos[i] + seg_force[i].astype(np.float32) * thrust_scale
+            thrust_handle.points = np.array([[seg_pos[i], thrust_end]])
 
             # Sleep until this frame's wall-clock target
             if anim_budget > 0 and i < n_seg - 1:
