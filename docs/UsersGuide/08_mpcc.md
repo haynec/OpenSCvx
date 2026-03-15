@@ -622,9 +622,10 @@ This is a two-phase problem:
 1. **Offline**: Solve a time-optimal trajectory through the gates (single-shot, as in [Tutorial 02](02_drone_racing_constraints.md))
 2. **Online**: Use MPCC to track the solved trajectory in a receding-horizon loop
 
-### Phase 1: Time-Optimal Trajectory
+### Time-Optimal Reference Trajectory
 
-The offline problem is a standard time-optimal drone racing problem identical to what we built in [Tutorial 02](02_drone_racing_constraints.md): a 3D double integrator flying through 10 gates with loop closure.
+The offline problem is a standard time-optimal drone racing problem identical to what we built in [Tutorial 02](02_drone_racing_constraints.md): a 3D double integrator flying through a drone race course with gate constraints.
+We have slightly modified the problem to enforce loop closure: initial and terminal positions and velocities are constrained to be identical.
 We won't repeat the full setup here; the important output is the solved trajectory:
 
 ```python
@@ -636,8 +637,6 @@ ref_pos = results_traj.trajectory["position"]   # (N_dense, 3)
 ref_vel = results_traj.trajectory["velocity"]   # (N_dense, 3)
 ref_time = results_traj.trajectory["time"].flatten()
 ```
-
-### Extracting the Reference Path
 
 The post-processed trajectory gives us a dense set of position, velocity, and time samples.
 We need to convert this to an arc-length parametrization for the MPCC reference.
@@ -658,7 +657,7 @@ s_lap = s_lap[:-1]
 ref_pos_lap = ref_pos[:-1]
 ```
 
-The tiling, tangent computation, and `ox.Cinterp` setup follow the same pattern as before, now in 3D:
+The tiling and `ox.Cinterp` setup for position follow the same pattern as before, now in 3D:
 
 ```python
 p_ref = ox.Concat(
@@ -668,56 +667,21 @@ p_ref = ox.Concat(
 )
 ```
 
-### Phase 2: MPCC Problem
-
-The MPCC problem uses 3D double-integrator dynamics with gravity, matching the offline problem:
-
-```python
-dynamics = {
-    "position": velocity,
-    "velocity": (1 / m) * force + [0, 0, g_const],
-    "progress": progress_rate,
-    "lag_sum": lag_cost,
-    "contour_sum": contour_cost,
-}
-```
-
-The error decomposition is the same as in the 2D case, just with 3-component vectors.
-
-### Obstacle and Gate Constraints
-
-The MPCC problem inherits obstacle avoidance constraints from the racing environment:
+For the tangent field, we no longer need to differentiate the position spline — the reference trajectory already contains velocity data.
+We normalize it to get unit tangents, tile it alongside the position data, and interpolate:
 
 ```python
-for obs_center in obstacle_centers:
-    constraints.append(
-        ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obs_center))
-    )
-```
+tx_data = ref_vel[:-1, 0] / ref_speeds[:-1]
+ty_data = ref_vel[:-1, 1] / ref_speeds[:-1]
+tz_data = ref_vel[:-1, 2] / ref_speeds[:-1]
+# (tile tx_data, ty_data, tz_data the same way as position)
 
-For gate constraints, we use a cone formulation that is _progress-dependent_: a gate cone constraint is only active when the drone's progress is between the previous gate and the current one, and when the drone is approaching the gate (velocity pointing toward it).
-This is where `ox.Cond` and `ox.Vmap` come in:
-
-```python
-cone_constraints = ox.Vmap(
-    lambda apex, R_gate, n_hat, s_gate, s_prev: ox.Cond(
-        ox.All([
-            progress[0] >= s_prev,
-            progress[0] <= s_gate,
-            ox.Sum(velocity * n_hat) <= 0.0,
-        ]),
-        g_gate_cone(apex, R_gate, position),
-        -1.0,  # Inactive: return feasible value
-    ),
-    batch=[all_apexes, all_rotations, all_n_hats, all_s_gates, all_s_prevs],
+tangent = ox.Concat(
+    ox.Cinterp(progress[0], s_data, tx_data),
+    ox.Cinterp(progress[0], s_data, ty_data),
+    ox.Cinterp(progress[0], s_data, tz_data),
 )
-constraints.append(ox.ctcs(cone_constraints <= 0.0))
 ```
-
-`ox.Cond` evaluates a condition and returns one of two expressions.
-When the condition is true (drone is in the approach segment for this gate), we evaluate the cone constraint.
-When false, we return $-1.0$, which trivially satisfies the $\leq 0$ inequality.
-`ox.Vmap` vectorizes this over all gates, just as we vectorized obstacle constraints in [Tutorial 03](03_obstacle_avoidance_vmap.md).
 
 ### Warm-Starting from the Reference
 
@@ -745,35 +709,91 @@ def set_initial_guess(theta_start: float = 0.0):
 
 This gives the MPCC solver an excellent starting point: the initial guess is already close to the optimal trajectory, so convergence is fast from the very first MPC step.
 
-### Running the MPC Loop
+### Guess Shifting with the Reference Trajectory
 
-The MPC loop follows the same pattern as the simple example, now with the full 3D state:
+In the Dubins car examples we extrapolated the appended final node with a crude Euler step from the last node's dynamics.
+With the full reference trajectory available, we can do much better: look up the reference state at the extrapolated progress value.
 
 ```python
-problem_mpc.initialize()
+def shift_guess(nodes: dict):
+    # Map the last node's progress to reference time, step forward, map back
+    t_last = np.interp(nodes["progress"][-1, 0], s_data, t_data)
+    ext_prog = np.interp(t_last + dt_mpc, t_data, s_data)
 
-for step in range(max_steps):
-    problem_mpc.reset()
-    results = problem_mpc.solve()
-    results = problem_mpc.post_process()
-    nodes = results.nodes
-
-    # Advance initial conditions
-    position.initial = nodes["position"][1]
-    velocity.initial = nodes["velocity"][1]
-    progress.initial = np.array([
-        nodes["progress"][1, 0] - wrap_offset
+    # Look up reference state at the extrapolated progress
+    ext_pos = np.array([
+        np.interp(ext_prog, s_data, px_data),
+        np.interp(ext_prog, s_data, py_data),
+        np.interp(ext_prog, s_data, pz_data),
     ])
-    lag_sum.initial = [0.0]
-    contour_sum.initial = [0.0]
+    ext_vel = np.array([
+        np.interp(ext_prog, s_data, vx_data),
+        np.interp(ext_prog, s_data, vy_data),
+        np.interp(ext_prog, s_data, vz_data),
+    ])
+    # ... similarly for force, progress_rate
 
-    # Shift guess forward for warm-starting
-    shift_guess(nodes)
+    # Shift and wrap as before
+    shifted_progress = np.vstack([nodes["progress"][1:], [[ext_prog]]])
+    wrap_offset = (nodes["progress"][1, 0] // total_arc_length) * total_arc_length
+    shifted_progress -= wrap_offset
+
+    position.guess = np.vstack([nodes["position"][1:], [ext_pos]])
+    velocity.guess = np.vstack([nodes["velocity"][1:], [ext_vel]])
+    progress.guess = shifted_progress
+    # ...
 ```
 
-The progress wrapping deserves a mention: as the drone completes laps, the raw progress grows beyond the tiled range.
-We subtract full-lap offsets to keep the progress within `[progress.min, progress.max]` where the `ox.Cinterp` data is defined.
+The appended node now lies on the reference trajectory rather than being a rough dynamical extrapolation.
+This is the same idea as `set_initial_guess` — query the reference at the right arc-length — applied at every MPC step.
 
+### Additional Constraints and Extensions
+
+#### Obstacle Avoidance
+
+Because we are now running a closed-loop controller we can include additional constraints that were not present when calculating the time-optimal reference trajectory, for example, obstacles placed along the path
+
+```python
+for obs_center in obstacle_centers:
+    constraints.append(
+        ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obs_center))
+    )
+```
+
+#### Progress-Dependent Gate Constraints
+
+For the time-optimal reference trajectory we enforced the gates as convex nodal constraints, placing every k-th optimization node at a gate.
+This is no longer possible in the receding-horizon setting; we cannot guarantee that any node lies at a particular gate.
+While the contour error minimization encourages the closed-loop path to follow the reference trajectory through the gates, it does not enforce this.
+
+To generically constrain the MPCC optimizer to travel through the gates, we borrow the cone formulation from [tutorial 04](04_viewpoint_constraints.md) to create approach cone constraints for each gate.
+These are offset so that the edges of the gate exactly touch the cone.
+
+For gate constraints, we use a cone formulation that is _progress-dependent_: a gate cone constraint is only active when the drone's progress is between the previous gate and the current one, and when the drone is approaching the gate (velocity pointing toward it).
+This is where `ox.Cond` and `ox.Vmap` come in:
+
+```python
+cone_constraints = ox.Vmap(
+    lambda apex, R_gate, n_hat, s_gate, s_prev: ox.Cond(
+        ox.All([
+            progress[0] >= s_prev,
+            progress[0] <= s_gate,
+            ox.Sum(velocity * n_hat) <= 0.0,
+        ]),
+        g_gate_cone(apex, R_gate, position),
+        -1.0,  # Inactive: return feasible value
+    ),
+    batch=[all_apexes, all_rotations, all_n_hats, all_s_gates, all_s_prevs],
+)
+constraints.append(ox.ctcs(cone_constraints <= 0.0))
+```
+
+`ox.Cond` evaluates a condition and returns one of two expressions.
+When the condition is true (drone is in the approach segment for this gate), we evaluate the cone constraint.
+When false, we return $-1.0$, which trivially satisfies the $\leq 0$ inequality.
+`ox.Vmap` vectorizes this over all gates, just as we vectorized obstacle constraints in [Tutorial 03](03_obstacle_avoidance_vmap.md).
+
+#### Free Time Dilation
 
 !!! warning
     Should talk about the free time-dilation. Make sure to mention that we don't have any hard evidence (yet) on this improving performance
