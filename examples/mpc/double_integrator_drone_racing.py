@@ -390,7 +390,8 @@ if __name__ == "__main__":
     for obs_center in obstacle_centers:
         constraints.append(ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obs_center)))
 
-    # Gate cone constraints (vectorized) — active only when progress is between prev and current gate
+    # Gate cone constraints (vectorized)
+    # Active only when progress is between prev and current gate
     all_apexes = np.array(gate_cone_apexes)  # (n_gates, 3)
     all_rotations = np.array(gate_cone_rotations)  # (n_gates, 3, 3)
     all_n_hats = np.array(
