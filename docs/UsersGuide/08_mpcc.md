@@ -275,10 +275,9 @@ lag_cost = lag_scalar**2
 contour_cost = ox.Max(ox.Sum(e * e) - lag_scalar**2, 0.0)
 ```
 
-!!! note
-    We use `ox.Sum(e * e)` rather than `ox.linalg.Norm(e)**2` to avoid the derivative singularity $\partial \| \mathbf{e} \| / \partial \mathbf{e} = \mathbf{e} / \| \mathbf{e} \|$ at $\mathbf{e} = 0$
-    
-    The `ox.Max(..., 0.0)` clamp handles floating-point cases where the subtraction goes slightly negative.
+!!! note "Numerical Considerations"
+    - We use `ox.Sum(e * e)` rather than `ox.linalg.Norm(e)**2` to avoid the derivative singularity $\partial \| \mathbf{e} \| / \partial \mathbf{e} = \mathbf{e} / \| \mathbf{e} \|$ at $\mathbf{e} = 0$
+    - The `ox.Max(..., 0.0)` clamp handles floating-point cases where the subtraction goes slightly negative.
 
 ### Dynamics
 
@@ -511,10 +510,31 @@ Controls are shifted forward with the last value repeated; cost integrator guess
 We've now set up the core elements of the MPC(C) problem: initializing, solving, and shifting the initial condition and guess.
 However, in the general case we will not have an analytical reference path.
 Instead, we may have a set of discrete points from a pre-solved trajectory, a motion capture recording, or hand-placed waypoints.
+Let us examine an extension of the analytical Dubins car MPCC problem, sampling $M$ discrete points from the circle as our discrete path.
 We need a way to evaluate the reference position and tangent at arbitrary progress values within the symbolic expression graph.
 
 Linear interpolation between sparse points creates kinks in the tangent field, which cause oscillations in the contour error.
 We need something smoother: cubic spline interpolation.
+
+### Periodicity via Tiling
+
+Before building the splines, we need to do our chores and handle periodicity.
+Just as in the analytical case, we must accommodate the horizon looking ahead of the current position for progress values in $[-0.5L, 1.5L]$ which necessitates us "tiling" the data to cover this range.
+We tile the single-lap data by replicating the position samples at shifted arc-length offsets to create an `s_data` that covers the full range of the progress state:
+
+```python
+M = 30  # Samples per lap
+# s_lap, px_lap, py_lap: single-lap arc-length and position arrays
+
+s_min, s_max = -0.5 * total_arc_length, 1.5 * total_arc_length
+n_before = int(np.ceil(-s_min / total_arc_length))
+n_after = int(np.ceil(s_max / total_arc_length))
+tile_laps = range(-n_before, n_after + 1)
+
+s_data = np.concatenate([s_lap + k * total_arc_length for k in tile_laps])
+px_data = np.tile(px_lap, len(tile_laps))
+py_data = np.tile(py_lap, len(tile_laps))
+```
 
 ### Cubic Splines
 
@@ -522,24 +542,21 @@ OpenSCvx supports cubic splines via the `ox.Cinterp(x, xp, fp)` operator.
 Given breakpoints `xp` and values `fp` (both NumPy arrays, known at problem construction time), it evaluates the natural cubic spline at the symbolic query point `x`.
 This is the symbolic analog of `scipy.interpolate.CubicSpline` — in fact, it uses the same coefficients under the hood.
 
-To build a discrete reference path from $M$ sample points:
+With the tiled data in hand, building the reference path is straightforward:
 
 ```python
-from scipy.interpolate import CubicSpline as _CS
-
-M = 30  # Samples per lap
-# s_data, px_data, py_data: arc-length and position arrays (NumPy)
-
 p_ref = ox.Concat(
     ox.Cinterp(progress[0], s_data, px_data),
     ox.Cinterp(progress[0], s_data, py_data),
 )
 ```
 
-The tangent field requires a bit more care.
+The tangent field requires a bit more care for this example.
 We compute the derivative of the cubic spline at the breakpoints using SciPy, normalize to get unit tangents, and then interpolate _those_ with a second `ox.Cinterp`:
 
 ```python
+from scipy.interpolate import CubicSpline as _CS
+
 _dpx = _CS(s_data, px_data)(s_data, 1)  # Derivative at breakpoints
 _dpy = _CS(s_data, py_data)(s_data, 1)
 _tnorm = np.sqrt(_dpx**2 + _dpy**2)
@@ -552,16 +569,16 @@ tangent = ox.Concat(
 )
 ```
 
-Why not differentiate `ox.Cinterp` symbolically?
-We could, but pre-computing the tangent at the breakpoints and re-interpolating gives us a smooth, well-behaved tangent field with explicit normalization, and it avoids propagating derivative computations through the spline evaluation during SCP linearization.
+!!! tip
+    If our reference trajectory also contains velocity information (which it will soon), this allows us to define the tangent direction without resorting to numerical differentiation
 
-The rest of the MPCC formulation — error decomposition, cost integrators, dynamics, MPC loop — is identical to the analytical case.
+The rest of the MPCC formulation, error decomposition, cost integrators, dynamics, MPC loop, is identical to the analytical case with only minor adjustments to the heuristic components.
 This is the beauty of the approach: swapping from an analytical reference to a discrete one is purely a matter of changing how `p_ref` and `tangent` are constructed.
 
 ### Initialization with Discrete References
 
 With an analytical reference we could compute position and heading guesses from closed-form expressions.
-With a discrete reference we no longer have that luxury — instead we interpolate the reference data arrays directly.
+With a discrete reference we instead interpolate the reference data arrays directly:
 
 ```python
 def set_initial_guess(theta_start: float = 0.0, ref_speed: float = 5.0):
@@ -592,46 +609,10 @@ def set_initial_guess(theta_start: float = 0.0, ref_speed: float = 5.0):
     contour_sum.guess = np.zeros((n_mpc, 1))
 ```
 
-Position is looked up via `np.interp` (linear is fine for the _guess_); heading is inferred from the reference segment direction at each node via `np.searchsorted`.
+Position is looked up via `np.interp` (linear is fine for the _guess_).
+For heading, we need the direction of travel at each guess point — but with a discrete reference we don't have an analytical tangent.
+Instead, `np.searchsorted` finds which reference segment each `arc_guess` value falls on, and we compute the heading from the direction of that segment (`seg_dp`).
 The `shift_guess` and `update_initial_conditions` functions are structurally identical to the analytical case — wrapping and extrapolation depend on the dynamics, not the reference representation.
-
-### Periodicity via Tiling
-
-For closed-loop racing (multiple laps), we need the reference path to be periodic.
-We handle this by _tiling_ the single-lap data: replicate the position samples at shifted arc-length offsets so that `s_data` covers the full range of the progress state.
-
-```python
-s_min, s_max = -0.5 * total_arc_length, 1.5 * total_arc_length
-n_before = int(np.ceil(-s_min / total_arc_length))
-n_after = int(np.ceil(s_max / total_arc_length))
-tile_laps = range(-n_before, n_after + 1)
-
-s_data = np.concatenate([s_lap + k * total_arc_length for k in tile_laps])
-px_data = np.tile(px_lap, len(tile_laps))
-py_data = np.tile(py_lap, len(tile_laps))
-```
-
-The progress state bounds are set wide enough (here $[-0.5L, 1.5L]$) to accommodate the horizon looking ahead of the current position, and a wrapping operation in the MPC loop keeps the progress from growing without bound.
-
-### Per-State Cost Weighting
-
-As we saw in the simple example, `lam_cost` keeps the cost weights separate from the dynamics formulation:
-
-```python
-problem_mpc = ox.Problem(
-    ...
-    algorithm={
-        "autotuner": ox.ConstantProximalWeight(),
-        "lam_cost": {
-            "lag_sum": 1e0,
-            "contour_sum": 1e-1,
-            "progress": 1e-1,
-        },
-    },
-)
-```
-
-This is especially useful when iterating on a discrete-reference MPCC: you can re-tune the trade-off between progress maximization and tracking accuracy without touching the dynamics or re-deriving the error decomposition.
 
 ## Drone Racing MPCC
 
