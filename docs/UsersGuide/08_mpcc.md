@@ -764,13 +764,19 @@ for obs_center in obstacle_centers:
 
 For the time-optimal reference trajectory we enforced the gates as convex nodal constraints, placing every k-th optimization node at a gate.
 This is no longer possible in the receding-horizon setting; we cannot guarantee that any node lies at a particular gate.
-While the contour error minimization encourages the closed-loop path to follow the reference trajectory through the gates, it does not enforce this.
+While the contour error minimization encourages the closed-loop path to follow the reference trajectory through the gates, it does not guarantee it.
 
 To generically constrain the MPCC optimizer to travel through the gates, we borrow the cone formulation from [tutorial 04](04_viewpoint_constraints.md) to create approach cone constraints for each gate.
-These are offset so that the edges of the gate exactly touch the cone.
+These are offset such that the cone exactly touches the edges of the gate.
+This problem would quickly become infeasible for multiple cones.
+Therefore, we use a _progress-dependent_ condition to trigger a gates cone constraint when the drone is between the previous gate and the current gate.
+We use an `ox.Cond`/`ox.All` statement as introduced in [tutorial 06](06_logic.md) to encode this logic statement.
+Additionally, we add the constraint that $v \cdot n_{\textrm{gate}} <=0$ (the velocity projected onto the cone normal is negative) to ensure that the constraint is only active when the drone is flying towards a gate.
+This allows the drone to "fly around the corner" before the cone constraint becomes active.
 
-For gate constraints, we use a cone formulation that is _progress-dependent_: a gate cone constraint is only active when the drone's progress is between the previous gate and the current one, and when the drone is approaching the gate (velocity pointing toward it).
-This is where `ox.Cond` and `ox.Vmap` come in:
+Finally, to speed up initialization of the MPCC problem we use `ox.Vmap` from [tutorial 03](03_obstacle_avoidance_vmap.md) to leverage data-parallelism for all of the gates.
+
+Putting all this together results in our cone constraints:
 
 ```python
 cone_constraints = ox.Vmap(
@@ -788,23 +794,56 @@ cone_constraints = ox.Vmap(
 constraints.append(ox.ctcs(cone_constraints <= 0.0))
 ```
 
-`ox.Cond` evaluates a condition and returns one of two expressions.
-When the condition is true (drone is in the approach segment for this gate), we evaluate the cone constraint.
-When false, we return $-1.0$, which trivially satisfies the $\leq 0$ inequality.
-`ox.Vmap` vectorizes this over all gates, just as we vectorized obstacle constraints in [Tutorial 03](03_obstacle_avoidance_vmap.md).
-
 #### Free Time Dilation
 
-!!! warning
-    Should talk about the free time-dilation. Make sure to mention that we don't have any hard evidence (yet) on this improving performance
+We can leverage the built-in time dilation of OpenSCvx to allow the optimizer to dilate time "as necessary" to improve performance while keeping a fixed time horizon, giving it one more knob to turn.
+To ensure a consistent loop rate, we constrain that time at node 1 is always $t_{\textrm{MPCC}}$ in the future.
+
+```python
+t = ox.Time(
+    initial=0.0,
+    final=horizon_duration, # Still fixed!
+    min=0.0,
+    max=horizon_duration,
+    # Note: uniform_time_grid is NOT set, allowing non-uniform spacing
+)
+
+# Pin node 1 at a fixed dt so the MPC loop rate is constant
+constraints.append(
+    (t == horizon_duration / (n_mpc - 1)).convex().at(1)
+)
+```
+
+We also shift the time and time dilation guesses identically to the other states and controls:
+
+```python
+# Inside shift_guess(nodes):
+
+# Time: shift forward and renormalize so the horizon starts at t=0
+dtau = 1.0 / (n_mpc - 1)
+ext_time = nodes["time"][-1, 0] + nodes["_time_dilation"][-1, 0] * dtau
+shifted_time = np.vstack([nodes["time"][1:], [[ext_time]]])
+shifted_time -= shifted_time[0]  # Re-zero the horizon
+t.guess = shifted_time
+
+# Time dilation: shift forward, repeat last value
+t._time_dilation_control.guess = np.vstack(
+    [nodes["_time_dilation"][1:], nodes["_time_dilation"][-1:]]
+)
+```
+
+!!! note
+    We have not done extensive comparisons on the benefits/costs of allowing for non-constant time-dilation in the MPCC problem.
+    Depending on your problem, it may or may not be beneficial.
+    At the very least it's a cool feature that can be enabled at minimal cost :)
 
 ## Key Takeaways
 
-1. **Multi-objective Mayer costs**: `ox.Minimize` and `ox.Maximize` on state finals let you encode multiple competing running costs and rewards as integrator states. This is a general pattern that works for any Lagrange-to-Mayer conversion.
+1. **Multi-objective Mayer costs**: `ox.Minimize` and `ox.Maximize` on state finals let you encode multiple competing running costs and rewards as integrator states. This is a general pattern that works for any Lagrange-to-Mayer conversion. The `lam_cost` dictionary provides per-state cost weighting, separating the tuning of relative objective importance from the dynamics formulation.
 2. **`ox.Cinterp`**: Cubic spline interpolation within the symbolic graph enables smooth lookup of discrete reference data. Pre-computing the tangent field from the spline derivative and re-interpolating it avoids singularities and gives a clean tangent field.
 3. **The MPC pattern**: `problem.reset()` → `problem.solve()` → advance initial conditions → shift guess. Warm-starting from the shifted previous solution is essential for fast convergence.
-4. **Two-phase planning**: Solving the hard global problem offline (time-optimal trajectory through gates) and tracking it online with MPCC is a powerful decomposition. The MPCC handles local disturbances and model mismatch while the offline solution provides the global plan.
-5. **`lam_cost` dictionary**: Per-state cost weighting gives you a convenient tuning knob for the trade-off between multiple competing objectives.
+4. **Progress-dependent gate constraints**: Combining `ox.Cond`, `ox.All`, and `ox.Vmap` lets you encode constraints that activate only when the system is in a particular region of the path. This replaces the fixed node-to-gate assignment from single-shot problems with a formulation that works regardless of which nodes happen to be near a gate.
+5. **Two-phase planning**: Solving the hard global problem offline (time-optimal trajectory through gates) and tracking it online with MPCC is a powerful decomposition. The MPCC handles local disturbances and model mismatch while the offline solution provides the global plan.
 
 ## Further Reading
 
@@ -812,6 +851,8 @@ When false, we return $-1.0$, which trivially satisfies the $\leq 0$ inequality.
 - [Dubins Car MPCC Example (discrete reference)](../Examples/mpc/dubins_car_circle_polytope.md)
 - [3D Double Integrator MPCC Example](../Examples/mpc/double_integrator_polytope.md)
 - [Drone Racing MPCC Example](../Examples/mpc/double_integrator_drone_racing.md)
-- Romero, A. _et al._ (2022). "Model Predictive Contouring Control for Time-Optimal Quadrotor Flight." _IEEE Transactions on Robotics._
+- [Romero _et al._ (2022). "Model Predictive Contouring Control for Time-Optimal Quadrotor Flight." _IEEE Transactions on Robotics._](https://arxiv.org/abs/2108.13205)
+- [Lam _et al._ (2010). "Model Predictive Contouring Control." _IEEE Conference on Decision and Control._](https://web.archive.org/web/20170811172607id_/http://people.eng.unimelb.edu.au/manziec/resources/Publications%20pdfs/10_Conf_Lam.pdf)
+- [Krinner _et al._ (2024). "MPCC++: Model Predictive Contouring Control for Time-Optimal Flight with Safety Constraints." _Robotics: Science and Systems._](https://arxiv.org/abs/2403.17551v2))
 - [Drone Racing: Constraints and 3-DOF Dynamics](02_drone_racing_constraints.md) — the single-shot trajectory used as the MPCC reference
 - [Obstacle Avoidance: Vmap](03_obstacle_avoidance_vmap.md) — vectorized constraints used in the gate cone formulation
