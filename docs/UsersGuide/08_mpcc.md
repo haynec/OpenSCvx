@@ -489,8 +489,21 @@ def shift_guess(nodes: dict):
     position.guess = np.vstack([nodes["position"][1:], [ext_pos]])
     heading.guess = shifted_heading
     progress.guess = shifted_progress
-    lag_sum.guess = np.zeros((n_mpc, 1))
-    contour_sum.guess = np.zeros((n_mpc, 1))
+
+    # Cost integrators: shift and re-zero to preserve the accumulated profile
+    lag_offset = nodes["lag_sum"][1]
+    lag_sum.guess = np.maximum(
+        np.vstack([nodes["lag_sum"][1:] - lag_offset,
+                    nodes["lag_sum"][-1:] - lag_offset]),
+        0.0,
+    )
+
+    contour_offset = nodes["contour_sum"][1]
+    contour_sum.guess = np.maximum(
+        np.vstack([nodes["contour_sum"][1:] - contour_offset,
+                    nodes["contour_sum"][-1:] - contour_offset]),
+        0.0,
+    )
 
     # Controls: shift forward, repeat last value for the new final node
     speed.guess = np.vstack([nodes["speed"][1:], nodes["speed"][-1:]])
@@ -503,7 +516,10 @@ def shift_guess(nodes: dict):
 ```
 
 The wrap offsets are computed from node 1 of the previous solution (which becomes node 0 of the new problem) so the whole horizon shifts consistently.
-Controls are shifted forward with the last value repeated; cost integrator guesses are reset to zero.
+Controls are shifted forward with the last value repeated.
+The cost integrators deserve special attention: rather than resetting them to zero, we subtract the value at node 1 (which becomes the new node 0, where the integrator restarts at zero) and shift the rest down.
+This preserves the _shape_ of the accumulated cost profile from the previous solution, giving the solver a much better warm-start than a flat zero guess.
+The `np.maximum(..., 0.0)` clamp guards against numerical noise producing slightly negative values.
 
 ## Discrete Reference Paths
 
@@ -746,6 +762,7 @@ def shift_guess(nodes: dict):
 
 The appended node now lies on the reference trajectory rather than being a rough dynamical extrapolation.
 This is the same idea as `set_initial_guess` — query the reference at the right arc-length — applied at every MPC step.
+The cost integrators are shifted using the same offset-and-clamp pattern [introduced above](#warm-starting-shifting-the-guess), preserving the accumulated cost profile shape.
 
 ### Additional Constraints and Extensions
 
