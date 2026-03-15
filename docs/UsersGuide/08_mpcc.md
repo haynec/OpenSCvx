@@ -847,6 +847,44 @@ t._time_dilation_control.guess = np.vstack(
     Depending on your problem, it may or may not be beneficial.
     At the very least it's a cool feature that can be enabled at minimal cost :)
 
+## Realtime Interactive MPCC
+
+The [`realtime_double_integrator_drone_racing.py`](../Examples/mpc/realtime_double_integrator_drone_racing.md) example extends the drone racing MPCC into a live, interactive demo.
+Rather than running a fixed number of MPC steps, it runs indefinitely in a `while True` loop with realtime viser visualization that updates after each solve.
+
+The key change that enables interactivity is the use of `ox.Parameter` for the obstacle centers:
+
+```python
+obstacle_centers = [
+    ox.Parameter(f"obstacle_center_{i}", shape=(3,), value=pos)
+    for i, pos in enumerate(obstacle_center_positions)
+]
+```
+
+Unlike a plain NumPy array baked into the symbolic graph at construction time, an `ox.Parameter` can be updated between solves without re-initializing the problem.
+The obstacle avoidance constraints reference these parameters in the usual way:
+
+```python
+for obs_center in obstacle_centers:
+    constraints.append(
+        ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obs_center))
+    )
+```
+
+When the user clicks and drags an obstacle in the viser 3D view, a callback updates both the parameter value and the problem's parameter store:
+
+```python
+obstacle_centers[obs_idx].value = new_center
+problem_mpc.parameters[obstacle_centers[obs_idx].name] = new_center
+```
+
+The next `problem_mpc.solve()` call picks up the new obstacle position automatically — no recompilation, no re-initialization.
+The drone replans around the moved obstacle on the very next MPC step, demonstrating the closed-loop reactivity that makes MPCC useful in practice.
+
+!!! warning
+    Because the user has no constraints on where they place the obstacles, it is possible to position them in such a way as to make the problem infeasible.
+    When this occurs, the SCP algorithm will max out the allowed iterations, resulting in slow convergence and unexpected behavior.
+
 ## Key Takeaways
 
 1. **Multi-objective Mayer costs**: `ox.Minimize` and `ox.Maximize` on state finals let you encode multiple competing running costs and rewards as integrator states. This is a general pattern that works for any Lagrange-to-Mayer conversion. The `lam_cost` dictionary provides per-state cost weighting, separating the tuning of relative objective importance from the dynamics formulation.
@@ -861,6 +899,7 @@ t._time_dilation_control.guess = np.vstack(
 - [Dubins Car MPCC Example (discrete reference)](../Examples/mpc/dubins_car_circle_polytope.md)
 - [3D Double Integrator MPCC Example](../Examples/mpc/double_integrator_polytope.md)
 - [Drone Racing MPCC Example](../Examples/mpc/double_integrator_drone_racing.md)
+- [Realtime Interactive Drone Racing MPCC Example](../Examples/mpc/realtime_double_integrator_drone_racing.md)
 - [Romero _et al._ (2022). "Model Predictive Contouring Control for Time-Optimal Quadrotor Flight." _IEEE Transactions on Robotics._](https://arxiv.org/abs/2108.13205)
 - [Lam _et al._ (2010). "Model Predictive Contouring Control." _IEEE Conference on Decision and Control._](https://web.archive.org/web/20170811172607id_/http://people.eng.unimelb.edu.au/manziec/resources/Publications%20pdfs/10_Conf_Lam.pdf)
 - [Krinner _et al._ (2024). "MPCC++: Model Predictive Contouring Control for Time-Optimal Flight with Safety Constraints." _Robotics: Science and Systems._](https://arxiv.org/abs/2403.17551v2)
