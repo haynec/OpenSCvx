@@ -1,6 +1,9 @@
 """MPCC example: Dubins car tracking a circular reference trajectory (discrete).
 
+Based on the MPCC formulation from [Romero _et al._ (2022)](https://arxiv.org/abs/2108.13205).
+
 Demonstrates model-predictive contouring control (MPCC) with:
+
 - 2D Dubins car dynamics (position + heading, speed + angular rate controls)
 - Discrete reference path via Cinterp (sampled from a circle, generalizes to arbitrary paths)
 - Lag/contour error decomposition following Romero 2022

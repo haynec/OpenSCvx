@@ -1,6 +1,9 @@
 """MPCC example: 3D double integrator tracking a circular reference trajectory (discrete).
 
+Based on the MPCC formulation from [Romero _et al._ (2022)](https://arxiv.org/abs/2108.13205).
+
 Demonstrates model-predictive contouring control (MPCC) with:
+
 - 3D double integrator (point mass) dynamics (position + velocity, force control)
 - Discrete reference path via Cinterp (sampled from a periodic function arbitrary 3D paths)
 - Lag/contour error decomposition following Romero 2022

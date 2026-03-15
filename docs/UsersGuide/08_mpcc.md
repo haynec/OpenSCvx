@@ -770,7 +770,7 @@ This is no longer possible in the receding-horizon setting; we cannot guarantee 
 While the contour error minimization encourages the closed-loop path to follow the reference trajectory through the gates, it does not guarantee it.
 
 To generically constrain the MPCC optimizer to travel through the gates, we borrow the cone formulation from [tutorial 04](04_viewpoint_constraints.md) to create approach cone constraints for each gate.
-These are offset such that the cone exactly touches the edges of the gate.
+Each cone opens toward its gate so that the only way to satisfy the constraint is to fly through the gate opening with the cone apexes offset such that the cone exactly touches the edges of the gate.
 This problem would quickly become infeasible for multiple cones.
 Therefore, we use a _progress-dependent_ condition to trigger a gates cone constraint when the drone is between the previous gate and the current gate.
 We use an `ox.Cond`/`ox.All` statement as introduced in [tutorial 06](06_logic.md) to encode this logic statement.
@@ -844,7 +844,7 @@ t._time_dilation_control.guess = np.vstack(
 
 1. **Multi-objective Mayer costs**: `ox.Minimize` and `ox.Maximize` on state finals let you encode multiple competing running costs and rewards as integrator states. This is a general pattern that works for any Lagrange-to-Mayer conversion. The `lam_cost` dictionary provides per-state cost weighting, separating the tuning of relative objective importance from the dynamics formulation.
 2. **`ox.Cinterp`**: Cubic spline interpolation within the symbolic graph enables smooth lookup of discrete reference data. Pre-computing the tangent field from the spline derivative and re-interpolating it avoids singularities and gives a clean tangent field.
-3. **The MPC pattern**: `problem.reset()` → `problem.solve()` → advance initial conditions → shift guess. Warm-starting from the shifted previous solution is essential for fast convergence.
+3. **The MPC pattern**: `problem.reset()` -> `problem.solve()` -> advance initial conditions -> shift guess. Warm-starting from the shifted previous solution is essential for fast convergence.
 4. **Progress-dependent gate constraints**: Combining `ox.Cond`, `ox.All`, and `ox.Vmap` lets you encode constraints that activate only when the system is in a particular region of the path. This replaces the fixed node-to-gate assignment from single-shot problems with a formulation that works regardless of which nodes happen to be near a gate.
 5. **Two-phase planning**: Solving the hard global problem offline (time-optimal trajectory through gates) and tracking it online with MPCC is a powerful decomposition. The MPCC handles local disturbances and model mismatch while the offline solution provides the global plan.
 
@@ -856,6 +856,6 @@ t._time_dilation_control.guess = np.vstack(
 - [Drone Racing MPCC Example](../Examples/mpc/double_integrator_drone_racing.md)
 - [Romero _et al._ (2022). "Model Predictive Contouring Control for Time-Optimal Quadrotor Flight." _IEEE Transactions on Robotics._](https://arxiv.org/abs/2108.13205)
 - [Lam _et al._ (2010). "Model Predictive Contouring Control." _IEEE Conference on Decision and Control._](https://web.archive.org/web/20170811172607id_/http://people.eng.unimelb.edu.au/manziec/resources/Publications%20pdfs/10_Conf_Lam.pdf)
-- [Krinner _et al._ (2024). "MPCC++: Model Predictive Contouring Control for Time-Optimal Flight with Safety Constraints." _Robotics: Science and Systems._](https://arxiv.org/abs/2403.17551v2))
+- [Krinner _et al._ (2024). "MPCC++: Model Predictive Contouring Control for Time-Optimal Flight with Safety Constraints." _Robotics: Science and Systems._](https://arxiv.org/abs/2403.17551v2)
 - [Drone Racing: Constraints and 3-DOF Dynamics](02_drone_racing_constraints.md) — the single-shot trajectory used as the MPCC reference
 - [Obstacle Avoidance: Vmap](03_obstacle_avoidance_vmap.md) — vectorized constraints used in the gate cone formulation

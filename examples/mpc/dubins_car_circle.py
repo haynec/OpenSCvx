@@ -1,6 +1,9 @@
 """MPCC example: Dubins car tracking a circular reference trajectory.
 
+Based on the MPCC formulation from [Romero _et al._ (2022)](https://arxiv.org/abs/2108.13205).
+
 Demonstrates model-predictive contouring control (MPCC) with:
+
 - 2D Dubins car dynamics (position + heading, speed + angular rate controls)
 - Analytical circular reference path (no Linterp, no pre-solved trajectory)
 - Lag/contour error decomposition following Romero 2022
@@ -65,7 +68,7 @@ progress.final = [ox.Maximize(0.0)]
 
 lag_sum = ox.State("lag_sum", shape=(1,))  # Integrated lag cost
 lag_sum.min = np.array([0.0])
-lag_sum.max = np.array([1e-3])
+lag_sum.max = np.array([1e0])
 lag_sum.initial = np.array([0.0])
 lag_sum.final = [ox.Minimize(0.0)]
 

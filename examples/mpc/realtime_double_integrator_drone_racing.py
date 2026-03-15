@@ -1,6 +1,9 @@
 """Realtime MPCC drone racing: 3D double integrator with live visualization.
 
+Based on the MPCC formulation from [Romero _et al._ (2022)](https://arxiv.org/abs/2108.13205).
+
 Two-phase example:
+
 1. Solve a time-optimal drone racing trajectory through gates (double integrator)
 2. Use model-predictive contouring control (MPCC) to track it in closed loop,
    with the viser visualization updating in realtime after each MPC solve
