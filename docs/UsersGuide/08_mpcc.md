@@ -896,9 +896,9 @@ The drone replans around the moved obstacle on the very next MPC step, demonstra
 ## Further Reading
 
 - MPCC Examples
-    - [Dubins Car MPCC Example (analytical circle)](../Examples/mpc/dubins_car_circle.md)
-    - [Dubins Car MPCC Example (discrete reference)](../Examples/mpc/dubins_car_circle_polytope.md)
-    - [3D Double Integrator MPCC Example](../Examples/mpc/double_integrator_polytope.md)
+    - [Dubins Car MPCC Example (analytical circle)](../Examples/mpc/dubins_car_circle_analytical.md)
+    - [Dubins Car MPCC Example (discrete reference)](../Examples/mpc/dubins_car_circle_discrete.md)
+    - [3D Double Integrator MPCC Example](../Examples/mpc/double_integrator_discrete.md)
     - [Drone Racing MPCC Example](../Examples/mpc/double_integrator_drone_racing.md)
     - [Realtime Interactive Drone Racing MPCC Example](../Examples/mpc/realtime_double_integrator_drone_racing.md)
 - [Romero _et al._ (2022). "Model Predictive Contouring Control for Time-Optimal Quadrotor Flight." _IEEE Transactions on Robotics._](https://arxiv.org/abs/2108.13205)
