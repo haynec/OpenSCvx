@@ -15,6 +15,7 @@ The tutorials are designed to be read in order. Each builds on concepts from the
 | [05 Visualization](05_visualization.md) | — | 2D plots with Plotly, 3D interactive visualization with viser, Plotly-in-viser |
 | [06 Dubin's Car](06_logic.md) | Conditional path planning | Conditional statements, signal temporal logic (STL) |
 | [07 Multi-Link Arms](07_lie.md) | Articulated robot control | Lie algebra, propagated states |
+| [08 Model Predictive Control](08_mpcc.md) | Closed-loop drone racing | Receding horizon control, warm starting, cubic spline interpolation |
 
 ## Quick Start
 
