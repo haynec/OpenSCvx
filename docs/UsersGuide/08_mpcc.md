@@ -895,11 +895,12 @@ The drone replans around the moved obstacle on the very next MPC step, demonstra
 
 ## Further Reading
 
-- [Dubins Car MPCC Example (analytical circle)](../Examples/mpc/dubins_car_circle.md)
-- [Dubins Car MPCC Example (discrete reference)](../Examples/mpc/dubins_car_circle_polytope.md)
-- [3D Double Integrator MPCC Example](../Examples/mpc/double_integrator_polytope.md)
-- [Drone Racing MPCC Example](../Examples/mpc/double_integrator_drone_racing.md)
-- [Realtime Interactive Drone Racing MPCC Example](../Examples/mpc/realtime_double_integrator_drone_racing.md)
+- MPCC Examples
+    - [Dubins Car MPCC Example (analytical circle)](../Examples/mpc/dubins_car_circle.md)
+    - [Dubins Car MPCC Example (discrete reference)](../Examples/mpc/dubins_car_circle_polytope.md)
+    - [3D Double Integrator MPCC Example](../Examples/mpc/double_integrator_polytope.md)
+    - [Drone Racing MPCC Example](../Examples/mpc/double_integrator_drone_racing.md)
+    - [Realtime Interactive Drone Racing MPCC Example](../Examples/mpc/realtime_double_integrator_drone_racing.md)
 - [Romero _et al._ (2022). "Model Predictive Contouring Control for Time-Optimal Quadrotor Flight." _IEEE Transactions on Robotics._](https://arxiv.org/abs/2108.13205)
 - [Lam _et al._ (2010). "Model Predictive Contouring Control." _IEEE Conference on Decision and Control._](https://web.archive.org/web/20170811172607id_/http://people.eng.unimelb.edu.au/manziec/resources/Publications%20pdfs/10_Conf_Lam.pdf)
 - [Krinner _et al._ (2024). "MPCC++: Model Predictive Contouring Control for Time-Optimal Flight with Safety Constraints." _Robotics: Science and Systems._](https://arxiv.org/abs/2403.17551v2)
