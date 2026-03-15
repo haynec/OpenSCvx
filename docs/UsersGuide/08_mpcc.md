@@ -770,7 +770,14 @@ This is no longer possible in the receding-horizon setting; we cannot guarantee 
 While the contour error minimization encourages the closed-loop path to follow the reference trajectory through the gates, it does not guarantee it.
 
 To generically constrain the MPCC optimizer to travel through the gates, we borrow the cone formulation from [tutorial 04](04_viewpoint_constraints.md) to create approach cone constraints for each gate.
-Each cone opens toward its gate so that the only way to satisfy the constraint is to fly through the gate opening with the cone apexes offset such that the cone exactly touches the edges of the gate.
+Each cone opens toward its gate so that the only way to satisfy the constraint is to fly through the gate opening.
+The apex of each cone is placed behind the gate center along the gate normal $\hat{\mathbf{n}}$ so that the cone's cross-section at the gate plane exactly matches the gate opening:
+
+$$
+\mathbf{a} = \mathbf{c}_{\textrm{gate}} - \frac{w}{\tan \alpha} \, \hat{\mathbf{n}}
+$$
+
+where $\mathbf{a}$ is the cone apex, $\mathbf{c}_{\textrm{gate}}$ is the gate center, $w$ is the gate half-width, and $\alpha$ is the cone half-angle.
 This problem would quickly become infeasible for multiple cones.
 Therefore, we use a _progress-dependent_ condition to trigger a gates cone constraint when the drone is between the previous gate and the current gate.
 We use an `ox.Cond`/`ox.All` statement as introduced in [tutorial 06](06_logic.md) to encode this logic statement.
