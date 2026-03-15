@@ -1,11 +1,10 @@
 # 08 Receding Horizon Drone Racing: Model Predictive Contouring Control
 
 In this tutorial we step away from single-shot trajectory optimization and into the world of receding-horizon control.
-We will implement _model predictive contouring control_ (MPCC), a technique for tracking a reference path as fast as possible, and in doing so introduce several new concepts: multi-objective Mayer costs using integrator states with `ox.Minimize` and `ox.Maximize`, cubic spline interpolation within the symbolic graph via `ox.Cinterp`, as well as the receding-horizon MPC loop pattern.
+We will implement _model predictive contouring control_ (MPCC), a technique for tracking a reference path as fast as possible.
+Starting from a simple 2D example with an analytical reference path, we will build up to a full drone racing MPCC that tracks a pre-solved time-optimal trajectory through gates and around obstacles.
 
-We will start from a simple 2D example with an analytical reference path to introduce the core concepts before generalizing to discrete reference paths. Finally, we will build a full drone racing MPCC problem that tracks a pre-solved time-optimal trajectory through gates and around dynamic obstacles.
-
-This tutorial covers:
+Along the way, this tutorial introduces:
 
 - Using OpenSCvx in a receding-horizon setting
 - Multi-objective Mayer costs with `ox.Minimize` and `ox.Maximize` and per-state cost weighting with `lam_cost`
@@ -19,7 +18,7 @@ This tutorial covers:
 Before jumping into the MPCC implementation, let us first introduce the key concepts of the formulation. Readers in a hurry can jump straight to the [Dubins Car](#a-simple-example-dubins-car-on-a-circle) and [drone racing](#drone-racing-mpcc) sections and get to coding.
 
 In the previous tutorials we solved trajectory optimization problems offline and obtained high-performance solutions.
-In practice, however, we may need a closed-loop controller to _execute_ these trajectories in the presence of unmodeled dynamics, unseen obstacles, _etc._
+In practice, however, we may need a closed-loop controller to _execute_ these trajectories in the presence of unmodeled dynamics, environmental uncertainty, unseen obstacles, _etc._
 A natural approach is to track the pre-solved trajectory using a receding-horizon controller to allow for replanning to account for changes in the environment in a closed-loop fashion.
 In this tutorial we will implement _model predictive contouring control_ (MPCC), a formulation originally introduced by [Lam _et al._ 2010](https://doi.org/10.1016/j.automatica.2009.10.027) and applied to drone racing by [Romero _et al._ 2022](https://arxiv.org/abs/2108.13205) (see also [Krinner _et al._ 2024](https://arxiv.org/abs/2403.17551v2)). We will follow along with the implementation of Romero.
 
