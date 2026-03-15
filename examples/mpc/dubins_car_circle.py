@@ -213,8 +213,23 @@ def shift_guess(nodes: dict):
     position.guess = np.vstack([nodes["position"][1:], ext_pos])
     heading.guess = shifted_heading
     progress.guess = shifted_progress
-    lag_sum.guess = np.zeros((n_mpc, 1))
-    contour_sum.guess = np.zeros((n_mpc, 1))
+
+    lag_offset = nodes["lag_sum"][1]
+    lag_sum.guess = np.maximum(
+        np.vstack([nodes["lag_sum"][1:] - lag_offset, nodes["lag_sum"][-1:] - lag_offset]),
+        0.0,
+    )
+
+    contour_offset = nodes["contour_sum"][1]
+    contour_sum.guess = np.maximum(
+        np.vstack(
+            [
+                nodes["contour_sum"][1:] - contour_offset,
+                nodes["contour_sum"][-1:] - contour_offset,
+            ]
+        ),
+        0.0,
+    )
 
     speed.guess = np.vstack([nodes["speed"][1:], nodes["speed"][-1:]])
     angular_rate.guess = np.vstack([nodes["angular_rate"][1:], nodes["angular_rate"][-1:]])
