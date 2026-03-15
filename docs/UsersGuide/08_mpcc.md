@@ -586,7 +586,7 @@ tangent = ox.Concat(
 ```
 
 !!! tip
-    If our reference trajectory also contains velocity information (which it will soon), this allows us to define the tangent direction without resorting to numerical differentiation
+    If our reference trajectory also contains velocity information, we could use it to define the tangent direction directly without resorting to numerical differentiation
 
 The rest of the MPCC formulation, error decomposition, cost integrators, dynamics, MPC loop, is identical to the analytical case with only minor adjustments to the heuristic components.
 This is the beauty of the approach: swapping from an analytical reference to a discrete one is purely a matter of changing how `p_ref` and `tangent` are constructed.
@@ -683,21 +683,7 @@ p_ref = ox.Concat(
 )
 ```
 
-For the tangent field, we no longer need to differentiate the position spline — the reference trajectory already contains velocity data.
-We normalize it to get unit tangents, tile it alongside the position data, and interpolate:
-
-```python
-tx_data = ref_vel[:-1, 0] / ref_speeds[:-1]
-ty_data = ref_vel[:-1, 1] / ref_speeds[:-1]
-tz_data = ref_vel[:-1, 2] / ref_speeds[:-1]
-# (tile tx_data, ty_data, tz_data the same way as position)
-
-tangent = ox.Concat(
-    ox.Cinterp(progress[0], s_data, tx_data),
-    ox.Cinterp(progress[0], s_data, ty_data),
-    ox.Cinterp(progress[0], s_data, tz_data),
-)
-```
+The tangent field is constructed using the same spline-derivative approach [introduced above](#cubic-splines), now in 3D.
 
 ### Warm-Starting from the Reference
 
