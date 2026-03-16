@@ -92,7 +92,7 @@ wp1_pred = ox.linalg.Norm(position - wp1_center) <= wp1_radius
 wp2_pred = ox.linalg.Norm(position - wp2_center) <= wp2_radius
 
 # Visit waypoint constraints using symbolic Or
-# Note: visit_wp_or_expr is already a constraint, so we can use .over() directly
+# Note: visit_wp_or_expr is already a constraint, so we can use .at() directly
 constraints.append(ox.stl.Or(wp1_pred, wp2_pred).at([3, 4, 5]))
 
 # Build the problem
