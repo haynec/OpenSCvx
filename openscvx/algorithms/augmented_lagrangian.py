@@ -142,7 +142,13 @@ class AugmentedLagrangian(AutotuningBase):
         lam_vb_nodal: np.ndarray,
         lam_prox: np.ndarray,
     ) -> np.ndarray:
-        """Update virtual buffer penalty weights for nodal constraints.
+        """
+        !!! warning
+            This code is WIP and may not be correct.
+        
+        TODO: (haynec) Flush this out.
+
+        Update virtual buffer penalty weights for nodal constraints.
 
         Evaluates each nodal constraint to obtain violation
         nu = max(0, g(x, u)), then applies the same two-case update rule
@@ -185,7 +191,13 @@ class AugmentedLagrangian(AutotuningBase):
         lam_vb_cross: np.ndarray,
         lam_prox: np.ndarray,
     ) -> np.ndarray:
-        """Update virtual buffer penalty weights for cross-node constraints.
+        """
+        !!! warning
+            This code is WIP and may not be correct.
+        
+        TODO: (haynec) Flush this out.
+        
+        Update virtual buffer penalty weights for cross-node constraints.
 
         Evaluates each cross-node constraint to obtain total violation
         nu = sum(max(0, g(X, U))), then applies the same two-case update
