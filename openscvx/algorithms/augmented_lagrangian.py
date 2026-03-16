@@ -309,12 +309,6 @@ class AugmentedLagrangian(AutotuningBase):
                 candidate.lam_vc = self._update_virtual_control_weights(
                     candidate, candidate_x_prop, settings, state.lam_vc, candidate.lam_prox
                 )
-                # candidate.lam_vb_nodal = self._update_virtual_buffer_nodal_weights(
-                #     candidate, nodal_constraints, params, state.lam_vb_nodal, candidate.lam_prox
-                # )
-                # candidate.lam_vb_cross = self._update_virtual_buffer_cross_weights(
-                #     candidate, nodal_constraints, params, state.lam_vb_cross, candidate.lam_prox
-                # )
 
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Higher"
@@ -326,12 +320,6 @@ class AugmentedLagrangian(AutotuningBase):
                 candidate.lam_vc = self._update_virtual_control_weights(
                     candidate, candidate_x_prop, settings, state.lam_vc, candidate.lam_prox
                 )
-                # candidate.lam_vb_nodal = self._update_virtual_buffer_nodal_weights(
-                #     candidate, nodal_constraints, params, state.lam_vb_nodal, candidate.lam_prox
-                # )
-                # candidate.lam_vb_cross = self._update_virtual_buffer_cross_weights(
-                #     candidate, nodal_constraints, params, state.lam_vb_cross, candidate.lam_prox
-                # )
 
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Constant"
@@ -343,12 +331,7 @@ class AugmentedLagrangian(AutotuningBase):
                 candidate.lam_vc = self._update_virtual_control_weights(
                     candidate, candidate_x_prop, settings, state.lam_vc, candidate.lam_prox
                 )
-                # candidate.lam_vb_nodal = self._update_virtual_buffer_nodal_weights(
-                #     candidate, nodal_constraints, params, state.lam_vb_nodal, candidate.lam_prox
-                # )
-                # candidate.lam_vb_cross = self._update_virtual_buffer_cross_weights(
-                #     candidate, nodal_constraints, params, state.lam_vb_cross, candidate.lam_prox
-                # )
+                
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Lower"
 
