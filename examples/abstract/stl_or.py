@@ -13,11 +13,10 @@ import os
 import sys
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 import openscvx as ox
 from openscvx import Problem
-from openscvx.plotting import plot_states, plot_controls, plot_virtual_control_heatmap
+from openscvx.plotting import plot_controls, plot_states, plot_virtual_control_heatmap
 
 # Ensure examples can be run directly by adding project root to path
 current_dir = os.path.dirname(os.path.abspath(__file__))

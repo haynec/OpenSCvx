@@ -95,7 +95,6 @@ problem = Problem(
 problem.settings.prp.dt = 0.001
 
 
-
 if __name__ == "__main__":
     problem.initialize()
     results = problem.solve()

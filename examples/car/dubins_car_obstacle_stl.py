@@ -24,8 +24,8 @@ sys.path.append(grandparent_dir)
 
 import openscvx as ox
 from examples.plotting import plot_dubins_car, plot_velocity_vs_distance
-from openscvx.plotting import plot_states, plot_controls
 from openscvx import Problem
+from openscvx.plotting import plot_controls, plot_states
 
 n = 8
 total_time = 0.8  # Total simulation time
@@ -90,7 +90,7 @@ near_obstacle = distance_to_obstacle <= safety_threshold
 # Use the scalar speed magnitude so the IfThen residuals are 0-D scalars
 slow_speed = ox.linalg.Norm(speed) <= 5.0
 
-velocity_rule = ox.stl.IfThen(near_obstacle, slow_speed, c = 1e-12)
+velocity_rule = ox.stl.IfThen(near_obstacle, slow_speed, c=1e-12)
 
 constraints.append(
     velocity_rule.over(
