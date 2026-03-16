@@ -25,8 +25,8 @@ sys.path.append(grandparent_dir)
 
 import openscvx as ox
 from examples.plotting import plot_dubins_car, plot_velocity_vs_waypoint
-from openscvx.plotting import plot_states, plot_controls
 from openscvx import Problem
+from openscvx.plotting import plot_controls, plot_states
 
 n = 20
 total_time = 3.0  # Total simulation time
@@ -85,11 +85,11 @@ safety_region = ox.linalg.Norm(position - obs_center) <= 1.6
 # Globally the control bound is 10.0; inside the waypoint window we restrict to 1.0.
 slow_speed_in_waypoint = ox.linalg.Norm(speed) <= 1.0
 
-speed_constraint = ox.stl.IfThen(safety_region, slow_speed_in_waypoint, c = 1e-18)
+speed_constraint = ox.stl.IfThen(safety_region, slow_speed_in_waypoint, c=1e-18)
 
 constraints.append(
     speed_constraint.over(
-        (0, n-1),
+        (0, n - 1),
     )
 )
 
@@ -98,7 +98,7 @@ constraints.append(
         (8, 12),
     )
 )
-    
+
 
 # Define normal dynamics (no conditional logic here)
 dynamics = {
