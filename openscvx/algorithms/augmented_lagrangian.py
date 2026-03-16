@@ -145,7 +145,7 @@ class AugmentedLagrangian(AutotuningBase):
         """
         !!! warning
             This code is WIP and may not be correct.
-        
+
         TODO: (haynec) Flush this out.
 
         Update virtual buffer penalty weights for nodal constraints.
@@ -194,9 +194,9 @@ class AugmentedLagrangian(AutotuningBase):
         """
         !!! warning
             This code is WIP and may not be correct.
-        
+
         TODO: (haynec) Flush this out.
-        
+
         Update virtual buffer penalty weights for cross-node constraints.
 
         Evaluates each cross-node constraint to obtain total violation
