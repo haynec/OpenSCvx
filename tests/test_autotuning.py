@@ -1024,8 +1024,12 @@ def test_augmented_lagrangian_accept_decrease(
     assert len(algorithm_state.X) == initial_x_len + 1
     assert len(algorithm_state.lam_vc_history) == 2
     assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
-    assert len(algorithm_state.lam_vb_nodal_history) == 2
-    assert len(algorithm_state.lam_vb_cross_history) == 2
+    # Virtual buffer weight updates are currently disabled (commented out),
+    # so these histories should not grow in accept branches.
+    assert candidate.lam_vb_nodal is None
+    assert candidate.lam_vb_cross is None
+    assert len(algorithm_state.lam_vb_nodal_history) == 1
+    assert len(algorithm_state.lam_vb_cross_history) == 1
     assert len(algorithm_state.lam_cost_history) == 2
     assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
@@ -1183,13 +1187,14 @@ def test_augmented_lagrangian_accept_higher(
     # Candidate should have updated virtual control weights and be accepted,
     # and those weights must be recorded back into the algorithm_state histories.
     assert candidate.lam_vc is not None
-    assert candidate.lam_vb_nodal is not None
-    assert candidate.lam_vb_cross is not None
     assert len(algorithm_state.X) == initial_x_len + 1
     assert len(algorithm_state.lam_vc_history) == 2
     assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
-    assert len(algorithm_state.lam_vb_nodal_history) == 2
-    assert len(algorithm_state.lam_vb_cross_history) == 2
+    # Virtual buffer weight updates are currently disabled (commented out)
+    assert candidate.lam_vb_nodal is None
+    assert candidate.lam_vb_cross is None
+    assert len(algorithm_state.lam_vb_nodal_history) == 1
+    assert len(algorithm_state.lam_vb_cross_history) == 1
     assert len(algorithm_state.lam_cost_history) == 2
     assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
@@ -1282,13 +1287,14 @@ def test_augmented_lagrangian_accept_constant(
     # Candidate should have updated virtual control weights and be accepted,
     # and those weights must be recorded back into the algorithm_state histories.
     assert candidate.lam_vc is not None
-    assert candidate.lam_vb_nodal is not None
-    assert candidate.lam_vb_cross is not None
     assert len(algorithm_state.X) == initial_x_len + 1
     assert len(algorithm_state.lam_vc_history) == 2
     assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
-    assert len(algorithm_state.lam_vb_nodal_history) == 2
-    assert len(algorithm_state.lam_vb_cross_history) == 2
+    # Virtual buffer weight updates are currently disabled (commented out)
+    assert candidate.lam_vb_nodal is None
+    assert candidate.lam_vb_cross is None
+    assert len(algorithm_state.lam_vb_nodal_history) == 1
+    assert len(algorithm_state.lam_vb_cross_history) == 1
     assert len(algorithm_state.lam_cost_history) == 2
     assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 

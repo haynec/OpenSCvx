@@ -59,7 +59,7 @@ class AugmentedLagrangian(AutotuningBase):
         eta_1: float = 1e-1,
         eta_2: float = 0.8,
         ep: float = 0.5,
-        eta_lambda: float = 1e0,
+        eta_lambda: float = 1e1,
         lam_vc_max: float = 1e5,
         lam_prox_min: float = 1e-3,
         lam_prox_max: float = 2e5,
@@ -133,6 +133,91 @@ class AugmentedLagrangian(AutotuningBase):
         case2 = lam_vc + (nu**2) / self.ep * scale
         vc_new = np.where(mask, case1, case2)
         return np.minimum(self.lam_vc_max, vc_new)
+
+    def _update_virtual_buffer_nodal_weights(
+        self,
+        candidate: "CandidateIterate",
+        nodal_constraints: "LoweredJaxConstraints",
+        params: dict,
+        lam_vb_nodal: np.ndarray,
+        lam_prox: np.ndarray,
+    ) -> np.ndarray:
+        """
+        !!! warning
+            This code is WIP and may not be correct.
+
+        TODO: (haynec) Flush this out.
+
+        Update virtual buffer penalty weights for nodal constraints.
+
+        Evaluates each nodal constraint to obtain violation
+        nu = max(0, g(x, u)), then applies the same two-case update rule
+        used for virtual control weights: linear when nu > ep, quadratic
+        otherwise. Result is clipped to lam_vc_max.
+        """
+        lam_vb_new = lam_vb_nodal.copy()
+        lam_prox_scalar = float(np.max(lam_prox))
+        scale = self.eta_lambda * (1 / (2 * lam_prox_scalar))
+
+        for idx, constraint in enumerate(nodal_constraints.nodal):
+            g = constraint.func(candidate.x, candidate.u, 0, params)
+            nu = np.maximum(0, g)
+
+            if constraint.nodes is not None:
+                nodes_array = np.array(constraint.nodes)
+                nu_slice = nu[nodes_array]
+                current = lam_vb_nodal[nodes_array, idx]
+            else:
+                nu_slice = nu
+                current = lam_vb_nodal[:, idx]
+
+            mask = nu_slice > self.ep
+            case1 = current + nu_slice * scale
+            case2 = current + (nu_slice**2) / self.ep * scale
+            updated = np.where(mask, case1, case2)
+
+            if constraint.nodes is not None:
+                lam_vb_new[nodes_array, idx] = updated
+            else:
+                lam_vb_new[:, idx] = updated
+
+        return np.minimum(self.lam_vc_max, lam_vb_new)
+
+    def _update_virtual_buffer_cross_weights(
+        self,
+        candidate: "CandidateIterate",
+        nodal_constraints: "LoweredJaxConstraints",
+        params: dict,
+        lam_vb_cross: np.ndarray,
+        lam_prox: np.ndarray,
+    ) -> np.ndarray:
+        """
+        !!! warning
+            This code is WIP and may not be correct.
+
+        TODO: (haynec) Flush this out.
+
+        Update virtual buffer penalty weights for cross-node constraints.
+
+        Evaluates each cross-node constraint to obtain total violation
+        nu = sum(max(0, g(X, U))), then applies the same two-case update
+        rule used for virtual control weights. Result is clipped to lam_vc_max.
+        """
+        lam_vb_new = lam_vb_cross.copy()
+        lam_prox_scalar = float(np.max(lam_prox))
+        scale = self.eta_lambda * (1 / (2 * lam_prox_scalar))
+
+        for idx, constraint in enumerate(nodal_constraints.cross_node):
+            g = constraint.func(candidate.x, candidate.u, params)
+            nu = np.sum(np.maximum(0, g))
+
+            current = lam_vb_cross[idx]
+            if nu > self.ep:
+                lam_vb_new[idx] = current + nu * scale
+            else:
+                lam_vb_new[idx] = current + (nu**2) / self.ep * scale
+
+        return np.minimum(self.lam_vc_max, lam_vb_new)
 
     def update_weights(
         self,
@@ -225,51 +310,45 @@ class AugmentedLagrangian(AutotuningBase):
             if rho < self.eta_0:
                 # Reject Solution and higher weight
                 lam_prox_k1 = np.minimum(self.lam_prox_max, self.gamma_1 * lam_prox_k)
-                state.lam_prox_history.append(lam_prox_k1)
+                candidate.lam_prox = lam_prox_k1
+                state.reject_solution(candidate)
                 adaptive_state = "Reject Higher"
             elif rho >= self.eta_0 and rho < self.eta_1:
                 # Accept Solution with heigher weight
                 lam_prox_k1 = np.minimum(self.lam_prox_max, self.gamma_1 * lam_prox_k)
-                state.lam_prox_history.append(lam_prox_k1)
-
+                candidate.lam_prox = lam_prox_k1
                 # Update virtual control weight matrix
                 candidate.lam_vc = self._update_virtual_control_weights(
-                    candidate, candidate_x_prop, settings, state.lam_vc, state.lam_prox
+                    candidate, candidate_x_prop, settings, state.lam_vc, candidate.lam_prox
                 )
-                candidate.lam_vb_nodal = state.lam_vb_nodal
-                candidate.lam_vb_cross = state.lam_vb_cross
 
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Higher"
             elif rho >= self.eta_1 and rho < self.eta_2:
                 # Accept Solution with constant weight
                 lam_prox_k1 = lam_prox_k
-                state.lam_prox_history.append(lam_prox_k1)
-
+                candidate.lam_prox = lam_prox_k1
                 # Update virtual control weight matrix
                 candidate.lam_vc = self._update_virtual_control_weights(
-                    candidate, candidate_x_prop, settings, state.lam_vc, state.lam_prox
+                    candidate, candidate_x_prop, settings, state.lam_vc, candidate.lam_prox
                 )
-                candidate.lam_vb_nodal = state.lam_vb_nodal
-                candidate.lam_vb_cross = state.lam_vb_cross
 
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Constant"
             else:
                 # Accept Solution with lower weight
                 lam_prox_k1 = np.maximum(self.lam_prox_min, self.gamma_2 * lam_prox_k)
-                state.lam_prox_history.append(lam_prox_k1)
+                candidate.lam_prox = lam_prox_k1
                 # Update virtual control weight matrix
                 candidate.lam_vc = self._update_virtual_control_weights(
-                    candidate, candidate_x_prop, settings, state.lam_vc, state.lam_prox
+                    candidate, candidate_x_prop, settings, state.lam_vc, candidate.lam_prox
                 )
-                candidate.lam_vb_nodal = state.lam_vb_nodal
-                candidate.lam_vb_cross = state.lam_vb_cross
+
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Lower"
 
         else:
-            state.lam_prox_history.append(lam_prox_k)
+            candidate.lam_prox = lam_prox_k
             candidate.lam_vc = state.lam_vc
             candidate.lam_vb_nodal = state.lam_vb_nodal
             candidate.lam_vb_cross = state.lam_vb_cross

@@ -740,7 +740,6 @@ class AlgorithmState:
 
     def accept_solution(self, cand: CandidateIterate) -> None:
         """Accept the given candidate iterate by updating the state in place."""
-
         if cand.x is None or cand.u is None:
             raise ValueError(
                 "No candidate iterate to accept. Expected algorithm to set "
@@ -775,6 +774,8 @@ class AlgorithmState:
         if cand.TR is not None:
             self.TR_history.append(cand.TR)
 
+        if cand.lam_prox is not None:
+            self.lam_prox_history.append(cand.lam_prox)
         if cand.lam_vc is not None:
             self.lam_vc_history.append(cand.lam_vc)
         if cand.lam_cost is not None:
@@ -788,6 +789,21 @@ class AlgorithmState:
             self.J_nonlin_history.append(cand.J_nonlin)
         if cand.J_lin is not None:
             self.J_lin_history.append(cand.J_lin)
+
+    def reject_solution(self, cand: CandidateIterate) -> None:
+        """Reject the current candidate and update only the trust-region weight.
+
+        This is intended for autotuners that decide to *reject* a candidate
+        iterate but still want to adapt the proximal (trust-region) weight
+        for the next solve. The new trust region weight is taken from
+        ``cand.lam_prox`` (shape ``(N, n_states + n_controls)``) and appended
+        to the history. It does **not** modify trajectories or any other
+        histories.
+
+        Args:
+            cand: The rejected candidate iterate; its ``lam_prox`` is recorded.
+        """
+        self.lam_prox_history.append(cand.lam_prox)
 
     @property
     def x(self) -> np.ndarray:

@@ -358,13 +358,26 @@ def test_constraint_types(constraint_type):
     jax.clear_caches()
 
 
-@pytest.mark.parametrize("algorithm_type", ["augmented_lagrangian", "constant_proximal"])
-def test_algorithm_types(algorithm_type):
+@pytest.mark.parametrize(
+    "autotuner_spec",
+    [
+        "augmented_lagrangian",
+        "constant_proximal",
+        "ramp_proximal",
+        "string_augmented_lagrangian",
+        "dict_ramp_proximal",
+    ],
+)
+def test_autotuning(autotuner_spec):
     """
-    Test brachistochrone with different algorithm types.
+    Test brachistochrone with different autotuning strategies.
+
+    Covers all three autotuner implementations (AugmentedLagrangian,
+    ConstantProximalWeight, RampProximalWeight) as well as the string
+    and dict-based resolution paths in ``_resolve_autotuner``.
 
     Args:
-        constraint_type: Specifies which algorithm is used.
+        autotuner_spec: Identifies the autotuner and how it is specified.
     """
     import jax.numpy as jnp
 
@@ -412,7 +425,7 @@ def test_algorithm_types(algorithm_type):
         "velocity": g * ox.Cos(theta[0]),
     }
 
-    # Generate box constraints for all states based on constraint_type
+    # Generate box constraints for all states
     constraint_exprs = []
     for state in states:
         constraint_exprs.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
@@ -425,10 +438,16 @@ def test_algorithm_types(algorithm_type):
         uniform_time_grid=True,
     )
 
-    if algorithm_type == "augmented_lagrangian":
+    if autotuner_spec == "augmented_lagrangian":
         autotuner = ox.AugmentedLagrangian()
-    elif algorithm_type == "constant_proximal":
+    elif autotuner_spec == "constant_proximal":
         autotuner = ox.ConstantProximalWeight()
+    elif autotuner_spec == "ramp_proximal":
+        autotuner = ox.RampProximalWeight()
+    elif autotuner_spec == "string_augmented_lagrangian":
+        autotuner = "AugmentedLagrangian"
+    elif autotuner_spec == "dict_ramp_proximal":
+        autotuner = {"type": "RampProximalWeight", "ramp_factor": 1.0}
 
     problem = Problem(
         dynamics=dynamics,
@@ -469,7 +488,7 @@ def test_algorithm_types(algorithm_type):
         g,
     )
 
-    _print_comparison_metrics(comparison, f"Brachistochrone {algorithm_type.capitalize()}")
+    _print_comparison_metrics(comparison, f"Brachistochrone Autotuning ({autotuner_spec})")
     _assert_brachistochrone_accuracy(comparison, problem, result)
 
     # Clean up JAX caches
@@ -712,7 +731,12 @@ def test_parameters():
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm={"lam_prox": 1e0, "lam_cost": 6e-1, "lam_vc": 1e1},
+        algorithm={
+            "autotuner": ox.ConstantProximalWeight(),
+            "lam_prox": 1e0,
+            "lam_cost": 6e-1,
+            "lam_vc": 1e1,
+        },
     )
 
     problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}

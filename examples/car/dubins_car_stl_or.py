@@ -92,8 +92,8 @@ wp1_pred = ox.linalg.Norm(position - wp1_center) <= wp1_radius
 wp2_pred = ox.linalg.Norm(position - wp2_center) <= wp2_radius
 
 # Visit waypoint constraints using symbolic Or
-# Note: visit_wp_or_expr is already a constraint, so we can use .over() directly
-constraints.append(ox.stl.Or(wp1_pred, wp2_pred).over((3, 5), penalty="squared_relu"))
+# Note: visit_wp_or_expr is already a constraint, so we can use .at() directly
+constraints.append(ox.stl.Or(wp1_pred, wp2_pred).at([3, 4, 5]))
 
 # Build the problem
 constraints.append((time.at(5) - time.at(3) == 1.23).convex())
@@ -105,6 +105,7 @@ problem = Problem(
     time=time,  # Time is already defined above as ox.Time
     constraints=constraints,
     N=n,
+    algorithm={"autotuner": ox.AugmentedLagrangian(eta_lambda=1e0), "lam_vb": 1e0},
     float_dtype="float64",
 )
 
