@@ -7508,7 +7508,7 @@ Useful when you want a fixed trust region size without adaptation.</p>
 </span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57"></a>        <span class="k">else</span><span class="p">:</span>
 </span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58"></a>            <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">lam_cost</span>
 </span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59"></a>
-</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60"></a>        <span class="n">state</span><span class="o">.</span><span class="n">lam_prox_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span><span class="p">)</span>
+</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60"></a>        <span class="n">candidate</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span>
 </span><span id="__span-0-61"><a id="__codelineno-0-61" name="__codelineno-0-61"></a>        <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
 </span><span id="__span-0-62"><a id="__codelineno-0-62" name="__codelineno-0-62"></a>        <span class="k">return</span> <span class="s2">&quot;Accept Constant&quot;</span>
 </span></code></pre></div></td></tr></table></div>
@@ -7721,7 +7721,7 @@ Useful when you want a fixed trust region size without adaptation.</p>
 </span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57"></a>    <span class="k">else</span><span class="p">:</span>
 </span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58"></a>        <span class="n">candidate</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="n">weights</span><span class="o">.</span><span class="n">lam_cost</span>
 </span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59"></a>
-</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60"></a>    <span class="n">state</span><span class="o">.</span><span class="n">lam_prox_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span><span class="p">)</span>
+</span><span id="__span-0-60"><a id="__codelineno-0-60" name="__codelineno-0-60"></a>    <span class="n">candidate</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">=</span> <span class="n">state</span><span class="o">.</span><span class="n">lam_prox</span>
 </span><span id="__span-0-61"><a id="__codelineno-0-61" name="__codelineno-0-61"></a>    <span class="n">state</span><span class="o">.</span><span class="n">accept_solution</span><span class="p">(</span><span class="n">candidate</span><span class="p">)</span>
 </span><span id="__span-0-62"><a id="__codelineno-0-62" name="__codelineno-0-62"></a>    <span class="k">return</span> <span class="s2">&quot;Accept Constant&quot;</span>
 </span></code></pre></div></td></tr></table></div>
