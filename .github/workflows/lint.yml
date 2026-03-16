@@ -30,9 +30,7 @@ jobs:
       run: uv pip install --system ruff
 
     - name: Run Ruff linting
-      run: |
-        ruff check openscvx/ tests/
+      run: ruff check
 
     - name: Run Ruff formatting check
-      run: |
-        ruff format --check openscvx/ tests/
+      run: ruff format --check
