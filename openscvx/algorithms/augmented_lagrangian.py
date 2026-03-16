@@ -331,7 +331,7 @@ class AugmentedLagrangian(AutotuningBase):
                 candidate.lam_vc = self._update_virtual_control_weights(
                     candidate, candidate_x_prop, settings, state.lam_vc, candidate.lam_prox
                 )
-                
+
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Lower"
 
