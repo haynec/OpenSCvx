@@ -13,6 +13,44 @@ if TYPE_CHECKING:
     from openscvx.lowered import Dynamics
 
 
+def batched_jvp(
+        f: callable,
+        primal: jnp.ndarray,
+        tangents: jnp.ndarray
+) -> jnp.ndarray:
+    """Evaluates Jacobian-vector products batched over a stack of tangent vectors.
+
+    Computes the pushforward map of ``f`` at ``primal`` over the stack of inputs in the last axis of
+    ``tangents``. The outputs are then also stacked in the last axis. The input and output of ``f``
+    may have any number of dimensions.
+
+    For example, suppose ``f`` takes a vector input x ∈ ℝⁿ. Let ∂𝑓 be the Jacobian of ``f`` at
+    ``primal``. Take ``tangents`` to be an n×k matrix whose columns are in the domain of ``f``;
+    i.e. 𝑉 = [ 𝑣₁ 𝑣₂ ... 𝑣ₖ ]. This function then computes the matrix-matrix product
+    ∂𝑓𝑉 = [ ∂𝑓𝑣₁ ∂𝑓𝑣₂ ... ∂𝑓𝑣ₖ ]. Going one step further, if the columns of ``tangents`` are the
+    standard basis vectors, then 𝑉 = 𝐼 and this function outputs the Jacobian ∂𝑓.
+
+    See `the JAX documentation <https://docs.jax.dev/en/latest/jacobian-vector-products.html>`_
+    for more details on terminology.
+
+    Args:
+        f: Function whose Jacobian to take.
+        primal: Input value at which the Jacobian of ``f`` is taken.
+        tangents: Array of tangent vectors with which to evaluate Jacobian-vector products, stacked
+            in the last axis.
+
+    Returns:
+        Array of Jacobian-vector products for each value in ``tangents``, stacked in the last axis.
+
+    """
+    pushforward = jax.vmap(
+        lambda tangent : jax.jvp(f, (primal,), (tangent,))[1],  # Discard value of f (zeroth output)
+        in_axes=-1,
+        out_axes=-1
+    )
+    return pushforward(tangents)
+
+
 class VectorizeDiscretizeLinearize(Discretizer):
     """Discretization via differentiating through the integrator for all segments simultaneously.
 
@@ -53,7 +91,10 @@ class VectorizeDiscretizeLinearize(Discretizer):
         self.custom_integrator = custom_integrator
         self.atol_combined = atol
         self.rtol_combined = rtol
-        self.extra_kwargs = args | {"adjoint": dfx.ForwardMode()} if args is not None else {"adjoint": dfx.ForwardMode()}
+        if args is None:
+            self.extra_kwargs = {"adjoint": dfx.ForwardMode()}
+        else:
+            self.extra_kwargs = args | {"adjoint": dfx.ForwardMode()}
 
     def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
         """Create a multiple-shooting vectorize-then-discretize-then-linearize solver.
@@ -137,18 +178,17 @@ class VectorizeDiscretizeLinearize(Discretizer):
             params: dict,
         ):
 
-            partial_in_x = lambda x : vectorize_then_discretize(x, u_cur, u_next, params)
-            partial_in_u_cur = lambda u_cur : vectorize_then_discretize(x, u_cur, u_next, params)
-            partial_in_u_next = lambda u_next : vectorize_then_discretize(x, u_cur, u_next, params)
+            partial_in_x = lambda x : vectorize_then_discretize(x, u_cur, u_next, params)  # noqa E731
+            partial_in_u_cur = lambda u_cur : vectorize_then_discretize(x, u_cur, u_next, params)  # noqa E731
+            partial_in_u_next = lambda u_next : vectorize_then_discretize(x, u_cur, u_next, params)  # noqa E731
 
-            mapped_jvp = lambda f, primal : jax.vmap(lambda tangent : jax.jvp(f, (primal,), (tangent,))[1], in_axes=0, out_axes=-1)  # zeroth output of jvp is function value, which can be discarded
+            # Stack of (repeats over all nodes of (standard basis vectors of state))
+            x_tangents = jnp.repeat(jnp.eye(n_x)[None, :, :], N - 1, axis=0)  
+            u_tangents = jnp.repeat(jnp.eye(n_u)[None, :, :], N - 1, axis=0)
 
-            x_tangents = jnp.repeat(jnp.eye(n_x)[:, None, :], N - 1, axis=1)  # stack of (repeats over all nodes of (standard basis vectors of state))
-            u_tangents = jnp.repeat(jnp.eye(n_u)[:, None, :], N - 1, axis=1)  # stack of (repeats over all nodes of (standard basis vectors of control))
-
-            A_d = mapped_jvp(partial_in_x, x)(x_tangents)
-            B_d = mapped_jvp(partial_in_u_cur, u_cur)(u_tangents)
-            C_d = mapped_jvp(partial_in_u_next, u_next)(u_tangents)
+            A_d = batched_jvp(partial_in_x, x, x_tangents)
+            B_d = batched_jvp(partial_in_u_cur, u_cur, u_tangents)
+            C_d = batched_jvp(partial_in_u_next, u_next, u_tangents)
 
             return A_d, B_d, C_d
 
@@ -156,7 +196,18 @@ class VectorizeDiscretizeLinearize(Discretizer):
             A_d, B_d, C_d = vectorize_then_discretize_then_linearize(x[:-1], u[:-1], u[1:], params)
             x_prop = vectorize_then_discretize(x[:-1], u[:-1], u[1:], params)
 
-            V_multi = jnp.concatenate([x_prop, A_d.reshape(-1, N-1, n_x*n_x), B_d.reshape(-1, N-1, n_x*n_u), C_d.reshape(-1, N-1, n_x*n_u)], axis=2)
+            # TODO: providing the histories of A, B, and C can lead to as much as a 20% slowdown.
+            # If they aren't getting used, they shouldn't be here. V_multi should be replaced with
+            # an output directly corresponding to the history of x_prop.
+            V_multi = jnp.concatenate(
+                [
+                    x_prop,
+                    A_d.reshape(-1, N-1, n_x*n_x),
+                    B_d.reshape(-1, N-1, n_x*n_u),
+                    C_d.reshape(-1, N-1, n_x*n_u)
+                ],
+                axis=2
+            )
             i4 = V_multi.shape[2]
             V_multi = V_multi.reshape(-1, (N-1)*i4).T
 
@@ -208,7 +259,10 @@ class DiscretizeLinearizeVectorize(Discretizer):
         self.custom_integrator = custom_integrator
         self.atol_combined = atol
         self.rtol_combined = rtol
-        self.extra_kwargs = args | {"adjoint": dfx.ForwardMode()} if args is not None else {"adjoint": dfx.ForwardMode()}
+        if args is None:
+            self.extra_kwargs = {"adjoint": dfx.ForwardMode()}
+        else:
+            self.extra_kwargs = args | {"adjoint": dfx.ForwardMode()}
 
     def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
         """Create a multiple-shooting discretize-then-linearize-then-vectorize solver.
@@ -288,15 +342,36 @@ class DiscretizeLinearizeVectorize(Discretizer):
 
         discretize_then_vectorize = jax.vmap(single_shot, in_axes=(0, 0, 0, 0, None), out_axes=1)
         discretize_then_linearize = jax.jacfwd(single_shot, argnums=(0, 1, 2))
-        discretize_then_linearize_then_vectorize = jax.vmap(discretize_then_linearize, in_axes=(0, 0, 0, 0, None), out_axes=1)
+        discretize_then_linearize_then_vectorize = jax.vmap(
+            discretize_then_linearize,
+            in_axes=(0, 0, 0, 0, None),
+            out_axes=1
+        )
 
         nodes = jnp.arange(0, N - 1)
 
         def solver(x, u, params):
-            A_d, B_d, C_d = discretize_then_linearize_then_vectorize(x[:-1], u[:-1], u[1:], nodes, params)
+            A_d, B_d, C_d = discretize_then_linearize_then_vectorize(
+                x[:-1],
+                u[:-1],
+                u[1:],
+                nodes,
+                params
+            )
             x_prop = discretize_then_vectorize(x[:-1], u[:-1], u[1:], nodes, params)
 
-            V_multi = jnp.concatenate([x_prop, A_d.reshape(-1, N-1, n_x*n_x), B_d.reshape(-1, N-1, n_x*n_u), C_d.reshape(-1, N-1, n_x*n_u)], axis=2)
+            # TODO: providing the histories of A, B, and C can lead to as much as a 20% slowdown.
+            # If they aren't getting used, they shouldn't be here. V_multi should be replaced with
+            # an output directly corresponding to the history of x_prop.
+            V_multi = jnp.concatenate(
+                [
+                    x_prop,
+                    A_d.reshape(-1, N-1, n_x*n_x),
+                    B_d.reshape(-1, N-1, n_x*n_u),
+                    C_d.reshape(-1, N-1, n_x*n_u)
+                ],
+                axis=2
+            )
             i4 = V_multi.shape[2]
             V_multi = V_multi.reshape(-1, (N-1)*i4).T
 

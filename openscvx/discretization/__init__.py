@@ -20,6 +20,7 @@ import inspect
 from typing import Any
 
 from .base import Discretizer
+from .discretize_linearize import DiscretizeLinearizeVectorize, VectorizeDiscretizeLinearize
 from .linearize_discretize import (
     LinearizeDiscretize,
     calculate_impulsive_discretization,
@@ -27,17 +28,16 @@ from .linearize_discretize import (
 )
 from .linearize_discretize_sparse import LinearizeDiscretizeSparse
 from .sparse_utils import color_columns, make_sparse_jacobian_fns
-from .discretize_linearize import VectorizeDiscretizeLinearize, DiscretizeLinearizeVectorize
 
 # ---------------------------------------------------------------------------
 # Spec resolver — turn a dict into a Discretizer instance
 # ---------------------------------------------------------------------------
 
 _DISCRETIZER_MAP = {
+    "DiscretizeLinearizeVectorize": DiscretizeLinearizeVectorize,
     "LinearizeDiscretize": LinearizeDiscretize,
     "LinearizeDiscretizeSparse": LinearizeDiscretizeSparse,
     "VectorizeDiscretizeLinearize": VectorizeDiscretizeLinearize,
-    "DiscretizeLinearizeVectorize": DiscretizeLinearizeVectorize,
 }
 
 
@@ -87,10 +87,10 @@ def _resolve_discretizer(val: Any) -> Discretizer:
 
 __all__ = [
     "Discretizer",
+    "DiscretizeLinearizeVectorize",
     "LinearizeDiscretize",
     "LinearizeDiscretizeSparse",
     "VectorizeDiscretizeLinearize",
-    "DiscretizeLinearizeVectorize",
     "_resolve_discretizer",
     "calculate_impulsive_discretization",
     "color_columns",
