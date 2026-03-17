@@ -34,8 +34,8 @@ class VectorizeDiscretizeLinearize(Discretizer):
             is valid. Defaults to ``"Tsit5"``.
         custom_integrator: Use the built-in fixed-step RK45 integrator instead of Diffrax.
             Faster but less robust. Defaults to ``False``.
-        atol: Absolute tolerance for the ODE solver. Defaults to ``1e-3``.
-        rtol: Relative tolerance for the ODE solver. Defaults to ``1e-6``.
+        atol: Absolute tolerance of the ODE solver for all segments combined. Defaults to ``1e-3``.
+        rtol: Relative tolerance of the ODE solver for all segments combined. Defaults to ``1e-6``.
         args: Extra keyword arguments forwarded to :func:`diffrax.diffeqsolve`. Defaults to ``{}``.
     """
 
@@ -51,8 +51,8 @@ class VectorizeDiscretizeLinearize(Discretizer):
         self.dis_type = dis_type
         self.ode_solver = ode_solver
         self.custom_integrator = custom_integrator
-        self.atol = atol
-        self.rtol = rtol
+        self.atol_combined = atol
+        self.rtol_combined = rtol
         self.extra_kwargs = args | {"adjoint": dfx.ForwardMode()} if args is not None else {"adjoint": dfx.ForwardMode()}
 
     def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
@@ -74,6 +74,12 @@ class VectorizeDiscretizeLinearize(Discretizer):
         n_x = settings.sim.n_states
         n_u = settings.sim.n_controls
         nodes = jnp.arange(0, N - 1)
+
+        # Provided tolerances are for state and all three Jacobians combined, but only state will
+        # be integrated. Tighten tolerances by factor of (state size) / (state and Jacobians size)
+        # to make up for this
+        rtol = self.rtol_combined / (1 + n_x + 2*n_u)
+        atol = self.atol_combined / (1 + n_x + 2*n_u)
 
         multiple_state_dot = jax.vmap(dynamics.f, in_axes=(0, 0, 0, None))
 
@@ -117,8 +123,8 @@ class VectorizeDiscretizeLinearize(Discretizer):
                     1.0 / (N - 1),
                     x.flatten(),
                     solver_name=self.ode_solver,
-                    rtol=self.rtol,
-                    atol=self.atol,
+                    rtol=rtol,
+                    atol=atol,
                     args=(u_cur, u_next, params),
                     extra_kwargs=self.extra_kwargs,
                 )
@@ -183,8 +189,8 @@ class DiscretizeLinearizeVectorize(Discretizer):
             is valid. Defaults to ``"Tsit5"``.
         custom_integrator: Use the built-in fixed-step RK45 integrator instead of Diffrax.
             Faster but less robust. Defaults to ``False``.
-        atol: Absolute tolerance for the ODE solver. Defaults to ``1e-3``.
-        rtol: Relative tolerance for the ODE solver. Defaults to ``1e-6``.
+        atol: Absolute tolerance of the ODE solver for all segments combined. Defaults to ``1e-3``.
+        rtol: Relative tolerance of the ODE solver for all segments combined. Defaults to ``1e-6``.
         args: Extra keyword arguments forwarded to :func:`diffrax.diffeqsolve`. Defaults to ``{}``.
     """
 
@@ -200,8 +206,8 @@ class DiscretizeLinearizeVectorize(Discretizer):
         self.dis_type = dis_type
         self.ode_solver = ode_solver
         self.custom_integrator = custom_integrator
-        self.atol = atol
-        self.rtol = rtol
+        self.atol_combined = atol
+        self.rtol_combined = rtol
         self.extra_kwargs = args | {"adjoint": dfx.ForwardMode()} if args is not None else {"adjoint": dfx.ForwardMode()}
 
     def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
@@ -223,6 +229,12 @@ class DiscretizeLinearizeVectorize(Discretizer):
         N = settings.sim.n
         n_x = settings.sim.n_states
         n_u = settings.sim.n_controls
+
+        # Provided tolerances are for state and all three Jacobians for all nodes combined, but only
+        # state will be integrated and on only one segment. Tighten tolerances by factor of
+        # (state size) / (state and Jacobians size for all nodes) to make up for this
+        rtol = self.rtol_combined / (N - 1) / (1 + n_x + 2*n_u)
+        atol = self.atol_combined / (N - 1) / (1 + n_x + 2*n_u)
 
         single_state_dot = dynamics.f
 
@@ -267,8 +279,8 @@ class DiscretizeLinearizeVectorize(Discretizer):
                     1.0 / (N - 1),
                     x,
                     solver_name=self.ode_solver,
-                    rtol=self.rtol,
-                    atol=self.atol,
+                    rtol=rtol,
+                    atol=atol,
                     args=(u_cur, u_next, node, params),
                     extra_kwargs=self.extra_kwargs,
                 )
