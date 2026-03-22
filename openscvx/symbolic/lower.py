@@ -800,6 +800,11 @@ def lower_symbolic_problem(
 
         dynamics_sparsity = discrete_sparsity(A_c, B_c, dis_type="FOH")
 
+        # Attach continuous-time sparsity to the Dynamics object so the
+        # discretizer can exploit it for sparse Jacobian computation.
+        dynamics.A_c_sparsity = A_c
+        dynamics.B_c_sparsity = B_c
+
     # Compute per-constraint Jacobian sparsity from the symbolic AST.
     # Each scalar nodal constraint produces a 1-D mask over x and u.
     # No time-dilation patch needed: constraints take the full u vector.

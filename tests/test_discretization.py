@@ -1,10 +1,13 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 from jax import export
 
-from openscvx.discretization import LinearizeDiscretize
+from openscvx.discretization import LinearizeDiscretize, LinearizeDiscretizeSparse, color_columns
 from openscvx.discretization.linearize_discretize import _dVdt
+from openscvx.discretization.linearize_discretize_sparse import _dVdt_sparse
+from openscvx.sparse import make_sparse_jacobian_fns
 
 # --- fixtures for dummy params, state_dot, A, B  ------------------
 
@@ -130,3 +133,240 @@ def test_jit_discretization_solver_compiles(settings, dynamics, integrator):
     # jit & lower & compile
     jitted = jax.jit(solver)
     export.export(jitted)(x, u, {})
+
+
+# --- sparse discretization tests ----------------------------------------
+
+
+def _rocket_dynamics(x, u, node, params):
+    """3-DOF rocket: pos(3), vel(3), mass(1) with thrust(3).
+
+    Jacobian A_c has clear sparsity: position rows depend only on velocity,
+    mass row depends only on thrust magnitude (through controls, not states
+    beyond mass).
+    """
+    pos = x[:3]
+    vel = x[3:6]
+    m = x[6]
+    T = u[:3]
+    s = u[3]  # time-dilation
+    g = 3.71
+    Isp_ge = 225.0 * 9.807
+    T_norm = jnp.sqrt(jnp.sum(T**2) + 1e-8)
+    pos_dot = vel
+    vel_dot = T / m - jnp.array([0.0, 0.0, g])
+    mass_dot = -T_norm / Isp_ge
+    return s * jnp.concatenate([pos_dot, vel_dot, jnp.array([mass_dot])])
+
+
+@pytest.fixture
+def rocket_settings():
+    p = Dummy()
+    p.sim = Dummy()
+    p.sim.n_states = 7
+    p.sim.n_controls = 4  # thrust(3) + time-dilation(1)
+    p.sim.S_x = jnp.eye(7)
+    p.sim.c_x = jnp.zeros(7)
+    p.sim.S_u = jnp.eye(4)
+    p.sim.c_u = jnp.zeros(4)
+    p.sim.inv_S_x = jnp.eye(7)
+    p.sim.inv_S_u = jnp.eye(4)
+    p.sim.n = 8
+    p.dev = Dummy()
+    p.dev.debug = False
+    return p
+
+
+@pytest.fixture
+def rocket_dynamics():
+    d = Dummy()
+    d.f = _rocket_dynamics
+    d.A_c_sparsity = None
+    d.B_c_sparsity = None
+    return d
+
+
+def _get_rocket_sparsity():
+    """Compute the A_c and B_c boolean sparsity patterns for the rocket.
+
+    Evaluates at multiple random points to capture all structural nonzeros
+    (some entries may be zero at a particular operating point but are
+    structurally nonzero).
+    """
+    n_x, n_u = 7, 4
+    rng = np.random.default_rng(0)
+    A_c = np.zeros((n_x, n_x), dtype=bool)
+    B_c = np.zeros((n_x, n_u), dtype=bool)
+    for _ in range(5):
+        x0 = jnp.array(rng.normal(size=n_x))
+        x0 = x0.at[6].set(jnp.abs(x0[6]) + 100.0)
+        u0 = jnp.array(rng.normal(size=n_u))
+        u0 = u0.at[3].set(jnp.abs(u0[3]) + 0.1)
+        A = jax.jacfwd(_rocket_dynamics, argnums=0)(x0, u0, 0, {})
+        B = jax.jacfwd(_rocket_dynamics, argnums=1)(x0, u0, 0, {})
+        A_c |= np.array(np.abs(A) > 1e-12)
+        B_c |= np.array(np.abs(B) > 1e-12)
+    return A_c, B_c
+
+
+def test_color_columns_validity():
+    """Coloring respects the structural orthogonality constraint."""
+    A_c, _ = _get_rocket_sparsity()
+    colors = color_columns(A_c)
+    n = A_c.shape[1]
+    for i in range(n):
+        for j in range(i + 1, n):
+            if colors[i] == colors[j]:
+                # Same color → no shared nonzero row
+                shared = A_c[:, i] & A_c[:, j]
+                assert not shared.any(), (
+                    f"Columns {i} and {j} share color {colors[i]} "
+                    f"but have overlapping nonzero rows"
+                )
+
+
+def test_sparse_jacobian_matches_dense():
+    """Sparse Jacobian via coloring matches dense jacfwd numerically."""
+    A_c, B_c = _get_rocket_sparsity()
+    n_x, n_u = 7, 4
+    A_vm, B_vm = make_sparse_jacobian_fns(
+        _rocket_dynamics, A_c, B_c, n_x, n_u
+    )
+
+    A_dense_fn = jax.vmap(jax.jacfwd(_rocket_dynamics, 0), in_axes=(0, 0, 0, None))
+    B_dense_fn = jax.vmap(jax.jacfwd(_rocket_dynamics, 1), in_axes=(0, 0, 0, None))
+
+    rng = np.random.default_rng(42)
+    batch = 4
+    x = jnp.array(rng.normal(size=(batch, n_x)))
+    x = x.at[:, 6].set(jnp.abs(x[:, 6]) + 100.0)  # mass > 0
+    u = jnp.array(rng.normal(size=(batch, n_u)))
+    u = u.at[:, 3].set(jnp.abs(u[:, 3]) + 0.1)  # time-dilation > 0
+    nodes = jnp.arange(batch)
+
+    A_sp = A_vm(x, u, nodes, {})
+    A_dn = A_dense_fn(x, u, nodes, {})
+    np.testing.assert_allclose(np.array(A_sp), np.array(A_dn), atol=1e-5)
+
+    B_sp = B_vm(x, u, nodes, {})
+    B_dn = B_dense_fn(x, u, nodes, {})
+    np.testing.assert_allclose(np.array(B_sp), np.array(B_dn), atol=1e-5)
+
+
+def test_sparse_discretization_matches_dense(rocket_settings, rocket_dynamics):
+    """Sparse and dense discretization paths produce matching A_d, B_d, C_d."""
+    A_c, B_c = _get_rocket_sparsity()
+
+    # Dense path
+    dense_disc = LinearizeDiscretize(
+        custom_integrator=True, dis_type="FOH"
+    )
+    dense_solver = dense_disc.get_solver(rocket_dynamics, rocket_settings)
+
+    # Sparse path
+    rocket_dynamics.A_c_sparsity = A_c
+    rocket_dynamics.B_c_sparsity = B_c
+    sparse_disc = LinearizeDiscretizeSparse(
+        custom_integrator=True, dis_type="FOH"
+    )
+    sparse_solver = sparse_disc.get_solver(rocket_dynamics, rocket_settings)
+
+    N = rocket_settings.sim.n
+    n_x = rocket_settings.sim.n_states
+    n_u = rocket_settings.sim.n_controls
+
+    rng = np.random.default_rng(123)
+    x = jnp.array(rng.normal(size=(N, n_x))) * 10.0
+    x = x.at[:, 6].set(jnp.abs(x[:, 6]) + 100.0)
+    u = jnp.array(rng.normal(size=(N, n_u)))
+    u = u.at[:, 3].set(jnp.abs(u[:, 3]) + 0.5)
+
+    A_dense, B_dense, C_dense, xp_dense, _ = dense_solver(x, u, {})
+    A_sparse, B_sparse, C_sparse, xp_sparse, _ = sparse_solver(x, u, {})
+
+    np.testing.assert_allclose(np.array(A_sparse), np.array(A_dense), atol=1e-4)
+    np.testing.assert_allclose(np.array(B_sparse), np.array(B_dense), atol=1e-4)
+    np.testing.assert_allclose(np.array(C_sparse), np.array(C_dense), atol=1e-4)
+    np.testing.assert_allclose(np.array(xp_sparse), np.array(xp_dense), atol=1e-4)
+
+
+@pytest.mark.parametrize("dis_type", ["FOH", "ZOH"])
+def test_compact_v_matches_dense(rocket_settings, rocket_dynamics, dis_type):
+    """Compact-V (sparse) integration produces the same A_d, B_d, C_d as dense."""
+    A_c, B_c = _get_rocket_sparsity()
+    n_x = rocket_settings.sim.n_states
+    n_u = rocket_settings.sim.n_controls
+    N = rocket_settings.sim.n
+
+    from openscvx.symbolic.sparsity import discrete_sparsity
+
+    Ad_pat, Bd_pat, Cd_pat = discrete_sparsity(A_c, B_c, dis_type)
+    nnz_Ad = int(Ad_pat.sum())
+    nnz_Bd = int(Bd_pat.sum())
+    nnz_Cd = int(Cd_pat.sum())
+    aug_dim_dense = n_x + n_x * n_x + 2 * n_x * n_u
+    aug_dim_compact = n_x + nnz_Ad + nnz_Bd + nnz_Cd
+    assert aug_dim_compact < aug_dim_dense, (
+        f"compact ({aug_dim_compact}) should be smaller than dense ({aug_dim_dense})"
+    )
+
+    dense_disc = LinearizeDiscretize(
+        custom_integrator=True, dis_type=dis_type
+    )
+    dense_solver = dense_disc.get_solver(rocket_dynamics, rocket_settings)
+
+    rocket_dynamics.A_c_sparsity = A_c
+    rocket_dynamics.B_c_sparsity = B_c
+    sparse_disc = LinearizeDiscretizeSparse(
+        custom_integrator=True, dis_type=dis_type
+    )
+    sparse_solver = sparse_disc.get_solver(rocket_dynamics, rocket_settings)
+
+    rng = np.random.default_rng(99)
+    x = jnp.array(rng.normal(size=(N, n_x))) * 10.0
+    x = x.at[:, 6].set(jnp.abs(x[:, 6]) + 100.0)
+    u = jnp.array(rng.normal(size=(N, n_u)))
+    u = u.at[:, 3].set(jnp.abs(u[:, 3]) + 0.5)
+
+    A_dense, B_dense, C_dense, xp_dense, _ = dense_solver(x, u, {})
+    A_sparse, B_sparse, C_sparse, xp_sparse, V_sparse = sparse_solver(x, u, {})
+
+    np.testing.assert_allclose(np.array(A_sparse), np.array(A_dense), atol=1e-4)
+    np.testing.assert_allclose(np.array(B_sparse), np.array(B_dense), atol=1e-4)
+    np.testing.assert_allclose(np.array(C_sparse), np.array(C_dense), atol=1e-4)
+    np.testing.assert_allclose(np.array(xp_sparse), np.array(xp_dense), atol=1e-4)
+
+    # Verify that the dense-reconstructed Vmulti is compatible with from_V
+    from openscvx.algorithms.base import DiscretizationResult
+
+    disc_result = DiscretizationResult.from_V(
+        np.asarray(V_sparse), n_x=n_x, n_u=n_u, N=N
+    )
+    np.testing.assert_allclose(disc_result.A_d, np.array(A_dense), atol=1e-4)
+    np.testing.assert_allclose(disc_result.B_d, np.array(B_dense), atol=1e-4)
+
+
+def test_sparse_fallback_when_dense(settings, dynamics):
+    """When Jacobian is fully dense, sparse path falls back to dense jacfwd."""
+    dynamics.A_c_sparsity = np.ones((2, 2), dtype=bool)
+    dynamics.B_c_sparsity = np.ones((2, 2), dtype=bool)
+    disc = LinearizeDiscretizeSparse(custom_integrator=True)
+    solver = disc.get_solver(dynamics, settings)
+
+    x = jnp.ones((settings.sim.n, settings.sim.n_states))
+    u = jnp.ones((settings.sim.n, settings.sim.n_controls))
+    A_d, B_d, C_d, xp, _ = solver(x, u, {})
+
+    assert A_d.shape == (settings.sim.n - 1, 2, 2)
+
+
+def test_sparse_fallback_when_no_sparsity(settings, dynamics):
+    """When no sparsity info is available, LinearizeDiscretizeSparse falls back to dense."""
+    disc = LinearizeDiscretizeSparse(custom_integrator=True)
+    solver = disc.get_solver(dynamics, settings)
+
+    x = jnp.ones((settings.sim.n, settings.sim.n_states))
+    u = jnp.ones((settings.sim.n, settings.sim.n_controls))
+    A_d, B_d, C_d, xp, _ = solver(x, u, {})
+
+    assert A_d.shape == (settings.sim.n - 1, 2, 2)

@@ -1,7 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 import jax.numpy as jnp
+import numpy as np
 
 
 @dataclass
@@ -27,6 +28,12 @@ class Dynamics:
             Jacobian of ``f`` w.r.t. ``x``.
         B (Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]]):
             Jacobian of ``f`` w.r.t. ``u``.
+        A_c_sparsity (Optional[np.ndarray]): Boolean ``(n_x, n_x)`` array
+            giving the structural sparsity of the continuous-time state
+            Jacobian ``df/dx``.  Computed from the symbolic AST.
+        B_c_sparsity (Optional[np.ndarray]): Boolean ``(n_x, n_u)`` array
+            giving the structural sparsity of the continuous-time control
+            Jacobian ``df/du``.  Computed from the symbolic AST.
 
     !!! note
         The ``A`` and ``B`` fields are kept for convenience but may be
@@ -38,3 +45,5 @@ class Dynamics:
     f: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
     A: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
     B: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
+    A_c_sparsity: Optional[np.ndarray] = field(default=None, repr=False)
+    B_c_sparsity: Optional[np.ndarray] = field(default=None, repr=False)
