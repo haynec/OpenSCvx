@@ -736,6 +736,8 @@ def test_parameters():
             "lam_prox": 1e0,
             "lam_cost": 6e-1,
             "lam_vc": 1e1,
+            "ep_tr": 1e-5,
+            "ep_vc": 1e-8,
         },
     )
 

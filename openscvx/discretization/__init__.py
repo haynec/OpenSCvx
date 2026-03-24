@@ -11,9 +11,9 @@ intermediate types, but the input (continuous nonlinear dynamics + reference
 trajectory) and output (discrete-time linear matrices A_d, B_d, C_d) are
 always consistent.
 
-The default implementation is :class:`LinearizeDiscretize`, which computes
-continuous-time Jacobians via JAX autodiff and integrates them alongside the
-nonlinear dynamics through an augmented state vector.
+:class:`Problem` uses :class:`LinearizeDiscretizeSparse` by default (sparse
+Jacobians and compact variational integration when sparsity patterns exist).
+:class:`LinearizeDiscretize` is the dense linearize-then-discretize scheme.
 """
 
 import inspect
@@ -25,6 +25,8 @@ from .linearize_discretize import (
     calculate_impulsive_discretization,
     get_impulsive_discretization_solver,
 )
+from .linearize_discretize_sparse import LinearizeDiscretizeSparse
+from .sparse_utils import color_columns, make_sparse_jacobian_fns
 
 # ---------------------------------------------------------------------------
 # Spec resolver — turn a dict into a Discretizer instance
@@ -32,6 +34,7 @@ from .linearize_discretize import (
 
 _DISCRETIZER_MAP = {
     "LinearizeDiscretize": LinearizeDiscretize,
+    "LinearizeDiscretizeSparse": LinearizeDiscretizeSparse,
 }
 
 
@@ -41,16 +44,16 @@ def _resolve_discretizer(val: Any) -> Discretizer:
     Accepted forms:
 
     * **instance** — already-constructed :class:`Discretizer` (pass-through).
-    * **dict** — keyword arguments passed to :class:`LinearizeDiscretize`.
-      An optional ``"type"`` key selects the class (currently only
-      ``"LinearizeDiscretize"``).
+    * **dict** — keyword arguments passed to the selected discretizer class.
+      An optional ``"type"`` key selects the class (defaults to
+      :class:`LinearizeDiscretizeSparse`).
 
     Examples::
 
-        # Dict with keyword overrides (default class)
+        # Dict with keyword overrides (default class: LinearizeDiscretizeSparse)
         _resolve_discretizer({"dis_type": "ZOH", "ode_solver": "Dopri8"})
 
-        # Dict with explicit type
+        # Dict with explicit dense discretizer
         _resolve_discretizer({"type": "LinearizeDiscretize", "dis_type": "ZOH"})
 
         # Instance pass-through
@@ -82,7 +85,10 @@ def _resolve_discretizer(val: Any) -> Discretizer:
 __all__ = [
     "Discretizer",
     "LinearizeDiscretize",
+    "LinearizeDiscretizeSparse",
     "_resolve_discretizer",
     "calculate_impulsive_discretization",
+    "color_columns",
     "get_impulsive_discretization_solver",
+    "make_sparse_jacobian_fns",
 ]

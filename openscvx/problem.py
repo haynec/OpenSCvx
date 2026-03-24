@@ -175,9 +175,12 @@ class Problem:
             discretizer: Discretization method configuration. Accepts:
 
                 - ``None`` — uses ``LinearizeDiscretize()`` with defaults
-                  (FOH, Tsit5).
+                  (FOH, Tsit5). Uses sparse Jacobians and compact variational
+                  integration when sparsity patterns exist on dynamics; otherwise
+                  falls back to dense ``jax.jacfwd`` (same numerics).
                 - A ``Discretizer`` instance — used directly.
-                - A ``dict`` — passed as kwargs to ``LinearizeDiscretize()``.
+                - A ``dict`` — resolved via :func:`~openscvx.discretization._resolve_discretizer`
+                  (default class is ``LinearizeDiscretize`` unless ``"type"`` is set).
 
                 Examples::
 
@@ -293,7 +296,9 @@ class Problem:
                 )
             self._algorithm = algorithm
 
-        # Resolve discretizer: None → default, dict → LinearizeDiscretize(**dict), instance → use
+        # Resolve discretizer: None → LinearizeDiscretize,
+        #                      dict → _resolve_discretizer,
+        #                      instance → use
         if discretizer is None:
             self._discretizer = LinearizeDiscretize()
         elif isinstance(discretizer, dict):
@@ -434,7 +439,7 @@ class Problem:
             `initialize()` will have no effect on subsequent solves.
 
         Returns:
-            The discretizer instance (e.g., LinearizeDiscretize).
+            The discretizer instance (e.g., ``LinearizeDiscretize``).
         """
         return self._discretizer
 
