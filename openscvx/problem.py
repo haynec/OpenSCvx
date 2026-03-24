@@ -439,7 +439,7 @@ class Problem:
             `initialize()` will have no effect on subsequent solves.
 
         Returns:
-            The discretizer instance (e.g., ``LinearizeDiscretizeSparse``).
+            The discretizer instance (e.g., ``LinearizeDiscretize``).
         """
         return self._discretizer
 
