@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
@@ -70,20 +70,32 @@ class LinearizeDiscretizeSparse(LinearizeDiscretize):
         n_u = settings.sim.n_controls
 
         A_vmapped, B_vmapped = make_sparse_jacobian_fns(
-            dynamics.f, A_c_pat, B_c_pat, n_x, n_u,
+            dynamics.f,
+            A_c_pat,
+            B_c_pat,
+            n_x,
+            n_u,
         )
 
         Ad_pat, Bd_pat, Cd_pat = discrete_sparsity(
-            A_c_pat, B_c_pat, self.dis_type,
+            A_c_pat,
+            B_c_pat,
+            self.dis_type,
         )
         Ad_r, Ad_c = np.where(Ad_pat)
         Bd_r, Bd_c = np.where(Bd_pat)
         Cd_r, Cd_c = np.where(Cd_pat)
 
         sparse_layout = (
-            jnp.array(Ad_r), jnp.array(Ad_c), len(Ad_r),
-            jnp.array(Bd_r), jnp.array(Bd_c), len(Bd_r),
-            jnp.array(Cd_r), jnp.array(Cd_c), len(Cd_r),
+            jnp.array(Ad_r),
+            jnp.array(Ad_c),
+            len(Ad_r),
+            jnp.array(Bd_r),
+            jnp.array(Bd_c),
+            len(Bd_r),
+            jnp.array(Cd_r),
+            jnp.array(Cd_c),
+            len(Cd_r),
         )
 
         return lambda x, u, params: _calculate_discretization_sparse(
@@ -238,9 +250,15 @@ def _calculate_discretization_sparse(
     N = settings.sim.n
 
     (
-        Ad_rows, Ad_cols, nnz_Ad,
-        Bd_rows, Bd_cols, nnz_Bd,
-        Cd_rows, Cd_cols, nnz_Cd,
+        Ad_rows,
+        Ad_cols,
+        nnz_Ad,
+        Bd_rows,
+        Bd_cols,
+        nnz_Bd,
+        Cd_rows,
+        Cd_cols,
+        nnz_Cd,
     ) = sparse_layout
 
     aug_dim = n_x + nnz_Ad + nnz_Bd + nnz_Cd
@@ -248,25 +266,35 @@ def _calculate_discretization_sparse(
     V0 = jnp.zeros((N - 1, aug_dim))
     V0 = V0.at[:, :n_x].set(x[:-1].astype(float))
     phi0_nz = (Ad_rows == Ad_cols).astype(x.dtype)
-    V0 = V0.at[:, n_x : n_x + nnz_Ad].set(
-        jnp.broadcast_to(phi0_nz[None], (N - 1, nnz_Ad))
-    )
+    V0 = V0.at[:, n_x : n_x + nnz_Ad].set(jnp.broadcast_to(phi0_nz[None], (N - 1, nnz_Ad)))
     V0 = V0.reshape(-1)
 
     integrator_args = dict(
         u_cur=u[:-1].astype(float),
         u_next=u[1:].astype(float),
         state_dot=state_dot,
-        A=A, B=B,
-        n_x=n_x, n_u=n_u, N=N,
+        A=A,
+        B=B,
+        n_x=n_x,
+        n_u=n_u,
+        N=N,
         dis_type=discretizer.dis_type,
-        S_x=settings.sim.S_x, c_x=settings.sim.c_x,
-        S_u=settings.sim.S_u, c_u=settings.sim.c_u,
-        inv_S_x=settings.sim.inv_S_x, inv_S_u=settings.sim.inv_S_u,
+        S_x=settings.sim.S_x,
+        c_x=settings.sim.c_x,
+        S_u=settings.sim.S_u,
+        c_u=settings.sim.c_u,
+        inv_S_x=settings.sim.inv_S_x,
+        inv_S_u=settings.sim.inv_S_u,
         params=params,
-        Ad_rows=Ad_rows, Ad_cols=Ad_cols, nnz_Ad=nnz_Ad,
-        Bd_rows=Bd_rows, Bd_cols=Bd_cols, nnz_Bd=nnz_Bd,
-        Cd_rows=Cd_rows, Cd_cols=Cd_cols, nnz_Cd=nnz_Cd,
+        Ad_rows=Ad_rows,
+        Ad_cols=Ad_cols,
+        nnz_Ad=nnz_Ad,
+        Bd_rows=Bd_rows,
+        Bd_cols=Bd_cols,
+        nnz_Bd=nnz_Bd,
+        Cd_rows=Cd_rows,
+        Cd_cols=Cd_cols,
+        nnz_Cd=nnz_Cd,
     )
 
     def dVdt_wrapped(t, y):
@@ -274,15 +302,22 @@ def _calculate_discretization_sparse(
 
     if discretizer.custom_integrator:
         sol = solve_ivp_rk45(
-            dVdt_wrapped, 1.0 / (N - 1), V0,
-            args=(), is_not_compiled=settings.dev.debug,
+            dVdt_wrapped,
+            1.0 / (N - 1),
+            V0,
+            args=(),
+            is_not_compiled=settings.dev.debug,
         )
     else:
         sol = solve_ivp_diffrax(
-            dVdt_wrapped, 1.0 / (N - 1), V0,
+            dVdt_wrapped,
+            1.0 / (N - 1),
+            V0,
             solver_name=discretizer.ode_solver,
-            rtol=discretizer.rtol, atol=discretizer.atol,
-            args=(), extra_kwargs=discretizer.args,
+            rtol=discretizer.rtol,
+            atol=discretizer.atol,
+            args=(),
+            extra_kwargs=discretizer.args,
         )
 
     Vend = sol[-1].T.reshape(-1, aug_dim)
@@ -300,12 +335,15 @@ def _calculate_discretization_sparse(
 
     # Reconstruct a dense-layout Vmulti so that
     # DiscretizationResult.from_V can unpack it unchanged.
-    Vend_dense = jnp.concatenate([
-        x_prop,
-        A_bar.reshape(N - 1, n_x * n_x),
-        B_bar.reshape(N - 1, n_x * n_u),
-        C_bar.reshape(N - 1, n_x * n_u),
-    ], axis=-1)
+    Vend_dense = jnp.concatenate(
+        [
+            x_prop,
+            A_bar.reshape(N - 1, n_x * n_x),
+            B_bar.reshape(N - 1, n_x * n_u),
+            C_bar.reshape(N - 1, n_x * n_u),
+        ],
+        axis=-1,
+    )
     Vmulti = Vend_dense.reshape(-1, 1)
 
     return A_bar, B_bar, C_bar, x_prop, Vmulti

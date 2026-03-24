@@ -54,7 +54,7 @@ def _assert_brachistochrone_accuracy(comparison, problem, result):
         f"better than analytical {comparison['analytical_time']:.4f}s"
     )
 
-     # Check trajectory shape: position RMSE should be small
+    # Check trajectory shape: position RMSE should be small
     # Current performance: ~0.01, so enforce < 0.05 with margin
     position_rmse = comparison["position_rmse"]
     assert position_rmse < 0.05, f"Position RMSE {position_rmse:.4f} exceeds threshold of 0.05"

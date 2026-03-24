@@ -18,7 +18,6 @@ import jax.numpy as jnp
 import numpy as np
 from jax.experimental.sparse import BCOO
 
-
 # ---------------------------------------------------------------------------
 # Graph coloring
 # ---------------------------------------------------------------------------
@@ -119,9 +118,7 @@ def _sparse_jacobian_fn(
         n_args = len(primals)
 
         def f_of_target(target):
-            new_args = tuple(
-                target if i == argnums else primals[i] for i in range(n_args)
-            )
+            new_args = tuple(target if i == argnums else primals[i] for i in range(n_args))
             return f(*new_args, **kwargs)
 
         def single_jvp(seed):

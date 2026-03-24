@@ -6,7 +6,6 @@ from jax import export
 
 from openscvx.discretization import LinearizeDiscretize, LinearizeDiscretizeSparse, color_columns
 from openscvx.discretization.linearize_discretize import _dVdt
-from openscvx.discretization.linearize_discretize_sparse import _dVdt_sparse
 from openscvx.sparse import make_sparse_jacobian_fns
 
 # --- fixtures for dummy params, state_dot, A, B  ------------------
@@ -145,7 +144,6 @@ def _rocket_dynamics(x, u, node, params):
     mass row depends only on thrust magnitude (through controls, not states
     beyond mass).
     """
-    pos = x[:3]
     vel = x[3:6]
     m = x[6]
     T = u[:3]
@@ -220,8 +218,7 @@ def test_color_columns_validity():
                 # Same color → no shared nonzero row
                 shared = A_c[:, i] & A_c[:, j]
                 assert not shared.any(), (
-                    f"Columns {i} and {j} share color {colors[i]} "
-                    f"but have overlapping nonzero rows"
+                    f"Columns {i} and {j} share color {colors[i]} but have overlapping nonzero rows"
                 )
 
 
@@ -229,9 +226,7 @@ def test_sparse_jacobian_matches_dense():
     """Sparse Jacobian via coloring matches dense jacfwd numerically."""
     A_c, B_c = _get_rocket_sparsity()
     n_x, n_u = 7, 4
-    A_vm, B_vm = make_sparse_jacobian_fns(
-        _rocket_dynamics, A_c, B_c, n_x, n_u
-    )
+    A_vm, B_vm = make_sparse_jacobian_fns(_rocket_dynamics, A_c, B_c, n_x, n_u)
 
     A_dense_fn = jax.vmap(jax.jacfwd(_rocket_dynamics, 0), in_axes=(0, 0, 0, None))
     B_dense_fn = jax.vmap(jax.jacfwd(_rocket_dynamics, 1), in_axes=(0, 0, 0, None))
@@ -258,17 +253,13 @@ def test_sparse_discretization_matches_dense(rocket_settings, rocket_dynamics):
     A_c, B_c = _get_rocket_sparsity()
 
     # Dense path
-    dense_disc = LinearizeDiscretize(
-        custom_integrator=True, dis_type="FOH"
-    )
+    dense_disc = LinearizeDiscretize(custom_integrator=True, dis_type="FOH")
     dense_solver = dense_disc.get_solver(rocket_dynamics, rocket_settings)
 
     # Sparse path
     rocket_dynamics.A_c_sparsity = A_c
     rocket_dynamics.B_c_sparsity = B_c
-    sparse_disc = LinearizeDiscretizeSparse(
-        custom_integrator=True, dis_type="FOH"
-    )
+    sparse_disc = LinearizeDiscretizeSparse(custom_integrator=True, dis_type="FOH")
     sparse_solver = sparse_disc.get_solver(rocket_dynamics, rocket_settings)
 
     N = rocket_settings.sim.n
@@ -310,16 +301,12 @@ def test_compact_v_matches_dense(rocket_settings, rocket_dynamics, dis_type):
         f"compact ({aug_dim_compact}) should be smaller than dense ({aug_dim_dense})"
     )
 
-    dense_disc = LinearizeDiscretize(
-        custom_integrator=True, dis_type=dis_type
-    )
+    dense_disc = LinearizeDiscretize(custom_integrator=True, dis_type=dis_type)
     dense_solver = dense_disc.get_solver(rocket_dynamics, rocket_settings)
 
     rocket_dynamics.A_c_sparsity = A_c
     rocket_dynamics.B_c_sparsity = B_c
-    sparse_disc = LinearizeDiscretizeSparse(
-        custom_integrator=True, dis_type=dis_type
-    )
+    sparse_disc = LinearizeDiscretizeSparse(custom_integrator=True, dis_type=dis_type)
     sparse_solver = sparse_disc.get_solver(rocket_dynamics, rocket_settings)
 
     rng = np.random.default_rng(99)
@@ -339,9 +326,7 @@ def test_compact_v_matches_dense(rocket_settings, rocket_dynamics, dis_type):
     # Verify that the dense-reconstructed Vmulti is compatible with from_V
     from openscvx.algorithms.base import DiscretizationResult
 
-    disc_result = DiscretizationResult.from_V(
-        np.asarray(V_sparse), n_x=n_x, n_u=n_u, N=N
-    )
+    disc_result = DiscretizationResult.from_V(np.asarray(V_sparse), n_x=n_x, n_u=n_u, N=N)
     np.testing.assert_allclose(disc_result.A_d, np.array(A_dense), atol=1e-4)
     np.testing.assert_allclose(disc_result.B_d, np.array(B_dense), atol=1e-4)
 
