@@ -54,32 +54,32 @@ def _assert_brachistochrone_accuracy(comparison, problem, result):
         f"better than analytical {comparison['analytical_time']:.4f}s"
     )
 
-    # Check trajectory shape: position RMSE should be small
-    # With default LinearizeDiscretizeSparse, linearization differs slightly from
-    # dense jacfwd; allow a slightly looser bound than the historical ~0.01 RMSE.
+     # Check trajectory shape: position RMSE should be small
+    # Current performance: ~0.01, so enforce < 0.05 with margin
     position_rmse = comparison["position_rmse"]
-    assert position_rmse < 0.08, f"Position RMSE {position_rmse:.4f} exceeds threshold of 0.08"
+    assert position_rmse < 0.05, f"Position RMSE {position_rmse:.4f} exceeds threshold of 0.05"
 
-    # Check maximum position error (slightly looser with sparse default linearization)
+    # Check maximum position error
     max_pos_error = comparison["position_max_error"]
-    assert max_pos_error < 0.12, (
-        f"Maximum position error {max_pos_error:.4f} exceeds threshold of 0.12"
+    assert max_pos_error < 0.1, (
+        f"Maximum position error {max_pos_error:.4f} exceeds threshold of 0.1"
     )
 
-    # Check velocity accuracy (slightly looser with sparse default linearization)
+    # Check velocity accuracy
+    # Current performance: ~0.01 m/s, so enforce < 0.05 m/s with margin
     velocity_rmse = comparison["velocity_rmse"]
-    assert velocity_rmse < 0.08, f"Velocity RMSE {velocity_rmse:.4f} exceeds threshold of 0.08 m/s"
+    assert velocity_rmse < 0.05, f"Velocity RMSE {velocity_rmse:.4f} exceeds threshold of 0.05 m/s"
 
     # Check that we didn't take too many iterations
     if "discretization_history" in result:
         num_iters = len(result["discretization_history"])
         assert num_iters < 27, f"Took {num_iters} SCP iterations (expected < 15)"
 
-    # Check timing — sparse default discretizer adds JAX compile work for colored JVPs
-    assert problem.timing_init < 60.0, (
-        f"Initialization took {problem.timing_init:.2f}s (expected < 60s)"
+    # Check timing - these are generous limits for a simple problem like brachistochrone
+    assert problem.timing_init < 10.0, (
+        f"Initialization took {problem.timing_init:.2f}s (expected < 10s)"
     )
-    assert problem.timing_solve < 2.0, f"Solve took {problem.timing_solve:.2f}s (expected < 2s)"
+    assert problem.timing_solve < 1.2, f"Solve took {problem.timing_solve:.2f}s (expected < 1.2s)"
     assert problem.timing_post < 5.0, (
         f"Post-processing took {problem.timing_post:.2f}s (expected < 5s)"
     )
@@ -736,6 +736,8 @@ def test_parameters():
             "lam_prox": 1e0,
             "lam_cost": 6e-1,
             "lam_vc": 1e1,
+            "ep_tr": 1e-5,
+            "ep_vc": 1e-8,
         },
     )
 
