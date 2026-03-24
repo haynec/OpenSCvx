@@ -60,9 +60,7 @@ class VectorizeDiscretizeLinearize(Discretizer):
 
     Supports ZOH (zero-order hold) and FOH (first-order hold) control interpolation between nodes.
 
-    Use this integration scheme when the nonlinear dynamics are challenging
-    (e.g. stiff/sensitive, badly scaled, or with long time horizons) or when
-    tight tolerances are desired.
+    This integration scheme offers the best balance of speed and accuracy for most problems.
 
     Args:
         dis_type: Control hold type. ``"FOH"`` (first-order hold) or ``"ZOH"`` (zero-order hold).
@@ -89,8 +87,8 @@ class VectorizeDiscretizeLinearize(Discretizer):
         self.dis_type = dis_type
         self.ode_solver = ode_solver
         self.custom_integrator = custom_integrator
-        self.atol_combined = atol
-        self.rtol_combined = rtol
+        self.atol = atol
+        self.rtol = rtol
         if args is None:
             self.extra_kwargs = {"adjoint": dfx.ForwardMode()}
         else:
@@ -116,11 +114,8 @@ class VectorizeDiscretizeLinearize(Discretizer):
         n_u = settings.sim.n_controls
         nodes = jnp.arange(0, N - 1)
 
-        # Provided tolerances are for state and all three Jacobians combined, but only state will
-        # be integrated. Tighten tolerances by factor of (state size) / (state and Jacobians size)
-        # to make up for this
-        rtol = self.rtol_combined / (1 + n_x + 2*n_u)
-        atol = self.atol_combined / (1 + n_x + 2*n_u)
+        rtol = self.rtol
+        atol = self.atol
 
         multiple_state_dot = jax.vmap(dynamics.f, in_axes=(0, 0, 0, None))
 
@@ -183,7 +178,7 @@ class VectorizeDiscretizeLinearize(Discretizer):
             partial_in_u_next = lambda u_next : vectorize_then_discretize(x, u_cur, u_next, params)  # noqa E731
 
             # Stack of (repeats over all nodes of (standard basis vectors of state))
-            x_tangents = jnp.repeat(jnp.eye(n_x)[None, :, :], N - 1, axis=0)  
+            x_tangents = jnp.repeat(jnp.eye(n_x)[None, :, :], N - 1, axis=0)
             u_tangents = jnp.repeat(jnp.eye(n_u)[None, :, :], N - 1, axis=0)
 
             A_d = batched_jvp(partial_in_x, x, x_tangents)
@@ -257,8 +252,8 @@ class DiscretizeLinearizeVectorize(Discretizer):
         self.dis_type = dis_type
         self.ode_solver = ode_solver
         self.custom_integrator = custom_integrator
-        self.atol_combined = atol
-        self.rtol_combined = rtol
+        self.atol = atol
+        self.rtol = rtol
         if args is None:
             self.extra_kwargs = {"adjoint": dfx.ForwardMode()}
         else:
@@ -284,11 +279,10 @@ class DiscretizeLinearizeVectorize(Discretizer):
         n_x = settings.sim.n_states
         n_u = settings.sim.n_controls
 
-        # Provided tolerances are for state and all three Jacobians for all nodes combined, but only
-        # state will be integrated and on only one segment. Tighten tolerances by factor of
-        # (state size) / (state and Jacobians size for all nodes) to make up for this
-        rtol = self.rtol_combined / (N - 1) / (1 + n_x + 2*n_u)
-        atol = self.atol_combined / (N - 1) / (1 + n_x + 2*n_u)
+        # Provided tolerances are for integration error of all N-1 segments together, but only one
+        # segment will be integrated at a time
+        rtol_one_segment = self.rtol / (N - 1)
+        atol_one_segment = self.atol / (N - 1)
 
         single_state_dot = dynamics.f
 
@@ -333,8 +327,8 @@ class DiscretizeLinearizeVectorize(Discretizer):
                     1.0 / (N - 1),
                     x,
                     solver_name=self.ode_solver,
-                    rtol=rtol,
-                    atol=atol,
+                    rtol=rtol_one_segment,
+                    atol=atol_one_segment,
                     args=(u_cur, u_next, node, params),
                     extra_kwargs=self.extra_kwargs,
                 )
