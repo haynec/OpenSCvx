@@ -19,9 +19,8 @@ Jacobians and compact variational integration when sparsity patterns exist).
 import inspect
 from typing import Any
 
-from openscvx.sparse import color_columns, make_sparse_jacobian_fns
-
 from .base import Discretizer
+from .sparse_utils import color_columns, make_sparse_jacobian_fns
 from .linearize_discretize import (
     LinearizeDiscretize,
     calculate_impulsive_discretization,
@@ -67,7 +66,7 @@ def _resolve_discretizer(val: Any) -> Discretizer:
         raise TypeError(f"Expected a Discretizer instance or dict, got {type(val).__name__}")
 
     kwargs = dict(val)  # copy to avoid mutating caller's dict
-    name = kwargs.pop("type", "LinearizeDiscretizeSparse")
+    name = kwargs.pop("type", "LinearizeDiscretize")
 
     cls = _DISCRETIZER_MAP.get(name)
     if cls is None:

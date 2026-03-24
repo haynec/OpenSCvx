@@ -54,7 +54,7 @@ class LinearizeDiscretizeSparse(LinearizeDiscretize):
         Returns:
             Callable ``(x, u, params) -> (A_d, B_d, C_d, x_prop, V)``.
         """
-        from openscvx.sparse import make_sparse_jacobian_fns
+        from .sparse_utils import make_sparse_jacobian_fns
         from openscvx.symbolic.sparsity import discrete_sparsity
 
         A_c_pat = getattr(dynamics, "A_c_sparsity", None)
