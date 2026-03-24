@@ -4,9 +4,13 @@ import numpy as np
 import pytest
 from jax import export
 
-from openscvx.discretization import LinearizeDiscretize, LinearizeDiscretizeSparse, color_columns
+from openscvx.discretization import (
+    LinearizeDiscretize,
+    LinearizeDiscretizeSparse,
+    color_columns,
+    make_sparse_jacobian_fns,
+)
 from openscvx.discretization.linearize_discretize import _dVdt
-from openscvx.discretization import make_sparse_jacobian_fns
 
 # --- fixtures for dummy params, state_dot, A, B  ------------------
 

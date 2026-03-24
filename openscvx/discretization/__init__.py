@@ -20,13 +20,13 @@ import inspect
 from typing import Any
 
 from .base import Discretizer
-from .sparse_utils import color_columns, make_sparse_jacobian_fns
 from .linearize_discretize import (
     LinearizeDiscretize,
     calculate_impulsive_discretization,
     get_impulsive_discretization_solver,
 )
 from .linearize_discretize_sparse import LinearizeDiscretizeSparse
+from .sparse_utils import color_columns, make_sparse_jacobian_fns
 
 # ---------------------------------------------------------------------------
 # Spec resolver — turn a dict into a Discretizer instance
