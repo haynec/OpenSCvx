@@ -296,8 +296,8 @@ class Problem:
                 )
             self._algorithm = algorithm
 
-        # Resolve discretizer: None → LinearizeDiscretize, 
-        #                      dict → _resolve_discretizer, 
+        # Resolve discretizer: None → LinearizeDiscretize,
+        #                      dict → _resolve_discretizer,
         #                      instance → use
         if discretizer is None:
             self._discretizer = LinearizeDiscretize()
