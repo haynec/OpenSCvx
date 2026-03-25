@@ -150,59 +150,60 @@ problem.settings.prp.solver = "Dopri8"
 problem.settings.prp.atol = integration_tol
 problem.settings.prp.rtol = integration_tol
 
-problem.initialize()
-results = problem.solve()
-results = problem.post_process()
+if __name__ == '__main__':
+    problem.initialize()
+    results = problem.solve()
+    results = problem.post_process()
 
-pos = results.trajectory["position"]
-vel = results.trajectory["velocity"]
-x0_opt = np.concatenate([pos[0], vel[0]])
-xf_opt = np.concatenate([pos[-1], vel[-1]])
+    pos = results.trajectory["position"]
+    vel = results.trajectory["velocity"]
+    x0_opt = np.concatenate([pos[0], vel[0]])
+    xf_opt = np.concatenate([pos[-1], vel[-1]])
 
-# Match the post-optimization check style in main_orbs_2.py:
-# integrate only to t_f from optimized initial state and export xyz.
-traj_plot = np.asarray(
-    solve_ivp_diffrax(
-        lambda t, x: cr3bp_rhs(x, jnp.zeros((0,), dtype=x.dtype), 0, {}),
-        tau_final=t_opt,
-        y_0=jnp.asarray(x0_opt, dtype=jnp.float64),
-        args=(),
-        tau_0=0.0,
-        num_substeps=2000,
-        solver_name="Dopri8",
-        rtol=integration_tol,
-        atol=integration_tol,
-    ),
-    dtype=float,
-)
+    # Match the post-optimization check style in main_orbs_2.py:
+    # integrate only to t_f from optimized initial state and export xyz.
+    traj_plot = np.asarray(
+        solve_ivp_diffrax(
+            lambda t, x: cr3bp_rhs(x, jnp.zeros((0,), dtype=x.dtype), 0, {}),
+            tau_final=t_opt,
+            y_0=jnp.asarray(x0_opt, dtype=jnp.float64),
+            args=(),
+            tau_0=0.0,
+            num_substeps=2000,
+            solver_name="Dopri8",
+            rtol=integration_tol,
+            atol=integration_tol,
+        ),
+        dtype=float,
+    )
 
-# Plot guess and solution using the exact plot_projections_2d style.
-guess_results = OptimizationResults(converged=True, t_final=float(t_opt))
-guess_results.trajectory = {
-    "time": np.linspace(0.0, t_opt, guess_dense.shape[0]).reshape(-1, 1),
-    "position": guess_dense[:, :3],
-    "velocity": guess_dense[:, 3:6],
-}
-guess_results.nodes = {
-    "time": np.array([0.0, t_opt]).reshape(-1, 1),
-    "position": nominal_guess[:, :3],
-    "velocity": nominal_guess[:, 3:6],
-}
-fig_guess = plot_projections_2d(guess_results, velocity_var_name="velocity")
-fig_guess.update_layout(title="Initial Guess - XY, XZ, YZ Projections")
-fig_guess.show()
+    # Plot guess and solution using the exact plot_projections_2d style.
+    guess_results = OptimizationResults(converged=True, t_final=float(t_opt))
+    guess_results.trajectory = {
+        "time": np.linspace(0.0, t_opt, guess_dense.shape[0]).reshape(-1, 1),
+        "position": guess_dense[:, :3],
+        "velocity": guess_dense[:, 3:6],
+    }
+    guess_results.nodes = {
+        "time": np.array([0.0, t_opt]).reshape(-1, 1),
+        "position": nominal_guess[:, :3],
+        "velocity": nominal_guess[:, 3:6],
+    }
+    fig_guess = plot_projections_2d(guess_results, velocity_var_name="velocity")
+    fig_guess.update_layout(title="Initial Guess - XY, XZ, YZ Projections")
+    fig_guess.show()
 
-solution_results = OptimizationResults(converged=bool(results.converged), t_final=float(t_opt))
-solution_results.trajectory = {
-    "time": np.linspace(0.0, t_opt, traj_plot.shape[0]).reshape(-1, 1),
-    "position": traj_plot[:, :3],
-    "velocity": traj_plot[:, 3:6],
-}
-solution_results.nodes = {
-    "time": results.nodes["time"],
-    "position": results.nodes["position"],
-    "velocity": results.nodes["velocity"],
-}
-fig_solution = plot_projections_2d(solution_results, velocity_var_name="velocity")
-fig_solution.update_layout(title="Solution - XY, XZ, YZ Projections")
-fig_solution.show()
+    solution_results = OptimizationResults(converged=bool(results.converged), t_final=float(t_opt))
+    solution_results.trajectory = {
+        "time": np.linspace(0.0, t_opt, traj_plot.shape[0]).reshape(-1, 1),
+        "position": traj_plot[:, :3],
+        "velocity": traj_plot[:, 3:6],
+    }
+    solution_results.nodes = {
+        "time": results.nodes["time"],
+        "position": results.nodes["position"],
+        "velocity": results.nodes["velocity"],
+    }
+    fig_solution = plot_projections_2d(solution_results, velocity_var_name="velocity")
+    fig_solution.update_layout(title="Solution - XY, XZ, YZ Projections")
+    fig_solution.show()
