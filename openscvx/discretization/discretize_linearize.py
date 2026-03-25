@@ -13,40 +13,6 @@ if TYPE_CHECKING:
     from openscvx.lowered import Dynamics
 
 
-def batched_jvp(f: callable, primal: jnp.ndarray, tangents: jnp.ndarray) -> jnp.ndarray:
-    """Evaluates Jacobian-vector products batched over a stack of tangent vectors.
-
-    Computes the pushforward map of ``f`` at ``primal`` over the stack of inputs in the last axis of
-    ``tangents``. The outputs are then also stacked in the last axis. The input and output of ``f``
-    may have any number of dimensions.
-
-    For example, suppose ``f`` takes a vector input x ∈ ℝⁿ. Let ∂𝑓 be the Jacobian of ``f`` at
-    ``primal``. Take ``tangents`` to be an n×k matrix whose columns are in the domain of ``f``;
-    i.e. 𝑉 = [ 𝑣₁ 𝑣₂ ... 𝑣ₖ ]. This function then computes the matrix-matrix product
-    ∂𝑓𝑉 = [ ∂𝑓𝑣₁ ∂𝑓𝑣₂ ... ∂𝑓𝑣ₖ ]. Going one step further, if the columns of ``tangents`` are the
-    standard basis vectors, then 𝑉 = 𝐼 and this function outputs the Jacobian ∂𝑓.
-
-    See `the JAX documentation <https://docs.jax.dev/en/latest/jacobian-vector-products.html>`_
-    for more details on terminology.
-
-    Args:
-        f: Function whose Jacobian to take.
-        primal: Input value at which the Jacobian of ``f`` is taken.
-        tangents: Array of tangent vectors with which to evaluate Jacobian-vector products, stacked
-            in the last axis.
-
-    Returns:
-        Array of Jacobian-vector products for each value in ``tangents``, stacked in the last axis.
-
-    """
-    pushforward = jax.vmap(
-        lambda tangent: jax.jvp(f, (primal,), (tangent,))[1],  # Discard value of f (zeroth output)
-        in_axes=-1,
-        out_axes=-1,
-    )
-    return pushforward(tangents)
-
-
 class VectorizeDiscretizeLinearize(Discretizer):
     """Discretization via differentiating through the integrator for all segments simultaneously.
 
@@ -162,24 +128,36 @@ class VectorizeDiscretizeLinearize(Discretizer):
                 )
             return sol.reshape(-1, N - 1, n_x)
 
+        i0 = 0
+        i1 = n_x
+        i2 = n_x + n_u
+        i3 = n_x + 2*n_u
+        standard_basis = jnp.repeat(jnp.eye(i3)[None], N - 1, axis=0)
+
         def vectorize_then_discretize_then_linearize(
             x: jnp.ndarray,
             u_cur: np.ndarray,
             u_next: np.ndarray,
             params: dict,
         ):
+            def partial(z):
+                x = z[:, i0:i1]
+                u_cur = z[:, i1:i2]
+                u_next = z[:, i2:i3]
+                return vectorize_then_discretize(x, u_cur, u_next, params)
 
-            partial_in_x = lambda x: vectorize_then_discretize(x, u_cur, u_next, params)  # noqa E731
-            partial_in_u_cur = lambda u_cur: vectorize_then_discretize(x, u_cur, u_next, params)  # noqa E731
-            partial_in_u_next = lambda u_next: vectorize_then_discretize(x, u_cur, u_next, params)  # noqa E731
+            primal = jnp.concatenate([x, u_cur, u_next], axis=-1)
+            pushforward = jax.vmap(
+                # Discard value of f (zeroth output)
+                lambda tangent: jax.jvp(partial, (primal,), (tangent,))[1],
+                in_axes=-1,
+                out_axes=-1,
+            )
+            jacobians = pushforward(standard_basis)
 
-            # Stack of (repeats over all nodes of (standard basis vectors of state))
-            x_tangents = jnp.repeat(jnp.eye(n_x)[None, :, :], N - 1, axis=0)
-            u_tangents = jnp.repeat(jnp.eye(n_u)[None, :, :], N - 1, axis=0)
-
-            A_d = batched_jvp(partial_in_x, x, x_tangents)
-            B_d = batched_jvp(partial_in_u_cur, u_cur, u_tangents)
-            C_d = batched_jvp(partial_in_u_next, u_next, u_tangents)
+            A_d = jacobians[:, :, :, i0:i1]
+            B_d = jacobians[:, :, :, i1:i2]
+            C_d = jacobians[:, :, :, i2:i3]
 
             return A_d, B_d, C_d
 
