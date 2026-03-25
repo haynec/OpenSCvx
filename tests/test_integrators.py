@@ -1,5 +1,6 @@
 # test_integrators.py
 
+import diffrax as dfx
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -88,3 +89,24 @@ def test_solve_ivp_diffrax_prop_decay(solver_name):
     ys = np.array(sol[:, 0])
     expected = np.exp(-np.linspace(tau0, tau1, MAX_TAU_LEN))
     np.testing.assert_allclose(ys, expected, rtol=1e-3, atol=1e-6)
+
+
+def test_solve_ivp_diffrax_with_stepto_controller():
+    t0, t1 = 0.0, 1.0
+    num_steps = 11
+    times = jnp.linspace(t0, t1, num_steps)
+    y0 = jnp.array([1.0])
+    sol = solve_ivp_diffrax(
+        decay,
+        t1,
+        y0,
+        args=(),
+        solver_name="Tsit5",
+        rtol=1e-3,
+        atol=1e-6,
+        num_substeps=num_steps,
+        extra_kwargs={"stepsize_controller": dfx.StepTo(ts=times)},
+    )
+    sol_np = np.array(sol[:, 0])
+    expected = np.exp(-np.array(times))
+    np.testing.assert_allclose(sol_np, expected, rtol=5e-3, atol=5e-3)
