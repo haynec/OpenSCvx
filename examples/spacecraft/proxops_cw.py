@@ -127,7 +127,7 @@ problem = Problem(
     constraints=constraints,
     N=n_nodes,
     algorithm={"lam_vb": 1e0},
-    discretizer={"dis_type": "ZOH"},
+    discretizer={"dis_type": "ZOH", "ode_solver": "Dopri8"},
 )
 
 # Plotting metadata

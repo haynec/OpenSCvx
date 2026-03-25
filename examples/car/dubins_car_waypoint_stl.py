@@ -85,7 +85,7 @@ safety_region = ox.linalg.Norm(position - obs_center) <= 1.6
 # Globally the control bound is 10.0; inside the waypoint window we restrict to 1.0.
 slow_speed_in_waypoint = ox.linalg.Norm(speed) <= 1.0
 
-speed_constraint = ox.stl.IfThen(safety_region, slow_speed_in_waypoint, c=1e-2)
+speed_constraint = ox.stl.IfThen(safety_region, slow_speed_in_waypoint)
 
 constraints.append(
     speed_constraint.over(

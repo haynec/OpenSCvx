@@ -47,9 +47,9 @@ def _resolve_discretizer(val: Any) -> Discretizer:
     Accepted forms:
 
     * **instance** — already-constructed :class:`Discretizer` (pass-through).
-    * **dict** — keyword arguments passed to a new :class:`LinearizeDiscretize`.
-      An optional ``"type"`` key selects which :class:`Discretizer` to construct
-      instead.
+    * **dict** — keyword arguments passed to the selected discretizer class.
+      An optional ``"type"`` key selects the class (defaults to
+      :class:`VectorizeLinearizeDiscretize`).
 
     Examples::
 
@@ -69,7 +69,7 @@ def _resolve_discretizer(val: Any) -> Discretizer:
         raise TypeError(f"Expected a Discretizer instance or dict, got {type(val).__name__}")
 
     kwargs = dict(val)  # copy to avoid mutating caller's dict
-    name = kwargs.pop("type", "LinearizeDiscretize")
+    name = kwargs.pop("type", "VectorizeDiscretizeLinearize")
 
     cls = _DISCRETIZER_MAP.get(name)
     if cls is None:
