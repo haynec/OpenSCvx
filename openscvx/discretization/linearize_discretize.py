@@ -42,6 +42,7 @@ class LinearizeDiscretize(Discretizer):
             ``stepsize_controller``). Set ``rtol``/``atol`` here when using
             the default PID controller. Defaults to ``{}``.
     """
+
     def __init__(
         self,
         dis_type: str = "FOH",

@@ -348,8 +348,7 @@ class PenalizedTrustRegion(Algorithm):
 
         # Solve a dumb problem to initialize DPP and JAX jacobians
         _, _, _, x_prop, V_multi_shoot = self._invoke_solver(
-            self._discretization_solver,
-            init_state.x, init_state.u.astype(float), params
+            self._discretization_solver, init_state.x, init_state.u.astype(float), params
         )
 
         init_state.add_discretization(V_multi_shoot.__array__())
@@ -401,16 +400,14 @@ class PenalizedTrustRegion(Algorithm):
         if state.k == 1:
             t0 = time.time()
             _, _, _, x_prop, V_multi_shoot = self._invoke_solver(
-                self._discretization_solver,
-                state.x, state.u.astype(float), params
+                self._discretization_solver, state.x, state.u.astype(float), params
             )
 
             u_state = state.u.astype(float)
             x0_prior = self._recover_prior_node_from_initial(settings, state.x[0])
             x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
             _, _, _, W_multi_shoot = self._invoke_solver(
-                self._discretization_solver_impulsive,
-                x_nodes_prior, u_state, params
+                self._discretization_solver_impulsive, x_nodes_prior, u_state, params
             )
             dis_time = time.time() - t0
 
@@ -439,16 +436,14 @@ class PenalizedTrustRegion(Algorithm):
 
         t0 = time.time()
         _, _, _, x_prop, V_multi_shoot = self._invoke_solver(
-            self._discretization_solver,
-            candidate.x, candidate.u.astype(float), params
+            self._discretization_solver, candidate.x, candidate.u.astype(float), params
         )
 
         u_candidate = candidate.u.astype(float)
         x0_prior = self._recover_prior_node_from_initial(settings, candidate.x[0])
         x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
         x_prop_plus, D_d, E_d, W_multi_shoot = self._invoke_solver(
-            self._discretization_solver_impulsive,
-            x_nodes_prior, u_candidate, params
+            self._discretization_solver_impulsive, x_nodes_prior, u_candidate, params
         )
 
         dis_time = time.time() - t0

@@ -86,5 +86,3 @@ def solve_ivp_rk45(
         _, _, solution = jax.lax.fori_loop(1, len(substeps), body_fun, (tau_0, y_0, solution))
 
     return solution
-
-
