@@ -53,6 +53,11 @@ def _resolve_discretizer(val: Any) -> Discretizer:
         # Dict with keyword overrides (default class: LinearizeDiscretizeSparse)
         _resolve_discretizer({"dis_type": "ZOH", "ode_solver": "Dopri8"})
 
+        # Configure integrator behavior (forwarded to Diffrax / diffeqsolve)
+        _resolve_discretizer(
+            {"diffrax_kwargs": {"num_substeps": 100, "max_steps": 20_000}}
+        )
+
         # Dict with explicit dense discretizer
         _resolve_discretizer({"type": "LinearizeDiscretize", "dis_type": "ZOH"})
 

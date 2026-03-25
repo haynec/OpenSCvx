@@ -160,6 +160,7 @@ def load_or_compile_propagation_solver(
     n_controls: int,
     max_tau_len: int,
     save_compiled: bool = False,
+    debug: bool = False,
 ) -> callable:
     """Load propagation solver from cache or compile and cache it.
 
@@ -175,6 +176,9 @@ def load_or_compile_propagation_solver(
     Returns:
         Compiled propagation solver
     """
+    if debug:
+        return propagation_solver
+
     if save_compiled:
         try:
             with open(cache_file, "rb") as f:
@@ -235,16 +239,29 @@ def prime_propagation_solver(
             name: np.ones_like(value) if hasattr(value, "shape") else float(value)
             for name, value in params.items()
         }
-        propagation_solver.call(
-            x_0,
-            tau_grid,
-            controls_current,
-            controls_next,
-            tau_init,
-            node,
-            save_time,
-            mask_padded,
-            dummy_params,
-        )
+        if hasattr(propagation_solver, "call"):
+            propagation_solver.call(
+                x_0,
+                tau_grid,
+                controls_current,
+                controls_next,
+                tau_init,
+                node,
+                save_time,
+                mask_padded,
+                dummy_params,
+            )
+        else:
+            propagation_solver(
+                x_0,
+                tau_grid,
+                controls_current,
+                controls_next,
+                tau_init,
+                node,
+                save_time,
+                mask_padded,
+                dummy_params,
+            )
     except Exception as e:
         print(f"[Initialization] Priming propagation_solver.call failed: {e}")

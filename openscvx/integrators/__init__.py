@@ -31,15 +31,21 @@ class Integrator(ABC):
 ```
 """
 
-from .runge_kutta import (
+from .diffrax import (
+    DEFAULT_DIFFRAX_ATOL,
+    DEFAULT_DIFFRAX_RTOL,
     SOLVER_MAP,
-    rk45_step,
     solve_ivp_diffrax,
     solve_ivp_diffrax_prop,
+)
+from .runge_kutta import (
+    rk45_step,
     solve_ivp_rk45,
 )
 
 __all__ = [
+    "DEFAULT_DIFFRAX_RTOL",
+    "DEFAULT_DIFFRAX_ATOL",
     "SOLVER_MAP",
     "rk45_step",
     "solve_ivp_rk45",
