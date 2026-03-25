@@ -38,7 +38,7 @@ mu_earth = 398600.4354360959
 mu_moon = 4902.800066163796
 mu = mu_moon / (mu_earth + mu_moon)
 t_f = 1.522
-t_opt = 6.0 * t_f       # 6 revolutions
+t_opt = 6.0 * t_f  # 6 revolutions
 n_nodes = 2
 integration_tol = 1e-10
 
@@ -81,8 +81,8 @@ guess_dense = np.asarray(
         tau_0=0.0,
         num_substeps=1000,
         solver_name="Dopri8",
-        rtol= integration_tol,
-        atol= integration_tol,
+        rtol=integration_tol,
+        atol=integration_tol,
     ),
     dtype=float,
 )
@@ -122,16 +122,16 @@ states = [position, velocity]
 
 time = ox.Time(initial=0.0, final=t_opt, min=0.0, max=t_opt)
 discretizer = {
-        "ode_solver": "Dopri8",
-        "atol": integration_tol,
-        "rtol": integration_tol,
-    }
-algorithm={
-        "k_max": 400,
-        "lam_prox": 2e-1,
-        "lam_vc": 5e-2,
-        "ep_vc": 1e-6,
-    }
+    "ode_solver": "Dopri8",
+    "atol": integration_tol,
+    "rtol": integration_tol,
+}
+algorithm = {
+    "k_max": 400,
+    "lam_prox": 2e-1,
+    "lam_vc": 5e-2,
+    "ep_vc": 1e-6,
+}
 
 problem = Problem(
     dynamics=dynamics,
@@ -150,7 +150,7 @@ problem.settings.prp.solver = "Dopri8"
 problem.settings.prp.atol = integration_tol
 problem.settings.prp.rtol = integration_tol
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     problem.initialize()
     results = problem.solve()
     results = problem.post_process()

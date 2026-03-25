@@ -13,11 +13,7 @@ if TYPE_CHECKING:
     from openscvx.lowered import Dynamics
 
 
-def batched_jvp(
-        f: callable,
-        primal: jnp.ndarray,
-        tangents: jnp.ndarray
-) -> jnp.ndarray:
+def batched_jvp(f: callable, primal: jnp.ndarray, tangents: jnp.ndarray) -> jnp.ndarray:
     """Evaluates Jacobian-vector products batched over a stack of tangent vectors.
 
     Computes the pushforward map of ``f`` at ``primal`` over the stack of inputs in the last axis of
@@ -44,9 +40,9 @@ def batched_jvp(
 
     """
     pushforward = jax.vmap(
-        lambda tangent : jax.jvp(f, (primal,), (tangent,))[1],  # Discard value of f (zeroth output)
+        lambda tangent: jax.jvp(f, (primal,), (tangent,))[1],  # Discard value of f (zeroth output)
         in_axes=-1,
-        out_axes=-1
+        out_axes=-1,
     )
     return pushforward(tangents)
 
@@ -173,9 +169,9 @@ class VectorizeDiscretizeLinearize(Discretizer):
             params: dict,
         ):
 
-            partial_in_x = lambda x : vectorize_then_discretize(x, u_cur, u_next, params)  # noqa E731
-            partial_in_u_cur = lambda u_cur : vectorize_then_discretize(x, u_cur, u_next, params)  # noqa E731
-            partial_in_u_next = lambda u_next : vectorize_then_discretize(x, u_cur, u_next, params)  # noqa E731
+            partial_in_x = lambda x: vectorize_then_discretize(x, u_cur, u_next, params)  # noqa E731
+            partial_in_u_cur = lambda u_cur: vectorize_then_discretize(x, u_cur, u_next, params)  # noqa E731
+            partial_in_u_next = lambda u_next: vectorize_then_discretize(x, u_cur, u_next, params)  # noqa E731
 
             # Stack of (repeats over all nodes of (standard basis vectors of state))
             x_tangents = jnp.repeat(jnp.eye(n_x)[None, :, :], N - 1, axis=0)
@@ -197,14 +193,14 @@ class VectorizeDiscretizeLinearize(Discretizer):
             V_multi = jnp.concatenate(
                 [
                     x_prop,
-                    A_d.reshape(-1, N-1, n_x*n_x),
-                    B_d.reshape(-1, N-1, n_x*n_u),
-                    C_d.reshape(-1, N-1, n_x*n_u)
+                    A_d.reshape(-1, N - 1, n_x * n_x),
+                    B_d.reshape(-1, N - 1, n_x * n_u),
+                    C_d.reshape(-1, N - 1, n_x * n_u),
                 ],
-                axis=2
+                axis=2,
             )
             i4 = V_multi.shape[2]
-            V_multi = V_multi.reshape(-1, (N-1)*i4).T
+            V_multi = V_multi.reshape(-1, (N - 1) * i4).T
 
             return A_d[-1], B_d[-1], C_d[-1], x_prop[-1], V_multi
 
@@ -337,20 +333,14 @@ class DiscretizeLinearizeVectorize(Discretizer):
         discretize_then_vectorize = jax.vmap(single_shot, in_axes=(0, 0, 0, 0, None), out_axes=1)
         discretize_then_linearize = jax.jacfwd(single_shot, argnums=(0, 1, 2))
         discretize_then_linearize_then_vectorize = jax.vmap(
-            discretize_then_linearize,
-            in_axes=(0, 0, 0, 0, None),
-            out_axes=1
+            discretize_then_linearize, in_axes=(0, 0, 0, 0, None), out_axes=1
         )
 
         nodes = jnp.arange(0, N - 1)
 
         def solver(x, u, params):
             A_d, B_d, C_d = discretize_then_linearize_then_vectorize(
-                x[:-1],
-                u[:-1],
-                u[1:],
-                nodes,
-                params
+                x[:-1], u[:-1], u[1:], nodes, params
             )
             x_prop = discretize_then_vectorize(x[:-1], u[:-1], u[1:], nodes, params)
 
@@ -360,14 +350,14 @@ class DiscretizeLinearizeVectorize(Discretizer):
             V_multi = jnp.concatenate(
                 [
                     x_prop,
-                    A_d.reshape(-1, N-1, n_x*n_x),
-                    B_d.reshape(-1, N-1, n_x*n_u),
-                    C_d.reshape(-1, N-1, n_x*n_u)
+                    A_d.reshape(-1, N - 1, n_x * n_x),
+                    B_d.reshape(-1, N - 1, n_x * n_u),
+                    C_d.reshape(-1, N - 1, n_x * n_u),
                 ],
-                axis=2
+                axis=2,
             )
             i4 = V_multi.shape[2]
-            V_multi = V_multi.reshape(-1, (N-1)*i4).T
+            V_multi = V_multi.reshape(-1, (N - 1) * i4).T
 
             return A_d[-1], B_d[-1], C_d[-1], x_prop[-1], V_multi
 
