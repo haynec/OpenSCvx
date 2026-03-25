@@ -223,9 +223,9 @@ class DiscretizeLinearizeVectorize(Discretizer):
 
     Supports ZOH (zero-order hold) and FOH (first-order hold) control interpolation between nodes.
 
-    More accurate than ``VectorizeDiscretizeLinearize``, but also more expensive. Use this
-    integration scheme when the nonlinear dynamics are challenging (e.g. stiff/sensitive,
-    badly scaled, or long time horizons) or when very tight tolerances are desired.
+    Use this integration scheme when the nonlinear dynamics are challenging (e.g. stiff/sensitive,
+    badly scaled, or over long time horizons) and require very tight tolerances. A prototypical
+    example is atmospheric entry of a spacecraft.
 
     Args:
         dis_type: Control hold type. ``"FOH"`` (first-order hold) or ``"ZOH"`` (zero-order hold).

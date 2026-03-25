@@ -20,8 +20,8 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 import openscvx as ox
-from openscvx.algorithms import OptimizationResults
 from openscvx import Problem
+from openscvx.algorithms import OptimizationResults
 from openscvx.integrators import solve_ivp_diffrax
 from openscvx.plotting import plot_projections_2d
 from openscvx.symbolic.lower import lower_to_jax
