@@ -131,6 +131,7 @@ algorithm = {
     "lam_prox": 2e-1,
     "lam_vc": 5e-2,
     "ep_vc": 1e-6,
+    "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
 }
 
 problem = Problem(
