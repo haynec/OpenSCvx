@@ -185,7 +185,19 @@ class VectorizeDiscretizeLinearize(Discretizer):
         return solver
 
     def citation(self) -> List[str]:
-        return []
+        """Return BibTeX citations for the vectorize-then-discretize-then-linearize method.
+
+        Returns:
+            List containing the BibTeX entries
+        """
+        return [
+            r"""@phdthesis{kidger2021on,
+  title={{O}n {N}eural {D}ifferential {E}quations},
+  author={Patrick Kidger},
+  year={2021},
+  school={University of Oxford},
+}""",
+        ]
 
 
 class DiscretizeLinearizeVectorize(Discretizer):
@@ -342,4 +354,16 @@ class DiscretizeLinearizeVectorize(Discretizer):
         return solver
 
     def citation(self) -> List[str]:
-        return []
+        """Return BibTeX citations for the discretize-then-linearize-then-vectorize method.
+
+        Returns:
+            List containing the BibTeX entries
+        """
+        return [
+            r"""@phdthesis{kidger2021on,
+  title={{O}n {N}eural {D}ifferential {E}quations},
+  author={Patrick Kidger},
+  year={2021},
+  school={University of Oxford},
+}""",
+        ]
