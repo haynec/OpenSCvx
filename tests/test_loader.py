@@ -20,6 +20,7 @@ from openscvx.loader import load_dict, load_json, load_yaml
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
 from tests.test_brachistochrone import (
     _print_comparison_metrics,
+    _assert_brachistochrone_accuracy,
 )
 
 # =============================================================================
@@ -67,6 +68,7 @@ def _validate_result(result, problem, label="YAML"):
         G,
     )
     _print_comparison_metrics(comparison, label)
+    _assert_brachistochrone_accuracy(comparison, problem, result)
     # Keep loader tests focused on correctness, not machine-dependent runtime.
     time_error_pct = comparison["time_error_pct"]
     assert time_error_pct < 1.0, (
