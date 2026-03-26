@@ -188,20 +188,21 @@ constraints.append(ee_target_constraint)
 # Initial Guesses (via IK)
 # =============================================================================
 
-from ik import ik_solve
+q_identity = [1, 0, 0, 0]
+home_ee_pos = [a2 + a3 + a4, 0, d1]
 
-# Solve IK for terminal joint angles that reach the target with identity orientation
-R_target = np.eye(3)
-q_terminal = ik_solve(
-    screw_axes,
-    T_home,
-    target.value,
-    R_target=R_target,
+angle.guess = ox.init.ik_interpolation(
+    keyframes=[
+        (home_ee_pos, q_identity),
+        (target.value, q_identity),
+    ],
+    nodes=[0, n - 1],
+    screw_axes=screw_axes,
+    T_home=T_home,
+    q_init=angle.initial,
     q_min=angle.min,
     q_max=angle.max,
 )
-
-angle.guess = np.linspace(angle.initial, q_terminal, n)
 velocity.guess = np.zeros((n, N_JOINTS))
 torque.guess = np.zeros((n, N_JOINTS))
 
@@ -238,7 +239,7 @@ if __name__ == "__main__":
     print(f"Link lengths: d1={d1}m, a2={a2}m, a3={a3}m, a4={a4}m")
     print(f"Home EE position: [{a2 + a3 + a4:.2f}, 0.00, {d1:.2f}]")
     print(f"Target position: {target.value}")
-    print(f"IK solution [deg]: {np.round(np.rad2deg(q_terminal), 1)}")
+    print(f"IK terminal guess [deg]: {np.round(np.rad2deg(angle.guess[-1]), 1)}")
     print()
 
     problem.initialize()

@@ -176,18 +176,21 @@ constraints.append(ee_target_constraint)
 # Initial Guesses (via IK)
 # =============================================================================
 
-from ik import ik_solve
+q_identity = [1, 0, 0, 0]
+home_ee_pos = [L2 + L3, 0, L1]
 
-# Solve IK for terminal joint angles that reach the target
-q_terminal = ik_solve(
-    screw_axes,
-    T_home,
-    target.value,
+angle.guess = ox.init.ik_interpolation(
+    keyframes=[
+        (home_ee_pos, q_identity),
+        (target.value, q_identity),
+    ],
+    nodes=[0, n - 1],
+    screw_axes=screw_axes,
+    T_home=T_home,
+    q_init=angle.initial,
     q_min=angle.min,
     q_max=angle.max,
 )
-
-angle.guess = np.linspace(angle.initial, q_terminal, n)
 velocity.guess = np.zeros((n, 3))
 torque.guess = np.zeros((n, 3))
 
