@@ -29,7 +29,7 @@ sys.path.append(grandparent_dir)
 
 import openscvx as ox
 from openscvx import Problem
-from openscvx.plotting import plot_scp_convergence_histories, plot_scp_iterations
+from openscvx.plotting import plot_controls, plot_scp_iterations
 
 # =============================================================================
 # Robot Parameters
@@ -47,8 +47,8 @@ a4 = 0.150  # Wrist to end-effector
 inertia = np.array([0.08, 0.06, 0.05, 0.04, 0.02, 0.01, 0.005])
 
 # Number of discretization nodes
-n = 5
-total_time = 3.0
+n = 2
+total_time = 1.0
 
 # =============================================================================
 # Screw Axes for Product of Exponentials
@@ -261,7 +261,7 @@ if __name__ == "__main__":
     print(f"Position error:    {error:.4f} m")
 
     plot_scp_iterations(results).show()
-    plot_scp_convergence_histories(results).show()
+    plot_controls(results).show()
 
     # =========================================================================
     # Viser 3D Arm Animation
