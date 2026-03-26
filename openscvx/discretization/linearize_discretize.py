@@ -1,11 +1,16 @@
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 from openscvx.discretization.base import Discretizer
-from openscvx.integrators import solve_ivp_diffrax, solve_ivp_rk45
+from openscvx.integrators import (
+    DEFAULT_DIFFRAX_ATOL,
+    DEFAULT_DIFFRAX_RTOL,
+    solve_ivp_diffrax,
+    solve_ivp_rk45,
+)
 
 if TYPE_CHECKING:
     from openscvx.config import Config
@@ -31,29 +36,61 @@ class LinearizeDiscretize(Discretizer):
         ode_solver: Diffrax solver name. Any solver from
             `Diffrax <https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/>`_
             is valid. Defaults to ``"Tsit5"``.
-        custom_integrator: Use the built-in fixed-step RK45 integrator
-            instead of Diffrax. Faster but less robust. Defaults to ``False``.
-        atol: Absolute tolerance for the ODE solver. Defaults to ``1e-3``.
-        rtol: Relative tolerance for the ODE solver. Defaults to ``1e-6``.
-        args: Extra keyword arguments forwarded to
-            :func:`diffrax.diffeqsolve`. Defaults to ``{}``.
+        diffrax_kwargs: Preferred Diffrax keyword overrides. These map to
+            :func:`openscvx.integrators.solve_ivp_diffrax` kwargs, and unknown
+            keys are forwarded to :func:`diffrax.diffeqsolve` (e.g.
+            ``stepsize_controller``). Set ``rtol``/``atol`` here when using
+            the default PID controller. Defaults to ``{}``.
     """
 
     def __init__(
         self,
         dis_type: str = "FOH",
         ode_solver: str = "Tsit5",
-        custom_integrator: bool = False,
-        atol: float = 1e-3,
-        rtol: float = 1e-6,
-        args: Optional[dict] = None,
+        diffrax_kwargs: Optional[dict[str, Any]] = None,
     ):
         self.dis_type = dis_type
         self.ode_solver = ode_solver
-        self.custom_integrator = custom_integrator
-        self.atol = atol
-        self.rtol = rtol
-        self.args = args if args is not None else {}
+        self.diffrax_kwargs = dict(diffrax_kwargs) if diffrax_kwargs is not None else {}
+
+    def _resolve_diffrax_kwargs(self) -> dict[str, Any]:
+        """Build kwargs for :func:`solve_ivp_diffrax`.
+
+        Unknown keys from ``self.diffrax_kwargs`` are forwarded to
+        :func:`diffrax.diffeqsolve` via ``extra_kwargs`` so users can pass
+        objects like ``stepsize_controller`` directly from discretizer settings.
+        """
+        kwargs: dict[str, Any] = {
+            "solver_name": self.ode_solver,
+            "rtol": DEFAULT_DIFFRAX_RTOL,
+            "atol": DEFAULT_DIFFRAX_ATOL,
+        }
+
+        user_kwargs = dict(self.diffrax_kwargs)
+        extra_kwargs: dict[str, Any] = {}
+
+        nested_extra = user_kwargs.pop("extra_kwargs", None)
+        if nested_extra is not None:
+            extra_kwargs.update(dict(nested_extra))
+
+        direct_keys = {"tau_0", "num_substeps", "solver_name", "rtol", "atol"}
+        for key, value in user_kwargs.items():
+            if key in direct_keys:
+                kwargs[key] = value
+            else:
+                extra_kwargs[key] = value
+
+        kwargs["extra_kwargs"] = extra_kwargs
+        return kwargs
+
+    def _resolve_rk45_kwargs(self, *, is_not_compiled: bool) -> dict[str, Any]:
+        """Build kwargs for :func:`solve_ivp_rk45`."""
+        kwargs: dict[str, Any] = {"is_not_compiled": is_not_compiled}
+        direct_keys = {"tau_0", "num_substeps", "is_not_compiled"}
+        for key, value in self.diffrax_kwargs.items():
+            if key in direct_keys:
+                kwargs[key] = value
+        return kwargs
 
     def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
         """Create a multi-shoot discretization solver.
@@ -318,25 +355,23 @@ def _calculate_discretization(
     def dVdt_wrapped(t, y):
         return _dVdt(t, y, **integrator_args)
 
-    # Choose integrator
-    if discretizer.custom_integrator:
+    if settings.dev.debug:
+        rk45_kwargs = discretizer._resolve_rk45_kwargs(is_not_compiled=settings.dev.debug)
         sol = solve_ivp_rk45(
             dVdt_wrapped,
             1.0 / (N - 1),
             V0,
             args=(),
-            is_not_compiled=settings.dev.debug,
+            **rk45_kwargs,
         )
     else:
+        diffrax_kwargs = discretizer._resolve_diffrax_kwargs()
         sol = solve_ivp_diffrax(
             dVdt_wrapped,
             1.0 / (N - 1),
             V0,
-            solver_name=discretizer.ode_solver,
-            rtol=discretizer.rtol,
-            atol=discretizer.atol,
             args=(),
-            extra_kwargs=discretizer.args,
+            **diffrax_kwargs,
         )
 
     Vend = sol[-1].T.reshape(-1, i4)

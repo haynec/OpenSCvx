@@ -138,10 +138,6 @@ def test_example(name, metadata):
     if hasattr(problem.settings, "dev"):
         problem.settings.dev.printing = False
 
-    # Disable custom integrator for stability (used in some drone examples)
-    if hasattr(problem, "_discretizer") and hasattr(problem._discretizer, "custom_integrator"):
-        problem._discretizer.custom_integrator = False
-
     # Run the optimization pipeline
     problem.initialize()
     result = problem.solve()

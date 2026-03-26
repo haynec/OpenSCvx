@@ -187,8 +187,13 @@ class Problem:
                     # Change hold type and ODE solver
                     discretizer={"dis_type": "ZOH", "ode_solver": "Dopri8"}
 
-                    # Use custom integrator
-                    discretizer={"custom_integrator": True}
+                    # Pass integrator kwargs (forwarded to Diffrax / diffeqsolve)
+                    discretizer={
+                        "diffrax_kwargs": {
+                            "max_steps": 20_000,
+                            "num_substeps": 100,
+                        }
+                    }
 
                     # Instance
                     discretizer=ox.LinearizeDiscretize(dis_type="ZOH")
@@ -426,11 +431,12 @@ class Problem:
     def discretizer(self) -> Discretizer:
         """Access the discretizer instance.
 
-        Attributes such as `dis_type`, `ode_solver`, and `custom_integrator`
+        Attributes such as `dis_type`, `ode_solver`, and `diffrax_kwargs`
         can be modified freely before `initialize` is called:
 
             problem.discretizer.dis_type = "ZOH"
             problem.discretizer.ode_solver = "Dopri8"
+            problem.discretizer.diffrax_kwargs = {"num_substeps": 100}
             problem.initialize()
 
         !!! warning
@@ -839,6 +845,7 @@ class Problem:
             self.settings.sim.n_controls,
             self.settings.prp.max_tau_len,
             save_compiled=self.settings.sim.save_compiled,
+            debug=self.settings.dev.debug,
         )
 
         # Build per-constraint lam_vb arrays from symbolic constraints and

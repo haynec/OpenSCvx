@@ -31,12 +31,9 @@ class LinearizeDiscretizeSparse(LinearizeDiscretize):
         dis_type: Control hold type. ``"FOH"`` or ``"ZOH"``.
             Defaults to ``"FOH"``.
         ode_solver: Diffrax solver name. Defaults to ``"Tsit5"``.
-        custom_integrator: Use built-in fixed-step RK45 instead of Diffrax.
-            Defaults to ``False``.
-        atol: Absolute tolerance for the ODE solver. Defaults to ``1e-3``.
-        rtol: Relative tolerance for the ODE solver. Defaults to ``1e-6``.
-        args: Extra keyword arguments forwarded to
-            :func:`diffrax.diffeqsolve`. Defaults to ``{}``.
+        diffrax_kwargs: Diffrax keyword overrides inherited from
+            :class:`LinearizeDiscretize`. Unknown keys are forwarded to
+            :func:`diffrax.diffeqsolve` via ``extra_kwargs``.
     """
 
     def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
@@ -301,24 +298,23 @@ def _calculate_discretization_sparse(
     def dVdt_wrapped(t, y):
         return _dVdt_sparse(t, y, **integrator_args)
 
-    if discretizer.custom_integrator:
+    if settings.dev.debug:
+        rk45_kwargs = discretizer._resolve_rk45_kwargs(is_not_compiled=settings.dev.debug)
         sol = solve_ivp_rk45(
             dVdt_wrapped,
             1.0 / (N - 1),
             V0,
             args=(),
-            is_not_compiled=settings.dev.debug,
+            **rk45_kwargs,
         )
     else:
+        diffrax_kwargs = discretizer._resolve_diffrax_kwargs()
         sol = solve_ivp_diffrax(
             dVdt_wrapped,
             1.0 / (N - 1),
             V0,
-            solver_name=discretizer.ode_solver,
-            rtol=discretizer.rtol,
-            atol=discretizer.atol,
             args=(),
-            extra_kwargs=discretizer.args,
+            **diffrax_kwargs,
         )
 
     Vend = sol[-1].T.reshape(-1, aug_dim)

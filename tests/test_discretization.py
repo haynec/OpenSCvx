@@ -1,3 +1,4 @@
+import diffrax as dfx
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -58,8 +59,8 @@ def dynamics():
 
 
 def test_discretization_shapes(settings, dynamics):
-    # build solver via LinearizeDiscretize (custom_integrator for speed)
-    discretizer = LinearizeDiscretize(custom_integrator=True)
+    settings.dev.debug = True
+    discretizer = LinearizeDiscretize()
     solver = discretizer.get_solver(dynamics, settings)
 
     # dummy x,u (n_controls already includes time-dilation)
@@ -123,10 +124,9 @@ def test_jit_dVdt_compiles(settings):
     lowered.compile()
 
 
-@pytest.mark.parametrize("integrator", ["custom_integrator", "diffrax"])
-def test_jit_discretization_solver_compiles(settings, dynamics, integrator):
-    # build the solver via LinearizeDiscretize with the chosen integrator
-    discretizer = LinearizeDiscretize(custom_integrator=(integrator == "custom_integrator"))
+def test_jit_discretization_solver_compiles(settings, dynamics):
+    settings.dev.debug = True  # force RK45 path
+    discretizer = LinearizeDiscretize()
     solver = discretizer.get_solver(dynamics, settings)
 
     # dummy x,u (n_controls already includes time-dilation)
@@ -254,16 +254,17 @@ def test_sparse_jacobian_matches_dense():
 
 def test_sparse_discretization_matches_dense(rocket_settings, rocket_dynamics):
     """Sparse and dense discretization paths produce matching A_d, B_d, C_d."""
+    rocket_settings.dev.debug = True
     A_c, B_c = _get_rocket_sparsity()
 
     # Dense path
-    dense_disc = LinearizeDiscretize(custom_integrator=True, dis_type="FOH")
+    dense_disc = LinearizeDiscretize(dis_type="FOH")
     dense_solver = dense_disc.get_solver(rocket_dynamics, rocket_settings)
 
     # Sparse path
     rocket_dynamics.A_c_sparsity = A_c
     rocket_dynamics.B_c_sparsity = B_c
-    sparse_disc = LinearizeDiscretizeSparse(custom_integrator=True, dis_type="FOH")
+    sparse_disc = LinearizeDiscretizeSparse(dis_type="FOH")
     sparse_solver = sparse_disc.get_solver(rocket_dynamics, rocket_settings)
 
     N = rocket_settings.sim.n
@@ -288,6 +289,7 @@ def test_sparse_discretization_matches_dense(rocket_settings, rocket_dynamics):
 @pytest.mark.parametrize("dis_type", ["FOH", "ZOH"])
 def test_compact_v_matches_dense(rocket_settings, rocket_dynamics, dis_type):
     """Compact-V (sparse) integration produces the same A_d, B_d, C_d as dense."""
+    rocket_settings.dev.debug = True
     A_c, B_c = _get_rocket_sparsity()
     n_x = rocket_settings.sim.n_states
     n_u = rocket_settings.sim.n_controls
@@ -305,12 +307,12 @@ def test_compact_v_matches_dense(rocket_settings, rocket_dynamics, dis_type):
         f"compact ({aug_dim_compact}) should be smaller than dense ({aug_dim_dense})"
     )
 
-    dense_disc = LinearizeDiscretize(custom_integrator=True, dis_type=dis_type)
+    dense_disc = LinearizeDiscretize(dis_type=dis_type)
     dense_solver = dense_disc.get_solver(rocket_dynamics, rocket_settings)
 
     rocket_dynamics.A_c_sparsity = A_c
     rocket_dynamics.B_c_sparsity = B_c
-    sparse_disc = LinearizeDiscretizeSparse(custom_integrator=True, dis_type=dis_type)
+    sparse_disc = LinearizeDiscretizeSparse(dis_type=dis_type)
     sparse_solver = sparse_disc.get_solver(rocket_dynamics, rocket_settings)
 
     rng = np.random.default_rng(99)
@@ -337,9 +339,10 @@ def test_compact_v_matches_dense(rocket_settings, rocket_dynamics, dis_type):
 
 def test_sparse_fallback_when_dense(settings, dynamics):
     """When Jacobian is fully dense, sparse path falls back to dense jacfwd."""
+    settings.dev.debug = True
     dynamics.A_c_sparsity = np.ones((2, 2), dtype=bool)
     dynamics.B_c_sparsity = np.ones((2, 2), dtype=bool)
-    disc = LinearizeDiscretizeSparse(custom_integrator=True)
+    disc = LinearizeDiscretizeSparse()
     solver = disc.get_solver(dynamics, settings)
 
     x = jnp.ones((settings.sim.n, settings.sim.n_states))
@@ -351,7 +354,8 @@ def test_sparse_fallback_when_dense(settings, dynamics):
 
 def test_sparse_fallback_when_no_sparsity(settings, dynamics):
     """When no sparsity info is available, LinearizeDiscretizeSparse falls back to dense."""
-    disc = LinearizeDiscretizeSparse(custom_integrator=True)
+    settings.dev.debug = True
+    disc = LinearizeDiscretizeSparse()
     solver = disc.get_solver(dynamics, settings)
 
     x = jnp.ones((settings.sim.n, settings.sim.n_states))
@@ -359,3 +363,58 @@ def test_sparse_fallback_when_no_sparsity(settings, dynamics):
     A_d, B_d, C_d, xp, _ = solver(x, u, {})
 
     assert A_d.shape == (settings.sim.n - 1, 2, 2)
+
+
+def test_diffrax_kwargs_routed_to_diffrax_kwargs():
+    controller = dfx.ConstantStepSize()
+    disc = LinearizeDiscretize(
+        diffrax_kwargs={
+            "solver_name": "Dopri5",
+            "rtol": 1e-7,
+            "atol": 1e-8,
+            "num_substeps": 13,
+            "stepsize_controller": controller,
+            "max_steps": 2048,
+        }
+    )
+
+    kwargs = disc._resolve_diffrax_kwargs()
+    assert kwargs["solver_name"] == "Dopri5"
+    assert kwargs["rtol"] == pytest.approx(1e-7)
+    assert kwargs["atol"] == pytest.approx(1e-8)
+    assert kwargs["num_substeps"] == 13
+    assert kwargs["extra_kwargs"]["stepsize_controller"] is controller
+    assert kwargs["extra_kwargs"]["max_steps"] == 2048
+
+
+def test_diffrax_kwargs_can_set_tolerances():
+    disc = LinearizeDiscretize(
+        diffrax_kwargs={"rtol": 1e-7, "atol": 1e-8},
+    )
+    kwargs = disc._resolve_diffrax_kwargs()
+    assert kwargs["rtol"] == pytest.approx(1e-7)
+    assert kwargs["atol"] == pytest.approx(1e-8)
+
+
+def test_default_diffrax_tolerances_when_not_set():
+    disc = LinearizeDiscretize()
+    kwargs = disc._resolve_diffrax_kwargs()
+    assert kwargs["rtol"] == pytest.approx(1e-6)
+    assert kwargs["atol"] == pytest.approx(1e-3)
+
+
+def test_diffrax_kwargs_routed_to_rk45_kwargs():
+    """Fixed-step RK45 only reads num_substeps / tau_0; Diffrax-only keys are dropped."""
+    disc = LinearizeDiscretize(
+        diffrax_kwargs={
+            "num_substeps": 77,
+            "tau_0": 0.2,
+            # Adaptive / Diffrax stepping — not applicable to fixed-step RK45
+            "stepsize_controller": dfx.ConstantStepSize(),
+        },
+    )
+    kwargs = disc._resolve_rk45_kwargs(is_not_compiled=False)
+    assert kwargs["num_substeps"] == 77
+    assert kwargs["tau_0"] == pytest.approx(0.2)
+    assert kwargs["is_not_compiled"] is False
+    assert "stepsize_controller" not in kwargs

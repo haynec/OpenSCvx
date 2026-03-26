@@ -8,6 +8,13 @@ from openscvx.integrators import solve_ivp_diffrax_prop
 from openscvx.lowered import Dynamics
 
 
+def _invoke_solver(solver: callable, *args):
+    """Call either a compiled solver wrapper (.call) or a plain callable."""
+    if hasattr(solver, "call"):
+        return solver.call(*args)
+    return solver(*args)
+
+
 def _time_dilation_index(settings: Config, n_controls: int) -> int:
     """Return time-dilation control index, falling back to last control."""
     td_slice = getattr(settings.sim, "time_dilation_slice", None)
@@ -273,7 +280,8 @@ def simulate_nonlinear_time(
             x_post = x_0
 
         # Call the continuous propagation solver with padded tau_cur and mask
-        sol = propagation_solver.call(
+        sol = _invoke_solver(
+            propagation_solver,
             x_post,
             (tau[k], tau[k + 1]),
             controls_current,
