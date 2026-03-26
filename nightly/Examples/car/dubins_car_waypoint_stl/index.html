@@ -2657,6 +2657,8 @@
       
         
       
+        
+      
     
     
     
@@ -2706,6 +2708,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../spacecraft/halo_orbit/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Halo Orbit
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -2918,6 +2948,8 @@
       
         
       
+        
+      
     
     
     
@@ -2987,6 +3019,34 @@
     
   
     base
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Reference/discretization/discretize_linearize/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    discretize_linearize
   
 
     
@@ -3084,7 +3144,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_3_4" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_3_5" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -3106,14 +3166,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_3_4" id="__nav_5_3_4_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_3_5" id="__nav_5_3_5_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_3_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_3_4">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_3_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -7595,7 +7655,7 @@ impose waypoint and speed-profile constraints.</p>
 </span><span id="__span-0-71"><a id="__codelineno-0-71" name="__codelineno-0-71" href="#__codelineno-0-71"></a><span class="c1"># Globally the control bound is 10.0; inside the waypoint window we restrict to 1.0.</span>
 </span><span id="__span-0-72"><a id="__codelineno-0-72" name="__codelineno-0-72" href="#__codelineno-0-72"></a><span class="n">slow_speed_in_waypoint</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">Norm</span><span class="p">(</span><span class="n">speed</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">1.0</span>
 </span><span id="__span-0-73"><a id="__codelineno-0-73" name="__codelineno-0-73" href="#__codelineno-0-73"></a>
-</span><span id="__span-0-74"><a id="__codelineno-0-74" name="__codelineno-0-74" href="#__codelineno-0-74"></a><span class="n">speed_constraint</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">stl</span><span class="o">.</span><span class="n">IfThen</span><span class="p">(</span><span class="n">safety_region</span><span class="p">,</span> <span class="n">slow_speed_in_waypoint</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="mf">1e-2</span><span class="p">)</span>
+</span><span id="__span-0-74"><a id="__codelineno-0-74" name="__codelineno-0-74" href="#__codelineno-0-74"></a><span class="n">speed_constraint</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">stl</span><span class="o">.</span><span class="n">IfThen</span><span class="p">(</span><span class="n">safety_region</span><span class="p">,</span> <span class="n">slow_speed_in_waypoint</span><span class="p">)</span>
 </span><span id="__span-0-75"><a id="__codelineno-0-75" name="__codelineno-0-75" href="#__codelineno-0-75"></a>
 </span><span id="__span-0-76"><a id="__codelineno-0-76" name="__codelineno-0-76" href="#__codelineno-0-76"></a><span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
 </span><span id="__span-0-77"><a id="__codelineno-0-77" name="__codelineno-0-77" href="#__codelineno-0-77"></a>    <span class="n">speed_constraint</span><span class="o">.</span><span class="n">over</span><span class="p">(</span>

@@ -161,6 +161,10 @@
          <lastmod>2026-03-26</lastmod>
     </url>
     <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/spacecraft/halo_orbit/</loc>
+         <lastmod>2026-03-26</lastmod>
+    </url>
+    <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/spacecraft/hohmann_transfer/</loc>
          <lastmod>2026-03-26</lastmod>
     </url>
@@ -242,6 +246,10 @@
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/discretization/base/</loc>
+         <lastmod>2026-03-26</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/discretization/discretize_linearize/</loc>
          <lastmod>2026-03-26</lastmod>
     </url>
     <url>
