@@ -11,7 +11,6 @@ from openscvx.utils.printing import (
     Verbosity,
     color_acceptance_ratio,
     color_adaptive_state,
-    color_J_nonlin,
 )
 
 from .base import AutotuningBase
@@ -33,8 +32,8 @@ class AugmentedLagrangian(AutotuningBase):
     """
 
     COLUMNS: List[Column] = [
-        Column("J_nonlin", "J_nonlin", 8, "{: .1e}", color_J_nonlin, Verbosity.STANDARD),
-        Column("J_lin", "J_lin", 8, "{: .1e}", color_J_nonlin, Verbosity.STANDARD),
+        Column("J_nonlin", "J_nonlin", 8, "{: .1e}", None, Verbosity.STANDARD),
+        Column("J_lin", "J_lin", 8, "{: .1e}", None, Verbosity.STANDARD),
         Column("pred_reduction", "pred_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL),
         Column("actual_reduction", "act_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL),
         Column(

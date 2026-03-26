@@ -123,8 +123,7 @@ states = [position, velocity]
 time = ox.Time(initial=0.0, final=t_opt, min=0.0, max=t_opt)
 discretizer = {
     "ode_solver": "Dopri8",
-    "atol": integration_tol,
-    "rtol": integration_tol,
+    "diffrax_kwargs": {"atol": integration_tol, "rtol": integration_tol},
 }
 algorithm = {
     "k_max": 400,

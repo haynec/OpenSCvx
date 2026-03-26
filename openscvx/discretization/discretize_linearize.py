@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional
 
 import diffrax as dfx
 import jax
@@ -6,7 +6,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from openscvx.discretization.base import Discretizer
-from openscvx.integrators import solve_ivp_diffrax, solve_ivp_rk45
+from openscvx.integrators import (
+    DEFAULT_DIFFRAX_ATOL,
+    DEFAULT_DIFFRAX_RTOL,
+    solve_ivp_diffrax,
+    solve_ivp_rk45,
+)
 
 if TYPE_CHECKING:
     from openscvx.config import Config
@@ -32,9 +37,11 @@ class VectorizeDiscretizeLinearize(Discretizer):
             is valid. Defaults to ``"Tsit5"``.
         custom_integrator: Use the built-in fixed-step RK45 integrator instead of Diffrax.
             Faster but less robust. Defaults to ``False``.
-        atol: Absolute tolerance of the ODE solver for all segments combined. Defaults to ``1e-3``.
-        rtol: Relative tolerance of the ODE solver for all segments combined. Defaults to ``1e-6``.
-        args: Extra keyword arguments forwarded to :func:`diffrax.diffeqsolve`. Defaults to ``{}``.
+        diffrax_kwargs: Preferred Diffrax keyword overrides. These map to
+            :func:`openscvx.integrators.solve_ivp_diffrax` kwargs, and unknown
+            keys are forwarded to :func:`diffrax.diffeqsolve` (e.g.
+            ``stepsize_controller``). Defaults to ``{}``.
+        args: Deprecated alias for ``diffrax_kwargs`` kept for backward compatibility.
     """
 
     def __init__(
@@ -42,19 +49,49 @@ class VectorizeDiscretizeLinearize(Discretizer):
         dis_type: str = "FOH",
         ode_solver: str = "Tsit5",
         custom_integrator: bool = False,
-        atol: float = 1e-3,
-        rtol: float = 1e-6,
+        diffrax_kwargs: Optional[dict[str, Any]] = None,
         args: Optional[dict] = None,
     ):
         self.dis_type = dis_type
         self.ode_solver = ode_solver
         self.custom_integrator = custom_integrator
-        self.atol = atol
-        self.rtol = rtol
-        if args is None:
-            self.extra_kwargs = {"adjoint": dfx.ForwardMode()}
-        else:
-            self.extra_kwargs = args | {"adjoint": dfx.ForwardMode()}
+        merged_kwargs: dict[str, Any] = {}
+        if diffrax_kwargs is not None:
+            merged_kwargs.update(dict(diffrax_kwargs))
+        if args is not None:
+            merged_kwargs.update(dict(args))
+        self.diffrax_kwargs = merged_kwargs
+
+    def _resolve_diffrax_kwargs(self) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "solver_name": self.ode_solver,
+            "rtol": DEFAULT_DIFFRAX_RTOL,
+            "atol": DEFAULT_DIFFRAX_ATOL,
+        }
+        user_kwargs = dict(self.diffrax_kwargs)
+        extra_kwargs: dict[str, Any] = {"adjoint": dfx.ForwardMode()}
+
+        nested_extra = user_kwargs.pop("extra_kwargs", None)
+        if nested_extra is not None:
+            extra_kwargs.update(dict(nested_extra))
+
+        direct_keys = {"tau_0", "num_substeps", "solver_name", "rtol", "atol"}
+        for key, value in user_kwargs.items():
+            if key in direct_keys:
+                kwargs[key] = value
+            else:
+                extra_kwargs[key] = value
+
+        kwargs["extra_kwargs"] = extra_kwargs
+        return kwargs
+
+    def _resolve_rk45_kwargs(self, *, is_not_compiled: bool) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {"is_not_compiled": is_not_compiled}
+        direct_keys = {"tau_0", "num_substeps", "is_not_compiled"}
+        for key, value in self.diffrax_kwargs.items():
+            if key in direct_keys:
+                kwargs[key] = value
+        return kwargs
 
     def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
         """Create a multiple-shooting vectorize-then-discretize-then-linearize solver.
@@ -75,9 +112,6 @@ class VectorizeDiscretizeLinearize(Discretizer):
         n_x = settings.sim.n_states
         n_u = settings.sim.n_controls
         nodes = jnp.arange(0, N - 1)
-
-        rtol = self.rtol
-        atol = self.atol
 
         multiple_state_dot = jax.vmap(dynamics.f, in_axes=(0, 0, 0, None))
 
@@ -108,23 +142,22 @@ class VectorizeDiscretizeLinearize(Discretizer):
         ) -> jnp.ndarray:
 
             if self.custom_integrator:
+                rk45_kwargs = self._resolve_rk45_kwargs(is_not_compiled=settings.dev.debug)
                 sol = solve_ivp_rk45(
                     multiple_dxdt,
                     1.0 / (N - 1),
                     x.flatten(),
                     args=(u_cur, u_next, params),
-                    is_not_compiled=settings.dev.debug,
+                    **rk45_kwargs,
                 )
             else:
+                diffrax_kwargs = self._resolve_diffrax_kwargs()
                 sol = solve_ivp_diffrax(
                     multiple_dxdt,
                     1.0 / (N - 1),
                     x.flatten(),
-                    solver_name=self.ode_solver,
-                    rtol=rtol,
-                    atol=atol,
                     args=(u_cur, u_next, params),
-                    extra_kwargs=self.extra_kwargs,
+                    **diffrax_kwargs,
                 )
             return sol.reshape(-1, N - 1, n_x)
 
@@ -221,9 +254,11 @@ class DiscretizeLinearizeVectorize(Discretizer):
             is valid. Defaults to ``"Tsit5"``.
         custom_integrator: Use the built-in fixed-step RK45 integrator instead of Diffrax.
             Faster but less robust. Defaults to ``False``.
-        atol: Absolute tolerance of the ODE solver for all segments combined. Defaults to ``1e-3``.
-        rtol: Relative tolerance of the ODE solver for all segments combined. Defaults to ``1e-6``.
-        args: Extra keyword arguments forwarded to :func:`diffrax.diffeqsolve`. Defaults to ``{}``.
+        diffrax_kwargs: Preferred Diffrax keyword overrides. These map to
+            :func:`openscvx.integrators.solve_ivp_diffrax` kwargs, and unknown
+            keys are forwarded to :func:`diffrax.diffeqsolve` (e.g.
+            ``stepsize_controller``). Defaults to ``{}``.
+        args: Deprecated alias for ``diffrax_kwargs`` kept for backward compatibility.
     """
 
     def __init__(
@@ -231,19 +266,55 @@ class DiscretizeLinearizeVectorize(Discretizer):
         dis_type: str = "FOH",
         ode_solver: str = "Tsit5",
         custom_integrator: bool = False,
-        atol: float = 1e-3,
-        rtol: float = 1e-6,
+        diffrax_kwargs: Optional[dict[str, Any]] = None,
         args: Optional[dict] = None,
     ):
         self.dis_type = dis_type
         self.ode_solver = ode_solver
         self.custom_integrator = custom_integrator
-        self.atol = atol
-        self.rtol = rtol
-        if args is None:
-            self.extra_kwargs = {"adjoint": dfx.ForwardMode()}
-        else:
-            self.extra_kwargs = args | {"adjoint": dfx.ForwardMode()}
+        merged_kwargs: dict[str, Any] = {}
+        if diffrax_kwargs is not None:
+            merged_kwargs.update(dict(diffrax_kwargs))
+        if args is not None:
+            merged_kwargs.update(dict(args))
+        self.diffrax_kwargs = merged_kwargs
+
+    def _resolve_diffrax_kwargs(self, *, n_segments: int) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "solver_name": self.ode_solver,
+            # Error budget is distributed since one segment is integrated at a time.
+            "rtol": DEFAULT_DIFFRAX_RTOL / n_segments,
+            "atol": DEFAULT_DIFFRAX_ATOL / n_segments,
+        }
+        user_kwargs = dict(self.diffrax_kwargs)
+        extra_kwargs: dict[str, Any] = {"adjoint": dfx.ForwardMode()}
+
+        nested_extra = user_kwargs.pop("extra_kwargs", None)
+        if nested_extra is not None:
+            extra_kwargs.update(dict(nested_extra))
+
+        direct_keys = {"tau_0", "num_substeps", "solver_name", "rtol", "atol"}
+        for key, value in user_kwargs.items():
+            if key in direct_keys:
+                kwargs[key] = value
+            else:
+                extra_kwargs[key] = value
+
+        if "rtol" in user_kwargs:
+            kwargs["rtol"] = user_kwargs["rtol"] / n_segments
+        if "atol" in user_kwargs:
+            kwargs["atol"] = user_kwargs["atol"] / n_segments
+
+        kwargs["extra_kwargs"] = extra_kwargs
+        return kwargs
+
+    def _resolve_rk45_kwargs(self, *, is_not_compiled: bool) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {"is_not_compiled": is_not_compiled}
+        direct_keys = {"tau_0", "num_substeps", "is_not_compiled"}
+        for key, value in self.diffrax_kwargs.items():
+            if key in direct_keys:
+                kwargs[key] = value
+        return kwargs
 
     def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
         """Create a multiple-shooting discretize-then-linearize-then-vectorize solver.
@@ -264,11 +335,6 @@ class DiscretizeLinearizeVectorize(Discretizer):
         N = settings.sim.n
         n_x = settings.sim.n_states
         n_u = settings.sim.n_controls
-
-        # Provided tolerances are for integration error of all N-1 segments together, but only one
-        # segment will be integrated at a time
-        rtol_one_segment = self.rtol / (N - 1)
-        atol_one_segment = self.atol / (N - 1)
 
         single_state_dot = dynamics.f
 
@@ -300,23 +366,22 @@ class DiscretizeLinearizeVectorize(Discretizer):
         ) -> jnp.ndarray:
 
             if self.custom_integrator:
+                rk45_kwargs = self._resolve_rk45_kwargs(is_not_compiled=settings.dev.debug)
                 sol = solve_ivp_rk45(
                     single_dxdt,
                     1.0 / (N - 1),
                     x,
                     args=(u_cur, u_next, node, params),
-                    is_not_compiled=settings.dev.debug,
+                    **rk45_kwargs,
                 )
             else:
+                diffrax_kwargs = self._resolve_diffrax_kwargs(n_segments=N - 1)
                 sol = solve_ivp_diffrax(
                     single_dxdt,
                     1.0 / (N - 1),
                     x,
-                    solver_name=self.ode_solver,
-                    rtol=rtol_one_segment,
-                    atol=atol_one_segment,
                     args=(u_cur, u_next, node, params),
-                    extra_kwargs=self.extra_kwargs,
+                    **diffrax_kwargs,
                 )
             return sol
 

@@ -69,6 +69,39 @@ def _validate_result(result, problem, label="YAML"):
     )
     _print_comparison_metrics(comparison, label)
     _assert_brachistochrone_accuracy(comparison, problem, result)
+    # Keep loader tests focused on correctness, not machine-dependent runtime.
+    time_error_pct = comparison["time_error_pct"]
+    assert time_error_pct < 1.0, (
+        f"Time error {time_error_pct:.2f}% exceeds 1% threshold "
+        f"(analytical: {comparison['analytical_time']:.4f}s, "
+        f"numerical: {comparison['numerical_time']:.4f}s)"
+    )
+
+    assert comparison["numerical_time"] >= comparison["analytical_time"] * 0.95, (
+        f"Numerical time {comparison['numerical_time']:.4f}s is suspiciously "
+        f"better than analytical {comparison['analytical_time']:.4f}s"
+    )
+
+    position_rmse = comparison["position_rmse"]
+    assert position_rmse < 0.05, f"Position RMSE {position_rmse:.4f} exceeds threshold of 0.05"
+
+    max_pos_error = comparison["position_max_error"]
+    assert max_pos_error < 0.1, (
+        f"Maximum position error {max_pos_error:.4f} exceeds threshold of 0.1"
+    )
+
+    velocity_rmse = comparison["velocity_rmse"]
+    assert velocity_rmse < 0.05, f"Velocity RMSE {velocity_rmse:.4f} exceeds threshold of 0.05 m/s"
+
+    if "discretization_history" in result:
+        num_iters = len(result["discretization_history"])
+        assert num_iters < 27, f"Took {num_iters} SCP iterations (expected < 27)"
+
+    # Light sanity guard for unexpected pathological runs without enforcing
+    # strict platform-dependent performance budgets.
+    assert problem.timing_init < 30.0, (
+        f"Initialization took {problem.timing_init:.2f}s (expected < 30s)"
+    )
     return comparison
 
 
