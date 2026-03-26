@@ -19,8 +19,8 @@ from openscvx import Problem
 from openscvx.loader import load_dict, load_json, load_yaml
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
 from tests.test_brachistochrone import (
-    _print_comparison_metrics,
     _assert_brachistochrone_accuracy,
+    _print_comparison_metrics,
 )
 
 # =============================================================================
