@@ -18,7 +18,12 @@ from openscvx.algorithms import (
     RampProximalWeight,
 )
 from openscvx.algorithms.optimization_results import OptimizationResults
-from openscvx.discretization import LinearizeDiscretize, LinearizeDiscretizeSparse
+from openscvx.discretization import (
+    DiscretizeLinearizeVectorize,
+    LinearizeDiscretize,
+    LinearizeDiscretizeSparse,
+    VectorizeDiscretizeLinearize,
+)
 from openscvx.expert import ByofSpec
 from openscvx.loader import load_dict, load_json, load_yaml
 from openscvx.problem import Problem
@@ -172,8 +177,10 @@ __all__ = [
     # Expert mode types
     "ByofSpec",
     # Discretization
+    "DiscretizeLinearizeVectorize",
     "LinearizeDiscretize",
     "LinearizeDiscretizeSparse",
+    "VectorizeDiscretizeLinearize",
     # Convex Solver
     "PTRSolver",
     # Algorithm & Autotuning

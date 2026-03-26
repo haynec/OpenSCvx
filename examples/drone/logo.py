@@ -361,6 +361,7 @@ problem = Problem(
         "lam_cost": 6e0,
     },
     float_dtype="float64",
+    discretizer=ox.DiscretizeLinearizeVectorize(atol=1e-4),
     solver={"solver_args": {"canon_backend": "COO", "enforce_dpp": True}},
 )
 

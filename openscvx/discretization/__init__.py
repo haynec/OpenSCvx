@@ -20,6 +20,7 @@ import inspect
 from typing import Any
 
 from .base import Discretizer
+from .discretize_linearize import DiscretizeLinearizeVectorize, VectorizeDiscretizeLinearize
 from .linearize_discretize import (
     LinearizeDiscretize,
     calculate_impulsive_discretization,
@@ -33,8 +34,10 @@ from .sparse_utils import color_columns, make_sparse_jacobian_fns
 # ---------------------------------------------------------------------------
 
 _DISCRETIZER_MAP = {
+    "DiscretizeLinearizeVectorize": DiscretizeLinearizeVectorize,
     "LinearizeDiscretize": LinearizeDiscretize,
     "LinearizeDiscretizeSparse": LinearizeDiscretizeSparse,
+    "VectorizeDiscretizeLinearize": VectorizeDiscretizeLinearize,
 }
 
 
@@ -46,7 +49,7 @@ def _resolve_discretizer(val: Any) -> Discretizer:
     * **instance** — already-constructed :class:`Discretizer` (pass-through).
     * **dict** — keyword arguments passed to the selected discretizer class.
       An optional ``"type"`` key selects the class (defaults to
-      :class:`LinearizeDiscretizeSparse`).
+      :class:`VectorizeLinearizeDiscretize`).
 
     Examples::
 
@@ -71,7 +74,7 @@ def _resolve_discretizer(val: Any) -> Discretizer:
         raise TypeError(f"Expected a Discretizer instance or dict, got {type(val).__name__}")
 
     kwargs = dict(val)  # copy to avoid mutating caller's dict
-    name = kwargs.pop("type", "LinearizeDiscretize")
+    name = kwargs.pop("type", "VectorizeDiscretizeLinearize")
 
     cls = _DISCRETIZER_MAP.get(name)
     if cls is None:
@@ -89,8 +92,10 @@ def _resolve_discretizer(val: Any) -> Discretizer:
 
 __all__ = [
     "Discretizer",
+    "DiscretizeLinearizeVectorize",
     "LinearizeDiscretize",
     "LinearizeDiscretizeSparse",
+    "VectorizeDiscretizeLinearize",
     "_resolve_discretizer",
     "calculate_impulsive_discretization",
     "color_columns",

@@ -39,7 +39,7 @@ from openscvx.config import (
 )
 from openscvx.discretization import (
     Discretizer,
-    LinearizeDiscretize,
+    VectorizeDiscretizeLinearize,
     _resolve_discretizer,
     get_impulsive_discretization_solver,
 )
@@ -305,7 +305,7 @@ class Problem:
         #                      dict → _resolve_discretizer,
         #                      instance → use
         if discretizer is None:
-            self._discretizer = LinearizeDiscretize()
+            self._discretizer = VectorizeDiscretizeLinearize()
         elif isinstance(discretizer, dict):
             self._discretizer = _resolve_discretizer(discretizer)
         else:
