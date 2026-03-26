@@ -12,6 +12,7 @@ from typing import Sequence, Tuple, Union
 
 import jax
 import jax.numpy as jnp
+import jaxlie
 import numpy as np
 
 from openscvx.init.interpolation import linspace, slerp
@@ -39,6 +40,7 @@ def _quat_wxyz_to_rotmat(q_wxyz):
     )
 
 
+@jax.jit
 def _so3_log(R):
     """SO(3) logarithm: rotation matrix -> rotation vector (axis * angle)."""
     cos_angle = jnp.clip((jnp.trace(R) - 1.0) / 2.0, -1.0, 1.0)
@@ -56,9 +58,9 @@ def _so3_log(R):
 # =============================================================================
 
 
+@jax.jit
 def _poe_fk_pose(screw_axes, T_home, q):
     """PoE FK returning (4, 4) end-effector transform."""
-    import jaxlie
 
     T = jnp.eye(4)
     for i in range(screw_axes.shape[0]):
@@ -66,14 +68,70 @@ def _poe_fk_pose(screw_axes, T_home, q):
     return T @ T_home
 
 
+@jax.jit
 def _poe_fk_position(screw_axes, T_home, q):
     """PoE FK returning (3,) end-effector position."""
     return _poe_fk_pose(screw_axes, T_home, q)[:3, 3]
 
 
 # =============================================================================
-# IK solver
+# IK solver (JIT-compiled via lax.while_loop)
 # =============================================================================
+
+
+@jax.jit
+def _ik_loop_pose(screw_axes, T_home, p_target, R_target, q0, q_lo, q_hi, damping, tol, max_iter):
+    """JIT'd 6D pose IK (position + orientation) via damped least-squares."""
+    target_vec = jnp.concatenate([p_target, jnp.zeros(3)])
+
+    def fk_vec(q):
+        T = _poe_fk_pose(screw_axes, T_home, q)
+        return jnp.concatenate([T[:3, 3], _so3_log(R_target.T @ T[:3, :3])])
+
+    J_fn = jax.jacfwd(fk_vec)
+
+    def cond(state):
+        _, err_norm, i = state
+        return (err_norm >= tol) & (i < max_iter)
+
+    def body(state):
+        q, _, i = state
+        current = fk_vec(q)
+        err = target_vec - current
+        J = J_fn(q)
+        dq = J.T @ jnp.linalg.solve(J @ J.T + damping * jnp.eye(6), err)
+        q_new = jnp.clip(q + dq, q_lo, q_hi)
+        return q_new, jnp.linalg.norm(target_vec - fk_vec(q_new)), i + 1
+
+    init_err = jnp.linalg.norm(target_vec - fk_vec(q0))
+    q_sol, _, _ = jax.lax.while_loop(cond, body, (q0, init_err, jnp.int32(0)))
+    return q_sol
+
+
+@jax.jit
+def _ik_loop_position(screw_axes, T_home, p_target, q0, q_lo, q_hi, damping, tol, max_iter):
+    """JIT'd position-only IK via damped least-squares."""
+
+    def fk_pos(q):
+        return _poe_fk_position(screw_axes, T_home, q)
+
+    J_fn = jax.jacfwd(fk_pos)
+
+    def cond(state):
+        _, err_norm, i = state
+        return (err_norm >= tol) & (i < max_iter)
+
+    def body(state):
+        q, _, i = state
+        err = p_target - fk_pos(q)
+        J = J_fn(q)
+        dq = J.T @ jnp.linalg.solve(J @ J.T + damping * jnp.eye(3), err)
+        q_new = jnp.clip(q + dq, q_lo, q_hi)
+        return q_new, jnp.linalg.norm(p_target - fk_pos(q_new)), i + 1
+
+    init_err = jnp.linalg.norm(p_target - fk_pos(q0))
+    q_sol, _, _ = jax.lax.while_loop(cond, body, (q0, init_err, jnp.int32(0)))
+    return q_sol
 
 
 def _ik_solve(
@@ -95,6 +153,8 @@ def _ik_solve(
     and optionally a target orientation. When R_target is provided, the solver
     minimizes the full 6D pose error (position + orientation via SO(3) log).
 
+    The inner loop is JIT-compiled via ``jax.lax.while_loop``.
+
     Args:
         screw_axes: (n_joints, 6) array of screw axes.
         T_home: (4, 4) home configuration.
@@ -115,49 +175,40 @@ def _ik_solve(
     if q0 is None:
         q0 = np.zeros(n_joints)
 
-    screw_axes_jnp = jnp.array(screw_axes)
-    T_home_jnp = jnp.array(T_home)
-    p_target_jnp = jnp.array(p_target)
+    screw_axes_j = jnp.array(screw_axes)
+    T_home_j = jnp.array(T_home)
+    p_target_j = jnp.array(p_target)
+    q0_j = jnp.array(q0, dtype=float)
+    q_lo = jnp.array(q_min) if q_min is not None else jnp.full(n_joints, -jnp.inf)
+    q_hi = jnp.array(q_max) if q_max is not None else jnp.full(n_joints, jnp.inf)
 
     if R_target is not None:
-        R_target_jnp = jnp.array(R_target)
-
-        def fk_vec(q):
-            T = _poe_fk_pose(screw_axes_jnp, T_home_jnp, q)
-            p = T[:3, 3]
-            ori_err = _so3_log(R_target_jnp.T @ T[:3, :3])
-            return jnp.concatenate([p, ori_err])
-
-        target_vec = jnp.concatenate([p_target_jnp, jnp.zeros(3)])
-        task_dim = 6
+        q_sol = _ik_loop_pose(
+            screw_axes_j,
+            T_home_j,
+            p_target_j,
+            jnp.array(R_target),
+            q0_j,
+            q_lo,
+            q_hi,
+            damping,
+            tol,
+            max_iter,
+        )
     else:
+        q_sol = _ik_loop_position(
+            screw_axes_j,
+            T_home_j,
+            p_target_j,
+            q0_j,
+            q_lo,
+            q_hi,
+            damping,
+            tol,
+            max_iter,
+        )
 
-        def fk_vec(q):
-            return _poe_fk_position(screw_axes_jnp, T_home_jnp, q)
-
-        target_vec = p_target_jnp
-        task_dim = 3
-
-    J_fn = jax.jacfwd(fk_vec)
-
-    q = jnp.array(q0, dtype=float)
-    for i in range(max_iter):
-        current = fk_vec(q)
-        err = target_vec - current
-        err_norm = jnp.linalg.norm(err)
-        if err_norm < tol:
-            break
-
-        J = J_fn(q)
-        dq = J.T @ jnp.linalg.solve(J @ J.T + damping * jnp.eye(task_dim), err)
-        q = q + dq
-
-        if q_min is not None:
-            q = jnp.maximum(q, jnp.array(q_min))
-        if q_max is not None:
-            q = jnp.minimum(q, jnp.array(q_max))
-
-    return np.array(q)
+    return np.array(q_sol)
 
 
 # =============================================================================
