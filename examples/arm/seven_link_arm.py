@@ -178,11 +178,13 @@ constraints.append(ee_target_constraint)
 
 from ik import ik_solve
 
-# Solve IK for terminal joint angles that reach the target
+# Solve IK for terminal joint angles that reach the target with identity orientation
+R_target = np.eye(3)
 q_terminal = ik_solve(
     screw_axes,
     T_home,
     target.value,
+    R_target=R_target,
     q_min=angle.min,
     q_max=angle.max,
 )
@@ -197,7 +199,7 @@ torque.guess = np.zeros((n, N_JOINTS))
 
 time = ox.Time(
     initial=0.0,
-    final=total_time,
+    final=ox.Minimize(total_time),
     min=0.0,
     max=total_time,
 )
@@ -251,7 +253,6 @@ if __name__ == "__main__":
     # =========================================================================
 
     import jaxlie
-    import viser
 
     from openscvx.plotting.viser import (
         add_animated_trail,
@@ -285,8 +286,39 @@ if __name__ == "__main__":
     angle_traj = np.asarray(results.trajectory["angle"])  # (T, 7)
     n_frames = len(angle_traj)
 
-    # keypoints shape: (T, 5, 3)
+    def rotation_matrix_to_wxyz(R):
+        """Convert 3x3 rotation matrix to wxyz quaternion."""
+        tr = np.trace(R)
+        if tr > 0:
+            s = 0.5 / np.sqrt(tr + 1.0)
+            w = 0.25 / s
+            x = (R[2, 1] - R[1, 2]) * s
+            y = (R[0, 2] - R[2, 0]) * s
+            z = (R[1, 0] - R[0, 1]) * s
+        elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+            s = 2.0 * np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2])
+            w = (R[2, 1] - R[1, 2]) / s
+            x = 0.25 * s
+            y = (R[0, 1] + R[1, 0]) / s
+            z = (R[0, 2] + R[2, 0]) / s
+        elif R[1, 1] > R[2, 2]:
+            s = 2.0 * np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2])
+            w = (R[0, 2] - R[2, 0]) / s
+            x = (R[0, 1] + R[1, 0]) / s
+            y = 0.25 * s
+            z = (R[1, 2] + R[2, 1]) / s
+        else:
+            s = 2.0 * np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1])
+            w = (R[1, 0] - R[0, 1]) / s
+            x = (R[0, 2] + R[2, 0]) / s
+            y = (R[1, 2] + R[2, 1]) / s
+            z = 0.25 * s
+        q = np.array([w, x, y, z])
+        return q / np.linalg.norm(q)
+
+    # keypoints: (T, 5, 3) positions, joint_quats: (T, 5, 4) wxyz quaternions
     keypoints = np.zeros((n_frames, 5, 3))
+    joint_quats = np.zeros((n_frames, 5, 4))
     for t in range(n_frames):
         q_t = angle_traj[t]
         T_partial = np.eye(4)
@@ -300,20 +332,19 @@ if __name__ == "__main__":
                 joint_idx += 1
             p_home = np.append(keypoint_home[k], 1.0)
             keypoints[t, k] = (T_partial @ p_home)[:3]
+            joint_quats[t, k] = rotation_matrix_to_wxyz(T_partial[:3, :3])
 
     # -- Create viser server ----------------------------------------------------
 
     server = create_server(ee_pos, show_grid=False)
-    server.scene.add_grid("/grid", width=1.5, height=1.5)
+    server.scene.add_grid("/grid", width=1.5, height=1.5, cell_size=0.25)
     server.scene.add_frame("/origin", axes_length=0.1, axes_radius=0.003)
 
     # Target marker
     add_target_markers(server, [tgt], radius=0.015, colors=[(255, 50, 50)])
 
     # Ghost EE trajectory (faint full path)
-    ee_colors = compute_velocity_colors(
-        np.asarray(results.trajectory.get("velocity"))
-    )
+    ee_colors = compute_velocity_colors(np.asarray(results.trajectory.get("velocity")))
     add_ghost_trajectory(server, ee_pos, ee_colors, point_size=0.005)
 
     # Animated EE trail
@@ -337,10 +368,7 @@ if __name__ == "__main__":
 
     # Initial arm segments: (4, 2, 3)
     init_points = np.stack(
-        [
-            np.stack([keypoints[0, k], keypoints[0, k + 1]])
-            for k in range(4)
-        ]
+        [np.stack([keypoints[0, k], keypoints[0, k + 1]]) for k in range(4)]
     ).astype(np.float32)
 
     arm_handle = server.scene.add_line_segments(
@@ -350,27 +378,27 @@ if __name__ == "__main__":
         line_width=5.0,
     )
 
-    # Joint spheres
-    joint_handles = []
+    # Joint coordinate frames
+    joint_frame_handles = []
+    joint_names = ["base", "shoulder", "elbow", "wrist", "ee"]
     for k in range(5):
-        h = server.scene.add_icosphere(
-            f"/joint_{k}",
-            radius=0.012,
-            color=(220, 220, 220),
+        h = server.scene.add_frame(
+            f"/joint_{joint_names[k]}",
+            wxyz=joint_quats[0, k].astype(np.float32),
             position=keypoints[0, k].astype(np.float32),
+            axes_length=0.06,
+            axes_radius=0.002,
         )
-        joint_handles.append(h)
+        joint_frame_handles.append(h)
 
     def update_arm(frame_idx: int) -> None:
         pts = np.stack(
-            [
-                np.stack([keypoints[frame_idx, k], keypoints[frame_idx, k + 1]])
-                for k in range(4)
-            ]
+            [np.stack([keypoints[frame_idx, k], keypoints[frame_idx, k + 1]]) for k in range(4)]
         ).astype(np.float32)
         arm_handle.points = pts
-        for k, h in enumerate(joint_handles):
+        for k, h in enumerate(joint_frame_handles):
             h.position = keypoints[frame_idx, k].astype(np.float32)
+            h.wxyz = joint_quats[frame_idx, k].astype(np.float32)
 
     # Animation controls
     traj_time = np.asarray(results.trajectory["time"])
