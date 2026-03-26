@@ -303,7 +303,9 @@ if __name__ == "__main__":
 
     # -- Create viser server ----------------------------------------------------
 
-    server = create_server(ee_pos)
+    server = create_server(ee_pos, show_grid=False)
+    server.scene.add_grid("/grid", width=1.5, height=1.5)
+    server.scene.add_frame("/origin", axes_length=0.1, axes_radius=0.003)
 
     # Target marker
     add_target_markers(server, [tgt], radius=0.015, colors=[(255, 50, 50)])
@@ -321,7 +323,8 @@ if __name__ == "__main__":
     _, update_marker = add_position_marker(server, ee_pos, radius=0.015)
 
     # Animated arm links (line segments between consecutive keypoints)
-    link_colors = np.array(
+    # Per-segment colors: (N_segments, 2, 3) — same color at both endpoints
+    link_rgb = np.array(
         [
             [180, 180, 180],  # base -> shoulder
             [100, 180, 255],  # shoulder -> elbow
@@ -330,6 +333,8 @@ if __name__ == "__main__":
         ],
         dtype=np.uint8,
     )
+    link_colors = np.stack([link_rgb, link_rgb], axis=1)  # (4, 2, 3)
+
     # Initial arm segments: (4, 2, 3)
     init_points = np.stack(
         [
