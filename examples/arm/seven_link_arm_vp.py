@@ -247,9 +247,7 @@ def look_at_quat(ee_pos, target_pos):
     d = target_pos - ee_pos
     d = d / np.linalg.norm(d)
     q_xyz = np.cross(boresight_body, d)
-    q_w = np.sqrt(np.dot(boresight_body, boresight_body) * np.dot(d, d)) + np.dot(
-        boresight_body, d
-    )
+    q_w = np.sqrt(np.dot(boresight_body, boresight_body) * np.dot(d, d)) + np.dot(boresight_body, d)
     q = np.hstack(([q_w], q_xyz))
     return q / np.linalg.norm(q)
 
@@ -343,6 +341,7 @@ if __name__ == "__main__":
         add_ghost_trajectory,
         add_position_marker,
         add_target_markers,
+        add_viewcone,
         compute_velocity_colors,
         create_server,
     )
@@ -389,6 +388,21 @@ if __name__ == "__main__":
 
     # Animated EE position marker
     _, update_marker = add_position_marker(server, ee_pos, radius=0.015)
+
+    # Animated wrist camera viewcone
+    ee_attitude = joint_quats[:, -1]  # EE quaternions (wxyz)
+    _, update_viewcone = add_viewcone(
+        server,
+        ee_pos,
+        ee_attitude,
+        half_angle_x=np.pi / alpha_x,
+        half_angle_y=np.pi / alpha_y,
+        scale=0.15,
+        norm_type=norm_type,
+        R_sb=np.array(R_sb),
+        color=(80, 180, 200),
+        opacity=0.3,
+    )
 
     # Animated arm links (line segments between consecutive keypoints)
     # Per-segment colors: (N_segments, 2, 3) — same color at both endpoints
@@ -441,7 +455,7 @@ if __name__ == "__main__":
     add_animation_controls(
         server,
         traj_time,
-        [update_trail, update_marker, update_arm],
+        [update_trail, update_marker, update_viewcone, update_arm],
         loop=True,
     )
 
