@@ -131,7 +131,7 @@ class VectorizeDiscretizeLinearize(Discretizer):
         i0 = 0
         i1 = n_x
         i2 = n_x + n_u
-        i3 = n_x + 2*n_u
+        i3 = n_x + 2 * n_u
         standard_basis = jnp.repeat(jnp.eye(i3)[None], N - 1, axis=0)
 
         def vectorize_then_discretize_then_linearize(
