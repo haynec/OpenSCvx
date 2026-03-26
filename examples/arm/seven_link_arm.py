@@ -123,13 +123,25 @@ controls = [torque]
 # Forward Kinematics using Product of Exponentials
 # =============================================================================
 # T_ee(q) = exp(ξ₁q₁) @ ... @ exp(ξ₇q₇) @ T_home
+#
+# We build the FK chain incrementally so we can capture the intermediate
+# transforms at each keypoint (base, shoulder, elbow, wrist, ee) for
+# visualization via algebraic_prop.
 
-xi = ox.Constant(screw_axes[0])
-T_ee = ox.lie.SE3Exp(xi * angle[0])
-for i in range(1, N_JOINTS):
-    xi = ox.Constant(screw_axes[i])
-    T_ee = T_ee @ ox.lie.SE3Exp(xi * angle[i])
-T_ee = T_ee @ ox.Constant(T_home)
+joint_names = ["base", "shoulder", "elbow", "wrist", "ee"]
+keypoint_after_joint = [0, 1, 2, 4, 7]  # how many joints precede each keypoint
+
+T_chain = ox.Constant(np.eye(4))
+joint_idx = 0
+joint_transforms = {}
+for name, n_joints in zip(joint_names, keypoint_after_joint):
+    while joint_idx < n_joints:
+        xi = ox.Constant(screw_axes[joint_idx])
+        T_chain = T_chain @ ox.lie.SE3Exp(xi * angle[joint_idx])
+        joint_idx += 1
+    joint_transforms[name] = T_chain
+
+T_ee = T_chain @ ox.Constant(T_home)
 
 # Extract end-effector position from homogeneous transform
 p_ee = ox.Concat(T_ee[0, 3], T_ee[1, 3], T_ee[2, 3])
@@ -212,7 +224,10 @@ problem = Problem(
     constraints=constraints,
     N=n,
     algorithm={"lam_vb": 1e1},
-    algebraic_prop={"ee_position": p_ee},
+    algebraic_prop={
+        "ee_position": p_ee,
+        **{f"T_{name}": T for name, T in joint_transforms.items()},
+    },
 )
 
 problem.settings.prp.dt = 0.01
@@ -264,75 +279,28 @@ if __name__ == "__main__":
         create_server,
     )
 
-    # -- Compute joint keypoint positions at each propagation timestep ----------
-    # Keypoint home positions and how many joints affect each:
-    #   base [0,0,0]: 0 joints
-    #   shoulder [0,0,d1]: 1 joint  (on z-axis, stays put under j1)
-    #   elbow [a2,0,d1]: 2 joints   (on j3/j4 axes, unaffected by them)
-    #   wrist [a2+a3,0,d1]: 4 joints (on j5/j6 axes)
-    #   ee [a2+a3+a4,0,d1]: 7 joints
+    # -- Extract joint keypoint positions from propagated transforms -------------
+    # Each T_{name} is (T, 4, 4) from algebraic_prop. Apply the keypoint's
+    # home position to get the world-frame position at each timestep.
 
-    keypoint_home = np.array(
-        [
-            [0.0, 0.0, 0.0],
-            [0.0, 0.0, d1],
-            [a2, 0.0, d1],
-            [a2 + a3, 0.0, d1],
-            [a2 + a3 + a4, 0.0, d1],
-        ]
-    )
-    keypoint_n_joints = [0, 1, 2, 4, 7]
+    keypoint_home_positions = {
+        "base": np.array([0.0, 0.0, 0.0]),
+        "shoulder": np.array([0.0, 0.0, d1]),
+        "elbow": np.array([a2, 0.0, d1]),
+        "wrist": np.array([a2 + a3, 0.0, d1]),
+        "ee": np.array([a2 + a3 + a4, 0.0, d1]),
+    }
 
-    angle_traj = np.asarray(results.trajectory["angle"])  # (T, 7)
-    n_frames = len(angle_traj)
-
-    def rotation_matrix_to_wxyz(R):
-        """Convert 3x3 rotation matrix to wxyz quaternion."""
-        tr = np.trace(R)
-        if tr > 0:
-            s = 0.5 / np.sqrt(tr + 1.0)
-            w = 0.25 / s
-            x = (R[2, 1] - R[1, 2]) * s
-            y = (R[0, 2] - R[2, 0]) * s
-            z = (R[1, 0] - R[0, 1]) * s
-        elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
-            s = 2.0 * np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2])
-            w = (R[2, 1] - R[1, 2]) / s
-            x = 0.25 * s
-            y = (R[0, 1] + R[1, 0]) / s
-            z = (R[0, 2] + R[2, 0]) / s
-        elif R[1, 1] > R[2, 2]:
-            s = 2.0 * np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2])
-            w = (R[0, 2] - R[2, 0]) / s
-            x = (R[0, 1] + R[1, 0]) / s
-            y = 0.25 * s
-            z = (R[1, 2] + R[2, 1]) / s
-        else:
-            s = 2.0 * np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1])
-            w = (R[1, 0] - R[0, 1]) / s
-            x = (R[0, 2] + R[2, 0]) / s
-            y = (R[1, 2] + R[2, 1]) / s
-            z = 0.25 * s
-        q = np.array([w, x, y, z])
-        return q / np.linalg.norm(q)
-
-    # keypoints: (T, 5, 3) positions, joint_quats: (T, 5, 4) wxyz quaternions
+    n_frames = len(ee_pos)
     keypoints = np.zeros((n_frames, 5, 3))
     joint_quats = np.zeros((n_frames, 5, 4))
-    for t in range(n_frames):
-        q_t = angle_traj[t]
-        T_partial = np.eye(4)
-        joint_idx = 0
-        for k in range(5):
-            # Advance the partial chain up to keypoint_n_joints[k]
-            while joint_idx < keypoint_n_joints[k]:
-                T_partial = T_partial @ np.asarray(
-                    jaxlie.SE3.exp(screw_axes[joint_idx] * q_t[joint_idx]).as_matrix()
-                )
-                joint_idx += 1
-            p_home = np.append(keypoint_home[k], 1.0)
-            keypoints[t, k] = (T_partial @ p_home)[:3]
-            joint_quats[t, k] = rotation_matrix_to_wxyz(T_partial[:3, :3])
+    for k, name in enumerate(joint_names):
+        T_k = np.asarray(results.trajectory[f"T_{name}"])  # (T, 4, 4)
+        p_home = np.append(keypoint_home_positions[name], 1.0)
+        keypoints[:, k] = (T_k @ p_home)[:, :3]
+        joint_quats[:, k] = np.array(
+            [jaxlie.SO3.from_matrix(T_k[t, :3, :3]).wxyz for t in range(n_frames)]
+        )
 
     # -- Create viser server ----------------------------------------------------
 
@@ -380,7 +348,6 @@ if __name__ == "__main__":
 
     # Joint coordinate frames
     joint_frame_handles = []
-    joint_names = ["base", "shoulder", "elbow", "wrist", "ee"]
     for k in range(5):
         h = server.scene.add_frame(
             f"/joint_{joint_names[k]}",
