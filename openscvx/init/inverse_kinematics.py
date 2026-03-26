@@ -56,17 +56,6 @@ def _so3_log(R):
 # =============================================================================
 
 
-def _poe_fk_position(screw_axes, T_home, q):
-    """PoE FK returning (3,) end-effector position."""
-    import jaxlie
-
-    T = jnp.eye(4)
-    for i in range(screw_axes.shape[0]):
-        T = T @ jaxlie.SE3.exp(screw_axes[i] * q[i]).as_matrix()
-    T = T @ T_home
-    return T[:3, 3]
-
-
 def _poe_fk_pose(screw_axes, T_home, q):
     """PoE FK returning (4, 4) end-effector transform."""
     import jaxlie
@@ -74,8 +63,12 @@ def _poe_fk_pose(screw_axes, T_home, q):
     T = jnp.eye(4)
     for i in range(screw_axes.shape[0]):
         T = T @ jaxlie.SE3.exp(screw_axes[i] * q[i]).as_matrix()
-    T = T @ T_home
-    return T
+    return T @ T_home
+
+
+def _poe_fk_position(screw_axes, T_home, q):
+    """PoE FK returning (3,) end-effector position."""
+    return _poe_fk_pose(screw_axes, T_home, q)[:3, 3]
 
 
 # =============================================================================
