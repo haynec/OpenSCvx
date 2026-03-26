@@ -47,7 +47,7 @@ a4 = 0.150  # Wrist to end-effector
 inertia = np.array([0.08, 0.06, 0.05, 0.04, 0.02, 0.01, 0.005])
 
 # Number of discretization nodes
-n = 2
+n = 5
 total_time = 1.0
 
 # =============================================================================
@@ -166,8 +166,8 @@ dynamics = {
 # Constraints
 # =============================================================================
 
-# Target end-effector position
-target = ox.Parameter("target", shape=(3,), value=np.array([0.3, 0.3, 0.5]))
+# Target end-effector position (+x, +y, low z — EE facing down)
+target = ox.Parameter("target", shape=(3,), value=np.array([0.35, 0.25, 0.05]))
 
 # Box constraints
 constraints = []
@@ -184,17 +184,35 @@ ee_tolerance = 0.01  # 1cm tolerance
 ee_target_constraint = (ox.linalg.Norm(p_ee - target, ord=2) <= ee_tolerance).at([n - 1])
 constraints.append(ee_target_constraint)
 
+constraints.append(ox.ctcs(p_ee[2] >= 0.0))
+
+# Terminal orientation: full SO(3) constraint via log map
+# R_des = Ry(90°) rotates body +x to world -z (EE facing down)
+R_des = ox.Constant(
+    np.array(
+        [
+            [0.0, 0.0, 1.0],
+            [0.0, 1.0, 0.0],
+            [-1.0, 0.0, 0.0],
+        ]
+    )
+)
+ori_error = ox.lie.SO3Log(R_des.T @ T_ee[:3, :3])  # (3,) rotation error vector
+ori_tolerance = np.deg2rad(5.0)
+constraints.append(ox.ctcs(ox.linalg.Norm(ori_error, ord=2) <= ori_tolerance))
+
 # =============================================================================
 # Initial Guesses (via IK)
 # =============================================================================
 
-q_identity = [1, 0, 0, 0]
-home_ee_pos = [a2 + a3 + a4, 0, d1]
+# EE facing down: 90° rotation about y maps body +x to world -z
+q_down = [np.cos(np.pi / 4), 0, np.sin(np.pi / 4), 0]
+start_ee_pos = [0.35, -0.25, 0.05]
 
 angle.guess = ox.init.ik_interpolation(
     keyframes=[
-        (home_ee_pos, q_identity),
-        (target.value, q_identity),
+        (start_ee_pos, q_down),
+        (target.value, q_down),
     ],
     nodes=[0, n - 1],
     screw_axes=screw_axes,
@@ -203,6 +221,7 @@ angle.guess = ox.init.ik_interpolation(
     q_min=angle.min,
     q_max=angle.max,
 )
+angle.initial = angle.guess[0]
 velocity.guess = np.zeros((n, N_JOINTS))
 torque.guess = np.zeros((n, N_JOINTS))
 
@@ -237,7 +256,7 @@ if __name__ == "__main__":
     print("7-DOF Redundant Arm Trajectory Optimization with PoE FK")
     print("=" * 60)
     print(f"Link lengths: d1={d1}m, a2={a2}m, a3={a3}m, a4={a4}m")
-    print(f"Home EE position: [{a2 + a3 + a4:.2f}, 0.00, {d1:.2f}]")
+    print(f"Start EE position: {list(start_ee_pos)}")
     print(f"Target position: {target.value}")
     print(f"IK terminal guess [deg]: {np.round(np.rad2deg(angle.guess[-1]), 1)}")
     print()
