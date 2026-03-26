@@ -114,7 +114,7 @@ states = [angle, velocity]
 
 # Joint torques (7,) — decreasing limits from base to tip
 torque = ox.Control("torque", shape=(N_JOINTS,))
-torque.max = np.array([80.0, 80.0, 40.0, 40.0, 20.0, 10.0, 5.0])
+torque.max = np.array([8.0, 8.0, 4.0, 4.0, 2.0, 1.0, 0.5])
 torque.min = -torque.max
 
 controls = [torque]
