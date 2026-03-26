@@ -210,6 +210,7 @@ problem = Problem(
     constraints=constraints,
     N=n,
     algorithm={"lam_vb": 1e1},
+    algebraic_prop={"ee_position": p_ee},
 )
 
 problem.settings.prp.dt = 0.01
@@ -227,23 +228,159 @@ if __name__ == "__main__":
     results = problem.solve()
     results = problem.post_process()
 
-    # Extract final joint angles
+    # Extract results
     final_q = results.trajectory["angle"][-1]
+    ee_pos = results.trajectory["ee_position"]  # (T, 3) from algebraic_prop
+
+    tgt = target.value
+    final_ee = ee_pos[-1]
+    error = np.linalg.norm(final_ee - tgt)
 
     print()
     print("Results:")
     print(f"Final joint angles [deg]: {np.round(np.rad2deg(final_q), 1)}")
-
-    # Verify EE position using jaxlie
-    from ik import poe_fk_position
-
-    tgt = target.value
-    final_ee = poe_fk_position(screw_axes, T_home, final_q)
-    error = np.linalg.norm(final_ee - tgt)
-
     print(f"Final EE position: [{final_ee[0]:.3f}, {final_ee[1]:.3f}, {final_ee[2]:.3f}]")
     print(f"Target position:   [{tgt[0]:.3f}, {tgt[1]:.3f}, {tgt[2]:.3f}]")
     print(f"Position error:    {error:.4f} m")
 
     plot_scp_iterations(results).show()
     plot_scp_convergence_histories(results).show()
+
+    # =========================================================================
+    # Viser 3D Arm Animation
+    # =========================================================================
+
+    import jaxlie
+    import viser
+
+    from openscvx.plotting.viser import (
+        add_animated_trail,
+        add_animation_controls,
+        add_ghost_trajectory,
+        add_position_marker,
+        add_target_markers,
+        compute_velocity_colors,
+        create_server,
+    )
+
+    # -- Compute joint keypoint positions at each propagation timestep ----------
+    # Keypoint home positions and how many joints affect each:
+    #   base [0,0,0]: 0 joints
+    #   shoulder [0,0,d1]: 1 joint  (on z-axis, stays put under j1)
+    #   elbow [a2,0,d1]: 2 joints   (on j3/j4 axes, unaffected by them)
+    #   wrist [a2+a3,0,d1]: 4 joints (on j5/j6 axes)
+    #   ee [a2+a3+a4,0,d1]: 7 joints
+
+    keypoint_home = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [0.0, 0.0, d1],
+            [a2, 0.0, d1],
+            [a2 + a3, 0.0, d1],
+            [a2 + a3 + a4, 0.0, d1],
+        ]
+    )
+    keypoint_n_joints = [0, 1, 2, 4, 7]
+
+    angle_traj = np.asarray(results.trajectory["angle"])  # (T, 7)
+    n_frames = len(angle_traj)
+
+    # keypoints shape: (T, 5, 3)
+    keypoints = np.zeros((n_frames, 5, 3))
+    for t in range(n_frames):
+        q_t = angle_traj[t]
+        T_partial = np.eye(4)
+        joint_idx = 0
+        for k in range(5):
+            # Advance the partial chain up to keypoint_n_joints[k]
+            while joint_idx < keypoint_n_joints[k]:
+                T_partial = T_partial @ np.asarray(
+                    jaxlie.SE3.exp(screw_axes[joint_idx] * q_t[joint_idx]).as_matrix()
+                )
+                joint_idx += 1
+            p_home = np.append(keypoint_home[k], 1.0)
+            keypoints[t, k] = (T_partial @ p_home)[:3]
+
+    # -- Create viser server ----------------------------------------------------
+
+    server = create_server(ee_pos)
+
+    # Target marker
+    add_target_markers(server, [tgt], radius=0.015, colors=[(255, 50, 50)])
+
+    # Ghost EE trajectory (faint full path)
+    ee_colors = compute_velocity_colors(
+        np.asarray(results.trajectory.get("velocity"))
+    )
+    add_ghost_trajectory(server, ee_pos, ee_colors, point_size=0.005)
+
+    # Animated EE trail
+    _, update_trail = add_animated_trail(server, ee_pos, ee_colors, point_size=0.008)
+
+    # Animated EE position marker
+    _, update_marker = add_position_marker(server, ee_pos, radius=0.015)
+
+    # Animated arm links (line segments between consecutive keypoints)
+    link_colors = np.array(
+        [
+            [180, 180, 180],  # base -> shoulder
+            [100, 180, 255],  # shoulder -> elbow
+            [100, 255, 150],  # elbow -> wrist
+            [255, 200, 100],  # wrist -> ee
+        ],
+        dtype=np.uint8,
+    )
+    # Initial arm segments: (4, 2, 3)
+    init_points = np.stack(
+        [
+            np.stack([keypoints[0, k], keypoints[0, k + 1]])
+            for k in range(4)
+        ]
+    ).astype(np.float32)
+
+    arm_handle = server.scene.add_line_segments(
+        "/arm_links",
+        points=init_points,
+        colors=link_colors,
+        line_width=5.0,
+    )
+
+    # Joint spheres
+    joint_handles = []
+    for k in range(5):
+        h = server.scene.add_icosphere(
+            f"/joint_{k}",
+            radius=0.012,
+            color=(220, 220, 220),
+            position=keypoints[0, k].astype(np.float32),
+        )
+        joint_handles.append(h)
+
+    def update_arm(frame_idx: int) -> None:
+        pts = np.stack(
+            [
+                np.stack([keypoints[frame_idx, k], keypoints[frame_idx, k + 1]])
+                for k in range(4)
+            ]
+        ).astype(np.float32)
+        arm_handle.points = pts
+        for k, h in enumerate(joint_handles):
+            h.position = keypoints[frame_idx, k].astype(np.float32)
+
+    # Animation controls
+    traj_time = np.asarray(results.trajectory["time"])
+    add_animation_controls(
+        server,
+        traj_time,
+        [update_trail, update_marker, update_arm],
+        loop=True,
+    )
+
+    print()
+    print("Viser server running — open the URL above in your browser.")
+    print("Press Ctrl+C to exit.")
+    try:
+        while True:
+            pass
+    except KeyboardInterrupt:
+        pass
