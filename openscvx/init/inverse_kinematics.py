@@ -62,9 +62,12 @@ def _so3_log(R):
 def _poe_fk_pose(screw_axes, T_home, angles):
     """PoE FK returning (4, 4) end-effector transform."""
 
-    T = jnp.eye(4)
-    for i in range(screw_axes.shape[0]):
-        T = T @ jaxlie.SE3.exp(screw_axes[i] * angles[i]).as_matrix()
+    def step(T, xi_angle):
+        xi, angle = xi_angle[:6], xi_angle[6]
+        return T @ jaxlie.SE3.exp(xi * angle).as_matrix(), None
+
+    xi_angles = jnp.concatenate([screw_axes, angles[:, None]], axis=1)
+    T, _ = jax.lax.scan(step, jnp.eye(4), xi_angles)
     return T @ T_home
 
 
