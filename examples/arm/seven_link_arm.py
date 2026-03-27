@@ -163,11 +163,27 @@ dynamics = {
 }
 
 # =============================================================================
+# Task Specification (start and goal EE poses)
+# =============================================================================
+# Orientation: Ry(90°) points body +x toward world -z (EE facing down)
+R_des = np.array(
+    [
+        [0.0, 0.0, 1.0],
+        [0.0, 1.0, 0.0],
+        [-1.0, 0.0, 0.0],
+    ]
+)
+# Same orientation as quaternion (wxyz) for IK initialization
+q_down = np.array([np.cos(np.pi / 4), 0.0, np.sin(np.pi / 4), 0.0])
+
+start_ee_pos = np.array([0.35, -0.25, 0.05])
+goal_ee_pos = np.array([0.35, 0.25, 0.05])
+
+# =============================================================================
 # Constraints
 # =============================================================================
 
-# Target end-effector position (+x, +y, low z — EE facing down)
-target = ox.Parameter("target", shape=(3,), value=np.array([0.35, 0.25, 0.05]))
+target = ox.Parameter("target", shape=(3,), value=goal_ee_pos)
 
 # Box constraints
 constraints = []
@@ -186,17 +202,7 @@ constraints.append(ee_target_constraint)
 
 constraints.append(ox.ctcs(p_ee[2] >= 0.0))
 
-# Terminal orientation: full SO(3) constraint via log map
-# R_des = Ry(90°) rotates body +x to world -z (EE facing down)
-R_des = ox.Constant(
-    np.array(
-        [
-            [0.0, 0.0, 1.0],
-            [0.0, 1.0, 0.0],
-            [-1.0, 0.0, 0.0],
-        ]
-    )
-)
+# Terminal orientation constraint via SO(3) log map
 ori_error = ox.lie.SO3Log(R_des.T @ T_ee[:3, :3])  # (3,) rotation error vector
 ori_tolerance = np.deg2rad(5.0)
 constraints.append(ox.ctcs(ox.linalg.Norm(ori_error, ord=2) <= ori_tolerance))
@@ -205,14 +211,10 @@ constraints.append(ox.ctcs(ox.linalg.Norm(ori_error, ord=2) <= ori_tolerance))
 # Initial Guesses (via IK)
 # =============================================================================
 
-# EE facing down: 90° rotation about y maps body +x to world -z
-q_down = [np.cos(np.pi / 4), 0, np.sin(np.pi / 4), 0]
-start_ee_pos = [0.35, -0.25, 0.05]
-
 angle.guess = ox.init.ik_interpolation(
     keyframes=[
         (start_ee_pos, q_down),
-        (target.value, q_down),
+        (goal_ee_pos, q_down),
     ],
     nodes=[0, n - 1],
     screw_axes=screw_axes,

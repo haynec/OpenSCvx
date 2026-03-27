@@ -194,11 +194,17 @@ dynamics = {
 }
 
 # =============================================================================
+# Task Specification (start and goal EE poses)
+# =============================================================================
+
+home_ee_pos = np.array([a2 + a3 + a4, 0, d1])
+goal_ee_pos = np.array([0.1, 0.3, 0.5])
+
+# =============================================================================
 # Constraints
 # =============================================================================
 
-# Target end-effector position
-target = ox.Parameter("target", shape=(3,), value=np.array([0.1, 0.3, 0.5]))
+target = ox.Parameter("target", shape=(3,), value=goal_ee_pos)
 
 # Box constraints
 constraints = []
@@ -235,7 +241,6 @@ constraints.append(visibility_constraint)
 # Initial Guesses (via IK)
 # =============================================================================
 
-home_ee_pos = np.array([a2 + a3 + a4, 0, d1])
 mean_vp = np.mean(vp_targets, axis=0)
 
 # Boresight direction in body frame (derived from sensor params)
@@ -253,12 +258,12 @@ def look_at_quat(ee_pos, target_pos):
 
 
 q_home = look_at_quat(home_ee_pos, mean_vp)
-q_final = look_at_quat(target.value, mean_vp)
+q_final = look_at_quat(goal_ee_pos, mean_vp)
 
 angle.guess = ox.init.ik_interpolation(
     keyframes=[
         (home_ee_pos, q_home),
-        (target.value, q_final),
+        (goal_ee_pos, q_final),
     ],
     nodes=[0, n - 1],
     screw_axes=screw_axes,
