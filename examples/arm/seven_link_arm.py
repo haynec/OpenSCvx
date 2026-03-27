@@ -166,14 +166,6 @@ dynamics = {
 # Task Specification (start and goal EE poses)
 # =============================================================================
 # Orientation: Ry(90°) points body +x toward world -z (EE facing down)
-R_des = np.array(
-    [
-        [0.0, 0.0, 1.0],
-        [0.0, 1.0, 0.0],
-        [-1.0, 0.0, 0.0],
-    ]
-)
-# Same orientation as quaternion (wxyz) for IK initialization
 q_down = np.array([np.cos(np.pi / 4), 0.0, np.sin(np.pi / 4), 0.0])
 
 start_ee_pos = np.array([0.35, -0.25, 0.05])
@@ -203,6 +195,14 @@ constraints.append(ee_target_constraint)
 constraints.append(ox.ctcs(p_ee[2] >= 0.0))
 
 # Terminal orientation constraint via SO(3) log map
+w, x, y, z = q_down
+R_des = np.array(
+    [
+        [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+        [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+        [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
+    ]
+)
 ori_error = ox.lie.SO3Log(R_des.T @ T_ee[:3, :3])  # (3,) rotation error vector
 ori_tolerance = np.deg2rad(5.0)
 constraints.append(ox.ctcs(ox.linalg.Norm(ori_error, ord=2) <= ori_tolerance))
@@ -219,9 +219,9 @@ angle.guess = ox.init.ik_interpolation(
     nodes=[0, n - 1],
     screw_axes=screw_axes,
     T_home=T_home,
-    q_init=angle.initial,
-    q_min=angle.min,
-    q_max=angle.max,
+    angles_init=angle.initial,
+    angles_min=angle.min,
+    angles_max=angle.max,
 )
 angle.initial = angle.guess[0]
 velocity.guess = np.zeros((n, N_JOINTS))

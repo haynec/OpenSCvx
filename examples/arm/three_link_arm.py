@@ -187,9 +187,9 @@ angle.guess = ox.init.ik_interpolation(
     nodes=[0, n - 1],
     screw_axes=screw_axes,
     T_home=T_home,
-    q_init=angle.initial,
-    q_min=angle.min,
-    q_max=angle.max,
+    angles_init=angle.initial,
+    angles_min=angle.min,
+    angles_max=angle.max,
 )
 velocity.guess = np.zeros((n, 3))
 torque.guess = np.zeros((n, 3))
