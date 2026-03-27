@@ -59,19 +59,19 @@ def _so3_log(R):
 
 
 @jax.jit
-def _poe_fk_pose(screw_axes, T_home, q):
+def _poe_fk_pose(screw_axes, T_home, angles):
     """PoE FK returning (4, 4) end-effector transform."""
 
     T = jnp.eye(4)
     for i in range(screw_axes.shape[0]):
-        T = T @ jaxlie.SE3.exp(screw_axes[i] * q[i]).as_matrix()
+        T = T @ jaxlie.SE3.exp(screw_axes[i] * angles[i]).as_matrix()
     return T @ T_home
 
 
 @jax.jit
-def _poe_fk_position(screw_axes, T_home, q):
+def _poe_fk_position(screw_axes, T_home, angles):
     """PoE FK returning (3,) end-effector position."""
-    return _poe_fk_pose(screw_axes, T_home, q)[:3, 3]
+    return _poe_fk_pose(screw_axes, T_home, angles)[:3, 3]
 
 
 # =============================================================================
@@ -80,12 +80,14 @@ def _poe_fk_position(screw_axes, T_home, q):
 
 
 @jax.jit
-def _ik_loop_pose(screw_axes, T_home, p_target, R_target, q0, q_lo, q_hi, damping, tol, max_iter):
+def _ik_loop_pose(
+    screw_axes, T_home, p_target, R_target, angles0, angles_lo, angles_hi, damping, tol, max_iter
+):
     """JIT'd 6D pose IK (position + orientation) via damped least-squares."""
     target_vec = jnp.concatenate([p_target, jnp.zeros(3)])
 
-    def fk_vec(q):
-        T = _poe_fk_pose(screw_axes, T_home, q)
+    def fk_vec(angles):
+        T = _poe_fk_pose(screw_axes, T_home, angles)
         return jnp.concatenate([T[:3, 3], _so3_log(R_target.T @ T[:3, :3])])
 
     J_fn = jax.jacfwd(fk_vec)
@@ -95,25 +97,27 @@ def _ik_loop_pose(screw_axes, T_home, p_target, R_target, q0, q_lo, q_hi, dampin
         return (err_norm >= tol) & (i < max_iter)
 
     def body(state):
-        q, _, i = state
-        current = fk_vec(q)
+        angles, _, i = state
+        current = fk_vec(angles)
         err = target_vec - current
-        J = J_fn(q)
-        dq = J.T @ jnp.linalg.solve(J @ J.T + damping * jnp.eye(6), err)
-        q_new = jnp.clip(q + dq, q_lo, q_hi)
-        return q_new, jnp.linalg.norm(target_vec - fk_vec(q_new)), i + 1
+        J = J_fn(angles)
+        dj = J.T @ jnp.linalg.solve(J @ J.T + damping * jnp.eye(6), err)
+        angles_new = jnp.clip(angles + dj, angles_lo, angles_hi)
+        return angles_new, jnp.linalg.norm(target_vec - fk_vec(angles_new)), i + 1
 
-    init_err = jnp.linalg.norm(target_vec - fk_vec(q0))
-    q_sol, _, _ = jax.lax.while_loop(cond, body, (q0, init_err, jnp.int32(0)))
-    return q_sol
+    init_err = jnp.linalg.norm(target_vec - fk_vec(angles0))
+    angles_sol, _, _ = jax.lax.while_loop(cond, body, (angles0, init_err, jnp.int32(0)))
+    return angles_sol
 
 
 @jax.jit
-def _ik_loop_position(screw_axes, T_home, p_target, q0, q_lo, q_hi, damping, tol, max_iter):
+def _ik_loop_position(
+    screw_axes, T_home, p_target, angles0, angles_lo, angles_hi, damping, tol, max_iter
+):
     """JIT'd position-only IK via damped least-squares."""
 
-    def fk_pos(q):
-        return _poe_fk_position(screw_axes, T_home, q)
+    def fk_pos(angles):
+        return _poe_fk_position(screw_axes, T_home, angles)
 
     J_fn = jax.jacfwd(fk_pos)
 
@@ -122,30 +126,30 @@ def _ik_loop_position(screw_axes, T_home, p_target, q0, q_lo, q_hi, damping, tol
         return (err_norm >= tol) & (i < max_iter)
 
     def body(state):
-        q, _, i = state
-        err = p_target - fk_pos(q)
-        J = J_fn(q)
-        dq = J.T @ jnp.linalg.solve(J @ J.T + damping * jnp.eye(3), err)
-        q_new = jnp.clip(q + dq, q_lo, q_hi)
-        return q_new, jnp.linalg.norm(p_target - fk_pos(q_new)), i + 1
+        angles, _, i = state
+        err = p_target - fk_pos(angles)
+        J = J_fn(angles)
+        dj = J.T @ jnp.linalg.solve(J @ J.T + damping * jnp.eye(3), err)
+        angles_new = jnp.clip(angles + dj, angles_lo, angles_hi)
+        return angles_new, jnp.linalg.norm(p_target - fk_pos(angles_new)), i + 1
 
-    init_err = jnp.linalg.norm(p_target - fk_pos(q0))
-    q_sol, _, _ = jax.lax.while_loop(cond, body, (q0, init_err, jnp.int32(0)))
-    return q_sol
+    init_err = jnp.linalg.norm(p_target - fk_pos(angles0))
+    angles_sol, _, _ = jax.lax.while_loop(cond, body, (angles0, init_err, jnp.int32(0)))
+    return angles_sol
 
 
 def _ik_solve(
     screw_axes,
     T_home,
     p_target,
-    q0=None,
+    angles0=None,
     *,
     R_target=None,
     max_iter=200,
     tol=1e-6,
     damping=1e-3,
-    q_min=None,
-    q_max=None,
+    angles_min=None,
+    angles_max=None,
 ):
     """Damped least-squares IK solver.
 
@@ -159,56 +163,56 @@ def _ik_solve(
         screw_axes: (n_joints, 6) array of screw axes.
         T_home: (4, 4) home configuration.
         p_target: (3,) desired end-effector position.
-        q0: (n_joints,) initial joint angle guess. Defaults to zeros.
+        angles0: (n_joints,) initial joint angle guess. Defaults to zeros.
         R_target: (3, 3) desired end-effector rotation matrix, or None for
             position-only IK.
         max_iter: Maximum iterations.
         tol: Convergence tolerance.
         damping: Damping factor for least-squares.
-        q_min: (n_joints,) optional lower joint limits.
-        q_max: (n_joints,) optional upper joint limits.
+        angles_min: (n_joints,) optional lower joint limits.
+        angles_max: (n_joints,) optional upper joint limits.
 
     Returns:
         (n_joints,) joint angles that place the EE near the target.
     """
     n_joints = screw_axes.shape[0]
-    if q0 is None:
-        q0 = np.zeros(n_joints)
+    if angles0 is None:
+        angles0 = np.zeros(n_joints)
 
     screw_axes_j = jnp.array(screw_axes)
     T_home_j = jnp.array(T_home)
     p_target_j = jnp.array(p_target)
-    q0_j = jnp.array(q0, dtype=float)
-    q_lo = jnp.array(q_min) if q_min is not None else jnp.full(n_joints, -jnp.inf)
-    q_hi = jnp.array(q_max) if q_max is not None else jnp.full(n_joints, jnp.inf)
+    angles0_j = jnp.array(angles0, dtype=float)
+    angles_lo = jnp.array(angles_min) if angles_min is not None else jnp.full(n_joints, -jnp.inf)
+    angles_hi = jnp.array(angles_max) if angles_max is not None else jnp.full(n_joints, jnp.inf)
 
     if R_target is not None:
-        q_sol = _ik_loop_pose(
+        angles_sol = _ik_loop_pose(
             screw_axes_j,
             T_home_j,
             p_target_j,
             jnp.array(R_target),
-            q0_j,
-            q_lo,
-            q_hi,
+            angles0_j,
+            angles_lo,
+            angles_hi,
             damping,
             tol,
             max_iter,
         )
     else:
-        q_sol = _ik_loop_position(
+        angles_sol = _ik_loop_position(
             screw_axes_j,
             T_home_j,
             p_target_j,
-            q0_j,
-            q_lo,
-            q_hi,
+            angles0_j,
+            angles_lo,
+            angles_hi,
             damping,
             tol,
             max_iter,
         )
 
-    return np.array(q_sol)
+    return np.array(angles_sol)
 
 
 # =============================================================================
@@ -222,9 +226,9 @@ def ik_interpolation(
     screw_axes: np.ndarray,
     T_home: np.ndarray,
     *,
-    q_init: np.ndarray = None,
-    q_min: np.ndarray = None,
-    q_max: np.ndarray = None,
+    angles_init: np.ndarray = None,
+    angles_min: np.ndarray = None,
+    angles_max: np.ndarray = None,
     damping: float = 1e-3,
     max_iter: int = 200,
     tol: float = 1e-6,
@@ -245,10 +249,10 @@ def ik_interpolation(
             determines the output size (N = nodes[-1] + 1).
         screw_axes: (n_joints, 6) array of screw axes for Product of Exponentials.
         T_home: (4, 4) home configuration transform.
-        q_init: (n_joints,) initial joint angle guess for the first node.
+        angles_init: (n_joints,) initial joint angle guess for the first node.
             Defaults to zeros.
-        q_min: (n_joints,) optional lower joint limits.
-        q_max: (n_joints,) optional upper joint limits.
+        angles_min: (n_joints,) optional lower joint limits.
+        angles_max: (n_joints,) optional upper joint limits.
         damping: Damping factor for least-squares IK.
         max_iter: Maximum IK iterations per node.
         tol: IK convergence tolerance.
@@ -274,37 +278,37 @@ def ik_interpolation(
     positions = [np.asarray(kf[0], dtype=np.float64) for kf in keyframes]
     quaternions = [np.asarray(kf[1], dtype=np.float64) for kf in keyframes]
 
-    for i, (p, q) in enumerate(zip(positions, quaternions)):
+    for i, (p, quat) in enumerate(zip(positions, quaternions)):
         if p.shape != (3,):
             raise ValueError(f"Keyframe {i} position has shape {p.shape}, expected (3,)")
-        if q.shape != (4,):
-            raise ValueError(f"Keyframe {i} quaternion has shape {q.shape}, expected (4,)")
+        if quat.shape != (4,):
+            raise ValueError(f"Keyframe {i} quaternion has shape {quat.shape}, expected (4,)")
 
     # Interpolate task-space trajectory
     p_traj = linspace(keyframes=positions, nodes=nodes)  # (N, 3)
-    q_traj = slerp(keyframes=quaternions, nodes=nodes)  # (N, 4)
+    quat_traj = slerp(keyframes=quaternions, nodes=nodes)  # (N, 4)
 
     N = nodes[-1] + 1
     n_joints = screw_axes.shape[0]
     result = np.zeros((N, n_joints), dtype=np.float64)
 
     # Solve IK at each node, warm-starting from previous solution
-    q_prev = q_init if q_init is not None else np.zeros(n_joints)
+    angles_prev = angles_init if angles_init is not None else np.zeros(n_joints)
     for k in range(N):
-        R_target = _quat_wxyz_to_rotmat(q_traj[k])
-        q_sol = _ik_solve(
+        R_target = _quat_wxyz_to_rotmat(quat_traj[k])
+        angles_sol = _ik_solve(
             screw_axes,
             T_home,
             p_traj[k],
-            q0=q_prev,
+            angles0=angles_prev,
             R_target=R_target,
             max_iter=max_iter,
             tol=tol,
             damping=damping,
-            q_min=q_min,
-            q_max=q_max,
+            angles_min=angles_min,
+            angles_max=angles_max,
         )
-        result[k] = q_sol
-        q_prev = q_sol
+        result[k] = angles_sol
+        angles_prev = angles_sol
 
     return result
