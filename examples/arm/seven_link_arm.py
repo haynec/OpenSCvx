@@ -220,12 +220,18 @@ R_des = np.array(
     ]
 )
 ori_error = ox.lie.SO3Log(R_des.T @ T_ee[:3, :3])  # (3,) rotation error vector
+ori_norm = ox.linalg.Norm(ori_error, ord=2)
+
+# Loose tolerance during transit, tight during grasp/place approach
 ori_tolerance = np.deg2rad(5.0)
-constraints.append(
-    (ox.linalg.Norm(ori_error, ord=2) <= ori_tolerance).over(
-        (waypoint_nodes[1], waypoint_nodes[-1])
-    )
-)
+ori_tolerance_tight = np.deg2rad(0.1)
+
+# Loose: full task range (pre_grasp through place)
+constraints.append((ori_norm <= ori_tolerance).over((waypoint_nodes[1], waypoint_nodes[-1])))
+# Tight: pre_grasp -> grasp -> pre_grasp
+constraints.append((ori_norm <= ori_tolerance_tight).over((waypoint_nodes[1], waypoint_nodes[3])))
+# Tight: pre_place -> place
+constraints.append((ori_norm <= ori_tolerance_tight).over((waypoint_nodes[4], waypoint_nodes[5])))
 
 # =============================================================================
 # Initial Guesses (via IK)
