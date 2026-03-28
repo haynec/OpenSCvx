@@ -1,14 +1,16 @@
-"""7-DOF redundant arm with Product of Exponentials forward kinematics.
+"""7-DOF redundant arm pick-and-place with Product of Exponentials FK.
 
 This example demonstrates trajectory optimization for a 7-DOF spatial arm
-(similar to a Kuka iiwa / Franka Panda layout) using Lie algebra operations
-for forward kinematics. The redundant kinematic structure means IK is needed
-to generate the SCP initial guess.
+performing a full pick-and-place motion: home -> pre-grasp -> grasp ->
+pre-place -> place. Uses Lie algebra operations for forward kinematics
+and IK-generated initial guesses.
 
 - 7 revolute joints with alternating z-y rotation axes
 - Product of Exponentials (PoE) forward kinematics using SE3Exp
+- Multi-waypoint pick-and-place trajectory
+- EE position constraints at each waypoint
+- Downward orientation constraints at grasp/place waypoints
 - IK-generated initial guess via damped least-squares
-- End-effector position tracking objective
 - Joint torque control inputs
 
 The PoE formula computes forward kinematics as:
@@ -46,9 +48,32 @@ a4 = 0.150  # Wrist to end-effector
 # Joint inertias (simplified, kg*m^2) — decreasing from base to tip
 inertia = np.array([0.08, 0.06, 0.05, 0.04, 0.02, 0.01, 0.005])
 
-# Number of discretization nodes
-n = 5
-total_time = 1.0
+# Number of discretization nodes (parameterized by segments between waypoints)
+nodes_per_segment = 2
+total_time = 4.0
+
+# =============================================================================
+# Pick-and-Place Waypoints
+# =============================================================================
+# Orientation: Ry(90°) points body +x toward world -z (EE facing down)
+q_down = np.array([np.cos(np.pi / 4), 0.0, np.sin(np.pi / 4), 0.0])
+q_identity = np.array([1.0, 0.0, 0.0, 0.0])
+
+pre_height = 0.15  # height above grasp/place positions
+
+grasp_pos = np.array([0.35, -0.25, 0.05])
+place_pos = np.array([0.35, 0.25, 0.05])
+home_pos = np.array([a2 + a3 + a4 - 0.01, 0.0, d1])
+pre_grasp_pos = grasp_pos + np.array([0.0, 0.0, pre_height])
+pre_place_pos = place_pos + np.array([0.0, 0.0, pre_height])
+
+waypoint_names = ["home", "pre_grasp", "grasp", "pre_grasp", "pre_place", "place"]
+waypoint_positions = [home_pos, pre_grasp_pos, grasp_pos, pre_grasp_pos, pre_place_pos, place_pos]
+waypoint_orientations = [q_identity, q_down, q_down, q_down, q_down, q_down]
+
+n_segments = len(waypoint_positions) - 1
+n = nodes_per_segment * n_segments + 1
+waypoint_nodes = [i * nodes_per_segment for i in range(len(waypoint_positions))]
 
 # =============================================================================
 # Screw Axes for Product of Exponentials
@@ -163,19 +188,8 @@ dynamics = {
 }
 
 # =============================================================================
-# Task Specification (start and goal EE poses)
-# =============================================================================
-# Orientation: Ry(90°) points body +x toward world -z (EE facing down)
-q_down = np.array([np.cos(np.pi / 4), 0.0, np.sin(np.pi / 4), 0.0])
-
-start_ee_pos = np.array([0.35, -0.25, 0.05])
-goal_ee_pos = np.array([0.35, 0.25, 0.05])
-
-# =============================================================================
 # Constraints
 # =============================================================================
-
-target = ox.Parameter("target", shape=(3,), value=goal_ee_pos)
 
 # Box constraints
 constraints = []
@@ -187,14 +201,16 @@ for state in states:
         ]
     )
 
-# End-effector target constraint at final node
-ee_tolerance = 0.01  # 1cm tolerance
-ee_target_constraint = (ox.linalg.Norm(p_ee - target, ord=2) <= ee_tolerance).at([n - 1])
-constraints.append(ee_target_constraint)
-
+# EE stays above the table
 constraints.append(ox.ctcs(p_ee[2] >= 0.0))
 
-# Terminal orientation constraint via SO(3) log map
+# EE position constraint at each waypoint
+ee_tolerance = 0.01  # 1cm tolerance
+for i, (wp, node) in enumerate(zip(waypoint_positions, waypoint_nodes)):
+    wp_param = ox.Parameter(f"waypoint_{waypoint_names[i]}", shape=(3,), value=wp)
+    constraints.append((ox.linalg.Norm(p_ee - wp_param, ord=2) <= ee_tolerance).at([node]))
+
+# Downward orientation constraint at task waypoints (pre_grasp, grasp, pre_place, place)
 w, x, y, z = q_down
 R_des = np.array(
     [
@@ -205,25 +221,23 @@ R_des = np.array(
 )
 ori_error = ox.lie.SO3Log(R_des.T @ T_ee[:3, :3])  # (3,) rotation error vector
 ori_tolerance = np.deg2rad(5.0)
-constraints.append(ox.ctcs(ox.linalg.Norm(ori_error, ord=2) <= ori_tolerance))
+task_waypoint_nodes = waypoint_nodes[1:]  # skip home
+constraints.append((ox.linalg.Norm(ori_error, ord=2) <= ori_tolerance).at(task_waypoint_nodes))
 
 # =============================================================================
 # Initial Guesses (via IK)
 # =============================================================================
 
 angle.guess = ox.init.ik_interpolation(
-    keyframes=[
-        (start_ee_pos, q_down),
-        (goal_ee_pos, q_down),
-    ],
-    nodes=[0, n - 1],
+    keyframes=list(zip(waypoint_positions, waypoint_orientations)),
+    nodes=waypoint_nodes,
     screw_axes=screw_axes,
     T_home=T_home,
     angles_init=angle.initial,
     angles_min=angle.min,
     angles_max=angle.max,
 )
-angle.initial = angle.guess[0]
+angle.initial = np.clip(angle.guess[0], angle.min, angle.max)
 velocity.guess = np.zeros((n, N_JOINTS))
 torque.guess = np.zeros((n, N_JOINTS))
 
@@ -255,12 +269,12 @@ problem = Problem(
 problem.settings.prp.dt = 0.01
 
 if __name__ == "__main__":
-    print("7-DOF Redundant Arm Trajectory Optimization with PoE FK")
+    print("7-DOF Arm Pick-and-Place Trajectory Optimization with PoE FK")
     print("=" * 60)
     print(f"Link lengths: d1={d1}m, a2={a2}m, a3={a3}m, a4={a4}m")
-    print(f"Start EE position: {list(start_ee_pos)}")
-    print(f"Target position: {target.value}")
-    print(f"IK terminal guess [deg]: {np.round(np.rad2deg(angle.guess[-1]), 1)}")
+    print(f"Nodes: {n} ({nodes_per_segment} per segment, {n_segments} segments)")
+    for name, pos, node in zip(waypoint_names, waypoint_positions, waypoint_nodes):
+        print(f"  {name:>12s} (node {node:2d}): {list(pos)}")
     print()
 
     problem.initialize()
@@ -271,16 +285,19 @@ if __name__ == "__main__":
     final_q = results.trajectory["angle"][-1]
     ee_pos = results.trajectory["ee_position"]  # (T, 3) from algebraic_prop
 
-    tgt = target.value
-    final_ee = ee_pos[-1]
-    error = np.linalg.norm(final_ee - tgt)
-
     print()
     print("Results:")
     print(f"Final joint angles [deg]: {np.round(np.rad2deg(final_q), 1)}")
-    print(f"Final EE position: [{final_ee[0]:.3f}, {final_ee[1]:.3f}, {final_ee[2]:.3f}]")
-    print(f"Target position:   [{tgt[0]:.3f}, {tgt[1]:.3f}, {tgt[2]:.3f}]")
-    print(f"Position error:    {error:.4f} m")
+    for name, pos, node in zip(waypoint_names, waypoint_positions, waypoint_nodes):
+        # Find the closest propagated frame to each waypoint node
+        t_node = node / (n - 1)
+        frame_idx = int(round(t_node * (len(ee_pos) - 1)))
+        ee_at_wp = ee_pos[frame_idx]
+        err = np.linalg.norm(ee_at_wp - pos)
+        print(
+            f"  {name:>12s}: pos=[{ee_at_wp[0]:.3f}, {ee_at_wp[1]:.3f}, {ee_at_wp[2]:.3f}]  "
+            f"err={err:.4f}m"
+        )
 
     plot_scp_iterations(results).show()
     plot_controls(results).show()
@@ -330,8 +347,16 @@ if __name__ == "__main__":
     server.scene.add_grid("/grid", width=1.5, height=1.5, cell_size=0.25)
     server.scene.add_frame("/origin", axes_length=0.1, axes_radius=0.003)
 
-    # Target marker
-    add_target_markers(server, [tgt], radius=0.015, colors=[(255, 50, 50)])
+    # Waypoint markers: grasp/place in red, pre-grasp/pre-place in orange, home in blue
+    marker_colors = {
+        "home": (100, 150, 255),
+        "pre_grasp": (255, 180, 50),
+        "grasp": (255, 50, 50),
+        "pre_place": (255, 180, 50),
+        "place": (255, 50, 50),
+    }
+    for name, pos in zip(waypoint_names, waypoint_positions):
+        add_target_markers(server, [pos], radius=0.015, colors=[marker_colors[name]])
 
     # Ghost EE trajectory (faint full path)
     ee_colors = compute_velocity_colors(np.asarray(results.trajectory.get("velocity")))
