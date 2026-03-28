@@ -221,8 +221,11 @@ R_des = np.array(
 )
 ori_error = ox.lie.SO3Log(R_des.T @ T_ee[:3, :3])  # (3,) rotation error vector
 ori_tolerance = np.deg2rad(5.0)
-task_waypoint_nodes = waypoint_nodes[1:]  # skip home
-constraints.append((ox.linalg.Norm(ori_error, ord=2) <= ori_tolerance).at(task_waypoint_nodes))
+constraints.append(
+    (ox.linalg.Norm(ori_error, ord=2) <= ori_tolerance).over(
+        (waypoint_nodes[1], waypoint_nodes[-1])
+    )
+)
 
 # =============================================================================
 # Initial Guesses (via IK)
@@ -259,7 +262,7 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"lam_vb": 1e1},
+    algorithm={"lam_vb": 1e0},
     algebraic_prop={
         "ee_position": p_ee,
         **{f"T_{name}": T for name, T in joint_transforms.items()},
