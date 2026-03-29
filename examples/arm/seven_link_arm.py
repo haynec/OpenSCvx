@@ -364,8 +364,12 @@ if __name__ == "__main__":
         "pre_place": (255, 180, 50),
         "place": (255, 50, 50),
     }
-    for name, pos in zip(waypoint_names, waypoint_positions):
-        add_target_markers(server, [pos], radius=0.015, colors=[marker_colors[name]])
+    add_target_markers(
+        server,
+        waypoint_positions,
+        radius=0.015,
+        colors=[marker_colors[name] for name in waypoint_names],
+    )
 
     # Ghost EE trajectory (faint full path)
     ee_colors = compute_velocity_colors(np.asarray(results.trajectory.get("velocity")))
