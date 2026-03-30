@@ -50,7 +50,7 @@ inertia = np.array([0.08, 0.06, 0.05, 0.04, 0.02, 0.01, 0.005])
 
 # Number of discretization nodes
 n = 5
-total_time = 1.0
+total_time = 4.0
 
 # =============================================================================
 # Wrist Camera (Viewcone) Parameters
@@ -71,12 +71,12 @@ c = jnp.array([0, 0, 1])  # Boresight in sensor frame
 norm_type = 2
 R_sb = jnp.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]])  # Sensor-to-body rotation
 
-# Viewpoint targets — workpiece features the wrist camera must track
+# Viewpoint targets — workpiece features the wrist camera must track (centered around y=0)
 vp_targets = np.array(
     [
-        [0.25, 0.20, 0.20],
-        [0.35, 0.20, 0.20],
-        [0.30, 0.30, 0.15],
+        [0.25, 0.00, 0.20],
+        [0.35, 0.00, 0.20],
+        [0.30, 0.05, 0.15],
     ]
 )
 
@@ -197,8 +197,8 @@ dynamics = {
 # Task Specification (start and goal EE poses)
 # =============================================================================
 
-home_ee_pos = np.array([a2 + a3 + a4, 0, d1])
-goal_ee_pos = np.array([0.1, 0.3, 0.5])
+home_ee_pos = np.array([0.3, 0.25, 0.25])
+goal_ee_pos = np.array([0.3, -0.25, 0.25])
 
 # =============================================================================
 # Constraints
@@ -294,7 +294,7 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"lam_vb": 1e1},
+    algorithm={"lam_vb": 1e0},
     algebraic_prop={
         "ee_position": p_ee,
         **{f"T_{name}": T for name, T in joint_transforms.items()},
