@@ -74,9 +74,9 @@ R_sb = jnp.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]])  # Sensor-to-body rotation
 # Viewpoint targets — workpiece features the wrist camera must track (centered around y=0)
 vp_targets = np.array(
     [
-        [0.25, 0.00, 0.20],
-        [0.35, 0.00, 0.20],
-        [0.30, 0.05, 0.15],
+        [0.25, 0.00, 0.10],
+        [0.35, 0.00, 0.10],
+        [0.30, 0.05, 0.05],
     ]
 )
 
