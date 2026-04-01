@@ -97,7 +97,12 @@ problem = Problem(
     constraints=constraints,
     N=n,
     licq_max=1e-6,
-    algorithm={"lam_prox": 1e-1, "lam_cost": 4e-2, "lam_vc": 2e0, "autotuner": ox.ConstantProximalWeight()},
+    algorithm={
+        "lam_prox": 1e-1,
+        "lam_cost": 4e-2,
+        "lam_vc": 2e0,
+        "autotuner": ox.ConstantProximalWeight(),
+    },
 )
 
 plotting_dict = {

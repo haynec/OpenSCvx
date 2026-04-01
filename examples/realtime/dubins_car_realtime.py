@@ -17,13 +17,14 @@ _this_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(_this_dir, ".."))
 sys.path.append(os.path.dirname(os.path.dirname(_this_dir)))
 
+from realtime.base_problems.dubins_car_realtime_base import problem
+
 from examples.plotting_viser import (
     build_scp_step_results,
     extract_multishoot_trajectory,
     format_metrics_markdown,
     get_print_queue_data,
 )
-from realtime.base_problems.dubins_car_realtime_base import problem
 
 problem.initialize()
 
@@ -127,7 +128,10 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
                     "prob_stat": "--",
                 }
             )
-            + f"\n**λ_cost:** {optimization_problem.algorithm.lam_cost:.2E}\n**λ_tr:** {optimization_problem.algorithm.lam_prox:.2E}"
+            + (
+                f"\n**λ_cost:** {optimization_problem.algorithm.lam_cost:.2E}"
+                f"\n**λ_tr:** {optimization_problem.algorithm.lam_prox:.2E}"
+            )
         )
 
     with server.gui.add_folder("Optimization Weights"):
