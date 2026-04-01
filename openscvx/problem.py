@@ -853,7 +853,7 @@ class Problem:
         # (assigned after Problem construction) are picked up.
         n_byof_nodal = len(self._byof.get("nodal_constraints", [])) if self._byof else 0
         n_byof_cross = len(self._byof.get("cross_nodal_constraints", [])) if self._byof else 0
-        self._algorithm._resolve_lam_vb(
+        self._algorithm.weights.build_vb_arrays(
             N=self.symbolic.N,
             nodal_constraints=self.symbolic.constraints.nodal,
             cross_node_constraints=self.symbolic.constraints.cross_node,

@@ -307,12 +307,15 @@ def _expand_lam_prox_dict(
 class Weights:
     """SCP weights used internally by the algorithm and autotuner.
 
-    This dataclass is an **internal** representation. Users should read and
-    write weights through the algorithm's properties (e.g.
-    ``algorithm.lam_cost``) which are the source of truth for user-facing
-    values. The autotuner may mutate these fields during SCP iteration;
-    those mutations are reflected in the weight histories on
-    :class:`AlgorithmState`.
+    Users should read and write weights through the algorithm's properties
+    (e.g. ``algorithm.lam_cost``). The autotuner may mutate these fields
+    during SCP iteration; those mutations are reflected in the weight
+    histories on :class:`AlgorithmState`.
+
+    Use :meth:`build` to construct from user-friendly inputs (floats or
+    ``{name: weight}`` dicts). Use :meth:`build_vb_arrays` to populate
+    ``lam_vb_nodal`` / ``lam_vb_cross`` once symbolic constraints are
+    available.
 
     Attributes:
         lam_prox: Trust region (proximal) weight. Scalar or
@@ -328,10 +331,10 @@ class Weights:
             default applied to every constraint. Use ``.weight()`` on
             individual constraints for per-constraint or per-node overrides.
         lam_vb_nodal: Virtual buffer penalty weights for nodal constraints,
-            shape ``(N, n_nodal)``. Set by :meth:`set_vb_arrays`.
+            shape ``(N, n_nodal)``. Set by :meth:`build_vb_arrays`.
         lam_vb_cross: Virtual buffer penalty weights for cross-node
             constraints, shape ``(n_cross,)``. Set by
-            :meth:`set_vb_arrays`.
+            :meth:`build_vb_arrays`.
     """
 
     lam_prox: Union[float, np.ndarray] = 1e0
@@ -350,17 +353,185 @@ class Weights:
         if isinstance(self.lam_cost, (list, tuple)):
             self.lam_cost = np.asarray(self.lam_cost, dtype=float)
 
-    def set_vb_arrays(
-        self,
-        lam_vb_nodal: np.ndarray,
-        lam_vb_cross: np.ndarray,
-    ) -> None:
-        """Set pre-built virtual buffer weight arrays.
+    @classmethod
+    def build(
+        cls,
+        lam_prox: Union[float, Dict[str, Union[float, list, np.ndarray]]] = 1e0,
+        lam_vc: Union[float, Dict[str, Union[float, list, np.ndarray]]] = 1e1,
+        lam_cost: Union[float, Dict[str, float]] = 1e-1,
+        lam_vb: float = 0.0,
+        states: Optional[List["State"]] = None,
+        controls: Optional[List["Control"]] = None,
+    ) -> "Weights":
+        """Construct Weights from user-friendly inputs.
+
+        Accepts floats (applied uniformly) or dicts mapping state/control
+        names to per-variable weights. Dict inputs are expanded to dense
+        arrays via the ``_expand_lam_*_dict`` helpers.
 
         Args:
-            lam_vb_nodal: Weight array of shape ``(N, n_nodal)``.
-            lam_vb_cross: Weight array of shape ``(n_cross,)``.
+            lam_prox: Trust region weight. Float or ``{name: weight}`` dict.
+                Dict requires *states* and *controls*.
+            lam_vc: Virtual control weight. Float or ``{state_name: weight}``
+                dict. Dict requires *states*.
+            lam_cost: Cost weight. Float or ``{state_name: weight}`` dict.
+                Dict requires *states*.
+            lam_vb: Virtual buffer default weight (scalar).
+            states: Symbolic State objects (required when any weight is a dict).
+            controls: Symbolic Control objects (required when *lam_prox* is a dict).
+
+        Returns:
+            A new Weights instance with resolved numeric values.
+
+        Raises:
+            ValueError: If a dict weight is given without the required
+                states/controls.
         """
+        return cls(
+            lam_prox=cls.resolve_lam_prox(lam_prox, states, controls),
+            lam_vc=cls.resolve_lam_vc(lam_vc, states),
+            lam_cost=cls.resolve_lam_cost(lam_cost, states),
+            lam_vb=float(lam_vb),
+        )
+
+    @staticmethod
+    def resolve_lam_prox(
+        lam_prox: Union[float, Dict[str, Union[float, list, np.ndarray]]],
+        states: Optional[List["State"]] = None,
+        controls: Optional[List["Control"]] = None,
+    ) -> Union[float, np.ndarray]:
+        """Resolve a ``lam_prox`` spec to a numeric value.
+
+        If *lam_prox* is a float it is returned as-is. If it is a dict,
+        *states* and *controls* must be provided for expansion.
+        """
+        if isinstance(lam_prox, dict):
+            if states is None or controls is None:
+                raise ValueError(
+                    "lam_prox was specified as a dict but states and/or "
+                    "controls were not provided. Pass both so the dict can "
+                    "be expanded to a per-variable weight array."
+                )
+            return _expand_lam_prox_dict(lam_prox, states, controls)
+        return lam_prox
+
+    @staticmethod
+    def resolve_lam_vc(
+        lam_vc: Union[float, Dict[str, Union[float, list, np.ndarray]]],
+        states: Optional[List["State"]] = None,
+    ) -> Union[float, np.ndarray]:
+        """Resolve a ``lam_vc`` spec to a numeric value.
+
+        If *lam_vc* is a float it is returned as-is. If it is a dict,
+        *states* must be provided for expansion.
+        """
+        if isinstance(lam_vc, dict):
+            if states is None:
+                raise ValueError(
+                    "lam_vc was specified as a dict but no states were "
+                    "provided. Pass states so the dict can be expanded to "
+                    "a per-state weight array."
+                )
+            return _expand_lam_vc_dict(lam_vc, states)
+        return lam_vc
+
+    @staticmethod
+    def resolve_lam_cost(
+        lam_cost: Union[float, Dict[str, float]],
+        states: Optional[List["State"]] = None,
+    ) -> Union[float, np.ndarray]:
+        """Resolve a ``lam_cost`` spec to a numeric value.
+
+        If *lam_cost* is a float it is returned as-is. If it is a dict,
+        *states* must be provided for expansion.
+        """
+        if isinstance(lam_cost, dict):
+            if states is None:
+                raise ValueError(
+                    "lam_cost was specified as a dict but no states were "
+                    "provided. Pass states so the dict can be expanded to "
+                    "a per-state weight array."
+                )
+            return _expand_lam_cost_dict(lam_cost, states)
+        return lam_cost
+
+    def build_vb_arrays(
+        self,
+        N: int,
+        nodal_constraints: list,
+        cross_node_constraints: list,
+        n_byof_nodal: int = 0,
+        n_byof_cross: int = 0,
+    ) -> None:
+        """Build per-constraint virtual buffer weight arrays.
+
+        Inspects each symbolic constraint's shape (to account for vector
+        decomposition) and ``.weight()`` overrides, then populates
+        ``self.lam_vb_nodal`` and ``self.lam_vb_cross``.
+
+        Args:
+            N: Number of trajectory nodes.
+            nodal_constraints: Symbolic ``NodalConstraint`` objects (post-
+                preprocessing, pre-lowering).
+            cross_node_constraints: Symbolic ``CrossNodeConstraint`` objects.
+            n_byof_nodal: Number of byof nodal constraints (each adds one
+                column with the default weight).
+            n_byof_cross: Number of byof cross-node constraints (each adds
+                one entry with the default weight).
+        """
+        default_vb = float(self.lam_vb)
+
+        # Count decomposed nodal constraints (vector → multiple scalars).
+        # Vector constraints are decomposed element-wise during lowering
+        # (see decompose_vector_nodal_constraints), so each element gets its
+        # own column.  We mirror that here via check_shape() to ensure the
+        # array dimensions match the post-decomposition constraint count.
+        n_nodal = 0
+        for nc in nodal_constraints:
+            shape = nc.constraint.lhs.check_shape()
+            n_nodal += int(np.prod(shape)) if len(shape) > 0 else 1
+
+        # Byof constraints are scalar (one column each), added after symbolic.
+        n_nodal += n_byof_nodal
+        n_cross = len(cross_node_constraints) + n_byof_cross
+
+        # max(..., 1) avoids size-0 CVXPy parameters.
+        n_nodal_param = max(n_nodal, 1)
+        n_cross_param = max(n_cross, 1)
+
+        lam_vb_nodal = np.full((N, n_nodal_param), default_vb)
+        lam_vb_cross = np.full(n_cross_param, default_vb)
+
+        # Apply per-constraint .weight() overrides for nodal constraints.
+        col = 0
+        for nc in nodal_constraints:
+            shape = nc.constraint.lhs.check_shape()
+            n_elem = int(np.prod(shape)) if len(shape) > 0 else 1
+
+            w = nc._lam_vb
+            if w is not None:
+                nodes = nc.nodes if nc.nodes is not None else list(range(N))
+                if isinstance(w, (int, float)):
+                    lam_vb_nodal[nodes, col : col + n_elem] = float(w)
+                elif isinstance(w, np.ndarray):
+                    if w.ndim == 1:
+                        # (n_elem,) — broadcast across nodes
+                        for i in range(n_elem):
+                            val = float(w[0]) if len(w) == 1 else float(w[i])
+                            lam_vb_nodal[nodes, col + i] = val
+                    elif w.ndim == 2:
+                        # (n_nodes, n_elem) — per-node-per-element
+                        for i in range(n_elem):
+                            c_i = 0 if w.shape[1] == 1 else i
+                            lam_vb_nodal[nodes, col + i] = w[:, c_i]
+
+            col += n_elem
+
+        # Apply per-constraint .weight() overrides for cross-node constraints.
+        for idx, cc in enumerate(cross_node_constraints):
+            if cc._lam_vb is not None:
+                lam_vb_cross[idx] = float(cc._lam_vb)
+
         self.lam_vb_nodal = lam_vb_nodal
         self.lam_vb_cross = lam_vb_cross
 
@@ -1062,185 +1233,6 @@ class Algorithm(ABC):
 
     #: Maximum number of SCP iterations. Subclasses must set this in ``__init__``.
     k_max: int
-
-    @staticmethod
-    def _resolve_lam_prox(
-        lam_prox: Union[float, Dict[str, Union[float, list, np.ndarray]]],
-        states: Optional[List["State"]] = None,
-        controls: Optional[List["Control"]] = None,
-    ) -> Union[float, np.ndarray]:
-        """Resolve a ``lam_prox`` spec to a numeric value.
-
-        If *lam_prox* is a float it is returned as-is.  If it is a dict
-        mapping state/control names to weights, *states* and *controls*
-        must be provided so the dict can be expanded to a per-variable
-        array via :func:`_expand_lam_prox_dict`.
-
-        Args:
-            lam_prox: Scalar weight or ``{name: weight}`` dict.
-            states: Symbolic State objects (required when *lam_prox* is a dict).
-            controls: Symbolic Control objects (required when *lam_prox* is a dict).
-
-        Returns:
-            float or np.ndarray of shape ``(n_states + n_controls,)`` or
-            ``(K, n_states + n_controls)``.
-
-        Raises:
-            ValueError: If *lam_prox* is a dict and *states*/*controls* is ``None``.
-        """
-        if isinstance(lam_prox, dict):
-            if states is None or controls is None:
-                raise ValueError(
-                    "lam_prox was specified as a dict but states and/or "
-                    "controls were not provided. Pass both so the dict can "
-                    "be expanded to a per-variable weight array."
-                )
-            return _expand_lam_prox_dict(lam_prox, states, controls)
-        return lam_prox
-
-    @staticmethod
-    def _resolve_lam_cost(
-        lam_cost: Union[float, Dict[str, float]],
-        states: Optional[List["State"]] = None,
-    ) -> Union[float, np.ndarray]:
-        """Resolve a ``lam_cost`` spec to a numeric value.
-
-        If *lam_cost* is a float it is returned as-is.  If it is a dict
-        mapping state names to weights, *states* must be provided so the
-        dict can be expanded to a per-state array via
-        :func:`_expand_lam_cost_dict`.
-
-        Args:
-            lam_cost: Scalar weight or ``{state_name: weight}`` dict.
-            states: Symbolic State objects (required when *lam_cost* is a dict).
-
-        Returns:
-            float or np.ndarray of shape ``(n_states,)``.
-
-        Raises:
-            ValueError: If *lam_cost* is a dict and *states* is ``None``.
-        """
-        if isinstance(lam_cost, dict):
-            if states is None:
-                raise ValueError(
-                    "lam_cost was specified as a dict but no states were "
-                    "provided. Pass states so the dict can be expanded to "
-                    "a per-state weight array."
-                )
-            return _expand_lam_cost_dict(lam_cost, states)
-        return lam_cost
-
-    @staticmethod
-    def _resolve_lam_vc(
-        lam_vc: Union[float, Dict[str, Union[float, list, np.ndarray]]],
-        states: Optional[List["State"]] = None,
-    ) -> Union[float, np.ndarray]:
-        """Resolve a ``lam_vc`` spec to a numeric value.
-
-        If *lam_vc* is a float it is returned as-is.  If it is a dict
-        mapping state names to weights, *states* must be provided so the
-        dict can be expanded to a per-state array via
-        :func:`_expand_lam_vc_dict`.
-
-        Args:
-            lam_vc: Scalar weight or ``{state_name: weight}`` dict.
-            states: Symbolic State objects (required when *lam_vc* is a dict).
-
-        Returns:
-            float or np.ndarray of shape ``(n_states,)`` or
-            ``(K, n_states)``.
-
-        Raises:
-            ValueError: If *lam_vc* is a dict and *states* is ``None``.
-        """
-        if isinstance(lam_vc, dict):
-            if states is None:
-                raise ValueError(
-                    "lam_vc was specified as a dict but no states were "
-                    "provided. Pass states so the dict can be expanded to "
-                    "a per-state weight array."
-                )
-            return _expand_lam_vc_dict(lam_vc, states)
-        return lam_vc
-
-    def _resolve_lam_vb(
-        self,
-        N: int,
-        nodal_constraints: list,
-        cross_node_constraints: list,
-        n_byof_nodal: int = 0,
-        n_byof_cross: int = 0,
-    ) -> None:
-        """Resolve per-constraint virtual buffer weight arrays.
-
-        Inspects each symbolic constraint's shape (to account for vector
-        decomposition) and ``.weight()`` overrides, then populates
-        ``weights.lam_vb_nodal`` and ``weights.lam_vb_cross``.
-
-        Args:
-            N: Number of trajectory nodes.
-            nodal_constraints: Symbolic ``NodalConstraint`` objects (post-
-                preprocessing, pre-lowering).
-            cross_node_constraints: Symbolic ``CrossNodeConstraint`` objects.
-            n_byof_nodal: Number of byof nodal constraints (each adds one
-                column with the default weight).
-            n_byof_cross: Number of byof cross-node constraints (each adds
-                one entry with the default weight).
-        """
-        default_vb = float(self.weights.lam_vb)
-
-        # Count decomposed nodal constraints (vector → multiple scalars).
-        # Vector constraints are decomposed element-wise during lowering
-        # (see decompose_vector_nodal_constraints), so each element gets its
-        # own column.  We mirror that here via check_shape() to ensure the
-        # array dimensions match the post-decomposition constraint count.
-        n_nodal = 0
-        for nc in nodal_constraints:
-            shape = nc.constraint.lhs.check_shape()
-            n_nodal += int(np.prod(shape)) if len(shape) > 0 else 1
-
-        # Byof constraints are scalar (one column each), added after symbolic.
-        n_nodal += n_byof_nodal
-        n_cross = len(cross_node_constraints) + n_byof_cross
-
-        # max(..., 1) avoids size-0 CVXPy parameters.
-        n_nodal_param = max(n_nodal, 1)
-        n_cross_param = max(n_cross, 1)
-
-        lam_vb_nodal = np.full((N, n_nodal_param), default_vb)
-        lam_vb_cross = np.full(n_cross_param, default_vb)
-
-        # Apply per-constraint .weight() overrides for nodal constraints.
-        col = 0
-        for nc in nodal_constraints:
-            shape = nc.constraint.lhs.check_shape()
-            n_elem = int(np.prod(shape)) if len(shape) > 0 else 1
-
-            w = nc._lam_vb
-            if w is not None:
-                nodes = nc.nodes if nc.nodes is not None else list(range(N))
-                if isinstance(w, (int, float)):
-                    lam_vb_nodal[nodes, col : col + n_elem] = float(w)
-                elif isinstance(w, np.ndarray):
-                    if w.ndim == 1:
-                        # (n_elem,) — broadcast across nodes
-                        for i in range(n_elem):
-                            val = float(w[0]) if len(w) == 1 else float(w[i])
-                            lam_vb_nodal[nodes, col + i] = val
-                    elif w.ndim == 2:
-                        # (n_nodes, n_elem) — per-node-per-element
-                        for i in range(n_elem):
-                            c_i = 0 if w.shape[1] == 1 else i
-                            lam_vb_nodal[nodes, col + i] = w[:, c_i]
-
-            col += n_elem
-
-        # Apply per-constraint .weight() overrides for cross-node constraints.
-        for idx, cc in enumerate(cross_node_constraints):
-            if cc._lam_vb is not None:
-                lam_vb_cross[idx] = float(cc._lam_vb)
-
-        self.weights.set_vb_arrays(lam_vb_nodal, lam_vb_cross)
 
     @abstractmethod
     def initialize(

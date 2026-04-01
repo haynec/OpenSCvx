@@ -153,17 +153,14 @@ class PenalizedTrustRegion(Algorithm):
         self._states: List["State"] = states
         self._controls: List["Control"] = controls
 
-        # Resolve dict lam_prox / lam_vc / lam_cost → ndarray (requires states/controls)
-        resolved_lam_prox = self._resolve_lam_prox(lam_prox, states, controls)
-        resolved_lam_vc = self._resolve_lam_vc(lam_vc, states)
-        resolved_lam_cost = self._resolve_lam_cost(lam_cost, states)
-
-        # SCP weights (grouped dataclass)
-        self.weights = Weights(
-            lam_prox=resolved_lam_prox,
-            lam_vc=resolved_lam_vc,
-            lam_cost=resolved_lam_cost,
+        # SCP weights (grouped dataclass, dict inputs expanded to arrays)
+        self.weights = Weights.build(
+            lam_prox=lam_prox,
+            lam_vc=lam_vc,
+            lam_cost=lam_cost,
             lam_vb=lam_vb,
+            states=states,
+            controls=controls,
         )
 
         # SCP convergence parameters
@@ -174,8 +171,8 @@ class PenalizedTrustRegion(Algorithm):
 
     # -- Weight properties ---------------------------------------------------
     # These properties resolve dict-valued inputs (e.g. {"velocity": 1e0})
-    # to arrays via the _resolve_lam_* helpers, then store the result on
-    # self.weights.  During SCP iteration the autotuner may mutate the
+    # to arrays via Weights.resolve_lam_* helpers, then store the result
+    # on self.weights.  During SCP iteration the autotuner may mutate the
     # values on self.weights directly (e.g. ramping lam_prox).  Those
     # in-flight changes are tracked in AlgorithmState weight histories.
 
@@ -208,7 +205,7 @@ class PenalizedTrustRegion(Algorithm):
 
     @lam_prox.setter
     def lam_prox(self, value: Union[float, Dict[str, Union[float, list]]]) -> None:
-        self.weights.lam_prox = self._resolve_lam_prox(value, self._states, self._controls)
+        self.weights.lam_prox = Weights.resolve_lam_prox(value, self._states, self._controls)
 
     @property
     def lam_vc(self) -> Union[float, np.ndarray]:
@@ -221,7 +218,7 @@ class PenalizedTrustRegion(Algorithm):
 
     @lam_vc.setter
     def lam_vc(self, value: Union[float, Dict[str, Union[float, list]]]) -> None:
-        self.weights.lam_vc = self._resolve_lam_vc(value, self._states)
+        self.weights.lam_vc = Weights.resolve_lam_vc(value, self._states)
 
     @property
     def lam_cost(self) -> Union[float, np.ndarray]:
@@ -235,7 +232,7 @@ class PenalizedTrustRegion(Algorithm):
 
     @lam_cost.setter
     def lam_cost(self, value: Union[float, Dict[str, float]]) -> None:
-        self.weights.lam_cost = self._resolve_lam_cost(value, self._states)
+        self.weights.lam_cost = Weights.resolve_lam_cost(value, self._states)
 
     @property
     def lam_vb(self) -> float:
