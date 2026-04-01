@@ -153,6 +153,10 @@
          <lastmod>2026-04-01</lastmod>
     </url>
     <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/realtime/base_problems/dubins_car_realtime_base/</loc>
+         <lastmod>2026-04-01</lastmod>
+    </url>
+    <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/realtime/base_problems/obstacle_avoidance_realtime_base/</loc>
          <lastmod>2026-04-01</lastmod>
     </url>
@@ -238,6 +242,10 @@
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/ramp_proximal_weight/</loc>
+         <lastmod>2026-04-01</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/weights/</loc>
          <lastmod>2026-04-01</lastmod>
     </url>
     <url>

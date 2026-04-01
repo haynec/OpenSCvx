@@ -2288,6 +2288,8 @@
       
         
       
+        
+      
     
     
     
@@ -2378,6 +2380,34 @@
     
   
     Drone Racing Realtime Base
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../realtime/base_problems/dubins_car_realtime_base/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dubins Car Realtime Base
   
 
     
@@ -7676,26 +7706,29 @@ using the stljax library for STL constraint formulation. The problem includes:</
 </span><span id="__span-0-93"><a id="__codelineno-0-93" name="__codelineno-0-93" href="#__codelineno-0-93"></a>    <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="p">,</span>  <span class="c1"># Time is already defined above as ox.Time</span>
 </span><span id="__span-0-94"><a id="__codelineno-0-94" name="__codelineno-0-94" href="#__codelineno-0-94"></a>    <span class="n">constraints</span><span class="o">=</span><span class="n">constraints</span><span class="p">,</span>
 </span><span id="__span-0-95"><a id="__codelineno-0-95" name="__codelineno-0-95" href="#__codelineno-0-95"></a>    <span class="n">N</span><span class="o">=</span><span class="n">n</span><span class="p">,</span>
-</span><span id="__span-0-96"><a id="__codelineno-0-96" name="__codelineno-0-96" href="#__codelineno-0-96"></a>    <span class="n">algorithm</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;autotuner&quot;</span><span class="p">:</span> <span class="n">ox</span><span class="o">.</span><span class="n">AugmentedLagrangian</span><span class="p">(</span><span class="n">eta_lambda</span><span class="o">=</span><span class="mf">1e0</span><span class="p">),</span> <span class="s2">&quot;lam_vb&quot;</span><span class="p">:</span> <span class="mf">1e0</span><span class="p">},</span>
+</span><span id="__span-0-96"><a id="__codelineno-0-96" name="__codelineno-0-96" href="#__codelineno-0-96"></a>    <span class="n">algorithm</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;autotuner&quot;</span><span class="p">:</span> <span class="n">ox</span><span class="o">.</span><span class="n">AugmentedLagrangian</span><span class="p">(</span><span class="n">eta_lambda</span><span class="o">=</span><span class="mf">1e0</span><span class="p">)},</span>
 </span><span id="__span-0-97"><a id="__codelineno-0-97" name="__codelineno-0-97" href="#__codelineno-0-97"></a>    <span class="n">float_dtype</span><span class="o">=</span><span class="s2">&quot;float64&quot;</span><span class="p">,</span>
 </span><span id="__span-0-98"><a id="__codelineno-0-98" name="__codelineno-0-98" href="#__codelineno-0-98"></a><span class="p">)</span>
 </span><span id="__span-0-99"><a id="__codelineno-0-99" name="__codelineno-0-99" href="#__codelineno-0-99"></a>
-</span><span id="__span-0-100"><a id="__codelineno-0-100" name="__codelineno-0-100" href="#__codelineno-0-100"></a><span class="c1"># Extract parameter values from problem.parameters (not Parameter objects)</span>
-</span><span id="__span-0-101"><a id="__codelineno-0-101" name="__codelineno-0-101" href="#__codelineno-0-101"></a><span class="n">plotting_dict</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-0-102"><a id="__codelineno-0-102" name="__codelineno-0-102" href="#__codelineno-0-102"></a>    <span class="s2">&quot;wp1_center&quot;</span><span class="p">:</span> <span class="n">problem</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;wp1_center&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-</span><span id="__span-0-103"><a id="__codelineno-0-103" name="__codelineno-0-103" href="#__codelineno-0-103"></a>    <span class="s2">&quot;wp1_radius&quot;</span><span class="p">:</span> <span class="n">problem</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;wp1_radius&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-</span><span id="__span-0-104"><a id="__codelineno-0-104" name="__codelineno-0-104" href="#__codelineno-0-104"></a>    <span class="s2">&quot;wp2_center&quot;</span><span class="p">:</span> <span class="n">problem</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;wp2_center&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-</span><span id="__span-0-105"><a id="__codelineno-0-105" name="__codelineno-0-105" href="#__codelineno-0-105"></a>    <span class="s2">&quot;wp2_radius&quot;</span><span class="p">:</span> <span class="n">problem</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;wp2_radius&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
-</span><span id="__span-0-106"><a id="__codelineno-0-106" name="__codelineno-0-106" href="#__codelineno-0-106"></a><span class="p">}</span>
-</span><span id="__span-0-107"><a id="__codelineno-0-107" name="__codelineno-0-107" href="#__codelineno-0-107"></a>
-</span><span id="__span-0-108"><a id="__codelineno-0-108" name="__codelineno-0-108" href="#__codelineno-0-108"></a><span class="c1"># Only add waypoints that are actually defined</span>
-</span><span id="__span-0-109"><a id="__codelineno-0-109" name="__codelineno-0-109" href="#__codelineno-0-109"></a><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
-</span><span id="__span-0-110"><a id="__codelineno-0-110" name="__codelineno-0-110" href="#__codelineno-0-110"></a>    <span class="n">problem</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
-</span><span id="__span-0-111"><a id="__codelineno-0-111" name="__codelineno-0-111" href="#__codelineno-0-111"></a>    <span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">solve</span><span class="p">()</span>
-</span><span id="__span-0-112"><a id="__codelineno-0-112" name="__codelineno-0-112" href="#__codelineno-0-112"></a>    <span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">post_process</span><span class="p">()</span>
-</span><span id="__span-0-113"><a id="__codelineno-0-113" name="__codelineno-0-113" href="#__codelineno-0-113"></a>    <span class="n">results</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">plotting_dict</span><span class="p">)</span>
-</span><span id="__span-0-114"><a id="__codelineno-0-114" name="__codelineno-0-114" href="#__codelineno-0-114"></a>
-</span><span id="__span-0-115"><a id="__codelineno-0-115" name="__codelineno-0-115" href="#__codelineno-0-115"></a>    <span class="n">plot_dubins_car_disjoint</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">problem</span><span class="o">.</span><span class="n">settings</span><span class="p">)</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</span><span id="__span-0-100"><a id="__codelineno-0-100" name="__codelineno-0-100" href="#__codelineno-0-100"></a><span class="n">problem</span><span class="o">.</span><span class="n">algorithm</span><span class="o">.</span><span class="n">lam_vb</span> <span class="o">=</span> <span class="mf">1e0</span>
+</span><span id="__span-0-101"><a id="__codelineno-0-101" name="__codelineno-0-101" href="#__codelineno-0-101"></a><span class="n">problem</span><span class="o">.</span><span class="n">algorithm</span><span class="o">.</span><span class="n">lam_vc</span> <span class="o">=</span> <span class="mf">1e1</span>
+</span><span id="__span-0-102"><a id="__codelineno-0-102" name="__codelineno-0-102" href="#__codelineno-0-102"></a>
+</span><span id="__span-0-103"><a id="__codelineno-0-103" name="__codelineno-0-103" href="#__codelineno-0-103"></a><span class="c1"># Extract parameter values from problem.parameters (not Parameter objects)</span>
+</span><span id="__span-0-104"><a id="__codelineno-0-104" name="__codelineno-0-104" href="#__codelineno-0-104"></a><span class="n">plotting_dict</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-0-105"><a id="__codelineno-0-105" name="__codelineno-0-105" href="#__codelineno-0-105"></a>    <span class="s2">&quot;wp1_center&quot;</span><span class="p">:</span> <span class="n">problem</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;wp1_center&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+</span><span id="__span-0-106"><a id="__codelineno-0-106" name="__codelineno-0-106" href="#__codelineno-0-106"></a>    <span class="s2">&quot;wp1_radius&quot;</span><span class="p">:</span> <span class="n">problem</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;wp1_radius&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+</span><span id="__span-0-107"><a id="__codelineno-0-107" name="__codelineno-0-107" href="#__codelineno-0-107"></a>    <span class="s2">&quot;wp2_center&quot;</span><span class="p">:</span> <span class="n">problem</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;wp2_center&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+</span><span id="__span-0-108"><a id="__codelineno-0-108" name="__codelineno-0-108" href="#__codelineno-0-108"></a>    <span class="s2">&quot;wp2_radius&quot;</span><span class="p">:</span> <span class="n">problem</span><span class="o">.</span><span class="n">parameters</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;wp2_radius&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span>
+</span><span id="__span-0-109"><a id="__codelineno-0-109" name="__codelineno-0-109" href="#__codelineno-0-109"></a><span class="p">}</span>
+</span><span id="__span-0-110"><a id="__codelineno-0-110" name="__codelineno-0-110" href="#__codelineno-0-110"></a>
+</span><span id="__span-0-111"><a id="__codelineno-0-111" name="__codelineno-0-111" href="#__codelineno-0-111"></a><span class="c1"># Only add waypoints that are actually defined</span>
+</span><span id="__span-0-112"><a id="__codelineno-0-112" name="__codelineno-0-112" href="#__codelineno-0-112"></a><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+</span><span id="__span-0-113"><a id="__codelineno-0-113" name="__codelineno-0-113" href="#__codelineno-0-113"></a>    <span class="n">problem</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
+</span><span id="__span-0-114"><a id="__codelineno-0-114" name="__codelineno-0-114" href="#__codelineno-0-114"></a>    <span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">solve</span><span class="p">()</span>
+</span><span id="__span-0-115"><a id="__codelineno-0-115" name="__codelineno-0-115" href="#__codelineno-0-115"></a>    <span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">post_process</span><span class="p">()</span>
+</span><span id="__span-0-116"><a id="__codelineno-0-116" name="__codelineno-0-116" href="#__codelineno-0-116"></a>    <span class="n">results</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">plotting_dict</span><span class="p">)</span>
+</span><span id="__span-0-117"><a id="__codelineno-0-117" name="__codelineno-0-117" href="#__codelineno-0-117"></a>
+</span><span id="__span-0-118"><a id="__codelineno-0-118" name="__codelineno-0-118" href="#__codelineno-0-118"></a>    <span class="n">plot_dubins_car_disjoint</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">problem</span><span class="o">.</span><span class="n">settings</span><span class="p">)</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </span></code></pre></div>
 
 

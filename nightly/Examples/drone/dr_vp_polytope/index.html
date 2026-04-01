@@ -2288,6 +2288,8 @@
       
         
       
+        
+      
     
     
     
@@ -2378,6 +2380,34 @@
     
   
     Drone Racing Realtime Base
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../realtime/base_problems/dubins_car_realtime_base/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dubins Car Realtime Base
   
 
     
@@ -7812,8 +7842,8 @@ gates with sensor visibility constraints. The problem includes:</p>
 </span><span id="__span-0-228"><a id="__codelineno-0-228" name="__codelineno-0-228" href="#__codelineno-0-228"></a>    <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="p">,</span>
 </span><span id="__span-0-229"><a id="__codelineno-0-229" name="__codelineno-0-229" href="#__codelineno-0-229"></a>    <span class="n">constraints</span><span class="o">=</span><span class="n">constraints</span><span class="p">,</span>
 </span><span id="__span-0-230"><a id="__codelineno-0-230" name="__codelineno-0-230" href="#__codelineno-0-230"></a>    <span class="n">N</span><span class="o">=</span><span class="n">n</span><span class="p">,</span>
-</span><span id="__span-0-231"><a id="__codelineno-0-231" name="__codelineno-0-231" href="#__codelineno-0-231"></a>    <span class="n">algorithm</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lam_prox&quot;</span><span class="p">:</span> <span class="mf">2e0</span><span class="p">,</span> <span class="s2">&quot;lam_vc&quot;</span><span class="p">:</span> <span class="mf">4e1</span><span class="p">,</span> <span class="s2">&quot;ep_tr&quot;</span><span class="p">:</span> <span class="mf">1e-5</span><span class="p">},</span>
-</span><span id="__span-0-232"><a id="__codelineno-0-232" name="__codelineno-0-232" href="#__codelineno-0-232"></a>    <span class="n">discretizer</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;atol&quot;</span><span class="p">:</span> <span class="mf">1e-4</span><span class="p">},</span>
+</span><span id="__span-0-231"><a id="__codelineno-0-231" name="__codelineno-0-231" href="#__codelineno-0-231"></a>    <span class="n">algorithm</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lam_prox&quot;</span><span class="p">:</span> <span class="mf">5e-2</span><span class="p">,</span> <span class="s2">&quot;lam_vc&quot;</span><span class="p">:</span> <span class="mf">1e0</span><span class="p">,</span> <span class="s2">&quot;lam_cost&quot;</span><span class="p">:</span> <span class="mf">2.5e-3</span><span class="p">,</span> <span class="s2">&quot;ep_tr&quot;</span><span class="p">:</span> <span class="mf">1e-5</span><span class="p">},</span>
+</span><span id="__span-0-232"><a id="__codelineno-0-232" name="__codelineno-0-232" href="#__codelineno-0-232"></a>    <span class="n">discretizer</span><span class="o">=</span><span class="n">ox</span><span class="o">.</span><span class="n">VectorizeDiscretizeLinearize</span><span class="p">(</span><span class="n">diffrax_kwargs</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;atol&quot;</span><span class="p">:</span> <span class="mf">1e-4</span><span class="p">}),</span>
 </span><span id="__span-0-233"><a id="__codelineno-0-233" name="__codelineno-0-233" href="#__codelineno-0-233"></a><span class="p">)</span>
 </span><span id="__span-0-234"><a id="__codelineno-0-234" name="__codelineno-0-234" href="#__codelineno-0-234"></a>
 </span><span id="__span-0-235"><a id="__codelineno-0-235" name="__codelineno-0-235" href="#__codelineno-0-235"></a><span class="n">plotting_dict</span> <span class="o">=</span> <span class="p">{</span>

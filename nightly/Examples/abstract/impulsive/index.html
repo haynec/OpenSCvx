@@ -2288,6 +2288,8 @@
       
         
       
+        
+      
     
     
     
@@ -2378,6 +2380,34 @@
     
   
     Drone Racing Realtime Base
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../realtime/base_problems/dubins_car_realtime_base/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dubins Car Realtime Base
   
 
     
@@ -7657,9 +7687,9 @@
 </span><span id="__span-0-76"><a id="__codelineno-0-76" name="__codelineno-0-76" href="#__codelineno-0-76"></a>    <span class="n">N</span><span class="o">=</span><span class="n">n</span><span class="p">,</span>
 </span><span id="__span-0-77"><a id="__codelineno-0-77" name="__codelineno-0-77" href="#__codelineno-0-77"></a><span class="p">)</span>
 </span><span id="__span-0-78"><a id="__codelineno-0-78" name="__codelineno-0-78" href="#__codelineno-0-78"></a>
-</span><span id="__span-0-79"><a id="__codelineno-0-79" name="__codelineno-0-79" href="#__codelineno-0-79"></a><span class="n">problem</span><span class="o">.</span><span class="n">algorithm</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">=</span> <span class="mf">1e-2</span>  <span class="c1"># Weight on the Trust Reigon</span>
-</span><span id="__span-0-80"><a id="__codelineno-0-80" name="__codelineno-0-80" href="#__codelineno-0-80"></a><span class="n">problem</span><span class="o">.</span><span class="n">algorithm</span><span class="o">.</span><span class="n">lam_vc</span> <span class="o">=</span> <span class="mf">5e1</span>  <span class="c1"># Weight on the Trust Reigon</span>
-</span><span id="__span-0-81"><a id="__codelineno-0-81" name="__codelineno-0-81" href="#__codelineno-0-81"></a><span class="n">problem</span><span class="o">.</span><span class="n">algorithm</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="mf">1e0</span>  <span class="c1"># Weight on the Minimal Time Objective</span>
+</span><span id="__span-0-79"><a id="__codelineno-0-79" name="__codelineno-0-79" href="#__codelineno-0-79"></a><span class="n">problem</span><span class="o">.</span><span class="n">algorithm</span><span class="o">.</span><span class="n">lam_prox</span> <span class="o">=</span> <span class="mf">2e-4</span>  <span class="c1"># Weight on the Trust Region</span>
+</span><span id="__span-0-80"><a id="__codelineno-0-80" name="__codelineno-0-80" href="#__codelineno-0-80"></a><span class="n">problem</span><span class="o">.</span><span class="n">algorithm</span><span class="o">.</span><span class="n">lam_vc</span> <span class="o">=</span> <span class="mf">1e0</span>  <span class="c1"># Weight on the Virtual Control</span>
+</span><span id="__span-0-81"><a id="__codelineno-0-81" name="__codelineno-0-81" href="#__codelineno-0-81"></a><span class="n">problem</span><span class="o">.</span><span class="n">algorithm</span><span class="o">.</span><span class="n">lam_cost</span> <span class="o">=</span> <span class="mf">2e-2</span>  <span class="c1"># Weight on the Minimal Time Objective</span>
 </span><span id="__span-0-82"><a id="__codelineno-0-82" name="__codelineno-0-82" href="#__codelineno-0-82"></a><span class="n">problem</span><span class="o">.</span><span class="n">algorithm</span><span class="o">.</span><span class="n">k_max</span> <span class="o">=</span> <span class="mi">100</span>
 </span><span id="__span-0-83"><a id="__codelineno-0-83" name="__codelineno-0-83" href="#__codelineno-0-83"></a>
 </span><span id="__span-0-84"><a id="__codelineno-0-84" name="__codelineno-0-84" href="#__codelineno-0-84"></a><span class="n">plotting_dict</span> <span class="o">=</span> <span class="p">{}</span>
