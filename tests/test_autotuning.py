@@ -1024,12 +1024,24 @@ def test_augmented_lagrangian_accept_decrease(
     assert len(algorithm_state.X) == initial_x_len + 1
     assert len(algorithm_state.lam_vc_history) == 2
     assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
-    # Virtual buffer weight updates are currently disabled (commented out),
-    # so these histories should not grow in accept branches.
-    assert candidate.lam_vb_nodal is None
-    assert candidate.lam_vb_cross is None
-    assert len(algorithm_state.lam_vb_nodal_history) == 1
-    assert len(algorithm_state.lam_vb_cross_history) == 1
+    # Virtual buffer weights use the same two-case rule as virtual control
+    lam_prox_new = np.maximum(autotuner.lam_prox_min, autotuner.gamma_2 * lam_prox_prev)
+    scale = autotuner.eta_lambda / (2.0 * float(np.max(lam_prox_new)))
+    nu_flat = np.maximum(0.0, candidate.x[:, 0] - 1.5)
+    expected_vb_col = np.ones(3)
+    for i in range(3):
+        nui = nu_flat[i]
+        if nui > autotuner.ep:
+            expected_vb_col[i] = 1.0 + nui * scale
+        else:
+            expected_vb_col[i] = 1.0 + (nui**2) / autotuner.ep * scale
+    expected_vb_nodal = expected_vb_col.reshape(3, 1)
+    np.testing.assert_allclose(candidate.lam_vb_nodal, expected_vb_nodal)
+    np.testing.assert_allclose(candidate.lam_vb_cross, algorithm_state.lam_vb_cross)
+    assert len(algorithm_state.lam_vb_nodal_history) == 2
+    assert len(algorithm_state.lam_vb_cross_history) == 2
+    assert np.allclose(algorithm_state.lam_vb_nodal_history[-1], candidate.lam_vb_nodal)
+    assert np.allclose(algorithm_state.lam_vb_cross_history[-1], candidate.lam_vb_cross)
     assert len(algorithm_state.lam_cost_history) == 2
     assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
@@ -1190,11 +1202,13 @@ def test_augmented_lagrangian_accept_higher(
     assert len(algorithm_state.X) == initial_x_len + 1
     assert len(algorithm_state.lam_vc_history) == 2
     assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
-    # Virtual buffer weight updates are currently disabled (commented out)
-    assert candidate.lam_vb_nodal is None
-    assert candidate.lam_vb_cross is None
-    assert len(algorithm_state.lam_vb_nodal_history) == 1
-    assert len(algorithm_state.lam_vb_cross_history) == 1
+    # No nodal/cross constraints: VB arrays are copied forward unchanged.
+    np.testing.assert_allclose(candidate.lam_vb_nodal, algorithm_state.lam_vb_nodal)
+    np.testing.assert_allclose(candidate.lam_vb_cross, algorithm_state.lam_vb_cross)
+    assert len(algorithm_state.lam_vb_nodal_history) == 2
+    assert len(algorithm_state.lam_vb_cross_history) == 2
+    assert np.allclose(algorithm_state.lam_vb_nodal_history[-1], candidate.lam_vb_nodal)
+    assert np.allclose(algorithm_state.lam_vb_cross_history[-1], candidate.lam_vb_cross)
     assert len(algorithm_state.lam_cost_history) == 2
     assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
@@ -1290,11 +1304,13 @@ def test_augmented_lagrangian_accept_constant(
     assert len(algorithm_state.X) == initial_x_len + 1
     assert len(algorithm_state.lam_vc_history) == 2
     assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
-    # Virtual buffer weight updates are currently disabled (commented out)
-    assert candidate.lam_vb_nodal is None
-    assert candidate.lam_vb_cross is None
-    assert len(algorithm_state.lam_vb_nodal_history) == 1
-    assert len(algorithm_state.lam_vb_cross_history) == 1
+    # No nodal/cross constraints: VB arrays are copied forward unchanged.
+    np.testing.assert_allclose(candidate.lam_vb_nodal, algorithm_state.lam_vb_nodal)
+    np.testing.assert_allclose(candidate.lam_vb_cross, algorithm_state.lam_vb_cross)
+    assert len(algorithm_state.lam_vb_nodal_history) == 2
+    assert len(algorithm_state.lam_vb_cross_history) == 2
+    assert np.allclose(algorithm_state.lam_vb_nodal_history[-1], candidate.lam_vb_nodal)
+    assert np.allclose(algorithm_state.lam_vb_cross_history[-1], candidate.lam_vb_cross)
     assert len(algorithm_state.lam_cost_history) == 2
     assert algorithm_state.lam_cost_history[-1] == pytest.approx(candidate.lam_cost)
 
