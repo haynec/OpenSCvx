@@ -23,7 +23,6 @@ _repo_root = os.path.dirname(os.path.dirname(os.path.dirname(_this_dir)))
 sys.path.append(_repo_root)
 
 import openscvx as ox
-from examples.plotting import plot_dubins_car
 from openscvx import Problem
 
 n = 8
