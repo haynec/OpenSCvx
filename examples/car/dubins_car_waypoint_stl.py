@@ -126,14 +126,16 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"autotuner": ox.RampProximalWeight()},
+    algorithm={"autotuner": ox.ConstantProximalWeight()},
     float_dtype="float64",
     licq_max=1e-10,
 )
 
 problem.algorithm.lam_prox = 1e-3
-problem.algorithm.lam_vc = 1e0
+problem.algorithm.lam_vc = 1e1
 problem.algorithm.lam_cost = 1e-3
+problem.algorithm.ep_vc = 1e-6
+problem.algorithm.ep_tr = 5e-4
 
 plotting_dict = {
     "obs_radius": problem.parameters["obs_radius"],
