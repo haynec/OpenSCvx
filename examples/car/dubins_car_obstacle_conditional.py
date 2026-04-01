@@ -110,7 +110,7 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"lam_vc": 1e3},
+    algorithm={"lam_prox": 1e-3, "lam_vc": 1e0, "lam_cost": 1e-4},
 )
 
 plotting_dict = {

@@ -98,7 +98,7 @@ problem = Problem(
     constraints=constraints,
     N=n,
     licq_max=1e-8,
-    algorithm={"lam_cost": 4e1, "lam_vc": 1e3},
+    algorithm={"lam_prox": 1e-3, "lam_cost": 4e-2, "lam_vc": 1e0},
 )
 
 plotting_dict = {
@@ -118,7 +118,9 @@ if __name__ == "__main__":
     problem.reset()
     problem.parameters["obs_center"] = np.array([0.5, 0.0])
     total_time = 0.7  # Adjust total time for second run
-    problem.algorithm.lam_vc = 1e2  # Adjust virtual control weight
+    problem.algorithm.lam_prox = 1e-2
+    problem.algorithm.lam_vc = 1e0
+    problem.algorithm.lam_cost = 1e-3
     position.guess = np.linspace([0, -2], [0, 2], n)
     theta.guess = np.zeros((n, 1))
     speed.guess = np.zeros((n, 1))

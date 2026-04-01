@@ -143,9 +143,9 @@ problem = Problem(
     N=n,
     algorithm={
         "autotuner": ox.RampProximalWeight(ramp_factor=1.04, lam_prox_max=1e2),
-        "lam_cost": 5e-1,
-        "lam_vc": 1.5e0,
-        "lam_prox": 2e-1,
+        "lam_cost": 1 / 3,
+        "lam_vc": 1e0,
+        "lam_prox": 2 / 15,
     },
     discretizer={"dis_type": "ZOH", "ode_solver": "Dopri8"},
 )

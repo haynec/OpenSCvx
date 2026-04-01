@@ -147,9 +147,9 @@ pz_data = np.tile(pz_lap, len(laps))
 n_mpc = 10  # Horizon nodes
 horizon_duration = 1.0  # Horizon length [s]
 
-Q_LAG = 1e0  # Lag error weight (high -> accurate progress tracking)
-Q_CONTOUR = 1e-1  # Contour error weight
-Q_PROGRESS = 1e-1
+Q_LAG = 1e-1  # Lag error weight (high -> accurate progress tracking)
+Q_CONTOUR = 1e-2  # Contour error weight
+Q_PROGRESS = 1e-2
 
 ###############################################################################
 # MPCC problem definition

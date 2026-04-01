@@ -39,9 +39,9 @@ total_arc_length = 2 * np.pi * R_circle  # One full lap
 n_mpc = 8  # Horizon nodes
 horizon_duration = 1.5  # Horizon length [s]
 
-Q_LAG = 1e0  # Lag error weight (high -> accurate progress tracking)
-Q_CONTOUR = 1e-1  # Contour error weight
-Q_PROGRESS = 1e-1
+Q_LAG = 1e-1  # Lag error weight (high -> accurate progress tracking)
+Q_CONTOUR = 1e-2  # Contour error weight
+Q_PROGRESS = 1e-2
 
 ###############################################################################
 # MPCC problem definition

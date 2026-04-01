@@ -198,9 +198,9 @@ problem = Problem(
     N=n,
     licq_max=1e-8,
     algorithm={
-        "lam_prox": 4e0,
-        "lam_cost": 1e-2,
-        "lam_vc": 1e1,
+        "lam_prox": 4e-1,
+        "lam_cost": 1e-3,
+        "lam_vc": 1e0,
         "ep_tr": 1e-6,
         "ep_vb": 1e-4,
         "ep_vc": 1e-8,

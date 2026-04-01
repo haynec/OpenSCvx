@@ -206,9 +206,9 @@ obstacle_radius = 5.0
 n_mpc = 11  # Horizon nodes
 horizon_duration = 2.0  # Horizon length [s]
 
-Q_LAG = 1e0  # Lag error weight (high -> accurate progress tracking)
-Q_CONTOUR = 5e-2  # Contour error weight
-Q_PROGRESS = 1e-1
+Q_LAG = 1e-1  # Lag error weight (high -> accurate progress tracking)
+Q_CONTOUR = 5e-3  # Contour error weight
+Q_PROGRESS = 1e-2
 
 ###############################################################################
 # Main
