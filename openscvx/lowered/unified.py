@@ -488,6 +488,7 @@ class UnifiedControl:
     scaling_max: Optional[np.ndarray] = None  # Scaling maximum bounds for unified control
     is_impulsive: Optional[bool] = False  # Default toggle for 'impulsivity' of the unified control
     nodes: Optional[dict[str, list[int]]] = None
+    foh_mask: Optional[np.ndarray] = None  # Per-element: 1.0=FOH, 0.0=ZOH, nan=unset
 
     def __post_init__(self):
         """Initialize slices after dataclass creation."""
@@ -598,6 +599,7 @@ class UnifiedControl:
             if parent_impulsive_mask.size
             else np.zeros((new_shape[0],), dtype=bool)
         )
+        new_foh_mask = self.foh_mask[indices] if self.foh_mask is not None else None
 
         true_selector = self._mask_to_selector(true_mask, empty_at_end=False)
         augmented_selector = self._mask_to_selector(~true_mask, empty_at_end=True)
@@ -615,6 +617,7 @@ class UnifiedControl:
             scaling_max=new_scaling_max,
             is_impulsive=new_is_impulsive,
             nodes=None,
+            foh_mask=new_foh_mask,
         )
 
     @property
@@ -790,6 +793,32 @@ class UnifiedControl:
                 appended_true_mask = np.ones((other.shape[0],), dtype=bool)
             new_true_mask = np.concatenate([current_true_mask, appended_true_mask])
 
+            # Per-element FOH mask for the appended block: UnifiedControl.foh_mask,
+            # or Control.hold converted to 1.0/0.0/nan (Control has no foh_mask).
+            n_o = int(other.shape[0])
+            if isinstance(other, UnifiedControl):
+                if other.foh_mask is not None:
+                    other_foh_part = other.foh_mask
+                else:
+                    other_foh_part = np.full(n_o, np.nan)
+            else:
+                hold = getattr(other, "hold", None)
+                if hold == "FOH":
+                    other_foh_part = np.ones(n_o)
+                elif hold == "ZOH":
+                    other_foh_part = np.zeros(n_o)
+                else:
+                    other_foh_part = np.full(n_o, np.nan)
+
+            needs_foh_mask = self.foh_mask is not None or not np.all(np.isnan(other_foh_part))
+            if needs_foh_mask:
+                self_part = (
+                    self.foh_mask if self.foh_mask is not None else np.full(self.shape[0], np.nan)
+                )
+                new_foh_mask = np.concatenate([self_part, other_foh_part])
+            else:
+                new_foh_mask = None
+
             # Update all attributes in place
             self.shape = new_shape
             self.min = new_min
@@ -797,6 +826,7 @@ class UnifiedControl:
             self.guess = new_guess
             self.scaling_min = new_scaling_min
             self.scaling_max = new_scaling_max
+            self.foh_mask = new_foh_mask
             self._true_dim = int(np.sum(new_true_mask))
             self._true_slice = self._mask_to_selector(new_true_mask, empty_at_end=False)
             self._augmented_slice = self._mask_to_selector(~new_true_mask, empty_at_end=True)
@@ -819,6 +849,8 @@ class UnifiedControl:
                 self.scaling_max = np.concatenate([self.scaling_max, np.array([max])])
             if self.is_impulsive is not None:
                 self.is_impulsive = np.concatenate([self.is_impulsive, np.array([is_impulsive])])
+            if self.foh_mask is not None:
+                self.foh_mask = np.concatenate([self.foh_mask, np.array([np.nan])])
 
             # Update dimensions
             self.shape = new_shape

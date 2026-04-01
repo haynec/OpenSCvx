@@ -1,10 +1,10 @@
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Union
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from openscvx.discretization.base import Discretizer
+from openscvx.discretization.base import Discretizer, _resolve_foh_mask
 from openscvx.integrators import (
     DEFAULT_DIFFRAX_ATOL,
     DEFAULT_DIFFRAX_RTOL,
@@ -32,7 +32,10 @@ class LinearizeDiscretize(Discretizer):
 
     Args:
         dis_type: Control hold type. ``"FOH"`` (first-order hold) or
-            ``"ZOH"`` (zero-order hold). Defaults to ``"FOH"``.
+            ``"ZOH"`` (zero-order hold) applies the same hold to every
+            control.  A per-control sequence (e.g. ``["FOH", "ZOH", "FOH"]``)
+            sets the hold independently for each control.
+            Defaults to ``"FOH"``.
         ode_solver: Diffrax solver name. Any solver from
             `Diffrax <https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/>`_
             is valid. Defaults to ``"Tsit5"``.
@@ -45,7 +48,7 @@ class LinearizeDiscretize(Discretizer):
 
     def __init__(
         self,
-        dis_type: str = "FOH",
+        dis_type: Union[str, Sequence[str]] = "FOH",
         ode_solver: str = "Tsit5",
         diffrax_kwargs: Optional[dict[str, Any]] = None,
     ):
@@ -162,7 +165,7 @@ def _dVdt(
     n_x: int,
     n_u: int,
     N: int,
-    dis_type: str,
+    foh_mask: np.ndarray,
     S_x: np.ndarray,
     c_x: np.ndarray,
     S_u: np.ndarray,
@@ -189,8 +192,8 @@ def _dVdt(
 
     where ``A = ∂F/∂x`` and ``B = ∂F/∂u`` are Jacobians of the
     time-dilated dynamics (which include the time-dilation factor ``s``
-    symbolically), and ``α, β`` are interpolation weights determined by the
-    hold type (ZOH: α=1, β=0; FOH: linear blend).
+    symbolically), and ``α, β`` are per-control interpolation weights
+    determined by the hold type (ZOH: α=1, β=0; FOH: linear blend).
 
     Args:
         tau: Normalized time in [0, 1] within the current segment.
@@ -203,7 +206,8 @@ def _dVdt(
         n_x: Number of states.
         n_u: Number of controls (including time-dilation).
         N: Number of trajectory nodes.
-        dis_type: ``"ZOH"`` (zero-order hold) or ``"FOH"`` (first-order hold).
+        foh_mask: Float array of shape ``(n_u,)`` — ``1.0`` for FOH controls,
+            ``0.0`` for ZOH controls.
         S_x: State scaling matrix (unused, reserved for future scaling).
         c_x: State offset vector (unused, reserved for future scaling).
         S_u: Control scaling matrix (unused, reserved for future scaling).
@@ -231,11 +235,8 @@ def _dVdt(
     # Unflatten V
     V = V.reshape(-1, i4)
 
-    # Compute the interpolation factor based on the discretization type
-    if dis_type == "ZOH":
-        beta = 0.0
-    elif dis_type == "FOH":
-        beta = (tau) * N
+    # Per-control interpolation weights: beta_i = tau*N for FOH, 0 for ZOH
+    beta = tau * N * foh_mask
     alpha = 1 - beta
 
     # Interpolate the control input
@@ -331,6 +332,9 @@ def _calculate_discretization(
 
     # TODO Implement scaling of V vector
 
+    u_foh_mask = getattr(settings.sim.u, "foh_mask", None)
+    foh_mask = _resolve_foh_mask(discretizer.dis_type, n_u, u_foh_mask)
+
     # Choose integrator
     integrator_args = dict(
         u_cur=u[:-1].astype(float),
@@ -341,7 +345,7 @@ def _calculate_discretization(
         n_x=n_x,
         n_u=n_u,
         N=N,
-        dis_type=discretizer.dis_type,
+        foh_mask=foh_mask,
         S_x=settings.sim.S_x,
         c_x=settings.sim.c_x,
         S_u=settings.sim.S_u,

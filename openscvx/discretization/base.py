@@ -19,11 +19,86 @@ of internal strategy.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional, Sequence, Union
+
+import numpy as np
 
 if TYPE_CHECKING:
     from openscvx.config import Config
     from openscvx.lowered.dynamics import Dynamics
+
+#: Accepted type for ``dis_type``: a single string applied to every control,
+#: or a per-control sequence.
+DisType = Union[str, Sequence[str]]
+
+
+def _make_foh_mask(dis_type: DisType, n_u: int) -> np.ndarray:
+    """Convert a ``dis_type`` specification into a boolean FOH mask.
+
+    Args:
+        dis_type: ``"FOH"`` / ``"ZOH"`` (applies to all controls), or a
+            sequence of length ``n_u`` with one entry per control.
+        n_u: Total number of controls (including any augmented controls
+            such as time-dilation).
+
+    Returns:
+        Boolean array of shape ``(n_u,)`` — ``True`` for FOH controls,
+        ``False`` for ZOH controls.
+    """
+    if isinstance(dis_type, str):
+        if dis_type == "FOH":
+            return np.ones(n_u, dtype=bool)
+        if dis_type == "ZOH":
+            return np.zeros(n_u, dtype=bool)
+        raise ValueError(f"Unknown dis_type: {dis_type!r}; expected 'FOH' or 'ZOH'")
+
+    if len(dis_type) != n_u:
+        raise ValueError(
+            f"dis_type has {len(dis_type)} entries but expected {n_u} (one per control)"
+        )
+    mask = np.empty(n_u, dtype=bool)
+    for i, dt in enumerate(dis_type):
+        if dt == "FOH":
+            mask[i] = True
+        elif dt == "ZOH":
+            mask[i] = False
+        else:
+            raise ValueError(f"Unknown dis_type[{i}]: {dt!r}; expected 'FOH' or 'ZOH'")
+    return mask
+
+
+def _resolve_foh_mask(
+    dis_type: DisType,
+    n_u: int,
+    u_foh_mask: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """Build the final per-control FOH mask.
+
+    Merges the discretizer-level ``dis_type`` default with any per-control
+    ``hold`` settings that were specified on individual :class:`Control`
+    objects and aggregated into ``u_foh_mask`` during unification.
+
+    Control-level settings take precedence over the discretizer default.
+
+    Args:
+        dis_type: Discretizer-level default (``"FOH"``, ``"ZOH"``, or a
+            per-control sequence).  Used as a fallback for controls that
+            did not specify ``hold``.
+        n_u: Total number of controls.
+        u_foh_mask: Optional float array of shape ``(n_u,)`` from
+            :attr:`UnifiedControl.foh_mask`.  Values are ``1.0`` (FOH),
+            ``0.0`` (ZOH), or ``nan`` (unset — use ``dis_type``).
+            ``None`` means no control specified ``hold``.
+
+    Returns:
+        Float array of shape ``(n_u,)`` with values ``1.0`` (FOH) or
+        ``0.0`` (ZOH).
+    """
+    base = _make_foh_mask(dis_type, n_u).astype(float)
+    if u_foh_mask is None:
+        return base
+    unset = np.isnan(u_foh_mask)
+    return np.where(unset, base, u_foh_mask)
 
 
 class Discretizer(ABC):
@@ -62,9 +137,11 @@ class Discretizer(ABC):
                     return []
     """
 
-    #: Control hold type (``"FOH"`` or ``"ZOH"``).  Subclasses must set this
-    #: in ``__init__``.
-    dis_type: str
+    #: Control hold type. A single ``"FOH"`` or ``"ZOH"`` string applies the
+    #: same hold to every control.  A sequence (e.g.
+    #: ``["FOH", "ZOH", "FOH"]``) sets the hold independently for each
+    #: control.  Subclasses must set this in ``__init__``.
+    dis_type: DisType
 
     #: ODE solver name used for integration (e.g., ``"Tsit5"``).  Subclasses
     #: must set this in ``__init__``.

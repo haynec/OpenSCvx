@@ -19,6 +19,7 @@ class Control(Variable):
 
     - Min/max bounds to enforce actuator limits
     - Initial trajectory guesses to help the optimizer converge
+    - Per-control hold type (FOH or ZOH) for discretization
 
     Common examples of control inputs include:
 
@@ -35,6 +36,8 @@ class Control(Variable):
         _min (np.ndarray | None): Minimum bounds for each element of the control
         _max (np.ndarray | None): Maximum bounds for each element of the control
         _guess (np.ndarray | None): Initial guess for the control trajectory (n_points, n_controls)
+        _hold (str | None): Hold type for discretization (``"FOH"``, ``"ZOH"``, or
+            ``None`` to defer to the discretizer's ``dis_type``)
 
     Example:
         Scalar throttle control bounded [0, 1]:
@@ -44,9 +47,9 @@ class Control(Variable):
             throttle.max = [1.0]
             throttle.guess = np.full((50, 1), 0.5)  # Start at 50% throttle
 
-        3D thrust vector for spacecraft:
+        3D thrust vector with zero-order hold:
 
-            thrust = Control("thrust", shape=(3,))
+            thrust = Control("thrust", shape=(3,), hold="ZOH")
             thrust.min = [-10, -10, 0]    # No downward thrust
             thrust.max = [10, 10, 50]     # Limited thrust
             thrust.guess = np.zeros((50, 3))  # Initialize with zero thrust
@@ -68,6 +71,7 @@ class Control(Variable):
         max: Optional[np.ndarray] = None,
         impulsive: bool = False,
         nodes: Optional[list[int]] = None,
+        hold: Optional[str] = None,
     ):
         """Initialize a Control object.
 
@@ -78,6 +82,9 @@ class Control(Variable):
             max: Optional maximum bounds array (keyword-only)
             impulsive: Whether this control is treated as impulsive
             nodes: Optional list of node indices where impulsive control is enabled
+            hold: Hold type for discretization — ``"FOH"`` (first-order hold),
+                ``"ZOH"`` (zero-order hold), or ``None`` (defer to the
+                discretizer's ``dis_type`` setting). Defaults to ``None``.
         """
         super().__init__(name, shape)
         self._scaling_min = None
@@ -89,6 +96,10 @@ class Control(Variable):
             self._nodes = [int(idx) for idx in nodes]
         else:
             self._nodes = None
+
+        if hold is not None and hold not in ("FOH", "ZOH"):
+            raise ValueError(f"hold must be 'FOH', 'ZOH', or None; got {hold!r}")
+        self._hold = hold
 
         if min is not None:
             self.min = min
@@ -181,6 +192,17 @@ class Control(Variable):
         self._is_impulsive = val
 
     @property
+    def hold(self) -> Optional[str]:
+        """Hold type for discretization (``"FOH"``, ``"ZOH"``, or ``None``)."""
+        return self._hold
+
+    @hold.setter
+    def hold(self, val: Optional[str]):
+        if val is not None and val not in ("FOH", "ZOH"):
+            raise ValueError(f"hold must be 'FOH', 'ZOH', or None; got {val!r}")
+        self._hold = val
+
+    @property
     def nodes(self) -> Optional[list[int]]:
         return self._nodes
 
@@ -199,8 +221,12 @@ class Control(Variable):
         Returns:
             Concise string showing the control name, shape and type.
         """
-        return (
-            "Control("
-            f"'{self.name}', shape={self.shape}, impulsive={self._is_impulsive}, "
-            f"nodes={self._nodes})"
-        )
+        parts = [
+            f"'{self.name}'",
+            f"shape={self.shape}",
+            f"impulsive={self._is_impulsive}",
+            f"nodes={self._nodes}",
+        ]
+        if self._hold is not None:
+            parts.append(f"hold={self._hold!r}")
+        return f"Control({', '.join(parts)})"

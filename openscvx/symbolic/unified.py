@@ -479,6 +479,24 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     if not nodes:
         nodes = None
 
+    # Build per-element FOH mask from control-level hold settings.
+    # 1.0 = FOH, 0.0 = ZOH, nan = unset (defer to discretizer dis_type).
+    any_hold_set = any(getattr(c, "hold", None) is not None for c in sorted_controls)
+    if any_hold_set:
+        foh_parts: list[np.ndarray] = []
+        for control in sorted_controls:
+            n = control.shape[0]
+            hold = getattr(control, "hold", None)
+            if hold == "FOH":
+                foh_parts.append(np.ones(n))
+            elif hold == "ZOH":
+                foh_parts.append(np.zeros(n))
+            else:
+                foh_parts.append(np.full(n, np.nan))
+        unified_foh_mask: np.ndarray | None = np.concatenate(foh_parts)
+    else:
+        unified_foh_mask = None
+
     return UnifiedControl(
         name=name,
         shape=(total_shape,),
@@ -493,4 +511,5 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         scaling_max=unified_scaling_max,
         is_impulsive=unified_is_impulsive,
         nodes=nodes,
+        foh_mask=unified_foh_mask,
     )

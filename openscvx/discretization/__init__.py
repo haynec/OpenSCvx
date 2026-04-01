@@ -19,7 +19,7 @@ Jacobians and compact variational integration when sparsity patterns exist).
 import inspect
 from typing import Any
 
-from .base import Discretizer
+from .base import Discretizer, DisType, _make_foh_mask, _resolve_foh_mask
 from .discretize_linearize import DiscretizeLinearizeVectorize, VectorizeDiscretizeLinearize
 from .linearize_discretize import (
     LinearizeDiscretize,
@@ -56,6 +56,9 @@ def _resolve_discretizer(val: Any) -> Discretizer:
         # Dict with keyword overrides (default class: LinearizeDiscretizeSparse)
         _resolve_discretizer({"dis_type": "ZOH", "ode_solver": "Dopri8"})
 
+        # Per-control hold: first control FOH, second ZOH, third FOH
+        _resolve_discretizer({"dis_type": ["FOH", "ZOH", "FOH"]})
+
         # Configure integrator behavior (forwarded to Diffrax / diffeqsolve)
         _resolve_discretizer(
             {"diffrax_kwargs": {"num_substeps": 100, "max_steps": 20_000}}
@@ -91,12 +94,15 @@ def _resolve_discretizer(val: Any) -> Discretizer:
 
 
 __all__ = [
+    "DisType",
     "Discretizer",
     "DiscretizeLinearizeVectorize",
     "LinearizeDiscretize",
     "LinearizeDiscretizeSparse",
     "VectorizeDiscretizeLinearize",
+    "_make_foh_mask",
     "_resolve_discretizer",
+    "_resolve_foh_mask",
     "calculate_impulsive_discretization",
     "color_columns",
     "get_impulsive_discretization_solver",

@@ -4,6 +4,7 @@ import numpy as np
 
 from openscvx.config import Config
 from openscvx.discretization import Discretizer
+from openscvx.discretization.base import _resolve_foh_mask
 from openscvx.integrators import solve_ivp_diffrax_prop
 from openscvx.lowered import Dynamics
 
@@ -31,14 +32,14 @@ def prop_aug_dy(
     tau_init: float,
     node: int,
     state_dot: callable,
-    dis_type: str,
+    foh_mask: np.ndarray,
     N: int,
     params: dict,
 ) -> np.ndarray:
     """Compute the augmented dynamics for propagation.
 
     This function computes the time-dilated dynamics for propagating the system
-    state, taking into account the discretization type (ZOH or FOH). The
+    state, taking into account the per-control hold type (ZOH or FOH). The
     time-dilation multiplication is already included in ``state_dot``
     symbolically.
 
@@ -50,7 +51,8 @@ def prop_aug_dy(
         tau_init (float): Initial normalized time.
         node (int): Current node index.
         state_dot (callable): Function computing time-dilated state derivatives.
-        dis_type (str): Discretization type ("ZOH" or "FOH").
+        foh_mask (np.ndarray): Float array of shape ``(n_u,)`` — ``1.0`` for
+            FOH controls, ``0.0`` for ZOH controls.
         N (int): Number of nodes in trajectory.
         params: Dictionary of additional parameters passed to state_dot.
 
@@ -59,10 +61,7 @@ def prop_aug_dy(
     """
     x = x[None, :]
 
-    if dis_type == "ZOH":
-        beta = 0.0
-    elif dis_type == "FOH":
-        beta = (tau - tau_init) * N
+    beta = (tau - tau_init) * N * foh_mask
     u = u_current + beta * (u_next - u_current)
 
     return state_dot(x, u, node, params).squeeze()
@@ -85,6 +84,9 @@ def get_propagation_solver(
         callable: A function that solves the propagation problem.
     """
 
+    u_foh_mask = getattr(settings.sim.u, "foh_mask", None)
+    foh_mask = _resolve_foh_mask(discretizer.dis_type, settings.sim.n_controls, u_foh_mask)
+
     def propagation_solver(V0, tau_grid, u_cur, u_next, tau_init, node, save_time, mask, params):
         param_map_update = params
         return solve_ivp_diffrax_prop(
@@ -97,7 +99,7 @@ def get_propagation_solver(
                 tau_init,  # shape (1, 1)
                 node,  # shape (1, 1)
                 state_dot,  # function or array
-                discretizer.dis_type,
+                foh_mask,
                 settings.sim.n,
                 param_map_update,
                 # additional named parameters as **kwargs
@@ -118,7 +120,7 @@ def s_to_t(x: np.ndarray, u: np.ndarray, settings: Config, discretizer: Discreti
     """Convert normalized time s to real time t.
 
     This function converts the normalized time variable s to real time t
-    based on the discretization type and time dilation factors.
+    based on the hold type of the time-dilation control.
 
     Args:
         x: State trajectory array, shape (N, n_states).
@@ -132,13 +134,16 @@ def s_to_t(x: np.ndarray, u: np.ndarray, settings: Config, discretizer: Discreti
     t = [x[:, settings.sim.time_slice][0]]
     tau = np.linspace(0, 1, settings.sim.n)
     idx_s = _time_dilation_index(settings, u.shape[1])
+    u_foh_mask = getattr(settings.sim.u, "foh_mask", None)
+    foh_mask = _resolve_foh_mask(discretizer.dis_type, u.shape[1], u_foh_mask)
+    td_is_foh = foh_mask[idx_s] > 0.5
     for k in range(1, settings.sim.n):
         s_kp = u[k - 1, idx_s]
         s_k = u[k, idx_s]
-        if discretizer.dis_type == "ZOH":
-            t.append(t[k - 1] + (tau[k] - tau[k - 1]) * (s_kp))
-        else:
+        if td_is_foh:
             t.append(t[k - 1] + 0.5 * (s_k + s_kp) * (tau[k] - tau[k - 1]))
+        else:
+            t.append(t[k - 1] + (tau[k] - tau[k - 1]) * (s_kp))
     return t
 
 
@@ -148,7 +153,7 @@ def t_to_tau(
     """Convert real time t to normalized time tau.
 
     This function converts real time t to normalized time tau and interpolates
-    the control inputs accordingly.
+    the control inputs according to each control's hold type.
 
     Args:
         u (np.ndarray): Control trajectory array, shape (N, n_controls).
@@ -161,25 +166,23 @@ def t_to_tau(
         tuple[np.ndarray, np.ndarray]: (tau, u_interp) where tau is normalized time and u_interp is
             interpolated controls.
     """
-    if discretizer.dis_type == "ZOH":
-        # Zero-Order Hold: step interpolation (hold previous value)
-        def u_lam(new_t):
-            # Find the index of the last nodal time <= new_t
-            idx = np.searchsorted(t_nodal, new_t, side="right") - 1
-            idx = np.clip(idx, 0, len(t_nodal) - 1)
-            return u[idx, :]
-    elif discretizer.dis_type == "FOH":
-        # First-Order Hold: linear interpolation
-        def u_lam(new_t):
-            return np.array([np.interp(new_t, t_nodal, u[:, i]) for i in range(u.shape[1])]).T
-    else:
-        raise ValueError("Currently unsupported discretization type")
+    u_foh_mask = getattr(settings.sim.u, "foh_mask", None)
+    foh_mask = _resolve_foh_mask(discretizer.dis_type, u.shape[1], u_foh_mask)
+    foh_mask_bool = foh_mask > 0.5
+
+    def u_lam(new_t):
+        idx = np.searchsorted(t_nodal, new_t, side="right") - 1
+        idx = np.clip(idx, 0, len(t_nodal) - 1)
+        zoh_vals = u[idx, :]
+        foh_vals = np.array([np.interp(new_t, t_nodal, u[:, i]) for i in range(u.shape[1])])
+        return np.where(foh_mask_bool, foh_vals, zoh_vals)
 
     u_interp = np.array([u_lam(t_i) for t_i in t])
 
     tau = np.zeros(len(t))
     tau_nodal = np.linspace(0, 1, settings.sim.n)
     idx_s = _time_dilation_index(settings, u.shape[1])
+    td_is_foh = foh_mask[idx_s] > 0.5
     for k in range(1, len(t)):
         k_nodal = np.where(t_nodal < t[k])[0][-1]
         s_kp = u[k_nodal, idx_s]
@@ -187,10 +190,10 @@ def t_to_tau(
         tau_p = tau_nodal[k_nodal]
 
         s_k = u[k_nodal + 1, idx_s]
-        if discretizer.dis_type == "ZOH":
-            tau[k] = tau_p + (t[k] - tp) / s_kp
-        else:
+        if td_is_foh:
             tau[k] = tau_p + 2 * (t[k] - tp) / (s_k + s_kp)
+        else:
+            tau[k] = tau_p + (t[k] - tp) / s_kp
     return tau, u_interp
 
 

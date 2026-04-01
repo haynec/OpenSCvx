@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import diffrax as dfx
 import jax
 import jax.numpy as jnp
@@ -11,6 +13,7 @@ from openscvx.discretization import (
     color_columns,
     make_sparse_jacobian_fns,
 )
+from openscvx.discretization.base import _make_foh_mask, _resolve_foh_mask
 from openscvx.discretization.linearize_discretize import _dVdt
 
 # --- fixtures for dummy params, state_dot, A, B  ------------------
@@ -27,6 +30,7 @@ def settings():
     p.sim = Dummy()
     p.sim.n_states = 2
     p.sim.n_controls = 2  # 1 vehicle control + 1 time-dilation (unified)
+    p.sim.u = SimpleNamespace(foh_mask=None)
     p.sim.S_x = jnp.eye(p.sim.n_states)
     p.sim.c_x = jnp.zeros(p.sim.n_states)
     p.sim.S_u = jnp.eye(p.sim.n_controls)
@@ -88,6 +92,7 @@ def test_jit_dVdt_compiles(settings):
     V_flat = jnp.ones((N - 1) * aug_dim)
     u_cur = jnp.ones((N - 1, n_u))
     u_next = jnp.ones((N - 1, n_u))
+    foh_mask = np.ones(n_u, dtype=np.float64)
 
     # Create vmapped versions of dynamics and Jacobians (as _dVdt expects)
     f_vmapped = jax.vmap(state_dot, in_axes=(0, 0, 0, None))
@@ -107,7 +112,7 @@ def test_jit_dVdt_compiles(settings):
             n_x,
             n_u,
             N,
-            "FOH",
+            foh_mask,
             settings.sim.S_x,
             settings.sim.c_x,
             settings.sim.S_u,
@@ -167,6 +172,7 @@ def rocket_settings():
     p.sim = Dummy()
     p.sim.n_states = 7
     p.sim.n_controls = 4  # thrust(3) + time-dilation(1)
+    p.sim.u = SimpleNamespace(foh_mask=None)
     p.sim.S_x = jnp.eye(7)
     p.sim.c_x = jnp.zeros(7)
     p.sim.S_u = jnp.eye(4)
@@ -401,6 +407,27 @@ def test_default_diffrax_tolerances_when_not_set():
     kwargs = disc._resolve_diffrax_kwargs()
     assert kwargs["rtol"] == pytest.approx(1e-6)
     assert kwargs["atol"] == pytest.approx(1e-3)
+
+
+def test_make_foh_mask_string_and_sequence():
+    np.testing.assert_array_equal(_make_foh_mask("FOH", 3), [True, True, True])
+    np.testing.assert_array_equal(_make_foh_mask("ZOH", 2), [False, False])
+    np.testing.assert_array_equal(
+        _make_foh_mask(["FOH", "ZOH", "FOH"], 3),
+        [True, False, True],
+    )
+
+
+def test_resolve_foh_mask_merges_unified_mask_with_discretizer_default():
+    """Explicit entries in ``u_foh_mask`` override ``dis_type``; ``nan`` defers."""
+    u_partial = np.array([np.nan, 0.0, 1.0], dtype=float)
+    merged_foh = _resolve_foh_mask("FOH", 3, u_partial)
+    np.testing.assert_array_equal(merged_foh, [1.0, 0.0, 1.0])
+
+    merged_zoh = _resolve_foh_mask("ZOH", 3, u_partial)
+    np.testing.assert_array_equal(merged_zoh, [0.0, 0.0, 1.0])
+
+    assert _resolve_foh_mask("ZOH", 2, None).tolist() == [0.0, 0.0]
 
 
 def test_diffrax_kwargs_routed_to_rk45_kwargs():

@@ -95,6 +95,63 @@ def test_unify_controls_sorting():
     np.testing.assert_array_equal(unified.min, expected_min)
 
 
+def test_unify_controls_foh_mask_from_hold():
+    """``Control.hold`` is aggregated into ``UnifiedControl.foh_mask``."""
+    a = Control("a", (1,), hold="FOH")
+    a.min = np.array([0.0])
+    b = Control("b", (2,), hold="ZOH")
+    b.min = np.array([0.0, 0.0])
+    c = Control("c", (1,))  # defer to discretizer → nan in mask
+    c.min = np.array([0.0])
+
+    unified = unify_controls([a, b, c])
+
+    assert unified.foh_mask is not None
+    assert unified.foh_mask.shape == (4,)
+    np.testing.assert_array_equal(unified.foh_mask[:1], [1.0])
+    np.testing.assert_array_equal(unified.foh_mask[1:3], [0.0, 0.0])
+    assert np.isnan(unified.foh_mask[3])
+
+
+def test_unify_controls_no_hold_yields_no_foh_mask():
+    """If no control sets ``hold``, ``foh_mask`` stays ``None``."""
+    u1 = Control("u1", (1,))
+    u1.min = np.array([0.0])
+    u2 = Control("u2", (1,))
+    u2.min = np.array([0.0])
+    unified = unify_controls([u1, u2])
+    assert unified.foh_mask is None
+
+
+def test_unified_control_append_preserves_control_hold():
+    """``append(Control(..., hold=...))`` extends ``foh_mask`` correctly."""
+    base = Control("u0", (1,))
+    base.min = np.array([0.0])
+    unified = unify_controls([base])
+    assert unified.foh_mask is None
+
+    extra = Control("u1", (2,), hold="ZOH")
+    extra.min = np.array([-1.0, -1.0])
+    unified.append(extra)
+
+    assert unified.foh_mask is not None
+    assert unified.foh_mask.shape == (3,)
+    assert np.isnan(unified.foh_mask[0])
+    np.testing.assert_array_equal(unified.foh_mask[1:3], [0.0, 0.0])
+
+
+def test_unified_control_append_control_with_foh_mask_on_self():
+    """Appending a ``Control`` with explicit hold when ``self`` already has ``foh_mask``."""
+    a = Control("a", (1,), hold="FOH")
+    a.min = np.array([0.0])
+    b = Control("b", (1,), hold="ZOH")
+    b.min = np.array([0.0])
+    unified = unify_controls([a])
+    assert unified.foh_mask is not None
+    unified.append(b)
+    np.testing.assert_array_equal(unified.foh_mask, [1.0, 0.0])
+
+
 # Test UnifiedState properties and methods
 def test_unified_state_properties():
     """Test true and augmented properties of UnifiedState."""
