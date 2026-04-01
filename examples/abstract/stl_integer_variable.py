@@ -87,7 +87,7 @@ problem = Problem(
     controls=controls,
     N=N,
     time=time,
-    algorithm={"autotuner": ox.ConstantProximalWeight(), "ep_vc": 1e-3, "lam_cost": 1e1},
+    algorithm={"autotuner": ox.ConstantProximalWeight(), "ep_vc": 1e-3, "lam_cost": 1e0},
     discretizer={"dis_type": "ZOH"},
     float_dtype="float64",
 )

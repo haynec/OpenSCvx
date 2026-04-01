@@ -126,7 +126,7 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n_nodes,
-    algorithm={"lam_vb": 1e0},
+    algorithm={"lam_vb": 1e-1},
     discretizer={"dis_type": "ZOH", "ode_solver": "Dopri8"},
 )
 

@@ -105,7 +105,7 @@ problem = Problem(
     time=time,  # Time is already defined above as ox.Time
     constraints=constraints,
     N=n,
-    algorithm={"autotuner": ox.AugmentedLagrangian(eta_lambda=1e0), "lam_vb": 1e0},
+    algorithm={"autotuner": ox.AugmentedLagrangian(eta_lambda=1e0), "lam_vb": 1e-1},
     float_dtype="float64",
 )
 
