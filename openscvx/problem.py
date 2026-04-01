@@ -246,6 +246,10 @@ class Problem:
 
         set_default_float_dtype(float_dtype)
 
+        # Persist so integration tests (and callers) can re-sync process-wide JAX config
+        # before initialize()/solve() after other examples have been imported.
+        self._float_dtype: str = float_dtype
+
         # Symbolic Preprocessing & Augmentation
         self.symbolic: SymbolicProblem = preprocess_symbolic_problem(
             dynamics=dynamics,
