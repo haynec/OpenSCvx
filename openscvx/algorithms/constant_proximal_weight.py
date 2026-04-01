@@ -9,7 +9,8 @@ from .base import AutotuningBase
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
-    from .base import AlgorithmState, CandidateIterate, Weights
+    from .base import AlgorithmState, CandidateIterate
+    from .weights import Weights
 
 
 class ConstantProximalWeight(AutotuningBase):

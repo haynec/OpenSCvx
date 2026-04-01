@@ -22,9 +22,10 @@ from openscvx.utils.printing import (
 )
 
 from .augmented_lagrangian import AugmentedLagrangian
-from .base import Algorithm, AlgorithmState, CandidateIterate, Weights
+from .base import Algorithm, AlgorithmState, CandidateIterate
 from .constant_proximal_weight import ConstantProximalWeight
 from .ramp_proximal_weight import RampProximalWeight
+from .weights import Weights
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints

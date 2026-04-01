@@ -82,11 +82,12 @@ import inspect
 from typing import Any, Dict
 
 from .augmented_lagrangian import AugmentedLagrangian
-from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult, Weights
+from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult
 from .constant_proximal_weight import ConstantProximalWeight
 from .optimization_results import OptimizationResults
 from .penalized_trust_region import PenalizedTrustRegion
 from .ramp_proximal_weight import RampProximalWeight
+from .weights import Weights
 
 # ---------------------------------------------------------------------------
 # Spec resolvers — turn dicts/strings into algorithm/autotuner instances
