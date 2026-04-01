@@ -86,9 +86,9 @@ problem = Problem(
     N=n,
 )
 
-problem.algorithm.lam_prox = 1e-2  # Weight on the Trust Reigon
-problem.algorithm.lam_vc = 5e1  # Weight on the Trust Reigon
-problem.algorithm.lam_cost = 1e0  # Weight on the Minimal Time Objective
+problem.algorithm.lam_prox = 2e-4  # Weight on the Trust Region
+problem.algorithm.lam_vc = 1e0  # Weight on the Virtual Control
+problem.algorithm.lam_cost = 2e-2  # Weight on the Minimal Time Objective
 problem.algorithm.k_max = 100
 
 plotting_dict = {}

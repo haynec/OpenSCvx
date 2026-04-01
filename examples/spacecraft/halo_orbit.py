@@ -127,8 +127,9 @@ discretizer = {
 }
 algorithm = {
     "k_max": 400,
-    "lam_prox": 2e-1,
-    "lam_vc": 5e-2,
+    "lam_prox": 1e0,
+    "lam_vc": 2.5e-1,
+    "lam_cost": 5e-1,
     "ep_vc": 1e-6,
     "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
 }

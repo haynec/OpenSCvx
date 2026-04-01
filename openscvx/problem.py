@@ -246,6 +246,10 @@ class Problem:
 
         set_default_float_dtype(float_dtype)
 
+        # Persist so integration tests (and callers) can re-sync process-wide JAX config
+        # before initialize()/solve() after other examples have been imported.
+        self._float_dtype: str = float_dtype
+
         # Symbolic Preprocessing & Augmentation
         self.symbolic: SymbolicProblem = preprocess_symbolic_problem(
             dynamics=dynamics,
@@ -848,12 +852,12 @@ class Problem:
             debug=self.settings.dev.debug,
         )
 
-        # Build per-constraint lam_vb arrays from symbolic constraints and
-        # re-normalize. Deferred to initialize() so that user-set lam_vb
-        # values (assigned after Problem construction) are picked up.
+        # Build per-constraint lam_vb arrays from symbolic constraints.
+        # Deferred to initialize() so that user-set lam_vb values
+        # (assigned after Problem construction) are picked up.
         n_byof_nodal = len(self._byof.get("nodal_constraints", [])) if self._byof else 0
         n_byof_cross = len(self._byof.get("cross_nodal_constraints", [])) if self._byof else 0
-        self._algorithm._resolve_lam_vb(
+        self._algorithm.weights.build_vb_arrays(
             N=self.symbolic.N,
             nodal_constraints=self.symbolic.constraints.nodal,
             cross_node_constraints=self.symbolic.constraints.cross_node,

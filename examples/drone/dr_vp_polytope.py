@@ -241,8 +241,8 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"lam_prox": 2e0, "lam_vc": 4e1, "ep_tr": 1e-5},
-    discretizer={"atol": 1e-4},
+    algorithm={"lam_prox": 5e-2, "lam_vc": 1e0, "lam_cost": 2.5e-3, "ep_tr": 1e-5},
+    discretizer=ox.VectorizeDiscretizeLinearize(diffrax_kwargs={"atol": 1e-4}),
 )
 
 plotting_dict = {

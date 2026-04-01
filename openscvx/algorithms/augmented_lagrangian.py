@@ -18,7 +18,8 @@ from .base import AutotuningBase
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
-    from .base import AlgorithmState, CandidateIterate, Weights
+    from .base import AlgorithmState, CandidateIterate
+    from .weights import Weights
 
 
 class AugmentedLagrangian(AutotuningBase):
@@ -225,7 +226,7 @@ class AugmentedLagrangian(AutotuningBase):
             nodal_constraints: Lowered JAX constraints
             settings: Configuration object containing adaptation parameters
             params: Dictionary of problem parameters
-            weights: Normalized initial weights from the algorithm
+            weights: Initial weights from the algorithm
         """
         # Calculate nonlinear penalty for current candidate
         candidate_x_prop = (

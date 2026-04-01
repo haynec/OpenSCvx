@@ -235,7 +235,7 @@ problem = Problem(
     constraints=constraints,
     N=n,
     licq_max=1e-8,
-    algorithm={"lam_prox": 4e0, "ep_tr": 1e-6},
+    algorithm={"lam_prox": 4e-1, "ep_tr": 1e-6},
 )
 
 plotting_dict = {

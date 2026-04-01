@@ -9,11 +9,11 @@ from openscvx.algorithms.base import (
     AutotuningBase,
     CandidateIterate,
     DiscretizationResult,
-    Weights,
 )
 from openscvx.algorithms.constant_proximal_weight import ConstantProximalWeight
 from openscvx.algorithms.penalized_trust_region import PenalizedTrustRegion
 from openscvx.algorithms.ramp_proximal_weight import RampProximalWeight
+from openscvx.algorithms.weights import Weights
 from openscvx.config import (
     Config,
     DevConfig,
