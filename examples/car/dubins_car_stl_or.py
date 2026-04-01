@@ -105,9 +105,12 @@ problem = Problem(
     time=time,  # Time is already defined above as ox.Time
     constraints=constraints,
     N=n,
-    algorithm={"autotuner": ox.AugmentedLagrangian(eta_lambda=1e0), "lam_vb": 1e-1},
+    algorithm={"autotuner": ox.AugmentedLagrangian(eta_lambda=1e0)},
     float_dtype="float64",
 )
+
+problem.algorithm.lam_vb = 1e0
+problem.algorithm.lam_vc = 1e1
 
 # Extract parameter values from problem.parameters (not Parameter objects)
 plotting_dict = {

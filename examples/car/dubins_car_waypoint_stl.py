@@ -131,11 +131,9 @@ problem = Problem(
     licq_max=1e-10,
 )
 
-# problem.algorithm.ep_vc = 1e-6
-# problem.algorithm.ep_tr = 5e-4
-problem.algorithm.lam_prox = 5e-4
+problem.algorithm.lam_prox = 1e-3
 problem.algorithm.lam_vc = 1e0
-problem.algorithm.lam_cost = 5e-5
+problem.algorithm.lam_cost = 1e-3
 
 plotting_dict = {
     "obs_radius": problem.parameters["obs_radius"],
