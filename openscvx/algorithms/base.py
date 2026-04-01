@@ -305,40 +305,32 @@ def _expand_lam_prox_dict(
 
 @dataclass
 class Weights:
-    """Normalized SCP weights used internally by the algorithm and autotuner.
+    """SCP weights used internally by the algorithm and autotuner.
 
     This dataclass is an **internal** representation. Users should read and
     write weights through the algorithm's properties (e.g.
     ``algorithm.lam_cost``) which are the source of truth for user-facing
-    values. The autotuner may mutate the normalized fields on this object
-    during SCP iteration; those mutations are reflected in the weight
-    histories on :class:`AlgorithmState` but do **not** alter the raw
-    (user-specified) values.
-
-    The public fields (``lam_prox``, ``lam_vc``, ``lam_cost``, ``lam_vb``)
-    always hold **normalized** values (largest == 1.0).  The original
-    user-specified values are preserved in private ``_raw_*`` attributes so
-    that :meth:`normalize` can be re-invoked without accumulating rounding
-    drift.
+    values. The autotuner may mutate these fields during SCP iteration;
+    those mutations are reflected in the weight histories on
+    :class:`AlgorithmState`.
 
     Attributes:
-        lam_prox: Trust region (proximal) weight (normalized). Scalar or
+        lam_prox: Trust region (proximal) weight. Scalar or
             array of shape ``(n_states + n_controls,)`` or
             ``(N, n_states + n_controls)`` for per-variable / per-node
             weighting.
-        lam_vc: Virtual control penalty weight (normalized). Scalar or
+        lam_vc: Virtual control penalty weight. Scalar or
             array of shape ``(n_states,)`` or ``(n_nodes-1, n_states)``
             for per-state / per-node weighting.
-        lam_cost: Cost weight per state (normalized). Scalar or array of
+        lam_cost: Cost weight per state. Scalar or array of
             shape ``(n_states,)`` for per-state weighting.
-        lam_vb: Global virtual buffer penalty weight (normalized). Scalar
+        lam_vb: Global virtual buffer penalty weight. Scalar
             default applied to every constraint. Use ``.weight()`` on
             individual constraints for per-constraint or per-node overrides.
-        lam_vb_nodal: Virtual buffer penalty weights for nodal constraints
-            (normalized), shape ``(N, n_nodal)``. Set by
-            :meth:`set_vb_arrays`.
+        lam_vb_nodal: Virtual buffer penalty weights for nodal constraints,
+            shape ``(N, n_nodal)``. Set by :meth:`set_vb_arrays`.
         lam_vb_cross: Virtual buffer penalty weights for cross-node
-            constraints (normalized), shape ``(n_cross,)``. Set by
+            constraints, shape ``(n_cross,)``. Set by
             :meth:`set_vb_arrays`.
     """
 
@@ -358,59 +350,6 @@ class Weights:
         if isinstance(self.lam_cost, (list, tuple)):
             self.lam_cost = np.asarray(self.lam_cost, dtype=float)
 
-        # Snapshot the user-specified values so normalize() is idempotent.
-        self._raw_lam_prox = (
-            self.lam_prox.copy() if isinstance(self.lam_prox, np.ndarray) else self.lam_prox
-        )
-        self._raw_lam_vc = (
-            self.lam_vc.copy() if isinstance(self.lam_vc, np.ndarray) else self.lam_vc
-        )
-        self._raw_lam_cost = (
-            self.lam_cost.copy() if isinstance(self.lam_cost, np.ndarray) else self.lam_cost
-        )
-        self._raw_lam_vb = float(self.lam_vb)
-        self._raw_lam_vb_nodal: Optional[np.ndarray] = None
-        self._raw_lam_vb_cross: Optional[np.ndarray] = None
-
-    def normalize(self) -> None:
-        """Normalize weights so the largest equals 1.0.
-
-        Always re-derives from the stored raw (user-specified) values,
-        making this method idempotent and safe to call after updating
-        any individual raw weight.
-        """
-        raw_prox_max = (
-            float(np.max(self._raw_lam_prox))
-            if isinstance(self._raw_lam_prox, np.ndarray)
-            else self._raw_lam_prox
-        )
-        raw_vc_max = (
-            float(np.max(self._raw_lam_vc))
-            if isinstance(self._raw_lam_vc, np.ndarray)
-            else self._raw_lam_vc
-        )
-        raw_cost_max = (
-            float(np.max(self._raw_lam_cost))
-            if isinstance(self._raw_lam_cost, np.ndarray)
-            else self._raw_lam_cost
-        )
-        if self._raw_lam_vb_nodal is not None:
-            raw_vb_max = max(
-                float(np.max(self._raw_lam_vb_nodal)),
-                float(np.max(self._raw_lam_vb_cross)),
-            )
-        else:
-            raw_vb_max = self._raw_lam_vb
-        scale = max(raw_prox_max, raw_vc_max, raw_cost_max, raw_vb_max)
-        if scale > 0:
-            self.lam_prox = self._raw_lam_prox / scale
-            self.lam_vc = self._raw_lam_vc / scale
-            self.lam_cost = self._raw_lam_cost / scale
-            self.lam_vb = self._raw_lam_vb / scale
-            if self._raw_lam_vb_nodal is not None:
-                self.lam_vb_nodal = self._raw_lam_vb_nodal / scale
-                self.lam_vb_cross = self._raw_lam_vb_cross / scale
-
     def set_vb_arrays(
         self,
         lam_vb_nodal: np.ndarray,
@@ -418,18 +357,12 @@ class Weights:
     ) -> None:
         """Set pre-built virtual buffer weight arrays.
 
-        Stores the given arrays as both the current (normalized) and raw
-        (pre-normalization) values. Call :meth:`normalize` afterwards to
-        rescale all weights consistently.
-
         Args:
             lam_vb_nodal: Weight array of shape ``(N, n_nodal)``.
             lam_vb_cross: Weight array of shape ``(n_cross,)``.
         """
         self.lam_vb_nodal = lam_vb_nodal
         self.lam_vb_cross = lam_vb_cross
-        self._raw_lam_vb_nodal = lam_vb_nodal.copy()
-        self._raw_lam_vb_cross = lam_vb_cross.copy()
 
 
 @dataclass
@@ -667,7 +600,7 @@ class AutotuningBase(ABC):
             nodal_constraints: Lowered JAX constraints
             settings: Configuration object containing adaptation parameters
             params: Dictionary of problem parameters
-            weights: Normalized initial weights from the algorithm
+            weights: Initial weights from the algorithm
 
         Returns:
             str: Adaptive state string describing the update action (e.g., "Accept Lower")
@@ -1028,7 +961,7 @@ class AlgorithmState:
 
         Args:
             settings: Configuration object containing initial guesses and SCP parameters
-            weights: Normalized initial weights from the algorithm.
+            weights: Initial weights from the algorithm.
                 ``lam_vc`` is expanded to an ``(N-1, n_states)`` array here
                 (scalar or per-state values are broadcast).
 
@@ -1118,13 +1051,13 @@ class Algorithm(ABC):
                     return converged
 
     Attributes:
-        weights: Normalized SCP weights used by the algorithm and autotuner.
+        weights: SCP weights used by the algorithm and autotuner.
             Subclasses must set this in ``__init__``.
         k_max: Maximum number of SCP iterations.
             Subclasses must set this in ``__init__``.
     """
 
-    #: Normalized SCP weights. Subclasses must set this in ``__init__``.
+    #: SCP weights. Subclasses must set this in ``__init__``.
     weights: Weights
 
     #: Maximum number of SCP iterations. Subclasses must set this in ``__init__``.
@@ -1238,12 +1171,11 @@ class Algorithm(ABC):
         n_byof_nodal: int = 0,
         n_byof_cross: int = 0,
     ) -> None:
-        """Resolve per-constraint virtual buffer weight arrays and re-normalize.
+        """Resolve per-constraint virtual buffer weight arrays.
 
         Inspects each symbolic constraint's shape (to account for vector
-        decomposition) and ``.weight()`` overrides, populates
-        ``weights.lam_vb_nodal`` and ``weights.lam_vb_cross``, then
-        re-normalizes all weights so the overrides participate in the scale.
+        decomposition) and ``.weight()`` overrides, then populates
+        ``weights.lam_vb_nodal`` and ``weights.lam_vb_cross``.
 
         Args:
             N: Number of trajectory nodes.
@@ -1255,7 +1187,7 @@ class Algorithm(ABC):
             n_byof_cross: Number of byof cross-node constraints (each adds
                 one entry with the default weight).
         """
-        default_vb = float(self.weights._raw_lam_vb)
+        default_vb = float(self.weights.lam_vb)
 
         # Count decomposed nodal constraints (vector → multiple scalars).
         # Vector constraints are decomposed element-wise during lowering
@@ -1309,7 +1241,6 @@ class Algorithm(ABC):
                 lam_vb_cross[idx] = float(cc._lam_vb)
 
         self.weights.set_vb_arrays(lam_vb_nodal, lam_vb_cross)
-        self.weights.normalize()
 
     @abstractmethod
     def initialize(

@@ -49,7 +49,7 @@ class RampProximalWeight(AutotuningBase):
             nodal_constraints: Lowered JAX constraints
             settings: Configuration object containing adaptation parameters
             params: Dictionary of problem parameters
-            weights: Normalized initial weights from the algorithm
+            weights: Initial weights from the algorithm
 
         Returns:
             str: Adaptive state string (e.g., "Accept", "Reject")

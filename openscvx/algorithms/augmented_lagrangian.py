@@ -225,7 +225,7 @@ class AugmentedLagrangian(AutotuningBase):
             nodal_constraints: Lowered JAX constraints
             settings: Configuration object containing adaptation parameters
             params: Dictionary of problem parameters
-            weights: Normalized initial weights from the algorithm
+            weights: Initial weights from the algorithm
         """
         # Calculate nonlinear penalty for current candidate
         candidate_x_prop = (

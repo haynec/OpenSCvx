@@ -848,9 +848,9 @@ class Problem:
             debug=self.settings.dev.debug,
         )
 
-        # Build per-constraint lam_vb arrays from symbolic constraints and
-        # re-normalize. Deferred to initialize() so that user-set lam_vb
-        # values (assigned after Problem construction) are picked up.
+        # Build per-constraint lam_vb arrays from symbolic constraints.
+        # Deferred to initialize() so that user-set lam_vb values
+        # (assigned after Problem construction) are picked up.
         n_byof_nodal = len(self._byof.get("nodal_constraints", [])) if self._byof else 0
         n_byof_cross = len(self._byof.get("cross_nodal_constraints", [])) if self._byof else 0
         self._algorithm._resolve_lam_vb(
