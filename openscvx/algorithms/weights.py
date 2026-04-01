@@ -55,9 +55,9 @@ class Weights:
             ``(n_cross,)``. Built by :meth:`build_vb_arrays`.
     """
 
-    lam_prox: Union[float, np.ndarray] = 1e0
-    lam_vc: Union[float, np.ndarray] = 1e1
-    lam_cost: Union[float, np.ndarray] = 1e-1
+    lam_prox: Union[float, np.ndarray] = 1e-1
+    lam_vc: Union[float, np.ndarray] = 1e0
+    lam_cost: Union[float, np.ndarray] = 1e-2
     lam_vb: float = 0.0
     lam_vb_nodal: Optional[np.ndarray] = None
     lam_vb_cross: Optional[np.ndarray] = None
@@ -74,9 +74,9 @@ class Weights:
     @classmethod
     def build(
         cls,
-        lam_prox: Union[float, Dict[str, Union[float, list, np.ndarray]]] = 1e0,
-        lam_vc: Union[float, Dict[str, Union[float, list, np.ndarray]]] = 1e1,
-        lam_cost: Union[float, Dict[str, float]] = 1e-1,
+        lam_prox: Union[float, Dict[str, Union[float, list, np.ndarray]]] = 1e-1,
+        lam_vc: Union[float, Dict[str, Union[float, list, np.ndarray]]] = 1e0,
+        lam_cost: Union[float, Dict[str, float]] = 1e-2,
         lam_vb: float = 0.0,
         states: Optional[List["State"]] = None,
         controls: Optional[List["Control"]] = None,

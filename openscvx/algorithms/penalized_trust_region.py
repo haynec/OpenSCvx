@@ -87,9 +87,9 @@ class PenalizedTrustRegion(Algorithm):
         self,
         autotuner: "AutotuningBase" = None,
         k_max: int = 200,
-        lam_prox: Union[float, Dict[str, Union[float, list]]] = 1e0,
-        lam_vc: Union[float, Dict[str, Union[float, list]]] = 1e1,
-        lam_cost: Union[float, Dict[str, float]] = 1e-1,
+        lam_prox: Union[float, Dict[str, Union[float, list]]] = 1e-1,
+        lam_vc: Union[float, Dict[str, Union[float, list]]] = 1e0,
+        lam_cost: Union[float, Dict[str, float]] = 1e-2,
         lam_vb: float = 0.0,
         ep_tr: float = 1e-4,
         ep_vb: float = 1e-4,
@@ -110,7 +110,7 @@ class PenalizedTrustRegion(Algorithm):
                 be scalars, 1-D arrays for per-component weighting, or
                 2-D arrays of shape ``(n_nodes, n_components)`` for
                 per-node-per-component weighting.  Variables not in the
-                dict default to ``1.0``. Defaults to 1.0.
+                dict default to ``1.0``. Defaults to 0.1.
             lam_vc: Virtual control penalty weight. Either a float
                 (applied uniformly to all states) or a dict mapping state
                 names to per-state weights, e.g.
@@ -118,13 +118,13 @@ class PenalizedTrustRegion(Algorithm):
                 be scalars, 1-D arrays for per-component weighting, or
                 2-D arrays of shape ``(n_nodes-1, n_components)`` for
                 per-node-per-component weighting.  States not in the dict
-                default to ``1.0``. Defaults to 10.0.
+                default to ``1.0``. Defaults to 1.0.
             lam_cost: Cost weight. Either a float (applied to all
                 minimize/maximize states) or a dict mapping state names
                 to per-state weights, e.g.
                 ``{"velocity": 1e-1, "time": 1e0}``.  Dict values may
                 be arrays for per-component weighting, e.g.
-                ``{"position": [0, 0, 1e-6]}``. Defaults to 0.1.
+                ``{"position": [0, 0, 1e-6]}``. Defaults to 0.01.
             lam_vb: Virtual buffer penalty weight. Defaults to 0.0.
             ep_tr: Trust region convergence tolerance. Defaults to 1e-4.
             ep_vb: Virtual buffer convergence tolerance. Defaults to 1e-4.
