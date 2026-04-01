@@ -1130,7 +1130,10 @@ def test_augmented_lagrangian_accept_higher(
     V_dummy[:, -1] = V_final.flatten()
     algorithm_state.discretizations.append(
         DiscretizationResult.from_V(
-            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+            V_dummy, 
+            n_x=algorithm_state.n_x, 
+            n_u=algorithm_state.n_u, 
+            N=algorithm_state.N
         )
     )
 
