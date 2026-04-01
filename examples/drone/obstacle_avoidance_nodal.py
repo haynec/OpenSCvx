@@ -150,7 +150,7 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"lam_vb": 1e-1},
+    algorithm={"lam_vb": 1e-1, "lam_prox": 2e0},
 )
 
 plotting_dict = {

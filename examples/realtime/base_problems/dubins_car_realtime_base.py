@@ -17,10 +17,10 @@ import sys
 import jax.numpy as jnp
 import numpy as np
 
-# Add grandparent directory to path to import examples.plotting
-current_dir = os.path.dirname(os.path.abspath(__file__))
-grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
-sys.path.append(grandparent_dir)
+# Add repo root to path (this file lives in examples/realtime/base_problems/)
+_this_dir = os.path.dirname(os.path.abspath(__file__))
+_repo_root = os.path.dirname(os.path.dirname(os.path.dirname(_this_dir)))
+sys.path.append(_repo_root)
 
 import openscvx as ox
 from examples.plotting import plot_dubins_car
@@ -98,7 +98,7 @@ problem = Problem(
     constraints=constraints,
     N=n,
     licq_max=1e-6,
-    algorithm={"lam_prox": 1e-3, "lam_cost": 4e-2, "lam_vc": 1e0},
+    algorithm={"lam_prox": 1e-1, "lam_cost": 4e-2, "lam_vc": 2e0, "autotuner": ox.ConstantProximalWeight()},
 )
 
 plotting_dict = {
@@ -112,23 +112,23 @@ if __name__ == "__main__":
     results = problem.post_process()
     results.update(plotting_dict)
 
-    plot_dubins_car(results, problem.settings).show()
+#     plot_dubins_car(results, problem.settings).show()
 
-    # Second run with different parameters
-    problem.reset()
-    problem.parameters["obs_center"] = np.array([0.5, 0.0])
-    total_time = 0.7  # Adjust total time for second run
-    problem.algorithm.lam_prox = 1e-2
-    problem.algorithm.lam_vc = 1e0
-    problem.algorithm.lam_cost = 1e-3
-    position.guess = np.linspace([0, -2], [0, 2], n)
-    theta.guess = np.zeros((n, 1))
-    speed.guess = np.zeros((n, 1))
-    angular_rate.guess = np.zeros((n, 1))
+#     # Second run with different parameters
+#     problem.reset()
+#     problem.parameters["obs_center"] = np.array([0.5, 0.0])
+#     total_time = 0.7  # Adjust total time for second run
+#     problem.algorithm.lam_prox = 1e-2
+#     problem.algorithm.lam_vc = 1e0
+#     problem.algorithm.lam_cost = 1e-3
+#     position.guess = np.linspace([0, -2], [0, 2], n)
+#     theta.guess = np.zeros((n, 1))
+#     speed.guess = np.zeros((n, 1))
+#     angular_rate.guess = np.zeros((n, 1))
 
-    plotting_dict["obs_center"] = np.array([0.5, 0.0])
+#     plotting_dict["obs_center"] = np.array([0.5, 0.0])
 
-    results = problem.solve()
-    results = problem.post_process()
-    results.update(plotting_dict)
-    plot_dubins_car(results, problem.settings).show()
+#     results = problem.solve()
+#     results = problem.post_process()
+#     results.update(plotting_dict)
+#     plot_dubins_car(results, problem.settings).show()

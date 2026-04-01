@@ -204,6 +204,7 @@ problem = Problem(
         "ep_tr": 1e-6,
         "ep_vb": 1e-4,
         "ep_vc": 1e-8,
+        "autotuner": ox.ConstantProximalWeight(),
     },
 )
 
