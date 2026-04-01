@@ -1,10 +1,11 @@
-"""SCP weight configuration and dict-to-array resolution.
+"""SCP penalty weights for successive convexification.
 
-This module provides the :class:`Weights` dataclass that holds all penalty
-weights used by the SCP algorithm (trust region, virtual control, virtual
-buffer, cost). Weights can be constructed from user-friendly inputs (floats
-or ``{name: weight}`` dicts) via :meth:`Weights.build`, and per-constraint
-virtual buffer arrays are populated via :meth:`Weights.build_vb_arrays`.
+Provides the :class:`Weights` dataclass that holds all penalty weights
+(trust region, virtual control, virtual buffer, cost) used in the SCP
+objective function. Weights can be constructed from user-friendly inputs
+(floats or ``{name: weight}`` dicts) via :meth:`Weights.build`, and
+per-constraint virtual buffer arrays are populated via
+:meth:`Weights.build_vb_arrays`.
 """
 
 from dataclasses import dataclass
@@ -19,36 +20,39 @@ if TYPE_CHECKING:
 
 @dataclass
 class Weights:
-    """SCP weights used internally by the algorithm and autotuner.
+    """Penalty weights for the SCP objective function.
 
-    Users should read and write weights through the algorithm's properties
-    (e.g. ``algorithm.lam_cost``). The autotuner may mutate these fields
-    during SCP iteration; those mutations are reflected in the weight
-    histories on :class:`AlgorithmState`.
+    Each SCP subproblem minimizes a weighted sum of the original cost,
+    trust region penalty, virtual control penalty, and virtual buffer
+    penalty. This dataclass holds the weights for each term.
+
+    Weights can be accessed directly (``weights.lam_prox``) or through
+    the algorithm's convenience properties (``algorithm.lam_prox``).
+    During SCP iteration, the autotuner may mutate these fields; those
+    changes are tracked in :class:`AlgorithmState` weight histories.
 
     Use :meth:`build` to construct from user-friendly inputs (floats or
     ``{name: weight}`` dicts). Use :meth:`build_vb_arrays` to populate
-    ``lam_vb_nodal`` / ``lam_vb_cross`` once symbolic constraints are
+    ``lam_vb_nodal`` and ``lam_vb_cross`` once symbolic constraints are
     available.
 
     Attributes:
-        lam_prox: Trust region (proximal) weight. Scalar or
-            array of shape ``(n_states + n_controls,)`` or
-            ``(N, n_states + n_controls)`` for per-variable / per-node
-            weighting.
-        lam_vc: Virtual control penalty weight. Scalar or
-            array of shape ``(n_states,)`` or ``(n_nodes-1, n_states)``
-            for per-state / per-node weighting.
-        lam_cost: Cost weight per state. Scalar or array of
-            shape ``(n_states,)`` for per-state weighting.
-        lam_vb: Global virtual buffer penalty weight. Scalar
-            default applied to every constraint. Use ``.weight()`` on
-            individual constraints for per-constraint or per-node overrides.
-        lam_vb_nodal: Virtual buffer penalty weights for nodal constraints,
-            shape ``(N, n_nodal)``. Set by :meth:`build_vb_arrays`.
-        lam_vb_cross: Virtual buffer penalty weights for cross-node
-            constraints, shape ``(n_cross,)``. Set by
-            :meth:`build_vb_arrays`.
+        lam_prox: Trust region (proximal) weight. Scalar (uniform) or
+            array of shape ``(n_x + n_u,)`` for per-variable weighting,
+            or ``(N, n_x + n_u)`` for per-node-per-variable weighting.
+        lam_vc: Virtual control penalty weight. Scalar (uniform) or
+            array of shape ``(n_x,)`` for per-state weighting, or
+            ``(N-1, n_x)`` for per-node-per-state weighting.
+        lam_cost: Cost weight. Scalar (uniform across all
+            minimize/maximize states) or array of shape ``(n_x,)`` for
+            per-state weighting.
+        lam_vb: Global virtual buffer penalty weight. Scalar default
+            applied to every constraint unless overridden via
+            ``.weight()`` on individual constraints.
+        lam_vb_nodal: Per-node weights for nodal constraints, shape
+            ``(N, n_nodal)``. Built by :meth:`build_vb_arrays`.
+        lam_vb_cross: Weights for cross-node constraints, shape
+            ``(n_cross,)``. Built by :meth:`build_vb_arrays`.
     """
 
     lam_prox: Union[float, np.ndarray] = 1e0
@@ -81,7 +85,7 @@ class Weights:
 
         Accepts floats (applied uniformly) or dicts mapping state/control
         names to per-variable weights. Dict inputs are expanded to dense
-        arrays using each variable's ``_slice``.
+        arrays via the ``resolve_lam_*`` methods.
 
         Args:
             lam_prox: Trust region weight. Float or ``{name: weight}`` dict.
