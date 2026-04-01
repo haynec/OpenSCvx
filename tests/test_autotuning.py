@@ -1024,7 +1024,7 @@ def test_augmented_lagrangian_accept_decrease(
     assert len(algorithm_state.X) == initial_x_len + 1
     assert len(algorithm_state.lam_vc_history) == 2
     assert np.allclose(algorithm_state.lam_vc_history[-1], candidate.lam_vc)
-    # Virtual buffer weights use the same two-case rule as virtual control (see AugmentedLagrangian).
+    # Virtual buffer weights use the same two-case rule as virtual control
     lam_prox_new = np.maximum(autotuner.lam_prox_min, autotuner.gamma_2 * lam_prox_prev)
     scale = autotuner.eta_lambda / (2.0 * float(np.max(lam_prox_new)))
     nu_flat = np.maximum(0.0, candidate.x[:, 0] - 1.5)
