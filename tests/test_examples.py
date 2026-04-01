@@ -142,8 +142,8 @@ def test_example(name, metadata):
     sync_jax_float_config_for_problem(problem)
 
     # Disable printing for cleaner test output
-    # if hasattr(problem.settings, "dev"):
-    #     problem.settings.dev.printing = False
+    if hasattr(problem.settings, "dev"):
+        problem.settings.dev.printing = False
 
     # Run the optimization pipeline
     problem.initialize()
