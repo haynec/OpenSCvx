@@ -19,7 +19,7 @@ Jacobians and compact variational integration when sparsity patterns exist).
 import inspect
 from typing import Any
 
-from .base import Discretizer, DisType, _make_foh_mask, _resolve_foh_mask
+from .base import Discretizer, DisType
 from .discretize_linearize import DiscretizeLinearizeVectorize, VectorizeDiscretizeLinearize
 from .linearize_discretize import (
     LinearizeDiscretize,
