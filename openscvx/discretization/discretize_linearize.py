@@ -34,8 +34,8 @@ class VectorizeDiscretizeLinearize(Discretizer):
         dis_type: Control hold type. ``"FOH"`` (first-order hold) or
             ``"ZOH"`` (zero-order hold) applies the same hold to every
             control.  A per-control sequence (e.g. ``["FOH", "ZOH", "FOH"]``)
-            sets the hold independently for each control.
-            Defaults to ``"FOH"``.
+            sets the hold independently for each control (merged with any
+            ``Control.hold`` settings).  Defaults to ``"FOH"``.
         ode_solver: Diffrax solver name. Any solver from
             `Diffrax <https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/>`_
             is valid. Defaults to ``"Tsit5"``.
@@ -254,8 +254,8 @@ class DiscretizeLinearizeVectorize(Discretizer):
         dis_type: Control hold type. ``"FOH"`` (first-order hold) or
             ``"ZOH"`` (zero-order hold) applies the same hold to every
             control.  A per-control sequence (e.g. ``["FOH", "ZOH", "FOH"]``)
-            sets the hold independently for each control.
-            Defaults to ``"FOH"``.
+            sets the hold independently for each control (merged with any
+            ``Control.hold`` settings).  Defaults to ``"FOH"``.
         ode_solver: Diffrax solver name. Any solver from
             `Diffrax <https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/>`_
             is valid. Defaults to ``"Tsit5"``.

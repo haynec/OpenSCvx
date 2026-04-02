@@ -140,7 +140,8 @@ class Discretizer(ABC):
     #: Control hold type. A single ``"FOH"`` or ``"ZOH"`` string applies the
     #: same hold to every control.  A sequence (e.g.
     #: ``["FOH", "ZOH", "FOH"]``) sets the hold independently for each
-    #: control.  Subclasses must set this in ``__init__``.
+    #: control, and is merged with any per-control ``Control.hold`` settings.
+    #: Subclasses must set this in ``__init__``.
     dis_type: DisType
 
     #: ODE solver name used for integration (e.g., ``"Tsit5"``).  Subclasses

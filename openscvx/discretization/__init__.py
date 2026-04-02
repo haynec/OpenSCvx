@@ -49,15 +49,15 @@ def _resolve_discretizer(val: Any) -> Discretizer:
     * **instance** — already-constructed :class:`Discretizer` (pass-through).
     * **dict** — keyword arguments passed to the selected discretizer class.
       An optional ``"type"`` key selects the class (defaults to
-      :class:`VectorizeLinearizeDiscretize`).
+      :class:`VectorizeDiscretizeLinearize`).
 
     Examples::
 
-        # Dict with keyword overrides (default class: LinearizeDiscretizeSparse)
-        _resolve_discretizer({"dis_type": "ZOH", "ode_solver": "Dopri8"})
+        # Dict with keyword overrides (default class: VectorizeDiscretizeLinearize)
+        _resolve_discretizer({"ode_solver": "Dopri8"})
 
-        # Per-control hold: first control FOH, second ZOH, third FOH
-        _resolve_discretizer({"dis_type": ["FOH", "ZOH", "FOH"]})
+        # Global or per-control hold on the discretizer (or use ``Control.hold``)
+        _resolve_discretizer({"dis_type": "ZOH", "ode_solver": "Dopri8"})
 
         # Configure integrator behavior (forwarded to Diffrax / diffeqsolve)
         _resolve_discretizer(
@@ -65,10 +65,10 @@ def _resolve_discretizer(val: Any) -> Discretizer:
         )
 
         # Dict with explicit dense discretizer
-        _resolve_discretizer({"type": "LinearizeDiscretize", "dis_type": "ZOH"})
+        _resolve_discretizer({"type": "LinearizeDiscretize", "ode_solver": "Dopri8"})
 
         # Instance pass-through
-        _resolve_discretizer(LinearizeDiscretize(dis_type="ZOH"))
+        _resolve_discretizer(LinearizeDiscretize(ode_solver="Dopri8"))
     """
     if isinstance(val, Discretizer):
         return val

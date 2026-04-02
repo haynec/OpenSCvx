@@ -57,7 +57,7 @@ mass.scaling_min = np.array([1700])
 mass.guess = np.linspace(mass.initial, 1690, n).reshape(-1, 1)
 
 # Define control
-thrust = ox.Control("thrust", shape=(3,))  # Thrust force vector [Tx, Ty, Tz]
+thrust = ox.Control("thrust", shape=(3,), hold="ZOH")  # Thrust force vector [Tx, Ty, Tz]
 
 T_bar = 3.1 * 1e3
 T1 = 0.3 * T_bar
@@ -147,7 +147,7 @@ problem = Problem(
         "lam_vc": 2e0,
         "lam_prox": 2 / 15,
     },
-    discretizer={"dis_type": "ZOH", "ode_solver": "Dopri8"},
+    discretizer={"ode_solver": "Dopri8"},
 )
 
 plotting_dict = {

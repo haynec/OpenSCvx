@@ -27,6 +27,7 @@ Expected schema
     controls:
       - name: thrust
         shape: [3]
+        hold: ZOH                 # optional: FOH or ZOH (preferred over discretizer dis_type)
         min: [-10, -10, 0]
         max: [10, 10, 50]
 
@@ -51,8 +52,7 @@ Expected schema
         ramp_factor: 1.04
         lam_prox_max: 100.0
 
-    discretizer:                     # optional
-      dis_type: ZOH
+    discretizer:                     # optional (integrator / tolerances)
       ode_solver: Dopri8
 
     solver:                          # optional (convex subproblem solver)
@@ -154,7 +154,8 @@ def load_dict(data: dict) -> dict:
     # ---- controls ------------------------------------------------------
     controls: List[Control] = []
     for c in data.get("controls", []):
-        control = Control(c["name"], shape=tuple(c["shape"]))
+        hold = c.get("hold")
+        control = Control(c["name"], shape=tuple(c["shape"]), hold=hold)
         if "min" in c:
             control.min = np.asarray(c["min"], dtype=float)
         if "max" in c:

@@ -184,12 +184,9 @@ class Problem:
 
                 Examples::
 
-                    # Change hold type and ODE solver
-                    discretizer={"dis_type": "ZOH", "ode_solver": "Dopri8"}
-
-                    # Per-control hold via Control objects (preferred):
+                    # Per-control hold (preferred) + ODE solver on the discretizer
                     #   thrust = ox.Control("thrust", shape=(3,), hold="ZOH")
-                    #   torque = ox.Control("torque", shape=(2,), hold="FOH")
+                    discretizer={"ode_solver": "Dopri8"}
 
                     # Pass integrator kwargs (forwarded to Diffrax / diffeqsolve)
                     discretizer={
@@ -200,7 +197,7 @@ class Problem:
                     }
 
                     # Instance
-                    discretizer=ox.LinearizeDiscretize(dis_type="ZOH")
+                    discretizer=ox.LinearizeDiscretize(dis_type="ZOH", ode_solver="Dopri8")
             solver: Convex subproblem solver configuration. Accepts:
 
                 - ``None`` — uses ``PTRSolver()`` with defaults (QOCO backend).
@@ -442,8 +439,7 @@ class Problem:
         Attributes such as `dis_type`, `ode_solver`, and `diffrax_kwargs`
         can be modified freely before `initialize` is called:
 
-            problem.discretizer.dis_type = "ZOH"               # all controls
-            problem.discretizer.dis_type = ["FOH", "ZOH"]      # per-control
+            problem.discretizer.dis_type = "ZOH"
             problem.discretizer.ode_solver = "Dopri8"
             problem.discretizer.diffrax_kwargs = {"num_substeps": 100}
             problem.initialize()
