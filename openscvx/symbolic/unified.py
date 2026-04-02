@@ -50,22 +50,13 @@ See Also:
     - Control: Individual symbolic control variable (symbolic/expr/control.py)
 """
 
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 
 from openscvx.lowered.unified import UnifiedControl, UnifiedState
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
-
-
-def _continuous_hold_parameterization(control: Control) -> Optional[str]:
-    """Return ``\"FOH\"`` or ``\"ZOH\"`` if set on ``control``; else ``None``."""
-    p = control.parameterization
-    if p in ("FOH", "ZOH"):
-        return p
-    return None
-
 
 # Re-export for backwards compatibility
 __all__ = ["unify_states", "unify_controls", "UnifiedState", "UnifiedControl"]
@@ -360,9 +351,7 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         return UnifiedControl(name=name, shape=(0,))
 
     def _is_impulsive_control(ctrl: Control) -> bool:
-        is_imp = getattr(ctrl, "is_impulsive", False)
-        is_imp_arr = np.asarray(is_imp, dtype=bool).reshape(-1)
-        return bool(np.any(is_imp_arr))
+        return ctrl.parameterization == "impulsive"
 
     # Reorder controls to mirror unified control layout assumptions:
     # 1) continuous controls first, 2) impulsive controls second.
@@ -469,22 +458,13 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     nodes = {}
     is_impulsive_list = []
     for control in sorted_controls:
-        is_impulsive_block = np.asarray(control.is_impulsive, dtype=bool).reshape(-1)
-        if is_impulsive_block.size != int(control.shape[0]):
-            raise ValueError(
-                f"Control '{control.name}' impulsive mask has size {is_impulsive_block.size}, "
-                f"expected {control.shape[0]}."
-            )
-
-        if np.any(is_impulsive_block):
-            if not np.all(is_impulsive_block):
-                raise ValueError(
-                    f"Control '{control.name}' mixes continuous and impulsive components. "
-                    "Use separate Control objects."
-                )
+        n = int(control.shape[0])
+        if control.parameterization == "impulsive":
+            is_impulsive_block = np.ones(n, dtype=bool)
             if control.nodes is not None:
                 nodes[control.name] = list(control.nodes)
-
+        else:
+            is_impulsive_block = np.zeros(n, dtype=bool)
         is_impulsive_list.append(is_impulsive_block)
 
     if is_impulsive_list:
@@ -492,17 +472,17 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     if not nodes:
         nodes = None
 
-    # Build per-element FOH mask from control-level ``parameterization`` (FOH/ZOH).
+    # Build per-element FOH mask from ``Control.parameterization`` (FOH/ZOH only).
     # 1.0 = FOH, 0.0 = ZOH, nan = unset (defer to discretizer dis_type).
-    any_foh_zoh_set = any(_continuous_hold_parameterization(c) is not None for c in sorted_controls)
+    any_foh_zoh_set = any(c.parameterization in ("FOH", "ZOH") for c in sorted_controls)
     if any_foh_zoh_set:
         foh_parts: list[np.ndarray] = []
         for control in sorted_controls:
             n = control.shape[0]
-            pz = _continuous_hold_parameterization(control)
-            if pz == "FOH":
+            p = control.parameterization
+            if p == "FOH":
                 foh_parts.append(np.ones(n))
-            elif pz == "ZOH":
+            elif p == "ZOH":
                 foh_parts.append(np.zeros(n))
             else:
                 foh_parts.append(np.full(n, np.nan))

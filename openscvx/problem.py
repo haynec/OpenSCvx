@@ -677,10 +677,7 @@ class Problem:
         # Build nodes dictionary with all states and controls
         nodes_dict = {}
         has_impulsive_controls = any(
-            bool(control.is_impulsive.any())
-            if hasattr(control.is_impulsive, "any")
-            else bool(control.is_impulsive)
-            for control in self.symbolic.controls
+            control.parameterization == "impulsive" for control in self.symbolic.controls
         )
 
         # Add all states (user-defined and augmented)

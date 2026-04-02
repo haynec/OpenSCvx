@@ -203,42 +203,6 @@ class Control(Variable):
         self._scaling_max = val
 
     @property
-    def is_impulsive(self) -> np.ndarray:
-        return np.repeat(self._parameterization == "impulsive", self.shape[0])
-
-    @is_impulsive.setter
-    def is_impulsive(self, val) -> None:
-        if val is None:
-            if self._parameterization == "impulsive":
-                self._parameterization = None
-                self._nodes = None
-            return
-        arr = np.asarray(val, dtype=bool).reshape(-1)
-        if arr.size == 1:
-            arr = np.repeat(bool(arr.item()), self.shape[0])
-        if arr.shape != self.shape:
-            raise ValueError(
-                f"Impulsive controls toggles shape {arr.shape} "
-                f"does not match Control shape {self.shape}"
-            )
-        if np.all(~arr):
-            if self._parameterization == "impulsive":
-                self._parameterization = None
-                self._nodes = None
-            return
-        if np.all(arr):
-            if self._parameterization in ("FOH", "ZOH"):
-                raise ValueError(
-                    "Cannot mark control impulsive while parameterization is FOH/ZOH; "
-                    "set parameterization='impulsive'."
-                )
-            self._parameterization = "impulsive"
-            return
-        raise ValueError(
-            "Per-element impulsive mask is not supported; use separate Control objects."
-        )
-
-    @property
     def nodes(self) -> Optional[list[int]]:
         return self._nodes
 

@@ -486,7 +486,9 @@ class UnifiedControl:
     time_dilation_slice: Optional[slice] = None  # Slice for time dilation control
     scaling_min: Optional[np.ndarray] = None  # Scaling minimum bounds for unified control
     scaling_max: Optional[np.ndarray] = None  # Scaling maximum bounds for unified control
-    is_impulsive: Optional[bool] = False  # Default toggle for 'impulsivity' of the unified control
+    # Per-DOF mask: True where that unified control component is impulsive (from
+    # ``Control(parameterization="impulsive")``).  Scalar False broadcasts in ``_impulsive_mask``.
+    is_impulsive: Optional[bool] = False
     nodes: Optional[dict[str, list[int]]] = None
     foh_mask: Optional[np.ndarray] = None  # Per-element: 1.0=FOH, 0.0=ZOH, nan=unset
 
@@ -704,7 +706,7 @@ class UnifiedControl:
         *,
         min=-np.inf,
         max=np.inf,
-        is_impulsive=False,
+        parameterization: Optional[str] = None,
         guess=0.0,
         augmented=False,
     ) -> None:
@@ -719,6 +721,8 @@ class UnifiedControl:
                 creates a new scalar control variable with properties from keyword args.
             min (float): Lower bound for new scalar control (default: -inf)
             max (float): Upper bound for new scalar control (default: inf)
+            parameterization: For scalar append only: ``None`` (continuous) or
+                ``\"impulsive\"``.  When appending a ``Control``, its ``parameterization`` is used.
             guess (float): Initial guess value for new scalar control (default: 0.0)
             augmented (bool): Whether the appended control is augmented (internal) rather
                 than true (user-defined). Affects _true_dim tracking. Default: False
@@ -819,6 +823,13 @@ class UnifiedControl:
             else:
                 new_foh_mask = None
 
+            parent_imp = self._impulsive_mask()
+            if isinstance(other, UnifiedControl):
+                other_imp_part = other._impulsive_mask()
+            else:
+                other_imp_part = np.full(n_o, other.parameterization == "impulsive", dtype=bool)
+            new_impulsive_mask = np.concatenate([parent_imp, other_imp_part])
+
             # Update all attributes in place
             self.shape = new_shape
             self.min = new_min
@@ -827,12 +838,20 @@ class UnifiedControl:
             self.scaling_min = new_scaling_min
             self.scaling_max = new_scaling_max
             self.foh_mask = new_foh_mask
+            self.is_impulsive = new_impulsive_mask
             self._true_dim = int(np.sum(new_true_mask))
             self._true_slice = self._mask_to_selector(new_true_mask, empty_at_end=False)
             self._augmented_slice = self._mask_to_selector(~new_true_mask, empty_at_end=True)
 
         else:
             # Create a single new variable
+            if parameterization is not None and parameterization != "impulsive":
+                raise ValueError(
+                    "append(..., parameterization=...) for a scalar control only accepts "
+                    "None or 'impulsive'."
+                )
+            impulsive_dof = parameterization == "impulsive"
+
             new_shape = (self.shape[0] + 1,)
 
             # Extend arrays
@@ -848,7 +867,9 @@ class UnifiedControl:
             if self.scaling_max is not None:
                 self.scaling_max = np.concatenate([self.scaling_max, np.array([max])])
             if self.is_impulsive is not None:
-                self.is_impulsive = np.concatenate([self.is_impulsive, np.array([is_impulsive])])
+                self.is_impulsive = np.concatenate(
+                    [self.is_impulsive, np.array([impulsive_dof], dtype=bool)]
+                )
             if self.foh_mask is not None:
                 self.foh_mask = np.concatenate([self.foh_mask, np.array([np.nan])])
 
