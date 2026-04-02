@@ -354,7 +354,7 @@ def test_control_creation():
     c = Control("thrust", shape=(2,))
     assert c.name == "thrust"
     assert c.shape == (2,)
-    expected = "Control('thrust', shape=(2,), impulsive=[False False], nodes=None)"
+    expected = "Control('thrust', shape=(2,), parameterization=None, nodes=None)"
     assert repr(c) == expected
     assert c._min is None
     assert c._max is None
@@ -388,6 +388,27 @@ def test_control_bounds():
     c.max = [1.0, 10.0]
     assert np.allclose(c.min, [-1.0, 0.0])
     assert np.allclose(c.max, [1.0, 10.0])
+
+
+def test_control_parameterization_kwarg_and_setter():
+    """``parameterization`` accepts FOH/ZOH/impulsive/None and appears in ``repr``."""
+    from openscvx.symbolic.expr import Control
+
+    c0 = Control("u", shape=(1,))
+    assert c0.parameterization is None
+
+    c1 = Control("u", shape=(1,), parameterization="ZOH")
+    assert c1.parameterization == "zoh"
+    assert "parameterization='zoh'" in repr(c1)
+
+    c1.parameterization = "FOH"
+    assert c1.parameterization == "foh"
+
+    with pytest.raises(ValueError, match="parameterization must be"):
+        Control("bad", shape=(1,), parameterization="BOH")
+
+    with pytest.raises(ValueError, match="parameterization must be"):
+        setattr(c1, "parameterization", "X")
 
 
 # --- Control: Shape Checking ---

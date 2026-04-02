@@ -1,11 +1,11 @@
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Union
 
 import diffrax as dfx
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from openscvx.discretization.base import Discretizer
+from openscvx.discretization.base import Discretizer, _resolve_foh_mask
 from openscvx.integrators import (
     DEFAULT_DIFFRAX_ATOL,
     DEFAULT_DIFFRAX_RTOL,
@@ -25,12 +25,17 @@ class VectorizeDiscretizeLinearize(Discretizer):
     Jacobians of the propagated solutions (dF/dx, dF/du) via JAX forward-mode autodiff to produce
     discrete-time Jacobians.
 
-    Supports ZOH (zero-order hold) and FOH (first-order hold) control interpolation between nodes.
+    Supports ZOH (zero-order hold) and FOH (first-order hold) control interpolation between nodes,
+    including independent per-control selection.
 
     This integration scheme offers the best balance of speed and accuracy for most problems.
 
     Args:
-        dis_type: Control hold type. ``"FOH"`` (first-order hold) or ``"ZOH"`` (zero-order hold).
+        dis_type: Control hold type. ``"FOH"`` (first-order hold) or
+            ``"ZOH"`` (zero-order hold) applies the same hold to every
+            control.  A per-control sequence (e.g. ``["FOH", "ZOH", "FOH"]``)
+            sets the hold independently for each control, merged with any
+            per-control ``parameterization`` (``"FOH"`` / ``"ZOH"``).
             Defaults to ``"FOH"``.
         ode_solver: Diffrax solver name. Any solver from
             `Diffrax <https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/>`_
@@ -46,7 +51,7 @@ class VectorizeDiscretizeLinearize(Discretizer):
 
     def __init__(
         self,
-        dis_type: str = "FOH",
+        dis_type: Union[str, Sequence[str]] = "FOH",
         ode_solver: str = "Tsit5",
         custom_integrator: bool = False,
         diffrax_kwargs: Optional[dict[str, Any]] = None,
@@ -112,6 +117,8 @@ class VectorizeDiscretizeLinearize(Discretizer):
         n_x = settings.sim.n_states
         n_u = settings.sim.n_controls
         nodes = jnp.arange(0, N - 1)
+        u_foh_mask = getattr(settings.sim.u, "foh_mask", None)
+        foh_mask = _resolve_foh_mask(self.dis_type, n_u, u_foh_mask)
 
         multiple_state_dot = jax.vmap(dynamics.f, in_axes=(0, 0, 0, None))
 
@@ -123,10 +130,7 @@ class VectorizeDiscretizeLinearize(Discretizer):
             params: dict,
         ) -> jnp.ndarray:
 
-            if self.dis_type == "ZOH":
-                beta = 0.0
-            elif self.dis_type == "FOH":
-                beta = (tau) * N
+            beta = tau * N * foh_mask
 
             x = x.reshape(N - 1, n_x)
             u = u_cur + beta * (u_next - u_cur)
@@ -240,14 +244,19 @@ class DiscretizeLinearizeVectorize(Discretizer):
     Jacobians of the propagated solutions (dF/dx, dF/du) via JAX forward-mode autodiff to produce
     discrete-time Jacobians for each node.
 
-    Supports ZOH (zero-order hold) and FOH (first-order hold) control interpolation between nodes.
+    Supports ZOH (zero-order hold) and FOH (first-order hold) control interpolation between nodes,
+    including independent per-control selection.
 
     Use this integration scheme when the nonlinear dynamics are challenging (e.g. stiff/sensitive,
     badly scaled, or over long time horizons) and require very tight tolerances. A prototypical
     example is atmospheric entry of a spacecraft.
 
     Args:
-        dis_type: Control hold type. ``"FOH"`` (first-order hold) or ``"ZOH"`` (zero-order hold).
+        dis_type: Control hold type. ``"FOH"`` (first-order hold) or
+            ``"ZOH"`` (zero-order hold) applies the same hold to every
+            control.  A per-control sequence (e.g. ``["FOH", "ZOH", "FOH"]``)
+            sets the hold independently for each control, merged with any
+            per-control ``parameterization`` (``"FOH"`` / ``"ZOH"``).
             Defaults to ``"FOH"``.
         ode_solver: Diffrax solver name. Any solver from
             `Diffrax <https://docs.kidger.site/diffrax/usage/how-to-choose-a-solver/>`_
@@ -263,7 +272,7 @@ class DiscretizeLinearizeVectorize(Discretizer):
 
     def __init__(
         self,
-        dis_type: str = "FOH",
+        dis_type: Union[str, Sequence[str]] = "FOH",
         ode_solver: str = "Tsit5",
         custom_integrator: bool = False,
         diffrax_kwargs: Optional[dict[str, Any]] = None,
@@ -335,6 +344,8 @@ class DiscretizeLinearizeVectorize(Discretizer):
         N = settings.sim.n
         n_x = settings.sim.n_states
         n_u = settings.sim.n_controls
+        u_foh_mask = getattr(settings.sim.u, "foh_mask", None)
+        foh_mask = _resolve_foh_mask(self.dis_type, n_u, u_foh_mask)
 
         single_state_dot = dynamics.f
 
@@ -347,10 +358,7 @@ class DiscretizeLinearizeVectorize(Discretizer):
             params: dict,
         ) -> jnp.ndarray:
 
-            if self.dis_type == "ZOH":
-                beta = 0.0
-            elif self.dis_type == "FOH":
-                beta = (tau) * N
+            beta = tau * N * foh_mask
 
             u = u_cur + beta * (u_next - u_cur)
             F = single_state_dot(x, u, node, params)

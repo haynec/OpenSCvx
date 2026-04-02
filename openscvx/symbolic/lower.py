@@ -210,9 +210,7 @@ def _augment_impulsive_constraints(
         return
     added = []
     for control in controls:
-        is_imp = getattr(control, "is_impulsive", False)
-        is_impulsive = bool(is_imp.any()) if hasattr(is_imp, "any") else bool(is_imp)
-        if not is_impulsive:
+        if control.parameterization != "impulsive":
             continue
         control_nodes = getattr(control, "nodes", None)
         if control_nodes is None:

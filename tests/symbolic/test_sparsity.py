@@ -763,6 +763,17 @@ def test_discrete_sparsity_zoh_c_is_zero():
     np.testing.assert_array_equal(C_d, False)
 
 
+def test_discrete_sparsity_float_mask_mixed_columns():
+    """Per-column FOH via float mask: C_d[:,i] matches B_d[:,i] only where mask > 0.5."""
+    A_c = np.zeros((2, 2), dtype=bool)
+    B_c = np.array([[True, False], [False, True]], dtype=bool)
+    mask = np.array([1.0, 0.0], dtype=float)
+    _, B_d, C_d = discrete_sparsity(A_c, B_c, dis_type=mask)
+
+    assert np.array_equal(C_d[:, 0], B_d[:, 0])
+    np.testing.assert_array_equal(C_d[:, 1], False)
+
+
 def test_discrete_sparsity_rocket():
     """End-to-end: continuous rocket sparsity through discretization.
 

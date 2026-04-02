@@ -16,7 +16,7 @@ expression layer:
    shared helpers that those per-node implementations depend on.
 """
 
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -116,7 +116,7 @@ def transitive_closure(A: np.ndarray) -> np.ndarray:
 def discrete_sparsity(
     A_c: np.ndarray,
     B_c: np.ndarray,
-    dis_type: str = "ZOH",
+    dis_type: Union[str, Sequence[str], np.ndarray] = "ZOH",
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Discrete-time sparsity from continuous-time Jacobian patterns.
 
@@ -127,7 +127,7 @@ def discrete_sparsity(
         dB_d/dτ = A · B_d + α · B,    B_d(0) = 0
         dC_d/dτ = A · C_d + β · B,    C_d(0) = 0
 
-    where `α, β` are interpolation weights (ZOH: `α=1, β=0`;
+    where `α, β` are per-control interpolation weights (ZOH: `α=1, β=0`;
     FOH: linear blend).
 
     Because the *sparsity pattern* of `A` and `B` is constant along
@@ -136,12 +136,14 @@ def discrete_sparsity(
 
         A_d  = transitive_closure(A_c)
         B_d  = bool_matmul(A_d, B_c)
-        C_d  = all-False  (ZOH)  or  B_d  (FOH)
+        C_d  = per-column: all-False (ZOH) or B_d column (FOH)
 
     Args:
         A_c: `(n_x, n_x)` boolean continuous-time `df/dx` sparsity.
         B_c: `(n_x, n_u)` boolean continuous-time `df/du` sparsity.
-        dis_type: `"ZOH"` or `"FOH"`.
+        dis_type: ``"ZOH"`` or ``"FOH"`` (applied to all controls), a
+            per-control sequence of length ``n_u``, or a float/bool
+            array (``1``/``True`` = FOH, ``0``/``False`` = ZOH).
 
     Returns:
         `(A_d, B_d, C_d)` boolean sparsity patterns with shapes
@@ -149,8 +151,20 @@ def discrete_sparsity(
     """
     A_d = transitive_closure(A_c)
     B_d = _bool_matmul(A_d, B_c)
-    if dis_type == "FOH":
-        C_d = B_d.copy()
+
+    n_u = B_c.shape[1]
+    if isinstance(dis_type, np.ndarray):
+        foh_cols = np.asarray(dis_type).flatten() > 0.5
+        C_d = np.zeros_like(B_c)
+        C_d[:, foh_cols] = B_d[:, foh_cols]
+    elif isinstance(dis_type, str):
+        if dis_type == "FOH":
+            C_d = B_d.copy()
+        else:
+            C_d = np.zeros_like(B_c)
     else:
         C_d = np.zeros_like(B_c)
+        for i in range(n_u):
+            if dis_type[i] == "FOH":
+                C_d[:, i] = B_d[:, i]
     return A_d, B_d, C_d

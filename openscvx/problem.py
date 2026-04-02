@@ -184,8 +184,9 @@ class Problem:
 
                 Examples::
 
-                    # Change hold type and ODE solver
-                    discretizer={"dis_type": "ZOH", "ode_solver": "Dopri8"}
+                    # Per-control hold + ODE solver on the discretizer
+                    #   thrust = ox.Control("thrust", shape=(3,), parameterization="ZOH")
+                    discretizer={"ode_solver": "Dopri8"}
 
                     # Pass integrator kwargs (forwarded to Diffrax / diffeqsolve)
                     discretizer={
@@ -196,7 +197,7 @@ class Problem:
                     }
 
                     # Instance
-                    discretizer=ox.LinearizeDiscretize(dis_type="ZOH")
+                    discretizer=ox.LinearizeDiscretize(dis_type="ZOH", ode_solver="Dopri8")
             solver: Convex subproblem solver configuration. Accepts:
 
                 - ``None`` — uses ``PTRSolver()`` with defaults (QOCO backend).
@@ -676,10 +677,7 @@ class Problem:
         # Build nodes dictionary with all states and controls
         nodes_dict = {}
         has_impulsive_controls = any(
-            bool(control.is_impulsive.any())
-            if hasattr(control.is_impulsive, "any")
-            else bool(control.is_impulsive)
-            for control in self.symbolic.controls
+            control.parameterization == "impulsive" for control in self.symbolic.controls
         )
 
         # Add all states (user-defined and augmented)

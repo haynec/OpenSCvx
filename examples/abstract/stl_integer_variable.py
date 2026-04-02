@@ -40,7 +40,7 @@ x.final = [5.0]
 
 
 # Control: drives position; gear integrates toward chosen discrete level
-u = ox.Control("u", shape=(1,))
+u = ox.Control("u", shape=(1,), parameterization="ZOH")
 u.min = np.array([0.0])
 u.max = np.array([10.0])
 u.guess = np.ones((N, 1)) * 8.0
@@ -88,7 +88,6 @@ problem = Problem(
     N=N,
     time=time,
     algorithm={"autotuner": ox.ConstantProximalWeight(), "ep_vc": 1e-3, "lam_cost": 1e0},
-    discretizer={"dis_type": "ZOH"},
     float_dtype="float64",
 )
 

@@ -119,7 +119,7 @@ def test_hohmann_transfer_byof():
     dv = ox.Control(
         "delta_v",
         shape=(2,),
-        impulsive=True,
+        parameterization="impulsive",
         nodes=[0, n - 1],
     )
     dv_bound = 5.0  # km/s

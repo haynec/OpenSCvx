@@ -19,7 +19,7 @@ Jacobians and compact variational integration when sparsity patterns exist).
 import inspect
 from typing import Any
 
-from .base import Discretizer
+from .base import Discretizer, DisType
 from .discretize_linearize import DiscretizeLinearizeVectorize, VectorizeDiscretizeLinearize
 from .linearize_discretize import (
     LinearizeDiscretize,
@@ -49,11 +49,14 @@ def _resolve_discretizer(val: Any) -> Discretizer:
     * **instance** — already-constructed :class:`Discretizer` (pass-through).
     * **dict** — keyword arguments passed to the selected discretizer class.
       An optional ``"type"`` key selects the class (defaults to
-      :class:`VectorizeLinearizeDiscretize`).
+      :class:`VectorizeDiscretizeLinearize`).
 
     Examples::
 
-        # Dict with keyword overrides (default class: LinearizeDiscretizeSparse)
+        # Dict with keyword overrides (default class: VectorizeDiscretizeLinearize)
+        _resolve_discretizer({"ode_solver": "Dopri8"})
+
+        # Global hold on the discretizer (or ``Control(..., parameterization="FOH"|"ZOH")``)
         _resolve_discretizer({"dis_type": "ZOH", "ode_solver": "Dopri8"})
 
         # Configure integrator behavior (forwarded to Diffrax / diffeqsolve)
@@ -62,10 +65,10 @@ def _resolve_discretizer(val: Any) -> Discretizer:
         )
 
         # Dict with explicit dense discretizer
-        _resolve_discretizer({"type": "LinearizeDiscretize", "dis_type": "ZOH"})
+        _resolve_discretizer({"type": "LinearizeDiscretize", "ode_solver": "Dopri8"})
 
         # Instance pass-through
-        _resolve_discretizer(LinearizeDiscretize(dis_type="ZOH"))
+        _resolve_discretizer(LinearizeDiscretize(ode_solver="Dopri8"))
     """
     if isinstance(val, Discretizer):
         return val
@@ -91,6 +94,7 @@ def _resolve_discretizer(val: Any) -> Discretizer:
 
 
 __all__ = [
+    "DisType",
     "Discretizer",
     "DiscretizeLinearizeVectorize",
     "LinearizeDiscretize",

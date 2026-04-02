@@ -1,5 +1,7 @@
 # test_propagation.py
 
+from types import SimpleNamespace
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -35,6 +37,12 @@ class DummyDiscretizer:
         self.dis_type = dis_type
 
 
+def _attach_sim_u_and_n_controls(p, n_controls: int):
+    """Propagation and time helpers read ``sim.u.foh_mask`` and ``sim.n_controls``."""
+    p.sim.n_controls = n_controls
+    p.sim.u = SimpleNamespace(foh_mask=None)
+
+
 @pytest.mark.parametrize("dis_type,beta_expected", [("ZOH", 0.0), ("FOH", 1.0)])
 def test_prop_aug_dy_linear(dis_type, beta_expected):
     """
@@ -53,8 +61,10 @@ def test_prop_aug_dy_linear(dis_type, beta_expected):
 
     node = 0  # dummy node index
 
-    # compute beta
-    beta = 0.0 if dis_type == "ZOH" else (tau - tau_init) * N
+    # Per-control foh_mask: same hold on both components (scalar beta per column)
+    foh_scalar = 0.0 if dis_type == "ZOH" else 1.0
+    foh_mask = np.array([foh_scalar, foh_scalar], dtype=float)
+    beta = (tau - tau_init) * N * foh_scalar
     assert pytest.approx(beta) == beta_expected
 
     # manually compute expected
@@ -72,7 +82,36 @@ def test_prop_aug_dy_linear(dis_type, beta_expected):
         node,
         # state_dot includes time-dilation: s * (x + u_vehicle)
         lambda x_batch, u_full, node, params: u_full[:, 1:] * (x_batch + u_full[:, :1]),
-        dis_type,
+        foh_mask,
+        N,
+        {},
+    )
+    np.testing.assert_allclose(out, expected, rtol=1e-6)
+
+
+def test_prop_aug_dy_mixed_foh_zoh_per_control():
+    """First control FOH (interpolates), second ZOH (holds u_cur)."""
+    tau = 0.2
+    tau_init = 0.0
+    N = 5
+    x = np.array([1.0, 2.0])
+    u_cur = np.array([[0.0, 3.0]])
+    u_next = np.array([[2.0, 5.0]])
+    foh_mask = np.array([1.0, 0.0], dtype=float)
+    beta0 = (tau - tau_init) * N * 1.0
+    beta1 = 0.0
+    u_expected = u_cur + np.array([[beta0 * (2.0 - 0.0), beta1 * (5.0 - 3.0)]])
+    expected = u_expected[:, 1] * (x + u_expected[:, 0])
+
+    out = prop_aug_dy(
+        tau,
+        x,
+        u_cur,
+        u_next,
+        tau_init,
+        0,
+        lambda x_batch, u_full, node, params: u_full[:, 1:] * (x_batch + u_full[:, :1]),
+        foh_mask,
         N,
         {},
     )
@@ -90,6 +129,7 @@ def test_s_to_t_basic(dis_type):
     p.sim.initial_state = Dummy()
     p.sim.initial_state.value = np.array([0])
     p.sim.idx_t = slice(0, 1)
+    _attach_sim_u_and_n_controls(p, n_controls=2)
 
     # build u with slack values [1,2,3,4]
     u = Control("u", shape=(2,))  # 2 controls, last is slack
@@ -126,6 +166,7 @@ def test_t_to_tau_constant_slack(dis_type):
     p.sim.initial_state = Dummy()
     p.sim.initial_state.value = np.array([0])
     p.sim.idx_t = slice(0, 1)
+    _attach_sim_u_and_n_controls(p, n_controls=2)
 
     # constant slack = 2.0, control doesn't matter
     x = State("x", shape=(1,))  # dummy initial state
@@ -158,6 +199,7 @@ def test_propagation_solver_decay(dis_type):
     p = Dummy()
     p.sim = Dummy()
     p.sim.n = 2  # only one segment needed
+    _attach_sim_u_and_n_controls(p, n_controls=2)
     p.prp = Dummy()
     p.prp.solver = "Tsit5"
     p.prp.rtol = 1e-6
@@ -199,6 +241,7 @@ def test_jit_propagation_solver_compiles(dis_type):
     p = Dummy()
     p.sim = Dummy()
     p.sim.n = 5
+    _attach_sim_u_and_n_controls(p, n_controls=2)
     p.prp = Dummy()
     p.prp.solver = "Tsit5"
     p.prp.rtol = 1e-6
