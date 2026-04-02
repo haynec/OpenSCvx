@@ -146,28 +146,6 @@ class Control(Variable):
         self._parameterization = val
 
     @property
-    def hold(self) -> Optional[str]:
-        """``"FOH"`` / ``"ZOH"`` when ``parameterization`` is a hold type; else ``None``."""
-        if self._parameterization in ("FOH", "ZOH"):
-            return self._parameterization
-        return None
-
-    @hold.setter
-    def hold(self, val: Optional[str]) -> None:
-        if val is None:
-            if self._parameterization in ("FOH", "ZOH"):
-                self._parameterization = None
-            return
-        if val not in ("FOH", "ZOH"):
-            raise ValueError(f"hold must be 'FOH', 'ZOH', or None; got {val!r}")
-        if self._parameterization == "impulsive":
-            raise ValueError(
-                "Cannot set hold on an impulsive control; use parameterization='FOH' or 'ZOH' "
-                "on a separate continuous control."
-            )
-        self._parameterization = val
-
-    @property
     def scaling_min(self) -> Optional[np.ndarray]:
         """Get the scaling minimum bounds for the control variables.
 

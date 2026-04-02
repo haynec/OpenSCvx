@@ -794,7 +794,7 @@ class UnifiedControl:
             new_true_mask = np.concatenate([current_true_mask, appended_true_mask])
 
             # Per-element FOH mask for the appended block: UnifiedControl.foh_mask,
-            # or Control hold (parameterization FOH/ZOH) converted to 1.0/0.0/nan.
+            # or Control ``parameterization`` (FOH/ZOH) converted to 1.0/0.0/nan.
             n_o = int(other.shape[0])
             if isinstance(other, UnifiedControl):
                 if other.foh_mask is not None:
@@ -802,10 +802,10 @@ class UnifiedControl:
                 else:
                     other_foh_part = np.full(n_o, np.nan)
             else:
-                hold = getattr(other, "hold", None)
-                if hold == "FOH":
+                param = getattr(other, "parameterization", None)
+                if param == "FOH":
                     other_foh_part = np.ones(n_o)
-                elif hold == "ZOH":
+                elif param == "ZOH":
                     other_foh_part = np.zeros(n_o)
                 else:
                     other_foh_part = np.full(n_o, np.nan)

@@ -113,8 +113,8 @@ def test_unify_controls_foh_mask_from_parameterization():
     assert np.isnan(unified.foh_mask[3])
 
 
-def test_unify_controls_no_hold_yields_no_foh_mask():
-    """If no control sets FOH/ZOH ``parameterization``, ``foh_mask`` stays ``None``."""
+def test_unify_controls_no_foh_zoh_parameterization_yields_no_foh_mask():
+    """If no control sets ``parameterization`` to FOH/ZOH, ``foh_mask`` stays ``None``."""
     u1 = Control("u1", (1,))
     u1.min = np.array([0.0])
     u2 = Control("u2", (1,))

@@ -390,28 +390,25 @@ def test_control_bounds():
     assert np.allclose(c.max, [1.0, 10.0])
 
 
-def test_control_parameterization_kwarg_and_hold_property():
-    """``parameterization`` sets hold; ``hold`` property/setter stays in sync."""
+def test_control_parameterization_kwarg_and_setter():
+    """``parameterization`` accepts FOH/ZOH/impulsive/None and appears in ``repr``."""
     from openscvx.symbolic.expr import Control
 
     c0 = Control("u", shape=(1,))
     assert c0.parameterization is None
-    assert c0.hold is None
 
     c1 = Control("u", shape=(1,), parameterization="ZOH")
     assert c1.parameterization == "ZOH"
-    assert c1.hold == "ZOH"
     assert "parameterization='ZOH'" in repr(c1)
 
-    c1.hold = "FOH"
+    c1.parameterization = "FOH"
     assert c1.parameterization == "FOH"
-    assert c1.hold == "FOH"
 
     with pytest.raises(ValueError, match="parameterization must be"):
         Control("bad", shape=(1,), parameterization="BOH")
 
-    with pytest.raises(ValueError, match="hold must be"):
-        c1.hold = "X"
+    with pytest.raises(ValueError, match="parameterization must be"):
+        setattr(c1, "parameterization", "X")
 
 
 # --- Control: Shape Checking ---

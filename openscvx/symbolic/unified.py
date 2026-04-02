@@ -50,13 +50,22 @@ See Also:
     - Control: Individual symbolic control variable (symbolic/expr/control.py)
 """
 
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 
 from openscvx.lowered.unified import UnifiedControl, UnifiedState
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
+
+
+def _continuous_hold_parameterization(control: Control) -> Optional[str]:
+    """Return ``\"FOH\"`` or ``\"ZOH\"`` if set on ``control``; else ``None``."""
+    p = control.parameterization
+    if p in ("FOH", "ZOH"):
+        return p
+    return None
+
 
 # Re-export for backwards compatibility
 __all__ = ["unify_states", "unify_controls", "UnifiedState", "UnifiedControl"]
@@ -483,17 +492,17 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     if not nodes:
         nodes = None
 
-    # Build per-element FOH mask from control-level hold settings.
+    # Build per-element FOH mask from control-level ``parameterization`` (FOH/ZOH).
     # 1.0 = FOH, 0.0 = ZOH, nan = unset (defer to discretizer dis_type).
-    any_hold_set = any(getattr(c, "hold", None) is not None for c in sorted_controls)
-    if any_hold_set:
+    any_foh_zoh_set = any(_continuous_hold_parameterization(c) is not None for c in sorted_controls)
+    if any_foh_zoh_set:
         foh_parts: list[np.ndarray] = []
         for control in sorted_controls:
             n = control.shape[0]
-            hold = getattr(control, "hold", None)
-            if hold == "FOH":
+            pz = _continuous_hold_parameterization(control)
+            if pz == "FOH":
                 foh_parts.append(np.ones(n))
-            elif hold == "ZOH":
+            elif pz == "ZOH":
                 foh_parts.append(np.zeros(n))
             else:
                 foh_parts.append(np.full(n, np.nan))

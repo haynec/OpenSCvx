@@ -75,20 +75,20 @@ def _resolve_foh_mask(
     """Build the final per-control FOH mask.
 
     Merges the discretizer-level ``dis_type`` default with any per-control
-    ``hold`` settings that were specified on individual :class:`Control`
+    ``parameterization`` (``"FOH"`` / ``"ZOH"``) on individual :class:`Control`
     objects and aggregated into ``u_foh_mask`` during unification.
 
     Control-level settings take precedence over the discretizer default.
 
     Args:
         dis_type: Discretizer-level default (``"FOH"``, ``"ZOH"``, or a
-            per-control sequence).  Used as a fallback for controls that
-            did not specify ``hold``.
+            per-control sequence).  Used as a fallback for controls whose
+            ``parameterization`` does not set FOH/ZOH.
         n_u: Total number of controls.
         u_foh_mask: Optional float array of shape ``(n_u,)`` from
             :attr:`UnifiedControl.foh_mask`.  Values are ``1.0`` (FOH),
             ``0.0`` (ZOH), or ``nan`` (unset — use ``dis_type``).
-            ``None`` means no control specified ``hold``.
+            ``None`` means no control set FOH/ZOH ``parameterization``.
 
     Returns:
         Float array of shape ``(n_u,)`` with values ``1.0`` (FOH) or
@@ -140,8 +140,8 @@ class Discretizer(ABC):
     #: Control hold type. A single ``"FOH"`` or ``"ZOH"`` string applies the
     #: same hold to every control.  A sequence (e.g.
     #: ``["FOH", "ZOH", "FOH"]``) sets the hold independently for each
-    #: control, and is merged with any per-control ``Control`` hold (``parameterization``
-    #: ``"FOH"`` / ``"ZOH"``) settings.
+    #: control, and is merged with any per-control ``Control.parameterization``
+    #: (``"FOH"`` / ``"ZOH"``).
     #: Subclasses must set this in ``__init__``.
     dis_type: DisType
 
