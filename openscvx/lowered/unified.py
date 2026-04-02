@@ -486,9 +486,9 @@ class UnifiedControl:
     time_dilation_slice: Optional[slice] = None  # Slice for time dilation control
     scaling_min: Optional[np.ndarray] = None  # Scaling minimum bounds for unified control
     scaling_max: Optional[np.ndarray] = None  # Scaling maximum bounds for unified control
-    # Per-DOF mask: True where that unified control component is impulsive (from
-    # ``Control(parameterization="impulsive")``).  Scalar False broadcasts in ``_impulsive_mask``.
-    is_impulsive: Optional[bool] = False
+    # Per-DOF control parameterization. Entries are typically ``None`` (continuous)
+    # or ``"impulsive"``. A scalar value broadcasts to all control DOFs.
+    parameterization: Optional[np.ndarray | str] = None
     nodes: Optional[dict[str, list[int]]] = None
     foh_mask: Optional[np.ndarray] = None  # Per-element: 1.0=FOH, 0.0=ZOH, nan=unset
 
@@ -565,21 +565,30 @@ class UnifiedControl:
             return np.array([], dtype=int)
         return np.concatenate(idx_parts)
 
+    def _parameterization_array(self) -> np.ndarray:
+        """Return per-DOF parameterization array aligned to unified control dimension."""
+        if self.shape[0] == 0:
+            return np.array([], dtype=object)
+        p = self.parameterization
+        if p is None:
+            return np.full((self.shape[0],), None, dtype=object)
+        if isinstance(p, str):
+            return np.full((self.shape[0],), p, dtype=object)
+        arr = np.asarray(p, dtype=object).reshape(-1)
+        if arr.size == 1:
+            return np.repeat(arr, self.shape[0]).astype(object)
+        if arr.size != self.shape[0]:
+            raise ValueError(
+                f"parameterization size {arr.size} does not match unified "
+                f"control size {self.shape[0]}"
+            )
+        return arr
+
     def _impulsive_mask(self) -> np.ndarray:
         """Return impulsive mask aligned to unified control dimension."""
         if self.shape[0] == 0:
             return np.zeros((0,), dtype=bool)
-        if self.is_impulsive is None:
-            return np.zeros((self.shape[0],), dtype=bool)
-        mask = np.asarray(self.is_impulsive, dtype=bool).reshape(-1)
-        if mask.size == 1:
-            return np.repeat(mask, self.shape[0])
-        if mask.size != self.shape[0]:
-            raise ValueError(
-                f"is_impulsive mask size {mask.size} does not match unified "
-                f"control size {self.shape[0]}"
-            )
-        return mask
+        return self._parameterization_array() == "impulsive"
 
     def _subset(self, indices: np.ndarray, *, name: str, true_mask: np.ndarray) -> "UnifiedControl":
         """Build a sliced UnifiedControl by explicit indices."""
@@ -595,11 +604,11 @@ class UnifiedControl:
         new_scaling_min = self.scaling_min[indices] if self.scaling_min is not None else None
         new_scaling_max = self.scaling_max[indices] if self.scaling_max is not None else None
 
-        parent_impulsive_mask = self._impulsive_mask()
-        new_is_impulsive = (
-            parent_impulsive_mask[indices]
-            if parent_impulsive_mask.size
-            else np.zeros((new_shape[0],), dtype=bool)
+        parent_parameterization = self._parameterization_array()
+        new_parameterization = (
+            parent_parameterization[indices]
+            if parent_parameterization.size
+            else np.full((new_shape[0],), None, dtype=object)
         )
         new_foh_mask = self.foh_mask[indices] if self.foh_mask is not None else None
 
@@ -617,7 +626,7 @@ class UnifiedControl:
             _augmented_slice=augmented_selector,
             scaling_min=new_scaling_min,
             scaling_max=new_scaling_max,
-            is_impulsive=new_is_impulsive,
+            parameterization=new_parameterization,
             nodes=None,
             foh_mask=new_foh_mask,
         )
@@ -823,12 +832,12 @@ class UnifiedControl:
             else:
                 new_foh_mask = None
 
-            parent_imp = self._impulsive_mask()
+            parent_param = self._parameterization_array()
             if isinstance(other, UnifiedControl):
-                other_imp_part = other._impulsive_mask()
+                other_param_part = other._parameterization_array()
             else:
-                other_imp_part = np.full(n_o, other.parameterization == "impulsive", dtype=bool)
-            new_impulsive_mask = np.concatenate([parent_imp, other_imp_part])
+                other_param_part = np.full(n_o, other.parameterization, dtype=object)
+            new_parameterization = np.concatenate([parent_param, other_param_part]).astype(object)
 
             # Update all attributes in place
             self.shape = new_shape
@@ -838,7 +847,7 @@ class UnifiedControl:
             self.scaling_min = new_scaling_min
             self.scaling_max = new_scaling_max
             self.foh_mask = new_foh_mask
-            self.is_impulsive = new_impulsive_mask
+            self.parameterization = new_parameterization
             self._true_dim = int(np.sum(new_true_mask))
             self._true_slice = self._mask_to_selector(new_true_mask, empty_at_end=False)
             self._augmented_slice = self._mask_to_selector(~new_true_mask, empty_at_end=True)
@@ -850,7 +859,7 @@ class UnifiedControl:
                     "append(..., parameterization=...) for a scalar control only accepts "
                     "None or 'impulsive'."
                 )
-            impulsive_dof = parameterization == "impulsive"
+            scalar_parameterization = parameterization if parameterization is not None else None
 
             new_shape = (self.shape[0] + 1,)
 
@@ -866,10 +875,9 @@ class UnifiedControl:
                 self.scaling_min = np.concatenate([self.scaling_min, np.array([min])])
             if self.scaling_max is not None:
                 self.scaling_max = np.concatenate([self.scaling_max, np.array([max])])
-            if self.is_impulsive is not None:
-                self.is_impulsive = np.concatenate(
-                    [self.is_impulsive, np.array([impulsive_dof], dtype=bool)]
-                )
+            self.parameterization = np.concatenate(
+                [self._parameterization_array(), np.array([scalar_parameterization], dtype=object)]
+            ).astype(object)
             if self.foh_mask is not None:
                 self.foh_mask = np.concatenate([self.foh_mask, np.array([np.nan])])
 

@@ -135,7 +135,7 @@ def propagate_trajectory_results(
     )
 
     # Calculate CTCS constraint violation (use state after final impulse when applicable)
-    if dynamics_discrete is not None and np.any(settings.sim.u.is_impulsive):
+    if dynamics_discrete is not None and np.any(settings.sim.u._impulsive_mask()):
         ctcs_violation = full_final[settings.sim.ctcs_slice_prop]
     else:
         ctcs_violation = x_full[-1, settings.sim.ctcs_slice_prop]

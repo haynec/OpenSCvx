@@ -422,7 +422,7 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     # Build full arrays using scaling where available, min/max otherwise
     unified_scaling_min = None
     unified_scaling_max = None
-    unified_is_impulsive = np.zeros((total_shape,), dtype=bool)
+    unified_parameterization = np.full((total_shape,), None, dtype=object)
 
     # Check if any control has scaling
     has_any_scaling = any(
@@ -456,19 +456,19 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         unified_scaling_max = np.concatenate(scaling_max_list)
 
     nodes = {}
-    is_impulsive_list = []
+    parameterization_list = []
     for control in sorted_controls:
         n = int(control.shape[0])
         if control.parameterization == "impulsive":
-            is_impulsive_block = np.ones(n, dtype=bool)
+            parameterization_block = np.full(n, "impulsive", dtype=object)
             if control.nodes is not None:
                 nodes[control.name] = list(control.nodes)
         else:
-            is_impulsive_block = np.zeros(n, dtype=bool)
-        is_impulsive_list.append(is_impulsive_block)
+            parameterization_block = np.full(n, None, dtype=object)
+        parameterization_list.append(parameterization_block)
 
-    if is_impulsive_list:
-        unified_is_impulsive = np.concatenate(is_impulsive_list)
+    if parameterization_list:
+        unified_parameterization = np.concatenate(parameterization_list).astype(object)
     if not nodes:
         nodes = None
 
@@ -502,7 +502,7 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         time_dilation_slice=time_dilation_slice,
         scaling_min=unified_scaling_min,
         scaling_max=unified_scaling_max,
-        is_impulsive=unified_is_impulsive,
+        parameterization=unified_parameterization,
         nodes=nodes,
         foh_mask=unified_foh_mask,
     )

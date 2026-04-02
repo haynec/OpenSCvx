@@ -239,7 +239,7 @@ def simulate_nonlinear_time(
     u_interp = np.stack([np.interp(t, t, u[:, i]) for i in range(u.shape[1])], axis=-1)
     _time_dilation_index(settings, u.shape[1])
 
-    has_u_d = np.any(settings.sim.u.is_impulsive)
+    has_u_d = np.any(settings.sim.u._impulsive_mask())
 
     # Bin tau_vals into segments of tau
     tau_inds = np.digitize(tau_vals, tau) - 1
