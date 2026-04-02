@@ -459,12 +459,9 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     parameterization_list = []
     for control in sorted_controls:
         n = int(control.shape[0])
-        if control.parameterization == "impulsive":
-            parameterization_block = np.full(n, "impulsive", dtype=object)
-            if control.nodes is not None:
-                nodes[control.name] = list(control.nodes)
-        else:
-            parameterization_block = np.full(n, None, dtype=object)
+        parameterization_block = np.full(n, control.parameterization, dtype=object)
+        if control.parameterization == "impulsive" and control.nodes is not None:
+            nodes[control.name] = list(control.nodes)
         parameterization_list.append(parameterization_block)
 
     if parameterization_list:

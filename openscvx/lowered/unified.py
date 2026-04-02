@@ -486,8 +486,8 @@ class UnifiedControl:
     time_dilation_slice: Optional[slice] = None  # Slice for time dilation control
     scaling_min: Optional[np.ndarray] = None  # Scaling minimum bounds for unified control
     scaling_max: Optional[np.ndarray] = None  # Scaling maximum bounds for unified control
-    # Per-DOF control parameterization. Entries are typically ``None`` (continuous)
-    # or ``"impulsive"``. A scalar value broadcasts to all control DOFs.
+    # Per-DOF control parameterization. Entries are typically ``None``, ``"FOH"``,
+    # ``"ZOH"``, or ``"impulsive"``. A scalar value broadcasts to all control DOFs.
     parameterization: Optional[np.ndarray | str] = None
     nodes: Optional[dict[str, list[int]]] = None
     foh_mask: Optional[np.ndarray] = None  # Per-element: 1.0=FOH, 0.0=ZOH, nan=unset
@@ -730,8 +730,9 @@ class UnifiedControl:
                 creates a new scalar control variable with properties from keyword args.
             min (float): Lower bound for new scalar control (default: -inf)
             max (float): Upper bound for new scalar control (default: inf)
-            parameterization: For scalar append only: ``None`` (continuous) or
-                ``\"impulsive\"``.  When appending a ``Control``, its ``parameterization`` is used.
+            parameterization: For scalar append only: ``None``, ``\"FOH\"``,
+                ``\"ZOH\"``, or ``\"impulsive\"``. When appending a ``Control``,
+                its ``parameterization`` is used.
             guess (float): Initial guess value for new scalar control (default: 0.0)
             augmented (bool): Whether the appended control is augmented (internal) rather
                 than true (user-defined). Affects _true_dim tracking. Default: False
@@ -854,10 +855,10 @@ class UnifiedControl:
 
         else:
             # Create a single new variable
-            if parameterization is not None and parameterization != "impulsive":
+            if parameterization not in (None, "FOH", "ZOH", "impulsive"):
                 raise ValueError(
                     "append(..., parameterization=...) for a scalar control only accepts "
-                    "None or 'impulsive'."
+                    "None, 'FOH', 'ZOH', or 'impulsive'."
                 )
             scalar_parameterization = parameterization if parameterization is not None else None
 
@@ -879,7 +880,13 @@ class UnifiedControl:
                 [self._parameterization_array(), np.array([scalar_parameterization], dtype=object)]
             ).astype(object)
             if self.foh_mask is not None:
-                self.foh_mask = np.concatenate([self.foh_mask, np.array([np.nan])])
+                if scalar_parameterization == "FOH":
+                    new_foh_entry = np.array([1.0])
+                elif scalar_parameterization == "ZOH":
+                    new_foh_entry = np.array([0.0])
+                else:
+                    new_foh_entry = np.array([np.nan])
+                self.foh_mask = np.concatenate([self.foh_mask, new_foh_entry])
 
             # Update dimensions
             self.shape = new_shape
