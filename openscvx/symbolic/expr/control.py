@@ -22,8 +22,7 @@ class Control(Variable):
     - Min/max bounds to enforce actuator limits
     - Initial trajectory guesses to help the optimizer converge
     - A single ``parameterization`` choice: ``"FOH"`` / ``"ZOH"`` for continuous
-      hold type, or ``"impulsive"`` for discrete/impulsive actuation (same role
-      as the former ``impulsive=True`` flag)
+      hold type, or ``"impulsive"`` for discrete/impulsive actuation flag.
 
     Common examples of control inputs include:
 
