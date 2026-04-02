@@ -56,8 +56,8 @@ mass.scaling_min = np.array([1700])
 # mass.scaling_max = np.array([1700])
 mass.guess = np.linspace(mass.initial, 1690, n).reshape(-1, 1)
 
-# Define control
-thrust = ox.Control("thrust", shape=(3,), parameterization="ZOH")  # Thrust force vector [Tx, Ty, Tz]
+# Define control — thrust force vector [Tx, Ty, Tz]
+thrust = ox.Control("thrust", shape=(3,), parameterization="ZOH")
 
 T_bar = 3.1 * 1e3
 T1 = 0.3 * T_bar

@@ -318,8 +318,12 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
 
             thrust = ox.Control("thrust", shape=(2,))  # continuous, user-defined
             time_dilation = ox.Control("_time_dilation", shape=(1,))  # continuous, augmented
-            delta_v = ox.Control("delta_v", shape=(2,), parameterization="impulsive", nodes=[0, 20])
-            delta_v_aug = ox.Control("_delta_v_bias", shape=(1,), parameterization="impulsive", nodes=[0, 20])
+            delta_v = ox.Control(
+                "delta_v", shape=(2,), parameterization="impulsive", nodes=[0, 20]
+            )
+            delta_v_aug = ox.Control(
+                "_delta_v_bias", shape=(1,), parameterization="impulsive", nodes=[0, 20]
+            )
 
             unified = unify_controls([time_dilation, delta_v_aug, thrust, delta_v], name="u")
 
