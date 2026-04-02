@@ -27,7 +27,7 @@ Expected schema
     controls:
       - name: thrust
         shape: [3]
-        hold: ZOH                 # optional: FOH or ZOH (preferred over discretizer dis_type)
+        parameterization: ZOH     # optional: FOH, ZOH, or impulsive (with optional nodes)
         min: [-10, -10, 0]
         max: [10, 10, 50]
 
@@ -154,8 +154,18 @@ def load_dict(data: dict) -> dict:
     # ---- controls ------------------------------------------------------
     controls: List[Control] = []
     for c in data.get("controls", []):
-        hold = c.get("hold")
-        control = Control(c["name"], shape=tuple(c["shape"]), hold=hold)
+        param = c.get("parameterization")
+        if param is None and c.get("hold") is not None:
+            param = c["hold"]
+        elif param is None and c.get("impulsive"):
+            param = "impulsive"
+        nodes = c.get("nodes")
+        control = Control(
+            c["name"],
+            shape=tuple(c["shape"]),
+            parameterization=param,
+            nodes=nodes,
+        )
         if "min" in c:
             control.min = np.asarray(c["min"], dtype=float)
         if "max" in c:

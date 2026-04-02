@@ -89,7 +89,7 @@ from .constraint import (
 )
 
 # Control
-from .control import Control
+from .control import Control, Parameterization
 
 # Core base classes and fundamental operations
 from .expr import (
@@ -195,6 +195,7 @@ __all__ = [
     "Maximize",
     # Control
     "Control",
+    "Parameterization",
     # Time
     "Time",
     # Mathematical functions

@@ -40,7 +40,7 @@ x.final = [5.0]
 
 
 # Control: drives position; gear integrates toward chosen discrete level
-u = ox.Control("u", shape=(1,), hold="ZOH")
+u = ox.Control("u", shape=(1,), parameterization="ZOH")
 u.min = np.array([0.0])
 u.max = np.array([10.0])
 u.guess = np.ones((N, 1)) * 8.0

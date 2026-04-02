@@ -41,7 +41,7 @@ v.guess = np.linspace(v.initial, v.final, n).reshape(-1, 1)
 dv = ox.Control(
     "delta_v",
     shape=(1,),
-    impulsive=True,
+    parameterization="impulsive",
     nodes=[0, n - 1],
 )
 dv.max = np.array([0.2])

@@ -56,7 +56,7 @@ def _resolve_discretizer(val: Any) -> Discretizer:
         # Dict with keyword overrides (default class: VectorizeDiscretizeLinearize)
         _resolve_discretizer({"ode_solver": "Dopri8"})
 
-        # Global or per-control hold on the discretizer (or use ``Control.hold``)
+        # Global hold on the discretizer (or ``Control(..., parameterization="FOH"|"ZOH")``)
         _resolve_discretizer({"dis_type": "ZOH", "ode_solver": "Dopri8"})
 
         # Configure integrator behavior (forwarded to Diffrax / diffeqsolve)

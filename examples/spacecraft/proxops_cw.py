@@ -65,7 +65,7 @@ velocity.final = np.array([0.0, 0.0, 0.0])  # Zero relative velocity at docking
 velocity.guess = np.zeros((n_nodes, 3))
 
 # Define control: acceleration from thrusters [ax, ay, az] in m/s^2
-accel = ox.Control("accel", shape=(3,), hold="ZOH")
+accel = ox.Control("accel", shape=(3,), parameterization="ZOH")
 a_max = 0.1  # Maximum acceleration [m/s^2] (typical for reaction control thrusters)
 accel.max = np.array([a_max, a_max, a_max])
 accel.min = np.array([-a_max, -a_max, -a_max])

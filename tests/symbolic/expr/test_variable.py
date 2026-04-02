@@ -354,7 +354,7 @@ def test_control_creation():
     c = Control("thrust", shape=(2,))
     assert c.name == "thrust"
     assert c.shape == (2,)
-    expected = "Control('thrust', shape=(2,), impulsive=[False False], nodes=None)"
+    expected = "Control('thrust', shape=(2,), parameterization=None, nodes=None)"
     assert repr(c) == expected
     assert c._min is None
     assert c._max is None
@@ -390,22 +390,25 @@ def test_control_bounds():
     assert np.allclose(c.max, [1.0, 10.0])
 
 
-def test_control_hold_kwarg_and_property():
-    """``hold`` accepts FOH/ZOH/None and appears in ``repr`` when set."""
+def test_control_parameterization_kwarg_and_hold_property():
+    """``parameterization`` sets hold; ``hold`` property/setter stays in sync."""
     from openscvx.symbolic.expr import Control
 
     c0 = Control("u", shape=(1,))
+    assert c0.parameterization is None
     assert c0.hold is None
 
-    c1 = Control("u", shape=(1,), hold="ZOH")
+    c1 = Control("u", shape=(1,), parameterization="ZOH")
+    assert c1.parameterization == "ZOH"
     assert c1.hold == "ZOH"
-    assert "hold='ZOH'" in repr(c1)
+    assert "parameterization='ZOH'" in repr(c1)
 
     c1.hold = "FOH"
+    assert c1.parameterization == "FOH"
     assert c1.hold == "FOH"
 
-    with pytest.raises(ValueError, match="hold must be"):
-        Control("bad", shape=(1,), hold="BOH")
+    with pytest.raises(ValueError, match="parameterization must be"):
+        Control("bad", shape=(1,), parameterization="BOH")
 
     with pytest.raises(ValueError, match="hold must be"):
         c1.hold = "X"

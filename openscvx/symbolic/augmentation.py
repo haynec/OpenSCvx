@@ -626,7 +626,7 @@ def augment_dynamics_with_ctcs(
         xdot_aug = xdot
         xdelta_aug = xdelta if discrete_dynamics_set else None
 
-    time_dilation = Control("_time_dilation", shape=(1,), hold="ZOH")
+    time_dilation = Control("_time_dilation", shape=(1,), parameterization="ZOH")
 
     # Set up time dilation bounds and initial guess
     # Find the time state by name

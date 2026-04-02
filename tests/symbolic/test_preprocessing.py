@@ -1120,7 +1120,7 @@ def test_validate_input_types_impulsive_requires_dynamics_discrete():
     from openscvx.symbolic.expr.time import Time
 
     x = State("x", shape=(2,))
-    u_impulsive = Control("dv", shape=(1,), impulsive=True)
+    u_impulsive = Control("dv", shape=(1,), parameterization="impulsive")
     dynamics = {"x": x}
     constraints = [x <= 5]
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
@@ -1146,7 +1146,7 @@ def test_validate_input_types_impulsive_with_dynamics_discrete_dict_passes():
     from openscvx.symbolic.expr.time import Time
 
     x = State("x", shape=(2,))
-    u_impulsive = Control("dv", shape=(1,), impulsive=True)
+    u_impulsive = Control("dv", shape=(1,), parameterization="impulsive")
     dynamics = {"x": x}
     dynamics_discrete = {"x": x}  # identity for discrete step
     constraints = [x <= 5]
@@ -1169,7 +1169,7 @@ def test_validate_input_types_impulsive_with_byof_dynamics_discrete_passes():
     from openscvx.symbolic.expr.time import Time
 
     x = State("x", shape=(2,))
-    u_impulsive = Control("dv", shape=(1,), impulsive=True)
+    u_impulsive = Control("dv", shape=(1,), parameterization="impulsive")
     dynamics = {"x": x}
     byof = {"dynamics_discrete": {"x": lambda x, u, node, params: x}}  # placeholder for validation
     constraints = [x <= 5]
@@ -1219,7 +1219,7 @@ def test_validate_input_types_dynamics_discrete_must_be_dict():
     from openscvx.symbolic.expr.time import Time
 
     x = State("x", shape=(2,))
-    u_impulsive = Control("dv", shape=(1,), impulsive=True)
+    u_impulsive = Control("dv", shape=(1,), parameterization="impulsive")
     dynamics = {"x": x}
     constraints = [x <= 5]
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
@@ -1262,7 +1262,7 @@ def test_preprocess_symbolic_problem_with_dynamics_discrete_builds():
     v.max = np.array([1.0])
     v.guess = np.zeros((N, 1))
 
-    dv = Control("delta_v", shape=(1,), impulsive=True)
+    dv = Control("delta_v", shape=(1,), parameterization="impulsive")
     dv.min = np.array([-0.5])
     dv.max = np.array([0.5])
     dv.guess = np.zeros((N, 1))

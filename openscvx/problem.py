@@ -184,8 +184,8 @@ class Problem:
 
                 Examples::
 
-                    # Per-control hold (preferred) + ODE solver on the discretizer
-                    #   thrust = ox.Control("thrust", shape=(3,), hold="ZOH")
+                    # Per-control hold + ODE solver on the discretizer
+                    #   thrust = ox.Control("thrust", shape=(3,), parameterization="ZOH")
                     discretizer={"ode_solver": "Dopri8"}
 
                     # Pass integrator kwargs (forwarded to Diffrax / diffeqsolve)

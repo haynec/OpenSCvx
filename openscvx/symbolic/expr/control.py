@@ -1,8 +1,10 @@
-from typing import Optional, Tuple
+from typing import Literal, Optional, Tuple, Union
 
 import numpy as np
 
 from .variable import Variable
+
+Parameterization = Union[Literal["ZOH", "FOH", "impulsive"], None]
 
 
 class Control(Variable):
@@ -19,7 +21,9 @@ class Control(Variable):
 
     - Min/max bounds to enforce actuator limits
     - Initial trajectory guesses to help the optimizer converge
-    - Per-control hold type (FOH or ZOH) for discretization
+    - A single ``parameterization`` choice: ``"FOH"`` / ``"ZOH"`` for continuous
+      hold type, or ``"impulsive"`` for discrete/impulsive actuation (same role
+      as the former ``impulsive=True`` flag)
 
     Common examples of control inputs include:
 
@@ -36,8 +40,8 @@ class Control(Variable):
         _min (np.ndarray | None): Minimum bounds for each element of the control
         _max (np.ndarray | None): Maximum bounds for each element of the control
         _guess (np.ndarray | None): Initial guess for the control trajectory (n_points, n_controls)
-        _hold (str | None): Hold type for discretization (``"FOH"``, ``"ZOH"``, or
-            ``None`` to defer to the discretizer's ``dis_type``)
+        _parameterization: ``"FOH"``, ``"ZOH"``, ``"impulsive"``, or ``None`` (defer hold to the
+            discretizer's ``dis_type`` when not impulsive)
 
     Example:
         Scalar throttle control bounded [0, 1]:
@@ -49,10 +53,14 @@ class Control(Variable):
 
         3D thrust vector with zero-order hold:
 
-            thrust = Control("thrust", shape=(3,), hold="ZOH")
+            thrust = Control("thrust", shape=(3,), parameterization="ZOH")
             thrust.min = [-10, -10, 0]    # No downward thrust
             thrust.max = [10, 10, 50]     # Limited thrust
             thrust.guess = np.zeros((50, 3))  # Initialize with zero thrust
+
+        Impulsive delta-v at selected nodes:
+
+            dv = Control("delta_v", shape=(2,), parameterization="impulsive", nodes=[0, n - 1])
 
         2D steering control (left/right, forward/backward):
 
@@ -69,9 +77,8 @@ class Control(Variable):
         *,
         min: Optional[np.ndarray] = None,
         max: Optional[np.ndarray] = None,
-        impulsive: bool = False,
+        parameterization: Parameterization = None,
         nodes: Optional[list[int]] = None,
-        hold: Optional[str] = None,
     ):
         """Initialize a Control object.
 
@@ -80,26 +87,30 @@ class Control(Variable):
             shape: Shape of the control vector (typically 1D tuple like (3,))
             min: Optional minimum bounds array (keyword-only)
             max: Optional maximum bounds array (keyword-only)
-            impulsive: Whether this control is treated as impulsive
-            nodes: Optional list of node indices where impulsive control is enabled
-            hold: Hold type for discretization — ``"FOH"`` (first-order hold),
-                ``"ZOH"`` (zero-order hold), or ``None`` (defer to the
-                discretizer's ``dis_type`` setting). Defaults to ``None``.
+            parameterization: ``"FOH"`` or ``"ZOH"`` for continuous hold,
+                ``"impulsive"`` for discrete/impulsive actuation (requires
+                ``dynamics_discrete`` in the problem), or ``None`` to defer hold
+                to the discretizer when not impulsive.
+            nodes: Optional list of node indices where impulsive control is
+                applied (only valid with ``parameterization="impulsive"``).
         """
         super().__init__(name, shape)
         self._scaling_min = None
         self._scaling_max = None
-        self._is_impulsive = np.repeat(impulsive, shape[0])
-        if nodes is not None and not impulsive:
-            raise ValueError("nodes provided for a non-impulsive control.")
+
+        if parameterization is not None and parameterization not in ("FOH", "ZOH", "impulsive"):
+            raise ValueError(
+                "parameterization must be 'FOH', 'ZOH', 'impulsive', or None; "
+                f"got {parameterization!r}"
+            )
+        if nodes is not None and parameterization != "impulsive":
+            raise ValueError("nodes are only valid when parameterization='impulsive'.")
+
+        self._parameterization: Parameterization = parameterization
         if nodes is not None:
             self._nodes = [int(idx) for idx in nodes]
         else:
             self._nodes = None
-
-        if hold is not None and hold not in ("FOH", "ZOH"):
-            raise ValueError(f"hold must be 'FOH', 'ZOH', or None; got {hold!r}")
-        self._hold = hold
 
         if min is not None:
             self.min = min
@@ -115,6 +126,47 @@ class Control(Variable):
             for i in range(n):
                 S_u[i, self._slice.start + i] = True
         return S_x, S_u
+
+    @property
+    def parameterization(self) -> Parameterization:
+        """``"FOH"``, ``"ZOH"``, ``"impulsive"``, or ``None`` (defer hold / non-impulsive)."""
+        return self._parameterization
+
+    @parameterization.setter
+    def parameterization(self, val: Parameterization) -> None:
+        if val is not None and val not in ("FOH", "ZOH", "impulsive"):
+            raise ValueError(
+                "parameterization must be 'FOH', 'ZOH', 'impulsive', or None; "
+                f"got {val!r}"
+            )
+        if val != "impulsive" and self._nodes is not None:
+            raise ValueError(
+                "Cannot change parameterization away from 'impulsive' while nodes is set; "
+                "clear nodes first."
+            )
+        self._parameterization = val
+
+    @property
+    def hold(self) -> Optional[str]:
+        """``"FOH"`` / ``"ZOH"`` when ``parameterization`` is a hold type; else ``None``."""
+        if self._parameterization in ("FOH", "ZOH"):
+            return self._parameterization
+        return None
+
+    @hold.setter
+    def hold(self, val: Optional[str]) -> None:
+        if val is None:
+            if self._parameterization in ("FOH", "ZOH"):
+                self._parameterization = None
+            return
+        if val not in ("FOH", "ZOH"):
+            raise ValueError(f"hold must be 'FOH', 'ZOH', or None; got {val!r}")
+        if self._parameterization == "impulsive":
+            raise ValueError(
+                "Cannot set hold on an impulsive control; use parameterization='FOH' or 'ZOH' "
+                "on a separate continuous control."
+            )
+        self._parameterization = val
 
     @property
     def scaling_min(self) -> Optional[np.ndarray]:
@@ -175,44 +227,52 @@ class Control(Variable):
         self._scaling_max = val
 
     @property
-    def is_impulsive(self) -> Optional[bool]:
-        return self._is_impulsive
+    def is_impulsive(self) -> np.ndarray:
+        return np.repeat(self._parameterization == "impulsive", self.shape[0])
 
     @is_impulsive.setter
-    def is_impulsive(self, val):
+    def is_impulsive(self, val) -> None:
         if val is None:
-            self._is_impulsive = np.repeat(False, self.shape)
+            if self._parameterization == "impulsive":
+                self._parameterization = None
+                self._nodes = None
             return
-        val = np.repeat(val, self.shape)
-        if val.shape != self.shape:
+        arr = np.asarray(val, dtype=bool).reshape(-1)
+        if arr.size == 1:
+            arr = np.repeat(bool(arr.item()), self.shape[0])
+        if arr.shape != self.shape:
             raise ValueError(
-                f"Impulsive controls toggles shape {val.shape} "
+                f"Impulsive controls toggles shape {arr.shape} "
                 f"does not match Control shape {self.shape}"
             )
-        self._is_impulsive = val
-
-    @property
-    def hold(self) -> Optional[str]:
-        """Hold type for discretization (``"FOH"``, ``"ZOH"``, or ``None``)."""
-        return self._hold
-
-    @hold.setter
-    def hold(self, val: Optional[str]):
-        if val is not None and val not in ("FOH", "ZOH"):
-            raise ValueError(f"hold must be 'FOH', 'ZOH', or None; got {val!r}")
-        self._hold = val
+        if np.all(~arr):
+            if self._parameterization == "impulsive":
+                self._parameterization = None
+                self._nodes = None
+            return
+        if np.all(arr):
+            if self._parameterization in ("FOH", "ZOH"):
+                raise ValueError(
+                    "Cannot mark control impulsive while parameterization is FOH/ZOH; "
+                    "set parameterization='impulsive'."
+                )
+            self._parameterization = "impulsive"
+            return
+        raise ValueError(
+            "Per-element impulsive mask is not supported; use separate Control objects."
+        )
 
     @property
     def nodes(self) -> Optional[list[int]]:
         return self._nodes
 
     @nodes.setter
-    def nodes(self, val: Optional[list[int]]):
+    def nodes(self, val: Optional[list[int]]) -> None:
         if val is None:
             self._nodes = None
             return
-        if not np.any(self._is_impulsive):
-            raise ValueError("nodes can only be set for impulsive controls.")
+        if self._parameterization != "impulsive":
+            raise ValueError("nodes can only be set when parameterization='impulsive'.")
         self._nodes = [int(idx) for idx in val]
 
     def __repr__(self) -> str:
@@ -224,9 +284,7 @@ class Control(Variable):
         parts = [
             f"'{self.name}'",
             f"shape={self.shape}",
-            f"impulsive={self._is_impulsive}",
+            f"parameterization={self._parameterization!r}",
             f"nodes={self._nodes}",
         ]
-        if self._hold is not None:
-            parts.append(f"hold={self._hold!r}")
         return f"Control({', '.join(parts)})"

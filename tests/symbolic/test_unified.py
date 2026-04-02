@@ -95,11 +95,11 @@ def test_unify_controls_sorting():
     np.testing.assert_array_equal(unified.min, expected_min)
 
 
-def test_unify_controls_foh_mask_from_hold():
-    """``Control.hold`` is aggregated into ``UnifiedControl.foh_mask``."""
-    a = Control("a", (1,), hold="FOH")
+def test_unify_controls_foh_mask_from_parameterization():
+    """``Control`` ``parameterization`` FOH/ZOH is aggregated into ``foh_mask``."""
+    a = Control("a", (1,), parameterization="FOH")
     a.min = np.array([0.0])
-    b = Control("b", (2,), hold="ZOH")
+    b = Control("b", (2,), parameterization="ZOH")
     b.min = np.array([0.0, 0.0])
     c = Control("c", (1,))  # defer to discretizer → nan in mask
     c.min = np.array([0.0])
@@ -114,7 +114,7 @@ def test_unify_controls_foh_mask_from_hold():
 
 
 def test_unify_controls_no_hold_yields_no_foh_mask():
-    """If no control sets ``hold``, ``foh_mask`` stays ``None``."""
+    """If no control sets FOH/ZOH ``parameterization``, ``foh_mask`` stays ``None``."""
     u1 = Control("u1", (1,))
     u1.min = np.array([0.0])
     u2 = Control("u2", (1,))
@@ -124,13 +124,13 @@ def test_unify_controls_no_hold_yields_no_foh_mask():
 
 
 def test_unified_control_append_preserves_control_hold():
-    """``append(Control(..., hold=...))`` extends ``foh_mask`` correctly."""
+    """``append(Control(..., parameterization=...))`` extends ``foh_mask`` correctly."""
     base = Control("u0", (1,))
     base.min = np.array([0.0])
     unified = unify_controls([base])
     assert unified.foh_mask is None
 
-    extra = Control("u1", (2,), hold="ZOH")
+    extra = Control("u1", (2,), parameterization="ZOH")
     extra.min = np.array([-1.0, -1.0])
     unified.append(extra)
 
@@ -142,9 +142,9 @@ def test_unified_control_append_preserves_control_hold():
 
 def test_unified_control_append_control_with_foh_mask_on_self():
     """Appending a ``Control`` with explicit hold when ``self`` already has ``foh_mask``."""
-    a = Control("a", (1,), hold="FOH")
+    a = Control("a", (1,), parameterization="FOH")
     a.min = np.array([0.0])
-    b = Control("b", (1,), hold="ZOH")
+    b = Control("b", (1,), parameterization="ZOH")
     b.min = np.array([0.0])
     unified = unify_controls([a])
     assert unified.foh_mask is not None
@@ -419,7 +419,7 @@ def test_unified_control_impulsive_order_and_true_selector():
     impulse = Control(
         "impulse",
         (1,),
-        impulsive=True,
+        parameterization="impulsive",
         nodes=[0],
     )
     impulse.min = np.array([-10.0])
