@@ -136,8 +136,7 @@ class Control(Variable):
     def parameterization(self, val: Parameterization) -> None:
         if val is not None and val not in ("FOH", "ZOH", "impulsive"):
             raise ValueError(
-                "parameterization must be 'FOH', 'ZOH', 'impulsive', or None; "
-                f"got {val!r}"
+                f"parameterization must be 'FOH', 'ZOH', 'impulsive', or None; got {val!r}"
             )
         if val != "impulsive" and self._nodes is not None:
             raise ValueError(
