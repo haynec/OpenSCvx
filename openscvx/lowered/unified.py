@@ -573,15 +573,22 @@ class UnifiedControl:
         if p is None:
             return np.full((self.shape[0],), None, dtype=object)
         if isinstance(p, str):
-            return np.full((self.shape[0],), p, dtype=object)
+            return np.full((self.shape[0],), p.lower(), dtype=object)
         arr = np.asarray(p, dtype=object).reshape(-1)
         if arr.size == 1:
-            return np.repeat(arr, self.shape[0]).astype(object)
+            single = arr.item()
+            if isinstance(single, str):
+                single = single.lower()
+            return np.full((self.shape[0],), single, dtype=object)
         if arr.size != self.shape[0]:
             raise ValueError(
                 f"parameterization size {arr.size} does not match unified "
                 f"control size {self.shape[0]}"
             )
+        arr = np.array(
+            [entry.lower() if isinstance(entry, str) else entry for entry in arr],
+            dtype=object,
+        )
         return arr
 
     def _impulsive_mask(self) -> np.ndarray:
@@ -817,9 +824,11 @@ class UnifiedControl:
                     other_foh_part = np.full(n_o, np.nan)
             else:
                 param = getattr(other, "parameterization", None)
-                if param == "FOH":
+                if isinstance(param, str):
+                    param = param.lower()
+                if param == "foh":
                     other_foh_part = np.ones(n_o)
-                elif param == "ZOH":
+                elif param == "zoh":
                     other_foh_part = np.zeros(n_o)
                 else:
                     other_foh_part = np.full(n_o, np.nan)
@@ -855,10 +864,12 @@ class UnifiedControl:
 
         else:
             # Create a single new variable
-            if parameterization not in (None, "FOH", "ZOH", "impulsive"):
+            if isinstance(parameterization, str):
+                parameterization = parameterization.lower()
+            if parameterization not in (None, "foh", "zoh", "impulsive"):
                 raise ValueError(
                     "append(..., parameterization=...) for a scalar control only accepts "
-                    "None, 'FOH', 'ZOH', or 'impulsive'."
+                    "None, 'foh', 'zoh', or 'impulsive'."
                 )
             scalar_parameterization = parameterization if parameterization is not None else None
 
@@ -880,9 +891,9 @@ class UnifiedControl:
                 [self._parameterization_array(), np.array([scalar_parameterization], dtype=object)]
             ).astype(object)
             if self.foh_mask is not None:
-                if scalar_parameterization == "FOH":
+                if scalar_parameterization == "foh":
                     new_foh_entry = np.array([1.0])
-                elif scalar_parameterization == "ZOH":
+                elif scalar_parameterization == "zoh":
                     new_foh_entry = np.array([0.0])
                 else:
                     new_foh_entry = np.array([np.nan])

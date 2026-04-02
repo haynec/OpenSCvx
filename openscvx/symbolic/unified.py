@@ -471,15 +471,15 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
 
     # Build per-element FOH mask from ``Control.parameterization`` (FOH/ZOH only).
     # 1.0 = FOH, 0.0 = ZOH, nan = unset (defer to discretizer dis_type).
-    any_foh_zoh_set = any(c.parameterization in ("FOH", "ZOH") for c in sorted_controls)
+    any_foh_zoh_set = any(c.parameterization in ("foh", "zoh") for c in sorted_controls)
     if any_foh_zoh_set:
         foh_parts: list[np.ndarray] = []
         for control in sorted_controls:
             n = control.shape[0]
             p = control.parameterization
-            if p == "FOH":
+            if p == "foh":
                 foh_parts.append(np.ones(n))
-            elif p == "ZOH":
+            elif p == "zoh":
                 foh_parts.append(np.zeros(n))
             else:
                 foh_parts.append(np.full(n, np.nan))

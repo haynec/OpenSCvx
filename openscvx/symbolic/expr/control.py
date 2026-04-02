@@ -4,7 +4,13 @@ import numpy as np
 
 from .variable import Variable
 
-Parameterization = Union[Literal["ZOH", "FOH", "impulsive"], None]
+Parameterization = Union[Literal["zoh", "foh", "impulsive"], None]
+
+
+def _normalize_parameterization(val: Optional[str]) -> Optional[str]:
+    if val is None:
+        return None
+    return val.lower()
 
 
 class Control(Variable):
@@ -97,9 +103,10 @@ class Control(Variable):
         self._scaling_min = None
         self._scaling_max = None
 
-        if parameterization is not None and parameterization not in ("FOH", "ZOH", "impulsive"):
+        parameterization = _normalize_parameterization(parameterization)
+        if parameterization is not None and parameterization not in ("foh", "zoh", "impulsive"):
             raise ValueError(
-                "parameterization must be 'FOH', 'ZOH', 'impulsive', or None; "
+                "parameterization must be 'foh', 'zoh', 'impulsive', or None; "
                 f"got {parameterization!r}"
             )
         if nodes is not None and parameterization != "impulsive":
@@ -133,9 +140,10 @@ class Control(Variable):
 
     @parameterization.setter
     def parameterization(self, val: Parameterization) -> None:
-        if val is not None and val not in ("FOH", "ZOH", "impulsive"):
+        val = _normalize_parameterization(val)
+        if val is not None and val not in ("foh", "zoh", "impulsive"):
             raise ValueError(
-                f"parameterization must be 'FOH', 'ZOH', 'impulsive', or None; got {val!r}"
+                f"parameterization must be 'foh', 'zoh', 'impulsive', or None; got {val!r}"
             )
         if val != "impulsive" and self._nodes is not None:
             raise ValueError(

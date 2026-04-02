@@ -46,9 +46,10 @@ def _make_foh_mask(dis_type: DisType, n_u: int) -> np.ndarray:
         ``False`` for ZOH controls.
     """
     if isinstance(dis_type, str):
-        if dis_type == "FOH":
+        dt = dis_type.lower()
+        if dt == "foh":
             return np.ones(n_u, dtype=bool)
-        if dis_type == "ZOH":
+        if dt == "zoh":
             return np.zeros(n_u, dtype=bool)
         raise ValueError(f"Unknown dis_type: {dis_type!r}; expected 'FOH' or 'ZOH'")
 
@@ -58,9 +59,10 @@ def _make_foh_mask(dis_type: DisType, n_u: int) -> np.ndarray:
         )
     mask = np.empty(n_u, dtype=bool)
     for i, dt in enumerate(dis_type):
-        if dt == "FOH":
+        dt_norm = dt.lower() if isinstance(dt, str) else dt
+        if dt_norm == "foh":
             mask[i] = True
-        elif dt == "ZOH":
+        elif dt_norm == "zoh":
             mask[i] = False
         else:
             raise ValueError(f"Unknown dis_type[{i}]: {dt!r}; expected 'FOH' or 'ZOH'")

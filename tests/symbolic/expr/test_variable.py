@@ -398,11 +398,11 @@ def test_control_parameterization_kwarg_and_setter():
     assert c0.parameterization is None
 
     c1 = Control("u", shape=(1,), parameterization="ZOH")
-    assert c1.parameterization == "ZOH"
-    assert "parameterization='ZOH'" in repr(c1)
+    assert c1.parameterization == "zoh"
+    assert "parameterization='zoh'" in repr(c1)
 
     c1.parameterization = "FOH"
-    assert c1.parameterization == "FOH"
+    assert c1.parameterization == "foh"
 
     with pytest.raises(ValueError, match="parameterization must be"):
         Control("bad", shape=(1,), parameterization="BOH")
