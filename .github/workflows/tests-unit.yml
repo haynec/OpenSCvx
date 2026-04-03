@@ -43,7 +43,7 @@ jobs:
 
     - name: Run unit tests
       run: |
-        pytest -v -m "not integration" --durations=10 --tb=short -n auto
+        pytest -v -m "not integration" --durations=15 --tb=short -n auto
 
     - name: Upload test results on failure
       if: failure()
