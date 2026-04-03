@@ -36,8 +36,7 @@ jobs:
     - name: Install dependencies
       run: |
         # Install package with optional GUI and test packages
-        uv pip install --system -e ".[gui,test]"
-        uv pip install pytest-xdist
+        uv pip install --system -e ".[gui,test]" pytest-xdist
 
     - name: Run integration tests
       run: |
