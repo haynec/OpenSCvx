@@ -40,10 +40,11 @@ jobs:
       run: |
         # Install package with optional GUI and test packages
         uv pip install --system -e ".[gui,test]"
+        uv pip install pytest-xdist
 
     - name: Run unit tests
       run: |
-        pytest -v -m "not integration" --durations=10 --tb=short
+        pytest -v -m "not integration" --durations=10 --tb=short -n auto
 
     - name: Upload test results on failure
       if: failure()
