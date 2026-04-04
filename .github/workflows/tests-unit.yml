@@ -39,11 +39,11 @@ jobs:
     - name: Install dependencies
       run: |
         # Install package with optional GUI and test packages
-        uv pip install --system -e ".[gui,test]" pytest-xdist
+        uv pip install --system -e ".[gui,test]"
 
     - name: Run unit tests
       run: |
-        pytest -v -m "not integration" --durations=15 --tb=short -n auto
+        pytest -v -m "not integration" --durations=10 --tb=short -n auto
 
     - name: Upload test results on failure
       if: failure()
