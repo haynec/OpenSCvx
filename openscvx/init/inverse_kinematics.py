@@ -2,9 +2,18 @@
 
 Generates joint-space trajectory guesses by interpolating task-space poses
 (position + orientation) between keyframes and solving inverse kinematics
-at each node in parallel via ``jax.vmap``. Combines linspace (position),
-slerp (orientation), and damped least-squares IK into a single
-initialization call.
+at each node via damped least-squares. Combines linspace (position),
+slerp (orientation), and IK into a single initialization call.
+
+Two solve modes are available:
+
+- **Parallel** (default): Solves all nodes independently via ``jax.vmap``.
+  Each node starts from the same ``angles_init`` seed. Avoids propagating
+  bad local minima but may produce less coherent joint-space paths.
+
+- **Sequential**: Solves nodes in order via ``jax.lax.scan``, seeding each
+  node with the previous node's solution. Produces smoother trajectories
+  when the seed is good, but a bad early solution can propagate.
 
 Requires jaxlie: pip install openscvx[lie]
 """
@@ -122,6 +131,7 @@ def ik_interpolation(
     angles_init: np.ndarray = None,
     angles_min: np.ndarray = None,
     angles_max: np.ndarray = None,
+    sequential: bool = False,
     damping: float = 1e-3,
     max_iter: int = 200,
     tol: float = 1e-6,
@@ -130,7 +140,7 @@ def ik_interpolation(
 
     Interpolates end-effector poses between keyframes (linspace for position,
     slerp for orientation) and solves inverse kinematics at each trajectory
-    node in parallel via ``jax.vmap``.
+    node.
 
     Args:
         keyframes: Sequence of (position, quaternion_wxyz) tuples. Each position
@@ -141,10 +151,14 @@ def ik_interpolation(
             determines the output size (N = nodes[-1] + 1).
         screw_axes: (n_joints, 6) array of screw axes for Product of Exponentials.
         T_home: (4, 4) home configuration transform.
-        angles_init: (n_joints,) initial joint angle guess for all nodes.
-            Defaults to zeros.
+        angles_init: (n_joints,) initial joint angle guess. In parallel mode
+            this seeds every node; in sequential mode it seeds only the first
+            node. Defaults to zeros.
         angles_min: (n_joints,) optional lower joint limits.
         angles_max: (n_joints,) optional upper joint limits.
+        sequential: If True, solve nodes sequentially (each node seeded by the
+            previous solution). If False (default), solve all nodes in parallel
+            from the same ``angles_init`` seed.
         damping: Damping factor for least-squares IK.
         max_iter: Maximum IK iterations per node.
         tol: IK convergence tolerance.
@@ -187,16 +201,35 @@ def ik_interpolation(
     angles_lo = jnp.array(angles_min) if angles_min is not None else jnp.full(n_joints, -jnp.inf)
     angles_hi = jnp.array(angles_max) if angles_max is not None else jnp.full(n_joints, jnp.inf)
 
-    # Broadcast initial guess to all nodes
     angles0 = jnp.array(angles_init) if angles_init is not None else jnp.zeros(n_joints)
-    N = nodes[-1] + 1
-    angles0_all = jnp.broadcast_to(angles0, (N, n_joints))
 
-    # Solve all nodes in parallel
-    result = jax.vmap(
-        lambda p, R, a0: _ik_loop_pose(
-            screw_axes_j, T_home_j, p, R, a0, angles_lo, angles_hi, damping, tol, max_iter
-        )
-    )(p_traj, R_traj, angles0_all)
+    if sequential:
+        # Solve nodes in order, seeding each from the previous solution
+        def scan_step(prev_angles, node_data):
+            p, R = node_data
+            sol = _ik_loop_pose(
+                screw_axes_j,
+                T_home_j,
+                p,
+                R,
+                prev_angles,
+                angles_lo,
+                angles_hi,
+                damping,
+                tol,
+                max_iter,
+            )
+            return sol, sol
+
+        _, result = jax.lax.scan(scan_step, angles0, (p_traj, R_traj))
+    else:
+        # Solve all nodes in parallel from the same seed
+        N = nodes[-1] + 1
+        angles0_all = jnp.broadcast_to(angles0, (N, n_joints))
+        result = jax.vmap(
+            lambda p, R, a0: _ik_loop_pose(
+                screw_axes_j, T_home_j, p, R, a0, angles_lo, angles_hi, damping, tol, max_iter
+            )
+        )(p_traj, R_traj, angles0_all)
 
     return np.array(result)

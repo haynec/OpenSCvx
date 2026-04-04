@@ -245,6 +245,7 @@ angle.guess = ox.init.ik_interpolation(
     angles_init=angle.initial,
     angles_min=angle.min,
     angles_max=angle.max,
+    sequential=True,
 )
 angle.initial = np.clip(angle.guess[0], angle.min, angle.max)
 velocity.guess = np.zeros((n, N_JOINTS))
