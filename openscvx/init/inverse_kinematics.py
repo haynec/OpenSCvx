@@ -2,8 +2,9 @@
 
 Generates joint-space trajectory guesses by interpolating task-space poses
 (position + orientation) between keyframes and solving inverse kinematics
-at each node. Combines linspace (position), slerp (orientation), and
-damped least-squares IK into a single initialization call.
+at each node in parallel via ``jax.vmap``. Combines linspace (position),
+slerp (orientation), and damped least-squares IK into a single
+initialization call.
 
 Requires jaxlie: pip install openscvx[lie]
 """
@@ -29,9 +30,9 @@ Pose = Union[
 
 
 def _quat_wxyz_to_rotmat(q_wxyz):
-    """Convert [w, x, y, z] quaternion to 3x3 rotation matrix."""
-    w, x, y, z = q_wxyz
-    return np.array(
+    """Convert [w, x, y, z] quaternion to 3x3 rotation matrix (JAX-compatible)."""
+    w, x, y, z = q_wxyz[0], q_wxyz[1], q_wxyz[2], q_wxyz[3]
+    return jnp.array(
         [
             [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
             [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
@@ -71,12 +72,6 @@ def _poe_fk_pose(screw_axes, T_home, angles):
     return T @ T_home
 
 
-@jax.jit
-def _poe_fk_position(screw_axes, T_home, angles):
-    """PoE FK returning (3,) end-effector position."""
-    return _poe_fk_pose(screw_axes, T_home, angles)[:3, 3]
-
-
 # =============================================================================
 # IK solver (JIT-compiled via lax.while_loop)
 # =============================================================================
@@ -113,111 +108,6 @@ def _ik_loop_pose(
     return angles_sol
 
 
-@jax.jit
-def _ik_loop_position(
-    screw_axes, T_home, p_target, angles0, angles_lo, angles_hi, damping, tol, max_iter
-):
-    """JIT'd position-only IK via damped least-squares."""
-
-    def fk_pos(angles):
-        return _poe_fk_position(screw_axes, T_home, angles)
-
-    J_fn = jax.jacfwd(fk_pos)
-
-    def cond(state):
-        _, err_norm, i = state
-        return (err_norm >= tol) & (i < max_iter)
-
-    def body(state):
-        angles, _, i = state
-        err = p_target - fk_pos(angles)
-        J = J_fn(angles)
-        dj = J.T @ jnp.linalg.solve(J @ J.T + damping * jnp.eye(3), err)
-        angles_new = jnp.clip(angles + dj, angles_lo, angles_hi)
-        return angles_new, jnp.linalg.norm(p_target - fk_pos(angles_new)), i + 1
-
-    init_err = jnp.linalg.norm(p_target - fk_pos(angles0))
-    angles_sol, _, _ = jax.lax.while_loop(cond, body, (angles0, init_err, jnp.int32(0)))
-    return angles_sol
-
-
-def _ik_solve(
-    screw_axes,
-    T_home,
-    p_target,
-    angles0=None,
-    *,
-    R_target=None,
-    max_iter=200,
-    tol=1e-6,
-    damping=1e-3,
-    angles_min=None,
-    angles_max=None,
-):
-    """Damped least-squares IK solver.
-
-    Solves for joint angles that place the end-effector at a target position
-    and optionally a target orientation. When R_target is provided, the solver
-    minimizes the full 6D pose error (position + orientation via SO(3) log).
-
-    The inner loop is JIT-compiled via ``jax.lax.while_loop``.
-
-    Args:
-        screw_axes: (n_joints, 6) array of screw axes.
-        T_home: (4, 4) home configuration.
-        p_target: (3,) desired end-effector position.
-        angles0: (n_joints,) initial joint angle guess. Defaults to zeros.
-        R_target: (3, 3) desired end-effector rotation matrix, or None for
-            position-only IK.
-        max_iter: Maximum iterations.
-        tol: Convergence tolerance.
-        damping: Damping factor for least-squares.
-        angles_min: (n_joints,) optional lower joint limits.
-        angles_max: (n_joints,) optional upper joint limits.
-
-    Returns:
-        (n_joints,) joint angles that place the EE near the target.
-    """
-    n_joints = screw_axes.shape[0]
-    if angles0 is None:
-        angles0 = np.zeros(n_joints)
-
-    screw_axes_j = jnp.array(screw_axes)
-    T_home_j = jnp.array(T_home)
-    p_target_j = jnp.array(p_target)
-    angles0_j = jnp.array(angles0, dtype=float)
-    angles_lo = jnp.array(angles_min) if angles_min is not None else jnp.full(n_joints, -jnp.inf)
-    angles_hi = jnp.array(angles_max) if angles_max is not None else jnp.full(n_joints, jnp.inf)
-
-    if R_target is not None:
-        angles_sol = _ik_loop_pose(
-            screw_axes_j,
-            T_home_j,
-            p_target_j,
-            jnp.array(R_target),
-            angles0_j,
-            angles_lo,
-            angles_hi,
-            damping,
-            tol,
-            max_iter,
-        )
-    else:
-        angles_sol = _ik_loop_position(
-            screw_axes_j,
-            T_home_j,
-            p_target_j,
-            angles0_j,
-            angles_lo,
-            angles_hi,
-            damping,
-            tol,
-            max_iter,
-        )
-
-    return np.array(angles_sol)
-
-
 # =============================================================================
 # Public API
 # =============================================================================
@@ -240,8 +130,7 @@ def ik_interpolation(
 
     Interpolates end-effector poses between keyframes (linspace for position,
     slerp for orientation) and solves inverse kinematics at each trajectory
-    node. Each IK solve is warm-started with the previous node's solution for
-    smooth joint trajectories.
+    node in parallel via ``jax.vmap``.
 
     Args:
         keyframes: Sequence of (position, quaternion_wxyz) tuples. Each position
@@ -252,7 +141,7 @@ def ik_interpolation(
             determines the output size (N = nodes[-1] + 1).
         screw_axes: (n_joints, 6) array of screw axes for Product of Exponentials.
         T_home: (4, 4) home configuration transform.
-        angles_init: (n_joints,) initial joint angle guess for the first node.
+        angles_init: (n_joints,) initial joint angle guess for all nodes.
             Defaults to zeros.
         angles_min: (n_joints,) optional lower joint limits.
         angles_max: (n_joints,) optional upper joint limits.
@@ -288,30 +177,26 @@ def ik_interpolation(
             raise ValueError(f"Keyframe {i} quaternion has shape {quat.shape}, expected (4,)")
 
     # Interpolate task-space trajectory
-    p_traj = linspace(keyframes=positions, nodes=nodes)  # (N, 3)
-    quat_traj = slerp(keyframes=quaternions, nodes=nodes)  # (N, 4)
+    p_traj = jnp.array(linspace(keyframes=positions, nodes=nodes))  # (N, 3)
+    quat_traj = jnp.array(slerp(keyframes=quaternions, nodes=nodes))  # (N, 4)
+    R_traj = jax.vmap(_quat_wxyz_to_rotmat)(quat_traj)  # (N, 3, 3)
 
-    N = nodes[-1] + 1
     n_joints = screw_axes.shape[0]
-    result = np.zeros((N, n_joints), dtype=np.float64)
+    screw_axes_j = jnp.array(screw_axes)
+    T_home_j = jnp.array(T_home)
+    angles_lo = jnp.array(angles_min) if angles_min is not None else jnp.full(n_joints, -jnp.inf)
+    angles_hi = jnp.array(angles_max) if angles_max is not None else jnp.full(n_joints, jnp.inf)
 
-    # Solve IK at each node, warm-starting from previous solution
-    angles_prev = angles_init if angles_init is not None else np.zeros(n_joints)
-    for k in range(N):
-        R_target = _quat_wxyz_to_rotmat(quat_traj[k])
-        angles_sol = _ik_solve(
-            screw_axes,
-            T_home,
-            p_traj[k],
-            angles0=angles_prev,
-            R_target=R_target,
-            max_iter=max_iter,
-            tol=tol,
-            damping=damping,
-            angles_min=angles_min,
-            angles_max=angles_max,
+    # Broadcast initial guess to all nodes
+    angles0 = jnp.array(angles_init) if angles_init is not None else jnp.zeros(n_joints)
+    N = nodes[-1] + 1
+    angles0_all = jnp.broadcast_to(angles0, (N, n_joints))
+
+    # Solve all nodes in parallel
+    result = jax.vmap(
+        lambda p, R, a0: _ik_loop_pose(
+            screw_axes_j, T_home_j, p, R, a0, angles_lo, angles_hi, damping, tol, max_iter
         )
-        result[k] = angles_sol
-        angles_prev = angles_sol
+    )(p_traj, R_traj, angles0_all)
 
-    return result
+    return np.array(result)
