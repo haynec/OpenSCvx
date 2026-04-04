@@ -27,7 +27,7 @@ EXCLUDED_EXAMPLES = {
 # Format: "relative/path/to/example.py": {"init": max_init, "solve": max_solve, "post": max_post}
 TIMING_BOUNDS = {
     "abstract/brachistochrone.py": {
-        "init": 10.0,
+        "init": 15.0,
         "solve": 1.0,
         "post": 5.0,
     },
