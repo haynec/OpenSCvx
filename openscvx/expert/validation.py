@@ -59,7 +59,7 @@ def validate_byof(
         raise ValueError(f"Unknown byof keys: {invalid_keys}. Valid keys: {valid_keys}")
 
     # Validate byof parameters
-    from openscvx.symbolic.expr.expr import Parameter
+    from openscvx.symbolic.expr.parameter import Parameter
 
     for i, param in enumerate(byof.get("parameters", [])):
         if not isinstance(param, Parameter):

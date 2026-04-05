@@ -71,7 +71,8 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, ConfigDict
 
 from openscvx.symbolic.expr.control import ControlSpec
-from openscvx.symbolic.expr.expr import Expr, Parameter, ParameterSpec
+from openscvx.symbolic.expr.expr import Expr
+from openscvx.symbolic.expr.parameter import Parameter, ParameterSpec
 from openscvx.symbolic.expr.state import StateSpec
 from openscvx.symbolic.expr.time import TimeSpec
 from openscvx.symbolic.parser._registry import _PARSE_FUNCTIONS

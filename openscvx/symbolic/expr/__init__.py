@@ -97,10 +97,12 @@ from .expr import (
     Expr,
     Leaf,
     NodeReference,
-    Parameter,
     to_expr,
     traverse,
 )
+
+# Parameter
+from .parameter import Parameter
 
 # Lie algebra operations
 from .lie import (

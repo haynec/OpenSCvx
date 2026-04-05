@@ -6,7 +6,8 @@ Visitors: Constant, Parameter, NodeReference
 import cvxpy as cp
 
 # Expression types to handle — uncomment as you paste visitors:
-from openscvx.symbolic.expr.expr import Constant, NodeReference, Parameter
+from openscvx.symbolic.expr.expr import Constant, NodeReference
+from openscvx.symbolic.expr.parameter import Parameter
 from openscvx.symbolic.lowerers.cvxpy._registry import visitor  # noqa: F401
 
 

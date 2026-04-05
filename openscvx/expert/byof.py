@@ -99,7 +99,7 @@ from typing import TYPE_CHECKING, Any, Callable, List, Literal, Tuple, TypedDict
 if TYPE_CHECKING:
     from jax import Array as JaxArray
 
-    from openscvx.symbolic.expr.expr import Parameter
+    from openscvx.symbolic.expr.parameter import Parameter
 else:
     JaxArray = Any
 
