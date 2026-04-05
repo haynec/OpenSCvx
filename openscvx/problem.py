@@ -29,7 +29,7 @@ from openscvx.algorithms import (
     AlgorithmState,
     OptimizationResults,
     PenalizedTrustRegion,
-    _resolve_algorithm,
+    PenalizedTrustRegionConfig,
 )
 from openscvx.config import (
     Config,
@@ -39,8 +39,8 @@ from openscvx.config import (
 )
 from openscvx.discretization import (
     Discretizer,
+    DiscretizerConfig,
     VectorizeDiscretizeLinearize,
-    _resolve_discretizer,
     get_impulsive_discretization_solver,
 )
 from openscvx.expert import ByofSpec
@@ -52,7 +52,7 @@ from openscvx.lowered.jax_constraints import (
     LoweredNodalConstraint,
 )
 from openscvx.propagation import get_propagation_solver, propagate_trajectory_results
-from openscvx.solvers import ConvexSolver, PTRSolver, _resolve_solver
+from openscvx.solvers import ConvexSolver, PTRSolver, SolverConfig
 from openscvx.symbolic.builder import preprocess_symbolic_problem
 from openscvx.symbolic.expr import CTCS, Constraint
 from openscvx.symbolic.expr.control import Control
@@ -288,51 +288,28 @@ class Problem:
         # Store byof for cache hashing
         self._byof = byof
 
-        # Resolve algorithm: None → default PTR, dict → PTR(**dict), instance → use directly
-        # Pass symbolic states/controls so dict-valued weights can be expanded eagerly.
-        if algorithm is None:
-            self._algorithm = PenalizedTrustRegion(
+        # Resolve algorithm: instance → use directly, dict/None → validate & build
+        if isinstance(algorithm, Algorithm):
+            self._algorithm = algorithm
+        else:
+            config = PenalizedTrustRegionConfig.model_validate(algorithm or {})
+            self._algorithm = config.to_algorithm(
                 states=self.symbolic.states, controls=self.symbolic.controls
             )
-        elif isinstance(algorithm, dict):
-            self._algorithm = _resolve_algorithm(
-                algorithm, states=self.symbolic.states, controls=self.symbolic.controls
-            )
-        else:
-            if not isinstance(algorithm, Algorithm):
-                raise TypeError(
-                    f"algorithm must be an Algorithm instance, dict, or None, "
-                    f"got {type(algorithm).__name__}"
-                )
-            self._algorithm = algorithm
 
-        # Resolve discretizer: None → LinearizeDiscretize,
-        #                      dict → _resolve_discretizer,
-        #                      instance → use
-        if discretizer is None:
-            self._discretizer = VectorizeDiscretizeLinearize()
-        elif isinstance(discretizer, dict):
-            self._discretizer = _resolve_discretizer(discretizer)
-        else:
-            if not isinstance(discretizer, Discretizer):
-                raise TypeError(
-                    f"discretizer must be a Discretizer instance, dict, or None, "
-                    f"got {type(discretizer).__name__}"
-                )
+        # Resolve discretizer: instance → use directly, dict/None → validate & build
+        if isinstance(discretizer, Discretizer):
             self._discretizer = discretizer
-
-        # Resolve solver: None → default PTRSolver, dict → PTRSolver(**dict), instance → use
-        if solver is None:
-            self._solver = PTRSolver()
-        elif isinstance(solver, dict):
-            self._solver = _resolve_solver(solver)
         else:
-            if not isinstance(solver, ConvexSolver):
-                raise TypeError(
-                    f"solver must be a ConvexSolver instance, dict, or None, "
-                    f"got {type(solver).__name__}"
-                )
+            config = DiscretizerConfig.model_validate(discretizer or {})
+            self._discretizer = config.to_discretizer()
+
+        # Resolve solver: instance → use directly, dict/None → validate & build
+        if isinstance(solver, ConvexSolver):
             self._solver = solver
+        else:
+            config = SolverConfig.model_validate(solver or {})
+            self._solver = config.to_solver()
 
         # Lower to JAX and CVXPy (byof handling happens inside lower_symbolic_problem)
         self._lowered: LoweredProblem = lower_symbolic_problem(

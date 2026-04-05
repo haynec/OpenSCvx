@@ -364,7 +364,7 @@ def test_constraint_types(constraint_type):
         "augmented_lagrangian",
         "constant_proximal",
         "ramp_proximal",
-        "string_augmented_lagrangian",
+        "dict_augmented_lagrangian",
         "dict_ramp_proximal",
     ],
 )
@@ -373,8 +373,8 @@ def test_autotuning(autotuner_spec):
     Test brachistochrone with different autotuning strategies.
 
     Covers all three autotuner implementations (AugmentedLagrangian,
-    ConstantProximalWeight, RampProximalWeight) as well as the string
-    and dict-based resolution paths in ``_resolve_autotuner``.
+    ConstantProximalWeight, RampProximalWeight) as well as the
+    dict-based resolution path through ``PenalizedTrustRegionConfig``.
 
     Args:
         autotuner_spec: Identifies the autotuner and how it is specified.
@@ -444,8 +444,8 @@ def test_autotuning(autotuner_spec):
         autotuner = ox.ConstantProximalWeight()
     elif autotuner_spec == "ramp_proximal":
         autotuner = ox.RampProximalWeight()
-    elif autotuner_spec == "string_augmented_lagrangian":
-        autotuner = "AugmentedLagrangian"
+    elif autotuner_spec == "dict_augmented_lagrangian":
+        autotuner = {"type": "AugmentedLagrangian"}
     elif autotuner_spec == "dict_ramp_proximal":
         autotuner = {"type": "RampProximalWeight", "ramp_factor": 1.0}
 

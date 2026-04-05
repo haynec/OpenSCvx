@@ -80,7 +80,7 @@ Current Implementations:
 
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from .augmented_lagrangian import AugmentedLagrangian
 from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult
@@ -170,11 +170,11 @@ class PenalizedTrustRegionConfig(BaseModel):
     The ``autotuner`` field accepts:
 
     * ``None`` — defaults to :class:`AugmentedLagrangian`.
-    * A **string** — autotuner class name with defaults, e.g. ``"RampProximalWeight"``.
     * A **dict** — class name via ``"type"`` key plus overrides.
+    * An **instance** — already-constructed autotuner (pass-through).
     """
 
-    autotuner: Optional[AutotunerConfig] = None
+    autotuner: Optional[Union[AutotunerConfig, AutotuningBase]] = None
     k_max: int = 200
     lam_prox: Union[float, Dict[str, Any]] = 1e-1
     lam_vc: Union[float, Dict[str, Any]] = 1e0
@@ -184,24 +184,20 @@ class PenalizedTrustRegionConfig(BaseModel):
     ep_vb: float = 1e-4
     ep_vc: float = 1e-8
 
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _normalize_autotuner(cls, data: Any) -> Any:
-        if isinstance(data, dict) and "autotuner" in data:
-            at = data["autotuner"]
-            if isinstance(at, str):
-                data = dict(data)
-                data["autotuner"] = {"type": at}
-        return data
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     def to_algorithm(
         self,
         states: Optional[List[Any]] = None,
         controls: Optional[List[Any]] = None,
     ) -> PenalizedTrustRegion:
-        autotuner = self.autotuner.to_autotuner() if self.autotuner is not None else None
+        at = self.autotuner
+        if at is None:
+            autotuner = None
+        elif isinstance(at, AutotuningBase):
+            autotuner = at
+        else:
+            autotuner = at.to_autotuner()
         return PenalizedTrustRegion(
             autotuner=autotuner,
             k_max=self.k_max,
