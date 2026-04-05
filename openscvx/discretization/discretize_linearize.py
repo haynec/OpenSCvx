@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Sequence, Union
 
 import diffrax as dfx
 import jax
@@ -48,6 +48,18 @@ class VectorizeDiscretizeLinearize(Discretizer):
             ``stepsize_controller``). Defaults to ``{}``.
         args: Deprecated alias for ``diffrax_kwargs`` kept for backward compatibility.
     """
+
+    class Spec(Discretizer.Spec):
+        """Validates VectorizeDiscretizeLinearize configuration from dict/YAML input."""
+
+        type: Literal["VectorizeDiscretizeLinearize"] = "VectorizeDiscretizeLinearize"
+        custom_integrator: bool = False
+        args: Optional[Dict[str, Any]] = None
+
+        def build(self) -> "VectorizeDiscretizeLinearize":
+            return VectorizeDiscretizeLinearize(
+                **self.model_dump(exclude={"type"}, exclude_unset=True)
+            )
 
     def __init__(
         self,
@@ -269,6 +281,18 @@ class DiscretizeLinearizeVectorize(Discretizer):
             ``stepsize_controller``). Defaults to ``{}``.
         args: Deprecated alias for ``diffrax_kwargs`` kept for backward compatibility.
     """
+
+    class Spec(Discretizer.Spec):
+        """Validates DiscretizeLinearizeVectorize configuration from dict/YAML input."""
+
+        type: Literal["DiscretizeLinearizeVectorize"] = "DiscretizeLinearizeVectorize"
+        custom_integrator: bool = False
+        args: Optional[Dict[str, Any]] = None
+
+        def build(self) -> "DiscretizeLinearizeVectorize":
+            return DiscretizeLinearizeVectorize(
+                **self.model_dump(exclude={"type"}, exclude_unset=True)
+            )
 
     def __init__(
         self,

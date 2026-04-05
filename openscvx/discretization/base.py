@@ -18,10 +18,12 @@ base class handles both, keeping the input/output contract consistent regardless
 of internal strategy.
 """
 
+import inspect
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, List, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Union
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
     from openscvx.config import Config
@@ -124,10 +126,25 @@ class Discretizer(ABC):
     Discretization parameters (hold type, integrator, tolerances) live on each
     concrete subclass as instance attributes.
 
+    Subclasses must:
+
+    1. Implement the ``get_solver`` and ``citation`` methods.
+    2. Define an inner ``Spec(Discretizer.Spec)`` class that adds a ``type``
+       field whose ``Literal`` value matches the class name, and a ``build()``
+       method returning an instance of the discretizer.
+
     Example:
         Implementing a custom discretizer::
 
             class EulerDiscretizer(Discretizer):
+                class Spec(Discretizer.Spec):
+                    type: Literal["EulerDiscretizer"] = "EulerDiscretizer"
+
+                    def build(self) -> "EulerDiscretizer":
+                        return EulerDiscretizer(
+                            **self.model_dump(exclude={"type"}, exclude_unset=True)
+                        )
+
                 def get_solver(self, dynamics, settings):
                     def solver(x, u, params):
                         # Euler discretization of dynamics
@@ -138,6 +155,33 @@ class Discretizer(ABC):
                 def citation(self):
                     return []
     """
+
+    class Spec(BaseModel):
+        """Base configuration spec for discretizers.
+
+        Subclass Specs inherit these common fields and add a ``type``
+        literal for discriminated-union dispatch plus a ``build()``
+        method that constructs the concrete discretizer.
+        """
+
+        dis_type: Union[str, List[str]] = "FOH"
+        ode_solver: str = "Tsit5"
+        diffrax_kwargs: Optional[Dict[str, Any]] = None
+
+        model_config = ConfigDict(extra="forbid")
+
+        def build(self) -> "Discretizer":
+            raise NotImplementedError
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if inspect.isabstract(cls):
+            return
+        if "Spec" not in cls.__dict__:
+            raise TypeError(
+                f"{cls.__name__} must define an inner Spec(Discretizer.Spec) class "
+                f"for dict/YAML configuration support"
+            )
 
     #: Control hold type. A single ``"FOH"`` or ``"ZOH"`` string applies the
     #: same hold to every control.  A sequence (e.g.

@@ -35,11 +35,11 @@ Python dict) and returns the keyword arguments needed to construct a
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from openscvx.algorithms import PenalizedTrustRegionConfig
 from openscvx.config import SettingsSpec
-from openscvx.discretization import DiscretizerConfig
+from openscvx.discretization import DEFAULT_DISCRETIZER_TYPE, DiscretizerConfig
 from openscvx.solvers import SolverConfig
 from openscvx.symbolic.expr.control import ControlSpec
 from openscvx.symbolic.expr.expr import Expr
@@ -73,6 +73,13 @@ class ProblemSpec(BaseModel):
     algebraic_prop: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("discretizer", mode="before")
+    @classmethod
+    def _inject_default_discretizer_type(cls, v: Any) -> Any:
+        if isinstance(v, dict) and "type" not in v:
+            return {**v, "type": DEFAULT_DISCRETIZER_TYPE}
+        return v
 
 
 # =============================================================================

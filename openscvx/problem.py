@@ -38,8 +38,8 @@ from openscvx.config import (
 )
 from openscvx.discretization import (
     Discretizer,
-    DiscretizerConfig,
     get_impulsive_discretization_solver,
+    resolve_discretizer_config,
 )
 from openscvx.expert import ByofSpec
 from openscvx.lowered import LoweredProblem, ParameterDict
@@ -303,8 +303,8 @@ class Problem:
         if isinstance(discretizer, Discretizer):
             self._discretizer = discretizer
         else:
-            config = DiscretizerConfig.model_validate(discretizer or {})
-            self._discretizer = config.to_discretizer()
+            spec = resolve_discretizer_config(discretizer or {})
+            self._discretizer = spec.build()
 
         # Resolve solver: instance → use directly, dict/None → validate & build
         if isinstance(solver, ConvexSolver):

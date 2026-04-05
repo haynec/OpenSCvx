@@ -16,9 +16,9 @@ Jacobians and compact variational integration when sparsity patterns exist).
 :class:`LinearizeDiscretize` is the dense linearize-then-discretize scheme.
 """
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Annotated, Any, Union
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import Field, TypeAdapter
 
 from .base import Discretizer, DisType
 from .discretize_linearize import DiscretizeLinearizeVectorize, VectorizeDiscretizeLinearize
@@ -31,44 +31,35 @@ from .linearize_discretize_sparse import LinearizeDiscretizeSparse
 from .sparse_utils import color_columns, make_sparse_jacobian_fns
 
 # ---------------------------------------------------------------------------
-# Spec resolver — turn a dict into a Discretizer instance
+# Discretizer config — discriminated union of each discretizer's inner Spec
 # ---------------------------------------------------------------------------
 
-_DISCRETIZER_MAP = {
-    "DiscretizeLinearizeVectorize": DiscretizeLinearizeVectorize,
-    "LinearizeDiscretize": LinearizeDiscretize,
-    "LinearizeDiscretizeSparse": LinearizeDiscretizeSparse,
-    "VectorizeDiscretizeLinearize": VectorizeDiscretizeLinearize,
-}
+DEFAULT_DISCRETIZER_TYPE = "VectorizeDiscretizeLinearize"
+
+DiscretizerConfig = Annotated[
+    Union[
+        VectorizeDiscretizeLinearize.Spec,
+        DiscretizeLinearizeVectorize.Spec,
+        LinearizeDiscretize.Spec,
+        LinearizeDiscretizeSparse.Spec,
+    ],
+    Field(discriminator="type"),
+]
+
+discretizer_config_adapter = TypeAdapter(DiscretizerConfig)
 
 
-class DiscretizerConfig(BaseModel):
-    """Validates discretizer configuration from dict input.
+def resolve_discretizer_config(val: Any) -> Discretizer.Spec:
+    """Validate a dict/Spec into a :class:`Discretizer.Spec` instance.
 
-    An optional ``type`` key selects the discretizer class (defaults to
-    ``VectorizeDiscretizeLinearize``).  Remaining fields are forwarded as
-    keyword arguments to the selected class.
+    Injects the default ``type`` (``VectorizeDiscretizeLinearize``) when the
+    input dict omits it, preserving backwards compatibility.
     """
-
-    type: str = "VectorizeDiscretizeLinearize"
-    dis_type: Union[str, List[str]] = "FOH"
-    ode_solver: str = "Tsit5"
-    custom_integrator: bool = False
-    diffrax_kwargs: Optional[Dict[str, Any]] = None
-    args: Optional[Dict[str, Any]] = None
-
-    model_config = ConfigDict(extra="forbid")
-
-    def to_discretizer(self) -> Discretizer:
-        cls = _DISCRETIZER_MAP.get(self.type)
-        if cls is None:
-            raise ValueError(
-                f"Unknown discretizer {self.type!r}; expected one of {sorted(_DISCRETIZER_MAP)}"
-            )
-        # Only forward explicitly-set fields so constructors with fewer
-        # parameters don't receive unexpected keyword arguments.
-        kwargs = self.model_dump(exclude={"type"}, exclude_unset=True)
-        return cls(**kwargs)
+    if isinstance(val, Discretizer.Spec):
+        return val
+    if isinstance(val, dict) and "type" not in val:
+        val = {**val, "type": DEFAULT_DISCRETIZER_TYPE}
+    return discretizer_config_adapter.validate_python(val)
 
 
 __all__ = [
@@ -79,6 +70,7 @@ __all__ = [
     "LinearizeDiscretize",
     "LinearizeDiscretizeSparse",
     "VectorizeDiscretizeLinearize",
+    "resolve_discretizer_config",
     "calculate_impulsive_discretization",
     "color_columns",
     "get_impulsive_discretization_solver",
