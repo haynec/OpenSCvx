@@ -123,7 +123,7 @@ class AugmentedLagrangianConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     def to_autotuner(self) -> AugmentedLagrangian:
-        return AugmentedLagrangian(**self.model_dump(exclude={"type"}))
+        return AugmentedLagrangian(**self.model_dump(exclude={"type"}, exclude_unset=True))
 
 
 class RampProximalWeightConfig(BaseModel):
@@ -138,7 +138,7 @@ class RampProximalWeightConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     def to_autotuner(self) -> RampProximalWeight:
-        return RampProximalWeight(**self.model_dump(exclude={"type"}))
+        return RampProximalWeight(**self.model_dump(exclude={"type"}, exclude_unset=True))
 
 
 class ConstantProximalWeightConfig(BaseModel):
@@ -151,7 +151,7 @@ class ConstantProximalWeightConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     def to_autotuner(self) -> ConstantProximalWeight:
-        return ConstantProximalWeight(**self.model_dump(exclude={"type"}))
+        return ConstantProximalWeight(**self.model_dump(exclude={"type"}, exclude_unset=True))
 
 
 AutotunerConfig = Annotated[
@@ -198,18 +198,12 @@ class PenalizedTrustRegionConfig(BaseModel):
             autotuner = at
         else:
             autotuner = at.to_autotuner()
+        kwargs = self.model_dump(exclude={"autotuner"}, exclude_unset=True)
         return PenalizedTrustRegion(
             autotuner=autotuner,
-            k_max=self.k_max,
-            lam_prox=self.lam_prox,
-            lam_vc=self.lam_vc,
-            lam_cost=self.lam_cost,
-            lam_vb=self.lam_vb,
-            ep_tr=self.ep_tr,
-            ep_vb=self.ep_vb,
-            ep_vc=self.ep_vc,
             states=states,
             controls=controls,
+            **kwargs,
         )
 
 
