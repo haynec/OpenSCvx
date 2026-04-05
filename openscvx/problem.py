@@ -86,7 +86,7 @@ class Problem:
         algorithm: Optional[Union[Algorithm, dict]] = None,
         discretizer: Optional[Union[Discretizer, dict]] = None,
         solver: Optional[Union[ConvexSolver, dict]] = None,
-        byof: Optional[dict] = None,
+        byof: Optional[Union[ByofSpec, dict]] = None,
         float_dtype: str = "float32",
     ):
         """The primary class in charge of compiling and exporting the solvers.
