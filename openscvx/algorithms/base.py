@@ -5,6 +5,7 @@ must follow, along with the AlgorithmState dataclass that holds mutable state
 during SCP iterations.
 """
 
+import inspect
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
@@ -119,8 +120,13 @@ class AutotuningBase(ABC):
     that are shared across different autotuning strategies (e.g., Penalized Trust
     Region, Augmented Lagrangian).
 
-    Subclasses should implement the `update_weights` method to define their specific
-    weight update strategy.
+    Subclasses must:
+
+    1. Implement the ``update_weights`` method.
+    2. Define an inner ``Spec(BaseModel)`` class with ``extra="forbid"`` that
+       validates dict/YAML input and provides a ``build()`` method returning
+       an instance of the autotuner.  The ``Spec`` must include a ``type``
+       field whose ``Literal`` value matches the class name.
 
     Class Attributes:
         COLUMNS: List of Column specs for autotuner-specific metrics to display.
@@ -128,6 +134,16 @@ class AutotuningBase(ABC):
     """
 
     COLUMNS: List[Column] = []
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if inspect.isabstract(cls):
+            return
+        if not hasattr(cls, "Spec"):
+            raise TypeError(
+                f"{cls.__name__} must define an inner Spec(BaseModel) class "
+                f"for dict/YAML configuration support"
+            )
 
     @staticmethod
     def calculate_cost_from_state(

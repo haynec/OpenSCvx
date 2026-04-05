@@ -78,7 +78,7 @@ Current Implementations:
 - :class:`PenalizedTrustRegion`: Penalized Trust Region (PTR) algorithm
 """
 
-from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+from typing import Annotated, Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -91,71 +91,15 @@ from .ramp_proximal_weight import RampProximalWeight
 from .weights import Weights
 
 # ---------------------------------------------------------------------------
-# Autotuner config models
+# Autotuner config — discriminated union of each autotuner's inner Spec
 # ---------------------------------------------------------------------------
 
-_AUTOTUNER_MAP: Dict[str, type] = {
-    "AugmentedLagrangian": AugmentedLagrangian,
-    "ConstantProximalWeight": ConstantProximalWeight,
-    "RampProximalWeight": RampProximalWeight,
-}
-
-
-class AugmentedLagrangianConfig(BaseModel):
-    """Validates AugmentedLagrangian configuration from dict input."""
-
-    type: Literal["AugmentedLagrangian"] = "AugmentedLagrangian"
-    rho_init: float = 1.0
-    rho_max: float = 1e2
-    gamma_1: float = 2.0
-    gamma_2: float = 0.5
-    eta_0: float = 1e-2
-    eta_1: float = 1e-1
-    eta_2: float = 0.8
-    ep: float = 0.99
-    eta_lambda: float = 1e1
-    lam_vc_max: float = 1e5
-    lam_prox_min: float = 1e-3
-    lam_prox_max: float = 1e4
-    lam_cost_drop: int = -1
-    lam_cost_relax: float = 1.0
-
-    model_config = ConfigDict(extra="forbid")
-
-    def to_autotuner(self) -> AugmentedLagrangian:
-        return AugmentedLagrangian(**self.model_dump(exclude={"type"}, exclude_unset=True))
-
-
-class RampProximalWeightConfig(BaseModel):
-    """Validates RampProximalWeight configuration from dict input."""
-
-    type: Literal["RampProximalWeight"] = "RampProximalWeight"
-    ramp_factor: float = 1.0
-    lam_prox_max: float = 1e3
-    lam_cost_drop: int = -1
-    lam_cost_relax: float = 1.0
-
-    model_config = ConfigDict(extra="forbid")
-
-    def to_autotuner(self) -> RampProximalWeight:
-        return RampProximalWeight(**self.model_dump(exclude={"type"}, exclude_unset=True))
-
-
-class ConstantProximalWeightConfig(BaseModel):
-    """Validates ConstantProximalWeight configuration from dict input."""
-
-    type: Literal["ConstantProximalWeight"] = "ConstantProximalWeight"
-    lam_cost_drop: int = -1
-    lam_cost_relax: float = 1.0
-
-    model_config = ConfigDict(extra="forbid")
-
-    def to_autotuner(self) -> ConstantProximalWeight:
-        return ConstantProximalWeight(**self.model_dump(exclude={"type"}, exclude_unset=True))
-
-
 AutotunerConfig = Annotated[
-    Union[AugmentedLagrangianConfig, RampProximalWeightConfig, ConstantProximalWeightConfig],
+    Union[
+        AugmentedLagrangian.Spec,
+        RampProximalWeight.Spec,
+        ConstantProximalWeight.Spec,
+    ],
     Field(discriminator="type"),
 ]
 
@@ -197,7 +141,7 @@ class PenalizedTrustRegionConfig(BaseModel):
         elif isinstance(at, AutotuningBase):
             autotuner = at
         else:
-            autotuner = at.to_autotuner()
+            autotuner = at.build()
         kwargs = self.model_dump(exclude={"autotuner"}, exclude_unset=True)
         return PenalizedTrustRegion(
             autotuner=autotuner,
@@ -223,7 +167,5 @@ __all__ = [
     "RampProximalWeight",
     # Config models
     "PenalizedTrustRegionConfig",
-    "AugmentedLagrangianConfig",
-    "RampProximalWeightConfig",
-    "ConstantProximalWeightConfig",
+    "AutotunerConfig",
 ]

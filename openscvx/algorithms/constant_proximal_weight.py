@@ -1,6 +1,8 @@
 """Autotuning functions for SCP (Successive Convex Programming) parameters."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
+
+from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 
@@ -20,6 +22,18 @@ class ConstantProximalWeight(AutotuningBase):
     while still updating virtual control weights and handling cost relaxation.
     Useful when you want a fixed trust region size without adaptation.
     """
+
+    class Spec(BaseModel):
+        """Validates ConstantProximalWeight configuration from dict/YAML input."""
+
+        type: Literal["ConstantProximalWeight"] = "ConstantProximalWeight"
+        lam_cost_drop: int = -1
+        lam_cost_relax: float = 1.0
+
+        model_config = ConfigDict(extra="forbid")
+
+        def build(self) -> "ConstantProximalWeight":
+            return ConstantProximalWeight(**self.model_dump(exclude={"type"}, exclude_unset=True))
 
     def __init__(
         self,
