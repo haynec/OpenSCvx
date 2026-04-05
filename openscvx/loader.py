@@ -37,6 +37,9 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict
 
+from openscvx.algorithms import PenalizedTrustRegionConfig
+from openscvx.discretization import DiscretizerConfig
+from openscvx.solvers import SolverConfig
 from openscvx.symbolic.expr.control import ControlSpec
 from openscvx.symbolic.expr.expr import Expr
 from openscvx.symbolic.expr.parameter import ParameterSpec
@@ -60,9 +63,9 @@ class ProblemSpec(BaseModel):
     parameters: List[ParameterSpec] = []
     dynamics: Dict[str, Any] = {}
     constraints: List[str] = []
-    algorithm: Optional[Dict[str, Any]] = None
-    discretizer: Optional[Dict[str, Any]] = None
-    solver: Optional[Dict[str, Any]] = None
+    algorithm: Optional[PenalizedTrustRegionConfig] = None
+    discretizer: Optional[DiscretizerConfig] = None
+    solver: Optional[SolverConfig] = None
     settings: Optional[Dict[str, Any]] = None
     states_prop: Optional[List[StateSpec]] = None
     dynamics_prop: Optional[Dict[str, Any]] = None
