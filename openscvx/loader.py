@@ -66,20 +66,47 @@ Expected schema
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
-import numpy as np
+from pydantic import BaseModel, ConfigDict
 
-from openscvx.symbolic.expr.control import Control
-from openscvx.symbolic.expr.expr import Expr, Parameter
-from openscvx.symbolic.expr.state import State
-from openscvx.symbolic.expr.time import Time
+from openscvx.symbolic.expr.control import ControlSpec
+from openscvx.symbolic.expr.expr import Expr, Parameter, ParameterSpec
+from openscvx.symbolic.expr.state import StateSpec
+from openscvx.symbolic.expr.time import TimeSpec
 from openscvx.symbolic.parser._registry import _PARSE_FUNCTIONS
 from openscvx.symbolic.parser.parser import ExprParser
 
-# ---------------------------------------------------------------------------
+
+# =============================================================================
+# Top-level problem spec
+# =============================================================================
+
+
+class ProblemSpec(BaseModel):
+    """Validates the entire YAML/JSON problem structure."""
+
+    N: int
+    time: TimeSpec
+    states: List[StateSpec]
+    controls: List[ControlSpec]
+    parameters: List[ParameterSpec] = []
+    dynamics: Dict[str, Any] = {}
+    constraints: List[str] = []
+    algorithm: Optional[Dict[str, Any]] = None
+    discretizer: Optional[Dict[str, Any]] = None
+    solver: Optional[Dict[str, Any]] = None
+    settings: Optional[Dict[str, Any]] = None
+    states_prop: Optional[List[StateSpec]] = None
+    dynamics_prop: Optional[Dict[str, Any]] = None
+    algebraic_prop: Optional[Dict[str, Any]] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+# =============================================================================
 # Public API
-# ---------------------------------------------------------------------------
+# =============================================================================
 
 
 def load_yaml(path: Union[str, Path]) -> dict:
