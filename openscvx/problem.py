@@ -160,7 +160,7 @@ class Problem:
                     algorithm={"lam_cost": 5e-1, "k_max": 50}
 
                     # Autotuner by name (default parameters)
-                    algorithm={"autotuner": {"type": "RampProximalWeight"}}
+                    algorithm={"autotuner": "RampProximalWeight"}
 
                     # Autotuner as dict with overrides
                     algorithm={

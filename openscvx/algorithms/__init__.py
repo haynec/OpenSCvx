@@ -80,7 +80,7 @@ Current Implementations:
 
 from typing import Annotated, Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .augmented_lagrangian import AugmentedLagrangian
 from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult
@@ -114,11 +114,20 @@ class PenalizedTrustRegionConfig(BaseModel):
     The ``autotuner`` field accepts:
 
     * ``None`` — defaults to :class:`AugmentedLagrangian`.
+    * A **string** — class name only, default parameters.
     * A **dict** — class name via ``"type"`` key plus overrides.
     * An **instance** — already-constructed autotuner (pass-through).
     """
 
     autotuner: Optional[Union[AutotunerConfig, AutotuningBase]] = None
+
+    @field_validator("autotuner", mode="before")
+    @classmethod
+    def _wrap_bare_string(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return {"type": v}
+        return v
+
     k_max: int = 200
     lam_prox: Union[float, Dict[str, Any]] = 1e-1
     lam_vc: Union[float, Dict[str, Any]] = 1e0

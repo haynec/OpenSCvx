@@ -178,7 +178,7 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"autotuner": {"type": "ConstantProximalWeight"}, "ep_tr": 1e-3},
+    algorithm={"autotuner": "ConstantProximalWeight", "ep_tr": 1e-3},
 )
 
 problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}

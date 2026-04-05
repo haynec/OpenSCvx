@@ -86,7 +86,7 @@ problem = Problem(
     N=n,
     licq_max=1e-8,
     algorithm={
-        "autotuner": {"type": "ConstantProximalWeight"},
+        "autotuner": "ConstantProximalWeight",
         "lam_prox": 1e0,
         "lam_cost": 1e-1,
     },
