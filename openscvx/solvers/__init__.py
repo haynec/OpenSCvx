@@ -75,9 +75,7 @@ class SolverConfig(BaseModel):
     def to_solver(self) -> ConvexSolver:
         cls = _SOLVER_MAP.get(self.type)
         if cls is None:
-            raise ValueError(
-                f"Unknown solver {self.type!r}; expected one of {sorted(_SOLVER_MAP)}"
-            )
+            raise ValueError(f"Unknown solver {self.type!r}; expected one of {sorted(_SOLVER_MAP)}")
         kwargs = self.model_dump(exclude={"type"}, exclude_defaults=True)
         return cls(**kwargs)
 

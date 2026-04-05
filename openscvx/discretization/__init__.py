@@ -63,8 +63,7 @@ class DiscretizerConfig(BaseModel):
         cls = _DISCRETIZER_MAP.get(self.type)
         if cls is None:
             raise ValueError(
-                f"Unknown discretizer {self.type!r}; "
-                f"expected one of {sorted(_DISCRETIZER_MAP)}"
+                f"Unknown discretizer {self.type!r}; expected one of {sorted(_DISCRETIZER_MAP)}"
             )
         # Only forward explicitly-set fields so constructors with fewer
         # parameters don't receive unexpected keyword arguments.
