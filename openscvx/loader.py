@@ -38,6 +38,7 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel, ConfigDict
 
 from openscvx.algorithms import PenalizedTrustRegionConfig
+from openscvx.config import SettingsSpec
 from openscvx.discretization import DiscretizerConfig
 from openscvx.solvers import SolverConfig
 from openscvx.symbolic.expr.control import ControlSpec
@@ -66,7 +67,7 @@ class ProblemSpec(BaseModel):
     algorithm: Optional[PenalizedTrustRegionConfig] = None
     discretizer: Optional[DiscretizerConfig] = None
     solver: Optional[SolverConfig] = None
-    settings: Optional[Dict[str, Any]] = None
+    settings: Optional[SettingsSpec] = None
     states_prop: Optional[List[StateSpec]] = None
     dynamics_prop: Optional[Dict[str, Any]] = None
     algebraic_prop: Optional[Dict[str, Any]] = None
@@ -203,7 +204,9 @@ def load_dict(data: dict) -> dict:
         result["algebraic_prop"] = algebraic_prop
 
     # ---- optional: settings (applied after Problem construction) -----------
+    # Convert to dict for Config.apply_dict(); only include sections that
+    # were explicitly provided so that unset sections keep their defaults.
     if spec.settings is not None:
-        result["settings"] = spec.settings
+        result["settings"] = spec.settings.model_dump(exclude_unset=True)
 
     return result

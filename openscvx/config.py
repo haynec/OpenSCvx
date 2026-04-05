@@ -71,6 +71,15 @@ class PropagationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class SettingsSpec(BaseModel):
+    """Validates the ``settings:`` block from YAML/JSON input."""
+
+    dev: Optional[DevConfig] = None
+    prp: Optional[PropagationConfig] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
 @dataclass(init=False)
 class SimConfig:
     # No class-level field declarations
