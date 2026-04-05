@@ -19,7 +19,7 @@ class DevConfig(BaseModel):
     This class defines the parameters used for development and debugging
     purposes.
 
-    Args:
+    Attributes:
         profiling: Whether to enable profiling for performance
             analysis. Defaults to False.
         debug: Disables all precompilation so you can place
@@ -46,7 +46,7 @@ class PropagationConfig(BaseModel):
     This class defines the parameters required for propagating the nonlinear
     system dynamics using the optimal control sequence.
 
-    Args:
+    Attributes:
         inter_sample: How dense the propagation within multishot
             discretization should be. Defaults to 30.
         dt: The time step for propagation. Defaults to 0.01.
