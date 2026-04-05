@@ -152,7 +152,7 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"autotuner": "ConstantProximalWeight", "lam_cost": 1e-1},
+    algorithm={"autotuner": {"type": "ConstantProximalWeight"}, "lam_cost": 1e-1},
 )
 
 plotting_dict = {
