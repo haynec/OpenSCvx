@@ -2,67 +2,34 @@
 
 Reads a structured problem definition from a YAML or JSON file (or a plain
 Python dict) and returns the keyword arguments needed to construct a
-:class:`openscvx.problem.Problem`.
+`openscvx.problem.Problem`.
 
-Expected schema
----------------
-.. code-block:: yaml
+!!! tip "YAML Schema & Editor Autocomplete"
+    The accepted YAML structure is defined by `ProblemSpec` (a pydantic
+    model). You can generate a JSON Schema for editor autocomplete and
+    validation with:
 
-    N: 50
+        openscvx schema                 # prints to stdout
+        openscvx schema -o schema.json  # writes to file
 
-    time:
-      initial: 0.0                 # or [minimize, 10.0]
-      final: [minimize, 10.0]
-      min: 0.0
-      max: 20.0
+    Then enable it in your editor:
 
-    states:
-      - name: pos
-        shape: [3]
-        min: [-10, -10, 0]
-        max: [10, 10, 100]
-        initial: [0, 0, 50]
-        final: [10, [free, 5], 0]
+    - **VS Code** (with the ``redhat.vscode-yaml`` extension) --
+    add a modeline as the first line of your YAML file:
+    ```yaml
+    # yaml-language-server: $schema=./schema.json
+    ```
+    Or configure globally in ``settings.json``:
+    ```json
+    "yaml.schemas": { "./schema.json": "*.ox.yaml" }
+    ```
+    - **JetBrains** -- *Languages & Frameworks > Schemas and DTDs >
+    JSON Schema Mappings*, point at the generated file and associate
+    a file pattern.
 
-    controls:
-      - name: thrust
-        shape: [3]
-        # optional: parameterization: FOH | ZOH | impulsive (use ``nodes`` with impulsive)
-        parameterization: ZOH
-        min: [-10, -10, 0]
-        max: [10, 10, 50]
-
-    parameters:
-      - name: gravity
-        shape: [3]
-        value: [0, 0, -9.81]
-
-    dynamics:
-      pos: "vel"
-      vel: "thrust + gravity"
-
-    constraints:
-      - "Norm(pos[:2] - obs_center) >= 2.0"
-      - "(vel[0] <= 3.0).at(0, 10, 20)"
-
-    algorithm:                       # optional
-      lam_cost: 5.0e-1
-      ep_tr: 1.0e-3
-      autotuner:
-        type: RampProximalWeight
-        ramp_factor: 1.04
-        lam_prox_max: 100.0
-
-    discretizer:                     # optional (integrator / tolerances)
-      ode_solver: Dopri8
-
-    solver:                          # optional (convex subproblem solver)
-      cvx_solver: QOCO
-      solver_args: {abstol: 1.0e-6, reltol: 1.0e-9}
-
-    settings:                        # optional, applied after Problem()
-      dev:
-        printing: true
+    This gives you field-name autocomplete, hover docs, and red squiggles
+    on typos or wrong types -- all derived from the pydantic models, so the
+    schema always matches the version of openscvx you have installed.
 """
 
 from pathlib import Path
