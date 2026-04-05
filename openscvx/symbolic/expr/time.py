@@ -1,9 +1,9 @@
 from typing import Any, List, Optional, Union
 
 import numpy as np
-from pydantic import BaseModel, ConfigDict
+from pydantic import ConfigDict
 
-from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.expr.state import State, StateSpec
 from openscvx.symbolic.expr.variable import Variable
 
 
@@ -261,13 +261,27 @@ def _parse_time_boundary(val: Any) -> Any:
     return val
 
 
-class TimeSpec(BaseModel):
-    """Validates Time configuration from YAML/JSON/dict input."""
+class TimeSpec(StateSpec):
+    """Validates Time configuration from YAML/JSON/dict input.
 
+    Extends :class:`StateSpec` with time-specific fields.  ``name`` and
+    ``shape`` are fixed (``"time"`` and ``[1]``), and ``initial``/``final``
+    are required (a Time must have boundary conditions).
+    """
+
+    # Time is always named "time" with shape (1,)
+    name: str = "time"
+    shape: List[int] = [1]
+
+    # Override: required for Time (scalar or [tag, value] pair)
     initial: Any
     final: Any
-    min: float
-    max: float
+
+    # Override: Time bounds are scalar floats, not optional float lists
+    min: Any  # type: ignore[assignment]
+    max: Any  # type: ignore[assignment]
+
+    # Time-specific fields
     uniform_time_grid: bool = False
     time_dilation_min: Optional[float] = None
     time_dilation_max: Optional[float] = None
