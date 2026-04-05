@@ -54,6 +54,9 @@ Example:
 
 from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple, Union
 
+if TYPE_CHECKING:
+    from openscvx.expert.byof import ByofSpec
+
 import cvxpy as cp
 import jax
 import numpy as np
@@ -696,7 +699,7 @@ def _contains_node_reference(expr: Expr) -> bool:
 def lower_symbolic_problem(
     problem: "SymbolicProblem",
     solver: "ConvexSolver",
-    byof: Optional[dict] = None,
+    byof: Optional["ByofSpec"] = None,
 ) -> LoweredProblem:
     """Lower symbolic problem specification to executable JAX and CVXPy code.
 

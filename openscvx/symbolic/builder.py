@@ -244,7 +244,7 @@ def preprocess_symbolic_problem(
     # When omitted (and no impulsive controls are present), default to an identity
     # mapping for each state so the discrete map preserves the state by default.
     if dynamics_discrete is None:
-        byof_dd = byof.get("dynamics_discrete", {}) if byof else {}
+        byof_dd = byof.dynamics_discrete if byof else {}
         if byof_dd:
             dynamics_discrete = {state.name: state for state in states if state.name not in byof_dd}
         else:
@@ -258,8 +258,8 @@ def preprocess_symbolic_problem(
         dynamics_discrete["time"] = time_state if time_state is not None else 0.0
 
     # Extract byof dynamics for validation
-    byof_dynamics = byof.get("dynamics", {}) if byof else {}
-    byof_dynamics_discrete = byof.get("dynamics_discrete", {}) if byof else {}
+    byof_dynamics = byof.dynamics if byof else {}
+    byof_dynamics_discrete = byof.dynamics_discrete if byof else {}
 
     # Validate dynamics dict matches state names and dimensions
     # byof_dynamics states should not be in symbolic dynamics dict
@@ -323,7 +323,7 @@ def preprocess_symbolic_problem(
 
     # Collect from byof parameters
     if byof is not None:
-        for param in byof.get("parameters", []):
+        for param in byof.parameters:
             if param.name not in parameters:
                 parameters[param.name] = param.value
 

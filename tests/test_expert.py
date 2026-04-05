@@ -163,13 +163,13 @@ def test_valid_byof_specifications(simple_states):
 
 
 def test_invalid_byof_keys(simple_states):
-    """Unknown byof keys should raise ValueError."""
+    """Unknown byof keys should raise ValueError (via pydantic extra='forbid')."""
     from openscvx.expert import validate_byof
 
-    with pytest.raises(ValueError, match="Unknown byof keys.*invalid_key"):
+    with pytest.raises(ValueError, match="invalid_key"):
         validate_byof({"invalid_key": []}, simple_states, n_x=3, n_u=1, N=50)
 
-    with pytest.raises(ValueError, match="Unknown byof keys"):
+    with pytest.raises(ValueError, match="bad_key1"):
         validate_byof({"bad_key1": [], "bad_key2": {}}, simple_states, n_x=3, n_u=1, N=50)
 
 
@@ -185,8 +185,8 @@ def test_invalid_byof_keys(simple_states):
             ValueError,
             "does not match any state name",
         ),
-        # Not callable
-        ({"velocity": "not a function"}, TypeError, "must be callable"),
+        # Not callable (pydantic catches this during ByofSpec validation)
+        ({"velocity": "not a function"}, ValueError, "callable"),
         # Wrong signature - too few params
         ({"velocity": lambda x, u: np.array([1.0])}, ValueError, "must have signature"),
         # Wrong signature - too many params
@@ -258,19 +258,19 @@ def test_dynamics_runtime_errors(simple_states):
 @pytest.mark.parametrize(
     "bad_spec,error_type,error_match",
     [
-        # Not a dict
-        ("not a dict", TypeError, "must be a dict"),
-        # Missing 'constraint_fn' key
-        ({"nodes": [0, 1]}, ValueError, "missing required key 'constraint_fn'"),
-        # constraint_fn not callable
-        ({"constraint_fn": "not a function"}, TypeError, "must be callable"),
+        # Not a dict (pydantic catches during ByofSpec validation)
+        ("not a dict", ValueError, "nodal_constraints"),
+        # Missing 'constraint_fn' key (pydantic catches as required field)
+        ({"nodes": [0, 1]}, ValueError, "constraint_fn"),
+        # constraint_fn not callable (pydantic catches)
+        ({"constraint_fn": "not a function"}, ValueError, "callable"),
         # Wrong signature
         ({"constraint_fn": lambda x, u: x[0]}, ValueError, "must have signature"),
-        # nodes not a list
+        # nodes not a list (pydantic catches type mismatch)
         (
             {"constraint_fn": lambda x, u, node, params: x[0], "nodes": "invalid"},
-            TypeError,
-            "must be a list",
+            ValueError,
+            "nodes",
         ),
         # Empty nodes list
         (
@@ -377,8 +377,8 @@ def test_nodal_constraint_node_index_validation(simple_states):
 @pytest.mark.parametrize(
     "bad_constraint,error_type,error_match",
     [
-        # Not callable
-        ("not a function", TypeError, "must be callable"),
+        # Not callable (pydantic catches)
+        ("not a function", ValueError, "callable"),
         # Wrong signature
         (lambda X, U: np.sum(X[:, 0]), ValueError, "must have signature f\\(X, U, params\\)"),
     ],
@@ -430,19 +430,19 @@ def test_cross_nodal_constraint_runtime_errors(simple_states):
 @pytest.mark.parametrize(
     "bad_spec,error_type,error_match",
     [
-        # Not a dict
-        ("not a dict", TypeError, "must be a dict"),
-        # Missing constraint_fn
-        ({"penalty": "square"}, ValueError, "missing required key 'constraint_fn'"),
-        # constraint_fn not callable
-        ({"constraint_fn": "not a function"}, TypeError, "constraint_fn.*must be callable"),
+        # Not a dict (pydantic catches during ByofSpec validation)
+        ("not a dict", ValueError, "ctcs_constraints"),
+        # Missing constraint_fn (pydantic catches as required field)
+        ({"penalty": "square"}, ValueError, "constraint_fn"),
+        # constraint_fn not callable (pydantic catches)
+        ({"constraint_fn": "not a function"}, ValueError, "callable"),
         # Wrong signature
         ({"constraint_fn": lambda x, u: x[0]}, ValueError, "must have signature"),
-        # Invalid penalty string
+        # Invalid penalty string (pydantic catches via Literal type)
         (
             {"constraint_fn": lambda x, u, node, params: x[0], "penalty": "invalid"},
             ValueError,
-            "must be 'square', 'l1', 'huber', or a callable",
+            "penalty",
         ),
     ],
 )
@@ -523,10 +523,10 @@ def test_ctcs_constraint_runtime_errors(simple_states):
 @pytest.mark.parametrize(
     "bad_bounds,error_match",
     [
-        # Not tuple/list
-        ("not a tuple", "must be a \\(min, max\\) tuple"),
-        # Wrong length
-        ((0.0, 1e-4, 1.0), "must be a \\(min, max\\) tuple"),
+        # Not tuple/list (pydantic catches type mismatch)
+        ("not a tuple", "bounds"),
+        # Wrong length (pydantic catches tuple length mismatch)
+        ((0.0, 1e-4, 1.0), "bounds"),
         # Min > max
         ((1.0, 0.0), "min.*must be <= max"),
     ],
@@ -616,8 +616,8 @@ def test_error_messages_index_correctly(simple_states):
             N=50,
         )
 
-    # Multiple CTCS constraints - error in second one
-    with pytest.raises(TypeError, match="ctcs_constraints\\[1\\]"):
+    # Multiple CTCS constraints - error in second one (pydantic includes field path)
+    with pytest.raises(ValueError, match="ctcs_constraints"):
         validate_byof(
             {
                 "ctcs_constraints": [

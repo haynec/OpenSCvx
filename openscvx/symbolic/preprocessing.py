@@ -803,7 +803,7 @@ def validate_input_types(
 
     any_impulsive_control_set = any(c.parameterization == "impulsive" for c in controls)
     # Discrete dynamics can be provided explicitly or via byof["dynamics_discrete"]
-    has_discrete_from_byof = byof is not None and bool(byof.get("dynamics_discrete"))
+    has_discrete_from_byof = byof is not None and bool(byof.dynamics_discrete)
     has_discrete_dynamics = dynamics_discrete is not None or has_discrete_from_byof
     if any_impulsive_control_set and not has_discrete_dynamics:
         raise ValueError(

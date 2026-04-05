@@ -5,16 +5,18 @@ checking signatures, shapes, and differentiability before use.
 """
 
 import inspect
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Union
 
 if TYPE_CHECKING:
     from openscvx.symbolic.expr.state import State
+
+from openscvx.expert.byof import ByofSpec
 
 __all__ = ["validate_byof"]
 
 
 def validate_byof(
-    byof: dict,
+    byof: Union[ByofSpec, dict],
     states: List["State"],
     n_x: int,
     n_u: int,
@@ -27,8 +29,11 @@ def validate_byof(
     appropriate shapes. Performs validation before functions are used to provide
     clear error messages.
 
+    Accepts both a :class:`ByofSpec` and a raw dict (which is validated through
+    ``ByofSpec.model_validate`` first, catching unknown keys and missing fields).
+
     Args:
-        byof: Dictionary of user-provided functions to validate
+        byof: ByofSpec or raw dict with user-provided functions
         states: List of State objects for determining expected shapes
         n_x: Total dimension of the unified state vector
         n_u: Total dimension of the unified control vector
@@ -45,23 +50,14 @@ def validate_byof(
     import jax
     import jax.numpy as jnp
 
-    # Validate byof keys
-    valid_keys = {
-        "parameters",
-        "dynamics",
-        "dynamics_discrete",
-        "nodal_constraints",
-        "cross_nodal_constraints",
-        "ctcs_constraints",
-    }
-    invalid_keys = set(byof.keys()) - valid_keys
-    if invalid_keys:
-        raise ValueError(f"Unknown byof keys: {invalid_keys}. Valid keys: {valid_keys}")
+    # Convert raw dict to ByofSpec (validates keys, required fields, types)
+    if not isinstance(byof, ByofSpec):
+        byof = ByofSpec.model_validate(byof)
 
     # Validate byof parameters
     from openscvx.symbolic.expr.parameter import Parameter
 
-    for i, param in enumerate(byof.get("parameters", [])):
+    for i, param in enumerate(byof.parameters):
         if not isinstance(param, Parameter):
             raise TypeError(f"byof parameters[{i}] must be a Parameter object, got {type(param)}")
 
@@ -72,7 +68,7 @@ def validate_byof(
     dummy_params = dict(parameters) if parameters else {}
 
     # Validate dynamics functions
-    byof_dynamics = byof.get("dynamics", {})
+    byof_dynamics = byof.dynamics
     if byof_dynamics:
         # Build mapping from state name to expected shape
         state_shapes = {state.name: state.shape for state in states}
@@ -122,7 +118,7 @@ def validate_byof(
                 ) from e
 
     # Validate dynamics_discrete functions (same signature and shape as dynamics)
-    byof_dynamics_discrete = byof.get("dynamics_discrete", {})
+    byof_dynamics_discrete = byof.dynamics_discrete
     if byof_dynamics_discrete:
         state_shapes = {state.name: state.shape for state in states}
         for state_name, fn in byof_dynamics_discrete.items():
@@ -165,17 +161,8 @@ def validate_byof(
                 ) from e
 
     # Validate nodal constraints
-    for i, constraint_spec in enumerate(byof.get("nodal_constraints", [])):
-        if not isinstance(constraint_spec, dict):
-            raise TypeError(
-                f"byof nodal_constraints[{i}] must be a dict (NodalConstraintSpec), "
-                f"got {type(constraint_spec)}"
-            )
-
-        if "constraint_fn" not in constraint_spec:
-            raise ValueError(f"byof nodal_constraints[{i}] missing required key 'constraint_fn'")
-
-        fn = constraint_spec["constraint_fn"]
+    for i, constraint_spec in enumerate(byof.nodal_constraints):
+        fn = constraint_spec.constraint_fn
         if not callable(fn):
             raise TypeError(
                 f"byof nodal_constraints[{i}]['constraint_fn'] must be callable, got {type(fn)}"
@@ -217,13 +204,8 @@ def validate_byof(
             ) from e
 
         # Validate nodes if provided
-        if "nodes" in constraint_spec:
-            nodes = constraint_spec["nodes"]
-            if not isinstance(nodes, (list, tuple)):
-                raise TypeError(
-                    f"byof nodal_constraints[{i}]['nodes'] must be a list or tuple, "
-                    f"got {type(nodes)}"
-                )
+        if constraint_spec.nodes is not None:
+            nodes = constraint_spec.nodes
             if len(nodes) == 0:
                 raise ValueError(f"byof nodal_constraints[{i}]['nodes'] cannot be empty")
 
@@ -244,7 +226,7 @@ def validate_byof(
     dummy_X = jnp.zeros((10, n_x))  # Dummy trajectory with 10 nodes
     dummy_U = jnp.zeros((10, n_u))
 
-    for i, fn in enumerate(byof.get("cross_nodal_constraints", [])):
+    for i, fn in enumerate(byof.cross_nodal_constraints):
         if not callable(fn):
             raise TypeError(f"byof cross_nodal_constraints[{i}] must be callable, got {type(fn)}")
 
@@ -283,14 +265,8 @@ def validate_byof(
             ) from e
 
     # Validate CTCS constraints
-    for i, ctcs_spec in enumerate(byof.get("ctcs_constraints", [])):
-        if not isinstance(ctcs_spec, dict):
-            raise TypeError(f"byof ctcs_constraints[{i}] must be a dict, got {type(ctcs_spec)}")
-
-        if "constraint_fn" not in ctcs_spec:
-            raise ValueError(f"byof ctcs_constraints[{i}] missing required key 'constraint_fn'")
-
-        fn = ctcs_spec["constraint_fn"]
+    for i, ctcs_spec in enumerate(byof.ctcs_constraints):
+        fn = ctcs_spec.constraint_fn
         if not callable(fn):
             raise TypeError(
                 f"byof ctcs_constraints[{i}]['constraint_fn'] must be callable, got {type(fn)}"
@@ -329,56 +305,35 @@ def validate_byof(
                 f"byof ctcs_constraints[{i}]['constraint_fn'] is not differentiable with JAX: {e}"
             ) from e
 
-        # Validate penalty function if provided
-        if "penalty" in ctcs_spec:
-            penalty_spec = ctcs_spec["penalty"]
-            if callable(penalty_spec):
-                # Test custom penalty function
-                try:
-                    test_residual = jnp.array(0.5)
-                    penalty_result = penalty_spec(test_residual)
-                    jnp.asarray(penalty_result)
-                except Exception as e:
-                    raise ValueError(
-                        f"byof ctcs_constraints[{i}]['penalty'] custom function failed: {e}"
-                    ) from e
-            elif penalty_spec not in ["square", "l1", "huber"]:
+        # Validate penalty function if callable
+        penalty_spec = ctcs_spec.penalty
+        if callable(penalty_spec):
+            try:
+                test_residual = jnp.array(0.5)
+                penalty_result = penalty_spec(test_residual)
+                jnp.asarray(penalty_result)
+            except Exception as e:
                 raise ValueError(
-                    f"byof ctcs_constraints[{i}]['penalty'] must be 'square', 'l1', 'huber', "
-                    f"or a callable, got {penalty_spec!r}"
-                )
+                    f"byof ctcs_constraints[{i}]['penalty'] custom function failed: {e}"
+                ) from e
 
-        # Validate idx if provided
-        if "idx" in ctcs_spec:
-            idx = ctcs_spec["idx"]
-            if not isinstance(idx, int):
-                raise TypeError(
-                    f"byof ctcs_constraints[{i}]['idx'] must be an integer, got {type(idx)}"
-                )
-            if idx < 0:
-                raise ValueError(
-                    f"byof ctcs_constraints[{i}]['idx'] must be non-negative, got {idx}"
-                )
+        # Validate idx
+        if ctcs_spec.idx < 0:
+            raise ValueError(
+                f"byof ctcs_constraints[{i}]['idx'] must be non-negative, got {ctcs_spec.idx}"
+            )
 
-        # Validate bounds if provided
-        if "bounds" in ctcs_spec:
-            bounds = ctcs_spec["bounds"]
-            if not isinstance(bounds, (tuple, list)) or len(bounds) != 2:
-                raise ValueError(
-                    f"byof ctcs_constraints[{i}]['bounds'] must be a (min, max) tuple, got {bounds}"
-                )
-            if bounds[0] > bounds[1]:
-                raise ValueError(
-                    f"byof ctcs_constraints[{i}]['bounds'] min ({bounds[0]}) must be <= "
-                    f"max ({bounds[1]})"
-                )
-        else:
-            # Use default bounds for initial value validation
-            bounds = (0.0, 1e-4)
+        # Validate bounds
+        bounds = ctcs_spec.bounds
+        if bounds[0] > bounds[1]:
+            raise ValueError(
+                f"byof ctcs_constraints[{i}]['bounds'] min ({bounds[0]}) must be <= "
+                f"max ({bounds[1]})"
+            )
 
         # Validate initial value is within bounds
-        if "initial" in ctcs_spec:
-            initial = ctcs_spec["initial"]
+        if ctcs_spec.initial is not None:
+            initial = ctcs_spec.initial
             if not (bounds[0] <= initial <= bounds[1]):
                 raise ValueError(
                     f"byof ctcs_constraints[{i}]['initial'] ({initial}) must be within "
@@ -386,18 +341,8 @@ def validate_byof(
                 )
 
         # Validate over (node interval) if provided
-        if "over" in ctcs_spec:
-            over = ctcs_spec["over"]
-            if not isinstance(over, (tuple, list)) or len(over) != 2:
-                raise ValueError(
-                    f"byof ctcs_constraints[{i}]['over'] must be a (start, end) tuple, got {over}"
-                )
-            start, end = over
-            if not isinstance(start, int) or not isinstance(end, int):
-                raise TypeError(
-                    f"byof ctcs_constraints[{i}]['over'] indices must be integers, "
-                    f"got start={type(start)}, end={type(end)}"
-                )
+        if ctcs_spec.over is not None:
+            start, end = ctcs_spec.over
             if start >= end:
                 raise ValueError(
                     f"byof ctcs_constraints[{i}]['over'] start ({start}) must be < end ({end})"

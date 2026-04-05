@@ -94,12 +94,12 @@ Example:
         problem = ox.Problem(..., byof=byof)
 """
 
-from typing import TYPE_CHECKING, Any, Callable, List, Literal, Tuple, TypedDict, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Optional, Tuple, Union
+
+from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
     from jax import Array as JaxArray
-
-    from openscvx.symbolic.expr.parameter import Parameter
 else:
     JaxArray = Any
 
@@ -114,7 +114,7 @@ CtcsConstraintFunction = Callable[[JaxArray, JaxArray, int, dict], float]
 PenaltyFunction = Union[Literal["square", "l1", "huber"], Callable[[float], float]]
 
 
-class NodalConstraintSpec(TypedDict, total=False):
+class NodalConstraintSpec(BaseModel):
     """Specification for nodal constraint with optional node selection.
 
     Nodal constraints are point-wise constraints evaluated at specific trajectory nodes.
@@ -146,11 +146,13 @@ class NodalConstraintSpec(TypedDict, total=False):
             }
     """
 
-    constraint_fn: NodalConstraintFunction  # Required
-    nodes: List[int]
+    constraint_fn: NodalConstraintFunction
+    nodes: Optional[List[int]] = None
+
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
 
-class CtcsConstraintSpec(TypedDict, total=False):
+class CtcsConstraintSpec(BaseModel):
     """Specification for CTCS (Continuous-Time Constraint Satisfaction) constraint.
 
     CTCS constraints are enforced by augmenting the dynamics with a penalty term that
@@ -230,15 +232,17 @@ class CtcsConstraintSpec(TypedDict, total=False):
             }
     """
 
-    constraint_fn: CtcsConstraintFunction  # Required
-    penalty: PenaltyFunction
-    bounds: Tuple[float, float]
-    initial: float
-    over: Tuple[int, int]
-    idx: int
+    constraint_fn: CtcsConstraintFunction
+    penalty: PenaltyFunction = "square"
+    bounds: Tuple[float, float] = (0.0, 1e-4)
+    initial: Optional[float] = None
+    over: Optional[Tuple[int, int]] = None
+    idx: int = 0
+
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
 
-class ByofSpec(TypedDict, total=False):
+class ByofSpec(BaseModel):
     """Bring-Your-Own-Functions specification for expert users.
 
     Allows bypassing the symbolic layer and directly providing raw JAX functions.
@@ -343,9 +347,11 @@ class ByofSpec(TypedDict, total=False):
             }
     """
 
-    parameters: List["Parameter"]
-    dynamics: dict[str, DynamicsFunction]
-    dynamics_discrete: dict[str, DynamicsFunction]
-    nodal_constraints: List[NodalConstraintSpec]
-    cross_nodal_constraints: List[CrossNodalConstraintFunction]
-    ctcs_constraints: List[CtcsConstraintSpec]
+    parameters: List[Any] = []
+    dynamics: Dict[str, DynamicsFunction] = {}
+    dynamics_discrete: Dict[str, DynamicsFunction] = {}
+    nodal_constraints: List[NodalConstraintSpec] = []
+    cross_nodal_constraints: List[CrossNodalConstraintFunction] = []
+    ctcs_constraints: List[CtcsConstraintSpec] = []
+
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)

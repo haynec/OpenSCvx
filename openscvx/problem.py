@@ -88,7 +88,7 @@ class Problem:
         algorithm: Optional[Union[Algorithm, dict]] = None,
         discretizer: Optional[Union[Discretizer, dict]] = None,
         solver: Optional[Union[ConvexSolver, dict]] = None,
-        byof: Optional[ByofSpec] = None,
+        byof: Optional[dict] = None,
         float_dtype: str = "float32",
     ):
         """The primary class in charge of compiling and exporting the solvers.
@@ -252,6 +252,10 @@ class Problem:
         self._float_dtype: str = float_dtype
 
         # Symbolic Preprocessing & Augmentation
+        # Resolve byof: dict → ByofSpec (validates keys and nested specs)
+        if byof is not None:
+            byof = ByofSpec.model_validate(byof)
+
         self.symbolic: SymbolicProblem = preprocess_symbolic_problem(
             dynamics=dynamics,
             dynamics_discrete=dynamics_discrete,
@@ -830,8 +834,8 @@ class Problem:
         # Build per-constraint lam_vb arrays from symbolic constraints.
         # Deferred to initialize() so that user-set lam_vb values
         # (assigned after Problem construction) are picked up.
-        n_byof_nodal = len(self._byof.get("nodal_constraints", [])) if self._byof else 0
-        n_byof_cross = len(self._byof.get("cross_nodal_constraints", [])) if self._byof else 0
+        n_byof_nodal = len(self._byof.nodal_constraints) if self._byof else 0
+        n_byof_cross = len(self._byof.cross_nodal_constraints) if self._byof else 0
         self._algorithm.weights.build_vb_arrays(
             N=self.symbolic.N,
             nodal_constraints=self.symbolic.constraints.nodal,
