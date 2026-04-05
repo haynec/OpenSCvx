@@ -1,7 +1,7 @@
 from typing import Any, List, Optional, Union
 
 import numpy as np
-from pydantic import ConfigDict
+from pydantic import ConfigDict, field_validator
 
 from openscvx.symbolic.expr.state import State, StateSpec
 from openscvx.symbolic.expr.variable import Variable
@@ -267,19 +267,24 @@ class TimeSpec(StateSpec):
     Extends :class:`StateSpec` with time-specific fields.  ``name`` and
     ``shape`` are fixed (``"time"`` and ``[1]``), and ``initial``/``final``
     are required (a Time must have boundary conditions).
+
+    YAML scalars and ``[tag, value]`` pairs are normalised into the
+    ``List`` forms that :class:`StateSpec` expects via ``field_validator``
+    so that no field type overrides are needed.
     """
 
     # Time is always named "time" with shape (1,)
     name: str = "time"
     shape: List[int] = [1]
 
-    # Override: required for Time (scalar or [tag, value] pair)
-    initial: Any
-    final: Any
+    # Required for Time (StateSpec has these Optional; re-declared without
+    # a default so pydantic treats them as required).
+    initial: Optional[List[Any]]
+    final: Optional[List[Any]]
 
-    # Override: Time bounds are scalar floats, not optional float lists
-    min: Any  # type: ignore[assignment]
-    max: Any  # type: ignore[assignment]
+    # Required for Time
+    min: Optional[List[float]]
+    max: Optional[List[float]]
 
     # Time-specific fields
     uniform_time_grid: bool = False
@@ -289,12 +294,35 @@ class TimeSpec(StateSpec):
 
     model_config = ConfigDict(extra="forbid")
 
+    @field_validator("initial", "final", mode="before")
+    @classmethod
+    def _wrap_scalar_boundary(cls, v: Any) -> Any:
+        """Wrap a scalar or ``[tag, value]`` pair into a single-element list."""
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            return [v]
+        # bare [tag, value] pair like ["minimize", 10.0]
+        if len(v) == 2 and isinstance(v[0], str) and not isinstance(v[1], list):
+            return [v]
+        return v
+
+    @field_validator("min", "max", mode="before")
+    @classmethod
+    def _wrap_scalar_bound(cls, v: Any) -> Any:
+        """Wrap a scalar float into a single-element list."""
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            return [float(v)]
+        return v
+
     def to_time(self) -> "Time":
         return Time(
-            initial=_parse_time_boundary(self.initial),
-            final=_parse_time_boundary(self.final),
-            min=float(self.min),
-            max=float(self.max),
+            initial=_parse_time_boundary(self.initial[0]) if self.initial else None,
+            final=_parse_time_boundary(self.final[0]) if self.final else None,
+            min=self.min[0] if self.min else None,
+            max=self.max[0] if self.max else None,
             uniform_time_grid=self.uniform_time_grid,
             time_dilation_min=self.time_dilation_min,
             time_dilation_max=self.time_dilation_max,
