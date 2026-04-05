@@ -7,7 +7,7 @@ code generation via cvxpygen for improved performance.
 
 import os
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Union
 
 import cvxpy as cp
 import numpy as np
@@ -125,6 +125,18 @@ class PTRSolver(ConvexSolver):
     Attributes:
         ocp_vars: The CVXPy variables and parameters (available after create_variables())
     """
+
+    class Spec(ConvexSolver.Spec):
+        """Validates PTRSolver configuration from dict/YAML input."""
+
+        type: Literal["PTRSolver"] = "PTRSolver"
+        cvx_solver: str = "QOCO"
+        solver_args: Optional[Dict[str, Any]] = None
+        cvxpygen: bool = False
+        cvxpygen_override: bool = False
+
+        def build(self) -> "PTRSolver":
+            return PTRSolver(**self.model_dump(exclude={"type"}, exclude_unset=True))
 
     def __init__(
         self,

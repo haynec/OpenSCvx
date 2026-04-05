@@ -41,43 +41,38 @@ Note:
     for the interface details.
 """
 
-from typing import Any, Dict, Optional
+from typing import Annotated, Any, Union
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import Field, TypeAdapter
 
 from .base import ConvexSolver
 from .ptr_solver import PTRSolver, PTRSolveResult
 
 # ---------------------------------------------------------------------------
-# Spec resolver — turn a dict into a ConvexSolver instance
+# Solver config — discriminated union of each solver's inner Spec
 # ---------------------------------------------------------------------------
 
-_SOLVER_MAP = {
-    "PTRSolver": PTRSolver,
-}
+DEFAULT_SOLVER_TYPE = "PTRSolver"
+
+SolverConfig = Annotated[
+    Union[PTRSolver.Spec,],
+    Field(discriminator="type"),
+]
+
+solver_config_adapter = TypeAdapter(SolverConfig)
 
 
-class SolverConfig(BaseModel):
-    """Validates convex subproblem solver configuration from dict input.
+def resolve_solver_config(val: Any) -> ConvexSolver.Spec:
+    """Validate a dict/Spec into a :class:`ConvexSolver.Spec` instance.
 
-    An optional ``type`` key selects the solver class (defaults to
-    ``PTRSolver``).
+    Injects the default ``type`` (``PTRSolver``) when the input dict
+    omits it, preserving backwards compatibility.
     """
-
-    type: str = "PTRSolver"
-    cvx_solver: str = "QOCO"
-    solver_args: Optional[Dict[str, Any]] = None
-    cvxpygen: bool = False
-    cvxpygen_override: bool = False
-
-    model_config = ConfigDict(extra="forbid")
-
-    def to_solver(self) -> ConvexSolver:
-        cls = _SOLVER_MAP.get(self.type)
-        if cls is None:
-            raise ValueError(f"Unknown solver {self.type!r}; expected one of {sorted(_SOLVER_MAP)}")
-        kwargs = self.model_dump(exclude={"type"}, exclude_unset=True)
-        return cls(**kwargs)
+    if isinstance(val, ConvexSolver.Spec):
+        return val
+    if isinstance(val, dict) and "type" not in val:
+        val = {**val, "type": DEFAULT_SOLVER_TYPE}
+    return solver_config_adapter.validate_python(val)
 
 
 __all__ = [
@@ -88,4 +83,5 @@ __all__ = [
     "PTRSolveResult",
     # Config
     "SolverConfig",
+    "resolve_solver_config",
 ]

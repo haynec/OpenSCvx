@@ -50,7 +50,7 @@ from openscvx.lowered.jax_constraints import (
     LoweredNodalConstraint,
 )
 from openscvx.propagation import get_propagation_solver, propagate_trajectory_results
-from openscvx.solvers import ConvexSolver, SolverConfig
+from openscvx.solvers import ConvexSolver, resolve_solver_config
 from openscvx.symbolic.builder import preprocess_symbolic_problem
 from openscvx.symbolic.expr import CTCS, Constraint
 from openscvx.symbolic.expr.control import Control
@@ -310,8 +310,8 @@ class Problem:
         if isinstance(solver, ConvexSolver):
             self._solver = solver
         else:
-            config = SolverConfig.model_validate(solver or {})
-            self._solver = config.to_solver()
+            spec = resolve_solver_config(solver or {})
+            self._solver = spec.build()
 
         # Lower to JAX and CVXPy (byof handling happens inside lower_symbolic_problem)
         self._lowered: LoweredProblem = lower_symbolic_problem(

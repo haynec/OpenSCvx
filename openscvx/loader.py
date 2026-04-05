@@ -40,7 +40,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 from openscvx.algorithms import PenalizedTrustRegionConfig
 from openscvx.config import SettingsSpec
 from openscvx.discretization import DEFAULT_DISCRETIZER_TYPE, DiscretizerConfig
-from openscvx.solvers import SolverConfig
+from openscvx.solvers import DEFAULT_SOLVER_TYPE, SolverConfig
 from openscvx.symbolic.expr.control import ControlSpec
 from openscvx.symbolic.expr.expr import Expr
 from openscvx.symbolic.expr.parameter import ParameterSpec
@@ -79,6 +79,13 @@ class ProblemSpec(BaseModel):
     def _inject_default_discretizer_type(cls, v: Any) -> Any:
         if isinstance(v, dict) and "type" not in v:
             return {**v, "type": DEFAULT_DISCRETIZER_TYPE}
+        return v
+
+    @field_validator("solver", mode="before")
+    @classmethod
+    def _inject_default_solver_type(cls, v: Any) -> Any:
+        if isinstance(v, dict) and "type" not in v:
+            return {**v, "type": DEFAULT_SOLVER_TYPE}
         return v
 
 
