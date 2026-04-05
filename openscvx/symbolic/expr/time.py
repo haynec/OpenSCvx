@@ -1,6 +1,7 @@
-from typing import Optional, Union
+from typing import Any, List, Optional, Union
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 
 from openscvx.symbolic.expr.state import State
 from openscvx.symbolic.expr.variable import Variable
@@ -246,3 +247,46 @@ class Time(State):
         if self._max is not None:
             parts.append(f"max={self._max[0]}")
         return f"Time({', '.join(parts)})"
+
+
+# =============================================================================
+# Pydantic spec for YAML / JSON / dict validation
+# =============================================================================
+
+
+def _parse_time_boundary(val: Any) -> Any:
+    """Convert a YAML time boundary to the Time constructor format."""
+    if isinstance(val, list) and len(val) == 2 and isinstance(val[0], str):
+        return (str(val[0]), float(val[1]))
+    return val
+
+
+class TimeSpec(BaseModel):
+    """Validates Time configuration from YAML/JSON/dict input."""
+
+    initial: Any
+    final: Any
+    min: float
+    max: float
+    uniform_time_grid: bool = False
+    time_dilation_min: Optional[float] = None
+    time_dilation_max: Optional[float] = None
+    time_dilation_guess: Optional[List[float]] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    def to_time(self) -> "Time":
+        return Time(
+            initial=_parse_time_boundary(self.initial),
+            final=_parse_time_boundary(self.final),
+            min=float(self.min),
+            max=float(self.max),
+            uniform_time_grid=self.uniform_time_grid,
+            time_dilation_min=self.time_dilation_min,
+            time_dilation_max=self.time_dilation_max,
+            time_dilation_guess=(
+                np.asarray(self.time_dilation_guess, dtype=float)
+                if self.time_dilation_guess is not None
+                else None
+            ),
+        )

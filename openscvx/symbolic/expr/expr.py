@@ -65,12 +65,13 @@ Example:
 
 import hashlib
 import struct
-from typing import TYPE_CHECKING, Callable, List, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Tuple, Union
 
 if TYPE_CHECKING:
     from .linalg import Transpose
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 
 
 class Expr:
@@ -539,6 +540,28 @@ class Parameter(Leaf):
         """
         hasher.update(b"Parameter")
         hasher.update(str(self._shape).encode())
+
+
+# =============================================================================
+# Pydantic spec for YAML / JSON / dict validation
+# =============================================================================
+
+
+class ParameterSpec(BaseModel):
+    """Validates Parameter configuration from YAML/JSON/dict input."""
+
+    name: str
+    shape: List[int]
+    value: Any
+
+    model_config = ConfigDict(extra="forbid")
+
+    def to_parameter(self) -> "Parameter":
+        return Parameter(
+            self.name,
+            shape=tuple(self.shape),
+            value=np.asarray(self.value, dtype=float),
+        )
 
 
 def to_expr(x: Union[Expr, float, int, np.ndarray]) -> Expr:

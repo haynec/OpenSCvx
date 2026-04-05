@@ -1,8 +1,8 @@
-from typing import Literal, Optional, Tuple, Union
+from typing import List, Literal, Optional, Tuple, Union
 
 import numpy as np
 
-from .variable import Variable
+from .variable import Variable, VariableSpec
 
 Parameterization = Union[Literal["zoh", "foh", "impulsive"], None]
 
@@ -236,3 +236,34 @@ class Control(Variable):
             f"nodes={self._nodes}",
         ]
         return f"Control({', '.join(parts)})"
+
+
+# =============================================================================
+# Pydantic spec for YAML / JSON / dict validation
+# =============================================================================
+
+
+class ControlSpec(VariableSpec):
+    """Validates Control configuration from YAML/JSON/dict input."""
+
+    parameterization: Optional[str] = None
+    nodes: Optional[List[int]] = None
+
+    def to_control(self) -> "Control":
+        control = Control(
+            self.name,
+            shape=tuple(self.shape),
+            parameterization=self.parameterization,
+            nodes=self.nodes,
+        )
+        if self.min is not None:
+            control.min = np.asarray(self.min, dtype=float)
+        if self.max is not None:
+            control.max = np.asarray(self.max, dtype=float)
+        if self.guess is not None:
+            control.guess = np.asarray(self.guess, dtype=float)
+        if self.scaling_min is not None:
+            control.scaling_min = np.asarray(self.scaling_min, dtype=float)
+        if self.scaling_max is not None:
+            control.scaling_max = np.asarray(self.scaling_max, dtype=float)
+        return control
