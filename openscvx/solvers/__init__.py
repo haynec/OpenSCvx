@@ -41,8 +41,9 @@ Note:
     for the interface details.
 """
 
-import inspect
-from typing import Any
+from typing import Any, Dict, Optional
+
+from pydantic import BaseModel, ConfigDict
 
 from .base import ConvexSolver
 from .ptr_solver import PTRSolver, PTRSolveResult
@@ -56,46 +57,29 @@ _SOLVER_MAP = {
 }
 
 
-def _resolve_solver(val: Any) -> ConvexSolver:
-    """Resolve a solver specification into an instance.
+class SolverConfig(BaseModel):
+    """Validates convex subproblem solver configuration from dict input.
 
-    Accepted forms:
-
-    * **instance** — already-constructed :class:`ConvexSolver` (pass-through).
-    * **dict** — keyword arguments passed to :class:`PTRSolver`.
-      An optional ``"type"`` key selects the class (currently only
-      ``"PTRSolver"``).
-
-    Examples::
-
-        # Dict with keyword overrides (default class)
-        _resolve_solver({"cvx_solver": "CLARABEL", "solver_args": {"tol_gap_abs": 1e-7}})
-
-        # Dict with explicit type
-        _resolve_solver({"type": "PTRSolver", "cvx_solver": "CLARABEL"})
-
-        # Instance pass-through
-        _resolve_solver(PTRSolver(cvx_solver="CLARABEL"))
+    An optional ``type`` key selects the solver class (defaults to
+    ``PTRSolver``).
     """
-    if isinstance(val, ConvexSolver):
-        return val
 
-    if not isinstance(val, dict):
-        raise TypeError(f"Expected a ConvexSolver instance or dict, got {type(val).__name__}")
+    type: str = "PTRSolver"
+    cvx_solver: str = "QOCO"
+    solver_args: Optional[Dict[str, Any]] = None
+    cvxpygen: bool = False
+    cvxpygen_override: bool = False
 
-    kwargs = dict(val)  # copy to avoid mutating caller's dict
-    name = kwargs.pop("type", "PTRSolver")
+    model_config = ConfigDict(extra="forbid")
 
-    cls = _SOLVER_MAP.get(name)
-    if cls is None:
-        raise ValueError(f"Unknown solver {name!r}; expected one of {sorted(_SOLVER_MAP)}")
-
-    try:
+    def to_solver(self) -> ConvexSolver:
+        cls = _SOLVER_MAP.get(self.type)
+        if cls is None:
+            raise ValueError(
+                f"Unknown solver {self.type!r}; expected one of {sorted(_SOLVER_MAP)}"
+            )
+        kwargs = self.model_dump(exclude={"type"}, exclude_defaults=True)
         return cls(**kwargs)
-    except TypeError as e:
-        valid = list(inspect.signature(cls.__init__).parameters.keys())
-        valid.remove("self")
-        raise TypeError(f"Invalid solver keyword argument: {e}. Valid keys: {valid}") from None
 
 
 __all__ = [
@@ -104,4 +88,6 @@ __all__ = [
     # PTR solver
     "PTRSolver",
     "PTRSolveResult",
+    # Config
+    "SolverConfig",
 ]

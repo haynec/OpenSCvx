@@ -16,8 +16,9 @@ Jacobians and compact variational integration when sparsity patterns exist).
 :class:`LinearizeDiscretize` is the dense linearize-then-discretize scheme.
 """
 
-import inspect
-from typing import Any
+from typing import Any, Dict, List, Optional, Union
+
+from pydantic import BaseModel, ConfigDict
 
 from .base import Discretizer, DisType
 from .discretize_linearize import DiscretizeLinearizeVectorize, VectorizeDiscretizeLinearize
@@ -41,66 +42,44 @@ _DISCRETIZER_MAP = {
 }
 
 
-def _resolve_discretizer(val: Any) -> Discretizer:
-    """Resolve a discretizer specification into an instance.
+class DiscretizerConfig(BaseModel):
+    """Validates discretizer configuration from dict input.
 
-    Accepted forms:
-
-    * **instance** — already-constructed :class:`Discretizer` (pass-through).
-    * **dict** — keyword arguments passed to the selected discretizer class.
-      An optional ``"type"`` key selects the class (defaults to
-      :class:`VectorizeDiscretizeLinearize`).
-
-    Examples::
-
-        # Dict with keyword overrides (default class: VectorizeDiscretizeLinearize)
-        _resolve_discretizer({"ode_solver": "Dopri8"})
-
-        # Global hold on the discretizer (or ``Control(..., parameterization="FOH"|"ZOH")``)
-        _resolve_discretizer({"dis_type": "ZOH", "ode_solver": "Dopri8"})
-
-        # Configure integrator behavior (forwarded to Diffrax / diffeqsolve)
-        _resolve_discretizer(
-            {"diffrax_kwargs": {"num_substeps": 100, "max_steps": 20_000}}
-        )
-
-        # Dict with explicit dense discretizer
-        _resolve_discretizer({"type": "LinearizeDiscretize", "ode_solver": "Dopri8"})
-
-        # Instance pass-through
-        _resolve_discretizer(LinearizeDiscretize(ode_solver="Dopri8"))
+    An optional ``type`` key selects the discretizer class (defaults to
+    ``VectorizeDiscretizeLinearize``).  Remaining fields are forwarded as
+    keyword arguments to the selected class.
     """
-    if isinstance(val, Discretizer):
-        return val
 
-    if not isinstance(val, dict):
-        raise TypeError(f"Expected a Discretizer instance or dict, got {type(val).__name__}")
+    type: str = "VectorizeDiscretizeLinearize"
+    dis_type: Union[str, List[str]] = "FOH"
+    ode_solver: str = "Tsit5"
+    custom_integrator: bool = False
+    diffrax_kwargs: Optional[Dict[str, Any]] = None
+    args: Optional[Dict[str, Any]] = None
 
-    kwargs = dict(val)  # copy to avoid mutating caller's dict
-    name = kwargs.pop("type", "VectorizeDiscretizeLinearize")
+    model_config = ConfigDict(extra="forbid")
 
-    cls = _DISCRETIZER_MAP.get(name)
-    if cls is None:
-        raise ValueError(
-            f"Unknown discretizer {name!r}; expected one of {sorted(_DISCRETIZER_MAP)}"
-        )
-
-    try:
+    def to_discretizer(self) -> Discretizer:
+        cls = _DISCRETIZER_MAP.get(self.type)
+        if cls is None:
+            raise ValueError(
+                f"Unknown discretizer {self.type!r}; "
+                f"expected one of {sorted(_DISCRETIZER_MAP)}"
+            )
+        # Only forward explicitly-set fields so constructors with fewer
+        # parameters don't receive unexpected keyword arguments.
+        kwargs = self.model_dump(exclude={"type"}, exclude_defaults=True)
         return cls(**kwargs)
-    except TypeError as e:
-        valid = list(inspect.signature(cls.__init__).parameters.keys())
-        valid.remove("self")
-        raise TypeError(f"Invalid discretizer keyword argument: {e}. Valid keys: {valid}") from None
 
 
 __all__ = [
     "DisType",
     "Discretizer",
+    "DiscretizerConfig",
     "DiscretizeLinearizeVectorize",
     "LinearizeDiscretize",
     "LinearizeDiscretizeSparse",
     "VectorizeDiscretizeLinearize",
-    "_resolve_discretizer",
     "calculate_impulsive_discretization",
     "color_columns",
     "get_impulsive_discretization_solver",

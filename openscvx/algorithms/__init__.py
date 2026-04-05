@@ -78,8 +78,9 @@ Current Implementations:
 - :class:`PenalizedTrustRegion`: Penalized Trust Region (PTR) algorithm
 """
 
-import inspect
-from typing import Any, Dict
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .augmented_lagrangian import AugmentedLagrangian
 from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult
@@ -90,7 +91,7 @@ from .ramp_proximal_weight import RampProximalWeight
 from .weights import Weights
 
 # ---------------------------------------------------------------------------
-# Spec resolvers — turn dicts/strings into algorithm/autotuner instances
+# Autotuner config models
 # ---------------------------------------------------------------------------
 
 _AUTOTUNER_MAP: Dict[str, type] = {
@@ -100,82 +101,120 @@ _AUTOTUNER_MAP: Dict[str, type] = {
 }
 
 
-def _resolve_autotuner(val: Any) -> Any:
-    """Resolve an autotuner specification into an instance.
+class AugmentedLagrangianConfig(BaseModel):
+    """Validates AugmentedLagrangian configuration from dict input."""
 
-    Accepted forms:
+    type: Literal["AugmentedLagrangian"] = "AugmentedLagrangian"
+    rho_init: float = 1.0
+    rho_max: float = 1e2
+    gamma_1: float = 2.0
+    gamma_2: float = 0.5
+    eta_0: float = 1e-2
+    eta_1: float = 1e-1
+    eta_2: float = 0.8
+    ep: float = 0.99
+    eta_lambda: float = 1e1
+    lam_vc_max: float = 1e5
+    lam_prox_min: float = 1e-3
+    lam_prox_max: float = 1e4
+    lam_cost_drop: int = -1
+    lam_cost_relax: float = 1.0
 
-    * **string** — class name only, default parameters::
+    model_config = ConfigDict(extra="forbid")
 
-          "RampProximalWeight"
+    def to_autotuner(self) -> AugmentedLagrangian:
+        return AugmentedLagrangian(**self.model_dump(exclude={"type"}))
 
-    * **dict** — class name + parameter overrides::
 
-          {"type": "RampProximalWeight", "ramp_factor": 1.04}
+class RampProximalWeightConfig(BaseModel):
+    """Validates RampProximalWeight configuration from dict input."""
 
-    * **instance** — already-constructed autotuner (pass-through).
+    type: Literal["RampProximalWeight"] = "RampProximalWeight"
+    ramp_factor: float = 1.0
+    lam_prox_max: float = 1e3
+    lam_cost_drop: int = -1
+    lam_cost_relax: float = 1.0
+
+    model_config = ConfigDict(extra="forbid")
+
+    def to_autotuner(self) -> RampProximalWeight:
+        return RampProximalWeight(**self.model_dump(exclude={"type"}))
+
+
+class ConstantProximalWeightConfig(BaseModel):
+    """Validates ConstantProximalWeight configuration from dict input."""
+
+    type: Literal["ConstantProximalWeight"] = "ConstantProximalWeight"
+    lam_cost_drop: int = -1
+    lam_cost_relax: float = 1.0
+
+    model_config = ConfigDict(extra="forbid")
+
+    def to_autotuner(self) -> ConstantProximalWeight:
+        return ConstantProximalWeight(**self.model_dump(exclude={"type"}))
+
+
+AutotunerConfig = Annotated[
+    Union[AugmentedLagrangianConfig, RampProximalWeightConfig, ConstantProximalWeightConfig],
+    Field(discriminator="type"),
+]
+
+# ---------------------------------------------------------------------------
+# Algorithm config model
+# ---------------------------------------------------------------------------
+
+
+class PenalizedTrustRegionConfig(BaseModel):
+    """Validates PenalizedTrustRegion configuration from dict input.
+
+    The ``autotuner`` field accepts:
+
+    * ``None`` — defaults to :class:`AugmentedLagrangian`.
+    * A **string** — autotuner class name with defaults, e.g. ``"RampProximalWeight"``.
+    * A **dict** — class name via ``"type"`` key plus overrides.
     """
-    if not isinstance(val, (str, dict)):
-        return val
 
-    if isinstance(val, str):
-        name = val
-        kwargs: dict = {}
-    else:
-        kwargs = dict(val)  # copy to avoid mutating the input
-        name = kwargs.pop("type", None)
-        if name is None:
-            raise ValueError(
-                "autotuner dict must include a 'type' key (e.g. type: RampProximalWeight)"
-            )
+    autotuner: Optional[AutotunerConfig] = None
+    k_max: int = 200
+    lam_prox: Union[float, Dict[str, Any]] = 1e-1
+    lam_vc: Union[float, Dict[str, Any]] = 1e0
+    lam_cost: Union[float, Dict[str, Any]] = 1e-2
+    lam_vb: float = 0.0
+    ep_tr: float = 1e-4
+    ep_vb: float = 1e-4
+    ep_vc: float = 1e-8
 
-    cls = _AUTOTUNER_MAP.get(name)
-    if cls is None:
-        raise ValueError(f"Unknown autotuner {name!r}; expected one of {sorted(_AUTOTUNER_MAP)}")
+    model_config = ConfigDict(extra="forbid")
 
-    try:
-        return cls(**kwargs)
-    except TypeError as e:
-        valid = list(inspect.signature(cls.__init__).parameters.keys())
-        valid.remove("self")
-        raise TypeError(f"Invalid autotuner keyword argument: {e}. Valid keys: {valid}") from None
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_autotuner(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "autotuner" in data:
+            at = data["autotuner"]
+            if isinstance(at, str):
+                data = dict(data)
+                data["autotuner"] = {"type": at}
+        return data
 
-
-def _resolve_algorithm(
-    kwargs: dict, states: list = None, controls: list = None
-) -> "PenalizedTrustRegion":
-    """Build a :class:`PenalizedTrustRegion` from a user-supplied dict.
-
-    Supports a nested ``autotuner`` key that is resolved via
-    :func:`_resolve_autotuner` (string, dict, or instance).
-
-    Args:
-        kwargs: Algorithm keyword arguments (e.g. ``lam_cost``, ``autotuner``).
-        states: Symbolic State objects, forwarded to the algorithm constructor
-            so that dict-valued ``lam_cost`` / ``lam_prox`` can be expanded
-            immediately.
-        controls: Symbolic Control objects, forwarded to the algorithm
-            constructor so that dict-valued ``lam_prox`` can be expanded
-            immediately.
-    """
-    kwargs = dict(kwargs)  # copy to avoid mutating the caller's dict
-
-    # Resolve nested autotuner spec if present
-    if "autotuner" in kwargs:
-        kwargs["autotuner"] = _resolve_autotuner(kwargs["autotuner"])
-
-    # Forward states/controls so dict weights can be expanded eagerly
-    if states is not None:
-        kwargs.setdefault("states", states)
-    if controls is not None:
-        kwargs.setdefault("controls", controls)
-
-    try:
-        return PenalizedTrustRegion(**kwargs)
-    except TypeError as e:
-        valid = list(inspect.signature(PenalizedTrustRegion.__init__).parameters.keys())
-        valid.remove("self")
-        raise TypeError(f"Invalid algorithm keyword argument: {e}. Valid keys: {valid}") from None
+    def to_algorithm(
+        self,
+        states: Optional[List[Any]] = None,
+        controls: Optional[List[Any]] = None,
+    ) -> PenalizedTrustRegion:
+        autotuner = self.autotuner.to_autotuner() if self.autotuner is not None else None
+        return PenalizedTrustRegion(
+            autotuner=autotuner,
+            k_max=self.k_max,
+            lam_prox=self.lam_prox,
+            lam_vc=self.lam_vc,
+            lam_cost=self.lam_cost,
+            lam_vb=self.lam_vb,
+            ep_tr=self.ep_tr,
+            ep_vb=self.ep_vb,
+            ep_vc=self.ep_vc,
+            states=states,
+            controls=controls,
+        )
 
 
 __all__ = [
@@ -192,4 +231,9 @@ __all__ = [
     "AugmentedLagrangian",
     "ConstantProximalWeight",
     "RampProximalWeight",
+    # Config models
+    "PenalizedTrustRegionConfig",
+    "AugmentedLagrangianConfig",
+    "RampProximalWeightConfig",
+    "ConstantProximalWeightConfig",
 ]
