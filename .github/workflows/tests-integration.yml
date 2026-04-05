@@ -40,7 +40,7 @@ jobs:
 
     - name: Run integration tests
       run: |
-        pytest -v -m integration --durations=10
+        pytest -v -m integration --durations=10 -n auto
 
     - name: Upload test results on failure
       if: failure()
