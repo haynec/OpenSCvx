@@ -159,71 +159,15 @@ def load_dict(data: dict) -> dict:
         via :meth:`Config.apply_dict() <openscvx.config.Config.apply_dict>`
         after construction).
     """
-    # ---- states --------------------------------------------------------
-    states: List[State] = []
-    for s in data.get("states", []):
-        state = State(s["name"], shape=tuple(s["shape"]))
-        if "min" in s:
-            state.min = np.asarray(s["min"], dtype=float)
-        if "max" in s:
-            state.max = np.asarray(s["max"], dtype=float)
-        if "initial" in s:
-            state.initial = _parse_boundary(s["initial"])
-        if "final" in s:
-            state.final = _parse_boundary(s["final"])
-        if "guess" in s:
-            state.guess = np.asarray(s["guess"], dtype=float)
-        if "scaling_min" in s:
-            state.scaling_min = np.asarray(s["scaling_min"], dtype=float)
-        if "scaling_max" in s:
-            state.scaling_max = np.asarray(s["scaling_max"], dtype=float)
-        states.append(state)
+    spec = ProblemSpec.model_validate(data)
 
-    # ---- controls ------------------------------------------------------
-    controls: List[Control] = []
-    for c in data.get("controls", []):
-        control = Control(
-            c["name"],
-            shape=tuple(c["shape"]),
-            parameterization=c.get("parameterization"),
-            nodes=c.get("nodes"),
-        )
-        if "min" in c:
-            control.min = np.asarray(c["min"], dtype=float)
-        if "max" in c:
-            control.max = np.asarray(c["max"], dtype=float)
-        if "guess" in c:
-            control.guess = np.asarray(c["guess"], dtype=float)
-        if "scaling_min" in c:
-            control.scaling_min = np.asarray(c["scaling_min"], dtype=float)
-        if "scaling_max" in c:
-            control.scaling_max = np.asarray(c["scaling_max"], dtype=float)
-        controls.append(control)
+    # ---- Build symbolic objects from validated specs -----------------------
+    states = [s.to_state() for s in spec.states]
+    controls = [c.to_control() for c in spec.controls]
+    parameters = [p.to_parameter() for p in spec.parameters]
+    time = spec.time.to_time()
 
-    # ---- parameters ----------------------------------------------------
-    parameters: List[Parameter] = []
-    for p in data.get("parameters", []):
-        param = Parameter(
-            p["name"],
-            shape=tuple(p["shape"]),
-            value=np.asarray(p["value"], dtype=float),
-        )
-        parameters.append(param)
-
-    # ---- time ----------------------------------------------------------
-    time_data = data["time"]
-    time = Time(
-        initial=_parse_time_boundary(time_data["initial"]),
-        final=_parse_time_boundary(time_data["final"]),
-        min=float(time_data["min"]),
-        max=float(time_data["max"]),
-        uniform_time_grid=bool(time_data.get("uniform_time_grid", False)),
-    )
-
-    # ---- N -------------------------------------------------------------
-    N = int(data["N"])
-
-    # ---- symbol table --------------------------------------------------
+    # ---- symbol table ------------------------------------------------------
     symbols: Dict[str, Expr] = {}
     for s in states:
         symbols[s.name] = s
@@ -242,14 +186,14 @@ def load_dict(data: dict) -> dict:
 
     parser = ExprParser(symbols)
 
-    # ---- dynamics ------------------------------------------------------
+    # ---- dynamics ----------------------------------------------------------
     dynamics: Dict[str, Expr] = {}
-    for state_name, expr_str in data.get("dynamics", {}).items():
+    for state_name, expr_str in spec.dynamics.items():
         dynamics[state_name] = parser.parse(str(expr_str))
 
-    # ---- constraints ---------------------------------------------------
+    # ---- constraints -------------------------------------------------------
     constraints: list = []
-    for constraint_str in data.get("constraints", []):
+    for constraint_str in spec.constraints:
         constraints.append(parser.parse(str(constraint_str)))
 
     result: Dict[str, Any] = {
@@ -257,84 +201,39 @@ def load_dict(data: dict) -> dict:
         "constraints": constraints,
         "states": states,
         "controls": controls,
-        "N": N,
+        "N": spec.N,
         "time": time,
     }
 
-    # ---- algorithm / discretizer / solver (optional) ---------------------
-    # Pass raw values (dict or instance) through to Problem, which owns
-    # resolution via _resolve_algorithm / _resolve_discretizer / _resolve_solver.
+    # ---- algorithm / discretizer / solver (optional) -----------------------
     for key in ("algorithm", "discretizer", "solver"):
-        if key in data:
-            result[key] = data[key]
+        val = getattr(spec, key)
+        if val is not None:
+            result[key] = val
 
-    # ---- optional: propagation states ----------------------------------
-    if "states_prop" in data:
-        states_prop: List[State] = []
-        for s in data["states_prop"]:
-            state = State(s["name"], shape=tuple(s["shape"]))
-            if "min" in s:
-                state.min = np.asarray(s["min"], dtype=float)
-            if "max" in s:
-                state.max = np.asarray(s["max"], dtype=float)
-            if "initial" in s:
-                state.initial = _parse_boundary(s["initial"])
-            states_prop.append(state)
-            symbols[state.name] = state  # add to symbol table for expressions
+    # ---- optional: propagation states --------------------------------------
+    if spec.states_prop is not None:
+        states_prop = [s.to_state() for s in spec.states_prop]
+        for s in states_prop:
+            symbols[s.name] = s
         result["states_prop"] = states_prop
 
-    # ---- optional: propagation dynamics --------------------------------
-    if "dynamics_prop" in data:
+    # ---- optional: propagation dynamics ------------------------------------
+    if spec.dynamics_prop is not None:
         dynamics_prop: Dict[str, Expr] = {}
-        for state_name, expr_str in data["dynamics_prop"].items():
+        for state_name, expr_str in spec.dynamics_prop.items():
             dynamics_prop[state_name] = parser.parse(str(expr_str))
         result["dynamics_prop"] = dynamics_prop
 
-    # ---- optional: algebraic propagation outputs -----------------------
-    if "algebraic_prop" in data:
+    # ---- optional: algebraic propagation outputs ---------------------------
+    if spec.algebraic_prop is not None:
         algebraic_prop: Dict[str, Expr] = {}
-        for name, expr_str in data["algebraic_prop"].items():
+        for name, expr_str in spec.algebraic_prop.items():
             algebraic_prop[name] = parser.parse(str(expr_str))
         result["algebraic_prop"] = algebraic_prop
 
-    # ---- optional: settings (applied after Problem construction) -------
-    if "settings" in data:
-        result["settings"] = data["settings"]
+    # ---- optional: settings (applied after Problem construction) -----------
+    if spec.settings is not None:
+        result["settings"] = spec.settings
 
     return result
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
-def _parse_boundary(arr: list) -> list:
-    """Convert YAML boundary condition arrays to the State setter format.
-
-    Plain numbers stay as-is (→ fixed).  Two-element lists like
-    ``[free, 5.0]`` are converted to tuples ``("free", 5.0)``.
-
-    A bare ``[tag, value]`` pair (e.g. ``[free, 5.0]`` for a shape-[1]
-    state) is auto-wrapped so that both ``[free, 5.0]`` and
-    ``[[free, 5.0]]`` produce the same result.  A bare string is never
-    a valid boundary element, so this detection is unambiguous.
-    """
-    # Bare [tag, value] pair — wrap so the element-wise loop handles it
-    if len(arr) == 2 and isinstance(arr[0], str) and not isinstance(arr[1], list):
-        arr = [arr]
-
-    result: list = []
-    for item in arr:
-        if isinstance(item, list) and len(item) == 2 and isinstance(item[0], str):
-            result.append((str(item[0]), float(item[1])))
-        else:
-            result.append(item)
-    return result
-
-
-def _parse_time_boundary(val: Any) -> Any:
-    """Convert a YAML time boundary to the Time constructor format."""
-    if isinstance(val, list) and len(val) == 2 and isinstance(val[0], str):
-        return (str(val[0]), float(val[1]))
-    return val
