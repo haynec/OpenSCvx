@@ -29,6 +29,7 @@ dependencies = [
     "viser",
     "matplotlib",
     "pyyaml",
+    "pydantic>=2.0",
 ]
 
 [project.scripts]
