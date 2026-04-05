@@ -98,6 +98,8 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Optional, 
 
 from pydantic import BaseModel, ConfigDict
 
+from openscvx.symbolic.expr.parameter import Parameter
+
 if TYPE_CHECKING:
     from jax import Array as JaxArray
 else:
@@ -347,7 +349,7 @@ class ByofSpec(BaseModel):
             }
     """
 
-    parameters: List[Any] = []
+    parameters: List[Parameter] = []
     dynamics: Dict[str, DynamicsFunction] = {}
     dynamics_discrete: Dict[str, DynamicsFunction] = {}
     nodal_constraints: List[NodalConstraintSpec] = []
