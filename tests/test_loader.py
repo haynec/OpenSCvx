@@ -14,9 +14,10 @@ from pathlib import Path
 import jax
 import numpy as np
 import pytest
+from pydantic import ValidationError
 
 from openscvx import Problem
-from openscvx.loader import load_dict, load_json, load_yaml
+from openscvx.loader import ProblemSpec, load_dict, load_json, load_yaml
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
 from tests.test_brachistochrone import (
     _assert_brachistochrone_accuracy,
@@ -366,3 +367,48 @@ def test_cross_nodal(feasible):
         _validate_result(result, problem, "YAML Cross-Nodal")
 
     jax.clear_caches()
+
+
+# =============================================================================
+# Spec validation — typos and wrong types caught by extra="forbid"
+# =============================================================================
+
+
+def test_typo_in_top_level_key():
+    """A misspelled top-level key (e.g. 'staets') should raise ValidationError."""
+    data = _base_dict()
+    data["staets"] = data.pop("states")
+    with pytest.raises(ValidationError, match="staets"):
+        ProblemSpec.model_validate(data)
+
+
+def test_typo_in_state_field():
+    """A misspelled field inside a state spec should raise ValidationError."""
+    data = _base_dict()
+    data["states"][0]["intial"] = data["states"][0].pop("initial")
+    with pytest.raises(ValidationError, match="intial"):
+        ProblemSpec.model_validate(data)
+
+
+def test_typo_in_time_field():
+    """A misspelled field inside the time spec should raise ValidationError."""
+    data = _base_dict()
+    data["time"]["unifrom_time_grid"] = data["time"].pop("uniform_time_grid")
+    with pytest.raises(ValidationError, match="unifrom_time_grid"):
+        ProblemSpec.model_validate(data)
+
+
+def test_typo_in_algorithm_field():
+    """A misspelled algorithm field should raise ValidationError."""
+    data = _base_dict()
+    data["algorithm"] = {"lam_cots": 1e-2}
+    with pytest.raises(ValidationError, match="lam_cots"):
+        ProblemSpec.model_validate(data)
+
+
+def test_wrong_type_for_N():
+    """Passing a non-integer N should raise ValidationError."""
+    data = _base_dict()
+    data["N"] = "fifty"
+    with pytest.raises(ValidationError, match="N"):
+        ProblemSpec.model_validate(data)

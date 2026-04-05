@@ -1171,7 +1171,9 @@ def test_validate_input_types_impulsive_with_byof_dynamics_discrete_passes():
     x = State("x", shape=(2,))
     u_impulsive = Control("dv", shape=(1,), parameterization="impulsive")
     dynamics = {"x": x}
-    byof = {"dynamics_discrete": {"x": lambda x, u, node, params: x}}  # placeholder for validation
+    from openscvx.expert.byof import ByofSpec
+
+    byof = ByofSpec(dynamics_discrete={"x": lambda x, u, node, params: x})
     constraints = [x <= 5]
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
 
