@@ -67,7 +67,7 @@ class DiscretizerConfig(BaseModel):
             )
         # Only forward explicitly-set fields so constructors with fewer
         # parameters don't receive unexpected keyword arguments.
-        kwargs = self.model_dump(exclude={"type"}, exclude_defaults=True)
+        kwargs = self.model_dump(exclude={"type"}, exclude_unset=True)
         return cls(**kwargs)
 
 
