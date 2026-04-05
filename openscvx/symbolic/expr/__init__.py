@@ -101,9 +101,6 @@ from .expr import (
     traverse,
 )
 
-# Parameter
-from .parameter import Parameter
-
 # Lie algebra operations
 from .lie import (
     Adjoint,
@@ -146,6 +143,9 @@ from .math import (
     Square,
     Tan,
 )
+
+# Parameter
+from .parameter import Parameter
 
 # Spatial/3D operations
 from .spatial import QDCM, SSM, SSMP

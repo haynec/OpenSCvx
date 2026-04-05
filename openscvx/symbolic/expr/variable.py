@@ -1,5 +1,5 @@
 import hashlib
-from typing import Any, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
