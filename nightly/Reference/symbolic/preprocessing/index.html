@@ -4864,6 +4864,8 @@
       
         
       
+        
+      
     
     
     
@@ -5290,6 +5292,34 @@
     
   
     math
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../expr/parameter/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    parameter
   
 
     
@@ -10801,7 +10831,7 @@ Should be called before any other validation in the preprocessing pipeline.</p>
 </span><span id="__span-0-803"><a id="__codelineno-0-803" name="__codelineno-0-803"></a>
 </span><span id="__span-0-804"><a id="__codelineno-0-804" name="__codelineno-0-804"></a>    <span class="n">any_impulsive_control_set</span> <span class="o">=</span> <span class="nb">any</span><span class="p">(</span><span class="n">c</span><span class="o">.</span><span class="n">parameterization</span> <span class="o">==</span> <span class="s2">&quot;impulsive&quot;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">controls</span><span class="p">)</span>
 </span><span id="__span-0-805"><a id="__codelineno-0-805" name="__codelineno-0-805"></a>    <span class="c1"># Discrete dynamics can be provided explicitly or via byof[&quot;dynamics_discrete&quot;]</span>
-</span><span id="__span-0-806"><a id="__codelineno-0-806" name="__codelineno-0-806"></a>    <span class="n">has_discrete_from_byof</span> <span class="o">=</span> <span class="n">byof</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">bool</span><span class="p">(</span><span class="n">byof</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dynamics_discrete&quot;</span><span class="p">))</span>
+</span><span id="__span-0-806"><a id="__codelineno-0-806" name="__codelineno-0-806"></a>    <span class="n">has_discrete_from_byof</span> <span class="o">=</span> <span class="n">byof</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">bool</span><span class="p">(</span><span class="n">byof</span><span class="o">.</span><span class="n">dynamics_discrete</span><span class="p">)</span>
 </span><span id="__span-0-807"><a id="__codelineno-0-807" name="__codelineno-0-807"></a>    <span class="n">has_discrete_dynamics</span> <span class="o">=</span> <span class="n">dynamics_discrete</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">has_discrete_from_byof</span>
 </span><span id="__span-0-808"><a id="__codelineno-0-808" name="__codelineno-0-808"></a>    <span class="k">if</span> <span class="n">any_impulsive_control_set</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">has_discrete_dynamics</span><span class="p">:</span>
 </span><span id="__span-0-809"><a id="__codelineno-0-809" name="__codelineno-0-809"></a>        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>

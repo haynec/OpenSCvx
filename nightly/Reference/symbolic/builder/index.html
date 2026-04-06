@@ -4940,6 +4940,8 @@
       
         
       
+        
+      
     
     
     
@@ -5366,6 +5368,34 @@
     
   
     math
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../expr/parameter/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    parameter
   
 
     
@@ -9228,7 +9258,7 @@ should NOT appear in the symbolic dynamics dict.</p>
 </span><span id="__span-0-244"><a id="__codelineno-0-244" name="__codelineno-0-244"></a>    <span class="c1"># When omitted (and no impulsive controls are present), default to an identity</span>
 </span><span id="__span-0-245"><a id="__codelineno-0-245" name="__codelineno-0-245"></a>    <span class="c1"># mapping for each state so the discrete map preserves the state by default.</span>
 </span><span id="__span-0-246"><a id="__codelineno-0-246" name="__codelineno-0-246"></a>    <span class="k">if</span> <span class="n">dynamics_discrete</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-247"><a id="__codelineno-0-247" name="__codelineno-0-247"></a>        <span class="n">byof_dd</span> <span class="o">=</span> <span class="n">byof</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dynamics_discrete&quot;</span><span class="p">,</span> <span class="p">{})</span> <span class="k">if</span> <span class="n">byof</span> <span class="k">else</span> <span class="p">{}</span>
+</span><span id="__span-0-247"><a id="__codelineno-0-247" name="__codelineno-0-247"></a>        <span class="n">byof_dd</span> <span class="o">=</span> <span class="n">byof</span><span class="o">.</span><span class="n">dynamics_discrete</span> <span class="k">if</span> <span class="n">byof</span> <span class="k">else</span> <span class="p">{}</span>
 </span><span id="__span-0-248"><a id="__codelineno-0-248" name="__codelineno-0-248"></a>        <span class="k">if</span> <span class="n">byof_dd</span><span class="p">:</span>
 </span><span id="__span-0-249"><a id="__codelineno-0-249" name="__codelineno-0-249"></a>            <span class="n">dynamics_discrete</span> <span class="o">=</span> <span class="p">{</span><span class="n">state</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">state</span> <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">states</span> <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">byof_dd</span><span class="p">}</span>
 </span><span id="__span-0-250"><a id="__codelineno-0-250" name="__codelineno-0-250"></a>        <span class="k">else</span><span class="p">:</span>
@@ -9242,8 +9272,8 @@ should NOT appear in the symbolic dynamics dict.</p>
 </span><span id="__span-0-258"><a id="__codelineno-0-258" name="__codelineno-0-258"></a>        <span class="n">dynamics_discrete</span><span class="p">[</span><span class="s2">&quot;time&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">time_state</span> <span class="k">if</span> <span class="n">time_state</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="mf">0.0</span>
 </span><span id="__span-0-259"><a id="__codelineno-0-259" name="__codelineno-0-259"></a>
 </span><span id="__span-0-260"><a id="__codelineno-0-260" name="__codelineno-0-260"></a>    <span class="c1"># Extract byof dynamics for validation</span>
-</span><span id="__span-0-261"><a id="__codelineno-0-261" name="__codelineno-0-261"></a>    <span class="n">byof_dynamics</span> <span class="o">=</span> <span class="n">byof</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dynamics&quot;</span><span class="p">,</span> <span class="p">{})</span> <span class="k">if</span> <span class="n">byof</span> <span class="k">else</span> <span class="p">{}</span>
-</span><span id="__span-0-262"><a id="__codelineno-0-262" name="__codelineno-0-262"></a>    <span class="n">byof_dynamics_discrete</span> <span class="o">=</span> <span class="n">byof</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;dynamics_discrete&quot;</span><span class="p">,</span> <span class="p">{})</span> <span class="k">if</span> <span class="n">byof</span> <span class="k">else</span> <span class="p">{}</span>
+</span><span id="__span-0-261"><a id="__codelineno-0-261" name="__codelineno-0-261"></a>    <span class="n">byof_dynamics</span> <span class="o">=</span> <span class="n">byof</span><span class="o">.</span><span class="n">dynamics</span> <span class="k">if</span> <span class="n">byof</span> <span class="k">else</span> <span class="p">{}</span>
+</span><span id="__span-0-262"><a id="__codelineno-0-262" name="__codelineno-0-262"></a>    <span class="n">byof_dynamics_discrete</span> <span class="o">=</span> <span class="n">byof</span><span class="o">.</span><span class="n">dynamics_discrete</span> <span class="k">if</span> <span class="n">byof</span> <span class="k">else</span> <span class="p">{}</span>
 </span><span id="__span-0-263"><a id="__codelineno-0-263" name="__codelineno-0-263"></a>
 </span><span id="__span-0-264"><a id="__codelineno-0-264" name="__codelineno-0-264"></a>    <span class="c1"># Validate dynamics dict matches state names and dimensions</span>
 </span><span id="__span-0-265"><a id="__codelineno-0-265" name="__codelineno-0-265"></a>    <span class="c1"># byof_dynamics states should not be in symbolic dynamics dict</span>
@@ -9307,7 +9337,7 @@ should NOT appear in the symbolic dynamics dict.</p>
 </span><span id="__span-0-323"><a id="__codelineno-0-323" name="__codelineno-0-323"></a>
 </span><span id="__span-0-324"><a id="__codelineno-0-324" name="__codelineno-0-324"></a>    <span class="c1"># Collect from byof parameters</span>
 </span><span id="__span-0-325"><a id="__codelineno-0-325" name="__codelineno-0-325"></a>    <span class="k">if</span> <span class="n">byof</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-326"><a id="__codelineno-0-326" name="__codelineno-0-326"></a>        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">byof</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;parameters&quot;</span><span class="p">,</span> <span class="p">[]):</span>
+</span><span id="__span-0-326"><a id="__codelineno-0-326" name="__codelineno-0-326"></a>        <span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">byof</span><span class="o">.</span><span class="n">parameters</span><span class="p">:</span>
 </span><span id="__span-0-327"><a id="__codelineno-0-327" name="__codelineno-0-327"></a>            <span class="k">if</span> <span class="n">param</span><span class="o">.</span><span class="n">name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">parameters</span><span class="p">:</span>
 </span><span id="__span-0-328"><a id="__codelineno-0-328" name="__codelineno-0-328"></a>                <span class="n">parameters</span><span class="p">[</span><span class="n">param</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">param</span><span class="o">.</span><span class="n">value</span>
 </span><span id="__span-0-329"><a id="__codelineno-0-329" name="__codelineno-0-329"></a>
