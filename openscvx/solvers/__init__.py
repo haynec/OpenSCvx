@@ -41,61 +41,27 @@ Note:
     for the interface details.
 """
 
-import inspect
 from typing import Any
 
-from .base import ConvexSolver
+from .base import _SOLVER_MAP, ConvexSolver, SolverSpec
 from .ptr_solver import PTRSolver, PTRSolveResult
 
 # ---------------------------------------------------------------------------
-# Spec resolver — turn a dict into a ConvexSolver instance
+# Populate the solver class map now that all classes are imported
 # ---------------------------------------------------------------------------
 
-_SOLVER_MAP = {
-    "PTRSolver": PTRSolver,
-}
+_SOLVER_MAP.update(
+    {
+        "PTRSolver": PTRSolver,
+    }
+)
 
 
-def _resolve_solver(val: Any) -> ConvexSolver:
-    """Resolve a solver specification into an instance.
-
-    Accepted forms:
-
-    * **instance** — already-constructed :class:`ConvexSolver` (pass-through).
-    * **dict** — keyword arguments passed to :class:`PTRSolver`.
-      An optional ``"type"`` key selects the class (currently only
-      ``"PTRSolver"``).
-
-    Examples::
-
-        # Dict with keyword overrides (default class)
-        _resolve_solver({"cvx_solver": "CLARABEL", "solver_args": {"tol_gap_abs": 1e-7}})
-
-        # Dict with explicit type
-        _resolve_solver({"type": "PTRSolver", "cvx_solver": "CLARABEL"})
-
-        # Instance pass-through
-        _resolve_solver(PTRSolver(cvx_solver="CLARABEL"))
-    """
-    if isinstance(val, ConvexSolver):
+def resolve_solver_config(val: Any) -> SolverSpec:
+    """Validate a dict/Spec into a :class:`SolverSpec` instance."""
+    if isinstance(val, SolverSpec):
         return val
-
-    if not isinstance(val, dict):
-        raise TypeError(f"Expected a ConvexSolver instance or dict, got {type(val).__name__}")
-
-    kwargs = dict(val)  # copy to avoid mutating caller's dict
-    name = kwargs.pop("type", "PTRSolver")
-
-    cls = _SOLVER_MAP.get(name)
-    if cls is None:
-        raise ValueError(f"Unknown solver {name!r}; expected one of {sorted(_SOLVER_MAP)}")
-
-    try:
-        return cls(**kwargs)
-    except TypeError as e:
-        valid = list(inspect.signature(cls.__init__).parameters.keys())
-        valid.remove("self")
-        raise TypeError(f"Invalid solver keyword argument: {e}. Valid keys: {valid}") from None
+    return SolverSpec.model_validate(val)
 
 
 __all__ = [
@@ -104,4 +70,7 @@ __all__ = [
     # PTR solver
     "PTRSolver",
     "PTRSolveResult",
+    # Config
+    "SolverSpec",
+    "resolve_solver_config",
 ]

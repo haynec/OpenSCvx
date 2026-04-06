@@ -1,6 +1,8 @@
 """Autotuning functions for SCP (Successive Convex Programming) parameters."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
+
+from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 
@@ -61,3 +63,21 @@ class ConstantProximalWeight(AutotuningBase):
         candidate.lam_prox = state.lam_prox
         state.accept_solution(candidate)
         return "Accept Constant"
+
+
+# =============================================================================
+# Pydantic spec for dict / YAML validation
+# =============================================================================
+
+
+class ConstantProximalWeightSpec(BaseModel):
+    """Validates ConstantProximalWeight configuration from dict/YAML input."""
+
+    type: Literal["ConstantProximalWeight"] = "ConstantProximalWeight"
+    lam_cost_drop: int = -1
+    lam_cost_relax: float = 1.0
+
+    model_config = ConfigDict(extra="forbid")
+
+    def build(self) -> ConstantProximalWeight:
+        return ConstantProximalWeight(**self.model_dump(exclude={"type"}, exclude_unset=True))

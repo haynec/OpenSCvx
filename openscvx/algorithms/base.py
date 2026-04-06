@@ -119,8 +119,7 @@ class AutotuningBase(ABC):
     that are shared across different autotuning strategies (e.g., Penalized Trust
     Region, Augmented Lagrangian).
 
-    Subclasses should implement the `update_weights` method to define their specific
-    weight update strategy.
+    Subclasses must implement the ``update_weights`` method.
 
     Class Attributes:
         COLUMNS: List of Column specs for autotuner-specific metrics to display.

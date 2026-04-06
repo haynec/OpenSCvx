@@ -374,7 +374,7 @@ def test_autotuning(autotuner_spec):
 
     Covers all three autotuner implementations (AugmentedLagrangian,
     ConstantProximalWeight, RampProximalWeight) as well as the string
-    and dict-based resolution paths in ``_resolve_autotuner``.
+    and dict-based resolution paths through ``PenalizedTrustRegionConfig``.
 
     Args:
         autotuner_spec: Identifies the autotuner and how it is specified.

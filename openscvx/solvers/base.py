@@ -30,7 +30,9 @@ must follow for use within successive convexification algorithms.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
     from openscvx.config import Config
@@ -45,6 +47,8 @@ class ConvexSolver(ABC):
     This class defines the interface for solvers that handle the convex
     subproblems generated at each iteration of a successive convexification
     algorithm.
+
+    Subclasses must implement all abstract methods below.
 
     The solver lifecycle has two phases:
 
@@ -231,3 +235,28 @@ class ConvexSolver(ABC):
             List of BibTeX citation strings.
         """
         raise NotImplementedError
+
+
+# =============================================================================
+# Pydantic spec for dict / YAML validation
+# =============================================================================
+
+_SOLVER_MAP: Dict[str, type] = {}  # populated by __init__.py after all classes are imported
+
+
+class SolverSpec(BaseModel):
+    """Validates solver configuration from dict/YAML input."""
+
+    type: Literal["PTRSolver"] = "PTRSolver"
+    cvx_solver: str = "QOCO"
+    solver_args: Optional[Dict[str, Any]] = None
+    cvxpygen: bool = False
+    cvxpygen_override: bool = False
+
+    model_config = ConfigDict(extra="forbid")
+
+    def build(self) -> ConvexSolver:
+        cls = _SOLVER_MAP.get(self.type)
+        if cls is None:
+            raise ValueError(f"Unknown solver {self.type!r}; expected one of {sorted(_SOLVER_MAP)}")
+        return cls(**self.model_dump(exclude={"type"}, exclude_unset=True))

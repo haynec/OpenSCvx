@@ -1,8 +1,9 @@
 """Autotuning functions for SCP (Successive Convex Programming) parameters."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 
@@ -77,3 +78,23 @@ class RampProximalWeight(AutotuningBase):
         else:
             state.accept_solution(candidate)
             return "Accept Higher"
+
+
+# =============================================================================
+# Pydantic spec for dict / YAML validation
+# =============================================================================
+
+
+class RampProximalWeightSpec(BaseModel):
+    """Validates RampProximalWeight configuration from dict/YAML input."""
+
+    type: Literal["RampProximalWeight"] = "RampProximalWeight"
+    ramp_factor: float = 1.0
+    lam_prox_max: float = 1e3
+    lam_cost_drop: int = -1
+    lam_cost_relax: float = 1.0
+
+    model_config = ConfigDict(extra="forbid")
+
+    def build(self) -> RampProximalWeight:
+        return RampProximalWeight(**self.model_dump(exclude={"type"}, exclude_unset=True))

@@ -97,7 +97,6 @@ from .expr import (
     Expr,
     Leaf,
     NodeReference,
-    Parameter,
     to_expr,
     traverse,
 )
@@ -144,6 +143,9 @@ from .math import (
     Square,
     Tan,
 )
+
+# Parameter
+from .parameter import Parameter
 
 # Spatial/3D operations
 from .spatial import QDCM, SSM, SSMP

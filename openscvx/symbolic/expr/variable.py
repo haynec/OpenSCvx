@@ -1,7 +1,8 @@
 import hashlib
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 
 from .expr import Leaf
 
@@ -327,3 +328,22 @@ class Variable(Leaf):
                 if guess_arr.shape[1] != 1:
                     guess_arr = guess_arr.T
                 self._guess = np.concatenate([self._guess, guess_arr], axis=1)
+
+
+# =============================================================================
+# Pydantic spec for YAML / JSON / dict validation
+# =============================================================================
+
+
+class VariableSpec(BaseModel):
+    """Validates Variable configuration from YAML/JSON/dict input."""
+
+    name: str
+    shape: List[int]
+    min: Optional[List[float]] = None
+    max: Optional[List[float]] = None
+    guess: Optional[List[List[float]]] = None
+    scaling_min: Optional[List[float]] = None
+    scaling_max: Optional[List[float]] = None
+
+    model_config = ConfigDict(extra="forbid")

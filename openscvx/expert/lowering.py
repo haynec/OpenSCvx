@@ -14,6 +14,7 @@ from jax import jacfwd
 from jax.lax import cond
 
 if TYPE_CHECKING:
+    from openscvx.expert.byof import ByofSpec
     from openscvx.lowered.unified import UnifiedState
     from openscvx.symbolic.expr.state import State
 
@@ -28,7 +29,7 @@ __all__ = ["apply_byof"]
 
 
 def apply_byof(
-    byof: dict,
+    byof: "ByofSpec",
     dynamics: Dynamics,
     dynamics_prop: Dynamics,
     dynamics_discrete: Dynamics,
@@ -77,7 +78,7 @@ def apply_byof(
 
     # Note: byof validation happens earlier in Problem.__init__ to fail fast
     # Handle byof dynamics by splicing in raw JAX functions at the correct slices
-    byof_dynamics = byof.get("dynamics", {})
+    byof_dynamics = byof.dynamics
     if byof_dynamics:
         # Build mapping from state name to slice for optimization states
         state_slices = {state.name: state._slice for state in states}
@@ -134,7 +135,7 @@ def apply_byof(
         dynamics_prop = Dynamics(f=composite_f_prop)
 
     # Handle byof dynamics_discrete by splicing in raw JAX functions at the correct slices
-    byof_dynamics_discrete = byof.get("dynamics_discrete", {})
+    byof_dynamics_discrete = byof.dynamics_discrete
     if byof_dynamics_discrete:
         state_slices = {state.name: state._slice for state in states}
 
@@ -158,9 +159,9 @@ def apply_byof(
 
     # Handle nodal constraints
     # Note: Validation happens earlier in Problem.__init__ via validate_byof
-    for constraint_spec in byof.get("nodal_constraints", []):
-        fn = constraint_spec["constraint_fn"]
-        nodes = constraint_spec.get("nodes", list(range(N)))  # Default: all nodes
+    for constraint_spec in byof.nodal_constraints:
+        fn = constraint_spec.constraint_fn
+        nodes = constraint_spec.nodes if constraint_spec.nodes is not None else list(range(N))
 
         # Normalize negative node indices (validation already done in validate_byof)
         normalized_nodes = [node if node >= 0 else N + node for node in nodes]
@@ -174,7 +175,7 @@ def apply_byof(
         jax_constraints.nodal.append(constraint)
 
     # Handle cross-nodal constraints
-    for fn in byof.get("cross_nodal_constraints", []):
+    for fn in byof.cross_nodal_constraints:
         constraint = LoweredCrossNodeConstraint(
             func=fn,
             grad_g_X=jacfwd(fn, argnums=0),
@@ -230,13 +231,12 @@ def apply_byof(
             except (ValueError, IndexError, AttributeError):
                 pass
 
-    # Group BYOF CTCS constraints by idx (default to 0)
+    # Group BYOF CTCS constraints by idx
     byof_ctcs_groups = {}
-    for ctcs_spec in byof.get("ctcs_constraints", []):
-        idx = ctcs_spec.get("idx", 0)
-        if idx not in byof_ctcs_groups:
-            byof_ctcs_groups[idx] = []
-        byof_ctcs_groups[idx].append(ctcs_spec)
+    for ctcs_spec in byof.ctcs_constraints:
+        if ctcs_spec.idx not in byof_ctcs_groups:
+            byof_ctcs_groups[ctcs_spec.idx] = []
+        byof_ctcs_groups[ctcs_spec.idx].append(ctcs_spec)
 
     # Validate that byof idx values don't create gaps
     # All idx must form contiguous sequence: [0, 1, 2, ..., max_idx]
@@ -259,9 +259,9 @@ def apply_byof(
         # Collect all penalty functions for this idx
         penalty_fns = []
         for spec in specs:
-            constraint_fn = spec["constraint_fn"]
-            penalty_spec = spec.get("penalty", "square")
-            over_interval = spec.get("over", None)  # Node interval (start, end) or None
+            constraint_fn = spec.constraint_fn
+            penalty_spec = spec.penalty
+            over_interval = spec.over
 
             if callable(penalty_spec):
                 penalty_func = penalty_spec
@@ -357,8 +357,8 @@ def apply_byof(
             # New idx - create new augmented state
             # Use bounds/initial from first spec in this group
             first_spec = specs[0]
-            bounds = first_spec.get("bounds", (0.0, 1e-4))
-            initial = first_spec.get("initial", bounds[0])
+            bounds = first_spec.bounds
+            initial = first_spec.initial if first_spec.initial is not None else bounds[0]
 
             def _make_ctcs_new_state(orig_f, pen_fns, td_sl):
                 """Create dynamics augmented with new CTCS state.

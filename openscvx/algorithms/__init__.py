@@ -78,104 +78,86 @@ Current Implementations:
 - :class:`PenalizedTrustRegion`: Penalized Trust Region (PTR) algorithm
 """
 
-import inspect
-from typing import Any, Dict
+from typing import Annotated, Any, Dict, List, Optional, Union
 
-from .augmented_lagrangian import AugmentedLagrangian
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from .augmented_lagrangian import AugmentedLagrangian, AugmentedLagrangianSpec
 from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult
-from .constant_proximal_weight import ConstantProximalWeight
+from .constant_proximal_weight import ConstantProximalWeight, ConstantProximalWeightSpec
 from .optimization_results import OptimizationResults
 from .penalized_trust_region import PenalizedTrustRegion
-from .ramp_proximal_weight import RampProximalWeight
+from .ramp_proximal_weight import RampProximalWeight, RampProximalWeightSpec
 from .weights import Weights
 
 # ---------------------------------------------------------------------------
-# Spec resolvers — turn dicts/strings into algorithm/autotuner instances
+# Autotuner config — discriminated union of each autotuner's Spec
 # ---------------------------------------------------------------------------
 
-_AUTOTUNER_MAP: Dict[str, type] = {
-    "AugmentedLagrangian": AugmentedLagrangian,
-    "ConstantProximalWeight": ConstantProximalWeight,
-    "RampProximalWeight": RampProximalWeight,
-}
+AutotunerConfig = Annotated[
+    Union[
+        AugmentedLagrangianSpec,
+        RampProximalWeightSpec,
+        ConstantProximalWeightSpec,
+    ],
+    Field(discriminator="type"),
+]
+
+# ---------------------------------------------------------------------------
+# Algorithm config model
+# ---------------------------------------------------------------------------
 
 
-def _resolve_autotuner(val: Any) -> Any:
-    """Resolve an autotuner specification into an instance.
+class PenalizedTrustRegionConfig(BaseModel):
+    """Validates PenalizedTrustRegion configuration from dict input.
 
-    Accepted forms:
+    The ``autotuner`` field accepts:
 
-    * **string** — class name only, default parameters::
-
-          "RampProximalWeight"
-
-    * **dict** — class name + parameter overrides::
-
-          {"type": "RampProximalWeight", "ramp_factor": 1.04}
-
-    * **instance** — already-constructed autotuner (pass-through).
+    * ``None`` — defaults to :class:`AugmentedLagrangian`.
+    * A **string** — class name only, default parameters.
+    * A **dict** — class name via ``"type"`` key plus overrides.
+    * An **instance** — already-constructed autotuner (pass-through).
     """
-    if not isinstance(val, (str, dict)):
-        return val
 
-    if isinstance(val, str):
-        name = val
-        kwargs: dict = {}
-    else:
-        kwargs = dict(val)  # copy to avoid mutating the input
-        name = kwargs.pop("type", None)
-        if name is None:
-            raise ValueError(
-                "autotuner dict must include a 'type' key (e.g. type: RampProximalWeight)"
-            )
+    autotuner: Optional[Union[AutotunerConfig, AutotuningBase]] = None
 
-    cls = _AUTOTUNER_MAP.get(name)
-    if cls is None:
-        raise ValueError(f"Unknown autotuner {name!r}; expected one of {sorted(_AUTOTUNER_MAP)}")
+    @field_validator("autotuner", mode="before")
+    @classmethod
+    def _wrap_bare_string(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            return {"type": v}
+        return v
 
-    try:
-        return cls(**kwargs)
-    except TypeError as e:
-        valid = list(inspect.signature(cls.__init__).parameters.keys())
-        valid.remove("self")
-        raise TypeError(f"Invalid autotuner keyword argument: {e}. Valid keys: {valid}") from None
+    k_max: int = 200
+    lam_prox: Union[float, Dict[str, Any]] = 1e-1
+    lam_vc: Union[float, Dict[str, Any]] = 1e0
+    lam_cost: Union[float, Dict[str, Any]] = 1e-2
+    lam_vb: float = 0.0
+    ep_tr: float = 1e-4
+    ep_vb: float = 1e-4
+    ep_vc: float = 1e-8
 
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
-def _resolve_algorithm(
-    kwargs: dict, states: list = None, controls: list = None
-) -> "PenalizedTrustRegion":
-    """Build a :class:`PenalizedTrustRegion` from a user-supplied dict.
-
-    Supports a nested ``autotuner`` key that is resolved via
-    :func:`_resolve_autotuner` (string, dict, or instance).
-
-    Args:
-        kwargs: Algorithm keyword arguments (e.g. ``lam_cost``, ``autotuner``).
-        states: Symbolic State objects, forwarded to the algorithm constructor
-            so that dict-valued ``lam_cost`` / ``lam_prox`` can be expanded
-            immediately.
-        controls: Symbolic Control objects, forwarded to the algorithm
-            constructor so that dict-valued ``lam_prox`` can be expanded
-            immediately.
-    """
-    kwargs = dict(kwargs)  # copy to avoid mutating the caller's dict
-
-    # Resolve nested autotuner spec if present
-    if "autotuner" in kwargs:
-        kwargs["autotuner"] = _resolve_autotuner(kwargs["autotuner"])
-
-    # Forward states/controls so dict weights can be expanded eagerly
-    if states is not None:
-        kwargs.setdefault("states", states)
-    if controls is not None:
-        kwargs.setdefault("controls", controls)
-
-    try:
-        return PenalizedTrustRegion(**kwargs)
-    except TypeError as e:
-        valid = list(inspect.signature(PenalizedTrustRegion.__init__).parameters.keys())
-        valid.remove("self")
-        raise TypeError(f"Invalid algorithm keyword argument: {e}. Valid keys: {valid}") from None
+    def to_algorithm(
+        self,
+        states: Optional[List[Any]] = None,
+        controls: Optional[List[Any]] = None,
+    ) -> PenalizedTrustRegion:
+        at = self.autotuner
+        if at is None:
+            autotuner = None
+        elif isinstance(at, AutotuningBase):
+            autotuner = at
+        else:
+            autotuner = at.build()
+        kwargs = self.model_dump(exclude={"autotuner"}, exclude_unset=True)
+        return PenalizedTrustRegion(
+            autotuner=autotuner,
+            states=states,
+            controls=controls,
+            **kwargs,
+        )
 
 
 __all__ = [
@@ -192,4 +174,7 @@ __all__ = [
     "AugmentedLagrangian",
     "ConstantProximalWeight",
     "RampProximalWeight",
+    # Config models
+    "PenalizedTrustRegionConfig",
+    "AutotunerConfig",
 ]

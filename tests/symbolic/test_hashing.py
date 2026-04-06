@@ -1062,27 +1062,38 @@ def test_byof_hash_none():
 
 
 def test_byof_hash_empty():
-    """Empty byof dict should return empty bytes."""
+    """Empty ByofSpec should return empty bytes."""
+    from openscvx.expert.byof import ByofSpec
     from openscvx.utils.caching import _hash_byof
 
-    assert _hash_byof({}) == b""
+    assert _hash_byof(ByofSpec()) == b""
 
 
 def test_byof_hash_changes_with_function():
     """Different lambda implementations should produce different hashes."""
+    from openscvx.expert.byof import ByofSpec, NodalConstraintSpec
     from openscvx.utils.caching import _hash_byof
 
-    byof1 = {"nodal_constraints": [{"constraint_fn": lambda x, u, n, p: x[0] - 10.0}]}
-    byof2 = {"nodal_constraints": [{"constraint_fn": lambda x, u, n, p: x[0] - 20.0}]}
+    byof1 = ByofSpec(
+        nodal_constraints=[NodalConstraintSpec(constraint_fn=lambda x, u, n, p: x[0] - 10.0)]
+    )
+    byof2 = ByofSpec(
+        nodal_constraints=[NodalConstraintSpec(constraint_fn=lambda x, u, n, p: x[0] - 20.0)]
+    )
 
     assert _hash_byof(byof1) != _hash_byof(byof2)
 
 
 def test_byof_hash_same_function_same_hash():
     """Identical lambda implementations should produce same hash."""
+    from openscvx.expert.byof import ByofSpec, NodalConstraintSpec
     from openscvx.utils.caching import _hash_byof
 
-    byof1 = {"nodal_constraints": [{"constraint_fn": lambda x, u, n, p: x[0] - 10.0}]}
-    byof2 = {"nodal_constraints": [{"constraint_fn": lambda x, u, n, p: x[0] - 10.0}]}
+    byof1 = ByofSpec(
+        nodal_constraints=[NodalConstraintSpec(constraint_fn=lambda x, u, n, p: x[0] - 10.0)]
+    )
+    byof2 = ByofSpec(
+        nodal_constraints=[NodalConstraintSpec(constraint_fn=lambda x, u, n, p: x[0] - 10.0)]
+    )
 
     assert _hash_byof(byof1) == _hash_byof(byof2)

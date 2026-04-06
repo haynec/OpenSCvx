@@ -28,8 +28,7 @@ from openscvx.algorithms import (
     Algorithm,
     AlgorithmState,
     OptimizationResults,
-    PenalizedTrustRegion,
-    _resolve_algorithm,
+    PenalizedTrustRegionConfig,
 )
 from openscvx.config import (
     Config,
@@ -39,9 +38,8 @@ from openscvx.config import (
 )
 from openscvx.discretization import (
     Discretizer,
-    VectorizeDiscretizeLinearize,
-    _resolve_discretizer,
     get_impulsive_discretization_solver,
+    resolve_discretizer_config,
 )
 from openscvx.expert import ByofSpec
 from openscvx.lowered import LoweredProblem, ParameterDict
@@ -52,7 +50,7 @@ from openscvx.lowered.jax_constraints import (
     LoweredNodalConstraint,
 )
 from openscvx.propagation import get_propagation_solver, propagate_trajectory_results
-from openscvx.solvers import ConvexSolver, PTRSolver, _resolve_solver
+from openscvx.solvers import ConvexSolver, resolve_solver_config
 from openscvx.symbolic.builder import preprocess_symbolic_problem
 from openscvx.symbolic.expr import CTCS, Constraint
 from openscvx.symbolic.expr.control import Control
@@ -88,7 +86,7 @@ class Problem:
         algorithm: Optional[Union[Algorithm, dict]] = None,
         discretizer: Optional[Union[Discretizer, dict]] = None,
         solver: Optional[Union[ConvexSolver, dict]] = None,
-        byof: Optional[ByofSpec] = None,
+        byof: Optional[Union[ByofSpec, dict]] = None,
         float_dtype: str = "float32",
     ):
         """The primary class in charge of compiling and exporting the solvers.
@@ -252,6 +250,10 @@ class Problem:
         self._float_dtype: str = float_dtype
 
         # Symbolic Preprocessing & Augmentation
+        # Resolve byof: dict → ByofSpec (validates keys and nested specs)
+        if byof is not None:
+            byof = ByofSpec.model_validate(byof)
+
         self.symbolic: SymbolicProblem = preprocess_symbolic_problem(
             dynamics=dynamics,
             dynamics_discrete=dynamics_discrete,
@@ -288,51 +290,28 @@ class Problem:
         # Store byof for cache hashing
         self._byof = byof
 
-        # Resolve algorithm: None → default PTR, dict → PTR(**dict), instance → use directly
-        # Pass symbolic states/controls so dict-valued weights can be expanded eagerly.
-        if algorithm is None:
-            self._algorithm = PenalizedTrustRegion(
+        # Resolve algorithm: instance → use directly, dict/None → validate & build
+        if isinstance(algorithm, Algorithm):
+            self._algorithm = algorithm
+        else:
+            config = PenalizedTrustRegionConfig.model_validate(algorithm or {})
+            self._algorithm = config.to_algorithm(
                 states=self.symbolic.states, controls=self.symbolic.controls
             )
-        elif isinstance(algorithm, dict):
-            self._algorithm = _resolve_algorithm(
-                algorithm, states=self.symbolic.states, controls=self.symbolic.controls
-            )
-        else:
-            if not isinstance(algorithm, Algorithm):
-                raise TypeError(
-                    f"algorithm must be an Algorithm instance, dict, or None, "
-                    f"got {type(algorithm).__name__}"
-                )
-            self._algorithm = algorithm
 
-        # Resolve discretizer: None → LinearizeDiscretize,
-        #                      dict → _resolve_discretizer,
-        #                      instance → use
-        if discretizer is None:
-            self._discretizer = VectorizeDiscretizeLinearize()
-        elif isinstance(discretizer, dict):
-            self._discretizer = _resolve_discretizer(discretizer)
-        else:
-            if not isinstance(discretizer, Discretizer):
-                raise TypeError(
-                    f"discretizer must be a Discretizer instance, dict, or None, "
-                    f"got {type(discretizer).__name__}"
-                )
+        # Resolve discretizer: instance → use directly, dict/None → validate & build
+        if isinstance(discretizer, Discretizer):
             self._discretizer = discretizer
-
-        # Resolve solver: None → default PTRSolver, dict → PTRSolver(**dict), instance → use
-        if solver is None:
-            self._solver = PTRSolver()
-        elif isinstance(solver, dict):
-            self._solver = _resolve_solver(solver)
         else:
-            if not isinstance(solver, ConvexSolver):
-                raise TypeError(
-                    f"solver must be a ConvexSolver instance, dict, or None, "
-                    f"got {type(solver).__name__}"
-                )
+            spec = resolve_discretizer_config(discretizer or {})
+            self._discretizer = spec.build()
+
+        # Resolve solver: instance → use directly, dict/None → validate & build
+        if isinstance(solver, ConvexSolver):
             self._solver = solver
+        else:
+            spec = resolve_solver_config(solver or {})
+            self._solver = spec.build()
 
         # Lower to JAX and CVXPy (byof handling happens inside lower_symbolic_problem)
         self._lowered: LoweredProblem = lower_symbolic_problem(
@@ -853,8 +832,8 @@ class Problem:
         # Build per-constraint lam_vb arrays from symbolic constraints.
         # Deferred to initialize() so that user-set lam_vb values
         # (assigned after Problem construction) are picked up.
-        n_byof_nodal = len(self._byof.get("nodal_constraints", [])) if self._byof else 0
-        n_byof_cross = len(self._byof.get("cross_nodal_constraints", [])) if self._byof else 0
+        n_byof_nodal = len(self._byof.nodal_constraints) if self._byof else 0
+        n_byof_cross = len(self._byof.cross_nodal_constraints) if self._byof else 0
         self._algorithm.weights.build_vb_arrays(
             N=self.symbolic.N,
             nodal_constraints=self.symbolic.constraints.nodal,

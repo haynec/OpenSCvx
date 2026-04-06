@@ -19,9 +19,10 @@ of internal strategy.
 """
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, List, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Sequence, Union
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
     from openscvx.config import Config
@@ -124,6 +125,8 @@ class Discretizer(ABC):
     Discretization parameters (hold type, integrator, tolerances) live on each
     concrete subclass as instance attributes.
 
+    Subclasses must implement the ``get_solver`` and ``citation`` methods.
+
     Example:
         Implementing a custom discretizer::
 
@@ -196,3 +199,41 @@ class Discretizer(ABC):
             List of BibTeX citation strings.
         """
         raise NotImplementedError
+
+
+# =============================================================================
+# Pydantic spec for dict / YAML validation
+# =============================================================================
+
+_DISCRETIZER_MAP: Dict[str, type] = {}  # populated by __init__.py after all classes are imported
+
+
+class DiscretizerSpec(BaseModel):
+    """Validates discretizer configuration from dict/YAML input.
+
+    A single spec covers all discretizer types.  The ``type`` field selects
+    the concrete class; ``custom_integrator`` and ``args`` are only used by
+    the two vectorized variants and are silently ignored by the others.
+    """
+
+    type: Literal[
+        "VectorizeDiscretizeLinearize",
+        "DiscretizeLinearizeVectorize",
+        "LinearizeDiscretize",
+        "LinearizeDiscretizeSparse",
+    ] = "VectorizeDiscretizeLinearize"
+    dis_type: Union[str, List[str]] = "FOH"
+    ode_solver: str = "Tsit5"
+    diffrax_kwargs: Optional[Dict[str, Any]] = None
+    custom_integrator: bool = False
+    args: Optional[Dict[str, Any]] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    def build(self) -> Discretizer:
+        cls = _DISCRETIZER_MAP.get(self.type)
+        if cls is None:
+            raise ValueError(
+                f"Unknown discretizer {self.type!r}; expected one of {sorted(_DISCRETIZER_MAP)}"
+            )
+        return cls(**self.model_dump(exclude={"type"}, exclude_unset=True))

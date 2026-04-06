@@ -1,9 +1,10 @@
 """Autotuning functions for SCP (Successive Convex Programming) parameters."""
 
 from copy import deepcopy
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Literal
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 from openscvx.utils.printing import (
@@ -364,3 +365,33 @@ class AugmentedLagrangian(AutotuningBase):
             adaptive_state = "Initial"
 
         return adaptive_state
+
+
+# =============================================================================
+# Pydantic spec for dict / YAML validation
+# =============================================================================
+
+
+class AugmentedLagrangianSpec(BaseModel):
+    """Validates AugmentedLagrangian configuration from dict/YAML input."""
+
+    type: Literal["AugmentedLagrangian"] = "AugmentedLagrangian"
+    rho_init: float = 1.0
+    rho_max: float = 1e2
+    gamma_1: float = 2.0
+    gamma_2: float = 0.5
+    eta_0: float = 1e-2
+    eta_1: float = 1e-1
+    eta_2: float = 0.8
+    ep: float = 0.99
+    eta_lambda: float = 1e1
+    lam_vc_max: float = 1e5
+    lam_prox_min: float = 1e-3
+    lam_prox_max: float = 1e4
+    lam_cost_drop: int = -1
+    lam_cost_relax: float = 1.0
+
+    model_config = ConfigDict(extra="forbid")
+
+    def build(self) -> AugmentedLagrangian:
+        return AugmentedLagrangian(**self.model_dump(exclude={"type"}, exclude_unset=True))
