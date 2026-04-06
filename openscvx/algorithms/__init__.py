@@ -82,23 +82,23 @@ from typing import Annotated, Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .augmented_lagrangian import AugmentedLagrangian
+from .augmented_lagrangian import AugmentedLagrangian, AugmentedLagrangianSpec
 from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult
-from .constant_proximal_weight import ConstantProximalWeight
+from .constant_proximal_weight import ConstantProximalWeight, ConstantProximalWeightSpec
 from .optimization_results import OptimizationResults
 from .penalized_trust_region import PenalizedTrustRegion
-from .ramp_proximal_weight import RampProximalWeight
+from .ramp_proximal_weight import RampProximalWeight, RampProximalWeightSpec
 from .weights import Weights
 
 # ---------------------------------------------------------------------------
-# Autotuner config — discriminated union of each autotuner's inner Spec
+# Autotuner config — discriminated union of each autotuner's Spec
 # ---------------------------------------------------------------------------
 
 AutotunerConfig = Annotated[
     Union[
-        AugmentedLagrangian.Spec,
-        RampProximalWeight.Spec,
-        ConstantProximalWeight.Spec,
+        AugmentedLagrangianSpec,
+        RampProximalWeightSpec,
+        ConstantProximalWeightSpec,
     ],
     Field(discriminator="type"),
 ]

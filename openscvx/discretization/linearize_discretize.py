@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, List, Literal, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Union
 
 import jax
 import jax.numpy as jnp
@@ -46,14 +46,6 @@ class LinearizeDiscretize(Discretizer):
             ``stepsize_controller``). Set ``rtol``/``atol`` here when using
             the default PID controller. Defaults to ``{}``.
     """
-
-    class Spec(Discretizer.Spec):
-        """Validates LinearizeDiscretize configuration from dict/YAML input."""
-
-        type: Literal["LinearizeDiscretize"] = "LinearizeDiscretize"
-
-        def build(self) -> "LinearizeDiscretize":
-            return LinearizeDiscretize(**self.model_dump(exclude={"type"}, exclude_unset=True))
 
     def __init__(
         self,

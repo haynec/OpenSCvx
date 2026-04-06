@@ -16,11 +16,9 @@ Jacobians and compact variational integration when sparsity patterns exist).
 :class:`LinearizeDiscretize` is the dense linearize-then-discretize scheme.
 """
 
-from typing import Annotated, Any, Union
+from typing import Any
 
-from pydantic import Field, TypeAdapter
-
-from .base import Discretizer, DisType
+from .base import _DISCRETIZER_MAP, Discretizer, DiscretizerSpec, DisType
 from .discretize_linearize import DiscretizeLinearizeVectorize, VectorizeDiscretizeLinearize
 from .linearize_discretize import (
     LinearizeDiscretize,
@@ -31,41 +29,38 @@ from .linearize_discretize_sparse import LinearizeDiscretizeSparse
 from .sparse_utils import color_columns, make_sparse_jacobian_fns
 
 # ---------------------------------------------------------------------------
-# Discretizer config — discriminated union of each discretizer's inner Spec
+# Populate the discretizer class map now that all classes are imported
 # ---------------------------------------------------------------------------
+
+_DISCRETIZER_MAP.update(
+    {
+        "VectorizeDiscretizeLinearize": VectorizeDiscretizeLinearize,
+        "DiscretizeLinearizeVectorize": DiscretizeLinearizeVectorize,
+        "LinearizeDiscretize": LinearizeDiscretize,
+        "LinearizeDiscretizeSparse": LinearizeDiscretizeSparse,
+    }
+)
 
 DEFAULT_DISCRETIZER_TYPE = "VectorizeDiscretizeLinearize"
 
-DiscretizerConfig = Annotated[
-    Union[
-        VectorizeDiscretizeLinearize.Spec,
-        DiscretizeLinearizeVectorize.Spec,
-        LinearizeDiscretize.Spec,
-        LinearizeDiscretizeSparse.Spec,
-    ],
-    Field(discriminator="type"),
-]
 
-discretizer_config_adapter = TypeAdapter(DiscretizerConfig)
-
-
-def resolve_discretizer_config(val: Any) -> Discretizer.Spec:
-    """Validate a dict/Spec into a :class:`Discretizer.Spec` instance.
+def resolve_discretizer_config(val: Any) -> DiscretizerSpec:
+    """Validate a dict/Spec into a :class:`DiscretizerSpec` instance.
 
     Injects the default ``type`` (``VectorizeDiscretizeLinearize``) when the
     input dict omits it, preserving backwards compatibility.
     """
-    if isinstance(val, Discretizer.Spec):
+    if isinstance(val, DiscretizerSpec):
         return val
     if isinstance(val, dict) and "type" not in val:
         val = {**val, "type": DEFAULT_DISCRETIZER_TYPE}
-    return discretizer_config_adapter.validate_python(val)
+    return DiscretizerSpec.model_validate(val)
 
 
 __all__ = [
     "DisType",
     "Discretizer",
-    "DiscretizerConfig",
+    "DiscretizerSpec",
     "DiscretizeLinearizeVectorize",
     "LinearizeDiscretize",
     "LinearizeDiscretizeSparse",

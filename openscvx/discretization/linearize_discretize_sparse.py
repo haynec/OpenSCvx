@@ -1,10 +1,10 @@
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from openscvx.discretization.base import Discretizer, _resolve_foh_mask
+from openscvx.discretization.base import _resolve_foh_mask
 from openscvx.discretization.linearize_discretize import LinearizeDiscretize
 from openscvx.integrators import solve_ivp_diffrax, solve_ivp_rk45
 
@@ -36,16 +36,6 @@ class LinearizeDiscretizeSparse(LinearizeDiscretize):
             :class:`LinearizeDiscretize`. Unknown keys are forwarded to
             :func:`diffrax.diffeqsolve` via ``extra_kwargs``.
     """
-
-    class Spec(Discretizer.Spec):
-        """Validates LinearizeDiscretizeSparse configuration from dict/YAML input."""
-
-        type: Literal["LinearizeDiscretizeSparse"] = "LinearizeDiscretizeSparse"
-
-        def build(self) -> "LinearizeDiscretizeSparse":
-            return LinearizeDiscretizeSparse(
-                **self.model_dump(exclude={"type"}, exclude_unset=True)
-            )
 
     def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
         """Create a sparse multi-shoot discretization solver.

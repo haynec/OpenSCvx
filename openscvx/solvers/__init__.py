@@ -41,38 +41,27 @@ Note:
     for the interface details.
 """
 
-from typing import Annotated, Any, Union
+from typing import Any
 
-from pydantic import Field, TypeAdapter
-
-from .base import ConvexSolver
+from .base import _SOLVER_MAP, ConvexSolver, SolverSpec
 from .ptr_solver import PTRSolver, PTRSolveResult
 
 # ---------------------------------------------------------------------------
-# Solver config — discriminated union of each solver's inner Spec
+# Populate the solver class map now that all classes are imported
 # ---------------------------------------------------------------------------
 
-DEFAULT_SOLVER_TYPE = "PTRSolver"
-
-SolverConfig = Annotated[
-    Union[PTRSolver.Spec,],
-    Field(discriminator="type"),
-]
-
-solver_config_adapter = TypeAdapter(SolverConfig)
+_SOLVER_MAP.update(
+    {
+        "PTRSolver": PTRSolver,
+    }
+)
 
 
-def resolve_solver_config(val: Any) -> ConvexSolver.Spec:
-    """Validate a dict/Spec into a :class:`ConvexSolver.Spec` instance.
-
-    Injects the default ``type`` (``PTRSolver``) when the input dict
-    omits it, preserving backwards compatibility.
-    """
-    if isinstance(val, ConvexSolver.Spec):
+def resolve_solver_config(val: Any) -> SolverSpec:
+    """Validate a dict/Spec into a :class:`SolverSpec` instance."""
+    if isinstance(val, SolverSpec):
         return val
-    if isinstance(val, dict) and "type" not in val:
-        val = {**val, "type": DEFAULT_SOLVER_TYPE}
-    return solver_config_adapter.validate_python(val)
+    return SolverSpec.model_validate(val)
 
 
 __all__ = [
@@ -82,6 +71,6 @@ __all__ = [
     "PTRSolver",
     "PTRSolveResult",
     # Config
-    "SolverConfig",
+    "SolverSpec",
     "resolve_solver_config",
 ]

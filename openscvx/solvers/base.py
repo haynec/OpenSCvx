@@ -29,9 +29,8 @@ must follow for use within successive convexification algorithms.
        ```
 """
 
-import inspect
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -49,12 +48,7 @@ class ConvexSolver(ABC):
     subproblems generated at each iteration of a successive convexification
     algorithm.
 
-    Subclasses must:
-
-    1. Implement all abstract methods below.
-    2. Define an inner ``Spec(ConvexSolver.Spec)`` class that adds a ``type``
-       field whose ``Literal`` value matches the class name, and a ``build()``
-       method returning an instance of the solver.
+    Subclasses must implement all abstract methods below.
 
     The solver lifecycle has two phases:
 
@@ -96,29 +90,6 @@ class ConvexSolver(ABC):
                     self._prob.solve()
                     return MyResult(...)
     """
-
-    class Spec(BaseModel):
-        """Base configuration spec for solvers.
-
-        Subclass Specs inherit these common fields and add a ``type``
-        literal for discriminated-union dispatch plus a ``build()``
-        method that constructs the concrete solver.
-        """
-
-        model_config = ConfigDict(extra="forbid")
-
-        def build(self) -> "ConvexSolver":
-            raise NotImplementedError
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        if inspect.isabstract(cls):
-            return
-        if "Spec" not in cls.__dict__:
-            raise TypeError(
-                f"{cls.__name__} must define an inner Spec(ConvexSolver.Spec) class "
-                f"for dict/YAML configuration support"
-            )
 
     #: Backend solver name (e.g., ``"QOCO"``, ``"CLARABEL"``).  Subclasses
     #: must set this in ``__init__``.
@@ -264,3 +235,28 @@ class ConvexSolver(ABC):
             List of BibTeX citation strings.
         """
         raise NotImplementedError
+
+
+# =============================================================================
+# Pydantic spec for dict / YAML validation
+# =============================================================================
+
+_SOLVER_MAP: Dict[str, type] = {}  # populated by __init__.py after all classes are imported
+
+
+class SolverSpec(BaseModel):
+    """Validates solver configuration from dict/YAML input."""
+
+    type: Literal["PTRSolver"] = "PTRSolver"
+    cvx_solver: str = "QOCO"
+    solver_args: Optional[Dict[str, Any]] = None
+    cvxpygen: bool = False
+    cvxpygen_override: bool = False
+
+    model_config = ConfigDict(extra="forbid")
+
+    def build(self) -> ConvexSolver:
+        cls = _SOLVER_MAP.get(self.type)
+        if cls is None:
+            raise ValueError(f"Unknown solver {self.type!r}; expected one of {sorted(_SOLVER_MAP)}")
+        return cls(**self.model_dump(exclude={"type"}, exclude_unset=True))
