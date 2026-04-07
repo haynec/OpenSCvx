@@ -22,8 +22,10 @@ Example:
 """
 
 from openscvx.init.interpolation import linspace, nlerp, slerp
+from openscvx.init.inverse_kinematics import ik_interpolation
 
 __all__ = [
+    "ik_interpolation",
     "linspace",
     "nlerp",
     "slerp",

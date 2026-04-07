@@ -173,13 +173,25 @@ ee_target_constraint = (ox.linalg.Norm(p_ee - target, ord=2) <= ee_tolerance).at
 constraints.append(ee_target_constraint)
 
 # =============================================================================
-# Initial Guesses
+# Initial Guesses (via IK)
 # =============================================================================
 
-np.random.seed(42)  # For reproducibility
-# Terminal angles that reach the target (from workspace analysis)
-q_terminal = np.deg2rad([47.8, -38.6, 62.4])
-angle.guess = np.linspace(angle.initial, q_terminal, n)
+q_identity = [1, 0, 0, 0]
+home_ee_pos = [L2 + L3, 0, L1]
+
+angle.guess = ox.init.ik_interpolation(
+    keyframes=[
+        (home_ee_pos, q_identity),
+        (target.value, q_identity),
+    ],
+    nodes=[0, n - 1],
+    screw_axes=screw_axes,
+    T_home=T_home,
+    angles_init=angle.initial,
+    angles_min=angle.min,
+    angles_max=angle.max,
+    sequential=True,
+)
 velocity.guess = np.zeros((n, 3))
 torque.guess = np.zeros((n, 3))
 
