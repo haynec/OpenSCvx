@@ -12,13 +12,13 @@
         <meta name="author" content="Chris Hayner">
       
       
-        <link rel="canonical" href="https://openscvx.github.io/OpenSCvx/nightly/Examples/arm/three_link_arm/">
+        <link rel="canonical" href="https://openscvx.github.io/OpenSCvx/nightly/Examples/arm/3_dof_arm/">
       
       
         <link rel="prev" href="../../abstract/stl_or/">
       
       
-        <link rel="next" href="../../car/dubins_car/">
+        <link rel="next" href="../7_dof_arm/">
       
       
         
@@ -29,7 +29,7 @@
     
     
       
-        <title>Three Link Arm - OpenSCvx</title>
+        <title>3 Dof Arm - OpenSCvx</title>
       
     
     
@@ -85,7 +85,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#three-link-arm" class="md-skip">
+        <a href="#3-dof-arm" class="md-skip">
           Skip to content
         </a>
       
@@ -122,7 +122,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Three Link Arm
+              3 Dof Arm
             
           </span>
         </div>
@@ -1183,6 +1183,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1254,7 +1258,7 @@
   <span class="md-ellipsis">
     
   
-    Three Link Arm
+    3 Dof Arm
   
 
     
@@ -1264,6 +1268,62 @@
 
       </a>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../7_dof_arm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    7 Dof Arm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../7_dof_arm_vp/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    7 Dof Arm Vp
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -3457,6 +3517,8 @@
       
         
       
+        
+      
     
     
     
@@ -3526,6 +3588,34 @@
     
   
     interpolation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../Reference/init/inverse_kinematics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    inverse_kinematics
   
 
     
@@ -7613,7 +7703,7 @@
 
 
   
-    <a href="https://github.com/OpenSCvx/OpenSCvx/edit/master/docs/examples/arm/three_link_arm.py" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/OpenSCvx/OpenSCvx/edit/master/docs/examples/arm/3_dof_arm.py" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -7622,14 +7712,14 @@
     
       
     
-    <a href="https://github.com/OpenSCvx/OpenSCvx/raw/master/docs/examples/arm/three_link_arm.py" title="View source of this page" class="md-content__button md-icon">
+    <a href="https://github.com/OpenSCvx/OpenSCvx/raw/master/docs/examples/arm/3_dof_arm.py" title="View source of this page" class="md-content__button md-icon">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 18c.56 0 1 .44 1 1s-.44 1-1 1-1-.44-1-1 .44-1 1-1m0-3c-2.73 0-5.06 1.66-6 4 .94 2.34 3.27 4 6 4s5.06-1.66 6-4c-.94-2.34-3.27-4-6-4m0 6.5a2.5 2.5 0 0 1-2.5-2.5 2.5 2.5 0 0 1 2.5-2.5 2.5 2.5 0 0 1 2.5 2.5 2.5 2.5 0 0 1-2.5 2.5M9.27 20H6V4h7v5h5v4.07c.7.08 1.36.25 2 .49V8l-6-6H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h4.5a8.2 8.2 0 0 1-1.23-2"/></svg>
     </a>
   
 
 
-<h1 id="three-link-arm">Three Link Arm<a class="headerlink" href="#three-link-arm" title="Permanent link">&para;</a></h1>
+<h1 id="3-dof-arm">3 Dof Arm<a class="headerlink" href="#3-dof-arm" title="Permanent link">&para;</a></h1>
 <p>3-link robotic arm with Product of Exponentials forward kinematics.</p>
 <p>This example demonstrates trajectory optimization for a 3-link spatial arm
 using Lie algebra operations for forward kinematics. The problem includes:</p>
@@ -7643,7 +7733,7 @@ using Lie algebra operations for forward kinematics. The problem includes:</p>
     T_ee(q) = exp(ξ₁q₁) @ exp(ξ₂q₂) @ exp(ξ₃q₃) @ T_home</p>
 <p>where ξᵢ are the screw axes and T_home is the end-effector pose at q=0.</p>
 <p>Requires jaxlie: pip install openscvx[lie]</p>
-<p><strong>File:</strong> <code>examples/arm/three_link_arm.py</code></p>
+<p><strong>File:</strong> <code>examples/arm/3_dof_arm.py</code></p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
@@ -7801,81 +7891,93 @@ using Lie algebra operations for forward kinematics. The problem includes:</p>
 </span><span id="__span-0-155"><a id="__codelineno-0-155" name="__codelineno-0-155" href="#__codelineno-0-155"></a><span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ee_target_constraint</span><span class="p">)</span>
 </span><span id="__span-0-156"><a id="__codelineno-0-156" name="__codelineno-0-156" href="#__codelineno-0-156"></a>
 </span><span id="__span-0-157"><a id="__codelineno-0-157" name="__codelineno-0-157" href="#__codelineno-0-157"></a><span class="c1"># =============================================================================</span>
-</span><span id="__span-0-158"><a id="__codelineno-0-158" name="__codelineno-0-158" href="#__codelineno-0-158"></a><span class="c1"># Initial Guesses</span>
+</span><span id="__span-0-158"><a id="__codelineno-0-158" name="__codelineno-0-158" href="#__codelineno-0-158"></a><span class="c1"># Initial Guesses (via IK)</span>
 </span><span id="__span-0-159"><a id="__codelineno-0-159" name="__codelineno-0-159" href="#__codelineno-0-159"></a><span class="c1"># =============================================================================</span>
 </span><span id="__span-0-160"><a id="__codelineno-0-160" name="__codelineno-0-160" href="#__codelineno-0-160"></a>
-</span><span id="__span-0-161"><a id="__codelineno-0-161" name="__codelineno-0-161" href="#__codelineno-0-161"></a><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>  <span class="c1"># For reproducibility</span>
-</span><span id="__span-0-162"><a id="__codelineno-0-162" name="__codelineno-0-162" href="#__codelineno-0-162"></a><span class="c1"># Terminal angles that reach the target (from workspace analysis)</span>
-</span><span id="__span-0-163"><a id="__codelineno-0-163" name="__codelineno-0-163" href="#__codelineno-0-163"></a><span class="n">q_terminal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">deg2rad</span><span class="p">([</span><span class="mf">47.8</span><span class="p">,</span> <span class="o">-</span><span class="mf">38.6</span><span class="p">,</span> <span class="mf">62.4</span><span class="p">])</span>
-</span><span id="__span-0-164"><a id="__codelineno-0-164" name="__codelineno-0-164" href="#__codelineno-0-164"></a><span class="n">angle</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="n">angle</span><span class="o">.</span><span class="n">initial</span><span class="p">,</span> <span class="n">q_terminal</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>
-</span><span id="__span-0-165"><a id="__codelineno-0-165" name="__codelineno-0-165" href="#__codelineno-0-165"></a><span class="n">velocity</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
-</span><span id="__span-0-166"><a id="__codelineno-0-166" name="__codelineno-0-166" href="#__codelineno-0-166"></a><span class="n">torque</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
-</span><span id="__span-0-167"><a id="__codelineno-0-167" name="__codelineno-0-167" href="#__codelineno-0-167"></a>
-</span><span id="__span-0-168"><a id="__codelineno-0-168" name="__codelineno-0-168" href="#__codelineno-0-168"></a><span class="c1"># =============================================================================</span>
-</span><span id="__span-0-169"><a id="__codelineno-0-169" name="__codelineno-0-169" href="#__codelineno-0-169"></a><span class="c1"># Problem Setup</span>
-</span><span id="__span-0-170"><a id="__codelineno-0-170" name="__codelineno-0-170" href="#__codelineno-0-170"></a><span class="c1"># =============================================================================</span>
-</span><span id="__span-0-171"><a id="__codelineno-0-171" name="__codelineno-0-171" href="#__codelineno-0-171"></a>
-</span><span id="__span-0-172"><a id="__codelineno-0-172" name="__codelineno-0-172" href="#__codelineno-0-172"></a><span class="n">time</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Time</span><span class="p">(</span>
-</span><span id="__span-0-173"><a id="__codelineno-0-173" name="__codelineno-0-173" href="#__codelineno-0-173"></a>    <span class="n">initial</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-</span><span id="__span-0-174"><a id="__codelineno-0-174" name="__codelineno-0-174" href="#__codelineno-0-174"></a>    <span class="n">final</span><span class="o">=</span><span class="n">total_time</span><span class="p">,</span>
-</span><span id="__span-0-175"><a id="__codelineno-0-175" name="__codelineno-0-175" href="#__codelineno-0-175"></a>    <span class="nb">min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-</span><span id="__span-0-176"><a id="__codelineno-0-176" name="__codelineno-0-176" href="#__codelineno-0-176"></a>    <span class="nb">max</span><span class="o">=</span><span class="n">total_time</span><span class="p">,</span>
-</span><span id="__span-0-177"><a id="__codelineno-0-177" name="__codelineno-0-177" href="#__codelineno-0-177"></a><span class="p">)</span>
-</span><span id="__span-0-178"><a id="__codelineno-0-178" name="__codelineno-0-178" href="#__codelineno-0-178"></a>
-</span><span id="__span-0-179"><a id="__codelineno-0-179" name="__codelineno-0-179" href="#__codelineno-0-179"></a><span class="n">problem</span> <span class="o">=</span> <span class="n">Problem</span><span class="p">(</span>
-</span><span id="__span-0-180"><a id="__codelineno-0-180" name="__codelineno-0-180" href="#__codelineno-0-180"></a>    <span class="n">dynamics</span><span class="o">=</span><span class="n">dynamics</span><span class="p">,</span>
-</span><span id="__span-0-181"><a id="__codelineno-0-181" name="__codelineno-0-181" href="#__codelineno-0-181"></a>    <span class="n">states</span><span class="o">=</span><span class="n">states</span><span class="p">,</span>
-</span><span id="__span-0-182"><a id="__codelineno-0-182" name="__codelineno-0-182" href="#__codelineno-0-182"></a>    <span class="n">controls</span><span class="o">=</span><span class="n">controls</span><span class="p">,</span>
-</span><span id="__span-0-183"><a id="__codelineno-0-183" name="__codelineno-0-183" href="#__codelineno-0-183"></a>    <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="p">,</span>
-</span><span id="__span-0-184"><a id="__codelineno-0-184" name="__codelineno-0-184" href="#__codelineno-0-184"></a>    <span class="n">constraints</span><span class="o">=</span><span class="n">constraints</span><span class="p">,</span>
-</span><span id="__span-0-185"><a id="__codelineno-0-185" name="__codelineno-0-185" href="#__codelineno-0-185"></a>    <span class="n">N</span><span class="o">=</span><span class="n">n</span><span class="p">,</span>
-</span><span id="__span-0-186"><a id="__codelineno-0-186" name="__codelineno-0-186" href="#__codelineno-0-186"></a>    <span class="n">algorithm</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lam_vb&quot;</span><span class="p">:</span> <span class="mf">1e0</span><span class="p">},</span>
-</span><span id="__span-0-187"><a id="__codelineno-0-187" name="__codelineno-0-187" href="#__codelineno-0-187"></a><span class="p">)</span>
-</span><span id="__span-0-188"><a id="__codelineno-0-188" name="__codelineno-0-188" href="#__codelineno-0-188"></a>
-</span><span id="__span-0-189"><a id="__codelineno-0-189" name="__codelineno-0-189" href="#__codelineno-0-189"></a><span class="c1"># Solver settings</span>
-</span><span id="__span-0-190"><a id="__codelineno-0-190" name="__codelineno-0-190" href="#__codelineno-0-190"></a><span class="n">problem</span><span class="o">.</span><span class="n">settings</span><span class="o">.</span><span class="n">prp</span><span class="o">.</span><span class="n">dt</span> <span class="o">=</span> <span class="mf">0.01</span>
-</span><span id="__span-0-191"><a id="__codelineno-0-191" name="__codelineno-0-191" href="#__codelineno-0-191"></a>
-</span><span id="__span-0-192"><a id="__codelineno-0-192" name="__codelineno-0-192" href="#__codelineno-0-192"></a><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
-</span><span id="__span-0-193"><a id="__codelineno-0-193" name="__codelineno-0-193" href="#__codelineno-0-193"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;3-Link Arm Trajectory Optimization with Product of Exponentials FK&quot;</span><span class="p">)</span>
-</span><span id="__span-0-194"><a id="__codelineno-0-194" name="__codelineno-0-194" href="#__codelineno-0-194"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;=&quot;</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span>
-</span><span id="__span-0-195"><a id="__codelineno-0-195" name="__codelineno-0-195" href="#__codelineno-0-195"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Link lengths: L1=</span><span class="si">{</span><span class="n">L1</span><span class="si">}</span><span class="s2">m, L2=</span><span class="si">{</span><span class="n">L2</span><span class="si">}</span><span class="s2">m, L3=</span><span class="si">{</span><span class="n">L3</span><span class="si">}</span><span class="s2">m&quot;</span><span class="p">)</span>
-</span><span id="__span-0-196"><a id="__codelineno-0-196" name="__codelineno-0-196" href="#__codelineno-0-196"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Home EE position: [</span><span class="si">{</span><span class="n">L2</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">L3</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, 0.00, </span><span class="si">{</span><span class="n">L1</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
-</span><span id="__span-0-197"><a id="__codelineno-0-197" name="__codelineno-0-197" href="#__codelineno-0-197"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Target position: </span><span class="si">{</span><span class="n">target</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="__span-0-198"><a id="__codelineno-0-198" name="__codelineno-0-198" href="#__codelineno-0-198"></a>    <span class="nb">print</span><span class="p">()</span>
-</span><span id="__span-0-199"><a id="__codelineno-0-199" name="__codelineno-0-199" href="#__codelineno-0-199"></a>
-</span><span id="__span-0-200"><a id="__codelineno-0-200" name="__codelineno-0-200" href="#__codelineno-0-200"></a>    <span class="n">problem</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
-</span><span id="__span-0-201"><a id="__codelineno-0-201" name="__codelineno-0-201" href="#__codelineno-0-201"></a>    <span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">solve</span><span class="p">()</span>
-</span><span id="__span-0-202"><a id="__codelineno-0-202" name="__codelineno-0-202" href="#__codelineno-0-202"></a>    <span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">post_process</span><span class="p">()</span>
+</span><span id="__span-0-161"><a id="__codelineno-0-161" name="__codelineno-0-161" href="#__codelineno-0-161"></a><span class="n">q_identity</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+</span><span id="__span-0-162"><a id="__codelineno-0-162" name="__codelineno-0-162" href="#__codelineno-0-162"></a><span class="n">home_ee_pos</span> <span class="o">=</span> <span class="p">[</span><span class="n">L2</span> <span class="o">+</span> <span class="n">L3</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">L1</span><span class="p">]</span>
+</span><span id="__span-0-163"><a id="__codelineno-0-163" name="__codelineno-0-163" href="#__codelineno-0-163"></a>
+</span><span id="__span-0-164"><a id="__codelineno-0-164" name="__codelineno-0-164" href="#__codelineno-0-164"></a><span class="n">angle</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">init</span><span class="o">.</span><span class="n">ik_interpolation</span><span class="p">(</span>
+</span><span id="__span-0-165"><a id="__codelineno-0-165" name="__codelineno-0-165" href="#__codelineno-0-165"></a>    <span class="n">keyframes</span><span class="o">=</span><span class="p">[</span>
+</span><span id="__span-0-166"><a id="__codelineno-0-166" name="__codelineno-0-166" href="#__codelineno-0-166"></a>        <span class="p">(</span><span class="n">home_ee_pos</span><span class="p">,</span> <span class="n">q_identity</span><span class="p">),</span>
+</span><span id="__span-0-167"><a id="__codelineno-0-167" name="__codelineno-0-167" href="#__codelineno-0-167"></a>        <span class="p">(</span><span class="n">target</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">q_identity</span><span class="p">),</span>
+</span><span id="__span-0-168"><a id="__codelineno-0-168" name="__codelineno-0-168" href="#__codelineno-0-168"></a>    <span class="p">],</span>
+</span><span id="__span-0-169"><a id="__codelineno-0-169" name="__codelineno-0-169" href="#__codelineno-0-169"></a>    <span class="n">nodes</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">n</span> <span class="o">-</span> <span class="mi">1</span><span class="p">],</span>
+</span><span id="__span-0-170"><a id="__codelineno-0-170" name="__codelineno-0-170" href="#__codelineno-0-170"></a>    <span class="n">screw_axes</span><span class="o">=</span><span class="n">screw_axes</span><span class="p">,</span>
+</span><span id="__span-0-171"><a id="__codelineno-0-171" name="__codelineno-0-171" href="#__codelineno-0-171"></a>    <span class="n">T_home</span><span class="o">=</span><span class="n">T_home</span><span class="p">,</span>
+</span><span id="__span-0-172"><a id="__codelineno-0-172" name="__codelineno-0-172" href="#__codelineno-0-172"></a>    <span class="n">angles_init</span><span class="o">=</span><span class="n">angle</span><span class="o">.</span><span class="n">initial</span><span class="p">,</span>
+</span><span id="__span-0-173"><a id="__codelineno-0-173" name="__codelineno-0-173" href="#__codelineno-0-173"></a>    <span class="n">angles_min</span><span class="o">=</span><span class="n">angle</span><span class="o">.</span><span class="n">min</span><span class="p">,</span>
+</span><span id="__span-0-174"><a id="__codelineno-0-174" name="__codelineno-0-174" href="#__codelineno-0-174"></a>    <span class="n">angles_max</span><span class="o">=</span><span class="n">angle</span><span class="o">.</span><span class="n">max</span><span class="p">,</span>
+</span><span id="__span-0-175"><a id="__codelineno-0-175" name="__codelineno-0-175" href="#__codelineno-0-175"></a>    <span class="n">sequential</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-176"><a id="__codelineno-0-176" name="__codelineno-0-176" href="#__codelineno-0-176"></a><span class="p">)</span>
+</span><span id="__span-0-177"><a id="__codelineno-0-177" name="__codelineno-0-177" href="#__codelineno-0-177"></a><span class="n">velocity</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+</span><span id="__span-0-178"><a id="__codelineno-0-178" name="__codelineno-0-178" href="#__codelineno-0-178"></a><span class="n">torque</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+</span><span id="__span-0-179"><a id="__codelineno-0-179" name="__codelineno-0-179" href="#__codelineno-0-179"></a>
+</span><span id="__span-0-180"><a id="__codelineno-0-180" name="__codelineno-0-180" href="#__codelineno-0-180"></a><span class="c1"># =============================================================================</span>
+</span><span id="__span-0-181"><a id="__codelineno-0-181" name="__codelineno-0-181" href="#__codelineno-0-181"></a><span class="c1"># Problem Setup</span>
+</span><span id="__span-0-182"><a id="__codelineno-0-182" name="__codelineno-0-182" href="#__codelineno-0-182"></a><span class="c1"># =============================================================================</span>
+</span><span id="__span-0-183"><a id="__codelineno-0-183" name="__codelineno-0-183" href="#__codelineno-0-183"></a>
+</span><span id="__span-0-184"><a id="__codelineno-0-184" name="__codelineno-0-184" href="#__codelineno-0-184"></a><span class="n">time</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Time</span><span class="p">(</span>
+</span><span id="__span-0-185"><a id="__codelineno-0-185" name="__codelineno-0-185" href="#__codelineno-0-185"></a>    <span class="n">initial</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+</span><span id="__span-0-186"><a id="__codelineno-0-186" name="__codelineno-0-186" href="#__codelineno-0-186"></a>    <span class="n">final</span><span class="o">=</span><span class="n">total_time</span><span class="p">,</span>
+</span><span id="__span-0-187"><a id="__codelineno-0-187" name="__codelineno-0-187" href="#__codelineno-0-187"></a>    <span class="nb">min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+</span><span id="__span-0-188"><a id="__codelineno-0-188" name="__codelineno-0-188" href="#__codelineno-0-188"></a>    <span class="nb">max</span><span class="o">=</span><span class="n">total_time</span><span class="p">,</span>
+</span><span id="__span-0-189"><a id="__codelineno-0-189" name="__codelineno-0-189" href="#__codelineno-0-189"></a><span class="p">)</span>
+</span><span id="__span-0-190"><a id="__codelineno-0-190" name="__codelineno-0-190" href="#__codelineno-0-190"></a>
+</span><span id="__span-0-191"><a id="__codelineno-0-191" name="__codelineno-0-191" href="#__codelineno-0-191"></a><span class="n">problem</span> <span class="o">=</span> <span class="n">Problem</span><span class="p">(</span>
+</span><span id="__span-0-192"><a id="__codelineno-0-192" name="__codelineno-0-192" href="#__codelineno-0-192"></a>    <span class="n">dynamics</span><span class="o">=</span><span class="n">dynamics</span><span class="p">,</span>
+</span><span id="__span-0-193"><a id="__codelineno-0-193" name="__codelineno-0-193" href="#__codelineno-0-193"></a>    <span class="n">states</span><span class="o">=</span><span class="n">states</span><span class="p">,</span>
+</span><span id="__span-0-194"><a id="__codelineno-0-194" name="__codelineno-0-194" href="#__codelineno-0-194"></a>    <span class="n">controls</span><span class="o">=</span><span class="n">controls</span><span class="p">,</span>
+</span><span id="__span-0-195"><a id="__codelineno-0-195" name="__codelineno-0-195" href="#__codelineno-0-195"></a>    <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="p">,</span>
+</span><span id="__span-0-196"><a id="__codelineno-0-196" name="__codelineno-0-196" href="#__codelineno-0-196"></a>    <span class="n">constraints</span><span class="o">=</span><span class="n">constraints</span><span class="p">,</span>
+</span><span id="__span-0-197"><a id="__codelineno-0-197" name="__codelineno-0-197" href="#__codelineno-0-197"></a>    <span class="n">N</span><span class="o">=</span><span class="n">n</span><span class="p">,</span>
+</span><span id="__span-0-198"><a id="__codelineno-0-198" name="__codelineno-0-198" href="#__codelineno-0-198"></a>    <span class="n">algorithm</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;lam_vb&quot;</span><span class="p">:</span> <span class="mf">1e0</span><span class="p">},</span>
+</span><span id="__span-0-199"><a id="__codelineno-0-199" name="__codelineno-0-199" href="#__codelineno-0-199"></a><span class="p">)</span>
+</span><span id="__span-0-200"><a id="__codelineno-0-200" name="__codelineno-0-200" href="#__codelineno-0-200"></a>
+</span><span id="__span-0-201"><a id="__codelineno-0-201" name="__codelineno-0-201" href="#__codelineno-0-201"></a><span class="c1"># Solver settings</span>
+</span><span id="__span-0-202"><a id="__codelineno-0-202" name="__codelineno-0-202" href="#__codelineno-0-202"></a><span class="n">problem</span><span class="o">.</span><span class="n">settings</span><span class="o">.</span><span class="n">prp</span><span class="o">.</span><span class="n">dt</span> <span class="o">=</span> <span class="mf">0.01</span>
 </span><span id="__span-0-203"><a id="__codelineno-0-203" name="__codelineno-0-203" href="#__codelineno-0-203"></a>
-</span><span id="__span-0-204"><a id="__codelineno-0-204" name="__codelineno-0-204" href="#__codelineno-0-204"></a>    <span class="c1"># Extract final joint angles</span>
-</span><span id="__span-0-205"><a id="__codelineno-0-205" name="__codelineno-0-205" href="#__codelineno-0-205"></a>    <span class="n">final_q</span> <span class="o">=</span> <span class="n">results</span><span class="o">.</span><span class="n">trajectory</span><span class="p">[</span><span class="s2">&quot;angle&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-</span><span id="__span-0-206"><a id="__codelineno-0-206" name="__codelineno-0-206" href="#__codelineno-0-206"></a>
-</span><span id="__span-0-207"><a id="__codelineno-0-207" name="__codelineno-0-207" href="#__codelineno-0-207"></a>    <span class="nb">print</span><span class="p">()</span>
-</span><span id="__span-0-208"><a id="__codelineno-0-208" name="__codelineno-0-208" href="#__codelineno-0-208"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Results:&quot;</span><span class="p">)</span>
-</span><span id="__span-0-209"><a id="__codelineno-0-209" name="__codelineno-0-209" href="#__codelineno-0-209"></a>    <span class="nb">print</span><span class="p">(</span>
-</span><span id="__span-0-210"><a id="__codelineno-0-210" name="__codelineno-0-210" href="#__codelineno-0-210"></a>        <span class="sa">f</span><span class="s2">&quot;Final joint angles [deg]: q1=</span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">rad2deg</span><span class="p">(</span><span class="n">final_q</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">, &quot;</span>
-</span><span id="__span-0-211"><a id="__codelineno-0-211" name="__codelineno-0-211" href="#__codelineno-0-211"></a>        <span class="sa">f</span><span class="s2">&quot;q2=</span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">rad2deg</span><span class="p">(</span><span class="n">final_q</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">, q3=</span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">rad2deg</span><span class="p">(</span><span class="n">final_q</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span>
-</span><span id="__span-0-212"><a id="__codelineno-0-212" name="__codelineno-0-212" href="#__codelineno-0-212"></a>    <span class="p">)</span>
-</span><span id="__span-0-213"><a id="__codelineno-0-213" name="__codelineno-0-213" href="#__codelineno-0-213"></a>
-</span><span id="__span-0-214"><a id="__codelineno-0-214" name="__codelineno-0-214" href="#__codelineno-0-214"></a>    <span class="c1"># Compute final EE position (using jaxlie for verification)</span>
-</span><span id="__span-0-215"><a id="__codelineno-0-215" name="__codelineno-0-215" href="#__codelineno-0-215"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">jaxlie</span>
-</span><span id="__span-0-216"><a id="__codelineno-0-216" name="__codelineno-0-216" href="#__codelineno-0-216"></a>
-</span><span id="__span-0-217"><a id="__codelineno-0-217" name="__codelineno-0-217" href="#__codelineno-0-217"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">compute_ee_position</span><span class="p">(</span><span class="n">q_vals</span><span class="p">):</span>
-</span><span id="__span-0-218"><a id="__codelineno-0-218" name="__codelineno-0-218" href="#__codelineno-0-218"></a>        <span class="n">T1</span> <span class="o">=</span> <span class="n">jaxlie</span><span class="o">.</span><span class="n">SE3</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">screw_axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">q_vals</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">as_matrix</span><span class="p">()</span>
-</span><span id="__span-0-219"><a id="__codelineno-0-219" name="__codelineno-0-219" href="#__codelineno-0-219"></a>        <span class="n">T2</span> <span class="o">=</span> <span class="n">jaxlie</span><span class="o">.</span><span class="n">SE3</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">screw_axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">q_vals</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">as_matrix</span><span class="p">()</span>
-</span><span id="__span-0-220"><a id="__codelineno-0-220" name="__codelineno-0-220" href="#__codelineno-0-220"></a>        <span class="n">T3</span> <span class="o">=</span> <span class="n">jaxlie</span><span class="o">.</span><span class="n">SE3</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">screw_axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">q_vals</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="o">.</span><span class="n">as_matrix</span><span class="p">()</span>
-</span><span id="__span-0-221"><a id="__codelineno-0-221" name="__codelineno-0-221" href="#__codelineno-0-221"></a>        <span class="n">T_final</span> <span class="o">=</span> <span class="n">T1</span> <span class="o">@</span> <span class="n">T2</span> <span class="o">@</span> <span class="n">T3</span> <span class="o">@</span> <span class="n">T_home</span>
-</span><span id="__span-0-222"><a id="__codelineno-0-222" name="__codelineno-0-222" href="#__codelineno-0-222"></a>        <span class="k">return</span> <span class="n">T_final</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
-</span><span id="__span-0-223"><a id="__codelineno-0-223" name="__codelineno-0-223" href="#__codelineno-0-223"></a>
-</span><span id="__span-0-224"><a id="__codelineno-0-224" name="__codelineno-0-224" href="#__codelineno-0-224"></a>    <span class="n">plot_scp_iterations</span><span class="p">(</span><span class="n">results</span><span class="p">)</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
-</span><span id="__span-0-225"><a id="__codelineno-0-225" name="__codelineno-0-225" href="#__codelineno-0-225"></a>    <span class="n">plot_scp_convergence_histories</span><span class="p">(</span><span class="n">results</span><span class="p">)</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
-</span><span id="__span-0-226"><a id="__codelineno-0-226" name="__codelineno-0-226" href="#__codelineno-0-226"></a>    <span class="n">tgt</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">value</span>
-</span><span id="__span-0-227"><a id="__codelineno-0-227" name="__codelineno-0-227" href="#__codelineno-0-227"></a>    <span class="n">final_ee</span> <span class="o">=</span> <span class="n">compute_ee_position</span><span class="p">(</span><span class="n">final_q</span><span class="p">)</span>
-</span><span id="__span-0-228"><a id="__codelineno-0-228" name="__codelineno-0-228" href="#__codelineno-0-228"></a>    <span class="n">error</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">final_ee</span> <span class="o">-</span> <span class="n">tgt</span><span class="p">)</span>
-</span><span id="__span-0-229"><a id="__codelineno-0-229" name="__codelineno-0-229" href="#__codelineno-0-229"></a>
-</span><span id="__span-0-230"><a id="__codelineno-0-230" name="__codelineno-0-230" href="#__codelineno-0-230"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Final EE position: [</span><span class="si">{</span><span class="n">final_ee</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">final_ee</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">final_ee</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
-</span><span id="__span-0-231"><a id="__codelineno-0-231" name="__codelineno-0-231" href="#__codelineno-0-231"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Target position:   [</span><span class="si">{</span><span class="n">tgt</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">tgt</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">tgt</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
-</span><span id="__span-0-232"><a id="__codelineno-0-232" name="__codelineno-0-232" href="#__codelineno-0-232"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Position error:    </span><span class="si">{</span><span class="n">error</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> m&quot;</span><span class="p">)</span>
+</span><span id="__span-0-204"><a id="__codelineno-0-204" name="__codelineno-0-204" href="#__codelineno-0-204"></a><span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+</span><span id="__span-0-205"><a id="__codelineno-0-205" name="__codelineno-0-205" href="#__codelineno-0-205"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;3-Link Arm Trajectory Optimization with Product of Exponentials FK&quot;</span><span class="p">)</span>
+</span><span id="__span-0-206"><a id="__codelineno-0-206" name="__codelineno-0-206" href="#__codelineno-0-206"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;=&quot;</span> <span class="o">*</span> <span class="mi">60</span><span class="p">)</span>
+</span><span id="__span-0-207"><a id="__codelineno-0-207" name="__codelineno-0-207" href="#__codelineno-0-207"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Link lengths: L1=</span><span class="si">{</span><span class="n">L1</span><span class="si">}</span><span class="s2">m, L2=</span><span class="si">{</span><span class="n">L2</span><span class="si">}</span><span class="s2">m, L3=</span><span class="si">{</span><span class="n">L3</span><span class="si">}</span><span class="s2">m&quot;</span><span class="p">)</span>
+</span><span id="__span-0-208"><a id="__codelineno-0-208" name="__codelineno-0-208" href="#__codelineno-0-208"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Home EE position: [</span><span class="si">{</span><span class="n">L2</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="n">L3</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, 0.00, </span><span class="si">{</span><span class="n">L1</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+</span><span id="__span-0-209"><a id="__codelineno-0-209" name="__codelineno-0-209" href="#__codelineno-0-209"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Target position: </span><span class="si">{</span><span class="n">target</span><span class="o">.</span><span class="n">value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-0-210"><a id="__codelineno-0-210" name="__codelineno-0-210" href="#__codelineno-0-210"></a>    <span class="nb">print</span><span class="p">()</span>
+</span><span id="__span-0-211"><a id="__codelineno-0-211" name="__codelineno-0-211" href="#__codelineno-0-211"></a>
+</span><span id="__span-0-212"><a id="__codelineno-0-212" name="__codelineno-0-212" href="#__codelineno-0-212"></a>    <span class="n">problem</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
+</span><span id="__span-0-213"><a id="__codelineno-0-213" name="__codelineno-0-213" href="#__codelineno-0-213"></a>    <span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">solve</span><span class="p">()</span>
+</span><span id="__span-0-214"><a id="__codelineno-0-214" name="__codelineno-0-214" href="#__codelineno-0-214"></a>    <span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">post_process</span><span class="p">()</span>
+</span><span id="__span-0-215"><a id="__codelineno-0-215" name="__codelineno-0-215" href="#__codelineno-0-215"></a>
+</span><span id="__span-0-216"><a id="__codelineno-0-216" name="__codelineno-0-216" href="#__codelineno-0-216"></a>    <span class="c1"># Extract final joint angles</span>
+</span><span id="__span-0-217"><a id="__codelineno-0-217" name="__codelineno-0-217" href="#__codelineno-0-217"></a>    <span class="n">final_q</span> <span class="o">=</span> <span class="n">results</span><span class="o">.</span><span class="n">trajectory</span><span class="p">[</span><span class="s2">&quot;angle&quot;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+</span><span id="__span-0-218"><a id="__codelineno-0-218" name="__codelineno-0-218" href="#__codelineno-0-218"></a>
+</span><span id="__span-0-219"><a id="__codelineno-0-219" name="__codelineno-0-219" href="#__codelineno-0-219"></a>    <span class="nb">print</span><span class="p">()</span>
+</span><span id="__span-0-220"><a id="__codelineno-0-220" name="__codelineno-0-220" href="#__codelineno-0-220"></a>    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Results:&quot;</span><span class="p">)</span>
+</span><span id="__span-0-221"><a id="__codelineno-0-221" name="__codelineno-0-221" href="#__codelineno-0-221"></a>    <span class="nb">print</span><span class="p">(</span>
+</span><span id="__span-0-222"><a id="__codelineno-0-222" name="__codelineno-0-222" href="#__codelineno-0-222"></a>        <span class="sa">f</span><span class="s2">&quot;Final joint angles [deg]: q1=</span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">rad2deg</span><span class="p">(</span><span class="n">final_q</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">, &quot;</span>
+</span><span id="__span-0-223"><a id="__codelineno-0-223" name="__codelineno-0-223" href="#__codelineno-0-223"></a>        <span class="sa">f</span><span class="s2">&quot;q2=</span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">rad2deg</span><span class="p">(</span><span class="n">final_q</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">, q3=</span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">rad2deg</span><span class="p">(</span><span class="n">final_q</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">&quot;</span>
+</span><span id="__span-0-224"><a id="__codelineno-0-224" name="__codelineno-0-224" href="#__codelineno-0-224"></a>    <span class="p">)</span>
+</span><span id="__span-0-225"><a id="__codelineno-0-225" name="__codelineno-0-225" href="#__codelineno-0-225"></a>
+</span><span id="__span-0-226"><a id="__codelineno-0-226" name="__codelineno-0-226" href="#__codelineno-0-226"></a>    <span class="c1"># Compute final EE position (using jaxlie for verification)</span>
+</span><span id="__span-0-227"><a id="__codelineno-0-227" name="__codelineno-0-227" href="#__codelineno-0-227"></a>    <span class="kn">import</span><span class="w"> </span><span class="nn">jaxlie</span>
+</span><span id="__span-0-228"><a id="__codelineno-0-228" name="__codelineno-0-228" href="#__codelineno-0-228"></a>
+</span><span id="__span-0-229"><a id="__codelineno-0-229" name="__codelineno-0-229" href="#__codelineno-0-229"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">compute_ee_position</span><span class="p">(</span><span class="n">q_vals</span><span class="p">):</span>
+</span><span id="__span-0-230"><a id="__codelineno-0-230" name="__codelineno-0-230" href="#__codelineno-0-230"></a>        <span class="n">T1</span> <span class="o">=</span> <span class="n">jaxlie</span><span class="o">.</span><span class="n">SE3</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">screw_axes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">q_vals</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">as_matrix</span><span class="p">()</span>
+</span><span id="__span-0-231"><a id="__codelineno-0-231" name="__codelineno-0-231" href="#__codelineno-0-231"></a>        <span class="n">T2</span> <span class="o">=</span> <span class="n">jaxlie</span><span class="o">.</span><span class="n">SE3</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">screw_axes</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">q_vals</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">as_matrix</span><span class="p">()</span>
+</span><span id="__span-0-232"><a id="__codelineno-0-232" name="__codelineno-0-232" href="#__codelineno-0-232"></a>        <span class="n">T3</span> <span class="o">=</span> <span class="n">jaxlie</span><span class="o">.</span><span class="n">SE3</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">screw_axes</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">q_vals</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span><span class="o">.</span><span class="n">as_matrix</span><span class="p">()</span>
+</span><span id="__span-0-233"><a id="__codelineno-0-233" name="__codelineno-0-233" href="#__codelineno-0-233"></a>        <span class="n">T_final</span> <span class="o">=</span> <span class="n">T1</span> <span class="o">@</span> <span class="n">T2</span> <span class="o">@</span> <span class="n">T3</span> <span class="o">@</span> <span class="n">T_home</span>
+</span><span id="__span-0-234"><a id="__codelineno-0-234" name="__codelineno-0-234" href="#__codelineno-0-234"></a>        <span class="k">return</span> <span class="n">T_final</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+</span><span id="__span-0-235"><a id="__codelineno-0-235" name="__codelineno-0-235" href="#__codelineno-0-235"></a>
+</span><span id="__span-0-236"><a id="__codelineno-0-236" name="__codelineno-0-236" href="#__codelineno-0-236"></a>    <span class="n">plot_scp_iterations</span><span class="p">(</span><span class="n">results</span><span class="p">)</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</span><span id="__span-0-237"><a id="__codelineno-0-237" name="__codelineno-0-237" href="#__codelineno-0-237"></a>    <span class="n">plot_scp_convergence_histories</span><span class="p">(</span><span class="n">results</span><span class="p">)</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</span><span id="__span-0-238"><a id="__codelineno-0-238" name="__codelineno-0-238" href="#__codelineno-0-238"></a>    <span class="n">tgt</span> <span class="o">=</span> <span class="n">target</span><span class="o">.</span><span class="n">value</span>
+</span><span id="__span-0-239"><a id="__codelineno-0-239" name="__codelineno-0-239" href="#__codelineno-0-239"></a>    <span class="n">final_ee</span> <span class="o">=</span> <span class="n">compute_ee_position</span><span class="p">(</span><span class="n">final_q</span><span class="p">)</span>
+</span><span id="__span-0-240"><a id="__codelineno-0-240" name="__codelineno-0-240" href="#__codelineno-0-240"></a>    <span class="n">error</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">final_ee</span> <span class="o">-</span> <span class="n">tgt</span><span class="p">)</span>
+</span><span id="__span-0-241"><a id="__codelineno-0-241" name="__codelineno-0-241" href="#__codelineno-0-241"></a>
+</span><span id="__span-0-242"><a id="__codelineno-0-242" name="__codelineno-0-242" href="#__codelineno-0-242"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Final EE position: [</span><span class="si">{</span><span class="n">final_ee</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">final_ee</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">final_ee</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+</span><span id="__span-0-243"><a id="__codelineno-0-243" name="__codelineno-0-243" href="#__codelineno-0-243"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Target position:   [</span><span class="si">{</span><span class="n">tgt</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">tgt</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">tgt</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+</span><span id="__span-0-244"><a id="__codelineno-0-244" name="__codelineno-0-244" href="#__codelineno-0-244"></a>    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Position error:    </span><span class="si">{</span><span class="n">error</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2"> m&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 
 
@@ -7929,13 +8031,13 @@ using Lie algebra operations for forward kinematics. The problem includes:</p>
         
         
           
-          <a href="../../car/dubins_car/" class="md-footer__link md-footer__link--next" aria-label="Next: Dubins Car">
+          <a href="../7_dof_arm/" class="md-footer__link md-footer__link--next" aria-label="Next: 7 Dof Arm">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Dubins Car
+                7 Dof Arm
               </div>
             </div>
             <div class="md-footer__button md-icon">
