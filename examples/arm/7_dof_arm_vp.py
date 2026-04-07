@@ -30,7 +30,6 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 import openscvx as ox
-from openscvx import Problem
 from openscvx.plotting import plot_controls, plot_scp_iterations
 
 # =============================================================================
@@ -287,7 +286,7 @@ time = ox.Time(
     max=total_time,
 )
 
-problem = Problem(
+problem = ox.Problem(
     dynamics=dynamics,
     states=states,
     controls=controls,
