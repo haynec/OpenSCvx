@@ -75,7 +75,7 @@ which must be solved at every integration step. Drift in the position- and veloc
 
 Both representations are viable for trajectory optimization, and there is a long line of work showing that maximal coordinates can actually be *advantageous* for trajopt — the constant block-diagonal mass matrix, the absence of coordinate singularities, the natural handling of closed loops and contact, and the well-conditioned linearizations near singular configurations are all real benefits that practitioners rightly care about. We plan to revisit the maximal formulation in a more advanced tutorial down the line.
 
-For this first pass we will start with the minimal representation because it is the simpler of the two: a pure ODE in $2n$ variables, no algebraic side-conditions, no multipliers, and a clean fit with the rest of the OpenSCvx modeling stack. That lets us focus on what is genuinely new here: expressing forward kinematics symbolically so the *task-space* quantities we want to constrain (end-effector position, orientation, camera frame) — which are no longer state variables — can be built as **functions of $\mathbf{q}$** inside the symbolic graph.
+For this first pass we will start with the minimal representation because it is the simpler of the two: a pure ODE in $2n$ variables, no algebraic side-conditions, no multipliers, and a clean fit with the rest of the OpenSCvx modeling stack. That lets us focus on what is new here: expressing forward kinematics symbolically so the *task-space* quantities we want to constrain (end-effector position, orientation, camera frame) — which are no longer state variables — can be built as **functions of the joint angles $\mathbf{q}$** inside the symbolic graph.
 That is exactly what `ox.lie` is for.
 
 !!! note "Looking ahead: sparsity and the maximal representation"
@@ -188,14 +188,58 @@ dynamics = {
 
 The point of this tutorial is to demonstrate the Lie-algebra modeling layer, which is independent of the dynamics model. Plugging in a richer $M(\mathbf{q})\ddot{\mathbf{q}} + C(\mathbf{q},\dot{\mathbf{q}})\dot{\mathbf{q}} + \mathbf{g}(\mathbf{q}) = \boldsymbol{\tau}$ would change only the right-hand side of `dynamics["velocity"]`.
 
-## Task-Space Constraints
+## A Mock Pick-and-Place
 
-Because `p_ee` and `R_ee` are symbolic, we can constrain them directly. The example performs a five-waypoint pick-and-place (`home → pre_grasp → grasp → pre_grasp → pre_place → place`), with a tight position tolerance at each waypoint:
+With the kinematic chain, dynamics, and task-space expressions in hand, we have all the fundamentals we need to pose an actual manipulation problem. To put them through their paces we will set up a mock pick-and-place: the arm starts at a home configuration, descends to grasp an object, lifts it, moves to a placement location, and sets it down — all expressed as Cartesian waypoints that the optimizer must hit while respecting joint limits and gripper-orientation constraints.
+
+### Waypoints
+
+The example performs a five-segment pick-and-place tour: `home → pre_grasp → grasp → pre_grasp → pre_place → place`. We lay out the waypoints in Cartesian space and assign each one to a discretization node:
 
 ```python
-ee_tolerance = 0.01  # 1 cm
-for i, (wp, node) in enumerate(zip(waypoint_positions, waypoint_nodes)):
-    wp_param = ox.Parameter(f"waypoint_{waypoint_names[i]}", shape=(3,), value=wp)
+# Orientation: Ry(90°) points the EE body +x toward world -z (gripper facing down)
+q_down = np.array([np.cos(np.pi / 4), 0.0, np.sin(np.pi / 4), 0.0])
+q_identity = np.array([1.0, 0.0, 0.0, 0.0])
+
+pre_height = 0.15
+grasp_pos     = np.array([0.35, -0.25, 0.05])
+place_pos     = np.array([0.35,  0.25, 0.05])
+home_pos      = np.array([a2 + a3 + a4 - 0.01, 0.0, d1])
+pre_grasp_pos = grasp_pos + np.array([0.0, 0.0, pre_height])
+pre_place_pos = place_pos + np.array([0.0, 0.0, pre_height])
+
+waypoint_names        = ["home", "pre_grasp", "grasp", "pre_grasp", "pre_place", "place"]
+waypoint_positions    = [home_pos, pre_grasp_pos, grasp_pos, pre_grasp_pos, pre_place_pos, place_pos]
+waypoint_orientations = [q_identity, q_down, q_down, q_down, q_down, q_down]
+
+nodes_per_segment = 2
+n_segments        = len(waypoint_positions) - 1
+n                 = nodes_per_segment * n_segments + 1   # 11 nodes total
+waypoint_nodes    = [i * nodes_per_segment for i in range(len(waypoint_positions))]
+```
+
+### Task-Space Constraints
+
+Because `p_ee` and `R_ee` are symbolic, we can constrain them directly. We start with the standard box constraints on each state, then enforce a tight position tolerance at each waypoint:
+
+```python
+states   = [angle, velocity]
+controls = [torque]
+
+constraints = []
+for state in states:
+    constraints.extend([
+        ox.ctcs(state <= state.max),
+        ox.ctcs(state.min <= state),
+    ])
+
+# Keep the EE above the table everywhere
+constraints.append(ox.ctcs(p_ee[2] >= 0.0))
+
+# Hit each waypoint within 1 cm
+ee_tolerance = 0.01
+for name, wp, node in zip(waypoint_names, waypoint_positions, waypoint_nodes):
+    wp_param = ox.Parameter(f"waypoint_{name}", shape=(3,), value=wp)
     constraints.append(
         (ox.linalg.Norm(p_ee - wp_param, ord=2) <= ee_tolerance).at([node])
     )
@@ -204,15 +248,30 @@ for i, (wp, node) in enumerate(zip(waypoint_positions, waypoint_nodes)):
 For orientation we use the $SO(3)$ logarithm, `ox.lie.SO3Log`, which maps a rotation matrix to its $\mathbb{R}^3$ axis–angle representation. The norm of $\log(R_{\text{des}}^\top R_{\text{ee}})$ is the geodesic angle error:
 
 ```python
-ori_error = ox.lie.SO3Log(R_des.T @ R_ee)
-ori_norm = ox.linalg.Norm(ori_error, ord=2)
+# Build R_des from q_down (the desired downward gripper orientation)
+w, x, y, z = q_down
+R_des = np.array([
+    [1 - 2*(y*y + z*z), 2*(x*y - w*z),     2*(x*z + w*y)],
+    [2*(x*y + w*z),     1 - 2*(x*x + z*z), 2*(y*z - w*x)],
+    [2*(x*z - w*y),     2*(y*z + w*x),     1 - 2*(x*x + y*y)],
+])
 
-# loose tolerance over the whole task, tight near grasp/place
-constraints.append((ori_norm <= np.deg2rad(5.0)).over((wp1, wpN)))
-constraints.append((ori_norm <= np.deg2rad(0.1)).over((wp_pregrasp, wp_pregrasp_2)))
+ori_error = ox.lie.SO3Log(R_des.T @ R_ee)
+ori_norm  = ox.linalg.Norm(ori_error, ord=2)
+
+# Loose tolerance for the entire task region; tight near grasp/place
+constraints.append(
+    (ori_norm <= np.deg2rad(5.0)).over((waypoint_nodes[1], waypoint_nodes[-1]))
+)
+constraints.append(
+    (ori_norm <= np.deg2rad(0.1)).over((waypoint_nodes[1], waypoint_nodes[3]))
+)
+constraints.append(
+    (ori_norm <= np.deg2rad(0.1)).over((waypoint_nodes[4], waypoint_nodes[5]))
+)
 ```
 
-This is a *continuous-time* constraint: the geodesic error is bounded everywhere along the trajectory, not just at the discrete nodes.
+These are *continuous-time* constraints: the geodesic error is bounded everywhere along the indicated trajectory segment, not just at the discrete nodes.
 
 ## Algebraic Propagated States
 
@@ -252,6 +311,9 @@ angle.guess = ox.init.ik_interpolation(
     angles_max=angle.max,
     sequential=True,
 )
+angle.initial   = np.clip(angle.guess[0], angle.min, angle.max)
+velocity.guess  = np.zeros((n, N_JOINTS))
+torque.guess    = np.zeros((n, N_JOINTS))
 ```
 
 The `sequential=True` flag seeds each node's IK solve from the previous node's solution, producing a coherent joint-space path. The default (`sequential=False`) solves all nodes in parallel from the same seed via `jax.vmap`, giving each node its own independent shot at finding a good local minimum.
@@ -269,7 +331,13 @@ The `sequential=True` flag seeds each node's IK solve from the previous node's s
 The full problem definition looks just like the drone examples — the only thing that has changed is *how* `p_ee` and `R_ee` are computed:
 
 ```python
-time = ox.Time(initial=0.0, final=ox.Minimize(4.0), min=0.0, max=4.0)
+total_time = 4.0
+time = ox.Time(
+    initial=0.0,
+    final=ox.Minimize(total_time),
+    min=0.0,
+    max=total_time,
+)
 
 problem = ox.Problem(
     dynamics=dynamics,
@@ -278,11 +346,13 @@ problem = ox.Problem(
     time=time,
     constraints=constraints,
     N=n,
+    algorithm={"lam_vb": 1e0},
     algebraic_prop={
         "ee_position": p_ee,
         **{f"T_{name}": T for name, T in joint_transforms.items()},
     },
 )
+problem.settings.prp.dt = 0.01
 
 problem.initialize()
 results = problem.solve()
@@ -297,7 +367,7 @@ After solving, `results.trajectory["T_ee"]` gives you the dense end-effector tra
 2. **Build forward kinematics symbolically.** `ox.lie.SE3Exp` lets you write the Product of Exponentials formula directly in the symbolic graph. The solver gets exact derivatives through the entire kinematic chain for free.
 3. **Snapshot intermediate frames.** Accumulating the FK chain incrementally and stashing partial products gives you every joint frame at no extra cost — handy for visualization, collision checks, or per-link constraints.
 4. **Use `algebraic_prop` for derived quantities.** Anything that is a function of the state can be propagated alongside the dynamics without entering the optimization, ready for plotting and analysis.
-5. **Initialize in task space.** `ox.init.ik_interpolation` lets you specify what you want the *end-effector* to do and figures out joint angles via IK. Use `sequential=True` for redundant arms to get coherent guesses.
+5. **Initialize in task space.** `ox.init.ik_interpolation` lets you specify what you want the *end-effector* to do and figures out joint angles via IK. Try parallel mode first; switch to sequential if you need a smoother joint-space path and your seed is good enough to avoid getting trapped in a bad IK branch.
 
 ## Further Reading
 
@@ -305,4 +375,3 @@ After solving, `results.trajectory["T_ee"]` gives you the dense end-effector tra
 - [Three-link arm Example](../Examples/arm/three_link_arm.md)
 - [Seven-link arm Example](../Examples/arm/seven_link_arm.md)
 - [Seven-link arm with viewcone Example](../Examples/arm/seven_link_arm_vp.md)
-- Lynch & Park, *Modern Robotics* — Chapter 4 covers the Product of Exponentials formula in detail
