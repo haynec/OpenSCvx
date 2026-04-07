@@ -97,7 +97,7 @@ In OpenSCvx, the building block is `ox.lie.SE3Exp`, which takes a length-6 screw
 
 ## Building the Kinematic Chain
 
-We will walk through the [7-DOF arm example](../Examples/arm/seven_link_arm.md). The robot is a Panda/iiwa-like arm with seven revolute joints in an alternating $z$–$y$ pattern. The link lengths and joint axes give us a fixed table of screw axes:
+We will walk through the [7-DOF arm example](../Examples/arm/7_dof_arm.md). The robot is a Panda/iiwa-like arm with seven revolute joints in an alternating $z$–$y$ pattern. The link lengths and joint axes give us a fixed table of screw axes:
 
 ```python
 import numpy as np
@@ -274,7 +274,7 @@ constraints.append(
 These are *continuous-time* constraints: the geodesic error is bounded everywhere along the indicated trajectory segment, not just at the discrete nodes.
 
 !!! tip "Composing with other constraint types"
-    Because `p_ee`, `R_ee`, and the intermediate `joint_transforms` are ordinary symbolic expressions, *any* constraint machinery from the earlier tutorials composes with them out of the box. You can wrap an obstacle-avoidance ellipsoid around `p_ee`, attach a [line-of-sight viewcone constraint](04_viewpoint_constraints.md) to a wrist-mounted camera built from `T_ee`, add a Vmap over a batch of visual targets, mix in [MPCC-style](08_mpcc.md) path tracking — the Lie-algebra layer doesn't change the rest of the API, it just gives you the task-space quantities to feed into it. The [seven-link arm with viewcone example](../Examples/arm/seven_link_arm_vp.md) does exactly this: same FK chain, plus a viewplanning constraint on the end-effector frame.
+    Because `p_ee`, `R_ee`, and the intermediate `joint_transforms` are ordinary symbolic expressions, *any* constraint machinery from the earlier tutorials composes with them out of the box. You can wrap an obstacle-avoidance ellipsoid around `p_ee`, attach a [line-of-sight viewcone constraint](04_viewpoint_constraints.md) to a wrist-mounted camera built from `T_ee`, add a Vmap over a batch of visual targets, mix in [MPCC-style](08_mpcc.md) path tracking — the Lie-algebra layer doesn't change the rest of the API, it just gives you the task-space quantities to feed into it. The [seven-link arm with viewcone example](../Examples/arm/7_dof_arm_vp.md) does exactly this: same FK chain, plus a viewplanning constraint on the end-effector frame.
 
 ## Algebraic Propagated States
 
@@ -375,6 +375,6 @@ After solving, `results.trajectory["T_ee"]` gives you the dense end-effector tra
 ## Further Reading
 
 - [API Reference: Lie algebra](../Reference/symbolic/expr/lie/index.md)
-- [Three-link arm Example](../Examples/arm/three_link_arm.md)
-- [Seven-link arm Example](../Examples/arm/seven_link_arm.md)
-- [Seven-link arm with viewcone Example](../Examples/arm/seven_link_arm_vp.md)
+- [Three-link arm Example](../Examples/arm/3_dof_arm.md)
+- [Seven-link arm Example](../Examples/arm/7_dof_arm.md)
+- [Seven-link arm with viewcone Example](../Examples/arm/7_dof_arm_vp.md)
