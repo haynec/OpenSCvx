@@ -294,7 +294,7 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"lam_vb": 1e0, "lam_vc": 1e1, "autotuner": ox.AugmentedLagrangian(eta_lambda=1e2)},
+    algorithm={"lam_vb": 1e0, "lam_vc": 1e1, "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0)},
     algebraic_prop={
         "ee_position": p_ee,
         **{f"T_{name}": T for name, T in joint_transforms.items()},
