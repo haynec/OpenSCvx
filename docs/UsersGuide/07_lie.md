@@ -11,7 +11,7 @@ Along the way, this tutorial introduces:
 - Initializing joint trajectories with `ox.init.ik_interpolation`
 
 This tutorial does not introduce a new constraint formulation in the way that the viewpoint or MPCC tutorials did.
-What is new is the *modeling layer*: how to express a kinematic chain inside the symbolic graph so the solver can differentiate through it and so we can constrain task-space quantities (end-effector position, orientation, viewcone, ...) directly.
+What is new is the *modeling layer*: how to express a kinematic chain inside the symbolic graph so the solver can differentiate through it and so we can constrain task-space quantities (end-effector position, orientation, viewcone, _etc._) directly.
 
 ## Minimal vs Maximal Representations
 
@@ -75,7 +75,7 @@ which must be solved at every integration step. Drift in the position- and veloc
 
 Both representations are viable for trajectory optimization, and there is a long line of work showing that maximal coordinates can actually be *advantageous* for trajopt — the constant block-diagonal mass matrix, the absence of coordinate singularities, the natural handling of closed loops and contact, and the well-conditioned linearizations near singular configurations are all real benefits that practitioners rightly care about. We plan to revisit the maximal formulation in a more advanced tutorial down the line.
 
-For this first pass we will start with the minimal representation because it is the simpler of the two: a pure ODE in $2n$ variables, no algebraic side-conditions, no multipliers, and a clean fit with the rest of the OpenSCvx modeling stack. That lets us focus on what is new here: expressing forward kinematics symbolically so the *task-space* quantities we want to constrain (end-effector position, orientation, camera frame) — which are no longer state variables — can be built as **functions of the joint angles $\mathbf{q}$** inside the symbolic graph.
+For this first pass we will start with the minimal representation because it is the simpler of the two: a pure ODE in $2n$ variables, no algebraic side-conditions, no multipliers, and a clean demonstration of how the OpenSCvx modeling stack can be applied to manipulation problems. That lets us focus on what is new here: expressing forward kinematics symbolically so the *task-space* quantities we want to constrain (end-effector position, orientation, camera frame) — which are no longer state variables — can be built as **functions of the joint angles $\mathbf{q}$** inside the symbolic graph.
 That is exactly what `ox.lie` is for.
 
 !!! note "Looking ahead: sparsity and the maximal representation"
@@ -272,6 +272,9 @@ constraints.append(
 ```
 
 These are *continuous-time* constraints: the geodesic error is bounded everywhere along the indicated trajectory segment, not just at the discrete nodes.
+
+!!! tip "Composing with other constraint types"
+    Because `p_ee`, `R_ee`, and the intermediate `joint_transforms` are ordinary symbolic expressions, *any* constraint machinery from the earlier tutorials composes with them out of the box. You can wrap an obstacle-avoidance ellipsoid around `p_ee`, attach a [line-of-sight viewcone constraint](04_viewpoint_constraints.md) to a wrist-mounted camera built from `T_ee`, add a Vmap over a batch of visual targets, mix in [MPCC-style](08_mpcc.md) path tracking — the Lie-algebra layer doesn't change the rest of the API, it just gives you the task-space quantities to feed into it. The [seven-link arm with viewcone example](../Examples/arm/seven_link_arm_vp.md) does exactly this: same FK chain, plus a viewplanning constraint on the end-effector frame.
 
 ## Algebraic Propagated States
 
