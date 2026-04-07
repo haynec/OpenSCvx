@@ -464,11 +464,5 @@ if __name__ == "__main__":
         loop=True,
     )
 
-    print()
-    print("Viser server running — open the URL above in your browser.")
-    print("Press Ctrl+C to exit.")
-    try:
-        while True:
-            pass
-    except KeyboardInterrupt:
-        pass
+    # Keep server running
+    server.sleep_forever()
