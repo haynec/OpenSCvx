@@ -1,8 +1,9 @@
-from typing import Optional, Union
+from typing import Any, List, Optional, Union
 
 import numpy as np
+from pydantic import ConfigDict, field_validator
 
-from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.expr.state import State, StateSpec
 from openscvx.symbolic.expr.variable import Variable
 
 
@@ -246,3 +247,88 @@ class Time(State):
         if self._max is not None:
             parts.append(f"max={self._max[0]}")
         return f"Time({', '.join(parts)})"
+
+
+# =============================================================================
+# Pydantic spec for YAML / JSON / dict validation
+# =============================================================================
+
+
+def _parse_time_boundary(val: Any) -> Any:
+    """Convert a YAML time boundary to the Time constructor format."""
+    if isinstance(val, list) and len(val) == 2 and isinstance(val[0], str):
+        return (str(val[0]), float(val[1]))
+    return val
+
+
+class TimeSpec(StateSpec):
+    """Validates Time configuration from YAML/JSON/dict input.
+
+    Extends :class:`StateSpec` with time-specific fields.  ``name`` and
+    ``shape`` are fixed (``"time"`` and ``[1]``), and ``initial``/``final``
+    are required (a Time must have boundary conditions).
+
+    YAML scalars and ``[tag, value]`` pairs are normalised into the
+    ``List`` forms that :class:`StateSpec` expects via ``field_validator``
+    so that no field type overrides are needed.
+    """
+
+    # Time is always named "time" with shape (1,)
+    name: str = "time"
+    shape: List[int] = [1]
+
+    # Required for Time (StateSpec has these Optional; re-declared without
+    # a default so pydantic treats them as required).
+    initial: Optional[List[Any]]
+    final: Optional[List[Any]]
+
+    # Required for Time
+    min: Optional[List[float]]
+    max: Optional[List[float]]
+
+    # Time-specific fields
+    uniform_time_grid: bool = False
+    time_dilation_min: Optional[float] = None
+    time_dilation_max: Optional[float] = None
+    time_dilation_guess: Optional[List[float]] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("initial", "final", mode="before")
+    @classmethod
+    def _wrap_scalar_boundary(cls, v: Any) -> Any:
+        """Wrap a scalar or ``[tag, value]`` pair into a single-element list."""
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            return [v]
+        # bare [tag, value] pair like ["minimize", 10.0]
+        if len(v) == 2 and isinstance(v[0], str) and not isinstance(v[1], list):
+            return [v]
+        return v
+
+    @field_validator("min", "max", mode="before")
+    @classmethod
+    def _wrap_scalar_bound(cls, v: Any) -> Any:
+        """Wrap a scalar float into a single-element list."""
+        if v is None:
+            return v
+        if not isinstance(v, list):
+            return [float(v)]
+        return v
+
+    def to_time(self) -> "Time":
+        return Time(
+            initial=_parse_time_boundary(self.initial[0]) if self.initial else None,
+            final=_parse_time_boundary(self.final[0]) if self.final else None,
+            min=self.min[0] if self.min else None,
+            max=self.max[0] if self.max else None,
+            uniform_time_grid=self.uniform_time_grid,
+            time_dilation_min=self.time_dilation_min,
+            time_dilation_max=self.time_dilation_max,
+            time_dilation_guess=(
+                np.asarray(self.time_dilation_guess, dtype=float)
+                if self.time_dilation_guess is not None
+                else None
+            ),
+        )

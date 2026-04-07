@@ -56,8 +56,8 @@ mass.scaling_min = np.array([1700])
 # mass.scaling_max = np.array([1700])
 mass.guess = np.linspace(mass.initial, 1690, n).reshape(-1, 1)
 
-# Define control
-thrust = ox.Control("thrust", shape=(3,))  # Thrust force vector [Tx, Ty, Tz]
+# Define control — thrust force vector [Tx, Ty, Tz]
+thrust = ox.Control("thrust", shape=(3,), parameterization="ZOH")
 
 T_bar = 3.1 * 1e3
 T1 = 0.3 * T_bar
@@ -143,11 +143,11 @@ problem = Problem(
     N=n,
     algorithm={
         "autotuner": ox.RampProximalWeight(ramp_factor=1.04, lam_prox_max=1e2),
-        "lam_cost": 5e-1,
-        "lam_vc": 1.5e0,
-        "lam_prox": 2e-1,
+        "lam_cost": 1 / 3,
+        "lam_vc": 2e0,
+        "lam_prox": 2 / 15,
     },
-    discretizer={"dis_type": "ZOH", "ode_solver": "Dopri8"},
+    discretizer={"ode_solver": "Dopri8"},
 )
 
 plotting_dict = {

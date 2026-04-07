@@ -1,10 +1,10 @@
 import hashlib
 from enum import Enum
-from typing import Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 
-from .variable import Variable
+from .variable import Variable, VariableSpec
 
 
 class BoundaryType(str, Enum):
@@ -650,3 +650,55 @@ class State(Variable):
             Concise string showing the state name and shape.
         """
         return f"State('{self.name}', shape={self.shape})"
+
+
+# =============================================================================
+# Pydantic spec for YAML / JSON / dict validation
+# =============================================================================
+
+
+def _parse_boundary(arr: list) -> list:
+    """Convert YAML boundary arrays to the State setter format.
+
+    Plain numbers stay as-is (fixed).  Two-element lists like
+    ``[free, 5.0]`` are converted to tuples ``("free", 5.0)``.
+
+    A bare ``[tag, value]`` pair (e.g. ``[free, 5.0]`` for a shape-[1]
+    state) is auto-wrapped so that both ``[free, 5.0]`` and
+    ``[[free, 5.0]]`` produce the same result.
+    """
+    if len(arr) == 2 and isinstance(arr[0], str) and not isinstance(arr[1], list):
+        arr = [arr]
+
+    result: list = []
+    for item in arr:
+        if isinstance(item, list) and len(item) == 2 and isinstance(item[0], str):
+            result.append((str(item[0]), float(item[1])))
+        else:
+            result.append(item)
+    return result
+
+
+class StateSpec(VariableSpec):
+    """Validates State configuration from YAML/JSON/dict input."""
+
+    initial: Optional[List[Any]] = None
+    final: Optional[List[Any]] = None
+
+    def to_state(self) -> "State":
+        state = State(self.name, shape=tuple(self.shape))
+        if self.min is not None:
+            state.min = np.asarray(self.min, dtype=float)
+        if self.max is not None:
+            state.max = np.asarray(self.max, dtype=float)
+        if self.initial is not None:
+            state.initial = _parse_boundary(self.initial)
+        if self.final is not None:
+            state.final = _parse_boundary(self.final)
+        if self.guess is not None:
+            state.guess = np.asarray(self.guess, dtype=float)
+        if self.scaling_min is not None:
+            state.scaling_min = np.asarray(self.scaling_min, dtype=float)
+        if self.scaling_max is not None:
+            state.scaling_max = np.asarray(self.scaling_max, dtype=float)
+        return state

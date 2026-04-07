@@ -471,7 +471,7 @@ class ExprParser:
         parsed with the placeholders temporarily added to the symbol table.
         """
         from openscvx.symbolic.expr.control import Control
-        from openscvx.symbolic.expr.expr import Parameter
+        from openscvx.symbolic.expr.parameter import Parameter
         from openscvx.symbolic.expr.state import State
         from openscvx.symbolic.expr.vmap import Vmap, _Placeholder
 

@@ -3,6 +3,10 @@ Automatically discover and test all examples in the examples/ directory.
 
 This test discovers all Python files in examples/ that define a 'problem' variable
 and validates that they converge successfully.
+
+Before each run, JAX floating-point settings are synced to each problem's
+``Problem._float_dtype`` so behavior matches executing that example file on its own
+(see :func:`sync_jax_float_config_for_problem`).
 """
 
 import importlib.util
@@ -49,13 +53,20 @@ TIMING_BOUNDS = {
     },
 }
 
-FLOAT_DATA_TYPES = {
-    "drone_logo": "float64",
-    "abstract_stl_integer_variable": "float64",
-    "car_dubins_car_obstacle_stl": "float64",
-    "car_dubins_car_waypoint_stl": "float64",
-    "car_dubins_car_stl_or": "float64",
-}
+
+def sync_jax_float_config_for_problem(problem) -> None:
+    """Align global JAX + lowerer dtype with ``problem`` (same as running the example script alone).
+
+    Discovery imports every example in one process; each :class:`~openscvx.problem.Problem`
+    mutates ``jax_enable_x64`` and ``set_default_float_dtype`` at construction time. Before
+    ``initialize()`` we restore the settings for *this* problem so tests match a manual run.
+    """
+    from openscvx.symbolic.lowerers.jax.logic import set_default_float_dtype
+
+    float_dtype = getattr(problem, "_float_dtype", "float32")
+    enable_x64 = float_dtype.lower() in ("float64", "f64", "double")
+    jax.config.update("jax_enable_x64", enable_x64)
+    set_default_float_dtype(float_dtype)
 
 
 def discover_examples():
@@ -128,11 +139,7 @@ def test_example(name, metadata):
     5. Check timing bounds (if specified for this example)
     """
     problem = metadata["problem"]
-    if name in FLOAT_DATA_TYPES:
-        if "float64" == FLOAT_DATA_TYPES[name]:
-            jax.config.update("jax_enable_x64", True)
-        else:
-            jax.config.update("jax_enable_x64", False)
+    sync_jax_float_config_for_problem(problem)
 
     # Disable printing for cleaner test output
     if hasattr(problem.settings, "dev"):

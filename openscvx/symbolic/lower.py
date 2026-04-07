@@ -54,6 +54,9 @@ Example:
 
 from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple, Union
 
+if TYPE_CHECKING:
+    from openscvx.expert.byof import ByofSpec
+
 import cvxpy as cp
 import jax
 import numpy as np
@@ -210,9 +213,7 @@ def _augment_impulsive_constraints(
         return
     added = []
     for control in controls:
-        is_imp = getattr(control, "is_impulsive", False)
-        is_impulsive = bool(is_imp.any()) if hasattr(is_imp, "any") else bool(is_imp)
-        if not is_impulsive:
+        if control.parameterization != "impulsive":
             continue
         control_nodes = getattr(control, "nodes", None)
         if control_nodes is None:
@@ -698,7 +699,7 @@ def _contains_node_reference(expr: Expr) -> bool:
 def lower_symbolic_problem(
     problem: "SymbolicProblem",
     solver: "ConvexSolver",
-    byof: Optional[dict] = None,
+    byof: Optional["ByofSpec"] = None,
 ) -> LoweredProblem:
     """Lower symbolic problem specification to executable JAX and CVXPy code.
 

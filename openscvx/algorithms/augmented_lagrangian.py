@@ -1,9 +1,10 @@
 """Autotuning functions for SCP (Successive Convex Programming) parameters."""
 
 from copy import deepcopy
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Literal
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 from openscvx.utils.printing import (
@@ -11,7 +12,6 @@ from openscvx.utils.printing import (
     Verbosity,
     color_acceptance_ratio,
     color_adaptive_state,
-    color_J_nonlin,
 )
 
 from .base import AutotuningBase
@@ -19,7 +19,8 @@ from .base import AutotuningBase
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
-    from .base import AlgorithmState, CandidateIterate, Weights
+    from .base import AlgorithmState, CandidateIterate
+    from .weights import Weights
 
 
 class AugmentedLagrangian(AutotuningBase):
@@ -33,8 +34,8 @@ class AugmentedLagrangian(AutotuningBase):
     """
 
     COLUMNS: List[Column] = [
-        Column("J_nonlin", "J_nonlin", 8, "{: .1e}", color_J_nonlin, Verbosity.STANDARD),
-        Column("J_lin", "J_lin", 8, "{: .1e}", color_J_nonlin, Verbosity.STANDARD),
+        Column("J_nonlin", "J_nonlin", 8, "{: .1e}", None, Verbosity.STANDARD),
+        Column("J_lin", "J_lin", 8, "{: .1e}", None, Verbosity.STANDARD),
         Column("pred_reduction", "pred_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL),
         Column("actual_reduction", "act_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL),
         Column(
@@ -52,17 +53,17 @@ class AugmentedLagrangian(AutotuningBase):
     def __init__(
         self,
         rho_init: float = 1.0,
-        rho_max: float = 1e6,
+        rho_max: float = 1e2,
         gamma_1: float = 2.0,
         gamma_2: float = 0.5,
         eta_0: float = 1e-2,
         eta_1: float = 1e-1,
         eta_2: float = 0.8,
-        ep: float = 0.5,
+        ep: float = 0.99,
         eta_lambda: float = 1e1,
         lam_vc_max: float = 1e5,
         lam_prox_min: float = 1e-3,
-        lam_prox_max: float = 2e5,
+        lam_prox_max: float = 1e4,
         lam_cost_drop: int = -1,
         lam_cost_relax: float = 1.0,
     ):
@@ -143,11 +144,6 @@ class AugmentedLagrangian(AutotuningBase):
         lam_prox: np.ndarray,
     ) -> np.ndarray:
         """
-        !!! warning
-            This code is WIP and may not be correct.
-
-        TODO: (haynec) Flush this out.
-
         Update virtual buffer penalty weights for nodal constraints.
 
         Evaluates each nodal constraint to obtain violation
@@ -192,11 +188,6 @@ class AugmentedLagrangian(AutotuningBase):
         lam_prox: np.ndarray,
     ) -> np.ndarray:
         """
-        !!! warning
-            This code is WIP and may not be correct.
-
-        TODO: (haynec) Flush this out.
-
         Update virtual buffer penalty weights for cross-node constraints.
 
         Evaluates each cross-node constraint to obtain total violation
@@ -215,7 +206,7 @@ class AugmentedLagrangian(AutotuningBase):
             if nu > self.ep:
                 lam_vb_new[idx] = current + nu * scale
             else:
-                lam_vb_new[idx] = current + (nu**2) / self.ep * scale
+                lam_vb_new[idx] = current + ((nu**2) / self.ep) * scale
 
         return np.minimum(self.lam_vc_max, lam_vb_new)
 
@@ -236,7 +227,7 @@ class AugmentedLagrangian(AutotuningBase):
             nodal_constraints: Lowered JAX constraints
             settings: Configuration object containing adaptation parameters
             params: Dictionary of problem parameters
-            weights: Normalized initial weights from the algorithm
+            weights: Initial weights from the algorithm
         """
         # Calculate nonlinear penalty for current candidate
         candidate_x_prop = (
@@ -321,6 +312,12 @@ class AugmentedLagrangian(AutotuningBase):
                 candidate.lam_vc = self._update_virtual_control_weights(
                     candidate, candidate_x_prop, settings, state.lam_vc, candidate.lam_prox
                 )
+                candidate.lam_vb_nodal = self._update_virtual_buffer_nodal_weights(
+                    candidate, nodal_constraints, params, state.lam_vb_nodal, candidate.lam_prox
+                )
+                candidate.lam_vb_cross = self._update_virtual_buffer_cross_weights(
+                    candidate, nodal_constraints, params, state.lam_vb_cross, candidate.lam_prox
+                )
 
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Higher"
@@ -332,6 +329,12 @@ class AugmentedLagrangian(AutotuningBase):
                 candidate.lam_vc = self._update_virtual_control_weights(
                     candidate, candidate_x_prop, settings, state.lam_vc, candidate.lam_prox
                 )
+                candidate.lam_vb_nodal = self._update_virtual_buffer_nodal_weights(
+                    candidate, nodal_constraints, params, state.lam_vb_nodal, candidate.lam_prox
+                )
+                candidate.lam_vb_cross = self._update_virtual_buffer_cross_weights(
+                    candidate, nodal_constraints, params, state.lam_vb_cross, candidate.lam_prox
+                )
 
                 state.accept_solution(candidate)
                 adaptive_state = "Accept Constant"
@@ -342,6 +345,12 @@ class AugmentedLagrangian(AutotuningBase):
                 # Update virtual control weight matrix
                 candidate.lam_vc = self._update_virtual_control_weights(
                     candidate, candidate_x_prop, settings, state.lam_vc, candidate.lam_prox
+                )
+                candidate.lam_vb_nodal = self._update_virtual_buffer_nodal_weights(
+                    candidate, nodal_constraints, params, state.lam_vb_nodal, candidate.lam_prox
+                )
+                candidate.lam_vb_cross = self._update_virtual_buffer_cross_weights(
+                    candidate, nodal_constraints, params, state.lam_vb_cross, candidate.lam_prox
                 )
 
                 state.accept_solution(candidate)
@@ -356,3 +365,33 @@ class AugmentedLagrangian(AutotuningBase):
             adaptive_state = "Initial"
 
         return adaptive_state
+
+
+# =============================================================================
+# Pydantic spec for dict / YAML validation
+# =============================================================================
+
+
+class AugmentedLagrangianSpec(BaseModel):
+    """Validates AugmentedLagrangian configuration from dict/YAML input."""
+
+    type: Literal["AugmentedLagrangian"] = "AugmentedLagrangian"
+    rho_init: float = 1.0
+    rho_max: float = 1e2
+    gamma_1: float = 2.0
+    gamma_2: float = 0.5
+    eta_0: float = 1e-2
+    eta_1: float = 1e-1
+    eta_2: float = 0.8
+    ep: float = 0.99
+    eta_lambda: float = 1e1
+    lam_vc_max: float = 1e5
+    lam_prox_min: float = 1e-3
+    lam_prox_max: float = 1e4
+    lam_cost_drop: int = -1
+    lam_cost_relax: float = 1.0
+
+    model_config = ConfigDict(extra="forbid")
+
+    def build(self) -> AugmentedLagrangian:
+        return AugmentedLagrangian(**self.model_dump(exclude={"type"}, exclude_unset=True))

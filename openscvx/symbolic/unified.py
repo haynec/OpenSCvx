@@ -318,8 +318,12 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
 
             thrust = ox.Control("thrust", shape=(2,))  # continuous, user-defined
             time_dilation = ox.Control("_time_dilation", shape=(1,))  # continuous, augmented
-            delta_v = ox.Control("delta_v", shape=(2,), impulsive=True, nodes=[0, 20])
-            delta_v_aug = ox.Control("_delta_v_bias", shape=(1,), impulsive=True, nodes=[0, 20])
+            delta_v = ox.Control(
+                "delta_v", shape=(2,), parameterization="impulsive", nodes=[0, 20]
+            )
+            delta_v_aug = ox.Control(
+                "_delta_v_bias", shape=(1,), parameterization="impulsive", nodes=[0, 20]
+            )
 
             unified = unify_controls([time_dilation, delta_v_aug, thrust, delta_v], name="u")
 
@@ -347,9 +351,7 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         return UnifiedControl(name=name, shape=(0,))
 
     def _is_impulsive_control(ctrl: Control) -> bool:
-        is_imp = getattr(ctrl, "is_impulsive", False)
-        is_imp_arr = np.asarray(is_imp, dtype=bool).reshape(-1)
-        return bool(np.any(is_imp_arr))
+        return ctrl.parameterization == "impulsive"
 
     # Reorder controls to mirror unified control layout assumptions:
     # 1) continuous controls first, 2) impulsive controls second.
@@ -420,7 +422,7 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
     # Build full arrays using scaling where available, min/max otherwise
     unified_scaling_min = None
     unified_scaling_max = None
-    unified_is_impulsive = np.zeros((total_shape,), dtype=bool)
+    unified_parameterization = np.full((total_shape,), None, dtype=object)
 
     # Check if any control has scaling
     has_any_scaling = any(
@@ -454,30 +456,36 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         unified_scaling_max = np.concatenate(scaling_max_list)
 
     nodes = {}
-    is_impulsive_list = []
+    parameterization_list = []
     for control in sorted_controls:
-        is_impulsive_block = np.asarray(control.is_impulsive, dtype=bool).reshape(-1)
-        if is_impulsive_block.size != int(control.shape[0]):
-            raise ValueError(
-                f"Control '{control.name}' impulsive mask has size {is_impulsive_block.size}, "
-                f"expected {control.shape[0]}."
-            )
+        n = int(control.shape[0])
+        parameterization_block = np.full(n, control.parameterization, dtype=object)
+        if control.parameterization == "impulsive" and control.nodes is not None:
+            nodes[control.name] = list(control.nodes)
+        parameterization_list.append(parameterization_block)
 
-        if np.any(is_impulsive_block):
-            if not np.all(is_impulsive_block):
-                raise ValueError(
-                    f"Control '{control.name}' mixes continuous and impulsive components. "
-                    "Use separate Control objects."
-                )
-            if control.nodes is not None:
-                nodes[control.name] = list(control.nodes)
-
-        is_impulsive_list.append(is_impulsive_block)
-
-    if is_impulsive_list:
-        unified_is_impulsive = np.concatenate(is_impulsive_list)
+    if parameterization_list:
+        unified_parameterization = np.concatenate(parameterization_list).astype(object)
     if not nodes:
         nodes = None
+
+    # Build per-element FOH mask from ``Control.parameterization`` (FOH/ZOH only).
+    # 1.0 = FOH, 0.0 = ZOH, nan = unset (defer to discretizer dis_type).
+    any_foh_zoh_set = any(c.parameterization in ("foh", "zoh") for c in sorted_controls)
+    if any_foh_zoh_set:
+        foh_parts: list[np.ndarray] = []
+        for control in sorted_controls:
+            n = control.shape[0]
+            p = control.parameterization
+            if p == "foh":
+                foh_parts.append(np.ones(n))
+            elif p == "zoh":
+                foh_parts.append(np.zeros(n))
+            else:
+                foh_parts.append(np.full(n, np.nan))
+        unified_foh_mask: np.ndarray | None = np.concatenate(foh_parts)
+    else:
+        unified_foh_mask = None
 
     return UnifiedControl(
         name=name,
@@ -491,6 +499,7 @@ def unify_controls(controls: List[Control], name: str = "unified_control") -> Un
         time_dilation_slice=time_dilation_slice,
         scaling_min=unified_scaling_min,
         scaling_max=unified_scaling_max,
-        is_impulsive=unified_is_impulsive,
+        parameterization=unified_parameterization,
         nodes=nodes,
+        foh_mask=unified_foh_mask,
     )

@@ -26,21 +26,21 @@ def _hash_byof(byof: Optional["ByofSpec"]) -> bytes:
         return b""
 
     codes = []
-    for f in byof.get("dynamics", {}).values():
+    for f in byof.dynamics.values():
         codes.append(f.__code__.co_code)
         codes.append(repr(f.__code__.co_consts).encode())
-    for f in byof.get("dynamics_discrete", {}).values():
+    for f in byof.dynamics_discrete.values():
         codes.append(f.__code__.co_code)
         codes.append(repr(f.__code__.co_consts).encode())
-    for c in byof.get("nodal_constraints", []):
-        codes.append(c["constraint_fn"].__code__.co_code)
-        codes.append(repr(c["constraint_fn"].__code__.co_consts).encode())
-    for f in byof.get("cross_nodal_constraints", []):
+    for c in byof.nodal_constraints:
+        codes.append(c.constraint_fn.__code__.co_code)
+        codes.append(repr(c.constraint_fn.__code__.co_consts).encode())
+    for f in byof.cross_nodal_constraints:
         codes.append(f.__code__.co_code)
         codes.append(repr(f.__code__.co_consts).encode())
-    for c in byof.get("ctcs_constraints", []):
-        codes.append(c["constraint_fn"].__code__.co_code)
-        codes.append(repr(c["constraint_fn"].__code__.co_consts).encode())
+    for c in byof.ctcs_constraints:
+        codes.append(c.constraint_fn.__code__.co_code)
+        codes.append(repr(c.constraint_fn.__code__.co_consts).encode())
 
     return b"".join(codes)
 

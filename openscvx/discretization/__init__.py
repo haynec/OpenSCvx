@@ -16,10 +16,10 @@ Jacobians and compact variational integration when sparsity patterns exist).
 :class:`LinearizeDiscretize` is the dense linearize-then-discretize scheme.
 """
 
-import inspect
 from typing import Any
 
-from .base import Discretizer
+from .base import _DISCRETIZER_MAP, Discretizer, DiscretizerSpec, DisType
+from .discretize_linearize import DiscretizeLinearizeVectorize, VectorizeDiscretizeLinearize
 from .linearize_discretize import (
     LinearizeDiscretize,
     calculate_impulsive_discretization,
@@ -29,69 +29,43 @@ from .linearize_discretize_sparse import LinearizeDiscretizeSparse
 from .sparse_utils import color_columns, make_sparse_jacobian_fns
 
 # ---------------------------------------------------------------------------
-# Spec resolver — turn a dict into a Discretizer instance
+# Populate the discretizer class map now that all classes are imported
 # ---------------------------------------------------------------------------
 
-_DISCRETIZER_MAP = {
-    "LinearizeDiscretize": LinearizeDiscretize,
-    "LinearizeDiscretizeSparse": LinearizeDiscretizeSparse,
-}
+_DISCRETIZER_MAP.update(
+    {
+        "VectorizeDiscretizeLinearize": VectorizeDiscretizeLinearize,
+        "DiscretizeLinearizeVectorize": DiscretizeLinearizeVectorize,
+        "LinearizeDiscretize": LinearizeDiscretize,
+        "LinearizeDiscretizeSparse": LinearizeDiscretizeSparse,
+    }
+)
+
+DEFAULT_DISCRETIZER_TYPE = "VectorizeDiscretizeLinearize"
 
 
-def _resolve_discretizer(val: Any) -> Discretizer:
-    """Resolve a discretizer specification into an instance.
+def resolve_discretizer_config(val: Any) -> DiscretizerSpec:
+    """Validate a dict/Spec into a :class:`DiscretizerSpec` instance.
 
-    Accepted forms:
-
-    * **instance** — already-constructed :class:`Discretizer` (pass-through).
-    * **dict** — keyword arguments passed to the selected discretizer class.
-      An optional ``"type"`` key selects the class (defaults to
-      :class:`LinearizeDiscretizeSparse`).
-
-    Examples::
-
-        # Dict with keyword overrides (default class: LinearizeDiscretizeSparse)
-        _resolve_discretizer({"dis_type": "ZOH", "ode_solver": "Dopri8"})
-
-        # Configure integrator behavior (forwarded to Diffrax / diffeqsolve)
-        _resolve_discretizer(
-            {"diffrax_kwargs": {"num_substeps": 100, "max_steps": 20_000}}
-        )
-
-        # Dict with explicit dense discretizer
-        _resolve_discretizer({"type": "LinearizeDiscretize", "dis_type": "ZOH"})
-
-        # Instance pass-through
-        _resolve_discretizer(LinearizeDiscretize(dis_type="ZOH"))
+    Injects the default ``type`` (``VectorizeDiscretizeLinearize``) when the
+    input dict omits it, preserving backwards compatibility.
     """
-    if isinstance(val, Discretizer):
+    if isinstance(val, DiscretizerSpec):
         return val
-
-    if not isinstance(val, dict):
-        raise TypeError(f"Expected a Discretizer instance or dict, got {type(val).__name__}")
-
-    kwargs = dict(val)  # copy to avoid mutating caller's dict
-    name = kwargs.pop("type", "LinearizeDiscretize")
-
-    cls = _DISCRETIZER_MAP.get(name)
-    if cls is None:
-        raise ValueError(
-            f"Unknown discretizer {name!r}; expected one of {sorted(_DISCRETIZER_MAP)}"
-        )
-
-    try:
-        return cls(**kwargs)
-    except TypeError as e:
-        valid = list(inspect.signature(cls.__init__).parameters.keys())
-        valid.remove("self")
-        raise TypeError(f"Invalid discretizer keyword argument: {e}. Valid keys: {valid}") from None
+    if isinstance(val, dict) and "type" not in val:
+        val = {**val, "type": DEFAULT_DISCRETIZER_TYPE}
+    return DiscretizerSpec.model_validate(val)
 
 
 __all__ = [
+    "DisType",
     "Discretizer",
+    "DiscretizerSpec",
+    "DiscretizeLinearizeVectorize",
     "LinearizeDiscretize",
     "LinearizeDiscretizeSparse",
-    "_resolve_discretizer",
+    "VectorizeDiscretizeLinearize",
+    "resolve_discretizer_config",
     "calculate_impulsive_discretization",
     "color_columns",
     "get_impulsive_discretization_solver",

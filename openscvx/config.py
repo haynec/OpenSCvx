@@ -1,7 +1,8 @@
-from dataclasses import dataclass, field, fields
-from typing import Optional
+from dataclasses import dataclass
+from typing import Any, ClassVar, Dict, Optional
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 
 from openscvx.lowered.unified import UnifiedControl, UnifiedState
 
@@ -12,14 +13,13 @@ def get_affine_scaling_matrices(n, minimum, maximum):
     return S, c
 
 
-@dataclass
-class DevConfig:
+class DevConfig(BaseModel):
     """Configuration class for development settings.
 
     This class defines the parameters used for development and debugging
     purposes.
 
-    Args:
+    Attributes:
         profiling: Whether to enable profiling for performance
             analysis. Defaults to False.
         debug: Disables all precompilation so you can place
@@ -37,15 +37,16 @@ class DevConfig:
     printing: bool = True
     verbosity: int = 2
 
+    model_config = ConfigDict(extra="forbid")
 
-@dataclass
-class PropagationConfig:
+
+class PropagationConfig(BaseModel):
     """Configuration class for propagation settings.
 
     This class defines the parameters required for propagating the nonlinear
     system dynamics using the optimal control sequence.
 
-    Args:
+    Attributes:
         inter_sample: How dense the propagation within multishot
             discretization should be. Defaults to 30.
         dt: The time step for propagation. Defaults to 0.01.
@@ -63,9 +64,20 @@ class PropagationConfig:
     dt: float = 0.01
     solver: str = "Dopri8"
     max_tau_len: int = 1000
-    args: dict = field(default_factory=dict)
+    args: Dict[str, Any] = {}
     atol: float = 1e-3
     rtol: float = 1e-6
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class SettingsSpec(BaseModel):
+    """Validates the ``settings:`` block from YAML/JSON input."""
+
+    dev: Optional[DevConfig] = None
+    prp: Optional[PropagationConfig] = None
+
+    model_config = ConfigDict(extra="forbid")
 
 
 @dataclass(init=False)
@@ -224,7 +236,13 @@ class Config:
     dev: DevConfig
 
     # Subsections derived from the lowered problem — not user-configurable.
-    _INTERNAL_FIELDS = frozenset({"sim"})
+    _INTERNAL_FIELDS: ClassVar[frozenset] = frozenset({"sim"})
+
+    # Maps configurable section names to their pydantic model classes.
+    _SECTION_MODELS: ClassVar[Dict[str, type]] = {
+        "prp": PropagationConfig,
+        "dev": DevConfig,
+    }
 
     def apply_dict(self, settings: dict) -> None:
         """Apply a nested settings dict to this :class:`Config`.
@@ -232,25 +250,23 @@ class Config:
         Valid subsection names are discovered automatically from the
         dataclass fields (minus internal ones like ``sim``).
 
+        Each subsection is validated through its pydantic model, so
+        typos and wrong types are caught immediately (``extra="forbid"``).
+
         Example::
 
             config.apply_dict({
                 "dev": {"printing": False, "verbosity": 1},
             })
 
-        Dict values are handled contextually:
-
-        * If the target attribute is itself a ``dict`` (e.g.
-          ``solver_args``), the incoming dict **replaces** it.
-        * Otherwise the incoming dict **recurses** into the sub-object.
-
         Args:
             settings: ``{section: {key: value, ...}, ...}``
 
         Raises:
-            ValueError: On unknown section names or attribute names.
+            ValueError: On unknown section names.
+            ValidationError: On unknown keys or wrong types within a section.
         """
-        configurable = {f.name for f in fields(self)} - self._INTERNAL_FIELDS
+        configurable = set(self._SECTION_MODELS)
 
         for section, values in settings.items():
             if section not in configurable:
@@ -261,21 +277,8 @@ class Config:
                 raise ValueError(
                     f"Expected a mapping for settings.{section}, got {type(values).__name__}"
                 )
-            _apply_dict_to(getattr(self, section), values, prefix=section)
-
-
-def _apply_dict_to(obj: object, values: dict, prefix: str) -> None:
-    """Recursively apply *values* as attributes on *obj*.
-
-    * Plain values → ``setattr``.
-    * Dict values where the current attribute is a ``dict`` → ``setattr``
-      (replacement, e.g. ``solver_args``).
-    * Dict values where the current attribute is an object → recurse.
-    """
-    for key, val in values.items():
-        if not hasattr(obj, key):
-            raise ValueError(f"Unknown setting '{prefix}.{key}'")
-        if isinstance(val, dict) and not isinstance(getattr(obj, key), dict):
-            _apply_dict_to(getattr(obj, key), val, prefix=f"{prefix}.{key}")
-        else:
-            setattr(obj, key, val)
+            # Merge current values with overrides and re-validate through pydantic.
+            current = getattr(self, section)
+            model_cls = self._SECTION_MODELS[section]
+            updated = model_cls.model_validate({**current.model_dump(), **values})
+            setattr(self, section, updated)

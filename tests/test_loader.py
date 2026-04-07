@@ -14,9 +14,10 @@ from pathlib import Path
 import jax
 import numpy as np
 import pytest
+from pydantic import ValidationError
 
 from openscvx import Problem
-from openscvx.loader import load_dict, load_json, load_yaml
+from openscvx.loader import ProblemSpec, load_dict, load_json, load_yaml
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
 from tests.test_brachistochrone import (
     _assert_brachistochrone_accuracy,
@@ -69,6 +70,39 @@ def _validate_result(result, problem, label="YAML"):
     )
     _print_comparison_metrics(comparison, label)
     _assert_brachistochrone_accuracy(comparison, problem, result)
+    # Keep loader tests focused on correctness, not machine-dependent runtime.
+    time_error_pct = comparison["time_error_pct"]
+    assert time_error_pct < 1.0, (
+        f"Time error {time_error_pct:.2f}% exceeds 1% threshold "
+        f"(analytical: {comparison['analytical_time']:.4f}s, "
+        f"numerical: {comparison['numerical_time']:.4f}s)"
+    )
+
+    assert comparison["numerical_time"] >= comparison["analytical_time"] * 0.95, (
+        f"Numerical time {comparison['numerical_time']:.4f}s is suspiciously "
+        f"better than analytical {comparison['analytical_time']:.4f}s"
+    )
+
+    position_rmse = comparison["position_rmse"]
+    assert position_rmse < 0.05, f"Position RMSE {position_rmse:.4f} exceeds threshold of 0.05"
+
+    max_pos_error = comparison["position_max_error"]
+    assert max_pos_error < 0.1, (
+        f"Maximum position error {max_pos_error:.4f} exceeds threshold of 0.1"
+    )
+
+    velocity_rmse = comparison["velocity_rmse"]
+    assert velocity_rmse < 0.05, f"Velocity RMSE {velocity_rmse:.4f} exceeds threshold of 0.05 m/s"
+
+    if "discretization_history" in result:
+        num_iters = len(result["discretization_history"])
+        assert num_iters < 27, f"Took {num_iters} SCP iterations (expected < 27)"
+
+    # Light sanity guard for unexpected pathological runs without enforcing
+    # strict platform-dependent performance budgets.
+    assert problem.timing_init < 30.0, (
+        f"Initialization took {problem.timing_init:.2f}s (expected < 30s)"
+    )
     return comparison
 
 
@@ -146,7 +180,7 @@ def test_load_file(fmt):
     kwargs = loader(FIXTURE_DIR / filename)
     problem = Problem(
         **kwargs,
-        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
+        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
     )
     result = _configure_and_solve(problem)
     _validate_result(result, problem, f"Brachistochrone {fmt.upper()}")
@@ -207,7 +241,7 @@ def test_constraint_types(constraint_type):
     kwargs = load_dict(data)
     problem = Problem(
         **kwargs,
-        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
+        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
     )
     result = _configure_and_solve(problem)
     _validate_result(result, problem, f"YAML {constraint_type}")
@@ -248,7 +282,7 @@ def test_propagation():
     kwargs = load_dict(data)
     problem = Problem(
         **kwargs,
-        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
+        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
     )
     result = _configure_and_solve(problem)
 
@@ -312,7 +346,7 @@ def test_cross_nodal(feasible):
     kwargs = load_dict(data)
     problem = Problem(
         **kwargs,
-        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1, "k_max": 50},
+        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0, "k_max": 50},
     )
 
     problem.settings.prp.dt = 0.01
@@ -333,3 +367,48 @@ def test_cross_nodal(feasible):
         _validate_result(result, problem, "YAML Cross-Nodal")
 
     jax.clear_caches()
+
+
+# =============================================================================
+# Spec validation — typos and wrong types caught by extra="forbid"
+# =============================================================================
+
+
+def test_typo_in_top_level_key():
+    """A misspelled top-level key (e.g. 'staets') should raise ValidationError."""
+    data = _base_dict()
+    data["staets"] = data.pop("states")
+    with pytest.raises(ValidationError, match="staets"):
+        ProblemSpec.model_validate(data)
+
+
+def test_typo_in_state_field():
+    """A misspelled field inside a state spec should raise ValidationError."""
+    data = _base_dict()
+    data["states"][0]["intial"] = data["states"][0].pop("initial")
+    with pytest.raises(ValidationError, match="intial"):
+        ProblemSpec.model_validate(data)
+
+
+def test_typo_in_time_field():
+    """A misspelled field inside the time spec should raise ValidationError."""
+    data = _base_dict()
+    data["time"]["unifrom_time_grid"] = data["time"].pop("uniform_time_grid")
+    with pytest.raises(ValidationError, match="unifrom_time_grid"):
+        ProblemSpec.model_validate(data)
+
+
+def test_typo_in_algorithm_field():
+    """A misspelled algorithm field should raise ValidationError."""
+    data = _base_dict()
+    data["algorithm"] = {"lam_cots": 1e-2}
+    with pytest.raises(ValidationError, match="lam_cots"):
+        ProblemSpec.model_validate(data)
+
+
+def test_wrong_type_for_N():
+    """Passing a non-integer N should raise ValidationError."""
+    data = _base_dict()
+    data["N"] = "fifty"
+    with pytest.raises(ValidationError, match="N"):
+        ProblemSpec.model_validate(data)

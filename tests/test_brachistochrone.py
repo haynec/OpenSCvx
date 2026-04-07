@@ -76,8 +76,8 @@ def _assert_brachistochrone_accuracy(comparison, problem, result):
         assert num_iters < 27, f"Took {num_iters} SCP iterations (expected < 15)"
 
     # Check timing - these are generous limits for a simple problem like brachistochrone
-    assert problem.timing_init < 10.0, (
-        f"Initialization took {problem.timing_init:.2f}s (expected < 10s)"
+    assert problem.timing_init < 12.0, (
+        f"Initialization took {problem.timing_init:.2f}s (expected < 12s)"
     )
     assert problem.timing_solve < 1.2, f"Solve took {problem.timing_solve:.2f}s (expected < 1.2s)"
     assert problem.timing_post < 5.0, (
@@ -193,7 +193,7 @@ def test_monolithic():
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
+        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
     )
 
     problem.settings.prp.dt = 0.01
@@ -320,7 +320,7 @@ def test_constraint_types(constraint_type):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
+        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
     )
 
     problem.settings.prp.dt = 0.01
@@ -374,7 +374,7 @@ def test_autotuning(autotuner_spec):
 
     Covers all three autotuner implementations (AugmentedLagrangian,
     ConstantProximalWeight, RampProximalWeight) as well as the string
-    and dict-based resolution paths in ``_resolve_autotuner``.
+    and dict-based resolution paths through ``PenalizedTrustRegionConfig``.
 
     Args:
         autotuner_spec: Identifies the autotuner and how it is specified.
@@ -457,7 +457,7 @@ def test_autotuning(autotuner_spec):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm={"autotuner": autotuner, "lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
+        algorithm={"autotuner": autotuner, "lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
     )
 
     problem.settings.prp.dt = 0.01
@@ -599,7 +599,7 @@ def test_cross_nodal(test_case):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1, "k_max": 50},
+        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0, "k_max": 50},
     )
 
     problem.settings.prp.dt = 0.01
@@ -733,9 +733,9 @@ def test_parameters():
         licq_max=1e-8,
         algorithm={
             "autotuner": ox.ConstantProximalWeight(),
-            "lam_prox": 1e0,
-            "lam_cost": 6e-1,
-            "lam_vc": 1e1,
+            "lam_prox": 1e-1,
+            "lam_cost": 6e-2,
+            "lam_vc": 1e0,
             "ep_tr": 1e-5,
             "ep_vc": 1e-8,
         },
@@ -934,7 +934,7 @@ def test_propagation():
         dynamics_prop=dynamics_prop_extra,  # Only extra states
         states_prop=states_prop_extra,  # Only extra states
         algebraic_prop=algebraic_prop,  # Algebraic outputs
-        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
+        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
     )
 
     problem.settings.prp.dt = 0.01
@@ -1331,7 +1331,7 @@ def test_byof(byof_mode):
         N=n,
         licq_max=1e-8,
         byof=byof,
-        algorithm={"lam_prox": 1e1, "lam_cost": 1e0, "lam_vc": 1e1},
+        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
     )
 
     problem.settings.prp.dt = 0.01

@@ -31,7 +31,7 @@ from .expr import Constant, Expr, Leaf
 from .state import State
 
 if TYPE_CHECKING:
-    from .expr import Parameter
+    from .parameter import Parameter
 
 # Type alias for a single batch source
 BatchSource = Union[np.ndarray, Constant, "Parameter", State, Control]
@@ -262,7 +262,7 @@ class Vmap(Expr):
                 data = ox.Parameter("data", shape=(3, n_samples))
                 ox.Vmap(lambda x: f(x), batch=data, axis=1)
         """
-        from .expr import Parameter
+        from .parameter import Parameter
 
         # Normalize input: convert single batch to list, then process each
         if isinstance(batch, (list, tuple)) and not isinstance(batch, np.ndarray):

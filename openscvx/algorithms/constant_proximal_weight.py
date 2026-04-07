@@ -1,6 +1,8 @@
 """Autotuning functions for SCP (Successive Convex Programming) parameters."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
+
+from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 
@@ -9,7 +11,8 @@ from .base import AutotuningBase
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
-    from .base import AlgorithmState, CandidateIterate, Weights
+    from .base import AlgorithmState, CandidateIterate
+    from .weights import Weights
 
 
 class ConstantProximalWeight(AutotuningBase):
@@ -44,7 +47,7 @@ class ConstantProximalWeight(AutotuningBase):
             nodal_constraints: Lowered JAX constraints
             settings: Configuration object containing adaptation parameters
             params: Dictionary of problem parameters
-            weights: Normalized initial weights from the algorithm
+            weights: Initial weights from the algorithm
 
         Returns:
             str: Adaptive state string (e.g., "Accept", "Reject")
@@ -60,3 +63,21 @@ class ConstantProximalWeight(AutotuningBase):
         candidate.lam_prox = state.lam_prox
         state.accept_solution(candidate)
         return "Accept Constant"
+
+
+# =============================================================================
+# Pydantic spec for dict / YAML validation
+# =============================================================================
+
+
+class ConstantProximalWeightSpec(BaseModel):
+    """Validates ConstantProximalWeight configuration from dict/YAML input."""
+
+    type: Literal["ConstantProximalWeight"] = "ConstantProximalWeight"
+    lam_cost_drop: int = -1
+    lam_cost_relax: float = 1.0
+
+    model_config = ConfigDict(extra="forbid")
+
+    def build(self) -> ConstantProximalWeight:
+        return ConstantProximalWeight(**self.model_dump(exclude={"type"}, exclude_unset=True))

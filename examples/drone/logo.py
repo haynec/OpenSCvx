@@ -357,10 +357,12 @@ problem = Problem(
     byof=byof,
     algorithm={
         "autotuner": {"type": "RampProximalWeight", "ramp_factor": 1.06, "lam_prox_max": 1e3},
-        "lam_vc": 1e3,
-        "lam_cost": 6e0,
+        "lam_prox": 1e-3,
+        "lam_vc": 1e0,
+        "lam_cost": 6e-3,
     },
     float_dtype="float64",
+    discretizer=ox.DiscretizeLinearizeVectorize(diffrax_kwargs={"atol": 1e-4}),
     solver={"solver_args": {"canon_backend": "COO", "enforce_dpp": True}},
 )
 

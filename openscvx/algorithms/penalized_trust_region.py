@@ -22,9 +22,10 @@ from openscvx.utils.printing import (
 )
 
 from .augmented_lagrangian import AugmentedLagrangian
-from .base import Algorithm, AlgorithmState, CandidateIterate, Weights
+from .base import Algorithm, AlgorithmState, CandidateIterate
 from .constant_proximal_weight import ConstantProximalWeight
 from .ramp_proximal_weight import RampProximalWeight
+from .weights import Weights
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
@@ -86,9 +87,9 @@ class PenalizedTrustRegion(Algorithm):
         self,
         autotuner: "AutotuningBase" = None,
         k_max: int = 200,
-        lam_prox: Union[float, Dict[str, Union[float, list]]] = 1e0,
-        lam_vc: Union[float, Dict[str, Union[float, list]]] = 1e1,
-        lam_cost: Union[float, Dict[str, float]] = 1e-1,
+        lam_prox: Union[float, Dict[str, Union[float, list]]] = 1e-1,
+        lam_vc: Union[float, Dict[str, Union[float, list]]] = 1e0,
+        lam_cost: Union[float, Dict[str, float]] = 1e-2,
         lam_vb: float = 0.0,
         ep_tr: float = 1e-4,
         ep_vb: float = 1e-4,
@@ -109,7 +110,7 @@ class PenalizedTrustRegion(Algorithm):
                 be scalars, 1-D arrays for per-component weighting, or
                 2-D arrays of shape ``(n_nodes, n_components)`` for
                 per-node-per-component weighting.  Variables not in the
-                dict default to ``1.0``. Defaults to 1.0.
+                dict default to ``1.0``. Defaults to 0.1.
             lam_vc: Virtual control penalty weight. Either a float
                 (applied uniformly to all states) or a dict mapping state
                 names to per-state weights, e.g.
@@ -117,13 +118,13 @@ class PenalizedTrustRegion(Algorithm):
                 be scalars, 1-D arrays for per-component weighting, or
                 2-D arrays of shape ``(n_nodes-1, n_components)`` for
                 per-node-per-component weighting.  States not in the dict
-                default to ``1.0``. Defaults to 10.0.
+                default to ``1.0``. Defaults to 1.0.
             lam_cost: Cost weight. Either a float (applied to all
                 minimize/maximize states) or a dict mapping state names
                 to per-state weights, e.g.
                 ``{"velocity": 1e-1, "time": 1e0}``.  Dict values may
                 be arrays for per-component weighting, e.g.
-                ``{"position": [0, 0, 1e-6]}``. Defaults to 0.1.
+                ``{"position": [0, 0, 1e-6]}``. Defaults to 0.01.
             lam_vb: Virtual buffer penalty weight. Defaults to 0.0.
             ep_tr: Trust region convergence tolerance. Defaults to 1e-4.
             ep_vb: Virtual buffer convergence tolerance. Defaults to 1e-4.
@@ -153,19 +154,15 @@ class PenalizedTrustRegion(Algorithm):
         self._states: List["State"] = states
         self._controls: List["Control"] = controls
 
-        # Resolve dict lam_prox / lam_vc / lam_cost → ndarray (requires states/controls)
-        resolved_lam_prox = self._resolve_lam_prox(lam_prox, states, controls)
-        resolved_lam_vc = self._resolve_lam_vc(lam_vc, states)
-        resolved_lam_cost = self._resolve_lam_cost(lam_cost, states)
-
-        # SCP weights (grouped dataclass, normalized for numerical conditioning)
-        self.weights = Weights(
-            lam_prox=resolved_lam_prox,
-            lam_vc=resolved_lam_vc,
-            lam_cost=resolved_lam_cost,
+        # SCP weights (grouped dataclass, dict inputs expanded to arrays)
+        self.weights = Weights.build(
+            lam_prox=lam_prox,
+            lam_vc=lam_vc,
+            lam_cost=lam_cost,
             lam_vb=lam_vb,
+            states=states,
+            controls=controls,
         )
-        self.weights.normalize()
 
         # SCP convergence parameters
         self.k_max = k_max
@@ -174,14 +171,11 @@ class PenalizedTrustRegion(Algorithm):
         self.ep_vc = ep_vc
 
     # -- Weight properties ---------------------------------------------------
-    # These properties are the **source of truth** for user-facing weight
-    # values.  Getters return the raw (user-specified, pre-normalization)
-    # value.  Setters update the raw value and re-normalize ``self.weights``.
-    #
-    # During SCP iteration the autotuner may mutate the *normalized* values
-    # on ``self.weights`` directly (e.g. ramping ``lam_prox``).  Those
-    # in-flight changes are tracked in ``AlgorithmState`` weight histories
-    # but do not affect the raw values returned here.
+    # These properties resolve dict-valued inputs (e.g. {"velocity": 1e0})
+    # to arrays via Weights.resolve_lam_* helpers, then store the result
+    # on self.weights.  During SCP iteration the autotuner may mutate the
+    # values on self.weights directly (e.g. ramping lam_prox).  Those
+    # in-flight changes are tracked in AlgorithmState weight histories.
 
     @staticmethod
     def _invoke_solver(solver: callable, *args):
@@ -206,83 +200,53 @@ class PenalizedTrustRegion(Algorithm):
     def lam_prox(self) -> Union[float, np.ndarray]:
         """Trust region (proximal) weight.
 
-        This is the user-specified value before normalization. Setting this
-        property triggers automatic re-normalization of all weights.  May be
-        a scalar or array for per-variable / per-node weighting.
-
-        !!! note
-            The autotuner may modify the normalized weight in
-            ``self.weights.lam_prox`` during iteration. Those changes are
-            internal and do not alter the value returned here.
+        May be a scalar or array for per-variable / per-node weighting.
         """
-        return self.weights._raw_lam_prox
+        return self.weights.lam_prox
 
     @lam_prox.setter
     def lam_prox(self, value: Union[float, Dict[str, Union[float, list]]]) -> None:
-        resolved = self._resolve_lam_prox(value, self._states, self._controls)
-        self.weights._raw_lam_prox = resolved
-        self.weights.normalize()
+        self.weights.lam_prox = Weights.resolve_lam_prox(value, self._states, self._controls)
 
     @property
     def lam_vc(self) -> Union[float, np.ndarray]:
-        """Virtual control penalty weight (pre-normalization).
-
-        This is the user-specified value before normalization. Setting this
-        property triggers automatic re-normalization of all weights.
+        """Virtual control penalty weight.
 
         Returns a float when a uniform scalar was provided, or an ndarray
         when per-state weights were given (via dict or array).
-
-        !!! note
-            The autotuner may modify the normalized weight in
-            ``self.weights.lam_vc`` during iteration. Those changes are
-            internal and do not alter the value returned here.
         """
-        return self.weights._raw_lam_vc
+        return self.weights.lam_vc
 
     @lam_vc.setter
     def lam_vc(self, value: Union[float, Dict[str, Union[float, list]]]) -> None:
-        self.weights._raw_lam_vc = self._resolve_lam_vc(value, self._states)
-        self.weights.normalize()
+        self.weights.lam_vc = Weights.resolve_lam_vc(value, self._states)
 
     @property
     def lam_cost(self) -> Union[float, np.ndarray]:
-        """Cost weight (pre-normalization).
-
-        This is the user-specified value before normalization. Setting this
-        property triggers automatic re-normalization of all weights.
+        """Cost weight.
 
         Returns a float when a uniform scalar was provided, or an ndarray
         of shape ``(n_states,)`` when per-state weights were given (via dict
         or array).
-
-        !!! note
-            The autotuner may modify the normalized weight in
-            ``self.weights.lam_cost`` during iteration. Those changes are
-            internal and do not alter the value returned here.
         """
-        return self.weights._raw_lam_cost
+        return self.weights.lam_cost
 
     @lam_cost.setter
     def lam_cost(self, value: Union[float, Dict[str, float]]) -> None:
-        self.weights._raw_lam_cost = self._resolve_lam_cost(value, self._states)
-        self.weights.normalize()
+        self.weights.lam_cost = Weights.resolve_lam_cost(value, self._states)
 
     @property
     def lam_vb(self) -> float:
-        """Global virtual buffer penalty weight (pre-normalization).
+        """Global virtual buffer penalty weight.
 
-        This is the user-specified scalar default before normalization.
-        Setting this property triggers automatic re-normalization.
         Per-constraint overrides are set via ``.weight()`` on individual
         constraints.
         """
-        return self.weights._raw_lam_vb
+        return self.weights.lam_vb
 
     @lam_vb.setter
     def lam_vb(self, value: float) -> None:
-        self.weights._raw_lam_vb = float(value)
-        self.weights.normalize()
+        self.weights.lam_vb = float(value)
 
     def get_columns(self, verbosity: int = Verbosity.STANDARD) -> List[Column]:
         """Get the columns to display for iteration output.

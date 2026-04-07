@@ -213,7 +213,7 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"lam_vb": 1e1},
+    algorithm={"lam_vb": 1e0},
 )
 
 # Solver settings

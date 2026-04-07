@@ -85,7 +85,7 @@ safety_region = ox.linalg.Norm(position - obs_center) <= 1.6
 # Globally the control bound is 10.0; inside the waypoint window we restrict to 1.0.
 slow_speed_in_waypoint = ox.linalg.Norm(speed) <= 1.0
 
-speed_constraint = ox.stl.IfThen(safety_region, slow_speed_in_waypoint, c=1e-2)
+speed_constraint = ox.stl.IfThen(safety_region, slow_speed_in_waypoint)
 
 constraints.append(
     speed_constraint.over(
@@ -126,14 +126,17 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"autotuner": ox.RampProximalWeight()},
+    algorithm={
+        "autotuner": ox.ConstantProximalWeight(),
+        "lam_prox": 1e-3,
+        "lam_vc": 1e1,
+        "lam_cost": 1e-3,
+        "ep_vc": 1e-6,
+        "ep_tr": 5e-4,
+    },
     float_dtype="float64",
     licq_max=1e-10,
 )
-
-# problem.algorithm.ep_vc = 1e-6
-# problem.algorithm.ep_tr = 5e-4
-problem.algorithm.lam_vc = 2e3
 
 plotting_dict = {
     "obs_radius": problem.parameters["obs_radius"],

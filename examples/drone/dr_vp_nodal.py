@@ -226,8 +226,10 @@ problem = Problem(
     constraints=constraints,
     N=n,
     algorithm={
-        "lam_vc": 1e2,
-        "lam_vb": 4e0,
+        "lam_prox": 1e-1,
+        "lam_cost": 1e-1,
+        "lam_vc": 1e0,
+        "lam_vb": 4e-2,
     },
 )
 

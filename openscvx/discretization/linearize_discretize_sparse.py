@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from openscvx.discretization.base import _resolve_foh_mask
 from openscvx.discretization.linearize_discretize import LinearizeDiscretize
 from openscvx.integrators import solve_ivp_diffrax, solve_ivp_rk45
 
@@ -75,10 +76,12 @@ class LinearizeDiscretizeSparse(LinearizeDiscretize):
             n_u,
         )
 
+        u_foh_mask = getattr(settings.sim.u, "foh_mask", None)
+        resolved_mask = _resolve_foh_mask(self.dis_type, n_u, u_foh_mask)
         Ad_pat, Bd_pat, Cd_pat = discrete_sparsity(
             A_c_pat,
             B_c_pat,
-            self.dis_type,
+            resolved_mask,
         )
         Ad_r, Ad_c = np.where(Ad_pat)
         Bd_r, Bd_c = np.where(Bd_pat)
@@ -120,7 +123,7 @@ def _dVdt_sparse(
     n_x: int,
     n_u: int,
     N: int,
-    dis_type: str,
+    foh_mask: np.ndarray,
     S_x: np.ndarray,
     c_x: np.ndarray,
     S_u: np.ndarray,
@@ -156,6 +159,8 @@ def _dVdt_sparse(
         tau: Normalized time in [0, 1] within the current segment.
         V: Flattened compact augmented state, shape
             ``((N-1) * (n_x + nnz_Ad + nnz_Bd + nnz_Cd),)``.
+        foh_mask: Float array of shape ``(n_u,)`` — ``1.0`` for FOH controls,
+            ``0.0`` for ZOH controls.
         Ad_rows, Ad_cols: Row/column indices of A_d structural nonzeros.
         nnz_Ad: Number of A_d structural nonzeros.
         Bd_rows, Bd_cols: Row/column indices of B_d structural nonzeros.
@@ -176,10 +181,8 @@ def _dVdt_sparse(
 
     V = V.reshape(-1, aug_dim)
 
-    if dis_type == "ZOH":
-        beta = 0.0
-    elif dis_type == "FOH":
-        beta = tau * N
+    # Per-control interpolation weights
+    beta = tau * N * foh_mask
     alpha = 1 - beta
 
     u = u_cur + beta * (u_next - u_cur)
@@ -267,6 +270,9 @@ def _calculate_discretization_sparse(
     V0 = V0.at[:, n_x : n_x + nnz_Ad].set(jnp.broadcast_to(phi0_nz[None], (N - 1, nnz_Ad)))
     V0 = V0.reshape(-1)
 
+    u_foh_mask = getattr(settings.sim.u, "foh_mask", None)
+    foh_mask = _resolve_foh_mask(discretizer.dis_type, n_u, u_foh_mask)
+
     integrator_args = dict(
         u_cur=u[:-1].astype(float),
         u_next=u[1:].astype(float),
@@ -276,7 +282,7 @@ def _calculate_discretization_sparse(
         n_x=n_x,
         n_u=n_u,
         N=N,
-        dis_type=discretizer.dis_type,
+        foh_mask=foh_mask,
         S_x=settings.sim.S_x,
         c_x=settings.sim.c_x,
         S_u=settings.sim.S_u,

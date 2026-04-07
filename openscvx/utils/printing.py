@@ -8,7 +8,6 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import jax
-import numpy as np
 from termcolor import colored
 
 if TYPE_CHECKING:
@@ -188,6 +187,9 @@ def print_summary_box(lines, title="Summary"):
     print(f"{' ' * indent}│ {title:^{box_width - 2}} │")
     print(f"{' ' * indent}├{'─' * box_width}┤")
     for line in content_lines:
+        if line == "SEP":
+            print(f"{' ' * indent}├{'─' * box_width}┤")
+            continue
         print(f"{' ' * indent}│ {line:<{box_width - 2}} │")
     print(f"{' ' * indent}╰{'─' * box_width}╯\n")
 
@@ -223,40 +225,12 @@ def print_problem_summary(
     # Get JAX backend information
     jax_backend = jax.devices()[0].platform.upper()
     jax_version = jax.__version__
+    float_dtype = "float64" if jax.config.read("jax_enable_x64") else "float32"
 
-    # Build weights string from algorithm weights
-    weights = algorithm.weights
-    if isinstance(weights.lam_cost, np.ndarray):
-        nz = weights.lam_cost[weights.lam_cost != 0]
-        if hasattr(algorithm, "_states") and algorithm._states is not None:
-            parts = []
-            for s in algorithm._states:
-                w = weights.lam_cost[s._slice]
-                if np.any(w != 0):
-                    nz_idx = np.nonzero(w)[0]
-                    if w.size == 1 or np.all(w == w[0]):
-                        parts.append(f"{s.name}={w.flat[0]:.1g}")
-                    elif nz_idx.size == 1:
-                        parts.append(f"{s.name}[{nz_idx[0]}]={w[nz_idx[0]]:.1g}")
-                    else:
-                        fmt = [f"{v:.1g}" for v in w]
-                        parts.append(f"{s.name}=[{', '.join(fmt)}]")
-            cost_str = "λ_cost={" + ", ".join(parts) + "}"
-        else:
-            cost_str = f"λ_cost={np.array2string(nz, precision=1, separator=',')}"
-    else:
-        cost_str = f"λ_cost={weights.lam_cost:4.1f}"
-    weights_parts = [
-        cost_str,
-        f"λ_tr={weights.lam_prox:4.1f}",
-        f"λ_vc={weights.lam_vc:4.1f}",
-    ]
-
-    # Add λ_vb only if there are nodal nonconvex constraints
-    if n_nodal_nonconvex > 0:
-        weights_parts.append(f"λ_vb={weights.lam_vb:4.1f}")
-
-    weights_str = ", ".join(weights_parts)
+    algorithm_name = type(algorithm).__name__
+    autotuner = getattr(algorithm, "autotuner", None)
+    autotuner_name = type(autotuner).__name__ if autotuner is not None else "N/A"
+    discretization_name = type(discretizer).__name__
 
     lines = [
         "Problem Summary",
@@ -269,8 +243,13 @@ def print_problem_summary(
             f"Subproblem: {n_cvx_variables} vars, {n_cvx_parameters} params,"
             f" {n_cvx_constraints} constraints"
         ),
-        f"Weights: {weights_str}",
-        f"CVX Solver: {solver.cvx_solver}, Discretization Solver: {discretizer.ode_solver}",
+        "SEP",
+        f"Algorithm: {algorithm_name}",
+        f"Autotuner: {autotuner_name}",
+        f"Discretizer: {discretization_name} ({discretizer.ode_solver})",
+        "SEP",
+        f"CVX Solver: {solver.cvx_solver}",
+        f"Float Dtype: {float_dtype}",
         f"JAX Backend: {jax_backend} (v{jax_version})",
     ]
 

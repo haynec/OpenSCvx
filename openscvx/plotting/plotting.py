@@ -22,17 +22,9 @@ def _get_var_dim(result: OptimizationResults, var_name: str, var_list: list) -> 
 
 
 def _is_impulsive_control(result: OptimizationResults, control_name: str) -> bool:
-    """Return True if the control is marked as impulsive."""
+    """Return True if the control uses impulsive parameterization."""
     var = _get_var(result, control_name, result._controls)
-    is_imp = getattr(var, "is_impulsive", None)
-    if is_imp is None:
-        return False
-    try:
-        import numpy as np
-
-        return bool(np.any(is_imp))
-    except Exception:
-        return bool(is_imp)
+    return getattr(var, "parameterization", None) == "impulsive"
 
 
 def _has_impulsive_controls(result: OptimizationResults) -> bool:

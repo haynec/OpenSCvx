@@ -6,7 +6,8 @@ Visitors: Constant, Parameter, NodeReference
 import jax.numpy as jnp
 
 # Expression types to handle — uncomment as you paste visitors:
-from openscvx.symbolic.expr.expr import Constant, NodeReference, Parameter
+from openscvx.symbolic.expr.expr import Constant, NodeReference
+from openscvx.symbolic.expr.parameter import Parameter
 from openscvx.symbolic.lowerers.jax._registry import visitor  # noqa: F401
 
 
