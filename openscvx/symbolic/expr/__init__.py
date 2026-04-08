@@ -65,8 +65,11 @@ Module Organization:
         `NodalConstraint` for enforcing constraints at discrete nodes and `CTCS` for
         continuous-time constraint satisfaction.
 
-    Signal Temporal Logic (stljax.py):
-        `Or` for logical disjunction in task specifications (stljax-backed).
+    Signal Temporal Logic (stl.py):
+        GMSR-backed smooth task-logic operators (`And`, `Or`, `Not`, `IfThen`,
+        `Always`, `Eventually`, `Until`, `IntegerVariable`) accessible via the
+        `ox.stl` namespace. See also `logic.py` for hard-boolean branching
+        (`All`, `Any`, `Cond`) used inside expressions rather than constraints.
 """
 
 # Arithmetic operations

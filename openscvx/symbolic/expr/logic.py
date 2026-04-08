@@ -3,6 +3,15 @@
 This module provides logical and control flow operations used in optimization problems,
 enabling conditional logic in dynamics and constraints. These operations are
 JAX-only and not supported in CVXPy lowering.
+
+See also:
+    ``openscvx.symbolic.expr.stl`` (``ox.stl``) provides smooth GMSR-backed
+    task-logic operators (``And``, ``Or``, ``Not``, ``IfThen``, ``Always``,
+    ...) for *constraint specification*. Those produce smooth scalar
+    robustness values, not hard booleans, and are the right tool when you
+    want to compose constraints into a task spec. The operators in *this*
+    module (``All``, ``Any``, ``Cond``) are for *expression-level*
+    branching where you need a true boolean reduction over predicates.
 """
 
 from typing import List, Optional, Tuple, Union

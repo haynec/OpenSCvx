@@ -17,6 +17,14 @@ Author: Samet Uzun and Chris Hayner
 Reference:
     https://doi.org/10.48550/arxiv.2405.10996
     https://doi.org/10.2514/6.2025-1895
+
+See also:
+    ``openscvx.symbolic.expr.logic`` provides ``All``/``Any``/``Cond`` for
+    *hard-boolean* branching inside expressions (e.g. switching dynamics
+    based on a predicate). Those are JAX-only and not differentiable
+    across the branch. The operators in *this* module are smooth and
+    differentiable everywhere, and are the right tool for composing
+    constraints into a task specification.
 """
 
 from typing import TYPE_CHECKING, Optional, Tuple, Union
