@@ -118,6 +118,38 @@ class STLExpr(Expr):
             nodes = [nodes]
         return NodalConstraint(constraint, list(nodes))
 
+    # ------------------------------------------------------------------
+    # Operator sugar for natural STL composition.
+    #
+    # These overloads only fire when at least one operand is already an
+    # STLExpr — bare ``Constraint`` objects intentionally do *not* get
+    # ``&``/``|``/``~`` so that ``Cond``/``All``/``Any`` users (see
+    # ``logic.py``) are not surprised by smooth-GMSR semantics sneaking
+    # into their hard-boolean branching. Lift into STL explicitly with
+    # any STL constructor (e.g. ``ox.stl.Always``) and the rest composes:
+    #
+    #     spec = (Always(c1) & Always(c2)) | ~stuck
+    #
+    # Note that smoothing parameters (``c``, ``lite``) cannot be passed
+    # through operator syntax — fall back to ``And(...)``/``Or(...)``/
+    # ``Not(...)`` if you need to tune them.
+    # ------------------------------------------------------------------
+
+    def __and__(self, other):
+        return And(self, other)
+
+    def __rand__(self, other):
+        return And(other, self)
+
+    def __or__(self, other):
+        return Or(self, other)
+
+    def __ror__(self, other):
+        return Or(other, self)
+
+    def __invert__(self):
+        return Not(self)
+
 
 def _validate_predicates(predicates, min_count, cls_name):
     """Validate that predicates are Constraint or STLExpr instances."""
