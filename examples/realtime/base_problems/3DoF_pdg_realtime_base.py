@@ -10,8 +10,12 @@ The problem includes:
 - Glideslope constraint for safe landing approach
 """
 
+import contextlib
+import io
 import os
+import queue
 import sys
+import time as pytime
 
 import numpy as np
 
@@ -30,6 +34,80 @@ from examples.plotting_viser import (
 
 from openscvx import Problem
 from openscvx.plotting import plot_controls, plot_projections_2d, plot_states, plot_vector_norm
+from openscvx.utils import printing as _openscvx_printing
+
+
+def _silence_openscvx_console_printing() -> None:
+    """Disable ASCII banner, problem box, and post-process results box for this example."""
+    _openscvx_printing.intro = lambda: None
+    _openscvx_printing.print_problem_summary = lambda *args, **kwargs: None
+    _openscvx_printing.print_results_summary = lambda *args, **kwargs: None
+
+
+def _scp_intermediate_drain_only(problem: Problem):
+    """Consume iteration emits without printing rows (keeps queue from growing)."""
+
+    def _run(print_queue, params, columns) -> None:
+        hz = 30.0
+        while True:
+            t_start = pytime.time()
+            try:
+                data = print_queue.get(timeout=1.0 / hz)
+                problem._scp_last_emit = data
+            except queue.Empty:
+                pass
+            pytime.sleep(max(0.0, 1.0 / hz - (pytime.time() - t_start)))
+
+    return _run
+
+
+_gpq_patched = False
+
+
+def _patch_get_print_queue_data_for_pdg() -> None:
+    """Prefer latest SCP emit stored on the problem (drain thread) for Viser metrics."""
+    global _gpq_patched
+    if _gpq_patched:
+        return
+    import examples.plotting_viser as _pv
+
+    _orig_gpq = _pv.get_print_queue_data
+
+    def _gpq(problem):
+        emit = getattr(problem, "_scp_last_emit", None)
+        if emit is not None:
+            return {
+                "dis_time": emit.get("dis_time", 0.0),
+                "prob_stat": emit.get("prob_stat", "--"),
+                "cost": emit.get("cost", 0.0),
+            }
+        return _orig_gpq(problem)
+
+    _pv.get_print_queue_data = _gpq
+    _gpq_patched = True
+
+
+def install_pdg_scp_console_style(problem: Problem) -> None:
+    """Show SCP column header once; suppress per-iteration table rows."""
+    problem.settings.dev.printing = True
+    _openscvx_printing.intermediate = _scp_intermediate_drain_only(problem)
+    _patch_get_print_queue_data_for_pdg()
+
+
+def initialize_problem_quiet(problem: Problem) -> None:
+    """Call ``initialize()`` without writing OpenSCvx banner/timing lines to stdout."""
+    with contextlib.redirect_stdout(io.StringIO()):
+        problem.initialize()
+
+
+def print_scp_table_header_once(problem: Problem) -> None:
+    """Print the SCP iteration table header (column names) once."""
+    cols = getattr(problem, "_columns", None)
+    if cols is not None:
+        _openscvx_printing.header(cols)
+
+
+_silence_openscvx_console_printing()
 
 n = 10
 total_time = 95.0  # Total simulation time
@@ -169,6 +247,8 @@ problem = Problem(
     discretizer={"ode_solver": "Dopri8"},
 )
 
+install_pdg_scp_console_style(problem)
+
 plotting_dict = {
     "rho_min": n_eng * T1.value * np.cos(theta.value),
     "rho_max": n_eng * T2.value * np.cos(theta.value),
@@ -176,7 +256,7 @@ plotting_dict = {
 }
 
 if __name__ == "__main__":
-    problem.initialize()
+    initialize_problem_quiet(problem)
     results = problem.solve()
     results = problem.post_process()
     results.update(plotting_dict)

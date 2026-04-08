@@ -19,6 +19,13 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
+_base_path = os.path.join(current_dir, "base_problems", "3DoF_pdg_realtime_base.py")
+_spec = importlib.util.spec_from_file_location("pdg3dof_realtime_base_sim", _base_path)
+if _spec is None or _spec.loader is None:
+    raise ImportError(f"Unable to load PDG realtime base module: {_base_path}")
+pdg = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(pdg)
+
 from examples.plotting_viser import (
     build_scp_step_results,
     compute_velocity_colors_realtime,
@@ -30,14 +37,8 @@ from examples.plotting_viser import (
 _viridis_cmap = matplotlib.colormaps["viridis"]
 VISER_SCENE_SCALE = 0.01
 
-_base_path = os.path.join(current_dir, "base_problems", "3DoF_pdg_realtime_base.py")
-_spec = importlib.util.spec_from_file_location("pdg3dof_realtime_base_sim", _base_path)
-if _spec is None or _spec.loader is None:
-    raise ImportError(f"Unable to load PDG realtime base module: {_base_path}")
-pdg = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(pdg)
-
-pdg.problem.initialize()
+pdg.initialize_problem_quiet(pdg.problem)
+pdg.print_scp_table_header_once(pdg.problem)
 
 
 def _to_deg(rad: float) -> float:
@@ -135,7 +136,6 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
         "running": True,
         "replan_requested": True,
         "reset_sim_requested": False,
-        "reset_all_requested": False,
         "plan_elapsed_s": 0.0,
         "active_time_guess_s": float(pdg.total_time),
         "last_sim_wall_s": time.time(),
@@ -146,21 +146,10 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
         "vehicle_mass": float(pdg.mass.initial[0]),
     }
     defaults = {
-        "I_sp": float(pdg.I_sp.value),
-        "g": float(pdg.g.value),
-        "theta_deg": _to_deg(float(pdg.theta.value)),
-        "glideslope_deg": _to_deg(float(pdg.glideslope_angle.value)),
-        "thrust_pointing_deg": _to_deg(float(pdg.thrust_pointing_angle.value)),
-        "T1": float(pdg.T1.value),
-        "T2": float(pdg.T2.value),
-        "final_xy": np.array(pdg.final_position.value, dtype=np.float64),
         "initial_pos": np.array(pdg.initial_position.value, dtype=np.float64),
         "initial_vel": np.array(pdg.velocity.initial, dtype=np.float64),
         "initial_mass": float(pdg.mass.initial[0]),
         "time_guess": float(pdg.total_time),
-        "lam_cost": float(optimization_problem.algorithm.lam_cost),
-        "lam_vc": float(optimization_problem.algorithm.lam_vc),
-        "lam_prox": float(optimization_problem.algorithm.lam_prox),
     }
 
     with server.gui.add_folder("Optimization Metrics"):
@@ -199,15 +188,10 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
 
     with server.gui.add_folder("Reset Controls", expand_by_default=True):
         reset_sim_button = server.gui.add_button("Reset Simulation Progress")
-        reset_all_button = server.gui.add_button("Reset Everything")
 
         @reset_sim_button.on_click
         def _(_) -> None:
             state["reset_sim_requested"] = True
-
-        @reset_all_button.on_click
-        def _(_) -> None:
-            state["reset_all_requested"] = True
 
     with server.gui.add_folder("Dynamics / Constraint Parameters"):
         isp_input = server.gui.add_number("I_sp", initial_value=float(pdg.I_sp.value), min=50.0, max=450.0, step=1.0)
@@ -372,37 +356,6 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
         _update_glideslope_cone()
         state["replan_requested"] = True
 
-    def _reset_everything() -> None:
-        lam_cost.value = defaults["lam_cost"]
-        lam_vc.value = defaults["lam_vc"]
-        lam_prox.value = defaults["lam_prox"]
-
-        isp_input.value = defaults["I_sp"]
-        g_input.value = defaults["g"]
-        theta_deg_input.value = defaults["theta_deg"]
-        glideslope_deg_input.value = defaults["glideslope_deg"]
-        thrust_pointing_deg_input.value = defaults["thrust_pointing_deg"]
-        t1_input.value = defaults["T1"]
-        t2_input.value = defaults["T2"]
-        final_xy_input.value = tuple(defaults["final_xy"])
-
-        pdg.initial_position.value = defaults["initial_pos"].copy()
-        pdg.position.initial = defaults["initial_pos"].copy()
-        pdg.velocity.initial = defaults["initial_vel"].copy()
-        pdg.mass.initial = np.array([defaults["initial_mass"]], dtype=np.float64)
-        optimization_problem.parameters["initial_position"] = defaults["initial_pos"].copy()
-
-        target_handle.position = (
-            float(defaults["final_xy"][0]) * VISER_SCENE_SCALE,
-            float(defaults["final_xy"][1]) * VISER_SCENE_SCALE,
-            0.0,
-        )
-        target_drag.position = target_handle.position
-        trajectory_handle.points = np.zeros((1, 3), dtype=np.float32)
-        trajectory_handle.colors = (255, 255, 0)
-
-        _reset_simulation_progress()
-
     def _interpolate_plan_state(tau: float) -> tuple[np.ndarray, np.ndarray, float]:
         x_plan = state["x_plan"]
         if x_plan is None or len(x_plan) == 0:
@@ -420,11 +373,6 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
                 dt = max(0.0, now - state["last_sim_wall_s"])
                 state["last_sim_wall_s"] = now
                 state["plan_elapsed_s"] += dt
-
-                if state["reset_all_requested"]:
-                    _reset_everything()
-                    state["reset_all_requested"] = False
-                    state["reset_sim_requested"] = False
 
                 if state["reset_sim_requested"]:
                     _reset_simulation_progress()

@@ -17,17 +17,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
-from examples.plotting_viser import (
-    build_scp_step_results,
-    compute_velocity_colors_realtime,
-    extract_multishoot_trajectory,
-    format_metrics_markdown,
-    get_print_queue_data,
-)
 import importlib.util
-
-_viridis_cmap = matplotlib.colormaps["viridis"]
-VISER_SCENE_SCALE = 0.01
 
 _base_path = os.path.join(current_dir, "base_problems", "3DoF_pdg_realtime_base.py")
 _spec = importlib.util.spec_from_file_location("pdg3dof_realtime_base", _base_path)
@@ -36,8 +26,20 @@ if _spec is None or _spec.loader is None:
 pdg = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(pdg)
 
+from examples.plotting_viser import (
+    build_scp_step_results,
+    compute_velocity_colors_realtime,
+    extract_multishoot_trajectory,
+    format_metrics_markdown,
+    get_print_queue_data,
+)
+
+_viridis_cmap = matplotlib.colormaps["viridis"]
+VISER_SCENE_SCALE = 0.01
+
 # Initialize once; updates are handled via parameter/state mutation + reset.
-pdg.problem.initialize()
+pdg.initialize_problem_quiet(pdg.problem)
+pdg.print_scp_table_header_once(pdg.problem)
 
 
 def _to_deg(rad: float) -> float:
