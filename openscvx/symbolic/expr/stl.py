@@ -380,3 +380,51 @@ class IntegerVariable(STLExpr):
 
     def __repr__(self) -> str:
         return f"IntegerVariable({self.expr!r}, values={self.values.tolist()})"
+
+
+class Not(STLExpr):
+    """GMSR smooth negation.
+
+    Satisfied when the inner predicate is *not* satisfied. Under the GMSR
+    convention this is just a sign flip on the residual: if the inner
+    predicate has robustness ``r``, then ``Not`` has robustness ``-r``.
+
+    Args:
+        predicate: A Constraint or STLExpr to negate.
+
+    Example::
+
+        import openscvx as ox
+        in_zone = ox.linalg.Norm(position - center) <= radius
+        outside = ox.stl.Not(in_zone)
+        # Equivalently, with operator syntax once lifted into STL:
+        outside = ~ox.stl.Always(in_zone)  # not always in zone
+
+    Note:
+        ``Not`` is a thin sign flip — there is no smoothing parameter.
+        Composing ``Not`` with ``Or``/``And`` recovers De Morgan duals
+        through the GMSR machinery rather than as an algebraic rewrite.
+    """
+
+    def __init__(self, predicate: Union[Constraint, "STLExpr"]):
+        _validate_predicates([predicate], 1, "Not")
+        self.predicate = predicate
+
+    def children(self):
+        return [self.predicate]
+
+    def canonicalize(self) -> "Expr":
+        canon = self.predicate.canonicalize()
+        # Double-negation elimination: ~~p -> p
+        if isinstance(canon, Not):
+            return canon.predicate
+        result = Not.__new__(Not)
+        result.predicate = canon
+        return result
+
+    def check_shape(self) -> Tuple[int, ...]:
+        self.predicate.check_shape()
+        return ()
+
+    def __repr__(self) -> str:
+        return f"Not({self.predicate!r})"
