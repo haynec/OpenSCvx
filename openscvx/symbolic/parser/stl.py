@@ -50,18 +50,16 @@ def _parse_always(args, kwargs):
 
 @function("Eventually")
 def _parse_eventually(args, kwargs):
-    if len(args) != 2:
-        raise ValueError("Eventually() requires exactly 2 arguments (predicate, interval)")
-    predicate, interval = args
-    return Eventually(predicate, interval, **kwargs)
+    if len(args) not in (1, 2):
+        raise ValueError("Eventually() requires 1 or 2 arguments (predicate[, interval])")
+    return Eventually(*args, **kwargs)
 
 
 @function("Until")
 def _parse_until(args, kwargs):
-    if len(args) != 3:
-        raise ValueError("Until() requires exactly 3 arguments (left, right, interval)")
-    left, right, interval = args
-    return Until(left, right, interval, **kwargs)
+    if len(args) not in (2, 3):
+        raise ValueError("Until() requires 2 or 3 arguments (left, right[, interval])")
+    return Until(*args, **kwargs)
 
 
 @function("IfThen")

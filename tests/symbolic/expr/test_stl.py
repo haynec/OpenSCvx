@@ -982,6 +982,19 @@ def test_stl_over_interval_type_seconds_raises_not_implemented():
         Or(p1, p2).over((0.0, 5.0), interval_type="seconds")
 
 
+def test_eventually_interval_optional():
+    _, p1, _ = _make_predicates()
+    node = Eventually(p1)
+    assert node.interval is None
+
+
+def test_until_interval_optional():
+    _, p1, p2 = _make_predicates()
+    node = Until(p1, p2)
+    assert node.interval is None
+    assert node.left is p1 and node.right is p2
+
+
 def test_until_interval_type_seconds():
     _, p1, p2 = _make_predicates()
     node = Until(p1, p2, (0.0, 5.0), interval_type="seconds")

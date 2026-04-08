@@ -909,12 +909,12 @@ class _UnimplementedTemporal(_TemporalSTLExpr):
     def __init__(
         self,
         predicate: Union[Constraint, "STLExpr"],
-        interval: IntervalLike,
+        interval: Optional[IntervalLike] = None,
         interval_type: IntervalKind = "nodes",
     ):
         _validate_predicates([predicate], 1, self._operator_name)
         self.predicate = predicate
-        self.interval = Interval.coerce(interval, interval_type)
+        self.interval = Interval.coerce(interval, interval_type) if interval is not None else None
 
     def children(self):
         return [self.predicate]
@@ -952,7 +952,9 @@ class Eventually(_UnimplementedTemporal):
     """STL ``Eventually`` operator: ``p`` holds at some time in the interval.
 
     Semantically: ``Eventually(p, (a, b))`` is satisfied iff ``p`` holds at
-    *some* time in ``[a, b]``.
+    *some* time in ``[a, b]``. The interval is optional — when omitted,
+    the operator inherits the ambient window from the enclosing seal
+    (e.g. ``.over()``), the same way ``Always`` does.
 
     !!! warning "Not yet implemented!"
         Constructing the node is allowed so that downstream
@@ -970,7 +972,9 @@ class Until(_UnimplementedTemporal):
     ``t* ∈ [a, b]`` at which ``right`` holds, and ``left`` holds at every
     time in ``[a, t*]``. ``Until`` is the most expressive of the standard
     STL temporal operators; ``Always`` and ``Eventually`` can both be
-    derived from it.
+    derived from it. The interval is optional — when omitted, the
+    operator inherits the ambient window from the enclosing seal, the
+    same way ``Always`` does.
 
     !!! warning "Not yet implemented!"
         Constructing the node is allowed so
@@ -984,14 +988,14 @@ class Until(_UnimplementedTemporal):
         self,
         left: Union[Constraint, "STLExpr"],
         right: Union[Constraint, "STLExpr"],
-        interval: IntervalLike,
+        interval: Optional[IntervalLike] = None,
         interval_type: IntervalKind = "nodes",
     ):
         _validate_predicates([left, right], 2, "Until")
         self.left = left
         self.right = right
         self.predicate = left  # for _UnimplementedTemporal.children/check_shape
-        self.interval = Interval.coerce(interval, interval_type)
+        self.interval = Interval.coerce(interval, interval_type) if interval is not None else None
 
     def children(self):
         return [self.left, self.right]
