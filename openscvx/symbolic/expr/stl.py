@@ -478,3 +478,101 @@ def Always(
     return CTCS(
         predicate, penalty=penalty, nodes=interval, idx=idx, check_nodally=check_nodally
     )
+
+
+class _UnimplementedTemporal(STLExpr):
+    """Base class for temporal STL nodes that are not yet implemented.
+
+    Stores the predicate + interval so that future formulations can be
+    swapped in without changing the surface API. Construction succeeds
+    (so that imports and AST inspection work), but any attempt to lower
+    or enforce the node raises NotImplementedError with a clear message.
+    """
+
+    _operator_name: str = "TemporalOperator"
+
+    def __init__(
+        self,
+        predicate: Union[Constraint, "STLExpr"],
+        interval: tuple[int, int],
+    ):
+        _validate_predicates([predicate], 1, self._operator_name)
+        self.predicate = predicate
+        self.interval = interval
+
+    def children(self):
+        return [self.predicate]
+
+    def canonicalize(self) -> "Expr":
+        raise NotImplementedError(
+            f"{self._operator_name} is not yet implemented. A novel formulation "
+            f"is in progress; for now, use ox.stl.Always for pointwise "
+            f"enforcement, or ox.stl.Or/And for explicit disjunctions."
+        )
+
+    def check_shape(self) -> Tuple[int, ...]:
+        self.predicate.check_shape()
+        return ()
+
+    def over(self, *args, **kwargs):
+        raise NotImplementedError(
+            f"{self._operator_name} is not yet implemented. A novel formulation "
+            f"is in progress; for now, use ox.stl.Always for pointwise "
+            f"enforcement, or ox.stl.Or/And for explicit disjunctions."
+        )
+
+    def at(self, *args, **kwargs):
+        raise NotImplementedError(
+            f"{self._operator_name} is not yet implemented. A novel formulation "
+            f"is in progress; for now, use ox.stl.Always for pointwise "
+            f"enforcement, or ox.stl.Or/And for explicit disjunctions."
+        )
+
+    def __repr__(self) -> str:
+        return f"{self._operator_name}({self.predicate!r}, {self.interval!r})"
+
+
+class Eventually(_UnimplementedTemporal):
+    """STL ``Eventually`` operator (placeholder).
+
+    Semantically: ``Eventually(p, (a, b))`` is satisfied iff ``p`` holds at
+    *some* time in ``[a, b]``. Implementation is in progress (a novel
+    formulation by a collaborator); constructing the node is allowed so
+    that downstream code can be sketched, but any use will raise
+    NotImplementedError.
+    """
+
+    _operator_name = "Eventually"
+
+
+class Until(_UnimplementedTemporal):
+    """STL ``Until`` operator (placeholder).
+
+    Not yet implemented. Constructing the node is allowed so downstream
+    code can be sketched; any use raises NotImplementedError.
+    """
+
+    _operator_name = "Until"
+
+    def __init__(
+        self,
+        left: Union[Constraint, "STLExpr"],
+        right: Union[Constraint, "STLExpr"],
+        interval: tuple[int, int],
+    ):
+        _validate_predicates([left, right], 2, "Until")
+        self.left = left
+        self.right = right
+        self.predicate = left  # for _UnimplementedTemporal.children/check_shape
+        self.interval = interval
+
+    def children(self):
+        return [self.left, self.right]
+
+    def check_shape(self) -> Tuple[int, ...]:
+        self.left.check_shape()
+        self.right.check_shape()
+        return ()
+
+    def __repr__(self) -> str:
+        return f"Until({self.left!r}, {self.right!r}, {self.interval!r})"
