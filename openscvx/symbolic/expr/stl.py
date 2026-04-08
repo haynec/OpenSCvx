@@ -428,3 +428,53 @@ class Not(STLExpr):
 
     def __repr__(self) -> str:
         return f"Not({self.predicate!r})"
+
+
+def Always(
+    predicate: Union[Constraint, "STLExpr"],
+    interval: tuple[int, int],
+    penalty: str = "smooth_relu",
+    idx: Optional[int] = None,
+    check_nodally: bool = False,
+) -> "CTCS":
+    """Enforce ``predicate`` at every point in ``interval`` (STL ``Always``).
+
+    This is syntactic sugar around CTCS: enforcing the integral of the
+    constraint violation to be zero across the interval is equivalent to
+    requiring the predicate to hold pointwise. ``Always`` is provided so
+    that STL specifications can be written in notation that mirrors the
+    math, without the user having to remember the CTCS-of-violation
+    encoding.
+
+    Args:
+        predicate: A Constraint or STLExpr that should hold throughout
+            the interval.
+        interval: ``(start, end)`` node indices defining the enforcement
+            window.
+        penalty: CTCS penalty function name.
+        idx: Optional grouping index for multiple augmented states.
+        check_nodally: Whether to additionally enforce at discrete nodes.
+
+    Returns:
+        A ``CTCS`` constraint enforcing ``predicate`` over ``interval``.
+
+    Example::
+
+        import openscvx as ox
+        avoid = ox.linalg.Norm(position - obs) >= safety_radius
+        constraints.append(ox.stl.Always(avoid, (0, N - 1)))
+    """
+    if isinstance(predicate, STLExpr):
+        return predicate.over(
+            interval, penalty=penalty, idx=idx, check_nodally=check_nodally
+        )
+    if not isinstance(predicate, Constraint):
+        raise TypeError(
+            f"Always requires a Constraint or STLExpr predicate, got "
+            f"{type(predicate).__name__}."
+        )
+    from .constraint import CTCS
+
+    return CTCS(
+        predicate, penalty=penalty, nodes=interval, idx=idx, check_nodally=check_nodally
+    )
