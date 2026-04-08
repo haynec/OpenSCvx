@@ -10,7 +10,6 @@ from openscvx.symbolic.expr.stl import (
     Eventually,
     IfThen,
     IntegerVariable,
-    Interval,
     Not,
     Or,
     Until,
@@ -46,7 +45,7 @@ def _parse_always(args, kwargs):
     if len(args) == 1:
         return Always(args[0], **kwargs)
     predicate, interval = args
-    return Always(predicate, Interval.coerce(interval), **kwargs)
+    return Always(predicate, interval, **kwargs)
 
 
 @function("Eventually")
@@ -54,7 +53,7 @@ def _parse_eventually(args, kwargs):
     if len(args) != 2:
         raise ValueError("Eventually() requires exactly 2 arguments (predicate, interval)")
     predicate, interval = args
-    return Eventually(predicate, Interval.coerce(interval), **kwargs)
+    return Eventually(predicate, interval, **kwargs)
 
 
 @function("Until")
@@ -62,7 +61,7 @@ def _parse_until(args, kwargs):
     if len(args) != 3:
         raise ValueError("Until() requires exactly 3 arguments (left, right, interval)")
     left, right, interval = args
-    return Until(left, right, Interval.coerce(interval), **kwargs)
+    return Until(left, right, interval, **kwargs)
 
 
 @function("IfThen")

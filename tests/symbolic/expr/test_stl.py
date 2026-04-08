@@ -27,10 +27,12 @@ from openscvx.symbolic.expr.stl import (
     Eventually,
     IfThen,
     IntegerVariable,
+    Interval,
     NodeInterval,
     Not,
     Or,
     STLExpr,
+    TimeInterval,
     Until,
 )
 from openscvx.symbolic.lowerers.jax import JaxLowerer
@@ -913,6 +915,77 @@ def test_until_over_raises():
     _, p1, p2 = _make_predicates()
     with pytest.raises(NotImplementedError, match="Until"):
         Until(p1, p2, (0, 5)).over((0, 5))
+
+
+# =============================================================================
+# Interval.coerce – explicit interval_type dispatch
+# =============================================================================
+
+
+def test_coerce_default_kind_is_nodes():
+    assert Interval.coerce((0, 5)) == NodeInterval(0, 5)
+
+
+def test_coerce_seconds_kind_builds_time_interval():
+    iv = Interval.coerce((0.0, 5.0), "seconds")
+    assert isinstance(iv, TimeInterval)
+    assert iv.start == 0.0 and iv.end == 5.0
+
+
+def test_coerce_seconds_accepts_int_bounds():
+    # "seconds" is permissive: any numeric is fine
+    iv = Interval.coerce((0, 5), "seconds")
+    assert isinstance(iv, TimeInterval)
+
+
+def test_coerce_nodes_rejects_non_integral_float():
+    with pytest.raises(TypeError, match="integral"):
+        Interval.coerce((0.0, 5.5), "nodes")
+
+
+def test_coerce_nodes_accepts_integral_float():
+    # 5.0 is exactly an integer — fine under "nodes"
+    assert Interval.coerce((0.0, 5.0), "nodes") == NodeInterval(0, 5)
+
+
+def test_coerce_invalid_kind_raises():
+    with pytest.raises(ValueError, match="interval_type"):
+        Interval.coerce((0, 5), "frames")
+
+
+def test_coerce_passthrough_typed_interval_matching_kind():
+    iv = NodeInterval(0, 5)
+    assert Interval.coerce(iv, "nodes") is iv
+
+
+def test_coerce_passthrough_typed_interval_mismatched_kind_raises():
+    iv = TimeInterval(0.0, 5.0)
+    with pytest.raises(TypeError, match="nodes"):
+        Interval.coerce(iv, "nodes")
+
+
+def test_always_interval_type_seconds_builds_time_interval():
+    _, p1, _ = _make_predicates()
+    node = Always(p1, (0.0, 5.0), interval_type="seconds")
+    assert isinstance(node.interval, TimeInterval)
+
+
+def test_always_over_interval_type_seconds_raises_not_implemented():
+    _, p1, _ = _make_predicates()
+    with pytest.raises(NotImplementedError, match="TimeInterval"):
+        Always(p1).over((0.0, 5.0), interval_type="seconds")
+
+
+def test_stl_over_interval_type_seconds_raises_not_implemented():
+    _, p1, p2 = _make_predicates()
+    with pytest.raises(NotImplementedError, match="TimeInterval"):
+        Or(p1, p2).over((0.0, 5.0), interval_type="seconds")
+
+
+def test_until_interval_type_seconds():
+    _, p1, p2 = _make_predicates()
+    node = Until(p1, p2, (0.0, 5.0), interval_type="seconds")
+    assert isinstance(node.interval, TimeInterval)
 
 
 def test_until_repr():

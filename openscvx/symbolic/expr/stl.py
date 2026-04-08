@@ -18,6 +18,10 @@ parameterizations that work directly with constraint residuals.
       against the model's explicit ``time`` state) is accepted at
       construction so downstream code can be sketched against the
       eventual API, but raises ``NotImplementedError`` at lowering.
+      The kind of interval is selected explicitly by the
+      ``interval_type`` kwarg on temporal constructors and on
+      ``.over()`` — either ``"nodes"`` (the default) or ``"seconds"``.
+      There is no implicit int-vs-float dispatch.
     - Mixed-interval nesting (e.g. ``□[0,5] p ∧ ◇[3,8] q``) has no
       defined lowering yet and is **rejected at construction time**.
       Temporal operators used as children of other STL operators must
@@ -87,13 +91,19 @@ if TYPE_CHECKING:
 # lowering strategies that share a surface API. The Interval ABC +
 # Interval.coerce give a single, typed construction site so that the
 # rest of the STL stack — constructors, parser, lowerer — never has to
-# hand-roll the dispatch.
+# hand-roll the dispatch. The user picks the kind explicitly via the
+# ``interval_type`` kwarg ("nodes" or "seconds"); there is no implicit
+# int-vs-float inference.
 #
 # Status: NodeInterval is implemented end to end. TimeInterval is
 # accepted at construction so that downstream code can be written
 # against the eventual API, but raises NotImplementedError at lowering
 # time.
 # ---------------------------------------------------------------------------
+
+
+IntervalKind = str  # "nodes" or "seconds"
+_VALID_KINDS = ("nodes", "seconds")
 
 
 class Interval:
@@ -105,40 +115,67 @@ class Interval:
     """
 
     @staticmethod
-    def coerce(value: object) -> "Interval":
+    def coerce(value: object, kind: IntervalKind = "nodes") -> "Interval":
         """Coerce a user-supplied interval-like value into an ``Interval``.
 
-        Accepts:
-            - an existing ``Interval`` instance (returned as-is);
-            - a 2-tuple/list of ints → :class:`NodeInterval`;
-            - a 2-tuple/list of floats → :class:`TimeInterval`;
-            - a parser :class:`Constant` wrapping a length-2 array, with
-              the same int-vs-float discrimination on its dtype.
+        Args:
+            value: One of
+                - an existing ``Interval`` instance (returned as-is, with
+                  a sanity check that ``kind`` matches its concrete type
+                  unless the caller left ``kind`` at the default);
+                - a length-2 tuple/list of numbers;
+                - a parser :class:`Constant` wrapping a length-2 array.
+            kind: ``"nodes"`` (default) selects :class:`NodeInterval`;
+                ``"seconds"`` selects :class:`TimeInterval`. The user
+                names the kind explicitly — there is no inference from
+                int-vs-float.
+
+        For ``kind="nodes"`` the bounds must be integral (Python ``int``
+        or a ``float``/array element exactly equal to an integer); a
+        non-integral bound is rejected loudly. For ``kind="seconds"``
+        any numeric bound is accepted and cast to ``float``.
         """
+        if kind not in _VALID_KINDS:
+            raise ValueError(f"interval_type must be one of {_VALID_KINDS!r}, got {kind!r}")
+
+        # Pre-typed Intervals pass through. If the caller named a kind,
+        # require it to match — silent reinterpretation is exactly the
+        # footgun this API is trying to remove.
         if isinstance(value, Interval):
+            target_cls = NodeInterval if kind == "nodes" else TimeInterval
+            if not isinstance(value, target_cls):
+                raise TypeError(f"interval_type={kind!r} but received {type(value).__name__}")
             return value
 
         if isinstance(value, Constant):
             arr = value.value
             if arr.shape != (2,):
                 raise TypeError(f"Interval Constant must have shape (2,), got {arr.shape}")
-            if arr.dtype.kind in ("i", "u"):
-                return NodeInterval(int(arr[0]), int(arr[1]))
-            return TimeInterval(float(arr[0]), float(arr[1]))
-
-        if isinstance(value, (tuple, list)) and len(value) == 2:
+            a, b = arr[0].item(), arr[1].item()
+        elif isinstance(value, (tuple, list)) and len(value) == 2:
             a, b = value
             if isinstance(a, bool) or isinstance(b, bool):
                 raise TypeError("Interval bounds cannot be bool")
-            if isinstance(a, int) and isinstance(b, int):
-                return NodeInterval(a, b)
-            if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-                return TimeInterval(float(a), float(b))
+            if not isinstance(a, (int, float)) or not isinstance(b, (int, float)):
+                raise TypeError(
+                    f"Interval bounds must be numeric, got ({type(a).__name__}, {type(b).__name__})"
+                )
+        else:
+            raise TypeError(
+                f"Cannot coerce {value!r} to an Interval. Expected an Interval "
+                f"instance, a length-2 tuple/list of numbers, or a length-2 Constant."
+            )
 
-        raise TypeError(
-            f"Cannot coerce {value!r} to an Interval. Expected an Interval "
-            f"instance, a 2-tuple of ints (node indices) or floats (seconds)."
-        )
+        if kind == "nodes":
+            for name, v in (("start", a), ("end", b)):
+                if isinstance(v, float) and not v.is_integer():
+                    raise TypeError(
+                        f"interval_type='nodes' requires integral bounds, got "
+                        f"{name}={v!r}. Pass interval_type='seconds' if you "
+                        f"meant a wall-time interval."
+                    )
+            return NodeInterval(int(a), int(b))
+        return TimeInterval(float(a), float(b))
 
 
 @dataclass(frozen=True)
@@ -191,7 +228,7 @@ class TimeInterval(Interval):
         return f"TimeInterval({self.start}, {self.end})"
 
 
-IntervalLike = Union[Interval, Tuple[int, int], Tuple[float, float]]
+IntervalLike = Union[Interval, Tuple[float, float]]
 
 
 class STLExpr(Expr):
@@ -270,13 +307,16 @@ class STLExpr(Expr):
         penalty: str = "smooth_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
+        interval_type: IntervalKind = "nodes",
     ) -> "CTCS":
         """Apply this STL expression over an enforcement interval using CTCS.
 
         Args:
-            interval: An ``Interval`` or interval-like value (a 2-tuple of
-                ints for node indices, or a 2-tuple of floats for seconds).
-                See :class:`Interval` for the full coercion rules.
+            interval: An ``Interval`` or a length-2 tuple of numeric bounds.
+            interval_type: ``"nodes"`` (default) treats the bounds as
+                discretization indices and produces a :class:`NodeInterval`;
+                ``"seconds"`` treats them as wall-time and produces a
+                :class:`TimeInterval` (lowering not yet implemented).
             penalty: Penalty function type for CTCS
             idx: Optional grouping index for multiple augmented states
             check_nodally: Whether to also enforce at discrete nodes
@@ -301,7 +341,7 @@ class STLExpr(Expr):
         from .arithmetic import Neg
         from .constraint import CTCS, Inequality
 
-        coerced = Interval.coerce(interval)
+        coerced = Interval.coerce(interval, interval_type)
         if isinstance(coerced, TimeInterval):
             raise NotImplementedError(
                 "TimeInterval lowering is not yet implemented. Time-based "
@@ -779,10 +819,11 @@ class Always(_TemporalSTLExpr):
         self,
         predicate: Union[Constraint, "STLExpr"],
         interval: Optional[IntervalLike] = None,
+        interval_type: IntervalKind = "nodes",
     ):
         _validate_predicates([predicate], 1, "Always")
         self.predicate = predicate
-        self.interval = Interval.coerce(interval) if interval is not None else None
+        self.interval = Interval.coerce(interval, interval_type) if interval is not None else None
 
     def children(self):
         return [self.predicate]
@@ -803,6 +844,7 @@ class Always(_TemporalSTLExpr):
         penalty: str = "smooth_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
+        interval_type: IntervalKind = "nodes",
     ) -> "CTCS":
         """Convert this ``Always`` to a ``CTCS`` constraint.
 
@@ -817,7 +859,7 @@ class Always(_TemporalSTLExpr):
             A ``CTCS`` constraint enforcing the inner predicate over the
             interval.
         """
-        chosen = Interval.coerce(interval) if interval is not None else self.interval
+        chosen = Interval.coerce(interval, interval_type) if interval is not None else self.interval
         if chosen is None:
             raise ValueError(
                 "Always requires an interval — pass one to the constructor or to .over()."
@@ -868,10 +910,11 @@ class _UnimplementedTemporal(_TemporalSTLExpr):
         self,
         predicate: Union[Constraint, "STLExpr"],
         interval: IntervalLike,
+        interval_type: IntervalKind = "nodes",
     ):
         _validate_predicates([predicate], 1, self._operator_name)
         self.predicate = predicate
-        self.interval = Interval.coerce(interval)
+        self.interval = Interval.coerce(interval, interval_type)
 
     def children(self):
         return [self.predicate]
@@ -942,12 +985,13 @@ class Until(_UnimplementedTemporal):
         left: Union[Constraint, "STLExpr"],
         right: Union[Constraint, "STLExpr"],
         interval: IntervalLike,
+        interval_type: IntervalKind = "nodes",
     ):
         _validate_predicates([left, right], 2, "Until")
         self.left = left
         self.right = right
         self.predicate = left  # for _UnimplementedTemporal.children/check_shape
-        self.interval = Interval.coerce(interval)
+        self.interval = Interval.coerce(interval, interval_type)
 
     def children(self):
         return [self.left, self.right]
