@@ -586,8 +586,7 @@ class Always(STLExpr):
         chosen = interval if interval is not None else self.interval
         if chosen is None:
             raise ValueError(
-                "Always requires an interval — pass one to the constructor "
-                "or to .over()."
+                "Always requires an interval — pass one to the constructor or to .over()."
             )
 
         if isinstance(self.predicate, STLExpr):
