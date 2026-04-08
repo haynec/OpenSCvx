@@ -21,7 +21,17 @@ import pytest
 
 from openscvx.symbolic.expr import Constant, State
 from openscvx.symbolic.expr.constraint import CTCS, Inequality, NodalConstraint
-from openscvx.symbolic.expr.stl import And, IfThen, IntegerVariable, Or, STLExpr
+from openscvx.symbolic.expr.stl import (
+    Always,
+    And,
+    Eventually,
+    IfThen,
+    IntegerVariable,
+    Not,
+    Or,
+    STLExpr,
+    Until,
+)
 from openscvx.symbolic.lowerers.jax import JaxLowerer
 
 # =============================================================================
@@ -577,3 +587,333 @@ def test_integer_variable_jax_single_allowed_value():
     fn = _setup_integer_variable_jax(values=[3.0])
     assert float(fn(jnp.array([3.0]), None, None, None)) == pytest.approx(0.0, abs=1e-4)
     assert float(fn(jnp.array([3.5]), None, None, None)) < 0.0
+
+
+# =============================================================================
+# Not – Construction & Tree Structure
+# =============================================================================
+
+
+def test_not_basic_construction():
+    _, p1, _ = _make_predicates()
+    node = Not(p1)
+    assert isinstance(node, STLExpr)
+    assert node.predicate is p1
+
+
+def test_not_children_returns_predicate():
+    _, p1, _ = _make_predicates()
+    assert Not(p1).children() == [p1]
+
+
+def test_not_repr():
+    _, p1, _ = _make_predicates()
+    assert repr(Not(p1)).startswith("Not(")
+
+
+def test_not_check_shape_returns_empty_tuple():
+    _, p1, _ = _make_predicates()
+    assert Not(p1).check_shape() == ()
+
+
+def test_not_rejects_non_constraint_arg():
+    with pytest.raises(TypeError):
+        Not("bad")
+
+
+def test_not_canonicalize_collapses_double_negation():
+    _, p1, _ = _make_predicates()
+    canon = Not(Not(p1)).canonicalize()
+    # ~~p should collapse to (canonicalized) p, not a Not node
+    assert not isinstance(canon, Not)
+
+
+def test_not_canonicalize_preserves_single_negation():
+    _, p1, _ = _make_predicates()
+    canon = Not(p1).canonicalize()
+    assert isinstance(canon, Not)
+
+
+def test_not_accepts_nested_stl():
+    _, p1, p2 = _make_predicates()
+    inner = Or(p1, p2)
+    node = Not(inner)
+    assert isinstance(node, Not)
+    assert node.predicate is inner
+
+
+# =============================================================================
+# Not – JAX Lowering
+# =============================================================================
+
+
+def _setup_not_jax():
+    x_sym = State("x", shape=(2,))
+    x_sym._slice = slice(0, 2)
+    p = x_sym[0] <= Constant(np.array(1.0))  # x[0] <= 1
+    return _lower_stl(Not(p))
+
+
+def test_not_jax_negative_when_inner_satisfied():
+    fn = _setup_not_jax()
+    # x[0]=0.5 satisfies inner predicate → Not should be unsatisfied (negative)
+    assert float(fn(jnp.array([0.5, 0.0]), None, None, None)) < 0.0
+
+
+def test_not_jax_positive_when_inner_violated():
+    fn = _setup_not_jax()
+    # x[0]=2.0 violates inner predicate → Not should be satisfied (positive)
+    assert float(fn(jnp.array([2.0, 0.0]), None, None, None)) > 0.0
+
+
+def test_not_jax_double_negation_matches_inner():
+    x_sym = State("x", shape=(2,))
+    x_sym._slice = slice(0, 2)
+    p = x_sym[0] <= Constant(np.array(1.0))
+    inner_fn = _lower_stl(Or(p, x_sym[1] <= Constant(np.array(2.0))))
+    double_fn = _lower_stl(Not(Not(Or(p, x_sym[1] <= Constant(np.array(2.0))))))
+    x = jnp.array([0.5, 3.0])
+    assert float(double_fn(x, None, None, None)) == pytest.approx(
+        float(inner_fn(x, None, None, None)), abs=1e-6
+    )
+
+
+# =============================================================================
+# Always – Construction & Tree Structure
+# =============================================================================
+
+
+def test_always_basic_construction():
+    _, p1, _ = _make_predicates()
+    node = Always(p1, (0, 5))
+    assert isinstance(node, STLExpr)
+    assert node.predicate is p1
+    assert node.interval == (0, 5)
+
+
+def test_always_interval_optional():
+    _, p1, _ = _make_predicates()
+    node = Always(p1)
+    assert node.interval is None
+
+
+def test_always_children_returns_predicate():
+    _, p1, _ = _make_predicates()
+    assert Always(p1, (0, 5)).children() == [p1]
+
+
+def test_always_repr_with_interval():
+    _, p1, _ = _make_predicates()
+    r = repr(Always(p1, (0, 5)))
+    assert r.startswith("Always(")
+    assert "(0, 5)" in r
+
+
+def test_always_repr_without_interval():
+    _, p1, _ = _make_predicates()
+    assert repr(Always(p1)).startswith("Always(")
+
+
+def test_always_check_shape_returns_empty_tuple():
+    _, p1, _ = _make_predicates()
+    assert Always(p1, (0, 5)).check_shape() == ()
+
+
+def test_always_rejects_non_constraint_predicate():
+    with pytest.raises(TypeError):
+        Always("bad", (0, 5))
+
+
+def test_always_canonicalize_preserves_interval():
+    _, p1, _ = _make_predicates()
+    canon = Always(p1, (3, 7)).canonicalize()
+    assert isinstance(canon, Always)
+    assert canon.interval == (3, 7)
+
+
+def test_always_accepts_nested_stl_predicate():
+    _, p1, p2 = _make_predicates()
+    inner = And(p1, p2)
+    node = Always(inner, (0, 5))
+    assert isinstance(node, Always)
+    assert node.predicate is inner
+
+
+# =============================================================================
+# Always – .over() seals to CTCS
+# =============================================================================
+
+
+def test_always_over_uses_stored_interval():
+    _, p1, _ = _make_predicates()
+    ctcs = Always(p1, (3, 7)).over()
+    assert isinstance(ctcs, CTCS)
+    assert ctcs.nodes == (3, 7)
+
+
+def test_always_over_override_interval():
+    _, p1, _ = _make_predicates()
+    ctcs = Always(p1, (3, 7)).over((0, 10))
+    assert ctcs.nodes == (0, 10)
+
+
+def test_always_over_requires_interval_somewhere():
+    _, p1, _ = _make_predicates()
+    with pytest.raises(ValueError, match="interval"):
+        Always(p1).over()
+
+
+def test_always_over_with_stl_predicate_returns_ctcs():
+    _, p1, p2 = _make_predicates()
+    ctcs = Always(And(p1, p2), (0, 5)).over()
+    assert isinstance(ctcs, CTCS)
+
+
+# =============================================================================
+# Always – JAX lowering (nested usage)
+# =============================================================================
+
+
+def _setup_always_nested_jax():
+    """Always nested inside an And — visitor lowers to inner robustness."""
+    x_sym = State("x", shape=(2,))
+    x_sym._slice = slice(0, 2)
+    p1 = x_sym[0] <= Constant(np.array(1.0))
+    p2 = x_sym[1] <= Constant(np.array(2.0))
+    return _lower_stl(And(Always(p1, (0, 5)), Always(p2, (0, 5))))
+
+
+def test_always_nested_jax_positive_when_both_satisfied():
+    fn = _setup_always_nested_jax()
+    assert float(fn(jnp.array([0.5, 1.5]), None, None, None)) > 0.0
+
+
+def test_always_nested_jax_negative_when_one_violated():
+    fn = _setup_always_nested_jax()
+    assert float(fn(jnp.array([0.5, 3.0]), None, None, None)) < 0.0
+
+
+# =============================================================================
+# Operator overloads on STLExpr (&, |, ~)
+# =============================================================================
+
+
+def test_stlexpr_or_operator_builds_or_node():
+    _, p1, p2 = _make_predicates()
+    node = Or(p1, p2) | Or(p2, p1)
+    assert isinstance(node, Or)
+    assert len(node.predicates) == 2
+
+
+def test_stlexpr_and_operator_builds_and_node():
+    _, p1, p2 = _make_predicates()
+    node = Or(p1, p2) & Or(p2, p1)
+    assert isinstance(node, And)
+    assert len(node.predicates) == 2
+
+
+def test_stlexpr_invert_operator_builds_not_node():
+    _, p1, p2 = _make_predicates()
+    node = ~Or(p1, p2)
+    assert isinstance(node, Not)
+
+
+def test_stlexpr_operator_with_constraint_on_left():
+    """Constraint & STLExpr → STLExpr.__rand__ kicks in."""
+    _, p1, p2 = _make_predicates()
+    node = p1 & Or(p1, p2)
+    assert isinstance(node, And)
+
+
+def test_stlexpr_operator_with_constraint_on_right():
+    _, p1, p2 = _make_predicates()
+    node = Or(p1, p2) | p1
+    assert isinstance(node, Or)
+
+
+def test_constraint_does_not_have_and_overload():
+    """Bare Constraint & Constraint should NOT build an STL node."""
+    _, p1, p2 = _make_predicates()
+    with pytest.raises(TypeError):
+        p1 & p2  # type: ignore[operator]
+
+
+def test_stlexpr_operator_composition_lowers_correctly():
+    """(Or & Or) | ~Or should produce a valid lowered function."""
+    x_sym = State("x", shape=(2,))
+    x_sym._slice = slice(0, 2)
+    p1 = x_sym[0] <= Constant(np.array(1.0))
+    p2 = x_sym[1] <= Constant(np.array(2.0))
+    spec = (Or(p1, p2) & Or(p1, p2)) | ~Or(p1, p2)
+    fn = _lower_stl(spec)
+    out = fn(jnp.array([0.5, 1.5]), None, None, None)
+    assert jnp.shape(out) == ()
+
+
+# =============================================================================
+# Eventually & Until – placeholders
+# =============================================================================
+
+
+def test_eventually_construction_succeeds():
+    _, p1, _ = _make_predicates()
+    node = Eventually(p1, (0, 5))
+    assert isinstance(node, STLExpr)
+    assert node.predicate is p1
+    assert node.interval == (0, 5)
+
+
+def test_eventually_canonicalize_raises():
+    _, p1, _ = _make_predicates()
+    with pytest.raises(NotImplementedError, match="Eventually"):
+        Eventually(p1, (0, 5)).canonicalize()
+
+
+def test_eventually_over_raises():
+    _, p1, _ = _make_predicates()
+    with pytest.raises(NotImplementedError, match="Eventually"):
+        Eventually(p1, (0, 5)).over((0, 5))
+
+
+def test_eventually_at_raises():
+    _, p1, _ = _make_predicates()
+    with pytest.raises(NotImplementedError, match="Eventually"):
+        Eventually(p1, (0, 5)).at([0])
+
+
+def test_eventually_repr():
+    _, p1, _ = _make_predicates()
+    r = repr(Eventually(p1, (0, 5)))
+    assert "Eventually" in r
+
+
+def test_until_construction_succeeds():
+    _, p1, p2 = _make_predicates()
+    node = Until(p1, p2, (0, 5))
+    assert isinstance(node, STLExpr)
+    assert node.left is p1
+    assert node.right is p2
+    assert node.interval == (0, 5)
+
+
+def test_until_children_returns_both_sides():
+    _, p1, p2 = _make_predicates()
+    assert Until(p1, p2, (0, 5)).children() == [p1, p2]
+
+
+def test_until_canonicalize_raises():
+    _, p1, p2 = _make_predicates()
+    with pytest.raises(NotImplementedError, match="Until"):
+        Until(p1, p2, (0, 5)).canonicalize()
+
+
+def test_until_over_raises():
+    _, p1, p2 = _make_predicates()
+    with pytest.raises(NotImplementedError, match="Until"):
+        Until(p1, p2, (0, 5)).over((0, 5))
+
+
+def test_until_repr():
+    _, p1, p2 = _make_predicates()
+    r = repr(Until(p1, p2, (0, 5)))
+    assert "Until" in r
