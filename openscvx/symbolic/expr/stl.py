@@ -440,7 +440,7 @@ class Not(STLExpr):
         # Equivalently, with operator syntax once lifted into STL:
         outside = ~ox.stl.Always(in_zone)  # not always in zone
 
-    Note:
+    !!! note
         ``Not`` is a thin sign flip — there is no smoothing parameter.
         Composing ``Not`` with ``Or``/``And`` recovers De Morgan duals
         through the GMSR machinery rather than as an algebraic rewrite.
@@ -479,12 +479,11 @@ def Always(
 ) -> "CTCS":
     """Enforce ``predicate`` at every point in ``interval`` (STL ``Always``).
 
-    This is syntactic sugar around CTCS: enforcing the integral of the
-    constraint violation to be zero across the interval is equivalent to
-    requiring the predicate to hold pointwise. ``Always`` is provided so
-    that STL specifications can be written in notation that mirrors the
-    math, without the user having to remember the CTCS-of-violation
-    encoding.
+    ``Always(p, (a, b))`` is satisfied iff ``p`` holds at *every* time in
+    the interval ``[a, b]``. This is the universal temporal quantifier of
+    STL and is the natural way to express invariants such as obstacle
+    avoidance, box constraints, or speed limits over a window of the
+    trajectory.
 
     Args:
         predicate: A Constraint or STLExpr that should hold throughout
@@ -503,6 +502,15 @@ def Always(
         import openscvx as ox
         avoid = ox.linalg.Norm(position - obs) >= safety_radius
         constraints.append(ox.stl.Always(avoid, (0, N - 1)))
+
+    !!! note
+        ``Always`` is currently syntactic sugar around CTCS: enforcing
+        the integral of the constraint violation to be zero across the
+        interval is equivalent to requiring the predicate to hold
+        pointwise. It is exposed as a function (returning a ``CTCS``)
+        rather than as an ``STLExpr`` node, so it cannot be composed
+        with ``&``/``|``/``~``; reach for the underlying ``And``/``Or``
+        constructors if you need that.
     """
     if isinstance(predicate, STLExpr):
         return predicate.over(
@@ -523,10 +531,12 @@ def Always(
 class _UnimplementedTemporal(STLExpr):
     """Base class for temporal STL nodes that are not yet implemented.
 
-    Stores the predicate + interval so that future formulations can be
-    swapped in without changing the surface API. Construction succeeds
-    (so that imports and AST inspection work), but any attempt to lower
-    or enforce the node raises NotImplementedError with a clear message.
+    !!! note
+        Stores the predicate + interval so that future formulations can
+        be swapped in without changing the surface API. Construction
+        succeeds (so that imports and AST inspection work), but any
+        attempt to lower or enforce the node raises NotImplementedError
+        with a clear message.
     """
 
     _operator_name: str = "TemporalOperator"
@@ -573,23 +583,33 @@ class _UnimplementedTemporal(STLExpr):
 
 
 class Eventually(_UnimplementedTemporal):
-    """STL ``Eventually`` operator (placeholder).
+    """STL ``Eventually`` operator: ``p`` holds at some time in the interval.
 
     Semantically: ``Eventually(p, (a, b))`` is satisfied iff ``p`` holds at
-    *some* time in ``[a, b]``. Implementation is in progress (a novel
-    formulation by a collaborator); constructing the node is allowed so
-    that downstream code can be sketched, but any use will raise
-    NotImplementedError.
+    *some* time in ``[a, b]``.
+
+    !!! warning "Not yet implemented!"
+        Constructing the node is allowed so that downstream
+        code can be sketched against the eventual API, but any attempt
+        to lower or enforce it raises ``NotImplementedError``.
     """
 
     _operator_name = "Eventually"
 
 
 class Until(_UnimplementedTemporal):
-    """STL ``Until`` operator (placeholder).
+    """STL ``Until`` operator: ``left`` holds until ``right`` holds.
 
-    Not yet implemented. Constructing the node is allowed so downstream
-    code can be sketched; any use raises NotImplementedError.
+    ``Until(left, right, (a, b))`` is satisfied iff there exists a time
+    ``t* ∈ [a, b]`` at which ``right`` holds, and ``left`` holds at every
+    time in ``[a, t*]``. ``Until`` is the most expressive of the standard
+    STL temporal operators; ``Always`` and ``Eventually`` can both be
+    derived from it.
+
+    !!! warning "Not yet implemented!"
+        Constructing the node is allowed so
+        downstream code can be sketched against the eventual API, but
+        any attempt to lower or enforce it raises ``NotImplementedError``.
     """
 
     _operator_name = "Until"
