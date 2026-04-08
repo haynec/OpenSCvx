@@ -13,11 +13,17 @@ parameterizations that work directly with constraint residuals.
     STL — anything involving an enforcement interval or time-bounded
     quantification — is still being built out:
 
-    - ``Always`` works standalone via ``.over()`` (sugar over CTCS), but
-      when nested inside another STL operator its interval is currently
-      ignored and it lowers to the inner predicate's pointwise
-      robustness. Mixed-interval nesting therefore does not yet have
-      the semantics you would expect from textbook STL.
+    - Intervals are typed: :class:`NodeInterval` (node indices) is
+      implemented end to end. :class:`TimeInterval` (seconds, resolved
+      against the model's explicit ``time`` state) is accepted at
+      construction so downstream code can be sketched against the
+      eventual API, but raises ``NotImplementedError`` at lowering.
+    - Mixed-interval nesting (e.g. ``□[0,5] p ∧ ◇[3,8] q``) has no
+      defined lowering yet and is **rejected at construction time**.
+      Temporal operators used as children of other STL operators must
+      be interval-free and inherit the ambient window from the
+      enclosing ``.over()``. Compose distinct windows as separate
+      top-level constraints instead.
     - ``Eventually`` and ``Until`` are placeholder nodes only —
       construction is allowed so downstream code can be sketched, but
       any attempt to lower or enforce them raises ``NotImplementedError``.
@@ -46,6 +52,7 @@ See also:
     constraints into a task specification.
 """
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, Tuple, Union
 
 import numpy as np
@@ -57,12 +64,163 @@ if TYPE_CHECKING:
     from .constraint import CTCS, NodalConstraint
 
 
+# ---------------------------------------------------------------------------
+# Interval value objects
+#
+# STL temporal operators take an enforcement interval. There are two
+# fundamentally different *kinds* of interval, and they lower very
+# differently:
+#
+#   - NodeInterval (start_node, end_node): resolved statically at graph
+#     build time. The participating nodes are known before any
+#     optimization runs and the lowering becomes a CTCS window over a
+#     known slice of the trajectory.
+#
+#   - TimeInterval (t_start, t_end) in seconds: resolved at *evaluation*
+#     time against the model's explicit `time` state. The set of nodes
+#     that fall inside the window is iterate-dependent; the interval is
+#     realised by gating the predicate residual on
+#     `(time >= t_start) & (time <= t_end)`. There is no static
+#     "convert to a node slice" step.
+#
+# These are not unit conversions of each other; they are different
+# lowering strategies that share a surface API. The Interval ABC +
+# Interval.coerce give a single, typed construction site so that the
+# rest of the STL stack — constructors, parser, lowerer — never has to
+# hand-roll the dispatch.
+#
+# Status: NodeInterval is implemented end to end. TimeInterval is
+# accepted at construction so that downstream code can be written
+# against the eventual API, but raises NotImplementedError at lowering
+# time.
+# ---------------------------------------------------------------------------
+
+
+class Interval:
+    """Base class for STL enforcement intervals.
+
+    Use :meth:`coerce` to build an ``Interval`` from a user-supplied
+    value (a tuple, an existing ``Interval``, or a parser ``Constant``).
+    Direct instantiation of the subclasses is also supported.
+    """
+
+    @staticmethod
+    def coerce(value: object) -> "Interval":
+        """Coerce a user-supplied interval-like value into an ``Interval``.
+
+        Accepts:
+            - an existing ``Interval`` instance (returned as-is);
+            - a 2-tuple/list of ints → :class:`NodeInterval`;
+            - a 2-tuple/list of floats → :class:`TimeInterval`;
+            - a parser :class:`Constant` wrapping a length-2 array, with
+              the same int-vs-float discrimination on its dtype.
+        """
+        if isinstance(value, Interval):
+            return value
+
+        if isinstance(value, Constant):
+            arr = value.value
+            if arr.shape != (2,):
+                raise TypeError(f"Interval Constant must have shape (2,), got {arr.shape}")
+            if arr.dtype.kind in ("i", "u"):
+                return NodeInterval(int(arr[0]), int(arr[1]))
+            return TimeInterval(float(arr[0]), float(arr[1]))
+
+        if isinstance(value, (tuple, list)) and len(value) == 2:
+            a, b = value
+            if isinstance(a, bool) or isinstance(b, bool):
+                raise TypeError("Interval bounds cannot be bool")
+            if isinstance(a, int) and isinstance(b, int):
+                return NodeInterval(a, b)
+            if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+                return TimeInterval(float(a), float(b))
+
+        raise TypeError(
+            f"Cannot coerce {value!r} to an Interval. Expected an Interval "
+            f"instance, a 2-tuple of ints (node indices) or floats (seconds)."
+        )
+
+
+@dataclass(frozen=True)
+class NodeInterval(Interval):
+    """An interval expressed as ``[start_node, end_node]`` discretization indices.
+
+    Resolved statically at graph build time: the participating nodes are
+    known before any optimization runs.
+    """
+
+    start: int
+    end: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.start, int) or not isinstance(self.end, int):
+            raise TypeError(
+                f"NodeInterval bounds must be int, got "
+                f"({type(self.start).__name__}, {type(self.end).__name__})"
+            )
+        if self.end < self.start:
+            raise ValueError(f"NodeInterval end ({self.end}) must be >= start ({self.start})")
+
+    def __repr__(self) -> str:
+        return f"NodeInterval({self.start}, {self.end})"
+
+
+@dataclass(frozen=True)
+class TimeInterval(Interval):
+    """An interval expressed as ``[t_start, t_end]`` in seconds.
+
+    Resolved at *evaluation* time against the model's explicit ``time``
+    state — the set of nodes that fall inside the window is iterate-
+    dependent and is realised by gating the predicate residual on
+    ``(time >= t_start) & (time <= t_end)``.
+
+    !!! warning "Not yet implemented"
+        Construction is allowed so downstream code can be sketched
+        against the eventual API, but lowering raises
+        ``NotImplementedError``. Use :class:`NodeInterval` for now.
+    """
+
+    start: float
+    end: float
+
+    def __post_init__(self) -> None:
+        if self.end < self.start:
+            raise ValueError(f"TimeInterval end ({self.end}) must be >= start ({self.start})")
+
+    def __repr__(self) -> str:
+        return f"TimeInterval({self.start}, {self.end})"
+
+
+IntervalLike = Union[Interval, Tuple[int, int], Tuple[float, float]]
+
+
 class STLExpr(Expr):
     """Base class for GMSR-based Signal Temporal Logic operators.
 
     Provides common functionality for all GMSR STL operators including
     helper methods `.over()` and `.at()` to convert STL expressions
     to constraints for trajectory optimization.
+
+    Sealing a spec — `.over()` vs `.at()`:
+        STL specs live in a symbolic world; to enforce one you must
+        seal it into a concrete constraint via one of two entry points,
+        which represent fundamentally different enforcement strategies:
+
+        - ``.over(interval)`` enforces the spec **throughout** a
+          continuous window. Lowers to a ``CTCS`` (continuous-time
+          constraint satisfaction) wrapper that integrates the
+          violation across the window. Takes an :class:`Interval` (or
+          interval-like value).
+        - ``.at(nodes)`` enforces the spec **only at** an explicit set
+          of discrete node indices. Lowers to a ``NodalConstraint``.
+          Takes a point set, not a window.
+
+        These have no shared abstraction today: ``.over()`` is window-
+        shaped, ``.at()`` is point-set-shaped, and they produce
+        different constraint types via different lowering paths. Pick
+        whichever matches the semantics you want — "always within this
+        stretch" → ``.over()``, "exactly at these checkpoints" →
+        ``.at()``. See the TODO below for the planned unification.
 
     STL Robustness Convention:
         STL uses "robustness" values that are positive when constraints are satisfied.
@@ -85,28 +243,40 @@ class STLExpr(Expr):
         Eventually, Always, or Until for actual STL specifications.
     """
 
-    # TODO: (griffin-norris, haynec, sametusun781) unify the interval,
-    # .over(), and .at() syntax in a clean way. Currently:
-    #   - intervals can live on temporal nodes (Always.interval) *and*
-    #     be re-specified at .over() time, with override semantics;
-    #   - .over() always means "CTCS-of-violation across this window",
-    #     .at() always means "nodal enforcement at these indices",
-    #     and the two have no shared abstraction;
-    #   - Always is the only operator that meaningfully owns an
-    #     interval today, but Eventually/Until will need them too, and
-    #     mixed-interval nesting (□[0,5] p ∧ ◇[3,8] q) has no story yet.
+    # TODO: (griffin-norris, haynec, sametusun781) unify the .over()
+    # and .at() syntax in a clean way. Status:
+    #   [done]   Intervals are typed (NodeInterval / TimeInterval) and
+    #            funnel through Interval.coerce; mixed-interval nesting
+    #            is rejected at construction.
+    #   [open]   Intervals can still live on temporal nodes
+    #            (Always.interval) *and* be re-specified at .over()
+    #            time, with override semantics. Probably fine, but the
+    #            override rule should be documented or removed.
+    #   [open]   .over() and .at() have no shared abstraction.
+    #            The natural unification is a single .enforce(window)
+    #            method dispatching on a window type:
+    #              NodeInterval / TimeInterval → CTCS-shaped lowering
+    #              NodeSet      / TimeSet      → nodal-shaped lowering
+    #            That gives one method, four cells, and adds wall-time
+    #            support purely additively. Worth a planning pass with
+    #            collaborators before committing.
+    #   [open]   TimeInterval lowering itself (gating on the model's
+    #            explicit `time` state). Currently raises
+    #            NotImplementedError at .over() time.
 
     def over(
         self,
-        interval: tuple[int, int],
+        interval: "IntervalLike",
         penalty: str = "smooth_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
     ) -> "CTCS":
-        """Apply this STL expression over a continuous interval using CTCS.
+        """Apply this STL expression over an enforcement interval using CTCS.
 
         Args:
-            interval: Tuple of (start, end) node indices for enforcement interval
+            interval: An ``Interval`` or interval-like value (a 2-tuple of
+                ints for node indices, or a 2-tuple of floats for seconds).
+                See :class:`Interval` for the full coercion rules.
             penalty: Penalty function type for CTCS
             idx: Optional grouping index for multiple augmented states
             check_nodally: Whether to also enforce at discrete nodes
@@ -118,14 +288,36 @@ class STLExpr(Expr):
 
             visit_either = ox.stl.Or(wp1, wp2)
             constraint = visit_either.over((3, 5))
+
+        See also:
+            :meth:`at` for enforcing the spec at an explicit set of
+            discrete node indices instead of throughout a window.
+            ``.over()`` is window-shaped (lowers to ``CTCS``); ``.at()``
+            is point-set-shaped (lowers to ``NodalConstraint``). They
+            are the two entry points for sealing an STL spec into a
+            concrete constraint and have no shared abstraction today —
+            see the class docstring for context.
         """
         from .arithmetic import Neg
         from .constraint import CTCS, Inequality
 
+        coerced = Interval.coerce(interval)
+        if isinstance(coerced, TimeInterval):
+            raise NotImplementedError(
+                "TimeInterval lowering is not yet implemented. Time-based "
+                "intervals will be realised by gating the predicate residual "
+                "on the model's explicit `time` state. Use NodeInterval "
+                "(int node indices) for now."
+            )
+
         constraint = Inequality(Neg(self), Constant(np.array(0.0)))
 
         return CTCS(
-            constraint, penalty=penalty, nodes=interval, idx=idx, check_nodally=check_nodally
+            constraint,
+            penalty=penalty,
+            nodes=(coerced.start, coerced.end),
+            idx=idx,
+            check_nodally=check_nodally,
         )
 
     def at(self, nodes: Union[list, tuple]) -> "NodalConstraint":
@@ -142,6 +334,15 @@ class STLExpr(Expr):
 
                 visit_either = ox.stl.Or(wp1, wp2)
                 constraint = visit_either.at([0, 5, 10])
+
+        See also:
+            :meth:`over` for enforcing the spec **throughout** a
+            continuous window instead of at a discrete point set.
+            ``.at()`` is point-set-shaped (lowers to
+            ``NodalConstraint``); ``.over()`` is window-shaped (lowers
+            to ``CTCS``). They are the two entry points for sealing an
+            STL spec into a concrete constraint and have no shared
+            abstraction today — see the class docstring for context.
 
         Note:
             This is a base class. Use concrete subclasses like Or, And,
@@ -190,7 +391,17 @@ class STLExpr(Expr):
 
 
 def _validate_predicates(predicates, min_count, cls_name):
-    """Validate that predicates are Constraint or STLExpr instances."""
+    """Validate that predicates are Constraint or STLExpr instances.
+
+    Also rejects temporal STL nodes that carry their own enforcement
+    interval as children of another STL operator. Mixed-interval nesting
+    (e.g. ``□[0,5] p ∧ ◇[3,8] q``) has no defined lowering yet, so we
+    refuse it loudly at construction time rather than silently dropping
+    the inner interval at lowering time. The workaround is to either
+    drop the inner interval and let it inherit the ambient window from
+    ``.over()``, or to compose the temporal pieces as separate
+    top-level constraints.
+    """
     if len(predicates) < min_count:
         raise ValueError(f"{cls_name} requires at least {min_count} predicates")
     for pred in predicates:
@@ -199,6 +410,16 @@ def _validate_predicates(predicates, min_count, cls_name):
                 f"{cls_name} requires Constraint or STLExpr predicates, got "
                 f"{type(pred).__name__}. "
                 f"Did you mean to write a constraint like 'expr <= value'?"
+            )
+        if isinstance(pred, _TemporalSTLExpr) and pred.interval is not None:
+            raise ValueError(
+                f"{cls_name}(...) cannot contain a temporal operator with an "
+                f"explicit interval (got {type(pred).__name__} with "
+                f"interval={pred.interval!r}). Mixed-interval nesting is not "
+                f"yet supported. Either drop the inner interval and let it "
+                f"inherit the ambient window from .over(), or compose the "
+                f"temporal pieces as separate top-level constraints: "
+                f"Always(p, I1).over() and Always(q, I2).over()."
             )
 
 
@@ -500,7 +721,21 @@ class Not(STLExpr):
         return f"Not({self.predicate!r})"
 
 
-class Always(STLExpr):
+class _TemporalSTLExpr(STLExpr):
+    """Base class for STL temporal operators (``Always``, ``Eventually``,
+    ``Until``).
+
+    Temporal operators are distinguished from purely-logical operators
+    (``And``, ``Or``, ``Not``, ``IfThen``) by carrying an enforcement
+    :class:`Interval`. Subclasses must set ``self.interval`` (an
+    ``Interval`` or ``None``) in their ``__init__``. This marker is what
+    :func:`_validate_predicates` checks to refuse mixed-interval nesting.
+    """
+
+    interval: Optional[Interval] = None
+
+
+class Always(_TemporalSTLExpr):
     """Enforce ``predicate`` at every point in ``interval`` (STL ``Always``).
 
     ``Always(p, (a, b))`` is satisfied iff ``p`` holds at *every* time in
@@ -532,23 +767,22 @@ class Always(STLExpr):
         interval is equivalent to requiring the predicate to hold
         pointwise. ``.over()`` performs that wrapping.
 
-        When ``Always`` is *nested* inside another STL operator, the
-        stored interval is currently ignored and the node lowers to the
-        inner predicate's pointwise robustness — so nested usage only
-        produces the intended semantics when all interacting temporal
-        operators share the same enforcement window. Mixed-interval
-        nesting will become well-defined once ``Eventually`` and
-        ``Until`` land with their full temporal lowering.
+        When ``Always`` is *nested* inside another STL operator it
+        must be interval-free and inherits the ambient window from the
+        enclosing ``.over()``. Passing an explicit interval to a nested
+        ``Always`` is rejected at construction time, since mixed-
+        interval nesting has no defined lowering yet. To compose
+        distinct windows, use separate top-level constraints.
     """
 
     def __init__(
         self,
         predicate: Union[Constraint, "STLExpr"],
-        interval: Optional[tuple[int, int]] = None,
+        interval: Optional[IntervalLike] = None,
     ):
         _validate_predicates([predicate], 1, "Always")
         self.predicate = predicate
-        self.interval = interval
+        self.interval = Interval.coerce(interval) if interval is not None else None
 
     def children(self):
         return [self.predicate]
@@ -565,7 +799,7 @@ class Always(STLExpr):
 
     def over(
         self,
-        interval: Optional[tuple[int, int]] = None,
+        interval: Optional[IntervalLike] = None,
         penalty: str = "smooth_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
@@ -583,10 +817,17 @@ class Always(STLExpr):
             A ``CTCS`` constraint enforcing the inner predicate over the
             interval.
         """
-        chosen = interval if interval is not None else self.interval
+        chosen = Interval.coerce(interval) if interval is not None else self.interval
         if chosen is None:
             raise ValueError(
                 "Always requires an interval — pass one to the constructor or to .over()."
+            )
+        if isinstance(chosen, TimeInterval):
+            raise NotImplementedError(
+                "TimeInterval lowering is not yet implemented. Time-based "
+                "intervals will be realised by gating the predicate residual "
+                "on the model's explicit `time` state. Use NodeInterval "
+                "(int node indices) for now."
             )
 
         if isinstance(self.predicate, STLExpr):
@@ -599,7 +840,7 @@ class Always(STLExpr):
         return CTCS(
             self.predicate,
             penalty=penalty,
-            nodes=chosen,
+            nodes=(chosen.start, chosen.end),
             idx=idx,
             check_nodally=check_nodally,
         )
@@ -610,7 +851,7 @@ class Always(STLExpr):
         return f"Always({self.predicate!r}, {self.interval!r})"
 
 
-class _UnimplementedTemporal(STLExpr):
+class _UnimplementedTemporal(_TemporalSTLExpr):
     """Base class for temporal STL nodes that are not yet implemented.
 
     !!! note
@@ -626,11 +867,11 @@ class _UnimplementedTemporal(STLExpr):
     def __init__(
         self,
         predicate: Union[Constraint, "STLExpr"],
-        interval: tuple[int, int],
+        interval: IntervalLike,
     ):
         _validate_predicates([predicate], 1, self._operator_name)
         self.predicate = predicate
-        self.interval = interval
+        self.interval = Interval.coerce(interval)
 
     def children(self):
         return [self.predicate]
@@ -700,13 +941,13 @@ class Until(_UnimplementedTemporal):
         self,
         left: Union[Constraint, "STLExpr"],
         right: Union[Constraint, "STLExpr"],
-        interval: tuple[int, int],
+        interval: IntervalLike,
     ):
         _validate_predicates([left, right], 2, "Until")
         self.left = left
         self.right = right
         self.predicate = left  # for _UnimplementedTemporal.children/check_shape
-        self.interval = interval
+        self.interval = Interval.coerce(interval)
 
     def children(self):
         return [self.left, self.right]

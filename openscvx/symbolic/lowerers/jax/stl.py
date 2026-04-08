@@ -222,11 +222,17 @@ def _visit_ifthen(lowerer, node: IfThen):
 def _visit_always(lowerer, node: Always):
     """Lower nested ``Always`` to JAX.
 
-    When ``Always`` appears as a child of another STL operator, we lower
-    it to the inner predicate's pointwise robustness — the stored
-    interval is ignored. Standalone use goes through ``.over()``, which
-    builds a ``CTCS`` directly and never reaches this visitor.
+    Mixed-interval nesting is rejected at construction time, so by the
+    time this visitor runs the node is guaranteed to be interval-free
+    and inherits the ambient window from the enclosing ``.over()``. We
+    just lower it to the inner predicate's pointwise robustness.
+    Standalone ``Always`` goes through ``.over()``, which builds a
+    ``CTCS`` directly and never reaches this visitor.
     """
+    assert node.interval is None, (
+        "nested Always with explicit interval should have been rejected at "
+        "construction by _validate_predicates"
+    )
     inner_fns = _lower_predicate_residuals(lowerer, [node.predicate])
 
     def always_fn(x, u, node_idx, params):

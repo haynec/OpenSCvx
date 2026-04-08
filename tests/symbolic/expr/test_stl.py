@@ -27,6 +27,7 @@ from openscvx.symbolic.expr.stl import (
     Eventually,
     IfThen,
     IntegerVariable,
+    NodeInterval,
     Not,
     Or,
     STLExpr,
@@ -688,7 +689,7 @@ def test_always_basic_construction():
     node = Always(p1, (0, 5))
     assert isinstance(node, STLExpr)
     assert node.predicate is p1
-    assert node.interval == (0, 5)
+    assert node.interval == NodeInterval(0, 5)
 
 
 def test_always_interval_optional():
@@ -728,7 +729,7 @@ def test_always_canonicalize_preserves_interval():
     _, p1, _ = _make_predicates()
     canon = Always(p1, (3, 7)).canonicalize()
     assert isinstance(canon, Always)
-    assert canon.interval == (3, 7)
+    assert canon.interval == NodeInterval(3, 7)
 
 
 def test_always_accepts_nested_stl_predicate():
@@ -775,12 +776,13 @@ def test_always_over_with_stl_predicate_returns_ctcs():
 
 
 def _setup_always_nested_jax():
-    """Always nested inside an And — visitor lowers to inner robustness."""
+    """Always nested inside an And — children must be interval-free and
+    inherit the ambient window from the enclosing .over()."""
     x_sym = State("x", shape=(2,))
     x_sym._slice = slice(0, 2)
     p1 = x_sym[0] <= Constant(np.array(1.0))
     p2 = x_sym[1] <= Constant(np.array(2.0))
-    return _lower_stl(And(Always(p1, (0, 5)), Always(p2, (0, 5))))
+    return _lower_stl(And(Always(p1), Always(p2)))
 
 
 def test_always_nested_jax_positive_when_both_satisfied():
@@ -860,7 +862,7 @@ def test_eventually_construction_succeeds():
     node = Eventually(p1, (0, 5))
     assert isinstance(node, STLExpr)
     assert node.predicate is p1
-    assert node.interval == (0, 5)
+    assert node.interval == NodeInterval(0, 5)
 
 
 def test_eventually_canonicalize_raises():
@@ -893,7 +895,7 @@ def test_until_construction_succeeds():
     assert isinstance(node, STLExpr)
     assert node.left is p1
     assert node.right is p2
-    assert node.interval == (0, 5)
+    assert node.interval == NodeInterval(0, 5)
 
 
 def test_until_children_returns_both_sides():
