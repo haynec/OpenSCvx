@@ -40,8 +40,10 @@ def _parse_not(args, kwargs):
 
 @function("Always")
 def _parse_always(args, kwargs):
-    if len(args) != 2:
-        raise ValueError("Always() requires exactly 2 arguments (predicate, interval)")
+    if len(args) not in (1, 2):
+        raise ValueError("Always() requires 1 or 2 arguments (predicate[, interval])")
+    if len(args) == 1:
+        return Always(args[0], **kwargs)
     predicate, interval = args
     if isinstance(interval, Constant):
         interval = tuple(int(v) for v in interval.value.tolist())

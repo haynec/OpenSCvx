@@ -17,7 +17,15 @@ import jax.numpy as jnp
 from jax import Array
 from jax.typing import ArrayLike
 
-from openscvx.symbolic.expr.stl import And, IfThen, IntegerVariable, Not, Or, STLExpr
+from openscvx.symbolic.expr.stl import (
+    Always,
+    And,
+    IfThen,
+    IntegerVariable,
+    Not,
+    Or,
+    STLExpr,
+)
 from openscvx.symbolic.lowerers.jax._registry import visitor
 
 # ---------------------------------------------------------------------------
@@ -208,6 +216,25 @@ def _visit_ifthen(lowerer, node: IfThen):
         return -gmsr_fn(jnp.array([cond_residual, conseq_residual]), c=c)
 
     return ifthen_fn
+
+
+@visitor(Always)
+def _visit_always(lowerer, node: Always):
+    """Lower nested ``Always`` to JAX.
+
+    When ``Always`` appears as a child of another STL operator, we lower
+    it to the inner predicate's pointwise robustness — the stored
+    interval is ignored. Standalone use goes through ``.over()``, which
+    builds a ``CTCS`` directly and never reaches this visitor.
+    """
+    inner_fns = _lower_predicate_residuals(lowerer, [node.predicate])
+
+    def always_fn(x, u, node_idx, params):
+        # inner_fns returns the residual (negative-when-satisfied);
+        # negate to get robustness (positive-when-satisfied).
+        return -inner_fns[0](x, u, node_idx, params)
+
+    return always_fn
 
 
 @visitor(Not)

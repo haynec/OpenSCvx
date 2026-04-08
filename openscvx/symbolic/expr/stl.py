@@ -7,6 +7,25 @@ differentiable approximations of Boolean logic for use in trajectory optimizatio
 Unlike the stljax module (which uses the stljax library), this module uses GMSR
 parameterizations that work directly with constraint residuals.
 
+!!! warning "Interval and time semantics are a work in progress"
+    The *logical* operators in this module (``And``, ``Or``, ``Not``,
+    ``IfThen``) are stable and compose freely. The *temporal* side of
+    STL — anything involving an enforcement interval or time-bounded
+    quantification — is still being built out:
+
+    - ``Always`` works standalone via ``.over()`` (sugar over CTCS), but
+      when nested inside another STL operator its interval is currently
+      ignored and it lowers to the inner predicate's pointwise
+      robustness. Mixed-interval nesting therefore does not yet have
+      the semantics you would expect from textbook STL.
+    - ``Eventually`` and ``Until`` are placeholder nodes only —
+      construction is allowed so downstream code can be sketched, but
+      any attempt to lower or enforce them raises ``NotImplementedError``.
+      A novel formulation is in progress.
+
+    Treat this surface as load-bearing for *logical* task composition
+    and as preview for *temporal* composition until those gaps close.
+
 GMSR Robustness Convention:
     GMSR functions operate on constraint residuals (negative when satisfied).
     The expression nodes in this module follow the standard STL convention where
@@ -65,6 +84,17 @@ class STLExpr(Expr):
         This is a base class. Use concrete subclasses like Or, And,
         Eventually, Always, or Until for actual STL specifications.
     """
+
+    # TODO: (griffin-norris, haynec, sametusun781) unify the interval,
+    # .over(), and .at() syntax in a clean way. Currently:
+    #   - intervals can live on temporal nodes (Always.interval) *and*
+    #     be re-specified at .over() time, with override semantics;
+    #   - .over() always means "CTCS-of-violation across this window",
+    #     .at() always means "nodal enforcement at these indices",
+    #     and the two have no shared abstraction;
+    #   - Always is the only operator that meaningfully owns an
+    #     interval today, but Eventually/Until will need them too, and
+    #     mixed-interval nesting (□[0,5] p ∧ ◇[3,8] q) has no story yet.
 
     def over(
         self,
@@ -470,13 +500,7 @@ class Not(STLExpr):
         return f"Not({self.predicate!r})"
 
 
-def Always(
-    predicate: Union[Constraint, "STLExpr"],
-    interval: tuple[int, int],
-    penalty: str = "smooth_relu",
-    idx: Optional[int] = None,
-    check_nodally: bool = False,
-) -> "CTCS":
+class Always(STLExpr):
     """Enforce ``predicate`` at every point in ``interval`` (STL ``Always``).
 
     ``Always(p, (a, b))`` is satisfied iff ``p`` holds at *every* time in
@@ -488,44 +512,103 @@ def Always(
     Args:
         predicate: A Constraint or STLExpr that should hold throughout
             the interval.
-        interval: ``(start, end)`` node indices defining the enforcement
-            window.
-        penalty: CTCS penalty function name.
-        idx: Optional grouping index for multiple augmented states.
-        check_nodally: Whether to additionally enforce at discrete nodes.
-
-    Returns:
-        A ``CTCS`` constraint enforcing ``predicate`` over ``interval``.
+        interval: Optional ``(start, end)`` node indices defining the
+            enforcement window. If omitted at construction, must be
+            supplied at ``.over()`` time.
 
     Example::
 
         import openscvx as ox
         avoid = ox.linalg.Norm(position - obs) >= safety_radius
-        constraints.append(ox.stl.Always(avoid, (0, N - 1)))
+        constraints.append(ox.stl.Always(avoid, (0, N - 1)).over())
+
+        # Composes naturally with other STL operators:
+        spec = ox.stl.Always(avoid, (0, N - 1)) & ox.stl.Always(in_box, (0, N - 1))
+        constraints.append(spec.over())
 
     !!! note
-        ``Always`` is currently syntactic sugar around CTCS: enforcing
+        Standalone, ``Always`` is syntactic sugar around CTCS: enforcing
         the integral of the constraint violation to be zero across the
         interval is equivalent to requiring the predicate to hold
-        pointwise. It is exposed as a function (returning a ``CTCS``)
-        rather than as an ``STLExpr`` node, so it cannot be composed
-        with ``&``/``|``/``~``; reach for the underlying ``And``/``Or``
-        constructors if you need that.
-    """
-    if isinstance(predicate, STLExpr):
-        return predicate.over(
-            interval, penalty=penalty, idx=idx, check_nodally=check_nodally
-        )
-    if not isinstance(predicate, Constraint):
-        raise TypeError(
-            f"Always requires a Constraint or STLExpr predicate, got "
-            f"{type(predicate).__name__}."
-        )
-    from .constraint import CTCS
+        pointwise. ``.over()`` performs that wrapping.
 
-    return CTCS(
-        predicate, penalty=penalty, nodes=interval, idx=idx, check_nodally=check_nodally
-    )
+        When ``Always`` is *nested* inside another STL operator, the
+        stored interval is currently ignored and the node lowers to the
+        inner predicate's pointwise robustness — so nested usage only
+        produces the intended semantics when all interacting temporal
+        operators share the same enforcement window. Mixed-interval
+        nesting will become well-defined once ``Eventually`` and
+        ``Until`` land with their full temporal lowering.
+    """
+
+    def __init__(
+        self,
+        predicate: Union[Constraint, "STLExpr"],
+        interval: Optional[tuple[int, int]] = None,
+    ):
+        _validate_predicates([predicate], 1, "Always")
+        self.predicate = predicate
+        self.interval = interval
+
+    def children(self):
+        return [self.predicate]
+
+    def canonicalize(self) -> "Expr":
+        result = Always.__new__(Always)
+        result.predicate = self.predicate.canonicalize()
+        result.interval = self.interval
+        return result
+
+    def check_shape(self) -> Tuple[int, ...]:
+        self.predicate.check_shape()
+        return ()
+
+    def over(
+        self,
+        interval: Optional[tuple[int, int]] = None,
+        penalty: str = "smooth_relu",
+        idx: Optional[int] = None,
+        check_nodally: bool = False,
+    ) -> "CTCS":
+        """Convert this ``Always`` to a ``CTCS`` constraint.
+
+        Args:
+            interval: Optional override for the enforcement interval. If
+                omitted, the interval supplied at construction is used.
+            penalty: CTCS penalty function name.
+            idx: Optional grouping index for multiple augmented states.
+            check_nodally: Whether to additionally enforce at discrete nodes.
+
+        Returns:
+            A ``CTCS`` constraint enforcing the inner predicate over the
+            interval.
+        """
+        chosen = interval if interval is not None else self.interval
+        if chosen is None:
+            raise ValueError(
+                "Always requires an interval — pass one to the constructor "
+                "or to .over()."
+            )
+
+        if isinstance(self.predicate, STLExpr):
+            return self.predicate.over(
+                chosen, penalty=penalty, idx=idx, check_nodally=check_nodally
+            )
+
+        from .constraint import CTCS
+
+        return CTCS(
+            self.predicate,
+            penalty=penalty,
+            nodes=chosen,
+            idx=idx,
+            check_nodally=check_nodally,
+        )
+
+    def __repr__(self) -> str:
+        if self.interval is None:
+            return f"Always({self.predicate!r})"
+        return f"Always({self.predicate!r}, {self.interval!r})"
 
 
 class _UnimplementedTemporal(STLExpr):
