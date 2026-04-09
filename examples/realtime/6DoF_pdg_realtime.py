@@ -50,7 +50,8 @@ def _target_viser_on_grid_plane(fx: float, fy: float) -> tuple[float, float, flo
     """Viser ``add_grid`` is XY at z=0.
 
     Horizontal axes are swapped vs naive (fx,fy)→(fx,fy) so they match ``model_vec_to_viser_xyz``:
-    model ``(fx, fy, 0)`` maps to Viser ``(0, fy*s, fx*s)``, so grid-plane motion uses ``vx = fy*s``, ``vy = fx*s``.
+    model ``(fx, fy, 0)`` maps to Viser ``(0, fy*s, fx*s)``, so grid-plane motion uses
+    ``vx = fy*s``, ``vy = fx*s``.
     """
     s = VISER_SCENE_SCALE
     return (float(fy) * s, float(fx) * s, 0.0)
@@ -75,7 +76,11 @@ def _generate_cone_mesh(
     axis = np.asarray(axis, dtype=np.float32)
     axis = axis / np.linalg.norm(axis)
 
-    ref = np.array([0.0, 0.0, 1.0], dtype=np.float32) if abs(axis[2]) < 0.9 else np.array([1.0, 0.0, 0.0], dtype=np.float32)
+    ref = (
+        np.array([0.0, 0.0, 1.0], dtype=np.float32)
+        if abs(axis[2]) < 0.9
+        else np.array([1.0, 0.0, 0.0], dtype=np.float32)
+    )
     u = ref - np.dot(ref, axis) * axis
     u = u / np.linalg.norm(u)
     v = np.cross(axis, u)
@@ -121,8 +126,12 @@ def _sync_problem_parameters_from_base() -> None:
     p.parameters["S_a"] = float(pdg.S_a.value)
     p.parameters["rho"] = float(pdg.rho.value)
     p.parameters["l_p"] = float(pdg.l_p.value)
-    p.parameters["initial_position"] = np.asarray(pdg.initial_position.value, dtype=np.float64).reshape(3)
-    p.parameters["final_position"] = np.asarray(pdg.final_position.value, dtype=np.float64).reshape(2)
+    p.parameters["initial_position"] = np.asarray(
+        pdg.initial_position.value, dtype=np.float64
+    ).reshape(3)
+    p.parameters["final_position"] = np.asarray(pdg.final_position.value, dtype=np.float64).reshape(
+        2
+    )
 
 
 def create_realtime_server(optimization_problem) -> viser.ViserServer:
@@ -159,7 +168,8 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
         position=_viser_tuple_from_model(init_pos),
     )
     _final_model = np.array(
-        [float(pdg.final_position.value[0]), float(pdg.final_position.value[1]), 0.0], dtype=np.float64
+        [float(pdg.final_position.value[0]), float(pdg.final_position.value[1]), 0.0],
+        dtype=np.float64,
     )
     target_handle = server.scene.add_icosphere(
         "/target",
@@ -257,13 +267,25 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
 
     with server.gui.add_folder("Algorithm Weights"):
         lam_cost = server.gui.add_number(
-            "lam_cost", initial_value=optimization_problem.algorithm.lam_cost, min=1e-8, max=1e5, step=0.01
+            "lam_cost",
+            initial_value=optimization_problem.algorithm.lam_cost,
+            min=1e-8,
+            max=1e5,
+            step=0.01,
         )
         lam_vc = server.gui.add_number(
-            "lam_vc", initial_value=optimization_problem.algorithm.lam_vc, min=1e-8, max=1e5, step=0.01
+            "lam_vc",
+            initial_value=optimization_problem.algorithm.lam_vc,
+            min=1e-8,
+            max=1e5,
+            step=0.01,
         )
         lam_prox = server.gui.add_number(
-            "lam_prox", initial_value=optimization_problem.algorithm.lam_prox, min=1e-8, max=1e5, step=0.01
+            "lam_prox",
+            initial_value=optimization_problem.algorithm.lam_prox,
+            min=1e-8,
+            max=1e5,
+            step=0.01,
         )
 
         @lam_cost.on_update
@@ -279,35 +301,79 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
             optimization_problem.algorithm.lam_prox = float(lam_prox.value)
 
     with server.gui.add_folder("Dynamics / Constraint Parameters"):
-        gI_in = server.gui.add_number("gI", initial_value=float(pdg.gI.value), min=0.01, max=20.0, step=0.01)
-        g0_in = server.gui.add_number("g0", initial_value=float(pdg.g0.value), min=0.01, max=20.0, step=0.01)
-        isp_in = server.gui.add_number("Isp", initial_value=float(pdg.Isp.value), min=1.0, max=500.0, step=1.0)
-        m_dry_in = server.gui.add_number("m_dry", initial_value=float(pdg.m_dry.value), min=0.5, max=2.0, step=0.01)
-        v_max_in = server.gui.add_number("v_max", initial_value=float(pdg.v_max.value), min=0.1, max=20.0, step=0.05)
-        w_max_in = server.gui.add_number("w_max", initial_value=float(pdg.w_max.value), min=0.01, max=5.0, step=0.01)
-        del_max_in = server.gui.add_number("del_max (deg)", initial_value=float(pdg.del_max.value), min=1.0, max=89.0, step=0.5)
-        theta_max_in = server.gui.add_number("theta_max (deg)", initial_value=float(pdg.theta_max.value), min=1.0, max=89.0, step=0.5)
-        t_min_in = server.gui.add_number("T_min", initial_value=float(pdg.T_min.value), min=0.1, max=20.0, step=0.1)
-        t_max_in = server.gui.add_number("T_max", initial_value=float(pdg.T_max.value), min=0.1, max=20.0, step=0.1)
-        gamma_in = server.gui.add_number("gamma (deg)", initial_value=float(pdg.gamma.value), min=1.0, max=89.0, step=0.5)
-        beta_in = server.gui.add_number("beta", initial_value=float(pdg.beta.value), min=0.0, max=1.0, step=0.001)
-        c_ax_in = server.gui.add_number("c_ax", initial_value=float(pdg.c_ax.value), min=0.0, max=5.0, step=0.05)
-        c_ayz_in = server.gui.add_number("c_ayz", initial_value=float(pdg.c_ayz.value), min=0.0, max=5.0, step=0.05)
-        s_a_in = server.gui.add_number("S_a", initial_value=float(pdg.S_a.value), min=0.0, max=5.0, step=0.05)
-        rho_in = server.gui.add_number("rho", initial_value=float(pdg.rho.value), min=0.0, max=5.0, step=0.05)
-        l_arm_in = server.gui.add_number("l (arm)", initial_value=float(pdg.l_arm.value), min=0.01, max=2.0, step=0.01)
-        l_p_in = server.gui.add_number("l_p", initial_value=float(pdg.l_p.value), min=0.0, max=1.0, step=0.01)
+        gI_in = server.gui.add_number(
+            "gI", initial_value=float(pdg.gI.value), min=0.01, max=20.0, step=0.01
+        )
+        g0_in = server.gui.add_number(
+            "g0", initial_value=float(pdg.g0.value), min=0.01, max=20.0, step=0.01
+        )
+        isp_in = server.gui.add_number(
+            "Isp", initial_value=float(pdg.Isp.value), min=1.0, max=500.0, step=1.0
+        )
+        m_dry_in = server.gui.add_number(
+            "m_dry", initial_value=float(pdg.m_dry.value), min=0.5, max=2.0, step=0.01
+        )
+        v_max_in = server.gui.add_number(
+            "v_max", initial_value=float(pdg.v_max.value), min=0.1, max=20.0, step=0.05
+        )
+        w_max_in = server.gui.add_number(
+            "w_max", initial_value=float(pdg.w_max.value), min=0.01, max=5.0, step=0.01
+        )
+        del_max_in = server.gui.add_number(
+            "del_max (deg)", initial_value=float(pdg.del_max.value), min=1.0, max=89.0, step=0.5
+        )
+        theta_max_in = server.gui.add_number(
+            "theta_max (deg)", initial_value=float(pdg.theta_max.value), min=1.0, max=89.0, step=0.5
+        )
+        t_min_in = server.gui.add_number(
+            "T_min", initial_value=float(pdg.T_min.value), min=0.1, max=20.0, step=0.1
+        )
+        t_max_in = server.gui.add_number(
+            "T_max", initial_value=float(pdg.T_max.value), min=0.1, max=20.0, step=0.1
+        )
+        gamma_in = server.gui.add_number(
+            "gamma (deg)", initial_value=float(pdg.gamma.value), min=1.0, max=89.0, step=0.5
+        )
+        beta_in = server.gui.add_number(
+            "beta", initial_value=float(pdg.beta.value), min=0.0, max=1.0, step=0.001
+        )
+        c_ax_in = server.gui.add_number(
+            "c_ax", initial_value=float(pdg.c_ax.value), min=0.0, max=5.0, step=0.05
+        )
+        c_ayz_in = server.gui.add_number(
+            "c_ayz", initial_value=float(pdg.c_ayz.value), min=0.0, max=5.0, step=0.05
+        )
+        s_a_in = server.gui.add_number(
+            "S_a", initial_value=float(pdg.S_a.value), min=0.0, max=5.0, step=0.05
+        )
+        rho_in = server.gui.add_number(
+            "rho", initial_value=float(pdg.rho.value), min=0.0, max=5.0, step=0.05
+        )
+        l_arm_in = server.gui.add_number(
+            "l (arm)", initial_value=float(pdg.l_arm.value), min=0.01, max=2.0, step=0.01
+        )
+        l_p_in = server.gui.add_number(
+            "l_p", initial_value=float(pdg.l_p.value), min=0.0, max=1.0, step=0.01
+        )
         j_diag = np.asarray(pdg.J_diag.value, dtype=np.float64).reshape(3)
-        j0 = server.gui.add_number("J_diag[0]", initial_value=float(j_diag[0]), min=1e-6, max=1.0, step=1e-4)
-        j1 = server.gui.add_number("J_diag[1]", initial_value=float(j_diag[1]), min=1e-6, max=1.0, step=1e-4)
-        j2 = server.gui.add_number("J_diag[2]", initial_value=float(j_diag[2]), min=1e-6, max=1.0, step=1e-4)
+        j0 = server.gui.add_number(
+            "J_diag[0]", initial_value=float(j_diag[0]), min=1e-6, max=1.0, step=1e-4
+        )
+        j1 = server.gui.add_number(
+            "J_diag[1]", initial_value=float(j_diag[1]), min=1e-6, max=1.0, step=1e-4
+        )
+        j2 = server.gui.add_number(
+            "J_diag[2]", initial_value=float(j_diag[2]), min=1e-6, max=1.0, step=1e-4
+        )
         initial_pos_input = server.gui.add_vector3(
             "initial_position",
             initial_value=tuple(np.asarray(pdg.initial_position.value, dtype=np.float64)),
             step=0.1,
         )
         final_xy_input = server.gui.add_vector2(
-            "final_position [x,y]", initial_value=tuple(np.asarray(pdg.final_position.value, dtype=np.float64)), step=0.1
+            "final_position [x,y]",
+            initial_value=tuple(np.asarray(pdg.final_position.value, dtype=np.float64)),
+            step=0.1,
         )
 
         @gI_in.on_update
@@ -476,7 +542,8 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
         pdg.mass.min = np.array([md], dtype=np.float64)
 
         final_xyz = np.array(
-            [float(pdg.final_position.value[0]), float(pdg.final_position.value[1]), 0.0], dtype=np.float64
+            [float(pdg.final_position.value[0]), float(pdg.final_position.value[1]), 0.0],
+            dtype=np.float64,
         )
         pdg.position.guess = np.linspace(new_initial, final_xyz, pdg.n)
         pdg.velocity.guess = np.linspace(
@@ -516,7 +583,8 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
             if len(positions) > 0:
                 colors = compute_velocity_colors_realtime(velocities, _viridis_cmap)
                 trajectory_handle.points = (
-                    pdg.model_vec_to_viser_xyz(np.asarray(positions, dtype=np.float64)) * VISER_SCENE_SCALE
+                    pdg.model_vec_to_viser_xyz(np.asarray(positions, dtype=np.float64))
+                    * VISER_SCENE_SCALE
                 ).astype(np.float32)
                 trajectory_handle.colors = colors
         except Exception:
@@ -525,7 +593,9 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
                 pos = x_traj[:, 1:4]
                 points = (pdg.model_vec_to_viser_xyz(pos) * VISER_SCENE_SCALE).astype(np.float32)
                 trajectory_handle.points = points
-                trajectory_handle.colors = np.tile(np.array([[255, 255, 0]], dtype=np.uint8), (points.shape[0], 1))
+                trajectory_handle.colors = np.tile(
+                    np.array([[255, 255, 0]], dtype=np.uint8), (points.shape[0], 1)
+                )
 
     def optimization_loop() -> None:
         while state["running"]:

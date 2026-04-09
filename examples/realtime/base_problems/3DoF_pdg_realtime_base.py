@@ -25,15 +25,11 @@ repo_root_dir = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
 sys.path.append(repo_root_dir)
 
 import openscvx as ox
-from openscvx import Free
-
 from examples.plotting_viser import (
     create_pdg_animated_plotting_server,
     create_scp_animated_plotting_server,
 )
-
-from openscvx import Problem
-from openscvx.plotting import plot_controls, plot_projections_2d, plot_states, plot_vector_norm
+from openscvx import Free, Problem
 from openscvx.utils import printing as _openscvx_printing
 
 
@@ -204,14 +200,10 @@ constraints.append(
 )
 
 # Initial position constraint
-constraints.append(
-    (position == initial_position).convex().at([0])
-)
+constraints.append((position == initial_position).convex().at([0]))
 
 # Terminal position constraint
-constraints.append(
-    (position[0:2] == final_position).convex().at([n-1])
-)
+constraints.append((position[0:2] == final_position).convex().at([n - 1]))
 
 
 # Define dynamics as dictionary mapping state names to their derivatives

@@ -64,7 +64,11 @@ def _generate_cone_mesh(
     axis = np.asarray(axis, dtype=np.float32)
     axis = axis / np.linalg.norm(axis)
 
-    ref = np.array([1.0, 0.0, 0.0], dtype=np.float32) if abs(axis[0]) < 0.9 else np.array([0.0, 1.0, 0.0], dtype=np.float32)
+    ref = (
+        np.array([1.0, 0.0, 0.0], dtype=np.float32)
+        if abs(axis[0]) < 0.9
+        else np.array([0.0, 1.0, 0.0], dtype=np.float32)
+    )
     u = ref - np.dot(ref, axis) * axis
     u = u / np.linalg.norm(u)
     v = np.cross(axis, u)
@@ -99,7 +103,9 @@ def _sync_problem_parameters_from_base() -> None:
     pdg.problem.parameters["thrust_pointing_angle"] = float(pdg.thrust_pointing_angle.value)
     pdg.problem.parameters["T1"] = float(pdg.T1.value)
     pdg.problem.parameters["T2"] = float(pdg.T2.value)
-    pdg.problem.parameters["initial_position"] = np.array(pdg.initial_position.value, dtype=np.float64)
+    pdg.problem.parameters["initial_position"] = np.array(
+        pdg.initial_position.value, dtype=np.float64
+    )
     pdg.problem.parameters["final_position"] = np.array(pdg.final_position.value, dtype=np.float64)
 
 
@@ -231,9 +237,27 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
             state["reset_requested"] = True
 
     with server.gui.add_folder("Algorithm Weights"):
-        lam_cost = server.gui.add_number("lam_cost", initial_value=optimization_problem.algorithm.lam_cost, min=1e-8, max=1e5, step=0.01)
-        lam_vc = server.gui.add_number("lam_vc", initial_value=optimization_problem.algorithm.lam_vc, min=1e-8, max=1e5, step=0.01)
-        lam_prox = server.gui.add_number("lam_prox", initial_value=optimization_problem.algorithm.lam_prox, min=1e-8, max=1e5, step=0.01)
+        lam_cost = server.gui.add_number(
+            "lam_cost",
+            initial_value=optimization_problem.algorithm.lam_cost,
+            min=1e-8,
+            max=1e5,
+            step=0.01,
+        )
+        lam_vc = server.gui.add_number(
+            "lam_vc",
+            initial_value=optimization_problem.algorithm.lam_vc,
+            min=1e-8,
+            max=1e5,
+            step=0.01,
+        )
+        lam_prox = server.gui.add_number(
+            "lam_prox",
+            initial_value=optimization_problem.algorithm.lam_prox,
+            min=1e-8,
+            max=1e5,
+            step=0.01,
+        )
 
         @lam_cost.on_update
         def _(_) -> None:
@@ -248,19 +272,45 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
             optimization_problem.algorithm.lam_prox = float(lam_prox.value)
 
     with server.gui.add_folder("Dynamics / Constraint Parameters"):
-        isp_input = server.gui.add_number("I_sp", initial_value=float(pdg.I_sp.value), min=50.0, max=450.0, step=1.0)
-        g_input = server.gui.add_number("g (m/s^2)", initial_value=float(pdg.g.value), min=0.0, max=20.0, step=0.01)
-        theta_deg_input = server.gui.add_number("theta (deg)", initial_value=_to_deg(pdg.theta.value), min=0.0, max=80.0, step=0.1)
-        glideslope_deg_input = server.gui.add_number("glideslope (deg)", initial_value=_to_deg(pdg.glideslope_angle.value), min=1.0, max=89.0, step=0.1)
-        thrust_pointing_deg_input = server.gui.add_number("thrust_pointing (deg)", initial_value=_to_deg(pdg.thrust_pointing_angle.value), min=0.0, max=89.0, step=0.1)
-        t1_input = server.gui.add_number("T1 per-engine (N)", initial_value=float(pdg.T1.value), min=0.0, max=10000.0, step=10.0)
-        t2_input = server.gui.add_number("T2 per-engine (N)", initial_value=float(pdg.T2.value), min=0.0, max=10000.0, step=10.0)
+        isp_input = server.gui.add_number(
+            "I_sp", initial_value=float(pdg.I_sp.value), min=50.0, max=450.0, step=1.0
+        )
+        g_input = server.gui.add_number(
+            "g (m/s^2)", initial_value=float(pdg.g.value), min=0.0, max=20.0, step=0.01
+        )
+        theta_deg_input = server.gui.add_number(
+            "theta (deg)", initial_value=_to_deg(pdg.theta.value), min=0.0, max=80.0, step=0.1
+        )
+        glideslope_deg_input = server.gui.add_number(
+            "glideslope (deg)",
+            initial_value=_to_deg(pdg.glideslope_angle.value),
+            min=1.0,
+            max=89.0,
+            step=0.1,
+        )
+        thrust_pointing_deg_input = server.gui.add_number(
+            "thrust_pointing (deg)",
+            initial_value=_to_deg(pdg.thrust_pointing_angle.value),
+            min=0.0,
+            max=89.0,
+            step=0.1,
+        )
+        t1_input = server.gui.add_number(
+            "T1 per-engine (N)", initial_value=float(pdg.T1.value), min=0.0, max=10000.0, step=10.0
+        )
+        t2_input = server.gui.add_number(
+            "T2 per-engine (N)", initial_value=float(pdg.T2.value), min=0.0, max=10000.0, step=10.0
+        )
         initial_pos_input = server.gui.add_vector3(
             "initial_position (m)",
             initial_value=tuple(np.asarray(pdg.initial_position.value, dtype=np.float64)),
             step=10.0,
         )
-        final_xy_input = server.gui.add_vector2("final_position [x,y] (m)", initial_value=tuple(np.asarray(pdg.final_position.value, dtype=np.float64)), step=10.0)
+        final_xy_input = server.gui.add_vector2(
+            "final_position [x,y] (m)",
+            initial_value=tuple(np.asarray(pdg.final_position.value, dtype=np.float64)),
+            step=10.0,
+        )
 
         @isp_input.on_update
         def _(_) -> None:
@@ -360,9 +410,13 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
         _sync_problem_parameters_from_base()
 
         rho_max = pdg.n_eng * float(pdg.T2.value) * np.cos(float(pdg.theta.value))
-        pdg.thrust.min = pdg.n_eng * np.array([-pdg.T_bar, -pdg.T_bar, -pdg.T_bar], dtype=np.float64)
+        pdg.thrust.min = pdg.n_eng * np.array(
+            [-pdg.T_bar, -pdg.T_bar, -pdg.T_bar], dtype=np.float64
+        )
         pdg.thrust.max = pdg.n_eng * np.array([pdg.T_bar, pdg.T_bar, pdg.T_bar], dtype=np.float64)
-        pdg.plotting_dict["rho_min"] = pdg.n_eng * float(pdg.T1.value) * np.cos(float(pdg.theta.value))
+        pdg.plotting_dict["rho_min"] = (
+            pdg.n_eng * float(pdg.T1.value) * np.cos(float(pdg.theta.value))
+        )
         pdg.plotting_dict["rho_max"] = rho_max
         pdg.plotting_dict["glideslope_angle_deg"] = _to_deg(float(pdg.glideslope_angle.value))
 
@@ -381,7 +435,9 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
             if x_traj.size and x_traj.shape[1] >= 3:
                 points = (x_traj[:, :3] * VISER_SCENE_SCALE).astype(np.float32)
                 trajectory_handle.points = points
-                trajectory_handle.colors = np.tile(np.array([[255, 255, 0]], dtype=np.uint8), (points.shape[0], 1))
+                trajectory_handle.colors = np.tile(
+                    np.array([[255, 255, 0]], dtype=np.uint8), (points.shape[0], 1)
+                )
 
     def optimization_loop() -> None:
         while state["running"]:

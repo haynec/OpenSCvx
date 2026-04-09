@@ -6,10 +6,12 @@ This example was adapted from the SCvxGEN repository by Abhi Kamath, https://scv
 """
 
 import jax
+
 jax.config.update("jax_enable_x64", True)
 
 import os
 import sys
+
 import numpy as np
 
 # Add grandparent directory to path to import examples.plotting
@@ -18,12 +20,11 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 import openscvx as ox
-from openscvx import Problem
 from examples.plotting_viser import (
     create_animated_plotting_server,
     create_scp_animated_plotting_server,
 )
-
+from openscvx import Problem
 
 n = 5
 
@@ -53,12 +54,8 @@ c_ayz = ox.Parameter("c_ayz", value=1.0)
 S_a = ox.Parameter("S_a", value=0.5)
 rho = ox.Parameter("rho", value=1.0)
 l_p = ox.Parameter("l_p", value=0.05)
-initial_position = ox.Parameter(
-    "initial_position", shape=(3,), value=np.array([7.5, 4.5, 2.5])
-)
-final_position = ox.Parameter(
-    "final_position", shape=(2,), value=np.array([0.0, 0.0])
-)
+initial_position = ox.Parameter("initial_position", shape=(3,), value=np.array([7.5, 4.5, 2.5]))
+final_position = ox.Parameter("final_position", shape=(2,), value=np.array([0.0, 0.0]))
 
 # Concat (not Stack): JAX lowering stacks scalars as (3,1); Diag needs a length-3 vector (3,).
 CA = ox.Diag(ox.Concat(c_ax, c_ayz, c_ayz))
@@ -115,28 +112,30 @@ q3 = attitude[2]
 q4 = attitude[3]
 
 # Direction cosine matrix (DCM) from quaternion
-CBI = ox.Block([
-    [q4**2 + q1**2 - q2**2 - q3**2,  2*(q1*q2 - q4*q3), 2*(q4*q2 + q1*q3)],
-    [2*(q4*q3 + q1*q2), q4**2 - q1**2 + q2**2 - q3**2, 2*(q2*q3 - q4*q1)],
-    [2*(q1*q3 - q4*q2), 2*(q4*q1 + q2*q3), q4**2 - q1**2 - q2**2 + q3**2]
-]).T  # Transpose to get inertial to body frame
+CBI = ox.Block(
+    [
+        [q4**2 + q1**2 - q2**2 - q3**2, 2 * (q1 * q2 - q4 * q3), 2 * (q4 * q2 + q1 * q3)],
+        [2 * (q4 * q3 + q1 * q2), q4**2 - q1**2 + q2**2 - q3**2, 2 * (q2 * q3 - q4 * q1)],
+        [2 * (q1 * q3 - q4 * q2), 2 * (q4 * q1 + q2 * q3), q4**2 - q1**2 - q2**2 + q3**2],
+    ]
+).T  # Transpose to get inertial to body frame
+
 
 def cross(a, b):
     """Cross product of two vectors"""
     return ox.Concat(
-        a[1] * b[2] - a[2] * b[1],
-        a[2] * b[0] - a[0] * b[2],
-        a[0] * b[1] - a[1] * b[0]
+        a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]
     )
+
 
 w1 = angular_velocity[0]
 w2 = angular_velocity[1]
 w3 = angular_velocity[2]
 
-q1_dot =  0.5 * (w1*q4 - w2*q3 + w3*q2)
-q2_dot =  0.5 * (w1*q3 - w3*q1 + w2*q4)
-q3_dot =  0.5 * (w2*q1 - w1*q2 + w3*q4)
-q4_dot = -0.5 * (w1*q1 + w2*q2 + w3*q3)
+q1_dot = 0.5 * (w1 * q4 - w2 * q3 + w3 * q2)
+q2_dot = 0.5 * (w1 * q3 - w3 * q1 + w2 * q4)
+q3_dot = 0.5 * (w2 * q1 - w1 * q2 + w3 * q4)
+q4_dot = -0.5 * (w1 * q1 + w2 * q2 + w3 * q3)
 
 attitude_dot = ox.Concat(q1_dot, q2_dot, q3_dot, q4_dot)
 
@@ -144,16 +143,12 @@ attitude_dot = ox.Concat(q1_dot, q2_dot, q3_dot, q4_dot)
 A = -0.5 * rho * ox.linalg.Norm(velocity) * S_a * CA @ CBI @ velocity
 
 dynamics = {
-    "mass": -(1/(Isp * g0)) * ox.linalg.Norm(thrust) - beta,
+    "mass": -(1 / (Isp * g0)) * ox.linalg.Norm(thrust) - beta,
     "position": velocity,
     "velocity": CBI.T @ (thrust + A) / mass[0] + ox.Concat(-gI, 0.0, 0.0),
     "attitude": attitude_dot,
     "angular_velocity": J_inv_mat
-    @ (
-        cross(r_arm, thrust)
-        + cross(r_cp, A)
-        - cross(angular_velocity, (J_mat @ angular_velocity))
-    ),
+    @ (cross(r_arm, thrust) + cross(r_cp, A) - cross(angular_velocity, (J_mat @ angular_velocity))),
 }
 
 
@@ -166,45 +161,26 @@ for state in states:
 
 # Boundary Constraints
 # Initial position constraint
-constraint_exprs.append(
-    (position == initial_position).convex().at([0])
-)
+constraint_exprs.append((position == initial_position).convex().at([0]))
 
 # Terminal position constraint
-constraint_exprs.append(
-    (position[0:2] == final_position).convex().at([n-1])
-)
+constraint_exprs.append((position[0:2] == final_position).convex().at([n - 1]))
 
 
 constraint_exprs.append(ox.ctcs(1.0 * (mass - m_dry) >= 0))
 constraint_exprs.append(
-    ox.ctcs(
-        0.1 * ox.linalg.Norm(position[1:])
-        - ox.Tan(gamma * np.pi / 180.0) * position[0]
-        <= 0
-    )
+    ox.ctcs(0.1 * ox.linalg.Norm(position[1:]) - ox.Tan(gamma * np.pi / 180.0) * position[0] <= 0)
 )
+constraint_exprs.append(ox.ctcs(0.1 * ox.linalg.Norm(velocity) ** 2 - v_max**2 <= 0))
 constraint_exprs.append(
-    ox.ctcs(0.1 * ox.linalg.Norm(velocity) ** 2 - v_max**2 <= 0)
+    ox.ctcs(1.0 * ox.Cos(theta_max * np.pi / 180.0) - 1.0 + 2.0 * (q2**2 + q3**2) <= 0)
 )
+constraint_exprs.append(ox.ctcs(1.0 * ox.linalg.Norm(angular_velocity) ** 2 - w_max**2 <= 0))
 constraint_exprs.append(
-    ox.ctcs(
-        1.0 * ox.Cos(theta_max * np.pi / 180.0)
-        - 1.0
-        + 2.0 * (q2**2 + q3**2)
-        <= 0
-    )
+    ox.ctcs(0.1 * ox.linalg.Norm(thrust) - thrust[0] / ox.Cos(del_max * np.pi / 180.0) <= 0)
 )
-constraint_exprs.append(ox.ctcs(1.0 * ox.linalg.Norm(angular_velocity)**2 - w_max**2 <= 0))
-constraint_exprs.append(
-    ox.ctcs(
-        0.1 * ox.linalg.Norm(thrust)
-        - thrust[0] / ox.Cos(del_max * np.pi / 180.0)
-        <= 0
-    )
-)
-constraint_exprs.append(ox.ctcs(0.1 * ox.linalg.Norm(thrust)**2 - T_max**2 <= 0))
-constraint_exprs.append(ox.ctcs(0.1 * T_min**2 - ox.linalg.Norm(thrust)**2 <= 0))
+constraint_exprs.append(ox.ctcs(0.1 * ox.linalg.Norm(thrust) ** 2 - T_max**2 <= 0))
+constraint_exprs.append(ox.ctcs(0.1 * T_min**2 - ox.linalg.Norm(thrust) ** 2 <= 0))
 
 # Nominal final time (must match free-final guess). Old API used
 # time_dilation_factor_min/max as factors times this value for absolute bounds.
