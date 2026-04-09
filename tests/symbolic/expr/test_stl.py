@@ -852,7 +852,7 @@ def test_constraint_does_not_have_and_overload():
     """Bare Constraint & Constraint should NOT build an STL node."""
     _, p1, p2 = _make_predicates()
     with pytest.raises(TypeError):
-        p1 & p2  # type: ignore[operator]
+        _ = p1 & p2  # type: ignore[operator]
 
 
 def test_stlexpr_operator_composition_lowers_correctly():

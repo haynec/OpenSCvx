@@ -1020,11 +1020,12 @@ class Until(_UnimplementedTemporal):
         interval: Optional[IntervalLike] = None,
         interval_type: IntervalKind = "nodes",
     ):
+        # _validate_predicates runs again inside super().__init__, but it
+        # only sees `left`; call it explicitly here to also validate `right`.
         _validate_predicates([left, right], 2, "Until")
+        super().__init__(left, interval=interval, interval_type=interval_type)
         self.left = left
         self.right = right
-        self.predicate = left  # for _UnimplementedTemporal.children/check_shape
-        self.interval = Interval.coerce(interval, interval_type) if interval is not None else None
 
     def children(self):
         return [self.left, self.right]
