@@ -17,7 +17,15 @@ import jax.numpy as jnp
 from jax import Array
 from jax.typing import ArrayLike
 
-from openscvx.symbolic.expr.stl import And, IfThen, IntegerVariable, Or, STLExpr
+from openscvx.symbolic.expr.stl import (
+    Always,
+    And,
+    IfThen,
+    IntegerVariable,
+    Not,
+    Or,
+    STLExpr,
+)
 from openscvx.symbolic.lowerers.jax._registry import visitor
 
 # ---------------------------------------------------------------------------
@@ -208,6 +216,47 @@ def _visit_ifthen(lowerer, node: IfThen):
         return -gmsr_fn(jnp.array([cond_residual, conseq_residual]), c=c)
 
     return ifthen_fn
+
+
+@visitor(Always)
+def _visit_always(lowerer, node: Always):
+    """Lower nested ``Always`` to JAX.
+
+    Mixed-interval nesting is rejected at construction time, so by the
+    time this visitor runs the node is guaranteed to be interval-free
+    and inherits the ambient window from the enclosing ``.over()``. We
+    just lower it to the inner predicate's pointwise robustness.
+    Standalone ``Always`` goes through ``.over()``, which builds a
+    ``CTCS`` directly and never reaches this visitor.
+    """
+    assert node.interval is None, (
+        "nested Always with explicit interval should have been rejected at "
+        "construction by _validate_predicates"
+    )
+    inner_fns = _lower_predicate_residuals(lowerer, [node.predicate])
+
+    def always_fn(x, u, node_idx, params):
+        # inner_fns returns the residual (negative-when-satisfied);
+        # negate to get robustness (positive-when-satisfied).
+        return -inner_fns[0](x, u, node_idx, params)
+
+    return always_fn
+
+
+@visitor(Not)
+def _visit_not(lowerer, node: Not):
+    """Lower GMSR negation (Not) to JAX.
+
+    Robustness(Not(p)) = -Robustness(p). We compute the inner predicate's
+    residual (negative-when-satisfied) and return it directly: that *is*
+    the negated robustness.
+    """
+    inner_fns = _lower_predicate_residuals(lowerer, [node.predicate])
+
+    def not_fn(x, u, node_idx, params):
+        return inner_fns[0](x, u, node_idx, params)
+
+    return not_fn
 
 
 @visitor(IntegerVariable)

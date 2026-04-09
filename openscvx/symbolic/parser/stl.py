@@ -1,10 +1,19 @@
 """Parser handlers for GMSR-based Signal Temporal Logic operations.
 
-Handlers: Or, And, IfThen, IntegerVariable
+Handlers: Or, And, Not, IfThen, IntegerVariable, Always, Eventually, Until
 """
 
 from openscvx.symbolic.expr.expr import Constant
-from openscvx.symbolic.expr.stl import And, IfThen, IntegerVariable, Or
+from openscvx.symbolic.expr.stl import (
+    Always,
+    And,
+    Eventually,
+    IfThen,
+    IntegerVariable,
+    Not,
+    Or,
+    Until,
+)
 from openscvx.symbolic.parser._registry import function
 
 
@@ -20,6 +29,37 @@ def _parse_and(args, kwargs):
     if len(args) < 2:
         raise ValueError("And() requires at least 2 predicate arguments")
     return And(*args, **kwargs)
+
+
+@function("Not")
+def _parse_not(args, kwargs):
+    if len(args) != 1:
+        raise ValueError("Not() requires exactly 1 predicate argument")
+    return Not(*args, **kwargs)
+
+
+@function("Always")
+def _parse_always(args, kwargs):
+    if len(args) not in (1, 2):
+        raise ValueError("Always() requires 1 or 2 arguments (predicate[, interval])")
+    if len(args) == 1:
+        return Always(args[0], **kwargs)
+    predicate, interval = args
+    return Always(predicate, interval, **kwargs)
+
+
+@function("Eventually")
+def _parse_eventually(args, kwargs):
+    if len(args) not in (1, 2):
+        raise ValueError("Eventually() requires 1 or 2 arguments (predicate[, interval])")
+    return Eventually(*args, **kwargs)
+
+
+@function("Until")
+def _parse_until(args, kwargs):
+    if len(args) not in (2, 3):
+        raise ValueError("Until() requires 2 or 3 arguments (left, right[, interval])")
+    return Until(*args, **kwargs)
 
 
 @function("IfThen")
