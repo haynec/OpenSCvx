@@ -249,7 +249,7 @@ plotting_dict = {
 
 if __name__ == "__main__":
     initialize_problem_quiet(problem)
-    results = problem.solve()
+    problem.solve()
     results = problem.post_process()
     results.update(plotting_dict)
 
