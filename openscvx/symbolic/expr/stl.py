@@ -240,24 +240,30 @@ class STLExpr(Expr):
 
     Sealing a spec — `.over()` vs `.at()`:
         STL specs live in a symbolic world; to enforce one you must
-        seal it into a concrete constraint via one of two entry points,
-        which represent fundamentally different enforcement strategies:
+        seal it into a concrete constraint via one of two entry points.
+        Both bind the spec to a *where on the trajectory*, but they
+        differ in the **shape** of that where, and that shape is the
+        only thing that determines the lowering:
 
-        - ``.over(interval)`` enforces the spec **throughout** a
-          continuous window. Lowers to a ``CTCS`` (continuous-time
-          constraint satisfaction) wrapper that integrates the
-          violation across the window. Takes an :class:`Interval` (or
-          interval-like value).
-        - ``.at(nodes)`` enforces the spec **only at** an explicit set
-          of discrete node indices. Lowers to a ``NodalConstraint``.
-          Takes a point set, not a window.
+        - ``.over(interval)`` binds the spec to a contiguous interval
+          (an :class:`Interval`, or a length-2 tuple coerced to one).
+          Lowers to a ``CTCS`` that integrates the violation across
+          the window — this is the natural realization of an STL
+          temporal quantifier ``□[a,b] p``.
+        - ``.at(nodes)`` binds the spec to a discrete list of node
+          indices. Lowers to a ``NodalConstraint`` that enforces the
+          predicate independently at each point — semantically a
+          finite conjunction ``p(n_1) ∧ p(n_2) ∧ ...``.
 
-        These have no shared abstraction today: ``.over()`` is window-
-        shaped, ``.at()`` is point-set-shaped, and they produce
-        different constraint types via different lowering paths. Pick
-        whichever matches the semantics you want — "always within this
-        stretch" → ``.over()``, "exactly at these checkpoints" →
-        ``.at()``. See the TODO below for the planned unification.
+        For a temporal operator like :class:`Always`, the interval is
+        part of the formula itself (``Always(p, I)``) and ``.over()``
+        seals it without taking a separate window. Specifying the
+        interval *both* on the operator and at the seal call is a
+        contradiction (not an override) and is rejected; the same
+        rule applies to ``Always(p, I).at(...)``. To pick a discrete
+        point set instead, leave the constructor's interval unset:
+        ``Always(p).at([2, 3, 5])`` is the universal quantifier over
+        a finite set, equivalent to a finite conjunction.
 
     STL Robustness Convention:
         STL uses "robustness" values that are positive when constraints are satisfied.
@@ -280,23 +286,20 @@ class STLExpr(Expr):
         Eventually, Always, or Until for actual STL specifications.
     """
 
-    # TODO: (griffin-norris, haynec, sametusun781) unify the .over()
-    # and .at() syntax in a clean way. Status:
+    # TODO: (griffin-norris, haynec, sametusun781) STL seal API status:
     #   [done]   Intervals are typed (NodeInterval / TimeInterval) and
     #            funnel through Interval.coerce; mixed-interval nesting
     #            is rejected at construction.
-    #   [open]   Intervals can still live on temporal nodes
-    #            (Always.interval) *and* be re-specified at .over()
-    #            time, with override semantics. Probably fine, but the
-    #            override rule should be documented or removed.
-    #   [open]   .over() and .at() have no shared abstraction.
-    #            The natural unification is a single .enforce(window)
-    #            method dispatching on a window type:
-    #              NodeInterval / TimeInterval → CTCS-shaped lowering
-    #              NodeSet      / TimeSet      → nodal-shaped lowering
-    #            That gives one method, four cells, and adds wall-time
-    #            support purely additively. Worth a planning pass with
-    #            collaborators before committing.
+    #   [done]   Override semantics on Always.over() removed: passing
+    #            an interval to both the constructor and .over() now
+    #            raises. Same rule on Always.at() when the operator
+    #            already carries an interval. The interval is part of
+    #            the formula and can only live in one place.
+    #   [done]   .over()/.at() unification: not needed. They are sugar
+    #            for two different region shapes (contiguous interval
+    #            vs. discrete point set) that map to two different
+    #            lowerings (CTCS vs. NodalConstraint). The "shape
+    #            determines lowering" story is the unification.
     #   [open]   TimeInterval lowering itself (gating on the model's
     #            explicit `time` state). Currently raises
     #            NotImplementedError at .over() time.
@@ -330,13 +333,11 @@ class STLExpr(Expr):
             constraint = visit_either.over((3, 5))
 
         See also:
-            :meth:`at` for enforcing the spec at an explicit set of
-            discrete node indices instead of throughout a window.
-            ``.over()`` is window-shaped (lowers to ``CTCS``); ``.at()``
-            is point-set-shaped (lowers to ``NodalConstraint``). They
-            are the two entry points for sealing an STL spec into a
-            concrete constraint and have no shared abstraction today —
-            see the class docstring for context.
+            :meth:`at` for binding the spec to a discrete point set
+            instead of a contiguous interval. The two methods seal to
+            different constraint types (CTCS vs. NodalConstraint)
+            because they pick different region shapes — see the
+            class docstring for the full story.
         """
         from .arithmetic import Neg
         from .constraint import CTCS, Inequality
@@ -376,13 +377,10 @@ class STLExpr(Expr):
                 constraint = visit_either.at([0, 5, 10])
 
         See also:
-            :meth:`over` for enforcing the spec **throughout** a
-            continuous window instead of at a discrete point set.
-            ``.at()`` is point-set-shaped (lowers to
-            ``NodalConstraint``); ``.over()`` is window-shaped (lowers
-            to ``CTCS``). They are the two entry points for sealing an
-            STL spec into a concrete constraint and have no shared
-            abstraction today — see the class docstring for context.
+            :meth:`over` for binding the spec to a contiguous
+            interval instead of a discrete point set. See the class
+            docstring for the full story on how the region shape
+            determines the lowering.
 
         Note:
             This is a base class. Use concrete subclasses like Or, And,
@@ -453,13 +451,15 @@ def _validate_predicates(predicates, min_count, cls_name):
             )
         if isinstance(pred, _TemporalSTLExpr) and pred.interval is not None:
             raise ValueError(
-                f"{cls_name}(...) cannot contain a temporal operator with an "
-                f"explicit interval (got {type(pred).__name__} with "
-                f"interval={pred.interval!r}). Mixed-interval nesting is not "
-                f"yet supported. Either drop the inner interval and let it "
-                f"inherit the ambient window from .over(), or compose the "
-                f"temporal pieces as separate top-level constraints: "
-                f"Always(p, I1).over() and Always(q, I2).over()."
+                f"{cls_name}(...) cannot contain a temporal operator that "
+                f"already carries an interval (got {type(pred).__name__} with "
+                f"interval={pred.interval!r}). Mixed-interval nesting has no "
+                f"defined lowering yet, so the inner interval would be "
+                f"silently dropped. Either drop the inner interval at "
+                f"construction and let it inherit the ambient window from "
+                f"the enclosing .over(), or compose the pieces as separate "
+                f"top-level constraints: Always(p, I1).over() and "
+                f"Always(q, I2).over()."
             )
 
 
@@ -774,6 +774,25 @@ class _TemporalSTLExpr(STLExpr):
 
     interval: Optional[Interval] = None
 
+    def at(self, nodes: Union[list, tuple]) -> "NodalConstraint":
+        """Seal this temporal spec at a discrete set of nodes.
+
+        Only valid when the operator does not already carry an
+        interval. The interval is part of *what the formula says*
+        (``□[a,b] p``); ``.at`` picks a discrete point set instead.
+        Specifying both is a contradiction, not an override, and is
+        rejected.
+        """
+        if self.interval is not None:
+            raise ValueError(
+                f"{type(self).__name__} already carries an interval "
+                f"({self.interval!r}); cannot also seal with .at({nodes!r}). "
+                f"The interval is part of the formula — pick exactly one of "
+                f"a contiguous interval (.over()) or a discrete point set "
+                f"(.at()) by leaving the constructor's interval unset."
+            )
+        return STLExpr.at(self, nodes)
+
 
 class Always(_TemporalSTLExpr):
     """Enforce ``predicate`` at every point in ``interval`` (STL ``Always``).
@@ -849,8 +868,11 @@ class Always(_TemporalSTLExpr):
         """Convert this ``Always`` to a ``CTCS`` constraint.
 
         Args:
-            interval: Optional override for the enforcement interval. If
-                omitted, the interval supplied at construction is used.
+            interval: Enforcement interval, supplied here *or* at
+                construction — but not both. The interval is part of
+                what the formula says (``□[a,b] p``); specifying it in
+                two places is a contradiction, not an override, and is
+                rejected.
             penalty: CTCS penalty function name.
             idx: Optional grouping index for multiple augmented states.
             check_nodally: Whether to additionally enforce at discrete nodes.
@@ -859,6 +881,13 @@ class Always(_TemporalSTLExpr):
             A ``CTCS`` constraint enforcing the inner predicate over the
             interval.
         """
+        if interval is not None and self.interval is not None:
+            raise ValueError(
+                f"Always already carries an interval ({self.interval!r}); "
+                f"cannot also pass interval={interval!r} to .over(). The "
+                f"interval is part of the formula — specify it in exactly "
+                f"one place: either Always(p, I).over() or Always(p).over(I)."
+            )
         chosen = Interval.coerce(interval, interval_type) if interval is not None else self.interval
         if chosen is None:
             raise ValueError(

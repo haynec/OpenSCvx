@@ -754,16 +754,29 @@ def test_always_over_uses_stored_interval():
     assert ctcs.nodes == (3, 7)
 
 
-def test_always_over_override_interval():
+def test_always_over_rejects_interval_specified_twice():
     _, p1, _ = _make_predicates()
-    ctcs = Always(p1, (3, 7)).over((0, 10))
-    assert ctcs.nodes == (0, 10)
+    with pytest.raises(ValueError, match="already carries an interval"):
+        Always(p1, (3, 7)).over((0, 10))
 
 
 def test_always_over_requires_interval_somewhere():
     _, p1, _ = _make_predicates()
-    with pytest.raises(ValueError, match="interval"):
+    with pytest.raises(ValueError, match="requires an interval"):
         Always(p1).over()
+
+
+def test_always_at_lowers_to_nodal_when_no_interval():
+    _, p1, _ = _make_predicates()
+    nodal = Always(p1).at([2, 3, 5])
+    assert isinstance(nodal, NodalConstraint)
+    assert nodal.nodes == [2, 3, 5]
+
+
+def test_always_at_rejects_when_interval_set():
+    _, p1, _ = _make_predicates()
+    with pytest.raises(ValueError, match="already carries an interval"):
+        Always(p1, (0, 5)).at([2, 3])
 
 
 def test_always_over_with_stl_predicate_returns_ctcs():
