@@ -425,6 +425,8 @@ def add_viewcone(
     color: tuple[int, int, int] = (35, 138, 141),  # Viridis at t~0.33 (teal)
     opacity: float = 0.4,
     wireframe: bool = False,
+    ring_only: bool = False,
+    line_width: float = 4.0,
     n_segments: int = 32,
 ) -> tuple[viser.MeshHandle | None, UpdateCallback | None]:
     """Add an animated viewcone mesh that matches p-norm constraints.
@@ -452,6 +454,9 @@ def add_viewcone(
         color: RGB color tuple
         opacity: Mesh opacity (0-1), ignored if wireframe=True
         wireframe: If True, render as wireframe instead of solid
+        ring_only: If True, render only the base ring as a closed line loop
+            instead of the full cone mesh.
+        line_width: Line width for the ring (only used when ``ring_only=True``).
         n_segments: Number of segments for cone smoothness
 
     Returns:
@@ -471,7 +476,6 @@ def add_viewcone(
         half_angle_x, half_angle_y, scale, norm_type, n_segments
     )
     n_base_verts = len(base_vertices) - 1  # Exclude apex
-    faces = _generate_viewcone_faces(n_base_verts)
 
     # Sensor-to-body rotation (transpose of body-to-sensor)
     R_sensor_to_body = R_sb.T if R_sb is not None else np.eye(3)
@@ -489,19 +493,40 @@ def add_viewcone(
         world_vertices = (R_sensor_to_world @ base_vertices.T).T + pos[frame_idx]
         return world_vertices.astype(np.float32)
 
-    # Create initial mesh
     initial_vertices = transform_vertices(0)
-    handle = server.scene.add_mesh_simple(
-        "/viewcone_mesh",
-        vertices=initial_vertices,
-        faces=faces,
-        color=color,
-        wireframe=wireframe,
-        opacity=opacity if not wireframe else 1.0,
-    )
 
-    def update(frame_idx: int) -> None:
-        handle.vertices = transform_vertices(frame_idx)
+    if ring_only:
+        # Render only the base ring as a closed line loop. Base vertices are
+        # indices 1..n_base_verts (index 0 is the apex). Build pairs of
+        # consecutive points, wrapping the last back to the first.
+        def _ring_segments(verts: np.ndarray) -> np.ndarray:
+            ring = verts[1:]  # skip apex
+            starts = ring
+            ends = np.roll(ring, -1, axis=0)
+            return np.stack([starts, ends], axis=1)  # (n_base_verts, 2, 3)
+
+        handle = server.scene.add_line_segments(
+            "/viewcone_ring",
+            points=_ring_segments(initial_vertices),
+            colors=color,
+            line_width=line_width,
+        )
+
+        def update(frame_idx: int) -> None:
+            handle.points = _ring_segments(transform_vertices(frame_idx))
+    else:
+        faces = _generate_viewcone_faces(n_base_verts)
+        handle = server.scene.add_mesh_simple(
+            "/viewcone_mesh",
+            vertices=initial_vertices,
+            faces=faces,
+            color=color,
+            wireframe=wireframe,
+            opacity=opacity if not wireframe else 1.0,
+        )
+
+        def update(frame_idx: int) -> None:
+            handle.vertices = transform_vertices(frame_idx)
 
     return handle, update
 

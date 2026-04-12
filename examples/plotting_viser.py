@@ -92,6 +92,7 @@ def create_animated_plotting_server(
     attitude_axes_length: float = 2.0,
     show_viewcone: bool = True,
     viewcone_scale: float = 10.0,
+    viewcone_ring_only: bool = False,
     target_radius: float = 1.0,
     show_control_plot: str | None = None,
     show_control_norm_plot: str | None = None,
@@ -137,6 +138,7 @@ def create_animated_plotting_server(
         attitude_axes_length: Length of body frame axes
         show_viewcone: If True and R_sb is in results, show camera viewcone
         viewcone_scale: Size/depth of viewcone mesh
+        viewcone_ring_only: If True, render viewcone as a base-ring outline only
         target_radius: Radius of target marker spheres
         show_control_plot: If provided with a control name, displays component plot
             showing each control component vs time with animated markers
@@ -509,22 +511,26 @@ def create_animated_plotting_server(
 
         # Add viewcone mesh if R_sb is available and enabled
         if show_viewcone and R_sb is not None and attitude is not None:
-            # Compute viewcone color from viridis colormap (fallback if matplotlib missing)
-            global plt
-            if plt is None:
-                try:  # pragma: no cover
-                    import matplotlib.pyplot as _plt
-
-                    plt = _plt
-                except Exception:
-                    plt = None
-
-            if plt is not None:
-                cmap = plt.get_cmap("viridis")
-                rgb = cmap(0.4)[:3]
-                viewcone_color = tuple(int(c * 255) for c in rgb)
+            if viewcone_ring_only:
+                # Match thrust vector styling so ring + thrust read as one element.
+                viewcone_color = (255, 100, 100)
             else:
-                viewcone_color = (80, 180, 200)
+                # Compute viewcone color from viridis colormap (fallback if matplotlib missing)
+                global plt
+                if plt is None:
+                    try:  # pragma: no cover
+                        import matplotlib.pyplot as _plt
+
+                        plt = _plt
+                    except Exception:
+                        plt = None
+
+                if plt is not None:
+                    cmap = plt.get_cmap("viridis")
+                    rgb = cmap(0.4)[:3]
+                    viewcone_color = tuple(int(c * 255) for c in rgb)
+                else:
+                    viewcone_color = (80, 180, 200)
 
             _, update_viewcone = add_viewcone(
                 server,
@@ -537,6 +543,7 @@ def create_animated_plotting_server(
                 R_sb=R_sb,
                 color=viewcone_color,
                 wireframe=False,
+                ring_only=viewcone_ring_only,
                 opacity=0.4,
             )
             update_callbacks.append(update_viewcone)

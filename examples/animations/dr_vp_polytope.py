@@ -35,8 +35,8 @@ from examples.plotting_viser import create_animated_plotting_server
 
 # --- Render settings ---------------------------------------------------------
 OUTPUT_PATH = os.path.join(current_dir, "dr_vp_polytope.mp4")
-WIDTH = 720
-HEIGHT = 720
+WIDTH = 1080
+HEIGHT = 1080
 FPS = 60
 CRF = 16  # lower = crisper; 16 is visually near-lossless
 
@@ -136,7 +136,8 @@ if __name__ == "__main__":
         show_control_norm_plot="thrust_force",
         controls="manual",
         show_grid=False,
-        trail_point_size=0.075
+        trail_point_size=0.075,
+        viewcone_ring_only=True,
     )
 
     def camera_pose_fn(frame_idx: int):
