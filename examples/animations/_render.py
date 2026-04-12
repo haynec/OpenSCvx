@@ -12,7 +12,7 @@ Typical usage (from an animation example):
     handle = create_animated_plotting_server(results, ..., controls="manual")
 
     def camera_pose_fn(frame_idx):
-        return polytope_follow_pose(positions[frame_idx], polytope_center)
+        return chase_pose(positions[frame_idx], target_center)
 
     render_animation_to_video(handle, "out.mp4", camera_pose_fn)
 
