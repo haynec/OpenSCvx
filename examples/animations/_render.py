@@ -57,7 +57,7 @@ def wait_for_client(
         clients = server.get_clients()
         if clients:
             client = next(iter(clients.values()))
-            print(f"[render] client connected.")
+            print("[render] client connected.")
             return client
         if time.time() - t0 > timeout_s:
             raise TimeoutError(
@@ -179,24 +179,32 @@ def render_animation_to_video(
     cmd = [
         ffmpeg,
         "-y",
-        "-f", "rawvideo",
-        "-vcodec", "rawvideo",
-        "-s", f"{width}x{height}",
-        "-pix_fmt", "rgb24",
-        "-r", str(fps),
-        "-i", "-",
-        "-c:v", "libx264",
-        "-pix_fmt", "yuv420p",
-        "-crf", str(crf),
-        "-preset", preset,
-        "-movflags", "+faststart",
+        "-f",
+        "rawvideo",
+        "-vcodec",
+        "rawvideo",
+        "-s",
+        f"{width}x{height}",
+        "-pix_fmt",
+        "rgb24",
+        "-r",
+        str(fps),
+        "-i",
+        "-",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-crf",
+        str(crf),
+        "-preset",
+        preset,
+        "-movflags",
+        "+faststart",
         str(output_path),
     ]
 
-    print(
-        f"[render] {len(frame_indices)} frame(s) @ {fps} fps, "
-        f"{width}x{height} -> {output_path}"
-    )
+    print(f"[render] {len(frame_indices)} frame(s) @ {fps} fps, {width}x{height} -> {output_path}")
 
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     assert proc.stdin is not None
@@ -236,8 +244,7 @@ def render_animation_to_video(
                 rate = done / max(elapsed, 1e-6)
                 eta = (len(frame_indices) - done) / max(rate, 1e-6)
                 print(
-                    f"[render]   frame {done}/{len(frame_indices)} "
-                    f"({rate:.1f} fps, eta {eta:.0f}s)"
+                    f"[render]   frame {done}/{len(frame_indices)} ({rate:.1f} fps, eta {eta:.0f}s)"
                 )
         proc.stdin.close()
     except BrokenPipeError as e:

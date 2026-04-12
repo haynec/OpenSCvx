@@ -784,9 +784,7 @@ def create_animated_plotting_server(
             update_callbacks=callbacks,
         )
     else:
-        raise ValueError(
-            f"controls must be 'gui' or 'manual', got {controls!r}"
-        )
+        raise ValueError(f"controls must be 'gui' or 'manual', got {controls!r}")
 
 
 def create_scp_animated_plotting_server(

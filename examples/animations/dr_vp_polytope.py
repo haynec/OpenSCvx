@@ -112,24 +112,33 @@ if __name__ == "__main__":
     # Select camera pose function based on mode.
     render_fov: float | None = None
     if CAMERA_MODE == "chase":
+
         def camera_pose_fn(frame_idx: int):
             return chase_pose(
-                positions[frame_idx], polytope_center,
-                chase_distance=CHASE_DISTANCE, vertical_offset=VERTICAL_OFFSET,
+                positions[frame_idx],
+                polytope_center,
+                chase_distance=CHASE_DISTANCE,
+                vertical_offset=VERTICAL_OFFSET,
             )
     elif CAMERA_MODE == "onboard":
         render_fov = sensor_fov_deg + ONBOARD_FOV_PADDING
+
         def camera_pose_fn(frame_idx: int):
             return onboard_pose(
-                positions[frame_idx], attitude[frame_idx], R_sb,
+                positions[frame_idx],
+                attitude[frame_idx],
+                R_sb,
                 forward_offset=ONBOARD_FORWARD_OFFSET,
             )
     elif CAMERA_MODE == "overview":
         static_pose = overview_pose(
             positions,
-            azimuth=OVERVIEW_AZIMUTH, elevation=OVERVIEW_ELEVATION,
-            radius_margin=OVERVIEW_RADIUS_MARGIN, fov_deg=OVERVIEW_FOV_DEG,
+            azimuth=OVERVIEW_AZIMUTH,
+            elevation=OVERVIEW_ELEVATION,
+            radius_margin=OVERVIEW_RADIUS_MARGIN,
+            fov_deg=OVERVIEW_FOV_DEG,
         )
+
         def camera_pose_fn(frame_idx: int):
             return static_pose
     else:

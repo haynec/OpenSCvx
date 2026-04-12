@@ -11,9 +11,7 @@ import numpy as np
 import viser.transforms as vtf
 
 
-def look_at_wxyz(
-    pos: np.ndarray, target: np.ndarray, up: np.ndarray
-) -> np.ndarray:
+def look_at_wxyz(pos: np.ndarray, target: np.ndarray, up: np.ndarray) -> np.ndarray:
     """Quaternion (w,x,y,z) for a camera at ``pos`` looking at ``target``.
 
     Uses the OpenCV camera convention that viser expects: +X right, +Y down,
@@ -82,11 +80,14 @@ def onboard_pose(
     """
     # R_body_to_world from the attitude quaternion (w, x, y, z)
     w, x, y, z = attitude_wxyz
-    R_bw = np.array([
-        [1 - 2*(y*y + z*z), 2*(x*y - z*w), 2*(x*z + y*w)],
-        [2*(x*y + z*w), 1 - 2*(x*x + z*z), 2*(y*z - x*w)],
-        [2*(x*z - y*w), 2*(y*z + x*w), 1 - 2*(x*x + y*y)],
-    ], dtype=np.float64)
+    R_bw = np.array(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+        ],
+        dtype=np.float64,
+    )
 
     # Sensor-to-world: columns are the sensor axes in world coords.
     # R_sb is body-to-sensor, so R_sb.T is sensor-to-body.
@@ -129,11 +130,13 @@ def overview_pose(
     radius = max_extent / np.sin(half_fov_rad) * radius_margin
 
     cos_el = np.cos(elevation)
-    cam_pos = center + radius * np.array([
-        cos_el * np.cos(azimuth),
-        cos_el * np.sin(azimuth),
-        np.sin(elevation),
-    ])
+    cam_pos = center + radius * np.array(
+        [
+            cos_el * np.cos(azimuth),
+            cos_el * np.sin(azimuth),
+            np.sin(elevation),
+        ]
+    )
     look_at = center.copy()
     wxyz = look_at_wxyz(cam_pos, look_at, up)
     return cam_pos, wxyz, look_at
