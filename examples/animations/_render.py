@@ -84,6 +84,7 @@ def render_animation_to_video(
     settle_s: float = 0.0,
     client: viser.ClientHandle | None = None,
     progress_every: int = 30,
+    fov_deg: float | None = None,
 ) -> Path:
     """Render frames of ``handle`` to an H.264 mp4 by piping raw RGB into ffmpeg.
 
@@ -134,6 +135,8 @@ def render_animation_to_video(
             ``get_render``. Usually 0; bump if you see torn/partial frames.
         client: Pre-connected client. If ``None``, waits for one.
         progress_every: Print a progress line every N rendered frames.
+        fov_deg: If given, override the client camera's vertical field of view
+            (in degrees) before rendering. Useful for matching a sensor FOV.
 
     Returns:
         Absolute path to the written mp4.
@@ -159,6 +162,9 @@ def render_animation_to_video(
 
     if client is None:
         client = wait_for_client(handle.server)
+
+    if fov_deg is not None:
+        client.camera.fov = np.radians(fov_deg)
 
     n = handle.n_frames
     if end_frame is None:
