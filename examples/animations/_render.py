@@ -77,7 +77,7 @@ def render_animation_to_video(
     fps: int = 30,
     crf: int = 16,
     preset: str = "slow",
-    background_color: tuple[int, int, int] = (25, 25, 30),
+    background_color: tuple[int, int, int] = (16, 17, 19),
     start_frame: int = 0,
     end_frame: int | None = None,
     stride: int = 1,
@@ -90,11 +90,16 @@ def render_animation_to_video(
     Each frame is fetched with ``transport_format="png"`` so we get a *lossless*
     RGBA array from the browser — no JPEG pre-compression stacked under the
     final h.264 pass. The alpha channel is composited onto ``background_color``
-    in numpy before writing, which also lets us pick a dark scene background
-    (viser's ``configure_theme(dark_mode=True)`` only styles the GUI panels,
-    not the 3D canvas). Both the browser's live view and the rendered frames
-    see the same background because we also push ``background_color`` to
-    ``server.scene.set_background_image`` as a 1x1 solid color.
+    in numpy before writing.
+
+    Why compositing is necessary: viser's dark mode puts the canvas over a
+    ``theme.colors.dark[9]`` (= ``#101113``) DOM element (see viser client
+    ``App.tsx:426``), and the browser compositor blends the scene over that
+    background at display time. But ``client.get_render`` returns only the
+    WebGL canvas pixels, which are transparent where nothing is drawn — so
+    we have to composite ourselves. The default ``background_color`` matches
+    Mantine's ``dark[9]`` exactly so the rendered frames are indistinguishable
+    from the live view.
 
     The video's playback rate (``fps``) is independent of how many frames the
     trajectory contains — ``stride`` controls the frame range from the trajectory

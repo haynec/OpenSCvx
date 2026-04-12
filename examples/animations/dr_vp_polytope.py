@@ -39,7 +39,6 @@ WIDTH = 1280
 HEIGHT = 720
 FPS = 30
 CRF = 16  # lower = crisper; 16 is visually near-lossless
-BACKGROUND_COLOR = (25, 25, 30)  # dark scene background (RGB 0..255)
 
 # --- Camera settings ---------------------------------------------------------
 CHASE_DISTANCE = 15.0  # camera sits this far past the drone along polytope->drone ray
@@ -126,6 +125,7 @@ if __name__ == "__main__":
         show_control_plot="thrust_force",
         show_control_norm_plot="thrust_force",
         controls="manual",
+        show_grid=False,
     )
 
     def camera_pose_fn(frame_idx: int):
@@ -139,5 +139,4 @@ if __name__ == "__main__":
         height=HEIGHT,
         fps=FPS,
         crf=CRF,
-        background_color=BACKGROUND_COLOR,
     )
