@@ -46,7 +46,7 @@ CRF = 16  # lower = crisper; 16 is visually near-lossless
 # propagation runs at 4x the video rate, so the trail is drawn from 4x denser
 # samples — smoother curves at speed — while `render_animation_to_video` strides
 # through every 4th sample to keep the video at realtime FPS.
-STRIDE = 4
+STRIDE = 6
 PROPAGATION_HZ = FPS * STRIDE
 
 # --- Camera settings ---------------------------------------------------------
@@ -136,6 +136,7 @@ if __name__ == "__main__":
         show_control_norm_plot="thrust_force",
         controls="manual",
         show_grid=False,
+        trail_point_size=0.075
     )
 
     def camera_pose_fn(frame_idx: int):

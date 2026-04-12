@@ -95,6 +95,7 @@ def create_animated_plotting_server(
     target_radius: float = 1.0,
     show_control_plot: str | None = None,
     show_control_norm_plot: str | None = None,
+    trail_point_size: float = 0.15,
     show_grid: bool = True,
     scene_scale: float = 1.0,
     controls: str = "gui",
@@ -331,7 +332,7 @@ def create_animated_plotting_server(
     if pos is not None:
         add_ghost_trajectory(server, pos, colors)
 
-        _, update_trail = add_animated_trail(server, pos, colors)
+        _, update_trail = add_animated_trail(server, pos, colors, point_size=trail_point_size)
         update_callbacks.append(update_trail)
 
         # Use position marker for point-mass, attitude frame for 6DOF
