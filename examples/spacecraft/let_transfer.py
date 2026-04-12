@@ -9,8 +9,9 @@ Modeling choices:
 """
 
 import os
+import shutil
 import sys
-import warnings
+import urllib.request
 from pathlib import Path
 
 import jax
@@ -34,91 +35,81 @@ from openscvx.symbolic.lower import lower_to_jax
 jax.config.update("jax_enable_x64", True)
 
 REFERENCE_DATE = "26 December 2025"
-KERNEL_FILENAMES = ("naif0012.tls", "de440.bsp", "pck00011.tpc", "gm_de440.tpc")
-LEGACY_KERNEL_DIR = Path("/Users/fabiospada/Desktop/research/CislunarLTO/scripts/p_10_trajopt_let/ker")
+KERNEL_DIR = Path(current_dir) / "ker"
+KERNEL_URLS = {
+    "naif0012.tls": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls",
+    "de440.bsp": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440.bsp",
+    "pck00011.tpc": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00011.tpc",
+    "gm_de440.tpc": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
+}
+KERNEL_FILENAMES = tuple(KERNEL_URLS.keys())
 
 
-def _candidate_kernel_dirs() -> list[Path]:
-    """Return kernel search paths in priority order."""
-    env_dir = os.environ.get("LET_SPICE_KERNEL_DIR")
-    candidates = []
-    if env_dir:
-        candidates.append(Path(env_dir).expanduser())
-    candidates.extend(
-        [
-            Path(current_dir) / "ker",
-            Path(grandparent_dir) / "ker",
-            LEGACY_KERNEL_DIR,
-        ]
-    )
-    dedup = []
-    for p in candidates:
-        if p not in dedup:
-            dedup.append(p)
-    return dedup
+def _download_kernel(url: str, destination: Path) -> None:
+    """Download a single SPICE kernel to destination atomically."""
+    temp_destination = destination.with_suffix(destination.suffix + ".part")
+    with urllib.request.urlopen(url, timeout=120) as response, temp_destination.open("wb") as out_file:
+        shutil.copyfileobj(response, out_file)
+    temp_destination.replace(destination)
+
+
+def _ensure_spice_kernels(kernel_dir: Path) -> None:
+    """Ensure all required kernels exist in kernel_dir, downloading missing files."""
+    kernel_dir.mkdir(parents=True, exist_ok=True)
+    missing = [name for name in KERNEL_FILENAMES if not (kernel_dir / name).is_file()]
+    if not missing:
+        return
+
+    download_errors = []
+    for kernel_name in missing:
+        destination = kernel_dir / kernel_name
+        try:
+            _download_kernel(KERNEL_URLS[kernel_name], destination)
+        except Exception as exc:
+            part_file = destination.with_suffix(destination.suffix + ".part")
+            if part_file.exists():
+                part_file.unlink()
+            download_errors.append(f"{kernel_name}: {exc}")
+
+    if download_errors:
+        raise RuntimeError("Failed to download SPICE kernels: " + "; ".join(download_errors))
 
 
 def _load_spice_problem_data(reference_date: str) -> dict:
     """Load constants and characteristic distances from SPICE kernels."""
     import spiceypy as spice
 
-    last_error = None
-    for kernel_dir in _candidate_kernel_dirs():
-        try:
-            if not kernel_dir.exists():
-                continue
-            spice.kclear()
-            for kernel_name in KERNEL_FILENAMES:
-                spice.furnsh(str(kernel_dir / kernel_name))
+    _ensure_spice_kernels(KERNEL_DIR)
+    spice.kclear()
+    for kernel_name in KERNEL_FILENAMES:
+        spice.furnsh(str(KERNEL_DIR / kernel_name))
 
-            et = spice.str2et(reference_date)
-            mu_earth_val = spice.bodvrd("Earth", "GM", 1)[1][0]
-            mu_sun_val = spice.bodvrd("Sun", "GM", 1)[1][0]
-            r_earth_val = spice.bodvrd("Earth", "RADII", 3)[1][0]
+    et = spice.str2et(reference_date)
+    mu_earth_val = spice.bodvrd("Earth", "GM", 1)[1][0]
+    mu_sun_val = spice.bodvrd("Sun", "GM", 1)[1][0]
+    r_earth_val = spice.bodvrd("Earth", "RADII", 3)[1][0]
 
-            pos_earth = spice.spkezr("Earth", et, "ECLIPJ2000", "NONE", "SSB")[0][:3]
-            pos_sun = spice.spkezr("Sun", et, "ECLIPJ2000", "NONE", "SSB")[0][:3]
-            pos_moon = spice.spkezr("Moon", et, "ECLIPJ2000", "NONE", "SSB")[0][:3]
+    pos_earth = spice.spkezr("Earth", et, "ECLIPJ2000", "NONE", "SSB")[0][:3]
+    pos_sun = spice.spkezr("Sun", et, "ECLIPJ2000", "NONE", "SSB")[0][:3]
+    pos_moon = spice.spkezr("Moon", et, "ECLIPJ2000", "NONE", "SSB")[0][:3]
 
-            return {
-                "mu_earth": float(mu_earth_val),
-                "mu_sun": float(mu_sun_val),
-                "r_earth": float(r_earth_val),
-                "d_earth_sun": float(np.linalg.norm(pos_earth - pos_sun)),
-                "d_earth_moon": float(np.linalg.norm(pos_earth - pos_moon)),
-                "kernel_dir": str(kernel_dir),
-                "reference_date": reference_date,
-            }
-        except Exception as exc:
-            last_error = exc
+    return {
+        "mu_earth": float(mu_earth_val),
+        "mu_sun": float(mu_sun_val),
+        "r_earth": float(r_earth_val),
+        "d_earth_sun": float(np.linalg.norm(pos_earth - pos_sun)),
+        "d_earth_moon": float(np.linalg.norm(pos_earth - pos_moon)),
+        "kernel_dir": str(KERNEL_DIR),
+        "reference_date": reference_date,
+    }
 
-    if last_error is not None:
-        raise RuntimeError(f"SPICE load failed from all candidate kernel dirs: {last_error}") from last_error
-    raise FileNotFoundError(
-        "No SPICE kernel directory found. Set LET_SPICE_KERNEL_DIR or provide a local ./ker folder."
-    )
-
-
-try:
-    spice_data = _load_spice_problem_data(REFERENCE_DATE)
-    mu_earth = spice_data["mu_earth"]
-    mu_sun = spice_data["mu_sun"]
-    r_earth = spice_data["r_earth"]
-    d_earth_sun = spice_data["d_earth_sun"]
-    d_earth_moon = spice_data["d_earth_moon"]
-    spice_source = f"SPICE ({spice_data['kernel_dir']})"
-except Exception as spice_exc:
-    # Keep a deterministic fallback so the example still imports/runs without SPICE.
-    warnings.warn(
-        f"SPICE data unavailable ({spice_exc}); falling back to embedded constants.",
-        RuntimeWarning,
-    )
-    mu_earth = 398600.4354360959
-    mu_sun = 1.32712440018e11
-    r_earth = 6378.1363
-    d_earth_sun = 149597870.7
-    d_earth_moon = 384400.0
-    spice_source = "embedded constants"
+spice_data = _load_spice_problem_data(REFERENCE_DATE)
+mu_earth = spice_data["mu_earth"]
+mu_sun = spice_data["mu_sun"]
+r_earth = spice_data["r_earth"]
+d_earth_sun = spice_data["d_earth_sun"]
+d_earth_moon = spice_data["d_earth_moon"]
+spice_source = f"SPICE ({spice_data['kernel_dir']})"
 
 # Sun-Earth normalized CR3BP parameters
 mu = mu_earth / (mu_earth + mu_sun)
@@ -494,10 +485,4 @@ if __name__ == "__main__":
     print(f"Initial delta-v (km/s): {dv0_opt * v_ref}")
     print(f"Final delta-v (normalized): {dvf_opt}")
     print(f"Final delta-v (km/s): {dvf_opt * v_ref}")
-    print(f"Final speed (normalized): {final_speed_norm:.6e}")
-    print(f"Final speed (km/s): {final_speed_norm * v_ref:.6f}")
-    print(f"dot(r, v) / (||r|| * ||v||) (-): {final_speed_pos_orth:.3f}")
-    print(f"Final Earth distance (km): {final_distance_km:.3f}")
-    print(f"Moon distance target (km): {d_earth_moon:.3f}")
-    print(f"Final distance error (km): {final_distance_error_km:+.3f}")
-    print(f"Final distance ~= Moon distance (|error| <= 100 km): {moon_distance_match}")
+

@@ -215,3 +215,6 @@ material/*
 !material/overrides/
 !material/overrides/**
 src/
+
+# SPICE kernels for spacecrafts examples
+examples/spacecraft/ker/
