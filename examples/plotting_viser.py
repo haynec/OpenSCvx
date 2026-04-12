@@ -9,6 +9,9 @@ For real-time examples, see examples/realtime/*.py.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Callable
+
 import matplotlib.pyplot as plt
 import numpy as np
 import viser
@@ -41,6 +44,39 @@ from openscvx.plotting.viser import (
 )
 
 # =============================================================================
+# Manual-stepping handle (for offline rendering)
+# =============================================================================
+
+
+@dataclass
+class AnimatedServerHandle:
+    """Handle for manually stepping an animated viser server, one frame at a time.
+
+    Returned by ``create_animated_plotting_server(..., controls="manual")``
+    instead of starting the GUI playback loop. Primitives registered on the
+    server all take ``frame_idx: int``, so calling ``handle.step(i)`` fans out
+    to every trail, marker, attitude frame, thrust vector, viewcone, etc. —
+    driving the scene without any wall-clock timer. Used by
+    ``examples/animations/_render.py`` to render frames one at a time and pipe
+    them into ffmpeg.
+    """
+
+    server: viser.ViserServer
+    traj_time: np.ndarray
+    update_callbacks: list[Callable[[int], None]]
+
+    @property
+    def n_frames(self) -> int:
+        return len(self.traj_time)
+
+    def step(self, frame_idx: int) -> None:
+        """Drive every registered primitive to show frame ``frame_idx``."""
+        idx = int(np.clip(frame_idx, 0, self.n_frames - 1))
+        for cb in self.update_callbacks:
+            cb(idx)
+
+
+# =============================================================================
 # Template Visualization Servers
 # =============================================================================
 
@@ -61,7 +97,8 @@ def create_animated_plotting_server(
     show_control_norm_plot: str | None = None,
     show_grid: bool = True,
     scene_scale: float = 1.0,
-) -> viser.ViserServer:
+    controls: str = "gui",
+) -> viser.ViserServer | AnimatedServerHandle:
     """Create an animated trajectory visualization server.
 
     This is a convenience function that composes the modular components.
@@ -107,9 +144,16 @@ def create_animated_plotting_server(
         show_grid: Whether to show the grid (default True)
         scene_scale: Divide all positions (and lengths) by this factor. Use >1 for
             large-scale trajectories (e.g., 100.0 for km-scale problems).
+        controls: ``"gui"`` (default) wires up play/pause/slider GUI and starts
+            the wall-clock playback thread, returning the raw ``ViserServer``.
+            ``"manual"`` skips the GUI/playback loop and instead returns an
+            :class:`AnimatedServerHandle` whose ``step(frame_idx)`` method drives
+            every primitive by hand — used for offline rendering (see
+            ``examples/animations/_render.py``).
 
     Returns:
-        ViserServer instance (animation runs in background thread)
+        ``ViserServer`` when ``controls="gui"``, otherwise
+        :class:`AnimatedServerHandle`.
     """
     # Extract data and convert to numpy (handles JAX arrays)
     pos = results.trajectory.get(position_key)
@@ -720,10 +764,21 @@ def create_animated_plotting_server(
             )
             update_callbacks.append(update_vline)
 
-    # Add animation controls
-    add_animation_controls(server, traj_time, update_callbacks, loop=loop_animation)
-
-    return server
+    # Wire up playback — either the wall-clock GUI loop, or a manual-step handle.
+    callbacks = [cb for cb in update_callbacks if cb is not None]
+    if controls == "gui":
+        add_animation_controls(server, traj_time, callbacks, loop=loop_animation)
+        return server
+    elif controls == "manual":
+        return AnimatedServerHandle(
+            server=server,
+            traj_time=np.asarray(traj_time, dtype=np.float64).flatten(),
+            update_callbacks=callbacks,
+        )
+    else:
+        raise ValueError(
+            f"controls must be 'gui' or 'manual', got {controls!r}"
+        )
 
 
 def create_scp_animated_plotting_server(

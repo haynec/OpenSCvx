@@ -1,15 +1,25 @@
-"""Cinematic animation of the drone-racing-with-polytope-viewplanning example.
+"""Cinematic offline render of the drone-racing-with-polytope-viewplanning example.
 
 The trajectory optimization problem itself lives in
-`examples/drone/dr_vp_polytope.py`; this file imports that `problem` (and the
-associated `plotting_dict`), solves it, and then drives a viser scene with a
-cinematic camera orbit suitable for landing-page / presentation captures.
+``examples/drone/dr_vp_polytope.py``; this file imports that ``problem`` (and
+the associated ``plotting_dict``), solves it, and drives a viser scene
+frame-by-frame while piping raw RGB into ffmpeg to produce an mp4 suitable for
+landing-page / presentation captures.
+
+Run it with::
+
+    python examples/animations/dr_vp_polytope.py
+
+The script prints a viser URL and waits. Open the URL in a browser — as soon
+as the client connects, the render begins. Requires ``ffmpeg`` on ``PATH``;
+``openscvx`` does not depend on it.
+
+Tweak ``OUTPUT_PATH`` / ``WIDTH`` / ``HEIGHT`` / ``FPS`` below for different
+output variants.
 """
 
 import os
 import sys
-import threading
-import time as _time
 
 import numpy as np
 import viser.transforms as vtf
@@ -19,146 +29,82 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
+from examples.animations._render import render_animation_to_video
 from examples.drone.dr_vp_polytope import plotting_dict, problem
-from examples.plotting_viser import (
-    create_animated_plotting_server,
-    create_scp_animated_plotting_server,
-)
+from examples.plotting_viser import create_animated_plotting_server
+
+# --- Render settings ---------------------------------------------------------
+OUTPUT_PATH = os.path.join(current_dir, "dr_vp_polytope.mp4")
+WIDTH = 1280
+HEIGHT = 720
+FPS = 30
+CRF = 16  # lower = crisper; 16 is visually near-lossless
+BACKGROUND_COLOR = (25, 25, 30)  # dark scene background (RGB 0..255)
+
+# --- Camera settings ---------------------------------------------------------
+CHASE_DISTANCE = 15.0  # camera sits this far past the drone along polytope->drone ray
+VERTICAL_OFFSET = 2.0  # lift so the drone isn't a 1-pixel occlusion of the polytope
 
 
 def _look_at_wxyz(pos: np.ndarray, target: np.ndarray, up: np.ndarray) -> np.ndarray:
-    """Quaternion (w,x,y,z) for a camera at `pos` looking at `target`.
+    """Quaternion (w,x,y,z) for a camera at ``pos`` looking at ``target``.
 
     Uses the OpenCV camera convention that viser expects: +X right, +Y down,
-    +Z forward. See `examples/animations/camera_control_notes.md`.
+    +Z forward. See ``examples/animations/camera_control_notes.md``.
     """
     forward = target - pos
     forward /= np.linalg.norm(forward)
     right = np.cross(forward, up)
-    right /= np.linalg.norm(right)
+    right_norm = np.linalg.norm(right)
+    if right_norm < 1e-6:
+        # Gimbal lock: forward is (nearly) parallel to up. Pick an arbitrary
+        # world axis that isn't, so the camera stays defined. The chosen axis
+        # determines the "roll" of the camera at the singularity — not great
+        # cinematically, but prevents a NaN crash.
+        fallback = np.array([1.0, 0.0, 0.0]) if abs(forward[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        right = np.cross(forward, fallback)
+        right_norm = np.linalg.norm(right)
+    right /= right_norm
     cam_down = np.cross(forward, right)  # = -world_up projected perp to forward
     R_world_cam = np.stack([right, cam_down, forward], axis=1)
     return vtf.SO3.from_matrix(R_world_cam).wxyz
 
 
-def _set_camera(server, pos: np.ndarray, wxyz: np.ndarray, look_at: np.ndarray) -> None:
-    """Atomically push a camera pose to every connected client."""
-    for _, client in server.get_clients().items():
-        with client.atomic():
-            client.camera.position = pos
-            client.camera.wxyz = wxyz
-            client.camera.look_at = look_at
-
-
-def orbit_camera(
-    server,
-    center=(100.0, -50.0, 20.0),
-    radius=60.0,
-    height=25.0,
-    period_s=12.0,
-    fps=60,
-    up=(0.0, 0.0, 1.0),
-):
-    """Continuously orbit every connected client's camera around a fixed `center`.
-
-    Useful for surveying a static scene (e.g. the polytope target cluster).
-    For a camera that follows the drone, see `polytope_follow_camera`.
-    """
-    center = np.asarray(center, dtype=np.float64)
-    up = np.asarray(up, dtype=np.float64)
-
-    def _loop():
-        t0 = _time.time()
-        while True:
-            theta = 2 * np.pi * ((_time.time() - t0) % period_s) / period_s
-            pos = center + np.array(
-                [radius * np.cos(theta), radius * np.sin(theta), height]
-            )
-            _set_camera(server, pos, _look_at_wxyz(pos, center, up), center)
-            _time.sleep(1.0 / fps)
-
-    threading.Thread(target=_loop, daemon=True).start()
-
-
-def polytope_follow_camera(
-    server,
-    positions: np.ndarray,
-    traj_time: np.ndarray,
+def polytope_follow_pose(
+    drone: np.ndarray,
     polytope_center: np.ndarray,
-    chase_distance: float = 15.0,
-    vertical_offset: float = 2.0,
-    fps: int = 60,
+    *,
+    chase_distance: float = CHASE_DISTANCE,
+    vertical_offset: float = VERTICAL_OFFSET,
     up=(0.0, 0.0, 1.0),
-):
-    """Chase camera that rides behind the drone and frames the polytope targets.
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Return ``(cam_pos, cam_wxyz, look_at)`` for a chase camera behind the drone.
 
-    At each frame the camera sits on the ray from `polytope_center` through the
-    drone, extended `chase_distance` units past the drone, then lifted by
-    `vertical_offset` along world-up so the drone isn't a single-pixel occlusion
-    of the targets. The camera always looks at `polytope_center`, so the viewer
-    sees the drone silhouetted against the target cluster — which is exactly
-    the geometry the viewplanning constraint is enforcing (the drone's sensor
-    boresight points along `drone -> polytope_center`).
+    The camera sits on the ray from ``polytope_center`` through ``drone``,
+    extended ``chase_distance`` units past the drone, then lifted along world
+    up by ``vertical_offset`` so the drone silhouettes (but doesn't pixel-occlude)
+    the target cluster. It always looks at ``polytope_center``.
 
-    Because the camera pose is a pure function of the drone's position, there
-    is no independent clock and no drift concern: the camera is wherever the
-    drone is, period. If playback is paused or scrubbed in the Animation panel,
-    the camera simply stops moving along with the scene.
-
-    Args:
-        server: The viser server returned by `create_animated_plotting_server`.
-        positions: (N, 3) drone position trajectory in world coordinates.
-        traj_time: (N,) timestamps matching `positions`, monotonically increasing.
-        polytope_center: (3,) world-coordinate center of the viewplanning polytope.
-        chase_distance: How far past the drone (along the polytope->drone ray)
-            to place the camera. Larger values = wider shot.
-        vertical_offset: World-up offset added to the camera position so the
-            drone is framed above/below the polytope center rather than directly
-            in front of it.
-        fps: Camera update rate.
-        up: World up direction (default z-up).
+    This is exactly the geometry the viewplanning constraint is enforcing:
+    the drone's sensor boresight points along ``drone -> polytope_center``,
+    so the chase camera naturally frames "what the drone is looking at" from
+    over-the-shoulder.
     """
-    positions = np.asarray(positions, dtype=np.float64)
-    traj_time = np.asarray(traj_time, dtype=np.float64).flatten()
+    drone = np.asarray(drone, dtype=np.float64)
     polytope_center = np.asarray(polytope_center, dtype=np.float64)
     up = np.asarray(up, dtype=np.float64)
-    lift = vertical_offset * up
 
-    t_start = float(traj_time[0])
-    t_end = float(traj_time[-1])
-    duration = t_end - t_start
+    ray = drone - polytope_center
+    ray_norm = np.linalg.norm(ray)
+    if ray_norm < 1e-6:
+        # Degenerate: drone sitting exactly at the polytope center. Shouldn't
+        # happen on a viewplanning trajectory, but don't divide by zero.
+        cam_pos = drone + vertical_offset * up
+    else:
+        cam_pos = drone + chase_distance * (ray / ray_norm) + vertical_offset * up
 
-    def drone_at(sim_t: float) -> np.ndarray:
-        """Linearly interpolate the drone position at simulation time `sim_t`."""
-        return np.array(
-            [np.interp(sim_t, traj_time, positions[:, k]) for k in range(3)]
-        )
-
-    def _loop():
-        t0 = _time.time()
-        while True:
-            sim_t = t_start + ((_time.time() - t0) % duration)
-            drone = drone_at(sim_t)
-
-            ray = drone - polytope_center
-            ray_norm = np.linalg.norm(ray)
-            # Degenerate case: drone exactly at polytope center. Shouldn't
-            # happen for a viewplanning trajectory, but guard anyway.
-            if ray_norm < 1e-6:
-                _time.sleep(1.0 / fps)
-                continue
-            ray_hat = ray / ray_norm
-
-            cam_pos = drone + chase_distance * ray_hat + lift
-            _set_camera(
-                server,
-                cam_pos,
-                _look_at_wxyz(cam_pos, polytope_center, up),
-                polytope_center,
-            )
-            _time.sleep(1.0 / fps)
-
-    threading.Thread(target=_loop, daemon=True).start()
+    wxyz = _look_at_wxyz(cam_pos, polytope_center, up)
+    return cam_pos, wxyz, polytope_center
 
 
 if __name__ == "__main__":
@@ -167,33 +113,31 @@ if __name__ == "__main__":
     results = problem.post_process()
     results.update(plotting_dict)
 
-    # Create both visualization servers (viser auto-assigns ports)
-    traj_server = create_animated_plotting_server(
+    # Center of the viewplanning polytope (mean of its vertices).
+    polytope_center = np.asarray(results["init_poses"]).mean(axis=0)
+    positions = np.asarray(results.trajectory["position"], dtype=np.float64)
+
+    # Build the scene in manual-step mode — no GUI playback loop, no wall-clock
+    # thread; we'll drive every frame ourselves from the render loop.
+    handle = create_animated_plotting_server(
         results,
         thrust_key="thrust_force",
         viewcone_scale=10.0,
         show_control_plot="thrust_force",
         show_control_norm_plot="thrust_force",
-    )
-    scp_server = create_scp_animated_plotting_server(
-        results,
-        attitude_stride=3,
-        frame_duration_ms=200,
+        controls="manual",
     )
 
-    # Center of the viewplanning polytope (mean of its vertices).
-    polytope_center = np.asarray(results["init_poses"]).mean(axis=0)
+    def camera_pose_fn(frame_idx: int):
+        return polytope_follow_pose(positions[frame_idx], polytope_center)
 
-    # Cinematic orbit around the polytope target cluster.
-    # orbit_camera(traj_server, center=tuple(polytope_center))
-
-    # Chase camera that rides behind the drone and frames the polytope.
-    polytope_follow_camera(
-        traj_server,
-        results.trajectory["position"],
-        results.trajectory["time"],
-        polytope_center=polytope_center,
+    render_animation_to_video(
+        handle,
+        OUTPUT_PATH,
+        camera_pose_fn,
+        width=WIDTH,
+        height=HEIGHT,
+        fps=FPS,
+        crf=CRF,
+        background_color=BACKGROUND_COLOR,
     )
-
-    # Keep both servers running
-    traj_server.sleep_forever()
