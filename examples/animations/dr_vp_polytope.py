@@ -35,10 +35,19 @@ from examples.plotting_viser import create_animated_plotting_server
 
 # --- Render settings ---------------------------------------------------------
 OUTPUT_PATH = os.path.join(current_dir, "dr_vp_polytope.mp4")
-WIDTH = 1280
+WIDTH = 720
 HEIGHT = 720
-FPS = 30
+FPS = 60
 CRF = 16  # lower = crisper; 16 is visually near-lossless
+
+# Oversampling factor for the propagation: how many trajectory samples we
+# propagate per rendered video frame. STRIDE=1 means one sample per frame (the
+# trail polyline looks chunky when the drone is fast). STRIDE=4 means the
+# propagation runs at 4x the video rate, so the trail is drawn from 4x denser
+# samples — smoother curves at speed — while `render_animation_to_video` strides
+# through every 4th sample to keep the video at realtime FPS.
+STRIDE = 4
+PROPAGATION_HZ = FPS * STRIDE
 
 # --- Camera settings ---------------------------------------------------------
 CHASE_DISTANCE = 15.0  # camera sits this far past the drone along polytope->drone ray
@@ -107,6 +116,7 @@ def polytope_follow_pose(
 
 
 if __name__ == "__main__":
+    problem.settings.prp.dt = 1.0 / PROPAGATION_HZ
     problem.initialize()
     problem.solve()
     results = problem.post_process()
@@ -139,4 +149,5 @@ if __name__ == "__main__":
         height=HEIGHT,
         fps=FPS,
         crf=CRF,
+        stride=STRIDE,
     )
