@@ -62,7 +62,7 @@ def orbit_camera(
     """Continuously orbit every connected client's camera around a fixed `center`.
 
     Useful for surveying a static scene (e.g. the polytope target cluster).
-    For a camera that follows the drone, see `drone_tracking_camera`.
+    For a camera that follows the drone, see `polytope_follow_camera`.
     """
     center = np.asarray(center, dtype=np.float64)
     up = np.asarray(up, dtype=np.float64)
@@ -80,42 +80,49 @@ def orbit_camera(
     threading.Thread(target=_loop, daemon=True).start()
 
 
-def drone_tracking_camera(
+def polytope_follow_camera(
     server,
     positions: np.ndarray,
     traj_time: np.ndarray,
-    radius: float = 8.0,
-    height: float = 3.0,
-    period_s: float = 8.0,
+    polytope_center: np.ndarray,
+    chase_distance: float = 15.0,
+    vertical_offset: float = 2.0,
     fps: int = 60,
     up=(0.0, 0.0, 1.0),
 ):
-    """Orbit the camera around the moving drone, keeping it centered in frame.
+    """Chase camera that rides behind the drone and frames the polytope targets.
 
-    The camera laps the drone every `period_s` seconds (constant angular speed
-    in the drone's frame — cinematic regardless of how fast the drone moves).
+    At each frame the camera sits on the ray from `polytope_center` through the
+    drone, extended `chase_distance` units past the drone, then lifted by
+    `vertical_offset` along world-up so the drone isn't a single-pixel occlusion
+    of the targets. The camera always looks at `polytope_center`, so the viewer
+    sees the drone silhouetted against the target cluster — which is exactly
+    the geometry the viewplanning constraint is enforcing (the drone's sensor
+    boresight points along `drone -> polytope_center`).
 
-    The function runs on its own wall-clock loop synchronized to the
-    trajectory's realtime duration `(traj_time[-1] - traj_time[0])`. The
-    trajectory animation server (`create_animated_plotting_server`) uses an
-    independent realtime clock too — they stay in lock-step as long as the
-    Animation panel's "Speed" slider is left at 1.0× and playback isn't
-    paused or scrubbed. If they drift, restart playback from the beginning
-    to re-sync.
+    Because the camera pose is a pure function of the drone's position, there
+    is no independent clock and no drift concern: the camera is wherever the
+    drone is, period. If playback is paused or scrubbed in the Animation panel,
+    the camera simply stops moving along with the scene.
 
     Args:
         server: The viser server returned by `create_animated_plotting_server`.
         positions: (N, 3) drone position trajectory in world coordinates.
         traj_time: (N,) timestamps matching `positions`, monotonically increasing.
-        radius: Horizontal orbit radius around the drone (world units).
-        height: Vertical offset of the camera above the drone (world units).
-        period_s: Seconds per full camera revolution around the drone.
+        polytope_center: (3,) world-coordinate center of the viewplanning polytope.
+        chase_distance: How far past the drone (along the polytope->drone ray)
+            to place the camera. Larger values = wider shot.
+        vertical_offset: World-up offset added to the camera position so the
+            drone is framed above/below the polytope center rather than directly
+            in front of it.
         fps: Camera update rate.
         up: World up direction (default z-up).
     """
     positions = np.asarray(positions, dtype=np.float64)
     traj_time = np.asarray(traj_time, dtype=np.float64).flatten()
+    polytope_center = np.asarray(polytope_center, dtype=np.float64)
     up = np.asarray(up, dtype=np.float64)
+    lift = vertical_offset * up
 
     t_start = float(traj_time[0])
     t_end = float(traj_time[-1])
@@ -130,15 +137,25 @@ def drone_tracking_camera(
     def _loop():
         t0 = _time.time()
         while True:
-            wall = (_time.time() - t0) % duration
-            sim_t = t_start + wall
-            theta = 2 * np.pi * (wall / period_s)
+            sim_t = t_start + ((_time.time() - t0) % duration)
+            drone = drone_at(sim_t)
 
-            target = drone_at(sim_t)
-            pos = target + np.array(
-                [radius * np.cos(theta), radius * np.sin(theta), height]
+            ray = drone - polytope_center
+            ray_norm = np.linalg.norm(ray)
+            # Degenerate case: drone exactly at polytope center. Shouldn't
+            # happen for a viewplanning trajectory, but guard anyway.
+            if ray_norm < 1e-6:
+                _time.sleep(1.0 / fps)
+                continue
+            ray_hat = ray / ray_norm
+
+            cam_pos = drone + chase_distance * ray_hat + lift
+            _set_camera(
+                server,
+                cam_pos,
+                _look_at_wxyz(cam_pos, polytope_center, up),
+                polytope_center,
             )
-            _set_camera(server, pos, _look_at_wxyz(pos, target, up), target)
             _time.sleep(1.0 / fps)
 
     threading.Thread(target=_loop, daemon=True).start()
@@ -164,14 +181,18 @@ if __name__ == "__main__":
         frame_duration_ms=200,
     )
 
-    # Cinematic orbit around the polytope target cluster.
-    # orbit_camera(traj_server)
+    # Center of the viewplanning polytope (mean of its vertices).
+    polytope_center = np.asarray(results["init_poses"]).mean(axis=0)
 
-    # Camera that orbits the drone, keeping it centered in frame.
-    drone_tracking_camera(
+    # Cinematic orbit around the polytope target cluster.
+    # orbit_camera(traj_server, center=tuple(polytope_center))
+
+    # Chase camera that rides behind the drone and frames the polytope.
+    polytope_follow_camera(
         traj_server,
         results.trajectory["position"],
         results.trajectory["time"],
+        polytope_center=polytope_center,
     )
 
     # Keep both servers running
