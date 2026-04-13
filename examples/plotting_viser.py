@@ -423,7 +423,7 @@ def create_animated_plotting_server(
                         )
 
                         # Draw extended boresight to plane intersection
-                        boresight_handle = server.scene.add_line_segments(
+                        _ = server.scene.add_line_segments(
                             "/boresight_extended",
                             points=np.array([[pos[0], boresight_intersection_0]], dtype=np.float32),
                             colors=(255, 0, 0),  # Red for boresight
