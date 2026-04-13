@@ -245,7 +245,14 @@ _SOLVER_MAP: Dict[str, type] = {}  # populated by __init__.py after all classes 
 
 
 class SolverSpec(BaseModel):
-    """Validates solver configuration from dict/YAML input."""
+    """Validates solver configuration from dict/YAML input.
+
+    !!! warning
+        Enabling ``cvxpygen`` currently disables sparse parameter declarations.
+        cvxpygen does not yet support the N-D sparsity indices used by
+        OpenSCvx's tiled parameters, so all parameters are created as dense
+        when code generation is active.
+    """
 
     type: Literal["PTRSolver"] = "PTRSolver"
     cvx_solver: str = "QOCO"
