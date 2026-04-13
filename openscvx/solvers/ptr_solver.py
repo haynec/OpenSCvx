@@ -234,6 +234,14 @@ class PTRSolver(ConvexSolver):
             B_d_sp = _tile_sparsity(B_d_pat, N - 1)
             C_d_sp = _tile_sparsity(C_d_pat, N - 1)
 
+        # TODO: (griffin-norris) Remove once cvxpygen supports N-D sparsity
+        # indices. cvxpygen's handle_sparsity() assumes 2-D (rows, cols) but
+        # our tiled parameters produce 3-D indices (slices, rows, cols).
+        # Dropping sparsity here is safe — it only affects codegen performance.
+        if self.cvxpygen:
+            A_d_sp = B_d_sp = C_d_sp = None
+            constraint_sparsity = None
+
         # Create all CVXPy variables for the OCP
         self._ocp_vars = create_cvxpy_variables(
             N=N,
