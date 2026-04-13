@@ -67,6 +67,10 @@ def create_server(
     pos: np.ndarray | None,
     dark_mode: bool = True,
     show_grid: bool = True,
+    host: str = "0.0.0.0",
+    port: int = 8080,
+    label: str | None = None,
+    verbose: bool = True,
 ) -> viser.ViserServer:
     """Create a viser server with basic scene setup.
 
@@ -74,11 +78,15 @@ def create_server(
         pos: Position array for computing grid size, or None to use default grid size
         dark_mode: Whether to use dark theme
         show_grid: Whether to show the grid (default True)
+        host: Host interface for the viser server
+        port: TCP port for the viser server
+        label: Optional label shown by viser
+        verbose: Whether viser logs startup/status to console
 
     Returns:
         ViserServer instance with grid and origin frame
     """
-    server = viser.ViserServer()
+    server = viser.ViserServer(host=host, port=port, label=label, verbose=verbose)
 
     # Configure theme with OpenSCvx branding
     # TitlebarButton and TitlebarConfig are TypedDict classes (create as plain dicts)

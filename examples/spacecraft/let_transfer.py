@@ -11,6 +11,7 @@ Modeling choices:
 import os
 import shutil
 import sys
+import time as pytime
 import urllib.request
 from pathlib import Path
 
@@ -35,6 +36,15 @@ from openscvx.symbolic.lower import lower_to_jax
 jax.config.update("jax_enable_x64", True)
 
 REFERENCE_DATE = "26 December 2025"
+ENABLE_VISER_ANIMATION = True
+ENABLE_VISER_INERTIAL_ANIMATION = True
+VISER_VISUAL_SCALE = 250.0
+VISER_MIN_SPEED_FOR_SAMPLING = 0.01
+VISER_TARGET_FPS = 60.0
+VISER_MAX_RESAMPLED_POINTS = 120000
+VISER_ROTATING_PORT = 8080
+VISER_INERTIAL_PORT = 8081
+VISER_REQUEST_SHARE_URLS = True
 KERNEL_DIR = Path(current_dir) / "ker"
 KERNEL_URLS = {
     "naif0012.tls": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls",
@@ -169,6 +179,400 @@ def _add_moon_orbit_overlay(fig, earth_pos: np.ndarray, moon_radius: float) -> N
         row=2,
         col=1,
     )
+
+
+def _set_projection_axis_labels_km(fig) -> None:
+    """Set projection subplot axis labels to km."""
+    fig.update_xaxes(title_text="X (km)", row=1, col=1)
+    fig.update_yaxes(title_text="Y (km)", row=1, col=1)
+    fig.update_xaxes(title_text="X (km)", row=1, col=2)
+    fig.update_yaxes(title_text="Z (km)", row=1, col=2)
+    fig.update_xaxes(title_text="Y (km)", row=2, col=1)
+    fig.update_yaxes(title_text="Z (km)", row=2, col=1)
+
+
+def _set_projection_speed_colorbar_kms(fig) -> None:
+    """Relabel projection colorbar to km/s when velocity-based coloring is used."""
+    for trace in fig.data:
+        marker = getattr(trace, "marker", None)
+        if marker is not None and getattr(marker, "colorbar", None) is not None:
+            marker.colorbar.title = "‖velocity‖ (km/s)"
+
+
+def _create_let_viser_server(
+    trajectory: np.ndarray,
+    traj_time_days: np.ndarray,
+    earth_pos: np.ndarray,
+    sun_pos: np.ndarray,
+    moon_radius: float,
+    moon_rate_rad_per_day: float,
+    guess_trajectory: np.ndarray | None = None,
+    port: int = VISER_ROTATING_PORT,
+):
+    """Create a viser server for LET trajectory playback."""
+    try:
+        from openscvx.plotting import viser as ox_viser
+
+        pos = np.asarray(trajectory[:, :3], dtype=np.float64)
+        vel = np.asarray(trajectory[:, 3:6], dtype=np.float64)
+
+        # Autoscale scene so tiny normalized CR3BP coordinates remain visible.
+        scale = max(float(moon_radius), float(np.linalg.norm(pos, axis=1).max()), 1e-9)
+        pos_vis = (pos / scale) * VISER_VISUAL_SCALE
+        earth_vis = (np.asarray(earth_pos, dtype=np.float64) / scale) * VISER_VISUAL_SCALE
+        moon_radius_vis = (float(moon_radius) / scale) * VISER_VISUAL_SCALE
+
+        colors = ox_viser.compute_velocity_colors(vel, fallback_length=pos.shape[0])
+        server = ox_viser.create_server(pos_vis, show_grid=True, port=port)
+
+        ox_viser.add_circular_orbit(
+            server,
+            radius=moon_radius_vis,
+            name="moon_orbit",
+            center=earth_vis,
+            color=(135, 135, 135),
+            line_width=1.6,
+        )
+
+        earth_radius = max(0.03 * moon_radius_vis, 0.15)
+        spacecraft_radius = 0.6 * earth_radius
+        server.scene.add_icosphere(
+            "/bodies/earth",
+            radius=earth_radius,
+            color=(80, 160, 255),
+            position=earth_vis,
+        )
+        sun_vis_real = (np.asarray(sun_pos, dtype=np.float64) / scale) * VISER_VISUAL_SCALE
+        sun_vis_norm = float(np.linalg.norm(sun_vis_real))
+        if sun_vis_norm > 1.8 * VISER_VISUAL_SCALE:
+            sun_vis = sun_vis_real * ((1.8 * VISER_VISUAL_SCALE) / sun_vis_norm)
+        else:
+            sun_vis = sun_vis_real
+        server.scene.add_icosphere(
+            "/bodies/sun",
+            radius=1.15 * earth_radius,
+            color=(255, 210, 70),
+            position=sun_vis,
+        )
+        # Phase the Moon so that at final time it rendezvous with the terminal trajectory point.
+        traj_time_days = np.asarray(traj_time_days, dtype=np.float64).flatten()
+        rel_final = pos_vis[-1] - earth_vis
+        rel_final_xy = np.array([rel_final[0], rel_final[1]], dtype=np.float64)
+        if np.linalg.norm(rel_final_xy) > 1e-12:
+            theta_final = float(np.arctan2(rel_final_xy[1], rel_final_xy[0]))
+        else:
+            theta_final = -0.5 * np.pi
+        theta_0 = theta_final - moon_rate_rad_per_day * float(traj_time_days[-1])
+        theta = theta_0 + moon_rate_rad_per_day * traj_time_days
+        moon_positions = earth_vis.reshape(1, 3) + moon_radius_vis * np.column_stack(
+            [np.cos(theta), np.sin(theta), np.zeros_like(theta)]
+        )
+        moon_handle = server.scene.add_icosphere(
+            "/bodies/moon",
+            radius=0.6 * earth_radius,
+            color=(220, 220, 220),
+            position=moon_positions[0],
+        )
+
+        if guess_trajectory is not None:
+            guess_pos = np.asarray(guess_trajectory[:, :3], dtype=np.float64)
+            guess_pos_vis = (guess_pos / scale) * VISER_VISUAL_SCALE
+            guess_colors = np.broadcast_to(
+                np.array([190, 150, 255], dtype=np.uint8), (guess_pos_vis.shape[0], 3)
+            ).copy()
+            ox_viser.add_ghost_trajectory(
+                server, guess_pos_vis, guess_colors, opacity=0.08, point_size=0.20
+            )
+
+        ox_viser.add_ghost_trajectory(server, pos_vis, colors, opacity=0.25, point_size=0.25)
+        _, update_trail = ox_viser.add_animated_trail(server, pos_vis, colors, point_size=0.45)
+        _, update_marker = ox_viser.add_position_marker(
+            server, pos_vis, radius=spacecraft_radius, color=(255, 160, 90)
+        )
+
+        def update_moon(frame_idx: int) -> None:
+            moon_handle.position = moon_positions[frame_idx]
+
+        ox_viser.add_animation_controls(
+            server,
+            np.asarray(traj_time_days, dtype=np.float64),
+            [update_trail, update_marker, update_moon],
+            loop=True,
+            folder_name="LET Animation",
+            time_label="Time (days)",
+        )
+        return server
+    except Exception as exc:
+        print(f"Viser animation unavailable: {exc}")
+        return None
+
+
+def _rotate_about_z(vectors: np.ndarray, theta: np.ndarray) -> np.ndarray:
+    """Rotate Nx3 vectors around +Z by angle array theta (radians)."""
+    vectors = np.asarray(vectors, dtype=np.float64)
+    theta = np.asarray(theta, dtype=np.float64).flatten()
+    c = np.cos(theta)
+    s = np.sin(theta)
+    out = np.empty_like(vectors)
+    out[:, 0] = c * vectors[:, 0] - s * vectors[:, 1]
+    out[:, 1] = s * vectors[:, 0] + c * vectors[:, 1]
+    out[:, 2] = vectors[:, 2]
+    return out
+
+
+def _hohmann_transfer_metrics(
+    mu_central_km3_s2: float,
+    r1_km: float,
+    r2_km: float,
+) -> dict:
+    """Compute Earth-centered two-impulse Hohmann delta-v."""
+    if r1_km <= 0.0 or r2_km <= 0.0:
+        raise ValueError(f"Invalid Hohmann radii: r1={r1_km}, r2={r2_km}.")
+
+    a_t = 0.5 * (r1_km + r2_km)
+    v_c1 = np.sqrt(mu_central_km3_s2 / r1_km)
+    v_c2 = np.sqrt(mu_central_km3_s2 / r2_km)
+    v_t1 = np.sqrt(mu_central_km3_s2 * (2.0 / r1_km - 1.0 / a_t))
+    v_t2 = np.sqrt(mu_central_km3_s2 * (2.0 / r2_km - 1.0 / a_t))
+
+    dv1_km_s = abs(v_t1 - v_c1)
+    dv2_km_s = abs(v_c2 - v_t2)
+    total_dv_km_s = dv1_km_s + dv2_km_s
+
+    return {
+        "dv1_km_s": float(dv1_km_s),
+        "dv2_km_s": float(dv2_km_s),
+        "total_dv_km_s": float(total_dv_km_s),
+    }
+
+
+def _create_let_viser_server_inertial(
+    trajectory: np.ndarray,
+    traj_time_days: np.ndarray,
+    r_ref_km: float,
+    d_earth_sun_km: float,
+    d_earth_moon_km: float,
+    moon_rate_rad_per_day: float,
+    kappa_val: float,
+    guess_trajectory: np.ndarray | None = None,
+    guess_time_days: np.ndarray | None = None,
+    port: int = VISER_INERTIAL_PORT,
+):
+    """Create a Sun-centered inertial-frame viser animation."""
+    try:
+        from openscvx.plotting import viser as ox_viser
+
+        traj_time_days = np.asarray(traj_time_days, dtype=np.float64).flatten()
+        pos_rot = np.asarray(trajectory[:, :3], dtype=np.float64)
+        vel_rot = np.asarray(trajectory[:, 3:6], dtype=np.float64)
+
+        tau = traj_time_days * d_2_sec / t_ref
+        theta = kappa_val * tau
+        rho_es_local = d_earth_sun_km / r_ref_km
+        rho_em_local = d_earth_moon_km / r_ref_km
+
+        earth_pos = np.column_stack(
+            [rho_es_local * np.cos(theta), rho_es_local * np.sin(theta), np.zeros_like(theta)]
+        )
+        sat_rel_inertial = _rotate_about_z(pos_rot, theta)
+        sat_pos = earth_pos + sat_rel_inertial
+
+        rel_final = sat_pos[-1] - earth_pos[-1]
+        rel_final_xy = np.array([rel_final[0], rel_final[1]], dtype=np.float64)
+        if np.linalg.norm(rel_final_xy) > 1e-12:
+            phi_final = float(np.arctan2(rel_final_xy[1], rel_final_xy[0]))
+        else:
+            phi_final = 0.0
+        phi_0 = phi_final - moon_rate_rad_per_day * float(traj_time_days[-1])
+        phi = phi_0 + moon_rate_rad_per_day * traj_time_days
+        moon_pos = earth_pos + rho_em_local * np.column_stack(
+            [np.cos(phi), np.sin(phi), np.zeros_like(phi)]
+        )
+
+        scene_max = max(
+            float(np.linalg.norm(sat_pos, axis=1).max()),
+            float(np.linalg.norm(earth_pos, axis=1).max()),
+            float(np.linalg.norm(moon_pos, axis=1).max()),
+            1e-9,
+        )
+        pos_vis = (sat_pos / scene_max) * VISER_VISUAL_SCALE
+        earth_vis = (earth_pos / scene_max) * VISER_VISUAL_SCALE
+        moon_vis = (moon_pos / scene_max) * VISER_VISUAL_SCALE
+        sun_vis = np.zeros(3, dtype=np.float64)
+
+        colors = ox_viser.compute_velocity_colors(vel_rot, fallback_length=pos_vis.shape[0])
+        server = ox_viser.create_server(pos_vis, show_grid=True, port=port)
+
+        sun_radius = max(0.04 * VISER_VISUAL_SCALE, 0.2)
+        earth_radius = max(0.0018 * VISER_VISUAL_SCALE, 0.035)
+        moon_radius = 0.45 * earth_radius
+        spacecraft_radius = 0.22 * earth_radius
+
+        server.scene.add_icosphere(
+            "/bodies/sun",
+            radius=sun_radius,
+            color=(255, 210, 70),
+            position=sun_vis,
+        )
+        earth_handle = server.scene.add_icosphere(
+            "/bodies/earth",
+            radius=earth_radius,
+            color=(80, 160, 255),
+            position=earth_vis[0],
+        )
+        moon_handle = server.scene.add_icosphere(
+            "/bodies/moon",
+            radius=moon_radius,
+            color=(220, 220, 220),
+            position=moon_vis[0],
+        )
+
+        earth_orbit_pos = np.column_stack(
+            [
+                rho_es_local * np.cos(np.linspace(0.0, 2.0 * np.pi, 721)),
+                rho_es_local * np.sin(np.linspace(0.0, 2.0 * np.pi, 721)),
+                np.zeros(721),
+            ]
+        )
+        earth_orbit_vis = (earth_orbit_pos / scene_max) * VISER_VISUAL_SCALE
+        earth_orbit_colors = np.broadcast_to(
+            np.array([90, 140, 255], dtype=np.uint8), (earth_orbit_vis.shape[0], 3)
+        ).copy()
+        ox_viser.add_ghost_trajectory(
+            server, earth_orbit_vis, earth_orbit_colors, opacity=0.14, point_size=0.20
+        )
+
+        moon_orbit_colors = np.broadcast_to(
+            np.array([175, 175, 175], dtype=np.uint8), (moon_vis.shape[0], 3)
+        ).copy()
+        ox_viser.add_ghost_trajectory(server, moon_vis, moon_orbit_colors, opacity=0.04, point_size=0.10)
+
+        if guess_trajectory is not None:
+            guess_pos_rot = np.asarray(guess_trajectory[:, :3], dtype=np.float64)
+            if guess_time_days is None:
+                guess_time_days = np.linspace(0.0, traj_time_days[-1], guess_pos_rot.shape[0])
+            guess_tau = np.asarray(guess_time_days, dtype=np.float64).flatten() * d_2_sec / t_ref
+            guess_theta = kappa_val * guess_tau
+            guess_earth = np.column_stack(
+                [
+                    rho_es_local * np.cos(guess_theta),
+                    rho_es_local * np.sin(guess_theta),
+                    np.zeros_like(guess_theta),
+                ]
+            )
+            guess_sat = guess_earth + _rotate_about_z(guess_pos_rot, guess_theta)
+            guess_vis = (guess_sat / scene_max) * VISER_VISUAL_SCALE
+            guess_colors = np.broadcast_to(
+                np.array([180, 145, 250], dtype=np.uint8), (guess_vis.shape[0], 3)
+            ).copy()
+            ox_viser.add_ghost_trajectory(server, guess_vis, guess_colors, opacity=0.07, point_size=0.20)
+
+        ox_viser.add_ghost_trajectory(server, pos_vis, colors, opacity=0.16, point_size=0.12)
+        _, update_trail = ox_viser.add_animated_trail(server, pos_vis, colors, point_size=0.18)
+        _, update_marker = ox_viser.add_position_marker(
+            server, pos_vis, radius=spacecraft_radius, color=(255, 160, 90)
+        )
+
+        camera_view_dir: dict[int, np.ndarray] = {}
+        camera_view_dist: dict[int, float] = {}
+
+        def _initialize_camera_tracking(client, earth_target: np.ndarray) -> bool:
+            try:
+                if float(client.camera.update_timestamp) <= 0.0:
+                    return False
+                rel = np.asarray(client.camera.position) - np.asarray(client.camera.look_at)
+                rel_norm = float(np.linalg.norm(rel))
+                if rel_norm < 1e-6:
+                    rel = np.array(
+                        [0.0, -0.20 * VISER_VISUAL_SCALE, 0.08 * VISER_VISUAL_SCALE],
+                        dtype=np.float64,
+                    )
+                    rel_norm = float(np.linalg.norm(rel))
+                camera_view_dir[client.client_id] = rel / rel_norm
+                camera_view_dist[client.client_id] = rel_norm
+                client.camera.position = earth_target + camera_view_dir[client.client_id] * rel_norm
+                client.camera.look_at = earth_target
+                return True
+            except Exception:
+                return False
+
+        @server.on_client_connect
+        def _on_client_connect(client) -> None:
+            _initialize_camera_tracking(client, earth_vis[0])
+
+        @server.on_client_disconnect
+        def _on_client_disconnect(client) -> None:
+            try:
+                camera_view_dir.pop(client.client_id, None)
+                camera_view_dist.pop(client.client_id, None)
+            except Exception:
+                pass
+
+        def update_earth(frame_idx: int) -> None:
+            earth_handle.position = earth_vis[frame_idx]
+            earth_target = earth_vis[frame_idx]
+            for client_id, client in server.get_clients().items():
+                try:
+                    if client_id not in camera_view_dir:
+                        if not _initialize_camera_tracking(client, earth_target):
+                            continue
+                        continue
+                    current_rel = np.asarray(client.camera.position) - np.asarray(client.camera.look_at)
+                    current_dist = float(np.linalg.norm(current_rel))
+                    if current_dist > 1e-6:
+                        camera_view_dist[client_id] = current_dist
+                    client.camera.position = earth_target + camera_view_dir[client_id] * camera_view_dist[client_id]
+                    client.camera.look_at = earth_target
+                except Exception:
+                    pass
+
+        def update_moon(frame_idx: int) -> None:
+            moon_handle.position = moon_vis[frame_idx]
+
+        def reset_camera_tracking() -> None:
+            camera_view_dir.clear()
+            camera_view_dist.clear()
+            earth_start = earth_vis[0]
+            for client in server.get_clients().values():
+                _initialize_camera_tracking(client, earth_start)
+
+        ox_viser.add_animation_controls(
+            server,
+            traj_time_days,
+            [update_trail, update_marker, update_earth, update_moon],
+            loop=True,
+            folder_name="LET Inertial (Sun-Centered)",
+            time_label="Time (days)",
+            reset_callbacks=[reset_camera_tracking],
+        )
+        return server
+    except Exception as exc:
+        print(f"Sun-centered inertial viser animation unavailable: {exc}")
+        return None
+
+
+def _resample_trajectory_for_viser(
+    trajectory: np.ndarray,
+    traj_time_days: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Resample trajectory for smoother low-speed viser playback."""
+    traj_time_days = np.asarray(traj_time_days, dtype=np.float64).flatten()
+    trajectory = np.asarray(trajectory, dtype=np.float64)
+    if traj_time_days.size < 2 or trajectory.shape[0] < 2:
+        return trajectory, traj_time_days
+
+    desired_dt_days = VISER_MIN_SPEED_FOR_SAMPLING / VISER_TARGET_FPS
+    horizon_days = float(traj_time_days[-1] - traj_time_days[0])
+    n_target = int(np.ceil(horizon_days / max(desired_dt_days, 1e-12))) + 1
+    n_target = min(max(n_target, trajectory.shape[0]), VISER_MAX_RESAMPLED_POINTS)
+    if n_target <= trajectory.shape[0]:
+        return trajectory, traj_time_days
+
+    t_dense = np.linspace(traj_time_days[0], traj_time_days[-1], n_target)
+    traj_dense = np.column_stack(
+        [np.interp(t_dense, traj_time_days, trajectory[:, i]) for i in range(trajectory.shape[1])]
+    )
+    return traj_dense, t_dense
 
 
 spice_data = _load_spice_problem_data(REFERENCE_DATE)
@@ -438,7 +842,11 @@ if __name__ == "__main__":
     print(f"Ephemeris source: {spice_source}")
     print(f"Reference date: {REFERENCE_DATE}")
     print(f"Reference scales: L={r_ref:.6f} km, T={t_ref:.6f} s, v_ref={v_ref:.9f} km/s")
-    print(f"Derived scaling factors: kappa=n*T={kappa:.12f}, rho_es=d_ES/L={rho_es:.12f}")
+    hohmann_metrics = _hohmann_transfer_metrics(
+        mu_central_km3_s2=mu_earth,
+        r1_km=r_0,
+        r2_km=d_earth_moon,
+    )
 
     x0_guess_post = x0_seed.copy()
     traj_guess = np.asarray(
@@ -459,16 +867,18 @@ if __name__ == "__main__":
     guess_results = OptimizationResults(converged=True, t_final=float(t_f_guess))
     guess_results.trajectory = {
         "time": np.linspace(0.0, t_f_guess, traj_guess.shape[0]).reshape(-1, 1),
-        "position": traj_guess[:, :3],
-        "velocity": traj_guess[:, 3:6],
+        "position": traj_guess[:, :3] * r_ref,
+        "velocity": traj_guess[:, 3:6] * v_ref,
     }
     guess_results.nodes = {
         "time": time_guess,
-        "position": nodal_guess[:, :3],
-        "velocity": nodal_guess[:, 3:6],
+        "position": nodal_guess[:, :3] * r_ref,
+        "velocity": nodal_guess[:, 3:6] * v_ref,
     }
     fig_guess = plot_projections_2d(guess_results, velocity_var_name="velocity")
-    fig_guess.update_layout(title="LET Initial Guess - XY, XZ, YZ Projections")
+    _set_projection_axis_labels_km(fig_guess)
+    _set_projection_speed_colorbar_kms(fig_guess)
+    fig_guess.update_layout(title="LET Initial Guess - XY, XZ, YZ Projections (km)")
     fig_guess.show()
 
     problem.initialize()
@@ -506,20 +916,22 @@ if __name__ == "__main__":
     solution_results = OptimizationResults(converged=bool(results.converged), t_final=t_f_opt)
     solution_results.trajectory = {
         "time": np.linspace(0.0, t_f_opt, traj_solution.shape[0]).reshape(-1, 1),
-        "position": traj_solution[:, :3],
-        "velocity": traj_solution[:, 3:6],
+        "position": traj_solution[:, :3] * r_ref,
+        "velocity": traj_solution[:, 3:6] * v_ref,
     }
     solution_results.nodes = {
         "time": results.nodes["time"],
-        "position": results.nodes["position"],
-        "velocity": results.nodes["velocity"],
+        "position": np.asarray(results.nodes["position"], dtype=float) * r_ref,
+        "velocity": np.asarray(results.nodes["velocity"], dtype=float) * v_ref,
     }
     fig_solution = plot_projections_2d(solution_results, velocity_var_name="velocity")
-    fig_solution.update_layout(title="LET Solution - XY, XZ, YZ Projections")
+    _set_projection_axis_labels_km(fig_solution)
+    _set_projection_speed_colorbar_kms(fig_solution)
+    fig_solution.update_layout(title="LET Solution - XY, XZ, YZ Projections (km)")
     _add_moon_orbit_overlay(
         fig_solution,
-        earth_pos=pos_earth_rot,
-        moon_radius=d_earth_moon / r_ref,
+        earth_pos=pos_earth_rot * r_ref,
+        moon_radius=d_earth_moon,
     )
     fig_solution.show()
 
@@ -535,11 +947,81 @@ if __name__ == "__main__":
     final_distance_km = final_distance_norm * r_ref
     final_distance_error_km = final_distance_km - d_earth_moon
     moon_distance_match = bool(np.isclose(final_distance_km, d_earth_moon, atol=100.0))
+    dv0_guess_norm = float(np.linalg.norm(delta_v0_guess))
+    dv0_opt_norm = float(np.linalg.norm(dv0_opt))
+    dvf_opt_norm = float(np.linalg.norm(dvf_opt))
+    total_dv_opt_norm = dv0_opt_norm + dvf_opt_norm
+    total_dv_with_guess_norm = dv0_guess_norm + total_dv_opt_norm
 
     print(f"Converged: {bool(results.converged)}")
-    print(f"Final time (normalized): {t_f_opt:.6f}")
     print(f"Final time (days): {t_f_opt * t_ref / d_2_sec:.6f}")
-    print(f"Initial delta-v (normalized): {dv0_opt}")
+    print(f"||delta_v0_guess|| (km/s): {dv0_guess_norm * v_ref:.9f}")
     print(f"Initial delta-v (km/s): {dv0_opt * v_ref}")
-    print(f"Final delta-v (normalized): {dvf_opt}")
+    print(f"||Initial delta-v|| (km/s): {dv0_opt_norm * v_ref:.9f}")
     print(f"Final delta-v (km/s): {dvf_opt * v_ref}")
+    print(f"||Final delta-v|| (km/s): {dvf_opt_norm * v_ref:.9f}")
+    print(f"Total ||delta-v|| (solution only, km/s): {total_dv_opt_norm * v_ref:.9f}")
+    print(f"Total ||delta-v|| (+delta_v0_guess, km/s): {total_dv_with_guess_norm * v_ref:.9f}")
+    print(f"Hohmann dv1 (km/s): {hohmann_metrics['dv1_km_s']:.9f}")
+    print(f"Hohmann dv2 (km/s): {hohmann_metrics['dv2_km_s']:.9f}")
+    print(f"Hohmann total delta-v (km/s): {hohmann_metrics['total_dv_km_s']:.9f}")
+
+    if ENABLE_VISER_ANIMATION:
+        traj_time_days = np.linspace(0.0, t_f_opt * t_ref / d_2_sec, traj_solution.shape[0])
+        traj_solution_vis, traj_time_days_vis = _resample_trajectory_for_viser(
+            traj_solution, traj_time_days
+        )
+        traj_guess_time_days = np.linspace(0.0, t_f_guess * t_ref / d_2_sec, traj_guess.shape[0])
+        traj_guess_vis, traj_guess_time_days_vis = _resample_trajectory_for_viser(
+            traj_guess, traj_guess_time_days
+        )
+        moon_rate_rad_per_day = np.sqrt(mu_earth / d_earth_moon**3) * d_2_sec
+        viser_server = _create_let_viser_server(
+            trajectory=traj_solution_vis,
+            traj_time_days=traj_time_days_vis,
+            earth_pos=pos_earth_rot,
+            sun_pos=np.array([-rho_es, 0.0, 0.0], dtype=float),
+            moon_radius=d_earth_moon / r_ref,
+            moon_rate_rad_per_day=moon_rate_rad_per_day,
+            guess_trajectory=traj_guess_vis,
+            port=VISER_ROTATING_PORT,
+        )
+        inertial_server = None
+        if ENABLE_VISER_INERTIAL_ANIMATION:
+            inertial_server = _create_let_viser_server_inertial(
+                trajectory=traj_solution_vis,
+                traj_time_days=traj_time_days_vis,
+                r_ref_km=r_ref,
+                d_earth_sun_km=d_earth_sun,
+                d_earth_moon_km=d_earth_moon,
+                moon_rate_rad_per_day=moon_rate_rad_per_day,
+                kappa_val=kappa,
+                guess_trajectory=traj_guess_vis,
+                guess_time_days=traj_guess_time_days_vis,
+                port=VISER_INERTIAL_PORT,
+            )
+
+        if viser_server is not None or inertial_server is not None:
+            rotating_url = f"http://localhost:{VISER_ROTATING_PORT}"
+            inertial_url = f"http://localhost:{VISER_INERTIAL_PORT}"
+            print("Launching viser animation server(s) (Ctrl+C to exit)...")
+            if viser_server is not None:
+                print(f"Rotating frame viewer: {rotating_url}")
+                if VISER_REQUEST_SHARE_URLS:
+                    try:
+                        rotating_share_url = viser_server.request_share_url(verbose=True)
+                        if rotating_share_url is not None:
+                            print(f"Rotating frame public URL: {rotating_share_url}")
+                    except Exception as exc:
+                        print(f"Rotating frame share URL unavailable: {exc}")
+            if inertial_server is not None:
+                print(f"Sun-centered inertial viewer: {inertial_url}")
+                if VISER_REQUEST_SHARE_URLS:
+                    try:
+                        inertial_share_url = inertial_server.request_share_url(verbose=True)
+                        if inertial_share_url is not None:
+                            print(f"Sun-centered inertial public URL: {inertial_share_url}")
+                    except Exception as exc:
+                        print(f"Sun-centered inertial share URL unavailable: {exc}")
+            while True:
+                pytime.sleep(1.0)
