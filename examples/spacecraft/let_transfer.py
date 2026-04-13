@@ -119,21 +119,22 @@ v_ref = r_ref / t_ref
 
 # Mission setup
 h_earth = 1500.0
+v_moon = np.sqrt(mu_earth/d_earth_moon) / v_ref
 r_0 = r_earth + h_earth
 pos_earth_rot = np.array([1.0 - mu, 0.0, 0.0])
 pos_0 = pos_earth_rot + np.array([r_0 / r_ref, 0.0, 0.0])
-vel_0 = np.array([0.0, 7.8 * np.sqrt(2.0) * 0.8866 / v_ref, 0.0])
+vel_0 = np.array([0.0, 7.8 * np.sqrt(2.0) * 0.88675 / v_ref, 0.0])
 x0_seed = np.concatenate([pos_0, vel_0])
 
 pos_f = pos_earth_rot + np.array([0.0, -d_earth_moon / r_ref, 0.0])
 vel_f = np.array([ np.sqrt(mu_earth / d_earth_moon) / v_ref, 0.0, 0.0])
-t_f_guess = 66.0 / 365.0 * (2.0 * np.pi)
+t_f_guess = 78.0 / 365.0 * (2.0 * np.pi)
 
 # Initial impulse guess.
 v_circular = np.sqrt(mu_earth / r_0) / v_ref
 delta_v0_guess = np.array([0.0, vel_0[1] - v_circular, 0.0])
 
-n_nodes = 30
+n_nodes = 45
 integration_tol = 1e-12
 
 # Guess-node distribution toggle:
@@ -311,7 +312,7 @@ fuel.guess = np.zeros((n_nodes, 1))
 delta_v.min = -np.ones(3)
 delta_v.max = np.ones(3)
 delta_v_guess = np.zeros((n_nodes, 3))
-delta_v_guess[0, :] = delta_v0_guess
+# delta_v_guess[0, :] = delta_v0_guess
 delta_v.guess = delta_v_guess
 
 time_guess = (t_f_guess * node_grid).reshape(-1, 1)
@@ -337,24 +338,28 @@ discretizer = {
     "diffrax_kwargs": {"atol": integration_tol, "rtol": integration_tol},
 }
 algorithm = {
-    "k_max": 50,
-    "lam_prox": 1e0,
-    "lam_vc": 1e1,
-    "lam_vb": 1e0,
-    "lam_cost": 1.0,
+    "k_max": 150,
+    "lam_prox": 5e-2,
+    "lam_vc": 3e1,
+    "lam_vb": 2e-1,
+    "lam_cost": 5e-1,
     "ep_tr": 1e-9,
     "ep_vc": 1e-6,
     "autotuner": ox.AugmentedLagrangian(),
 }
 
+constraints = []
 # Enforce final distance from Earth in normalized Sun-Earth rotating frame.
 final_radius_target = d_earth_moon / r_ref
-constraints = [
-    (ox.linalg.Norm(position - pos_earth_rot) <= final_radius_target).at([n_nodes - 1]),
+eps_radius          = 1e-12
+constraints += [
+    (ox.linalg.Norm(position - pos_earth_rot) <= final_radius_target).at([n_nodes - 1]).convex(),
 ]
 constraints += [
-    (ox.linalg.Norm(position - pos_earth_rot) >= final_radius_target).at([n_nodes - 1]),
+    (ox.linalg.Norm(position - pos_earth_rot) >= (1+eps_radius)*final_radius_target)
+                                                                                .at([n_nodes - 1]),
 ]
+
 # Final orbit tangency: radius and velocity orthogonal at terminal node.
 constraints += [
     (ox.Sum((position - pos_earth_rot) * velocity) >= 0.0).at([n_nodes - 1]),
@@ -362,6 +367,15 @@ constraints += [
 constraints += [
     (ox.Sum((position - pos_earth_rot) * velocity) <= 0.0).at([n_nodes - 1]),
 ]
+
+# Final speed magnitude: velocity should match the moon one
+constraints += [
+    (ox.linalg.Norm(velocity) - v_moon >= 0.0).at([n_nodes - 1]),
+]
+constraints += [
+    (ox.linalg.Norm(velocity) - v_moon <= 0.0).at([n_nodes - 1]).convex(),
+]
+
 
 problem = Problem(
     dynamics=dynamics,
