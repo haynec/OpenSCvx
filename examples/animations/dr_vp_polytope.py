@@ -46,7 +46,7 @@ CAMERA_MODE = "chase"
 OUTPUT_PATH = os.path.join(current_dir, f"dr_vp_polytope_{CAMERA_MODE}.mp4")
 WIDTH = 1080
 HEIGHT = 1080
-FPS = 60
+FPS = 30
 CRF = 16  # lower = crisper; 16 is visually near-lossless
 
 # Oversampling factor for the propagation: how many trajectory samples we
