@@ -40,7 +40,7 @@ from examples.drone.logo import get_kp_pose, plotting_dict, problem, total_time
 from examples.plotting_viser import create_animated_plotting_server
 
 # Camera mode: "chase" | "overview"
-CAMERA_MODE = "chase"
+CAMERA_MODE = "overview"
 
 # --- Render settings ---------------------------------------------------------
 OUTPUT_PATH = os.path.join(current_dir, f"logo_{CAMERA_MODE}.mp4")
@@ -71,7 +71,15 @@ if __name__ == "__main__":
     problem.initialize()
     problem.solve()
     results = problem.post_process()
-    results.update_plotting_data(**plotting_dict)
+    results.update_plotting_data(
+        **{
+            **plotting_dict,
+            # Hide elements that clutter the cinematic render — keep only the
+            # boresight intersection trail (the red "drawing" on the logo plane).
+            "moving_subject": False,
+            "relative_vector": False,
+        }
+    )
 
     positions = np.asarray(results.trajectory["position"], dtype=np.float64)
     traj_time = np.asarray(results.trajectory["time"], dtype=np.float64).flatten()
@@ -85,9 +93,9 @@ if __name__ == "__main__":
     )
     target_centroid = target_positions.mean(axis=0)
 
-    # Compute the logo drawing plane and the traced path (boresight ∩ plane),
-    # exactly as the logo __main__ block does. Without these keys the plotting
-    # server skips the cyan traced-path trail and the animated pointer dot.
+    # Define the logo drawing plane so the boresight-plane intersection works.
+    # We intentionally skip traced_path_on_plane (static cyan path + green dot)
+    # and the other diagnostic overlays to keep the render clean.
     p0 = np.asarray(get_kp_pose(0.0))
     p1 = np.asarray(get_kp_pose(0.33))
     p2 = np.asarray(get_kp_pose(0.67))
@@ -95,24 +103,7 @@ if __name__ == "__main__":
     plane_normal = np.cross(v1, v2)
     nrm = np.linalg.norm(plane_normal)
     plane_normal = plane_normal / nrm if nrm > 1e-10 else np.array([1.0, 0.0, 0.0])
-    plane_point = p0
-
-    def _ray_plane(origin, direction, p_plane, n_plane):
-        denom = np.dot(direction, n_plane)
-        if abs(denom) < 1e-10:
-            return None
-        t = np.dot(p_plane - origin, n_plane) / denom
-        return origin + t * direction if t >= 0 else None
-
-    traced_path = []
-    for i in range(n_frames):
-        rel = target_positions[i] - positions[i]
-        rel_dir = rel / np.linalg.norm(rel)
-        pt = _ray_plane(positions[i], rel_dir, plane_point, plane_normal)
-        traced_path.append(pt if pt is not None else target_positions[i])
-
-    results["traced_path_on_plane"] = np.array(traced_path, dtype=np.float64)
-    results["logo_plane_point"] = plane_point
+    results["logo_plane_point"] = p0
     results["logo_plane_normal"] = plane_normal
 
     # Build the scene in manual-step mode.
@@ -127,9 +118,8 @@ if __name__ == "__main__":
 
     # Select camera pose function based on mode.
     if CAMERA_MODE == "overview":
-        traced = np.array(traced_path, dtype=np.float64)
         static_pose = overview_pose(
-            traced,
+            target_positions,
             azimuth=OVERVIEW_AZIMUTH,
             elevation=OVERVIEW_ELEVATION,
             radius_margin=OVERVIEW_RADIUS_MARGIN,

@@ -275,7 +275,6 @@ def create_animated_plotting_server(
         lengths = np.array(
             [axes_length * boresight_multiplier, axes_length, axes_length], dtype=np.float32
         )
-        # viser expects colors shape (N, 2, 3) for N segments, 2 endpoints each, 3 RGB per point
         rgb_per_axis = np.array([[255, 0, 0], [0, 255, 0], [0, 0, 255]], dtype=np.uint8)
         colors = np.stack(
             [np.stack([rgb_per_axis[i], rgb_per_axis[i]], axis=0) for i in range(3)], axis=0
@@ -439,40 +438,47 @@ def create_animated_plotting_server(
                             position=boresight_intersection_0,
                         )
 
-                        # Add trail for boresight intersection point
-                        boresight_trail_handle = server.scene.add_line_segments(
+                        # Growing point-cloud trail for the boresight intersection.
+                        boresight_trail_cloud = server.scene.add_point_cloud(
                             "/boresight_intersection_trail",
-                            points=np.array([], dtype=np.float32).reshape(0, 2, 3),
-                            colors=(200, 50, 50),
-                            line_width=2.0,
+                            points=boresight_intersection_points[:1],
+                            colors=np.array([[200, 50, 50]], dtype=np.uint8),
+                            point_size=0.06,
                         )
 
                         def update_boresight(frame_idx: int) -> None:
                             idx = min(frame_idx, len(boresight_intersection_points) - 1)
-                            boresight_handle.points = np.array(
-                                [[pos[idx], boresight_intersection_points[idx]]], dtype=np.float32
+                            # Re-add boresight line (LineSegmentsHandle has no
+                            # mutable points); same scene path replaces the old.
+                            server.scene.add_line_segments(
+                                "/boresight_extended",
+                                points=np.array(
+                                    [[pos[idx], boresight_intersection_points[idx]]],
+                                    dtype=np.float32,
+                                ),
+                                colors=(255, 0, 0),
+                                line_width=3.0,
                             )
                             intersection_handle.position = boresight_intersection_points[idx]
 
-                            # Update trail to show up to current frame
-                            if idx > 0:
-                                trail_segments = np.array(
-                                    [
-                                        [
-                                            boresight_intersection_points[i],
-                                            boresight_intersection_points[i + 1],
-                                        ]
-                                        for i in range(idx)
-                                    ],
-                                    dtype=np.float32,
-                                )
-                                boresight_trail_handle.points = trail_segments
-                            else:
-                                boresight_trail_handle.points = np.array(
-                                    [], dtype=np.float32
-                                ).reshape(0, 2, 3)
+                            # Grow trail up to current frame
+                            n_trail = idx + 1
+                            boresight_trail_cloud.points = boresight_intersection_points[:n_trail]
+                            boresight_trail_cloud.colors = np.broadcast_to(
+                                np.array([[200, 50, 50]], dtype=np.uint8),
+                                (n_trail, 3),
+                            ).copy()
 
                         update_callbacks.append(update_boresight)
+
+                        # Also show the full body-frame axes at the drone position.
+                        _, update_axes = _add_attitude_axes_lines(
+                            "/body_axes",
+                            pos,
+                            attitude,
+                            axes_length=attitude_axes_length,
+                        )
+                        update_callbacks.append(update_axes)
                     else:
                         # Fallback to fixed multiplier if intersection fails
                         boresight_multiplier = 3.0
@@ -635,12 +641,12 @@ def create_animated_plotting_server(
                     position=rel_int_pos_0,
                 )
 
-                # Add trail for intersection point (grows with animation)
-                intersection_trail_handle = server.scene.add_line_segments(
+                # Growing point-cloud trail for the relative-vector intersection.
+                intersection_trail_cloud = server.scene.add_point_cloud(
                     "/relative_vector_intersection_trail",
-                    points=np.array([], dtype=np.float32).reshape(0, 2, 3),
-                    colors=(50, 200, 50),
-                    line_width=2.0,
+                    points=intersection_points[:1],
+                    colors=np.array([[50, 200, 50]], dtype=np.uint8),
+                    point_size=0.06,
                 )
 
                 # Line on plane from boresight intersection to relative-vector intersection
@@ -713,22 +719,25 @@ def create_animated_plotting_server(
                     p = intersection_points[idx].copy()
                     p[2] += 0.08
                     rel_intersection_handle.position = p
-                    if idx > 0:
-                        trail_segments = np.array(
-                            [
-                                [intersection_points[i], intersection_points[i + 1]]
-                                for i in range(idx)
-                            ],
-                            dtype=np.float32,
-                        )
-                        intersection_trail_handle.points = trail_segments
-                    else:
-                        intersection_trail_handle.points = np.array([], dtype=np.float32).reshape(
-                            0, 2, 3
-                        )
+
+                    # Grow trail up to current frame
+                    n_trail = idx + 1
+                    intersection_trail_cloud.points = intersection_points[:n_trail]
+                    intersection_trail_cloud.colors = np.broadcast_to(
+                        np.array([[50, 200, 50]], dtype=np.uint8),
+                        (n_trail, 3),
+                    ).copy()
+
                     if plane_segment_handle is not None and idx < len(boresight_pts):
-                        plane_segment_handle.points = np.array(
-                            [[boresight_pts[idx], intersection_points[idx]]], dtype=np.float32
+                        # Re-add (LineSegmentsHandle has no mutable points).
+                        server.scene.add_line_segments(
+                            "/plane_segment_boresight_to_rel",
+                            points=np.array(
+                                [[boresight_pts[idx], intersection_points[idx]]],
+                                dtype=np.float32,
+                            ),
+                            colors=(200, 200, 0),
+                            line_width=2.5,
                         )
 
                 update_callbacks.append(update_intersection)
