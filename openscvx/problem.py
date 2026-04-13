@@ -972,12 +972,18 @@ class Problem:
         }
 
     def solve(
-        self, max_iters: Optional[int] = None, continuous: bool = False
+        self,
+        max_iters: Optional[int] = None,
+        time_limit: Optional[float] = None,
+        continuous: bool = False,
     ) -> OptimizationResults:
         """Run the SCP algorithm until convergence or iteration limit.
 
         Args:
             max_iters: Maximum iterations (default: algorithm.k_max)
+            time_limit: Wall-clock time limit in seconds. Overrides
+                ``algorithm.t_max`` when provided. ``None`` (default) falls
+                back to ``algorithm.t_max``.
             continuous: If True, run all iterations regardless of convergence
 
         Returns:
@@ -1007,10 +1013,13 @@ class Problem:
             printing.header(self._columns)
 
         k_max = max_iters if max_iters is not None else self._algorithm.k_max
+        t_max = time_limit if time_limit is not None else self._algorithm.t_max
 
         while self._state.k <= k_max:
             result = self.step()
             if result["converged"] and not continuous:
+                break
+            if t_max is not None and (time.time() - t_0_while) >= t_max:
                 break
 
         t_f_while = time.time()
@@ -1030,7 +1039,8 @@ class Problem:
         # Store solution state
         self._solution = copy.deepcopy(self._state)
 
-        return self._format_result(self._state, self._state.k <= k_max)
+        timed_out = t_max is not None and self.timing_solve >= t_max
+        return self._format_result(self._state, self._state.k <= k_max and not timed_out)
 
     def post_process(self) -> OptimizationResults:
         """Propagate solution through full nonlinear dynamics for high-fidelity trajectory.
