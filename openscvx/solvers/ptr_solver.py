@@ -119,6 +119,14 @@ class PTRSolver(ConvexSolver):
             ``{"abstol": 1e-6, "reltol": 1e-9, "enforce_dpp": True}``.
         cvxpygen: Enable CVXPy code generation for faster solves.
             Defaults to ``False``.
+
+            !!! warning
+                Enabling cvxpygen currently disables sparse parameter
+                declarations. cvxpygen does not yet support the N-D sparsity
+                indices used by OpenSCvx's tiled parameters, so all parameters
+                are created as dense when code generation is active. This may
+                increase the generated solver's memory footprint and compile
+                time but does not affect solution correctness.
         cvxpygen_override: Overwrite existing generated solver directory
             without prompting. Defaults to ``False``.
 
