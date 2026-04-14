@@ -364,6 +364,98 @@ results = problem.post_process()
 
 After solving, `results.trajectory["T_ee"]` gives you the dense end-effector transform along the propagated trajectory, ready to feed straight into a viser animation or a downstream controller.
 
+## Extension: Self-Collision and Obstacle Avoidance
+
+The same intermediate `joint_transforms` we snapshotted above give us everything we need to constrain the *arm itself*, not just its end-effector. The [7-DOF arm with collisions](../Examples/arm/7_dof_arm_collision.md) example extends the pick-and-place setup with two extra constraints:
+
+- **Self-collision** between every pair of non-adjacent links.
+- **Obstacle avoidance** between every link and a spherical obstacle placed on the table.
+
+The idea is to approximate each link as a **capsule** (a sphere-swept line segment) between two consecutive keypoints, sample each capsule at a small grid of parameters $t \in [0, 1]$, and enforce a pairwise distance bound at every sample. `ox.Vmap` turns the inner loop into a single batched evaluation.
+
+First, lift each keypoint from its home position into the world frame using the transforms we already built. We pad with a trailing `1` so the $4 \times 4$ homogeneous transform acts on it correctly:
+
+```python
+keypoint_home_pos = {
+    "base":     np.array([0.0,          0.0, 0.0, 1.0]),
+    "shoulder": np.array([0.0,          0.0, d1,  1.0]),
+    "elbow":    np.array([a2,           0.0, d1,  1.0]),
+    "wrist":    np.array([a2 + a3,      0.0, d1,  1.0]),
+    "ee":       np.array([a2 + a3 + a4, 0.0, d1,  1.0]),
+}
+
+def _keypoint_world(name):
+    p_hom = joint_transforms[name] @ ox.Constant(keypoint_home_pos[name])
+    return ox.Concat(p_hom[0], p_hom[1], p_hom[2])
+
+kp = {name: _keypoint_world(name) for name in joint_names}
+```
+
+Then describe each link as `(start, end, radius)`:
+
+```python
+link_specs = [
+    ("base",     "shoulder", 0.06),
+    ("shoulder", "elbow",    0.05),
+    ("elbow",    "wrist",    0.04),
+    ("wrist",    "ee",       0.035),
+]
+```
+
+### Self-collision
+
+For every pair of non-adjacent capsules, sample both segments on a $t \times t$ grid and enforce that the sum of radii stays under the sampled distance:
+
+```python
+n_samples = 4
+ts = np.linspace(0.0, 1.0, n_samples)
+tt = np.stack(np.meshgrid(ts, ts, indexing="ij"), axis=-1).reshape(-1, 2)
+
+for i in range(len(link_specs)):
+    for j in range(i + 2, len(link_specs)):  # skip adjacent (shared joint)
+        a_start, a_end, r_a = link_specs[i]
+        b_start, b_end, r_b = link_specs[j]
+        pa0, pa1 = kp[a_start], kp[a_end]
+        pb0, pb1 = kp[b_start], kp[b_end]
+        r_sum = r_a + r_b
+
+        dists = ox.Vmap(
+            lambda t, pa0=pa0, pa1=pa1, pb0=pb0, pb1=pb1: ox.linalg.Norm(
+                ((1 - t[0]) * pa0 + t[0] * pa1)
+                - ((1 - t[1]) * pb0 + t[1] * pb1)
+            ),
+            batch=tt,
+        )
+        constraints.append(ox.ctcs(r_sum <= dists))
+```
+
+Skipping `j = i + 1` matters: adjacent capsules share a joint, so their minimum distance is identically zero and enforcing a strict capsule-capsule bound between them would be infeasible by construction.
+
+### Obstacle avoidance
+
+The same pattern handles a spherical obstacle — sample every link and keep it outside the inflated sphere:
+
+```python
+obstacle_center = np.array([0.35, 0.0, 0.25])
+obstacle_radius = 0.06
+
+for a_start, a_end, r_link in link_specs:
+    pa0, pa1 = kp[a_start], kp[a_end]
+    r_clear = obstacle_radius + r_link
+    obs_dists = ox.Vmap(
+        lambda t, pa0=pa0, pa1=pa1: ox.linalg.Norm(
+            ((1 - t) * pa0 + t * pa1) - ox.Constant(obstacle_center)
+        ),
+        batch=ts,
+    )
+    constraints.append(ox.ctcs(r_clear <= obs_dists))
+```
+
+Because each bound is wrapped in `ox.ctcs`, distances are enforced **continuously** along the trajectory — capsules cannot tunnel between nodes.
+
+!!! warning "Numerical performance"
+    Solve times on this example are currently noticeably slower than we would like when self-collision checking is included; expect a meaningful jump compared to the raw pick-and-place. We are actively working on it.
+
 ## Key Takeaways
 
 1. **Start simple with the minimal representation.** Joint angles + velocities give a pure ODE that drops cleanly into OpenSCvx's modeling stack — the easiest place to begin. Maximal coordinates are also a strong (and in some respects superior) choice for trajopt and will get their own tutorial in the future. The consequence of working in joint space is that task-space quantities are no longer states — they are symbolic functions of the state.
@@ -377,4 +469,5 @@ After solving, `results.trajectory["T_ee"]` gives you the dense end-effector tra
 - [API Reference: Lie algebra](../Reference/symbolic/expr/lie/index.md)
 - [Three-link arm Example](../Examples/arm/3_dof_arm.md)
 - [Seven-link arm Example](../Examples/arm/7_dof_arm.md)
+- [Seven-link arm with self-collision Example](../Examples/arm/7_dof_arm_collision.md)
 - [Seven-link arm with viewcone Example](../Examples/arm/7_dof_arm_vp.md)
