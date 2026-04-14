@@ -20,6 +20,8 @@ IGNORED_FILES = ["__init__.py", "plotting.py"]
 
 # Examples excluded from CI (e.g. exceeds runner memory)
 EXCLUDED_EXAMPLES = {
+    "animations/*.py",
+    "arm/7_dof_arm_collision.py",
     "drone/logo.py",
 }
 
@@ -87,8 +89,8 @@ def discover_examples():
         # Get relative path for naming
         rel_path = py_file.relative_to(examples_dir)
 
-        # Skip explicitly excluded examples
-        if str(rel_path) in EXCLUDED_EXAMPLES:
+        # Skip explicitly excluded examples (glob patterns, e.g. "animations/*.py")
+        if any(rel_path.match(pat) for pat in EXCLUDED_EXAMPLES):
             continue
 
         module_name = str(rel_path.with_suffix("")).replace("/", ".")
