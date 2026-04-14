@@ -129,6 +129,7 @@ class PenalizedTrustRegionConfig(BaseModel):
         return v
 
     k_max: int = 200
+    t_max: Optional[float] = None
     lam_prox: Union[float, Dict[str, Any]] = 1e-1
     lam_vc: Union[float, Dict[str, Any]] = 1e0
     lam_cost: Union[float, Dict[str, Any]] = 1e-2

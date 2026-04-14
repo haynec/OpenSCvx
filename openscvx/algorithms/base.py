@@ -718,6 +718,10 @@ class Algorithm(ABC):
     #: Maximum number of SCP iterations. Subclasses must set this in ``__init__``.
     k_max: int
 
+    #: Optional wall-clock time limit in seconds. ``None`` means no limit.
+    #: Subclasses must set this in ``__init__``.
+    t_max: Optional[float]
+
     @abstractmethod
     def initialize(
         self,
