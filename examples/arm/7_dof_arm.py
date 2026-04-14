@@ -226,7 +226,7 @@ ori_tolerance = np.deg2rad(5.0)
 ori_tolerance_tight = np.deg2rad(0.1)
 
 # Loose: full task range (pre_grasp through place)
-# constraints.append((ori_norm <= ori_tolerance).over((waypoint_nodes[1], waypoint_nodes[-1])))
+constraints.append((ori_norm <= ori_tolerance).over((waypoint_nodes[1], waypoint_nodes[-1])))
 # Tight: pre_grasp -> grasp -> pre_grasp
 constraints.append((ori_norm <= ori_tolerance_tight).over((waypoint_nodes[1], waypoint_nodes[3])))
 # Tight: pre_place -> place
@@ -281,7 +281,7 @@ for i in range(len(link_specs)):
 
 # Spherical obstacle avoidance: sample each link and enforce distance from
 # obstacle center >= obstacle_radius + link_radius.
-obstacle_center = np.array([0.35, 0.0, 0.25])
+obstacle_center = np.array([0.35, 0.0, 0.2])
 obstacle_radius = 0.06
 
 for a_start, a_end, r_link in link_specs:
@@ -383,7 +383,6 @@ if __name__ == "__main__":
     from openscvx.plotting.viser import (
         add_animated_trail,
         add_animation_controls,
-        add_ellipsoid_obstacles,
         add_ghost_trajectory,
         add_position_marker,
         add_target_markers,
@@ -435,10 +434,11 @@ if __name__ == "__main__":
         colors=[marker_colors[name] for name in waypoint_names],
     )
 
-    add_ellipsoid_obstacles(
-        server,
-        centers=[obstacle_center],
-        radii=[np.full(3, 1.0 / obstacle_radius)],
+    server.scene.add_icosphere(
+        "/obstacle",
+        radius=float(obstacle_radius),
+        color=(160, 60, 200),
+        position=(float(obstacle_center[0]), float(obstacle_center[1]), float(obstacle_center[2])),
     )
 
     # Ghost EE trajectory (faint full path)
