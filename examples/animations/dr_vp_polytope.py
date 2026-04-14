@@ -35,6 +35,7 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 from examples.animations._camera import chase_pose, onboard_pose, overview_pose
+from examples.animations._sensor_view import render_camera_panel_to_video
 from examples.animations._render import render_animation_to_video
 from examples.drone.dr_vp_polytope import plotting_dict, problem
 from examples.plotting_viser import create_animated_plotting_server
@@ -42,8 +43,14 @@ from examples.plotting_viser import create_animated_plotting_server
 # Camera mode: "chase" | "onboard" | "overview"
 CAMERA_MODE = "chase"
 
+# Also render the 2D plotly camera panel as a separate mp4 using the exact
+# same frame-index set as the viser render, so they can be composited together
+# (e.g. `ffmpeg -i viser.mp4 -i camera.mp4 -filter_complex hstack=inputs=2`).
+RENDER_CAMERA_PANEL = True
+
 # --- Render settings ---------------------------------------------------------
 OUTPUT_PATH = os.path.join(current_dir, f"dr_vp_polytope_{CAMERA_MODE}.mp4")
+CAMERA_PANEL_PATH = os.path.join(current_dir, "dr_vp_polytope_camera.mp4")
 WIDTH = 1080
 HEIGHT = 1080
 FPS = 30
@@ -155,3 +162,19 @@ if __name__ == "__main__":
         stride=STRIDE,
         fov_deg=render_fov,
     )
+
+    if RENDER_CAMERA_PANEL:
+        # Same start_frame / end_frame / stride / fps as the viser render above,
+        # so frame index i in the panel mp4 corresponds to frame i in the viser
+        # mp4 — safe to composite without resampling.
+        render_camera_panel_to_video(
+            results,
+            CAMERA_PANEL_PATH,
+            start_frame=0,
+            end_frame=None,
+            stride=STRIDE,
+            fps=FPS,
+            width=HEIGHT,  # square panel matches viser output aspect
+            height=HEIGHT,
+            crf=CRF,
+        )
