@@ -232,69 +232,6 @@ constraints.append((ori_norm <= ori_tolerance_tight).over((waypoint_nodes[1], wa
 # Tight: pre_place -> place
 constraints.append((ori_norm <= ori_tolerance_tight).over((waypoint_nodes[4], waypoint_nodes[5])))
 
-# Self-collision: capsule-capsule distance between non-adjacent link pairs,
-# approximated by sampling points along each link and enforcing pairwise
-# sphere-swept distance >= sum of link radii.
-keypoint_home_pos = {
-    "base":     np.array([0.0, 0.0, 0.0, 1.0]),
-    "shoulder": np.array([0.0, 0.0, d1,  1.0]),
-    "elbow":    np.array([a2,  0.0, d1,  1.0]),
-    "wrist":    np.array([a2 + a3, 0.0, d1, 1.0]),
-    "ee":       np.array([a2 + a3 + a4, 0.0, d1, 1.0]),
-}
-
-
-def _keypoint_world(name):
-    p_hom = joint_transforms[name] @ ox.Constant(keypoint_home_pos[name])
-    return ox.Concat(p_hom[0], p_hom[1], p_hom[2])
-
-
-kp = {name: _keypoint_world(name) for name in joint_names}
-
-link_specs = [
-    ("base",     "shoulder", 0.06),
-    ("shoulder", "elbow",    0.05),
-    ("elbow",    "wrist",    0.04),
-    ("wrist",    "ee",       0.035),
-]
-
-n_samples = 4
-ts = np.linspace(0.0, 1.0, n_samples)
-tt = np.stack(np.meshgrid(ts, ts, indexing="ij"), axis=-1).reshape(-1, 2)
-
-for i in range(len(link_specs)):
-    for j in range(i + 2, len(link_specs)):  # skip adjacent pairs (shared joint)
-        a_start, a_end, r_a = link_specs[i]
-        b_start, b_end, r_b = link_specs[j]
-        pa0, pa1 = kp[a_start], kp[a_end]
-        pb0, pb1 = kp[b_start], kp[b_end]
-        r_sum = r_a + r_b
-
-        dists = ox.Vmap(
-            lambda t, pa0=pa0, pa1=pa1, pb0=pb0, pb1=pb1: ox.linalg.Norm(
-                ((1 - t[0]) * pa0 + t[0] * pa1)
-                - ((1 - t[1]) * pb0 + t[1] * pb1)
-            ),
-            batch=tt,
-        )
-        constraints.append(ox.ctcs(r_sum <= dists))
-
-# Spherical obstacle avoidance: sample each link and enforce distance from
-# obstacle center >= obstacle_radius + link_radius.
-obstacle_center = np.array([0.35, 0.0, 0.2])
-obstacle_radius = 0.06
-
-for a_start, a_end, r_link in link_specs:
-    pa0, pa1 = kp[a_start], kp[a_end]
-    r_clear = obstacle_radius + r_link
-    obs_dists = ox.Vmap(
-        lambda t, pa0=pa0, pa1=pa1: ox.linalg.Norm(
-            ((1 - t) * pa0 + t * pa1) - ox.Constant(obstacle_center)
-        ),
-        batch=ts,
-    )
-    constraints.append(ox.ctcs(r_clear <= obs_dists))
-
 # =============================================================================
 # Initial Guesses (via IK)
 # =============================================================================
@@ -432,13 +369,6 @@ if __name__ == "__main__":
         waypoint_positions,
         radius=0.015,
         colors=[marker_colors[name] for name in waypoint_names],
-    )
-
-    server.scene.add_icosphere(
-        "/obstacle",
-        radius=float(obstacle_radius),
-        color=(160, 60, 200),
-        position=(float(obstacle_center[0]), float(obstacle_center[1]), float(obstacle_center[2])),
     )
 
     # Ghost EE trajectory (faint full path)
