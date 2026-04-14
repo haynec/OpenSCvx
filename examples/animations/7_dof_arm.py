@@ -37,6 +37,7 @@ from examples.animations._render import render_animation_to_video
 from examples.plotting_viser import AnimatedServerHandle
 from openscvx.plotting.viser import (
     add_animated_trail,
+    add_ellipsoid_obstacles,
     add_ghost_trajectory,
     add_position_marker,
     add_target_markers,
@@ -59,6 +60,8 @@ a4 = _arm_mod.a4
 joint_names = _arm_mod.joint_names
 waypoint_names = _arm_mod.waypoint_names
 waypoint_positions = _arm_mod.waypoint_positions
+obstacle_center = _arm_mod.obstacle_center
+obstacle_radius = _arm_mod.obstacle_radius
 
 # Keypoint home positions (derived from link lengths — defined in __main__ of
 # the arm example, so we replicate them here).
@@ -82,7 +85,7 @@ STRIDE = 4
 PROPAGATION_HZ = FPS * STRIDE
 
 # --- Camera settings ---------------------------------------------------------
-OVERVIEW_AZIMUTH = np.radians(20.0)
+OVERVIEW_AZIMUTH = np.radians(60.0)
 OVERVIEW_ELEVATION = np.radians(15.0)
 OVERVIEW_RADIUS_MARGIN = 1.0
 OVERVIEW_FOV_DEG = 60.0
@@ -128,6 +131,12 @@ if __name__ == "__main__":
         waypoint_positions,
         radius=0.015,
         colors=[marker_colors[name] for name in waypoint_names],
+    )
+
+    add_ellipsoid_obstacles(
+        server,
+        centers=[obstacle_center],
+        radii=[np.full(3, 1.0 / obstacle_radius)],
     )
 
     # Ghost EE trajectory + animated trail
