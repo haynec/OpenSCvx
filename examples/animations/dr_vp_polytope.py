@@ -35,8 +35,8 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 from examples.animations._camera import chase_pose, onboard_pose, overview_pose
-from examples.animations._sensor_view import render_camera_panel_to_video
 from examples.animations._render import render_animation_to_video
+from examples.animations._sensor_view import render_camera_panel_to_video
 from examples.drone.dr_vp_polytope import plotting_dict, problem
 from examples.plotting_viser import create_animated_plotting_server
 

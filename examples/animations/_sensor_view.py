@@ -35,12 +35,12 @@ from examples.plotting import full_subject_traj_time  # noqa: E402
 # that subject k in the camera panel is the same color as target k rendered
 # in the viser scene. If that palette ever changes, update this one too.
 VISER_SUBJECT_PALETTE: tuple[tuple[int, int, int], ...] = (
-    (255, 50, 50),    # Red
-    (50, 255, 50),    # Green
-    (50, 50, 255),    # Blue
-    (255, 255, 50),   # Yellow
-    (255, 50, 255),   # Magenta
-    (50, 255, 255),   # Cyan
+    (255, 50, 50),  # Red
+    (50, 255, 50),  # Green
+    (50, 50, 255),  # Blue
+    (255, 255, 50),  # Yellow
+    (255, 50, 255),  # Magenta
+    (50, 255, 255),  # Cyan
 )
 
 
