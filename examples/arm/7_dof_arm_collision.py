@@ -225,8 +225,6 @@ ori_norm = ox.linalg.Norm(ori_error, ord=2)
 ori_tolerance = np.deg2rad(5.0)
 ori_tolerance_tight = np.deg2rad(0.1)
 
-# Loose: full task range (pre_grasp through place)
-# constraints.append((ori_norm <= ori_tolerance).over((waypoint_nodes[1], waypoint_nodes[-1])))
 # Tight: pre_grasp -> grasp -> pre_grasp
 constraints.append((ori_norm <= ori_tolerance_tight).over((waypoint_nodes[1], waypoint_nodes[3])))
 # Tight: pre_place -> place
@@ -236,11 +234,11 @@ constraints.append((ori_norm <= ori_tolerance_tight).over((waypoint_nodes[4], wa
 # approximated by sampling points along each link and enforcing pairwise
 # sphere-swept distance >= sum of link radii.
 keypoint_home_pos = {
-    "base":     np.array([0.0, 0.0, 0.0, 1.0]),
-    "shoulder": np.array([0.0, 0.0, d1,  1.0]),
-    "elbow":    np.array([a2,  0.0, d1,  1.0]),
-    "wrist":    np.array([a2 + a3, 0.0, d1, 1.0]),
-    "ee":       np.array([a2 + a3 + a4, 0.0, d1, 1.0]),
+    "base": np.array([0.0, 0.0, 0.0, 1.0]),
+    "shoulder": np.array([0.0, 0.0, d1, 1.0]),
+    "elbow": np.array([a2, 0.0, d1, 1.0]),
+    "wrist": np.array([a2 + a3, 0.0, d1, 1.0]),
+    "ee": np.array([a2 + a3 + a4, 0.0, d1, 1.0]),
 }
 
 
@@ -252,10 +250,10 @@ def _keypoint_world(name):
 kp = {name: _keypoint_world(name) for name in joint_names}
 
 link_specs = [
-    ("base",     "shoulder", 0.06),
-    ("shoulder", "elbow",    0.05),
-    ("elbow",    "wrist",    0.04),
-    ("wrist",    "ee",       0.035),
+    ("base", "shoulder", 0.06),
+    ("shoulder", "elbow", 0.05),
+    ("elbow", "wrist", 0.04),
+    ("wrist", "ee", 0.035),
 ]
 
 n_samples = 4
@@ -272,8 +270,7 @@ for i in range(len(link_specs)):
 
         dists = ox.Vmap(
             lambda t, pa0=pa0, pa1=pa1, pb0=pb0, pb1=pb1: ox.linalg.Norm(
-                ((1 - t[0]) * pa0 + t[0] * pa1)
-                - ((1 - t[1]) * pb0 + t[1] * pb1)
+                ((1 - t[0]) * pa0 + t[0] * pa1) - ((1 - t[1]) * pb0 + t[1] * pb1)
             ),
             batch=tt,
         )
