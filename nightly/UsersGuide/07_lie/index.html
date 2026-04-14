@@ -1068,6 +1068,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#extension-self-collision-and-obstacle-avoidance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extension: Self-Collision and Obstacle Avoidance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Extension: Self-Collision and Obstacle Avoidance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#self-collision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Self-collision
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#obstacle-avoidance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Obstacle avoidance
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#key-takeaways" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1404,6 +1443,8 @@
       
         
       
+        
+      
     
     
     
@@ -1494,6 +1535,34 @@
     
   
     7 Dof Arm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Examples/arm/7_dof_arm_collision/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    7 Dof Arm Collision
   
 
     
@@ -8188,6 +8257,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#extension-self-collision-and-obstacle-avoidance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extension: Self-Collision and Obstacle Avoidance
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Extension: Self-Collision and Obstacle Avoidance">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#self-collision" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Self-collision
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#obstacle-avoidance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Obstacle avoidance
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#key-takeaways" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -8606,6 +8714,81 @@ I \ddot{\mathbf{q}} = \boldsymbol{\tau}
 </span><span id="__span-9-26"><a id="__codelineno-9-26" name="__codelineno-9-26" href="#__codelineno-9-26"></a><span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">post_process</span><span class="p">()</span>
 </span></code></pre></div>
 <p>After solving, <code>results.trajectory["T_ee"]</code> gives you the dense end-effector transform along the propagated trajectory, ready to feed straight into a viser animation or a downstream controller.</p>
+<h2 id="extension-self-collision-and-obstacle-avoidance">Extension: Self-Collision and Obstacle Avoidance<a class="headerlink" href="#extension-self-collision-and-obstacle-avoidance" title="Permanent link">&para;</a></h2>
+<p>The same intermediate <code>joint_transforms</code> we snapshotted above give us everything we need to constrain the <em>arm itself</em>, not just its end-effector. The <a href="../../Examples/arm/7_dof_arm_collision/">7-DOF arm with collisions</a> example extends the pick-and-place setup with two extra constraints:</p>
+<ul>
+<li><strong>Self-collision</strong> between every pair of non-adjacent links.</li>
+<li><strong>Obstacle avoidance</strong> between every link and a spherical obstacle placed on the table.</li>
+</ul>
+<p>The idea is to approximate each link as a <strong>capsule</strong> (a sphere-swept line segment) between two consecutive keypoints, sample each capsule at a small grid of parameters <span class="arithmatex">\(t \in [0, 1]\)</span>, and enforce a pairwise distance bound at every sample. <code>ox.Vmap</code> turns the inner loop into a single batched evaluation.</p>
+<p>First, lift each keypoint from its home position into the world frame using the transforms we already built. We pad with a trailing <code>1</code> so the <span class="arithmatex">\(4 \times 4\)</span> homogeneous transform acts on it correctly:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">keypoint_home_pos</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="s2">&quot;base&quot;</span><span class="p">:</span>     <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span>          <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]),</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="s2">&quot;shoulder&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span>          <span class="mf">0.0</span><span class="p">,</span> <span class="n">d1</span><span class="p">,</span>  <span class="mf">1.0</span><span class="p">]),</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="s2">&quot;elbow&quot;</span><span class="p">:</span>    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">a2</span><span class="p">,</span>           <span class="mf">0.0</span><span class="p">,</span> <span class="n">d1</span><span class="p">,</span>  <span class="mf">1.0</span><span class="p">]),</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="s2">&quot;wrist&quot;</span><span class="p">:</span>    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">a2</span> <span class="o">+</span> <span class="n">a3</span><span class="p">,</span>      <span class="mf">0.0</span><span class="p">,</span> <span class="n">d1</span><span class="p">,</span>  <span class="mf">1.0</span><span class="p">]),</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="s2">&quot;ee&quot;</span><span class="p">:</span>       <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">a2</span> <span class="o">+</span> <span class="n">a3</span> <span class="o">+</span> <span class="n">a4</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">d1</span><span class="p">,</span>  <span class="mf">1.0</span><span class="p">]),</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="p">}</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="k">def</span><span class="w"> </span><span class="nf">_keypoint_world</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>    <span class="n">p_hom</span> <span class="o">=</span> <span class="n">joint_transforms</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">@</span> <span class="n">ox</span><span class="o">.</span><span class="n">Constant</span><span class="p">(</span><span class="n">keypoint_home_pos</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>    <span class="k">return</span> <span class="n">ox</span><span class="o">.</span><span class="n">Concat</span><span class="p">(</span><span class="n">p_hom</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">p_hom</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">p_hom</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>
+</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a><span class="n">kp</span> <span class="o">=</span> <span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="n">_keypoint_world</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">joint_names</span><span class="p">}</span>
+</span></code></pre></div>
+<p>Then describe each link as <code>(start, end, radius)</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">link_specs</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="p">(</span><span class="s2">&quot;base&quot;</span><span class="p">,</span>     <span class="s2">&quot;shoulder&quot;</span><span class="p">,</span> <span class="mf">0.06</span><span class="p">),</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="p">(</span><span class="s2">&quot;shoulder&quot;</span><span class="p">,</span> <span class="s2">&quot;elbow&quot;</span><span class="p">,</span>    <span class="mf">0.05</span><span class="p">),</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="p">(</span><span class="s2">&quot;elbow&quot;</span><span class="p">,</span>    <span class="s2">&quot;wrist&quot;</span><span class="p">,</span>    <span class="mf">0.04</span><span class="p">),</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="p">(</span><span class="s2">&quot;wrist&quot;</span><span class="p">,</span>    <span class="s2">&quot;ee&quot;</span><span class="p">,</span>       <span class="mf">0.035</span><span class="p">),</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="p">]</span>
+</span></code></pre></div>
+<h3 id="self-collision">Self-collision<a class="headerlink" href="#self-collision" title="Permanent link">&para;</a></h3>
+<p>For every pair of non-adjacent capsules, sample both segments on a <span class="arithmatex">\(t \times t\)</span> grid and enforce that the sum of radii stays under the sampled distance:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">n_samples</span> <span class="o">=</span> <span class="mi">4</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">ts</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">)</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">tt</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">ts</span><span class="p">,</span> <span class="n">ts</span><span class="p">,</span> <span class="n">indexing</span><span class="o">=</span><span class="s2">&quot;ij&quot;</span><span class="p">),</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">link_specs</span><span class="p">)):</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">2</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">link_specs</span><span class="p">)):</span>  <span class="c1"># skip adjacent (shared joint)</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>        <span class="n">a_start</span><span class="p">,</span> <span class="n">a_end</span><span class="p">,</span> <span class="n">r_a</span> <span class="o">=</span> <span class="n">link_specs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>        <span class="n">b_start</span><span class="p">,</span> <span class="n">b_end</span><span class="p">,</span> <span class="n">r_b</span> <span class="o">=</span> <span class="n">link_specs</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
+</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>        <span class="n">pa0</span><span class="p">,</span> <span class="n">pa1</span> <span class="o">=</span> <span class="n">kp</span><span class="p">[</span><span class="n">a_start</span><span class="p">],</span> <span class="n">kp</span><span class="p">[</span><span class="n">a_end</span><span class="p">]</span>
+</span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a>        <span class="n">pb0</span><span class="p">,</span> <span class="n">pb1</span> <span class="o">=</span> <span class="n">kp</span><span class="p">[</span><span class="n">b_start</span><span class="p">],</span> <span class="n">kp</span><span class="p">[</span><span class="n">b_end</span><span class="p">]</span>
+</span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>        <span class="n">r_sum</span> <span class="o">=</span> <span class="n">r_a</span> <span class="o">+</span> <span class="n">r_b</span>
+</span><span id="__span-12-12"><a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a>
+</span><span id="__span-12-13"><a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a>        <span class="n">dists</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Vmap</span><span class="p">(</span>
+</span><span id="__span-12-14"><a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a>            <span class="k">lambda</span> <span class="n">t</span><span class="p">,</span> <span class="n">pa0</span><span class="o">=</span><span class="n">pa0</span><span class="p">,</span> <span class="n">pa1</span><span class="o">=</span><span class="n">pa1</span><span class="p">,</span> <span class="n">pb0</span><span class="o">=</span><span class="n">pb0</span><span class="p">,</span> <span class="n">pb1</span><span class="o">=</span><span class="n">pb1</span><span class="p">:</span> <span class="n">ox</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">Norm</span><span class="p">(</span>
+</span><span id="__span-12-15"><a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a>                <span class="p">((</span><span class="mi">1</span> <span class="o">-</span> <span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">*</span> <span class="n">pa0</span> <span class="o">+</span> <span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">pa1</span><span class="p">)</span>
+</span><span id="__span-12-16"><a id="__codelineno-12-16" name="__codelineno-12-16" href="#__codelineno-12-16"></a>                <span class="o">-</span> <span class="p">((</span><span class="mi">1</span> <span class="o">-</span> <span class="n">t</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">*</span> <span class="n">pb0</span> <span class="o">+</span> <span class="n">t</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">pb1</span><span class="p">)</span>
+</span><span id="__span-12-17"><a id="__codelineno-12-17" name="__codelineno-12-17" href="#__codelineno-12-17"></a>            <span class="p">),</span>
+</span><span id="__span-12-18"><a id="__codelineno-12-18" name="__codelineno-12-18" href="#__codelineno-12-18"></a>            <span class="n">batch</span><span class="o">=</span><span class="n">tt</span><span class="p">,</span>
+</span><span id="__span-12-19"><a id="__codelineno-12-19" name="__codelineno-12-19" href="#__codelineno-12-19"></a>        <span class="p">)</span>
+</span><span id="__span-12-20"><a id="__codelineno-12-20" name="__codelineno-12-20" href="#__codelineno-12-20"></a>        <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ox</span><span class="o">.</span><span class="n">ctcs</span><span class="p">(</span><span class="n">r_sum</span> <span class="o">&lt;=</span> <span class="n">dists</span><span class="p">))</span>
+</span></code></pre></div>
+<p>Skipping <code>j = i + 1</code> matters: adjacent capsules share a joint, so their minimum distance is identically zero and enforcing a strict capsule-capsule bound between them would be infeasible by construction.</p>
+<h3 id="obstacle-avoidance">Obstacle avoidance<a class="headerlink" href="#obstacle-avoidance" title="Permanent link">&para;</a></h3>
+<p>The same pattern handles a spherical obstacle — sample every link and keep it outside the inflated sphere:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">obstacle_center</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">])</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">obstacle_radius</span> <span class="o">=</span> <span class="mf">0.06</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="k">for</span> <span class="n">a_start</span><span class="p">,</span> <span class="n">a_end</span><span class="p">,</span> <span class="n">r_link</span> <span class="ow">in</span> <span class="n">link_specs</span><span class="p">:</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="n">pa0</span><span class="p">,</span> <span class="n">pa1</span> <span class="o">=</span> <span class="n">kp</span><span class="p">[</span><span class="n">a_start</span><span class="p">],</span> <span class="n">kp</span><span class="p">[</span><span class="n">a_end</span><span class="p">]</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>    <span class="n">r_clear</span> <span class="o">=</span> <span class="n">obstacle_radius</span> <span class="o">+</span> <span class="n">r_link</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>    <span class="n">obs_dists</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Vmap</span><span class="p">(</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>        <span class="k">lambda</span> <span class="n">t</span><span class="p">,</span> <span class="n">pa0</span><span class="o">=</span><span class="n">pa0</span><span class="p">,</span> <span class="n">pa1</span><span class="o">=</span><span class="n">pa1</span><span class="p">:</span> <span class="n">ox</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">Norm</span><span class="p">(</span>
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>            <span class="p">((</span><span class="mi">1</span> <span class="o">-</span> <span class="n">t</span><span class="p">)</span> <span class="o">*</span> <span class="n">pa0</span> <span class="o">+</span> <span class="n">t</span> <span class="o">*</span> <span class="n">pa1</span><span class="p">)</span> <span class="o">-</span> <span class="n">ox</span><span class="o">.</span><span class="n">Constant</span><span class="p">(</span><span class="n">obstacle_center</span><span class="p">)</span>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>        <span class="p">),</span>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>        <span class="n">batch</span><span class="o">=</span><span class="n">ts</span><span class="p">,</span>
+</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>    <span class="p">)</span>
+</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>    <span class="n">constraints</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ox</span><span class="o">.</span><span class="n">ctcs</span><span class="p">(</span><span class="n">r_clear</span> <span class="o">&lt;=</span> <span class="n">obs_dists</span><span class="p">))</span>
+</span></code></pre></div>
+<p>Because each bound is wrapped in <code>ox.ctcs</code>, distances are enforced <strong>continuously</strong> along the trajectory — capsules cannot tunnel between nodes.</p>
+<div class="admonition warning">
+<p class="admonition-title">Numerical performance</p>
+<p>Solve times on this example are currently noticeably slower than we would like when self-collision checking is included; expect a meaningful jump compared to the raw pick-and-place. We are actively working on it.</p>
+</div>
 <h2 id="key-takeaways">Key Takeaways<a class="headerlink" href="#key-takeaways" title="Permanent link">&para;</a></h2>
 <ol>
 <li><strong>Start simple with the minimal representation.</strong> Joint angles + velocities give a pure ODE that drops cleanly into OpenSCvx's modeling stack — the easiest place to begin. Maximal coordinates are also a strong (and in some respects superior) choice for trajopt and will get their own tutorial in the future. The consequence of working in joint space is that task-space quantities are no longer states — they are symbolic functions of the state.</li>
@@ -8619,6 +8802,7 @@ I \ddot{\mathbf{q}} = \boldsymbol{\tau}
 <li><a href="../../Reference/symbolic/expr/lie/">API Reference: Lie algebra</a></li>
 <li><a href="../../Examples/arm/3_dof_arm/">Three-link arm Example</a></li>
 <li><a href="../../Examples/arm/7_dof_arm/">Seven-link arm Example</a></li>
+<li><a href="../../Examples/arm/7_dof_arm_collision/">Seven-link arm with self-collision Example</a></li>
 <li><a href="../../Examples/arm/7_dof_arm_vp/">Seven-link arm with viewcone Example</a></li>
 </ul>
 
