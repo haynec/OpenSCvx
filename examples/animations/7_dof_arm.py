@@ -47,7 +47,7 @@ from openscvx.plotting.viser import (
 
 # Import the arm example by path (filename starts with a digit).
 _arm_spec = importlib.util.spec_from_file_location(
-    "arm_7dof", os.path.join(grandparent_dir, "examples", "arm", "7_dof_arm.py")
+    "arm_7dof", os.path.join(grandparent_dir, "examples", "arm", "7_dof_arm_collision.py")
 )
 _arm_mod = importlib.util.module_from_spec(_arm_spec)
 _arm_spec.loader.exec_module(_arm_mod)
