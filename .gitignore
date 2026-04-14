@@ -27,6 +27,9 @@ solver/*
 # Images
 *.eps
 
+# Animation renders
+examples/animations/mp4/
+
 # Numpy files
 *.npy
 

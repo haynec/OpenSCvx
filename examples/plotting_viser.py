@@ -9,6 +9,9 @@ For real-time examples, see examples/realtime/*.py.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Callable
+
 import matplotlib.pyplot as plt
 import numpy as np
 import viser
@@ -41,6 +44,39 @@ from openscvx.plotting.viser import (
 )
 
 # =============================================================================
+# Manual-stepping handle (for offline rendering)
+# =============================================================================
+
+
+@dataclass
+class AnimatedServerHandle:
+    """Handle for manually stepping an animated viser server, one frame at a time.
+
+    Returned by ``create_animated_plotting_server(..., controls="manual")``
+    instead of starting the GUI playback loop. Primitives registered on the
+    server all take ``frame_idx: int``, so calling ``handle.step(i)`` fans out
+    to every trail, marker, attitude frame, thrust vector, viewcone, etc. —
+    driving the scene without any wall-clock timer. Used by
+    ``examples/animations/_render.py`` to render frames one at a time and pipe
+    them into ffmpeg.
+    """
+
+    server: viser.ViserServer
+    traj_time: np.ndarray
+    update_callbacks: list[Callable[[int], None]]
+
+    @property
+    def n_frames(self) -> int:
+        return len(self.traj_time)
+
+    def step(self, frame_idx: int) -> None:
+        """Drive every registered primitive to show frame ``frame_idx``."""
+        idx = int(np.clip(frame_idx, 0, self.n_frames - 1))
+        for cb in self.update_callbacks:
+            cb(idx)
+
+
+# =============================================================================
 # Template Visualization Servers
 # =============================================================================
 
@@ -56,12 +92,15 @@ def create_animated_plotting_server(
     attitude_axes_length: float = 2.0,
     show_viewcone: bool = True,
     viewcone_scale: float = 10.0,
+    viewcone_ring_only: bool = False,
     target_radius: float = 1.0,
     show_control_plot: str | None = None,
     show_control_norm_plot: str | None = None,
+    trail_point_size: float = 0.15,
     show_grid: bool = True,
     scene_scale: float = 1.0,
-) -> viser.ViserServer:
+    controls: str = "gui",
+) -> viser.ViserServer | AnimatedServerHandle:
     """Create an animated trajectory visualization server.
 
     This is a convenience function that composes the modular components.
@@ -99,6 +138,7 @@ def create_animated_plotting_server(
         attitude_axes_length: Length of body frame axes
         show_viewcone: If True and R_sb is in results, show camera viewcone
         viewcone_scale: Size/depth of viewcone mesh
+        viewcone_ring_only: If True, render viewcone as a base-ring outline only
         target_radius: Radius of target marker spheres
         show_control_plot: If provided with a control name, displays component plot
             showing each control component vs time with animated markers
@@ -107,9 +147,16 @@ def create_animated_plotting_server(
         show_grid: Whether to show the grid (default True)
         scene_scale: Divide all positions (and lengths) by this factor. Use >1 for
             large-scale trajectories (e.g., 100.0 for km-scale problems).
+        controls: ``"gui"`` (default) wires up play/pause/slider GUI and starts
+            the wall-clock playback thread, returning the raw ``ViserServer``.
+            ``"manual"`` skips the GUI/playback loop and instead returns an
+            :class:`AnimatedServerHandle` whose ``step(frame_idx)`` method drives
+            every primitive by hand — used for offline rendering (see
+            ``examples/animations/_render.py``).
 
     Returns:
-        ViserServer instance (animation runs in background thread)
+        ``ViserServer`` when ``controls="gui"``, otherwise
+        :class:`AnimatedServerHandle`.
     """
     # Extract data and convert to numpy (handles JAX arrays)
     pos = results.trajectory.get(position_key)
@@ -228,7 +275,6 @@ def create_animated_plotting_server(
         lengths = np.array(
             [axes_length * boresight_multiplier, axes_length, axes_length], dtype=np.float32
         )
-        # viser expects colors shape (N, 2, 3) for N segments, 2 endpoints each, 3 RGB per point
         rgb_per_axis = np.array([[255, 0, 0], [0, 255, 0], [0, 0, 255]], dtype=np.uint8)
         colors = np.stack(
             [np.stack([rgb_per_axis[i], rgb_per_axis[i]], axis=0) for i in range(3)], axis=0
@@ -287,7 +333,7 @@ def create_animated_plotting_server(
     if pos is not None:
         add_ghost_trajectory(server, pos, colors)
 
-        _, update_trail = add_animated_trail(server, pos, colors)
+        _, update_trail = add_animated_trail(server, pos, colors, point_size=trail_point_size)
         update_callbacks.append(update_trail)
 
         # Use position marker for point-mass, attitude frame for 6DOF
@@ -377,7 +423,7 @@ def create_animated_plotting_server(
                         )
 
                         # Draw extended boresight to plane intersection
-                        boresight_handle = server.scene.add_line_segments(
+                        _ = server.scene.add_line_segments(
                             "/boresight_extended",
                             points=np.array([[pos[0], boresight_intersection_0]], dtype=np.float32),
                             colors=(255, 0, 0),  # Red for boresight
@@ -392,40 +438,47 @@ def create_animated_plotting_server(
                             position=boresight_intersection_0,
                         )
 
-                        # Add trail for boresight intersection point
-                        boresight_trail_handle = server.scene.add_line_segments(
+                        # Growing point-cloud trail for the boresight intersection.
+                        boresight_trail_cloud = server.scene.add_point_cloud(
                             "/boresight_intersection_trail",
-                            points=np.array([], dtype=np.float32).reshape(0, 2, 3),
-                            colors=(200, 50, 50),
-                            line_width=2.0,
+                            points=boresight_intersection_points[:1],
+                            colors=np.array([[200, 50, 50]], dtype=np.uint8),
+                            point_size=0.06,
                         )
 
                         def update_boresight(frame_idx: int) -> None:
                             idx = min(frame_idx, len(boresight_intersection_points) - 1)
-                            boresight_handle.points = np.array(
-                                [[pos[idx], boresight_intersection_points[idx]]], dtype=np.float32
+                            # Re-add boresight line (LineSegmentsHandle has no
+                            # mutable points); same scene path replaces the old.
+                            server.scene.add_line_segments(
+                                "/boresight_extended",
+                                points=np.array(
+                                    [[pos[idx], boresight_intersection_points[idx]]],
+                                    dtype=np.float32,
+                                ),
+                                colors=(255, 0, 0),
+                                line_width=3.0,
                             )
                             intersection_handle.position = boresight_intersection_points[idx]
 
-                            # Update trail to show up to current frame
-                            if idx > 0:
-                                trail_segments = np.array(
-                                    [
-                                        [
-                                            boresight_intersection_points[i],
-                                            boresight_intersection_points[i + 1],
-                                        ]
-                                        for i in range(idx)
-                                    ],
-                                    dtype=np.float32,
-                                )
-                                boresight_trail_handle.points = trail_segments
-                            else:
-                                boresight_trail_handle.points = np.array(
-                                    [], dtype=np.float32
-                                ).reshape(0, 2, 3)
+                            # Grow trail up to current frame
+                            n_trail = idx + 1
+                            boresight_trail_cloud.points = boresight_intersection_points[:n_trail]
+                            boresight_trail_cloud.colors = np.broadcast_to(
+                                np.array([[200, 50, 50]], dtype=np.uint8),
+                                (n_trail, 3),
+                            ).copy()
 
                         update_callbacks.append(update_boresight)
+
+                        # Also show the full body-frame axes at the drone position.
+                        _, update_axes = _add_attitude_axes_lines(
+                            "/body_axes",
+                            pos,
+                            attitude,
+                            axes_length=attitude_axes_length,
+                        )
+                        update_callbacks.append(update_axes)
                     else:
                         # Fallback to fixed multiplier if intersection fails
                         boresight_multiplier = 3.0
@@ -464,22 +517,26 @@ def create_animated_plotting_server(
 
         # Add viewcone mesh if R_sb is available and enabled
         if show_viewcone and R_sb is not None and attitude is not None:
-            # Compute viewcone color from viridis colormap (fallback if matplotlib missing)
-            global plt
-            if plt is None:
-                try:  # pragma: no cover
-                    import matplotlib.pyplot as _plt
-
-                    plt = _plt
-                except Exception:
-                    plt = None
-
-            if plt is not None:
-                cmap = plt.get_cmap("viridis")
-                rgb = cmap(0.4)[:3]
-                viewcone_color = tuple(int(c * 255) for c in rgb)
+            if viewcone_ring_only:
+                # Match thrust vector styling so ring + thrust read as one element.
+                viewcone_color = (255, 100, 100)
             else:
-                viewcone_color = (80, 180, 200)
+                # Compute viewcone color from viridis colormap (fallback if matplotlib missing)
+                global plt
+                if plt is None:
+                    try:  # pragma: no cover
+                        import matplotlib.pyplot as _plt
+
+                        plt = _plt
+                    except Exception:
+                        plt = None
+
+                if plt is not None:
+                    cmap = plt.get_cmap("viridis")
+                    rgb = cmap(0.4)[:3]
+                    viewcone_color = tuple(int(c * 255) for c in rgb)
+                else:
+                    viewcone_color = (80, 180, 200)
 
             _, update_viewcone = add_viewcone(
                 server,
@@ -492,6 +549,7 @@ def create_animated_plotting_server(
                 R_sb=R_sb,
                 color=viewcone_color,
                 wireframe=False,
+                ring_only=viewcone_ring_only,
                 opacity=0.4,
             )
             update_callbacks.append(update_viewcone)
@@ -583,12 +641,12 @@ def create_animated_plotting_server(
                     position=rel_int_pos_0,
                 )
 
-                # Add trail for intersection point (grows with animation)
-                intersection_trail_handle = server.scene.add_line_segments(
+                # Growing point-cloud trail for the relative-vector intersection.
+                intersection_trail_cloud = server.scene.add_point_cloud(
                     "/relative_vector_intersection_trail",
-                    points=np.array([], dtype=np.float32).reshape(0, 2, 3),
-                    colors=(50, 200, 50),
-                    line_width=2.0,
+                    points=intersection_points[:1],
+                    colors=np.array([[50, 200, 50]], dtype=np.uint8),
+                    point_size=0.06,
                 )
 
                 # Line on plane from boresight intersection to relative-vector intersection
@@ -661,22 +719,25 @@ def create_animated_plotting_server(
                     p = intersection_points[idx].copy()
                     p[2] += 0.08
                     rel_intersection_handle.position = p
-                    if idx > 0:
-                        trail_segments = np.array(
-                            [
-                                [intersection_points[i], intersection_points[i + 1]]
-                                for i in range(idx)
-                            ],
-                            dtype=np.float32,
-                        )
-                        intersection_trail_handle.points = trail_segments
-                    else:
-                        intersection_trail_handle.points = np.array([], dtype=np.float32).reshape(
-                            0, 2, 3
-                        )
+
+                    # Grow trail up to current frame
+                    n_trail = idx + 1
+                    intersection_trail_cloud.points = intersection_points[:n_trail]
+                    intersection_trail_cloud.colors = np.broadcast_to(
+                        np.array([[50, 200, 50]], dtype=np.uint8),
+                        (n_trail, 3),
+                    ).copy()
+
                     if plane_segment_handle is not None and idx < len(boresight_pts):
-                        plane_segment_handle.points = np.array(
-                            [[boresight_pts[idx], intersection_points[idx]]], dtype=np.float32
+                        # Re-add (LineSegmentsHandle has no mutable points).
+                        server.scene.add_line_segments(
+                            "/plane_segment_boresight_to_rel",
+                            points=np.array(
+                                [[boresight_pts[idx], intersection_points[idx]]],
+                                dtype=np.float32,
+                            ),
+                            colors=(200, 200, 0),
+                            line_width=2.5,
                         )
 
                 update_callbacks.append(update_intersection)
@@ -720,10 +781,19 @@ def create_animated_plotting_server(
             )
             update_callbacks.append(update_vline)
 
-    # Add animation controls
-    add_animation_controls(server, traj_time, update_callbacks, loop=loop_animation)
-
-    return server
+    # Wire up playback — either the wall-clock GUI loop, or a manual-step handle.
+    callbacks = [cb for cb in update_callbacks if cb is not None]
+    if controls == "gui":
+        add_animation_controls(server, traj_time, callbacks, loop=loop_animation)
+        return server
+    elif controls == "manual":
+        return AnimatedServerHandle(
+            server=server,
+            traj_time=np.asarray(traj_time, dtype=np.float64).flatten(),
+            update_callbacks=callbacks,
+        )
+    else:
+        raise ValueError(f"controls must be 'gui' or 'manual', got {controls!r}")
 
 
 def create_scp_animated_plotting_server(
