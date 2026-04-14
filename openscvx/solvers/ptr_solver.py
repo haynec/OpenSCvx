@@ -119,6 +119,14 @@ class PTRSolver(ConvexSolver):
             ``{"abstol": 1e-6, "reltol": 1e-9, "enforce_dpp": True}``.
         cvxpygen: Enable CVXPy code generation for faster solves.
             Defaults to ``False``.
+
+            !!! warning
+                Enabling cvxpygen currently disables sparse parameter
+                declarations. cvxpygen does not yet support the N-D sparsity
+                indices used by OpenSCvx's tiled parameters, so all parameters
+                are created as dense when code generation is active. This may
+                increase the generated solver's memory footprint and compile
+                time but does not affect solution correctness.
         cvxpygen_override: Overwrite existing generated solver directory
             without prompting. Defaults to ``False``.
 
@@ -233,6 +241,14 @@ class PTRSolver(ConvexSolver):
             A_d_sp = _tile_sparsity(A_d_pat, N - 1)
             B_d_sp = _tile_sparsity(B_d_pat, N - 1)
             C_d_sp = _tile_sparsity(C_d_pat, N - 1)
+
+        # TODO: (griffin-norris) Remove once cvxpygen supports N-D sparsity
+        # indices. cvxpygen's handle_sparsity() assumes 2-D (rows, cols) but
+        # our tiled parameters produce 3-D indices (slices, rows, cols).
+        # Dropping sparsity here is safe — it only affects codegen performance.
+        if self.cvxpygen:
+            A_d_sp = B_d_sp = C_d_sp = None
+            constraint_sparsity = None
 
         # Create all CVXPy variables for the OCP
         self._ocp_vars = create_cvxpy_variables(

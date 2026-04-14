@@ -87,6 +87,7 @@ class PenalizedTrustRegion(Algorithm):
         self,
         autotuner: "AutotuningBase" = None,
         k_max: int = 200,
+        t_max: float | None = None,
         lam_prox: Union[float, Dict[str, Union[float, list]]] = 1e-1,
         lam_vc: Union[float, Dict[str, Union[float, list]]] = 1e0,
         lam_cost: Union[float, Dict[str, float]] = 1e-2,
@@ -103,6 +104,8 @@ class PenalizedTrustRegion(Algorithm):
             autotuner: Weight adaptation strategy. Defaults to
                 :class:`AugmentedLagrangian` when ``None``.
             k_max: Maximum SCP iterations. Defaults to 200.
+            t_max: Wall-clock time limit in seconds. ``None`` (default)
+                disables the time limit.
             lam_prox: Trust region (proximal) weight. Either a float
                 (applied uniformly to all states and controls) or a dict
                 mapping state/control names to weights, e.g.
@@ -166,6 +169,7 @@ class PenalizedTrustRegion(Algorithm):
 
         # SCP convergence parameters
         self.k_max = k_max
+        self.t_max = t_max
         self.ep_tr = ep_tr
         self.ep_vb = ep_vb
         self.ep_vc = ep_vc
