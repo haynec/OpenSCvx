@@ -49,8 +49,8 @@ CAMERA_MODE = "chase"
 RENDER_CAMERA_PANEL = True
 
 # --- Render settings ---------------------------------------------------------
-OUTPUT_PATH = os.path.join(current_dir, f"dr_vp_polytope_{CAMERA_MODE}.mp4")
-CAMERA_PANEL_PATH = os.path.join(current_dir, "dr_vp_polytope_camera.mp4")
+OUTPUT_PATH = os.path.join(current_dir, "mp4", f"dr_vp_polytope_{CAMERA_MODE}.mp4")
+CAMERA_PANEL_PATH = os.path.join(current_dir, "mp4", "dr_vp_polytope_camera.mp4")
 WIDTH = 1080
 HEIGHT = 1080
 FPS = 30

@@ -49,7 +49,7 @@ from examples.plotting_viser import create_animated_plotting_server
 CAMERA_MODE = "overview"
 
 # --- Render settings ---------------------------------------------------------
-OUTPUT_PATH = os.path.join(current_dir, f"obstacle_avoidance_vmap_{CAMERA_MODE}.mp4")
+OUTPUT_PATH = os.path.join(current_dir, "mp4", f"obstacle_avoidance_vmap_{CAMERA_MODE}.mp4")
 WIDTH = 1080
 HEIGHT = 1080
 FPS = 60

@@ -74,7 +74,7 @@ keypoint_home_positions = {
 }
 
 # --- Render settings ---------------------------------------------------------
-OUTPUT_PATH = os.path.join(current_dir, "7_dof_arm_overview.mp4")
+OUTPUT_PATH = os.path.join(current_dir, "mp4", "7_dof_arm_overview.mp4")
 WIDTH = 1080
 HEIGHT = 1080
 FPS = 60
