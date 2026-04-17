@@ -1,14 +1,8 @@
-"""Southern L2 Halo orbit initial conditions definition
-
-- Earth-Moon CR3BP rotating-frame dynamics
-- Symmetry structure at initial node: y0 = vx0 = vz0 = 0
-- Free design variables at initial node: x0, z0, vy0
-- Terminal objective to drive (y, vx, vz) toward zero after n revolutions
-
-"""
+"""Compute a halo-orbit initial condition x0_t."""
 
 import os
 import sys
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -21,21 +15,53 @@ sys.path.append(grandparent_dir)
 
 import openscvx as ox
 from openscvx import Problem
-from openscvx.algorithms import OptimizationResults
 from openscvx.integrators import solve_ivp_diffrax
-from openscvx.plotting import plot_projections_2d
 from openscvx.symbolic.lower import lower_to_jax
 
 # Use float64 in JAX for high-accuracy propagation.
 jax.config.update("jax_enable_x64", True)
+
+kernel_dir = Path(current_dir) / "ker"
+kernel_filenames = (
+    "gm_de440.tpc",
+)
+
+
+def _load_spice_mu_from_local_kernels(kernel_dir: Path) -> tuple[float, float]:
+    """Load Earth/Moon GM constants from local SPICE kernels."""
+    try:
+        import spiceypy as spice
+    except ImportError as exc:
+        raise ImportError(
+            "spiceypy is required for examples/spacecraft/halo_orbit.py. "
+            "Install it with: pip install spiceypy"
+        ) from exc
+
+    missing = [name for name in kernel_filenames if not (kernel_dir / name).is_file()]
+    if missing:
+        missing_str = ", ".join(missing)
+        raise FileNotFoundError(
+            f"Missing required SPICE kernel files in '{kernel_dir}': {missing_str}"
+        )
+
+    spice.kclear()
+    try:
+        for kernel_name in kernel_filenames:
+            spice.furnsh(str(kernel_dir / kernel_name))
+
+        mu_earth_val = float(spice.bodvrd("EARTH", "GM", 1)[1][0])
+        mu_moon_val = float(spice.bodvrd("MOON", "GM", 1)[1][0])
+        return mu_earth_val, mu_moon_val
+    finally:
+        spice.kclear()
+
 
 r0 = np.array([0.98736, 0.0, 0.00877])
 v0 = np.array([0.0, 1.63446, 0.0])
 x0_seed = np.concatenate([r0, v0])
 
 # Earth-Moon mass ratio used in normalized CR3BP
-mu_earth = 398600.4354360959
-mu_moon = 4902.800066163796
+mu_earth, mu_moon = _load_spice_mu_from_local_kernels(kernel_dir)
 mu = mu_moon / (mu_earth + mu_moon)
 t_f = 1.522
 t_opt = 6.0 * t_f  # 6 revolutions
@@ -71,7 +97,7 @@ dynamics = {
 }
 cr3bp_rhs = lower_to_jax(ox.Concat(velocity, velocity_dot))
 
-# Dense high-accuracy propagation used only to build a reliable guess and for plotting.
+# Dense high-accuracy propagation used only to build a reliable guess.
 guess_dense = np.asarray(
     solve_ivp_diffrax(
         lambda t, x: cr3bp_rhs(x, jnp.zeros((0,), dtype=x.dtype), 0, {}),
@@ -90,14 +116,12 @@ guess_dense = np.asarray(
 # Keep optimization decision vector at two nodes only: initial and final.
 nominal_guess = np.vstack([guess_dense[0], guess_dense[-1]])
 
-# Broad bounds (required by OpenSCvx for all variables)
 position.min = np.array([-2.0, -2.0, -2.0])
 position.max = np.array([2.0, 2.0, 2.0])
 velocity.min = np.array([-3.0, -3.0, -3.0])
 velocity.max = np.array([3.0, 3.0, 3.0])
 
 # Initial/final conditions:
-# y0 = vx0 = vz0 = 0 (fixed), x0/z0/vy0 free around the seed values.
 position.initial = [ox.Free(float(x0_seed[0])), 0.0, ox.Free(float(x0_seed[2]))]
 velocity.initial = [0.0, ox.Free(float(x0_seed[4])), 0.0]
 
@@ -151,60 +175,51 @@ problem.settings.prp.solver = "Dopri8"
 problem.settings.prp.atol = integration_tol
 problem.settings.prp.rtol = integration_tol
 
-if __name__ == "__main__":
+
+def _solve_halo_orbit() -> np.ndarray:
+    """Solve halo initialization problem and return x0_t."""
     problem.initialize()
     results = problem.solve()
     results = problem.post_process()
 
-    pos = results.trajectory["position"]
-    vel = results.trajectory["velocity"]
+    pos = np.asarray(results.trajectory["position"], dtype=float)
+    vel = np.asarray(results.trajectory["velocity"], dtype=float)
     x0_opt = np.concatenate([pos[0], vel[0]])
-    xf_opt = np.concatenate([pos[-1], vel[-1]])
+    return x0_opt
 
-    # Match the post-optimization check style in main_orbs_2.py:
-    # integrate only to t_f from optimized initial state and export xyz.
-    traj_plot = np.asarray(
-        solve_ivp_diffrax(
-            lambda t, x: cr3bp_rhs(x, jnp.zeros((0,), dtype=x.dtype), 0, {}),
-            tau_final=t_opt,
-            y_0=jnp.asarray(x0_opt, dtype=jnp.float64),
-            args=(),
-            tau_0=0.0,
-            num_substeps=2000,
-            solver_name="Dopri8",
-            rtol=integration_tol,
-            atol=integration_tol,
-        ),
-        dtype=float,
-    )
 
-    # Plot guess and solution using the exact plot_projections_2d style.
-    guess_results = OptimizationResults(converged=True, t_final=float(t_opt))
-    guess_results.trajectory = {
-        "time": np.linspace(0.0, t_opt, guess_dense.shape[0]).reshape(-1, 1),
-        "position": guess_dense[:, :3],
-        "velocity": guess_dense[:, 3:6],
-    }
-    guess_results.nodes = {
-        "time": np.array([0.0, t_opt]).reshape(-1, 1),
-        "position": nominal_guess[:, :3],
-        "velocity": nominal_guess[:, 3:6],
-    }
-    fig_guess = plot_projections_2d(guess_results, velocity_var_name="velocity")
-    fig_guess.update_layout(title="Initial Guess - XY, XZ, YZ Projections")
-    fig_guess.show()
+def get_halo_initial_condition(
+    *,
+    force_recompute: bool = False,
+    verbose: bool = False,
+) -> np.ndarray:
+    """Return halo initial condition x0_t as a simple API."""
+    # `force_recompute` is kept for API stability with older callers.
+    _ = force_recompute
+    x0_t = _solve_halo_orbit()
+    if verbose:
+        print("Computed halo target initial state.")
+    return x0_t
 
-    solution_results = OptimizationResults(converged=bool(results.converged), t_final=float(t_opt))
-    solution_results.trajectory = {
-        "time": np.linspace(0.0, t_opt, traj_plot.shape[0]).reshape(-1, 1),
-        "position": traj_plot[:, :3],
-        "velocity": traj_plot[:, 3:6],
-    }
-    solution_results.nodes = {
-        "time": results.nodes["time"],
-        "position": results.nodes["position"],
-        "velocity": results.nodes["velocity"],
-    }
-    fig_solution = plot_projections_2d(solution_results, velocity_var_name="velocity")
-    fig_solution.update_layout(title="Solution - XY, XZ, YZ Projections")
-    fig_solution.show()
+
+def get_halo_target_initial_state(
+    *,
+    force_recompute: bool = False,
+    use_cache: bool = True,
+    cache_file: Path | None = None,
+    verbose: bool = False,
+    return_metadata: bool = False,
+) -> np.ndarray | tuple[np.ndarray, dict[str, str]]:
+    """Backward-compatible wrapper; cache options are ignored."""
+    _ = use_cache
+    _ = cache_file
+    x0_t = get_halo_initial_condition(force_recompute=force_recompute, verbose=verbose)
+    if return_metadata:
+        return x0_t, {"source": "solve", "cache_file": "none"}
+    return x0_t
+
+
+if __name__ == "__main__":
+    x0_t = get_halo_initial_condition(verbose=True)
+    np.set_printoptions(precision=8, suppress=True)
+    print(x0_t)

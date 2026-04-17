@@ -216,8 +216,18 @@ material/*
 !material/overrides/**
 src/
 
-# SPICE kernels for spacecrafts examples
-examples/spacecraft/ker/
+# SPICE kernels in local ker directories
+**/ker/*.bsp
+**/ker/*.bpc
+**/ker/*.bc
+**/ker/*.bds
+**/ker/*.dsk
+**/ker/*.tf
+**/ker/*.ti
+**/ker/*.tls
+**/ker/*.tm
+**/ker/*.tpc
+**/ker/*.tsc
 
 # Solver_data folder
 solver_data/
