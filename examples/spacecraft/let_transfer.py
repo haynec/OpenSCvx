@@ -54,6 +54,7 @@ KERNEL_URLS = {
 }
 KERNEL_FILENAMES = tuple(KERNEL_URLS.keys())
 
+
 def _download_kernel(url: str, destination: Path) -> None:
     """Download a single SPICE kernel to destination atomically."""
     temp_destination = destination.with_suffix(destination.suffix + ".part")
@@ -124,9 +125,7 @@ def _normalized_node_grid(n: int, mode: str) -> np.ndarray:
         return s_uniform
     if mode_l == "cosine":
         return 0.5 * (1.0 - np.cos(np.pi * s_uniform))
-    raise ValueError(
-        f"Unknown NODE_DISTRIBUTION_MODE={mode!r}. Expected 'uniform' or 'cosine'."
-    )
+    raise ValueError(f"Unknown NODE_DISTRIBUTION_MODE={mode!r}. Expected 'uniform' or 'cosine'.")
 
 
 def _add_moon_orbit_overlay(fig, earth_pos: np.ndarray, moon_radius: float) -> None:
@@ -528,8 +527,7 @@ def _create_let_viser_server_inertial(
                     if current_dist > 1e-6:
                         camera_view_dist[client_id] = current_dist
                     client.camera.position = (
-                        earth_target
-                        + camera_view_dir[client_id] * camera_view_dist[client_id]
+                        earth_target + camera_view_dir[client_id] * camera_view_dist[client_id]
                     )
                     client.camera.look_at = earth_target
                 except Exception as exc:
@@ -627,29 +625,29 @@ grav_scale = t_ref**2 / r_ref**3
 
 # Mission setup
 h_earth = 1500.0
-v_moon = np.sqrt(mu_earth/d_earth_moon) / v_ref
+v_moon = np.sqrt(mu_earth / d_earth_moon) / v_ref
 r_0 = r_earth + h_earth
 # Earth-centered rotating coordinates: Earth at x=0, Sun at x=-1.
 pos_earth_rot = np.array([0.0, 0.0, 0.0])
-rot_deg             = 0.0
-rot_rad             = np.deg2rad(rot_deg)
-rot_mat             = np.array([[np.cos(rot_rad), -np.sin(rot_rad), 0], 
-                                [np.sin(rot_rad), np.cos(rot_rad), 0],
-                                  [0, 0, 1]])
+rot_deg = 0.0
+rot_rad = np.deg2rad(rot_deg)
+rot_mat = np.array(
+    [[np.cos(rot_rad), -np.sin(rot_rad), 0], [np.sin(rot_rad), np.cos(rot_rad), 0], [0, 0, 1]]
+)
 pos_0 = pos_earth_rot + rot_mat @ np.array([r_0 / r_ref, 0.0, 0.0])
 vel_0 = rot_mat @ np.array([0.0, 7.8 * np.sqrt(2.0) * 0.9085 / v_ref, 0.0])
 
 x0_seed = np.concatenate([pos_0, vel_0])
 
 pos_f = pos_earth_rot + np.array([0.0, -d_earth_moon / r_ref, 0.0])
-vel_f = np.array([ np.sqrt(mu_earth / d_earth_moon) / v_ref, 0.0, 0.0])
+vel_f = np.array([np.sqrt(mu_earth / d_earth_moon) / v_ref, 0.0, 0.0])
 t_f_guess_days = 78.0
 t_f_guess = t_f_guess_days * d_2_sec / t_ref
 
 # Initial impulse guess.
-v_circular      = np.sqrt(mu_earth / r_0) / v_ref
+v_circular = np.sqrt(mu_earth / r_0) / v_ref
 v_circular_vect = rot_mat @ np.array([0, v_circular, 0])
-delta_v0_guess  = vel_0 - v_circular_vect
+delta_v0_guess = vel_0 - v_circular_vect
 
 n_nodes = 45
 integration_tol = 1e-10
@@ -809,13 +807,14 @@ algorithm = {
 constraints = []
 # Enforce final distance from Earth in normalized Sun-Earth rotating frame.
 final_radius_target = d_earth_moon / r_ref
-eps_radius          = 1e-4
+eps_radius = 1e-4
 constraints += [
     (ox.linalg.Norm(position - pos_earth_rot) <= final_radius_target).at([n_nodes - 1]).convex(),
 ]
 constraints += [
-    (ox.linalg.Norm(position - pos_earth_rot) >= (1+eps_radius)*final_radius_target)
-                                                                                .at([n_nodes - 1]),
+    (ox.linalg.Norm(position - pos_earth_rot) >= (1 + eps_radius) * final_radius_target).at(
+        [n_nodes - 1]
+    ),
 ]
 
 # Final orbit tangency: radius and velocity orthogonal at terminal node.
