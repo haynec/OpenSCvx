@@ -950,13 +950,6 @@ if __name__ == "__main__":
     )
     fig_solution.show()
 
-    final_pos = traj_solution[-1, :3]
-    final_vel = traj_solution[-1, 3:6]
-    final_radius_vec = final_pos - pos_earth_rot
-    final_radius_norm = float(np.linalg.norm(final_radius_vec))
-    final_speed_norm = float(np.linalg.norm(final_vel))
-    final_distance_norm = final_radius_norm
-    final_distance_km = final_distance_norm * r_ref
     dv0_guess_norm = float(np.linalg.norm(delta_v0_guess))
     dv0_opt_norm = float(np.linalg.norm(dv0_opt))
     dvf_opt_norm = float(np.linalg.norm(dvf_opt))
