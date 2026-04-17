@@ -44,7 +44,7 @@ VISER_TARGET_FPS = 60.0
 VISER_MAX_RESAMPLED_POINTS = 120000
 VISER_ROTATING_PORT = 8080
 VISER_INERTIAL_PORT = 8081
-VISER_REQUEST_SHARE_URLS = True
+VISER_REQUEST_SHARE_URLS = False
 KERNEL_DIR = Path(current_dir) / "ker"
 KERNEL_URLS = {
     "naif0012.tls": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls",
@@ -57,7 +57,10 @@ KERNEL_FILENAMES = tuple(KERNEL_URLS.keys())
 def _download_kernel(url: str, destination: Path) -> None:
     """Download a single SPICE kernel to destination atomically."""
     temp_destination = destination.with_suffix(destination.suffix + ".part")
-    with urllib.request.urlopen(url, timeout=120) as response, temp_destination.open("wb") as out_file:
+    with (
+        urllib.request.urlopen(url, timeout=120) as response,
+        temp_destination.open("wb") as out_file,
+    ):
         shutil.copyfileobj(response, out_file)
     temp_destination.replace(destination)
 
@@ -445,7 +448,9 @@ def _create_let_viser_server_inertial(
         moon_orbit_colors = np.broadcast_to(
             np.array([175, 175, 175], dtype=np.uint8), (moon_vis.shape[0], 3)
         ).copy()
-        ox_viser.add_ghost_trajectory(server, moon_vis, moon_orbit_colors, opacity=0.04, point_size=0.10)
+        ox_viser.add_ghost_trajectory(
+            server, moon_vis, moon_orbit_colors, opacity=0.04, point_size=0.10
+        )
 
         if guess_trajectory is not None:
             guess_pos_rot = np.asarray(guess_trajectory[:, :3], dtype=np.float64)
@@ -465,7 +470,9 @@ def _create_let_viser_server_inertial(
             guess_colors = np.broadcast_to(
                 np.array([180, 145, 250], dtype=np.uint8), (guess_vis.shape[0], 3)
             ).copy()
-            ox_viser.add_ghost_trajectory(server, guess_vis, guess_colors, opacity=0.07, point_size=0.20)
+            ox_viser.add_ghost_trajectory(
+                server, guess_vis, guess_colors, opacity=0.07, point_size=0.20
+            )
 
         ox_viser.add_ghost_trajectory(server, pos_vis, colors, opacity=0.16, point_size=0.12)
         _, update_trail = ox_viser.add_animated_trail(server, pos_vis, colors, point_size=0.18)
@@ -502,11 +509,8 @@ def _create_let_viser_server_inertial(
 
         @server.on_client_disconnect
         def _on_client_disconnect(client) -> None:
-            try:
-                camera_view_dir.pop(client.client_id, None)
-                camera_view_dist.pop(client.client_id, None)
-            except Exception:
-                pass
+            camera_view_dir.pop(client.client_id, None)
+            camera_view_dist.pop(client.client_id, None)
 
         def update_earth(frame_idx: int) -> None:
             earth_handle.position = earth_vis[frame_idx]
@@ -517,14 +521,26 @@ def _create_let_viser_server_inertial(
                         if not _initialize_camera_tracking(client, earth_target):
                             continue
                         continue
-                    current_rel = np.asarray(client.camera.position) - np.asarray(client.camera.look_at)
+                    current_rel = np.asarray(client.camera.position) - np.asarray(
+                        client.camera.look_at
+                    )
                     current_dist = float(np.linalg.norm(current_rel))
                     if current_dist > 1e-6:
                         camera_view_dist[client_id] = current_dist
-                    client.camera.position = earth_target + camera_view_dir[client_id] * camera_view_dist[client_id]
+                    client.camera.position = (
+                        earth_target
+                        + camera_view_dir[client_id] * camera_view_dist[client_id]
+                    )
                     client.camera.look_at = earth_target
-                except Exception:
-                    pass
+                except Exception as exc:
+                    print(
+                        (
+                            f"[LET visualization] Failed to update camera for client "
+                            f"{client_id}: {exc}"
+                        ),
+                        file=sys.stderr,
+                    )
+                    continue
 
         def update_moon(frame_idx: int) -> None:
             moon_handle.position = moon_vis[frame_idx]
@@ -830,7 +846,7 @@ problem = Problem(
     discretizer=discretizer,
     algorithm=algorithm,
     float_dtype="float64",
-    solver={"cvx_solver": "MOSEK", "solver_args":{}},
+    solver={"cvx_solver": "CLARABEL"},
 )
 
 # Keep post-process propagation tolerances aligned with discretization.
@@ -940,13 +956,8 @@ if __name__ == "__main__":
     final_radius_vec = final_pos - pos_earth_rot
     final_radius_norm = float(np.linalg.norm(final_radius_vec))
     final_speed_norm = float(np.linalg.norm(final_vel))
-    final_speed_pos_orth = float(
-        np.dot(final_radius_vec, final_vel) / max(final_radius_norm * final_speed_norm, 1e-12)
-    )
     final_distance_norm = final_radius_norm
     final_distance_km = final_distance_norm * r_ref
-    final_distance_error_km = final_distance_km - d_earth_moon
-    moon_distance_match = bool(np.isclose(final_distance_km, d_earth_moon, atol=100.0))
     dv0_guess_norm = float(np.linalg.norm(delta_v0_guess))
     dv0_opt_norm = float(np.linalg.norm(dv0_opt))
     dvf_opt_norm = float(np.linalg.norm(dvf_opt))
