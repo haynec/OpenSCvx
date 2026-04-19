@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Callable, Dict, Optional
 from openscvx.lowered.cvxpy_constraints import LoweredCvxpyConstraints
 from openscvx.lowered.dynamics import Dynamics
 from openscvx.lowered.jax_constraints import LoweredJaxConstraints
+from openscvx.lowered.stm_meta import StmMeta
 from openscvx.lowered.unified import UnifiedControl, UnifiedState
 
 if TYPE_CHECKING:
@@ -69,3 +70,6 @@ class LoweredProblem:
 
     # Algebraic outputs (vmapped JAX functions for propagation)
     algebraic_prop: Optional[Dict[str, Callable]] = field(default_factory=dict)
+
+    # STM slot table (empty when problem declares no STM augmented states)
+    stm_meta: StmMeta = field(default_factory=StmMeta)

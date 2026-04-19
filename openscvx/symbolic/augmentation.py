@@ -63,6 +63,7 @@ from openscvx.symbolic.expr import (
     CTCS,
     Add,
     Concat,
+    Constant,
     Constraint,
     CrossNodeConstraint,
     Equality,
@@ -72,6 +73,12 @@ from openscvx.symbolic.expr import (
 )
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.expr.stm import (
+    STMImpulse,
+    STMPhysical,
+    assert_no_stm,
+    collect_stm_leaves_from_ctcs,
+)
 from openscvx.symbolic.expr.time import Time
 
 
@@ -476,6 +483,28 @@ def get_nodal_constraints_from_ctcs(
     return nodal_ctcs
 
 
+_STM_LEAF_BOUND = 1e6  # wide finite bounds for integration-only STM slots
+
+
+def _configure_stm_leaf(leaf: State, N: int) -> None:
+    """Populate bounds/boundary conditions/guess for an STM leaf before adding it
+    to the augmented state list. Φ initializes to vec(I); Φ_imp initializes to 0.
+    Final boundary is free; bounds are wide finite placeholders."""
+    n = leaf.shape[0]
+    if isinstance(leaf, STMPhysical):
+        init = np.eye(leaf.n_phys, dtype=float).reshape(-1)
+    elif isinstance(leaf, STMImpulse):
+        init = np.zeros(leaf.n_phys, dtype=float)
+    else:
+        init = np.zeros(n, dtype=float)
+
+    leaf.min = np.full(n, -_STM_LEAF_BOUND, dtype=float)
+    leaf.max = np.full(n, _STM_LEAF_BOUND, dtype=float)
+    leaf.initial = init
+    leaf.final = [("free", float(v)) for v in init]
+    leaf.guess = np.tile(init, (N, 1))
+
+
 def augment_dynamics_with_ctcs(
     xdot: Expr,
     states: List[State],
@@ -547,6 +576,13 @@ def augment_dynamics_with_ctcs(
     """
     # Save if discrete dynamics is null
     discrete_dynamics_set = xdelta is not None
+
+    # Enforce the one-way STM invariant: physical-state RHS must not read any
+    # STM handle. Only augmented-state RHS (CTCS penalties) may. This keeps
+    # dΦ/dτ = A_phys·Φ self-closing when variational blocks are emitted later.
+    assert_no_stm(xdot, "physical-state continuous dynamics")
+    if discrete_dynamics_set:
+        assert_no_stm(xdelta, "physical-state discrete dynamics")
 
     # Copy the original states and controls lists
     states_augmented = list(states)
@@ -625,6 +661,23 @@ def augment_dynamics_with_ctcs(
     else:
         xdot_aug = xdot
         xdelta_aug = xdelta if discrete_dynamics_set else None
+
+    # Emit STM augmented-state slots for every STM leaf referenced by any CTCS.
+    # Continuous RHS is a zero placeholder; the real variational equation
+    # Φ̇ = A_phys·Φ is injected by the discretizer (Step 5). Discrete RHS is
+    # identity; impulse-direction injection is applied by the propagation layer.
+    stm_leaves = collect_stm_leaves_from_ctcs(constraints_ctcs or [])
+    if stm_leaves:
+        stm_cont_rhs: List[Expr] = []
+        stm_disc_rhs: List[Expr] = []
+        for leaf in stm_leaves.values():
+            _configure_stm_leaf(leaf, N)
+            states_augmented.append(leaf)
+            stm_cont_rhs.append(Constant(np.zeros(leaf.shape[0])))
+            stm_disc_rhs.append(leaf)
+        xdot_aug = Concat(xdot_aug, *stm_cont_rhs)
+        if discrete_dynamics_set:
+            xdelta_aug = Concat(xdelta_aug, *stm_disc_rhs)
 
     time_dilation = Control("_time_dilation", shape=(1,), parameterization="ZOH")
 

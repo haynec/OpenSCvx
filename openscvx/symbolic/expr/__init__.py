@@ -156,6 +156,9 @@ from .spatial import QDCM, SSM, SSMP
 # State
 from .state import BoundaryType, Fixed, Free, Maximize, Minimize, State
 
+# STM (state transition matrix) symbolic handles
+from .stm import STMImpulse, STMPhysical
+
 # Time
 from .time import Time
 
@@ -198,6 +201,9 @@ __all__ = [
     "Fixed",
     "Minimize",
     "Maximize",
+    # STM symbolic handles
+    "STMPhysical",
+    "STMImpulse",
     # Control
     "Control",
     "Parameterization",

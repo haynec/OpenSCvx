@@ -14,6 +14,7 @@ from openscvx.lowered.jax_constraints import (
 )
 from openscvx.lowered.parameters import ParameterDict
 from openscvx.lowered.problem import LoweredProblem
+from openscvx.lowered.stm_meta import StmMeta, StmSlot
 from openscvx.lowered.unified import UnifiedControl, UnifiedState
 
 __all__ = [
@@ -25,6 +26,8 @@ __all__ = [
     "CVXPyVariables",
     "ParameterDict",
     "Dynamics",
+    "StmMeta",
+    "StmSlot",
     "UnifiedState",
     "UnifiedControl",
 ]

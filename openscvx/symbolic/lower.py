@@ -72,6 +72,7 @@ from openscvx.lowered import (
     LoweredNodalConstraint,
     LoweredProblem,
 )
+from openscvx.lowered.stm_meta import StmMeta, StmSlot
 from openscvx.symbolic.constraint_set import ConstraintSet
 from openscvx.symbolic.expr import Expr, NodeReference, traverse
 from openscvx.symbolic.expr.control import Control
@@ -850,6 +851,25 @@ def lower_symbolic_problem(
             output_fn_vmapped = jax.vmap(output_fn, in_axes=(0, 0, None, None))
             algebraic_prop_lowered[name] = output_fn_vmapped
 
+    stm_slots: List[StmSlot] = []
+    for state in problem.states:
+        if getattr(state, "_is_stm", False) is not True:
+            continue
+        control = getattr(state, "control", None)
+        ctrl_slice = control._slice if control is not None else None
+        ctrl_name = control.name if control is not None else None
+        stm_slots.append(
+            StmSlot(
+                name=state.name,
+                kind=state._stm_kind,
+                slice=state._slice,
+                n_phys=state.n_phys,
+                control_slice=ctrl_slice,
+                control_name=ctrl_name,
+            )
+        )
+    stm_meta = StmMeta(slots=stm_slots)
+
     return LoweredProblem(
         dynamics=dynamics,
         dynamics_discrete=dynamics_discrete,
@@ -861,4 +881,5 @@ def lower_symbolic_problem(
         x_prop_unified=x_prop_unified,
         cvxpy_params=cvxpy_params,
         algebraic_prop=algebraic_prop_lowered,
+        stm_meta=stm_meta,
     )

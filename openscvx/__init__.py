@@ -81,6 +81,8 @@ from openscvx.symbolic.expr import (
     Sqrt,
     Stack,
     State,
+    STMImpulse,
+    STMPhysical,
     Sub,
     Sum,
     Tan,
@@ -131,6 +133,9 @@ __all__ = [
     "Variable",
     "State",
     "Control",
+    # STM symbolic handles
+    "STMPhysical",
+    "STMImpulse",
     # Boundary condition helpers
     "Free",
     "Fixed",
