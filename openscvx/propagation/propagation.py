@@ -1,5 +1,7 @@
 from typing import Callable, Optional
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from openscvx.config import Config
@@ -7,6 +9,7 @@ from openscvx.discretization import Discretizer
 from openscvx.discretization.base import _resolve_foh_mask
 from openscvx.integrators import solve_ivp_diffrax_prop
 from openscvx.lowered import Dynamics
+from openscvx.lowered.stm_meta import StmMeta
 
 
 def _invoke_solver(solver: callable, *args):
@@ -35,6 +38,8 @@ def prop_aug_dy(
     foh_mask: np.ndarray,
     N: int,
     params: dict,
+    stm_meta: Optional[StmMeta] = None,
+    A: Optional[callable] = None,
 ) -> np.ndarray:
     """Compute the augmented dynamics for propagation.
 
@@ -64,11 +69,26 @@ def prop_aug_dy(
     beta = (tau - tau_init) * N * foh_mask
     u = u_current + beta * (u_next - u_current)
 
-    return state_dot(x, u, node, params).squeeze()
+    dx = state_dot(x, u, node, params)
+    if stm_meta is not None and not stm_meta.is_empty and A is not None:
+        n_phys = stm_meta.n_phys
+        A_phys = A(x, u, node, params)[0, :n_phys, :n_phys]
+        for slot in stm_meta.slots:
+            block = x[0, slot.slice]
+            if slot.kind == "physical":
+                dphi = (A_phys @ block.reshape(n_phys, n_phys)).reshape(-1)
+            else:
+                dphi = A_phys @ block
+            dx = dx.at[0, slot.slice].set(dphi)
+    return dx.squeeze()
 
 
 def get_propagation_solver(
-    state_dot: Dynamics, settings: Config, discretizer: Discretizer
+    state_dot: Dynamics,
+    settings: Config,
+    discretizer: Discretizer,
+    stm_meta: Optional[StmMeta] = None,
+    f_scalar: Optional[Callable] = None,
 ) -> callable:
     """Create a propagation solver function.
 
@@ -87,6 +107,10 @@ def get_propagation_solver(
     u_foh_mask = getattr(settings.sim.u, "foh_mask", None)
     foh_mask = _resolve_foh_mask(discretizer.dis_type, settings.sim.n_controls, u_foh_mask)
 
+    A_vmapped: Optional[Callable] = None
+    if stm_meta is not None and not stm_meta.is_empty and f_scalar is not None:
+        A_vmapped = jax.vmap(jax.jacfwd(f_scalar, argnums=0), in_axes=(0, 0, 0, None))
+
     def propagation_solver(V0, tau_grid, u_cur, u_next, tau_init, node, save_time, mask, params):
         param_map_update = params
         return solve_ivp_diffrax_prop(
@@ -102,6 +126,8 @@ def get_propagation_solver(
                 foh_mask,
                 settings.sim.n,
                 param_map_update,
+                stm_meta,
+                A_vmapped,
                 # additional named parameters as **kwargs
             ),
             tau_0=tau_grid[0],  # scalar
@@ -206,6 +232,7 @@ def simulate_nonlinear_time(
     settings: Config,
     propagation_solver: callable,
     dynamics_discrete: Optional[Callable] = None,
+    stm_meta: Optional[StmMeta] = None,
 ) -> np.ndarray:
     """Simulate the nonlinear system dynamics over time.
 
@@ -280,7 +307,18 @@ def simulate_nonlinear_time(
                 )
             ).reshape(-1)
         else:
-            x_post = x_0
+            x_post = np.asarray(x_0).copy()
+
+        # Reset STM slots at each segment start (identity for physical, zero for impulse).
+        if stm_meta is not None and not stm_meta.is_empty:
+            n_phys = stm_meta.n_phys
+            eye_flat = np.eye(n_phys).reshape(-1)
+            x_post = np.asarray(x_post).copy()
+            for slot in stm_meta.slots:
+                if slot.kind == "physical":
+                    x_post[slot.slice] = eye_flat
+                else:
+                    x_post[slot.slice] = 0.0
 
         # Call the continuous propagation solver with padded tau_cur and mask
         sol = _invoke_solver(

@@ -851,13 +851,24 @@ def lower_symbolic_problem(
             output_fn_vmapped = jax.vmap(output_fn, in_axes=(0, 0, None, None))
             algebraic_prop_lowered[name] = output_fn_vmapped
 
-    stm_slots: List[StmSlot] = []
+    stm_slots: list[StmSlot] = []
+    n_phys_stm = 0
+    psi_offset = 0
     for state in problem.states:
         if getattr(state, "_is_stm", False) is not True:
             continue
+        mode = getattr(state, "mode", "approx")
         control = getattr(state, "control", None)
         ctrl_slice = control._slice if control is not None else None
         ctrl_name = control.name if control is not None else None
+        # Ψ (second-order sensitivity) is only integrated for exact-mode
+        # *physical* slots. Impulse Ψ is trivially zero in continuous segments
+        # (Φ_imp resets to 0 and stays 0 until the discrete impulsive jump).
+        psi_slice = None
+        if mode == "exact" and state._stm_kind == "physical":
+            psi_size = state.n_phys ** 3
+            psi_slice = slice(psi_offset, psi_offset + psi_size)
+            psi_offset += psi_size
         stm_slots.append(
             StmSlot(
                 name=state.name,
@@ -866,9 +877,16 @@ def lower_symbolic_problem(
                 n_phys=state.n_phys,
                 control_slice=ctrl_slice,
                 control_name=ctrl_name,
+                mode=mode,
+                psi_slice=psi_slice,
             )
         )
-    stm_meta = StmMeta(slots=stm_slots)
+        n_phys_stm = state.n_phys
+    stm_meta = StmMeta(slots=tuple(stm_slots), n_phys=n_phys_stm, psi_size=psi_offset)
+
+    dynamics.stm_meta = stm_meta
+    dynamics_discrete.stm_meta = stm_meta
+    dynamics_prop.stm_meta = stm_meta
 
     return LoweredProblem(
         dynamics=dynamics,

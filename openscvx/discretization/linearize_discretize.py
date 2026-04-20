@@ -11,6 +11,7 @@ from openscvx.integrators import (
     solve_ivp_diffrax,
     solve_ivp_rk45,
 )
+from openscvx.lowered.stm_meta import StmMeta
 
 if TYPE_CHECKING:
     from openscvx.config import Config
@@ -123,15 +124,25 @@ class LinearizeDiscretize(Discretizer):
         # Capture discretizer settings for the returned closure
         discretizer = self
 
+        stm_meta = getattr(dynamics, "stm_meta", None) or StmMeta()
+
+        # Hessian H_ilm = ∂²f_i/∂x_l ∂x_m only needed for exact-mode Ψ integration.
+        H_vmapped = None
+        if stm_meta.has_exact:
+            H_fn = jax.jacfwd(A_fn, argnums=0)
+            H_vmapped = jax.vmap(H_fn, in_axes=(0, 0, 0, None))
+
         return lambda x, u, params: _calculate_discretization(
             x=x,
             u=u,
             state_dot=f_vmapped,
             A=A_vmapped,
             B=B_vmapped,
+            H=H_vmapped,
             settings=settings,
             discretizer=discretizer,
             params=params,
+            stm_meta=stm_meta,
         )
 
     def citation(self) -> List[str]:
@@ -163,6 +174,7 @@ def _dVdt(
     state_dot: callable,
     A: callable,
     B: callable,
+    H: Optional[callable],
     n_x: int,
     n_u: int,
     N: int,
@@ -174,6 +186,7 @@ def _dVdt(
     inv_S_x: np.ndarray,
     inv_S_u: np.ndarray,
     params: dict,
+    stm_meta: StmMeta,
 ) -> jnp.ndarray:
     """Time derivative of the augmented state vector for variational integration.
 
@@ -232,9 +245,11 @@ def _dVdt(
     i2 = i1 + n_x * n_x
     i3 = i2 + n_x * n_u
     i4 = i3 + n_x * n_u
+    # Ψ region (exact-mode only). Lives past the B_d/C_d blocks.
+    i5 = i4 + stm_meta.psi_size
 
     # Unflatten V
-    V = V.reshape(-1, i4)
+    V = V.reshape(-1, i5)
 
     # Per-control interpolation weights: beta_i = tau*N for FOH, 0 for ZOH
     beta = tau * N * foh_mask
@@ -258,6 +273,18 @@ def _dVdt(
     # fmt: off
     dVdt = jnp.zeros_like(V)
     dVdt = dVdt.at[:, i0:i1].set(F)
+    # Inject STM variational RHS (physical-state block of A only; one-way invariant).
+    if not stm_meta.is_empty:
+        n_phys = stm_meta.n_phys
+        A_phys = dfdx[:, :n_phys, :n_phys]
+        for slot in stm_meta.slots:
+            block = V[:, slot.slice]
+            if slot.kind == "physical":
+                phi = block.reshape(-1, n_phys, n_phys)
+                dphi = jnp.matmul(A_phys, phi).reshape(-1, n_phys * n_phys)
+            else:  # "impulse"
+                dphi = jnp.einsum("nij,nj->ni", A_phys, block)
+            dVdt = dVdt.at[:, slot.slice].set(dphi)
     dVdt = dVdt.at[:, i1:i2].set(
         jnp.matmul(dfdx, V[:, i1:i2].reshape(-1, n_x, n_x)).reshape(-1, n_x * n_x)
     )
@@ -267,6 +294,22 @@ def _dVdt(
     dVdt = dVdt.at[:, i3:i4].set(
         (jnp.matmul(dfdx, V[:, i3:i4].reshape(-1, n_x, n_u)) + dfdu * beta).reshape(-1, n_x * n_u)
     )
+    # Ψ variational RHS (exact-mode physical slots):
+    #   dΨ_ijk/dτ = A_il · Ψ_ljk + H_ilm · Φ_mk · Φ_lj
+    # where H_ilm = ∂²f_i/∂x_l ∂x_m; all indices range over [0, n_phys).
+    if stm_meta.psi_size > 0 and H is not None:
+        n_phys = stm_meta.n_phys
+        A_phys = dfdx[:, :n_phys, :n_phys]
+        H_phys = H(x, u, nodes, params)[:, :n_phys, :n_phys, :n_phys]
+        for slot in stm_meta.slots:
+            if slot.psi_slice is None or slot.kind != "physical":
+                continue
+            phi = V[:, slot.slice].reshape(-1, n_phys, n_phys)
+            psi = V[:, slot.psi_slice].reshape(-1, n_phys, n_phys, n_phys)
+            dpsi = jnp.einsum("bil,bljk->bijk", A_phys, psi) + jnp.einsum(
+                "bilm,bmk,blj->bijk", H_phys, phi, phi
+            )
+            dVdt = dVdt.at[:, slot.psi_slice].set(dpsi.reshape(-1, n_phys ** 3))
     # fmt: on
 
     # TODO Implement scaling of V vector
@@ -280,9 +323,11 @@ def _calculate_discretization(
     state_dot: callable,
     A: callable,
     B: callable,
+    H: Optional[callable],
     settings: "Config",
     discretizer: "LinearizeDiscretize",
     params: dict,
+    stm_meta: StmMeta,
 ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
     """Integrate the augmented variational equations to produce discrete-time matrices.
 
@@ -324,10 +369,20 @@ def _calculate_discretization(
     i2 = i1 + n_x * n_x
     i3 = i2 + n_x * n_u
     i4 = i3 + n_x * n_u
+    i5 = i4 + stm_meta.psi_size  # Ψ region (exact-mode only; 0 otherwise)
 
     # Initial augmented state
-    V0 = jnp.zeros((N - 1, i4))
+    V0 = jnp.zeros((N - 1, i5))
     V0 = V0.at[:, :n_x].set(x[:-1].astype(float))
+    # Reset STM slots at each segment start (identity for physical, zero for impulse).
+    if not stm_meta.is_empty:
+        n_phys = stm_meta.n_phys
+        eye_flat = jnp.eye(n_phys).reshape(-1)
+        for slot in stm_meta.slots:
+            if slot.kind == "physical":
+                V0 = V0.at[:, slot.slice].set(jnp.broadcast_to(eye_flat, (N - 1, n_phys * n_phys)))
+            else:
+                V0 = V0.at[:, slot.slice].set(0.0)
     V0 = V0.at[:, n_x : n_x + n_x * n_x].set(jnp.eye(n_x).reshape(1, -1).repeat(N - 1, axis=0))
     V0 = V0.reshape(-1)
 
@@ -343,6 +398,7 @@ def _calculate_discretization(
         state_dot=state_dot,
         A=A,
         B=B,
+        H=H,
         n_x=n_x,
         n_u=n_u,
         N=N,
@@ -354,6 +410,7 @@ def _calculate_discretization(
         inv_S_x=settings.sim.inv_S_x,
         inv_S_u=settings.sim.inv_S_u,
         params=params,  # Pass params as single dict
+        stm_meta=stm_meta,
     )
 
     # Define dVdt wrapper using named arguments
@@ -379,7 +436,7 @@ def _calculate_discretization(
             **diffrax_kwargs,
         )
 
-    Vend = sol[-1].T.reshape(-1, i4)
+    Vend = sol[-1].T.reshape(-1, i5)
     Vmulti = sol.T
 
     x_prop = Vend[:, i0:i1]
@@ -388,6 +445,18 @@ def _calculate_discretization(
     A_bar = Vend[:, i1:i2].reshape(N - 1, n_x, n_x)
     B_bar = Vend[:, i2:i3].reshape(N - 1, n_x, n_u)
     C_bar = Vend[:, i3:i4].reshape(N - 1, n_x, n_u)
+
+    # Exact-mode STM rows of A_bar come from Ψ. Φ resets to I at each segment
+    # start, so ∂Φ(τ_{k+1})/∂Φ(τ_k) = 0 (zero whole row first) and
+    # ∂Φ(τ_{k+1})/∂x_phys(τ_k) = Ψ (flatten (i,j) → row index within slot).
+    if stm_meta.psi_size > 0:
+        n_phys = stm_meta.n_phys
+        for slot in stm_meta.slots:
+            if slot.psi_slice is None or slot.kind != "physical":
+                continue
+            psi_end = Vend[:, slot.psi_slice].reshape(N - 1, n_phys * n_phys, n_phys)
+            A_bar = A_bar.at[:, slot.slice, :].set(0.0)
+            A_bar = A_bar.at[:, slot.slice, :n_phys].set(psi_end)
 
     return A_bar, B_bar, C_bar, x_prop, Vmulti
 

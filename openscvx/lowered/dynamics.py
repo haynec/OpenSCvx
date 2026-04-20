@@ -1,8 +1,11 @@
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 import jax.numpy as jnp
 import numpy as np
+
+if TYPE_CHECKING:
+    from openscvx.lowered.stm_meta import StmMeta
 
 
 @dataclass
@@ -47,3 +50,4 @@ class Dynamics:
     B: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
     A_c_sparsity: Optional[np.ndarray] = field(default=None, repr=False)
     B_c_sparsity: Optional[np.ndarray] = field(default=None, repr=False)
+    stm_meta: Optional["StmMeta"] = field(default=None, repr=False)

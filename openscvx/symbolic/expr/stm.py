@@ -40,94 +40,71 @@ class STMDependencyError(ValueError):
     """
 
 
+_STM_MODES = ("approx", "exact")
+
+
+def _validate_stm_mode(name: str, mode: str) -> str:
+    if mode not in _STM_MODES:
+        raise ValueError(
+            f"STM '{name}': mode must be one of {_STM_MODES}, got {mode!r}"
+        )
+    return mode
+
+
 class STMPhysical(State):
     """Running state transition matrix of the physical state block.
 
-    Represents ``Φ(τ) = ∂x_phys(τ)/∂x_phys(0)`` as a symbolic handle usable
-    inside augmented-state RHS expressions. Internally stored as a flat
-    ``(n_phys * n_phys,)`` state slice (row-major); ``n_phys`` is the
-    physical-state dimension, which the augmentation pass will use when
-    emitting the variational block.
+    Represents ``Φ(τ) = ∂x_phys(τ)/∂x_phys(0)`` as a flat ``(n_phys*n_phys,)``
+    state slice (row-major). Identity-initialized; dynamics
+    ``Φ̇ = A_phys · Φ`` emitted by the discretizer/propagator (not the user).
 
-    Initial value is the identity matrix (flattened) at each propagation
-    segment start (or at the horizon start, depending on the reset mode
-    configured on the problem). Dynamics are
-    ``Φ̇ = A_phys(x_phys, u) · Φ`` emitted automatically by the augmentation
-    pass — users do not write them.
+    The ``mode`` attribute selects the SCP Jacobian treatment:
 
-    This class inherits from :class:`State` so that the existing symbolic
-    machinery (slice assignment, hashing, lowering) can treat it uniformly;
-    the augmentation / discretization layers flag it as
-    ``_is_integration_only`` so it does not enter the SCP Jacobian
-    calculation as a true state.
-
-    Attributes:
-        n_phys: Physical-state dimension ``n`` (``shape == (n*n,)``).
-        _is_stm: Always ``True``.
-        _stm_kind: Always ``"physical"``.
-        _is_integration_only: Always ``True``. Read by the discretizer to
-            partition V into SCP states vs integration-only slots.
-
-    Example:
-        Declare and reference inside a CTCS penalty (wiring added in later
-        steps — this example is illustrative of the final API)::
-
-            phi = ox.STMPhysical("phi", n_phys=2)
-            # ... later, inside a CTCS expression ...
-            # robust_term = phi @ B_disturbance   # once MatMul support is wired
+    - ``"approx"`` (default): ``jax.lax.stop_gradient`` wraps STM reads so the
+      SCP treats Φ as a frozen input — CTCS rows see only ``∂/∂x_phys``.
+    - ``"exact"``: SCP sees CTCS sensitivity through Φ; requires second-order
+      sensitivity Ψ to close the chain (not yet implemented — raises).
     """
 
     _is_stm = True
     _stm_kind = "physical"
     _is_integration_only = True
 
-    def __init__(self, name: str, n_phys: int):
+    def __init__(self, name: str, n_phys: int, mode: str = "approx"):
         if n_phys <= 0:
             raise ValueError(
                 f"STMPhysical '{name}': n_phys must be positive, got {n_phys}"
             )
         super().__init__(name, shape=(n_phys * n_phys,))
         self.n_phys = int(n_phys)
+        self.mode = _validate_stm_mode(name, mode)
 
     def __repr__(self) -> str:
-        return f"STMPhysical('{self.name}', n_phys={self.n_phys})"
+        return f"STMPhysical('{self.name}', n_phys={self.n_phys}, mode={self.mode!r})"
 
 
 class STMImpulse(State):
     """Running sensitivity of the physical state to an impulsive control.
 
-    Represents ``Φ_imp(τ) = ∂x_phys(τ)/∂u_imp`` for a specified impulsive
-    control channel, as a symbolic handle usable inside augmented-state
-    RHS expressions. Shape is ``(n_phys,)``.
+    Represents ``Φ_imp(τ) = ∂x_phys(τ)/∂u_imp`` for a specific impulsive
+    control channel; shape ``(n_phys,)``. Zero-initialized, with the unit
+    direction of ``control`` injected at the impulse node by the propagator.
+    Continuous dynamics ``Φ̇_imp = A_phys · Φ_imp`` emitted by the discretizer.
 
-    Initial value is zero at each propagation segment start and is injected
-    with the unit direction of the impulsive control channel at the
-    impulse node's discrete jump (handled by the propagation layer in a
-    later step). Continuous-time dynamics are ``Φ̇_imp = A_phys · Φ_imp``,
-    emitted automatically by the augmentation pass.
-
-    Attributes:
-        n_phys: Physical-state dimension ``n`` (``shape == (n,)``).
-        control: Reference to the impulsive :class:`Control` this handle
-            tracks sensitivity to.
-        _is_stm: Always ``True``.
-        _stm_kind: Always ``"impulse"``.
-        _is_integration_only: Always ``True``.
-
-    Example:
-        Declare against an impulsive control (wiring added in later steps
-        — illustrative)::
-
-            delta_v = ox.Control("delta_v", shape=(1,),
-                                 parameterization="impulsive", nodes=[0, N-1])
-            phi_imp = ox.STMImpulse("phi_imp", n_phys=2, control=delta_v)
+    ``mode`` mirrors :class:`STMPhysical` (``"approx"`` / ``"exact"``).
     """
 
     _is_stm = True
     _stm_kind = "impulse"
     _is_integration_only = True
 
-    def __init__(self, name: str, n_phys: int, control: Optional["Control"] = None):
+    def __init__(
+        self,
+        name: str,
+        n_phys: int,
+        control: Optional["Control"] = None,
+        mode: str = "approx",
+    ):
         if n_phys <= 0:
             raise ValueError(
                 f"STMImpulse '{name}': n_phys must be positive, got {n_phys}"
@@ -135,10 +112,14 @@ class STMImpulse(State):
         super().__init__(name, shape=(n_phys,))
         self.n_phys = int(n_phys)
         self.control = control
+        self.mode = _validate_stm_mode(name, mode)
 
     def __repr__(self) -> str:
         ctrl_name = self.control.name if self.control is not None else None
-        return f"STMImpulse('{self.name}', n_phys={self.n_phys}, control={ctrl_name!r})"
+        return (
+            f"STMImpulse('{self.name}', n_phys={self.n_phys}, "
+            f"control={ctrl_name!r}, mode={self.mode!r})"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import numpy as np
 from openscvx.algorithms import OptimizationResults
 from openscvx.config import Config
 from openscvx.discretization import Discretizer
+from openscvx.lowered.stm_meta import StmMeta
 from openscvx.utils import calculate_cost_from_boundaries
 
 from .propagation import s_to_t, simulate_nonlinear_time, t_to_tau
@@ -20,6 +21,7 @@ def propagate_trajectory_results(
     dynamics_discrete: Optional[Callable] = None,
     algebraic_prop: Optional[dict] = None,
     discretizer: Optional[Discretizer] = None,
+    stm_meta: Optional[StmMeta] = None,
 ) -> OptimizationResults:
     """Propagate the optimal trajectory and compute additional results.
 
@@ -104,6 +106,7 @@ def propagate_trajectory_results(
             settings,
             propagation_solver,
             dynamics_discrete=dynamics_discrete,
+            stm_meta=stm_meta,
         )
     finally:
         # Always restore original x_prop, even if propagation fails
