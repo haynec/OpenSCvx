@@ -48,7 +48,7 @@ handle every case.
     - SCP iteration: ``add_scp_animation_controls``, ``add_scp_iteration_nodes``, etc.
 
 For problem-specific examples (drones with viewcones, rockets with glideslope
-constraints, etc.), see ``examples/plotting_viser.py``.
+constraints, etc.), see the files under ``examples/``.
 """
 
 # Server setup, animated components, Plotly integration, static primitives, and SCP visualization
@@ -62,6 +62,12 @@ from .animated import (
     add_target_markers,
     add_thrust_vector,
     add_viewcone,
+)
+from .dashboard import (
+    add_constraint_activity_overlay,
+    add_dashboard_panel,
+    activity_to_colors,
+    compute_constraint_activity_per_node,
 )
 from .orbits import add_circular_orbit
 from .plotly_integration import (
@@ -119,4 +125,9 @@ __all__ = [
     "extract_propagation_positions",
     "add_scp_propagation_lines",
     "add_scp_animation_controls",
+    # Constraint dashboard overlay
+    "add_constraint_activity_overlay",
+    "add_dashboard_panel",
+    "compute_constraint_activity_per_node",
+    "activity_to_colors",
 ]

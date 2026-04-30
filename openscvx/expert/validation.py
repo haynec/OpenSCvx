@@ -108,9 +108,15 @@ def validate_byof(
                     f"expected {expected_shape} (state '{state_name}' shape)"
                 )
 
-            # Test that gradient works (JAX compatibility check)
+            # Test that forward-mode AD works (the discretizer uses jax.jacfwd,
+            # so we test jax.jvp rather than jax.grad / jacrev).
             try:
-                jax.grad(lambda x: jnp.sum(fn(x, dummy_u, dummy_node, dummy_params)))(dummy_x)
+                tangent = jnp.ones_like(dummy_x)
+                jax.jvp(
+                    lambda x: fn(x, dummy_u, dummy_node, dummy_params),
+                    (dummy_x,),
+                    (tangent,),
+                )
             except Exception as e:
                 raise ValueError(
                     f"byof dynamics '{state_name}' is not differentiable with JAX. "

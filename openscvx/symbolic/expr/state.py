@@ -540,14 +540,22 @@ class State(Variable):
                 time = State("t", (1,))
                 time.final = [("minimize", 10)]
         """
-        # Convert to list first to handle mixed types properly
+        # Convert to list first to handle mixed types (plain numbers and tuples like ox.Free).
+        # A numpy object array may contain tuples; convert without going through np.asarray(float).
         if not isinstance(arr, (list, tuple)):
-            arr = np.asarray(arr)
-            if arr.shape != self.shape:
-                raise ValueError(
-                    f"State '{self.name}': final expected shape {self.shape}, got {arr.shape}"
-                )
-            arr = arr.tolist()
+            if isinstance(arr, np.ndarray) and arr.dtype == object:
+                arr = arr.tolist()
+            else:
+                try:
+                    arr = np.asarray(arr, dtype=float)
+                except (ValueError, TypeError):
+                    arr = list(arr)
+                else:
+                    if arr.shape != self.shape:
+                        raise ValueError(
+                            f"State '{self.name}': final expected shape {self.shape}, got {arr.shape}"
+                        )
+                    arr = arr.tolist()
 
         # Ensure we have the right number of elements
         if len(arr) != self.shape[0]:

@@ -39,6 +39,17 @@ class CandidateIterate:
     lam_vb_cross: Optional[np.ndarray] = None
     J_lin: Optional[float] = None
     J_nonlin: Optional[float] = None
+    # Per-iteration constraint activity diagnostics (populated by the SCP step).
+    # ``nu``: dynamics defect slacks, shape ``(N-1, n_x)``.
+    # ``nu_vb``: list of per-nodal-constraint slack arrays, each shape ``(N,)``.
+    # ``nu_vb_cross``: list of per-cross-node-constraint scalar slacks.
+    # Aggregate scalars (used by the convergence dashboard) are also recorded.
+    nu: Optional[np.ndarray] = None
+    nu_vb: Optional[List[np.ndarray]] = None
+    nu_vb_cross: Optional[List[float]] = None
+    J_tr: Optional[float] = None
+    J_vb: Optional[float] = None
+    J_vc: Optional[float] = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -325,6 +336,14 @@ class AlgorithmState:
     lam_prox_history: List[np.ndarray] = field(default_factory=list)
     x_full: List[np.ndarray] = field(default_factory=list)
     x_prop_full: List[np.ndarray] = field(default_factory=list)
+    # True per-iteration history of the convergence scalars and constraint
+    # activity diagnostics. Populated by Algorithm.step() and accept_solution().
+    J_tr_scalar_history: List[float] = field(default_factory=list)
+    J_vb_scalar_history: List[float] = field(default_factory=list)
+    J_vc_scalar_history: List[float] = field(default_factory=list)
+    nu_history: List[np.ndarray] = field(default_factory=list)
+    nu_vb_history: List[List[np.ndarray]] = field(default_factory=list)
+    nu_vb_cross_history: List[List[float]] = field(default_factory=list)
 
     def accept_solution(self, cand: CandidateIterate) -> None:
         """Accept the given candidate iterate by updating the state in place."""
@@ -377,6 +396,20 @@ class AlgorithmState:
             self.J_nonlin_history.append(cand.J_nonlin)
         if cand.J_lin is not None:
             self.J_lin_history.append(cand.J_lin)
+
+        # Per-iteration constraint activity diagnostics
+        if cand.J_tr is not None:
+            self.J_tr_scalar_history.append(float(cand.J_tr))
+        if cand.J_vb is not None:
+            self.J_vb_scalar_history.append(float(cand.J_vb))
+        if cand.J_vc is not None:
+            self.J_vc_scalar_history.append(float(cand.J_vc))
+        if cand.nu is not None:
+            self.nu_history.append(np.asarray(cand.nu))
+        if cand.nu_vb is not None:
+            self.nu_vb_history.append([np.asarray(v) for v in cand.nu_vb])
+        if cand.nu_vb_cross is not None:
+            self.nu_vb_cross_history.append([float(v) for v in cand.nu_vb_cross])
 
     def reject_solution(self, cand: CandidateIterate) -> None:
         """Reject the current candidate and update only the trust-region weight.

@@ -55,6 +55,13 @@ except ModuleNotFoundError as e:
             return f"<missing optional dependency '{self._package}'>"
 
     viser = _MissingOptionalDependency(package="viser", exc=e)  # type: ignore[assignment]
+from . import dashboard
+from .dashboard import (
+    plot_active_set,
+    plot_constraint_activity,
+    plot_convergence,
+    plot_ctcs_timeseries,
+)
 from .plotting import (
     plot_control_component,
     plot_controls,
@@ -79,6 +86,12 @@ __all__ = [
     "plot_virtual_control_heatmap",
     "plot_scp_iterations",
     "plot_scp_convergence_histories",
+    # Constraint activity dashboard (plotly)
+    "dashboard",
+    "plot_convergence",
+    "plot_constraint_activity",
+    "plot_active_set",
+    "plot_ctcs_timeseries",
     # 3D visualization submodule (viser)
     "viser",
 ]
