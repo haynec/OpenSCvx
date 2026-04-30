@@ -205,6 +205,9 @@ check_lint.py
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+# MuJoCo runtime log
+MUJOCO_LOG.TXT
+
 # MkDocs Material Insiders (installed from GitHub in CI, not committed)
 material/
 # But allow custom overrides to be committed

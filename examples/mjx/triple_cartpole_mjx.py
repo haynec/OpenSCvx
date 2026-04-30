@@ -52,17 +52,17 @@ TRIPLE_CARTPOLE_XML = f"""
       <body name="link1" pos="0 0 0">
         <joint name="hinge1" type="hinge" axis="0 1 0" limited="false"/>
         <geom name="pole1" type="capsule" fromto="0 0 0 0 0 {L1}"
-              size="0.04" mass="0.5" rgba="0.85 0.3 0.3 1"/>
+              size="0.06" mass="2.0" rgba="0.85 0.3 0.3 1"/>
         <!-- Link 2 — pivot at tip of link 1 -->
         <body name="link2" pos="0 0 {L1}">
           <joint name="hinge2" type="hinge" axis="0 1 0" limited="false"/>
           <geom name="pole2" type="capsule" fromto="0 0 0 0 0 {L2}"
-                size="0.035" mass="0.4" rgba="0.3 0.8 0.3 1"/>
+                size="0.035" mass="1.25" rgba="0.3 0.8 0.3 1"/>
           <!-- Link 3 — pivot at tip of link 2 -->
           <body name="link3" pos="0 0 {L2}">
             <joint name="hinge3" type="hinge" axis="0 1 0" limited="false"/>
             <geom name="pole3" type="capsule" fromto="0 0 0 0 0 {L3}"
-                  size="0.03" mass="0.3" rgba="0.3 0.3 0.85 1"/>
+                  size="0.03" mass="0.75" rgba="0.3 0.3 0.85 1"/>
           </body>
         </body>
       </body>
@@ -85,14 +85,14 @@ n_q = int(mjx_model.nq)   # 4: cart_x, θ1, θ2, θ3
 n_v = int(mjx_model.nv)   # 4: ẋ, θ̇1, θ̇2, θ̇3  (nq == nv, no quaternion)
 n_u = int(mjx_model.nu)   # 1: cart force
 
-n          = 600     # more nodes → finer resolution near the unstable upright equilibrium
+n          = 60      # more nodes → finer resolution near the unstable upright equilibrium
 total_time = 3.0
 
 # ── State / control definitions ───────────────────────────────────────────────
 qpos = ox.State("qpos", shape=(n_q,))
-qpos.min     = np.array([-8.0, -2 * np.pi, -2 * np.pi, -2 * np.pi])
-qpos.max     = np.array([ 8.0,  2 * np.pi,  2 * np.pi,  2 * np.pi])
-qpos.initial = np.array([0.0, 0.0, 0.0, 0.0])   # all links hanging down
+qpos.min     = np.array([-1.0, -2 * np.pi, -2 * np.pi, -2 * np.pi])
+qpos.max     = np.array([ 1.0,  2 * np.pi,  2 * np.pi,  2 * np.pi])
+qpos.initial = np.array([0.0, np.pi, 0.0, 0.0])   # all links hanging down
 qpos.final   = [ox.Free(0.0), 0.0,  0.0, 0.0]    # all links upright
 
 qvel = ox.State("qvel", shape=(n_v,))
@@ -101,7 +101,7 @@ qvel.max     = np.array([ 12.0,  12.0,  12.0,  12.0])
 qvel.initial = np.zeros(n_v)
 qvel.final   = [ox.Free(0.0), ox.Free(0.0), ox.Free(0.0), ox.Free(0.0)]
 
-ctrl = ox.Control("ctrl", shape=(n_u,), parameterization="ZOH")
+ctrl = ox.Control("ctrl", shape=(n_u,))
 ctrl.min   = np.array([-2.0])
 ctrl.max   = np.array([ 2.0])
 ctrl.guess = np.zeros((n, n_u))
