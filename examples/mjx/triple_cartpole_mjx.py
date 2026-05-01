@@ -309,7 +309,6 @@ def visualize(results, sim: dict | None = None) -> None:
     # ── Extract trajectory data ────────────────────────────────────────────────
     t_vec   = results.trajectory["time"].flatten()   # (N_fine,)
     q_traj  = results.trajectory["qpos"]             # (N_fine, 4)
-    qd_traj = results.trajectory["qvel"]             # (N_fine, 4)
     u_traj  = results.trajectory["ctrl"]             # (N_fine, 1)
 
     # Discretization nodes (coarser grid from the SCP solution)

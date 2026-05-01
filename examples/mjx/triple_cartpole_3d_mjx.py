@@ -717,7 +717,6 @@ if __name__ == "__main__":
     results = problem.post_process()
 
     final_q  = results.nodes["qpos"][-1]
-    final_qd = results.nodes["qvel"][-1]
     print()
     print(f"Final cart position:    ({final_q[IDX_CART_X]:.4f}, {final_q[IDX_CART_Y]:.4f}) m")
     print(f"Final α₁,β₁ [deg]:      ({np.rad2deg(final_q[IDX_A1]):.2f}, {np.rad2deg(final_q[IDX_B1]):.2f})")
