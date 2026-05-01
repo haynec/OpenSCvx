@@ -845,7 +845,7 @@ problem = Problem(
     discretizer=discretizer,
     algorithm=algorithm,
     float_dtype="float64",
-    solver={"cvx_solver": "CLARABEL"},
+    solver={"solver_args":{"abstol": 1e-9, "reltol": 1e-9}},
 )
 
 # Keep post-process propagation tolerances aligned with discretization.
