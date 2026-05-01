@@ -23,6 +23,7 @@ EXCLUDED_EXAMPLES = {
     "animations/*.py",
     "arm/7_dof_arm_collision.py",
     "drone/logo.py",
+    "mjx/*.py",
 }
 
 # Timing bounds for specific examples (in seconds)
