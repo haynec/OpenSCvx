@@ -90,8 +90,8 @@ total_time = 3.0
 
 # ── State / control definitions ───────────────────────────────────────────────
 qpos = ox.State("qpos", shape=(n_q,))
-qpos.min     = np.array([-1.0, -2 * np.pi, -2 * np.pi, -2 * np.pi])
-qpos.max     = np.array([ 1.0,  2 * np.pi,  2 * np.pi,  2 * np.pi])
+qpos.min     = np.array([-8.0, -2 * np.pi, -2 * np.pi, -2 * np.pi])
+qpos.max     = np.array([ 8.0,  2 * np.pi,  2 * np.pi,  2 * np.pi])
 qpos.initial = np.array([0.0, np.pi, 0.0, 0.0])   # all links hanging down
 qpos.final   = [ox.Free(0.0), 0.0,  0.0, 0.0]    # all links upright
 

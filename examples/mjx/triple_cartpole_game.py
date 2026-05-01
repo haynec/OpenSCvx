@@ -6,7 +6,8 @@ Three progressively harder levels:
   Level 3 — triple-link inverted pendulum
 
 Win condition for each level: hold ALL link cumulative angles within
-10° of vertical for 1 continuous second.  A 3-second freeze screen
+the configured angle band for the configured hold time (defaults under
+``Win condition`` in the GUI).  A 3-second freeze screen
 shows your time before the next level loads.
 
 Each link's target region is shown as a green/red wedge — the angle
@@ -16,8 +17,10 @@ time.
 Interaction
 -----------
 - Drag the **red X-arrow** on the cart to move the setpoint.
-- PD gains and setpoint speed are adjustable in the sidebar.
-- "Reset level" button restarts from hanging.
+- PD gains, setpoint speed, angle tolerance, and hold time are adjustable
+  in the sidebar.
+- "Reset level" restarts the current level from hanging; "Reset game"
+  starts over from level 1.
 
 Usage::
 
@@ -58,8 +61,8 @@ DEFAULT_KP    = 60.0
 DEFAULT_KD    = 15.0
 DEFAULT_RATE  = 4.0
 
-WIN_TOL_DEG   = 45.0
-HOLD_SECS     = 0.1
+WIN_TOL_DEG   = 45.0   # default for GUI slider (deg from vertical)
+HOLD_SECS     = 0.1    # default for GUI slider (continuous hold time)
 WIN_PAUSE_S   = 3.0
 N_LEVELS      = 3
 LEVEL_NAMES   = ["Single-link", "Double-link", "Triple-link"]
@@ -120,7 +123,9 @@ def fk_joints(q: np.ndarray, n_links: int) -> list[np.ndarray]:
     return pts
 
 
-def per_link_ok(qpos: np.ndarray, n_links: int) -> tuple[list[bool], float]:
+def per_link_ok(
+    qpos: np.ndarray, n_links: int, win_tol_deg: float
+) -> tuple[list[bool], float]:
     """Return per-link balance flags and worst absolute cumulative angle (deg)."""
     ok    = []
     worst = 0.0
@@ -130,7 +135,7 @@ def per_link_ok(qpos: np.ndarray, n_links: int) -> tuple[list[bool], float]:
         c_norm  = (cum + np.pi) % (2.0 * np.pi) - np.pi
         d       = abs(float(np.rad2deg(c_norm)))
         worst   = max(worst, d)
-        ok.append(d <= WIN_TOL_DEG)
+        ok.append(d <= win_tol_deg)
     return ok, worst
 
 
@@ -426,14 +431,14 @@ def _run_fireworks(server: object, duration: float = 9.0) -> None:
 
 # ── Cone geometry factory ─────────────────────────────────────────────────────
 
-def _make_cone_mesh(link_idx: int) -> tuple[np.ndarray, np.ndarray]:
+def _make_cone_mesh(link_idx: int, win_tol_deg: float) -> tuple[np.ndarray, np.ndarray]:
     """Triangular wedge centred at origin, apex down, opening upward.
 
     Returns (vertices [3×3 float32], faces [2×3 uint32]).
     Two faces so the mesh is visible from both the +Y and −Y camera sides.
     """
     L    = LINK_LENGTHS[link_idx]
-    half = np.deg2rad(WIN_TOL_DEG)
+    half = np.deg2rad(win_tol_deg)
     verts = np.array([
         [0.0,              0.0, 0.0],                   # apex
         [-L * np.sin(half), 0.0, L * np.cos(half)],     # left boundary
@@ -443,10 +448,10 @@ def _make_cone_mesh(link_idx: int) -> tuple[np.ndarray, np.ndarray]:
     return verts, faces
 
 
-def _make_cone_lines(link_idx: int) -> np.ndarray:
+def _make_cone_lines(link_idx: int, win_tol_deg: float) -> np.ndarray:
     """Two boundary edges of the cone as a (2,2,3) float32 segment array."""
     L    = LINK_LENGTHS[link_idx]
-    half = np.deg2rad(WIN_TOL_DEG)
+    half = np.deg2rad(win_tol_deg)
     apex     = np.array([0.0,              0.0, 0.0],                   dtype=np.float32)
     left_tip = np.array([-L * np.sin(half), 0.0, L * np.cos(half)],     dtype=np.float32)
     rght_tip = np.array([ L * np.sin(half), 0.0, L * np.cos(half)],     dtype=np.float32)
@@ -512,12 +517,29 @@ def run() -> None:
                                           min=0.1, max=8.0, step=0.1,
                                           initial_value=DEFAULT_RATE)
         btn_reset = server.gui.add_button("Reset level")
+        btn_reset_game = server.gui.add_button("Reset game")
 
     with server.gui.add_folder("PD Gains"):
         kp_sl = server.gui.add_slider("Kp  (N/m)",   min=0, max=300, step=1,
                                        initial_value=DEFAULT_KP)
         kd_sl = server.gui.add_slider("Kd  (N·s/m)", min=0, max=80,  step=0.5,
                                        initial_value=DEFAULT_KD)
+
+    with server.gui.add_folder("Win condition"):
+        win_tol_sl = server.gui.add_slider(
+            "Angle tolerance (°)",
+            min=1.0,
+            max=90.0,
+            step=0.5,
+            initial_value=WIN_TOL_DEG,
+        )
+        hold_sl = server.gui.add_slider(
+            "Hold time (s)",
+            min=0.05,
+            max=5.0,
+            step=0.05,
+            initial_value=HOLD_SECS,
+        )
 
     with server.gui.add_folder("State"):
         state_md = server.gui.add_markdown("*Waiting…*")
@@ -539,6 +561,13 @@ def run() -> None:
         gs["advancing"] = False
         win_html.visible = False
         _load_level(gs["level"])
+
+    @btn_reset_game.on_click
+    def _(_e):
+        gs["advancing"] = False
+        win_html.visible = False
+        progress_html.content = ""
+        _load_level(0)
 
     # ── HTML helpers ──────────────────────────────────────────────────────────
 
@@ -587,23 +616,41 @@ def run() -> None:
             'All 3 levels balanced. Impressive.</div></div>'
         )
 
-    def _progress_bar(hold: float) -> str:
-        frac = min(1.0, hold / HOLD_SECS)
+    def _progress_bar(hold: float, hold_secs: float) -> str:
+        denom = max(float(hold_secs), 1e-6)
+        frac = min(1.0, hold / denom)
         return (
             f'<div style="margin:6px 0;text-align:center;">'
             f'<div style="color:#50fa7b;font-size:12px;margin-bottom:4px;">'
-            f'Balancing… {hold:.1f} / {HOLD_SECS:.0f}s</div>'
+            f'Balancing… {hold:.1f} / {hold_secs:.2f}s</div>'
             f'<div style="background:#333;border-radius:4px;height:8px;">'
             f'<div style="background:#50fa7b;width:{frac*100:.0f}%;'
             f'height:8px;border-radius:4px;"></div></div></div>'
         )
 
-    def _angle_warning(worst: float) -> str:
+    def _angle_warning(worst: float, win_tol_deg: float) -> str:
         return (
             f'<div style="text-align:center;color:#ff6b6b;font-size:12px;'
             f'margin:4px 0;">Worst angle: {worst:.1f}°'
-            f' (need &lt;{WIN_TOL_DEG:.0f}°)</div>'
+            f' (need ≤{win_tol_deg:.1f}°)</div>'
         )
+
+    def _refresh_cone_geometry(win_tol_deg: float) -> None:
+        vis = _level_vis[0]
+        if vis is None:
+            return
+        n = vis["n"]
+        for i in range(n):
+            verts, _faces = _make_cone_mesh(i, win_tol_deg)
+            lpts = _make_cone_lines(i, win_tol_deg)
+            vis["green_fill"][i].vertices = verts
+            vis["red_fill"][i].vertices = verts
+            vis["green_lines"][i].points = lpts
+            vis["red_lines"][i].points = lpts
+
+    @win_tol_sl.on_update
+    def _(_e):
+        _refresh_cone_geometry(float(win_tol_sl.value))
 
     # ── Level setup ───────────────────────────────────────────────────────────
 
@@ -699,8 +746,11 @@ def run() -> None:
         # ── Tolerance cones ───────────────────────────────────────────────────
         # Each link i gets TWO mesh wedges (green = ok, red = not ok) plus
         # two boundary line pairs.  Visibility is toggled every render frame.
-        verts_cone, faces_cone = zip(*[_make_cone_mesh(i) for i in range(n)])
-        lines_cone = [_make_cone_lines(i) for i in range(n)]
+        wtol = float(win_tol_sl.value)
+        verts_cone, faces_cone = zip(
+            *[_make_cone_mesh(i, wtol) for i in range(n)]
+        )
+        lines_cone = [_make_cone_lines(i, wtol) for i in range(n)]
 
         green_fill, red_fill     = [], []
         green_lines, red_lines   = [], []
@@ -798,7 +848,9 @@ def run() -> None:
                 vis["tip_cloud"].points = ta;  vis["tip_cloud"].colors = tc
 
             # ── Tolerance cones — move to link bases, toggle green/red ────────
-            link_ok, worst = per_link_ok(qpos, n)
+            win_tol = float(win_tol_sl.value)
+            hold_secs = float(hold_sl.value)
+            link_ok, worst = per_link_ok(qpos, n, win_tol)
             for i in range(n):
                 base = tuple(float(v) for v in pts[i])
                 ok   = link_ok[i]
@@ -830,12 +882,12 @@ def run() -> None:
                     if gs["balance_start"] is None:
                         gs["balance_start"] = time.time()
                     hold = time.time() - gs["balance_start"]
-                    progress_html.content = _progress_bar(hold)
-                    if hold >= HOLD_SECS:
+                    progress_html.content = _progress_bar(hold, hold_secs)
+                    if hold >= hold_secs:
                         _trigger_win(elapsed)
                 else:
                     gs["balance_start"] = None
-                    progress_html.content = _angle_warning(worst)
+                    progress_html.content = _angle_warning(worst, win_tol)
 
             elif status == "won":
                 rem = WIN_PAUSE_S - (time.time() - gs["win_at"])
@@ -854,8 +906,10 @@ def run() -> None:
 
     print("Cartpole Balancing Game — open http://localhost:8080")
     print("Drag the red X-arrow to move the cart.")
-    print(f"Hold all links inside the green cones (within {WIN_TOL_DEG:.0f}°)"
-          f" for {HOLD_SECS:.0f}s to complete each level.")
+    print(
+        f"Hold links in the green wedges (default ±{WIN_TOL_DEG:.0f}°, "
+        f"{HOLD_SECS:.2f}s — adjustable under Win condition)."
+    )
     server.sleep_forever()
 
 

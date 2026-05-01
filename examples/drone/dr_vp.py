@@ -8,6 +8,9 @@ to maintain visual contact with reference targets. The problem includes:
 - Attitude planning for simultaneous gate navigation and visual tracking
 - _Continuous_ sensor visibility constraints to keep targets in FOV
 - Minimal time objective
+
+When executed as a script, after the solve it opens the Plotly dashboard panels
+from :mod:`openscvx.plotting.dashboard`, then the Viser trajectory / SCP viewers.
 """
 
 import os
@@ -241,6 +244,15 @@ if __name__ == "__main__":
     problem.initialize()
     results = problem.solve()
     results = problem.post_process()
+
+    # Dashboard: convergence, virtual buffers / controls, active CTCS set, and
+    # per-constraint timeseries (see ``openscvx.plotting.dashboard`` docstring).
+    import openscvx.plotting.dashboard as dash
+
+    dash.plot_convergence(results).show()
+    dash.plot_constraint_activity(results).show()
+    dash.plot_active_set(results).show()
+    dash.plot_ctcs_timeseries(problem, results).show()
 
     results.update(plotting_dict)
 
