@@ -675,7 +675,7 @@ if __name__ == "__main__":
     print()
 
     problem.initialize()
-    results = problem.solve()
+    problem.solve()
     results = problem.post_process()
 
     final_q  = results.nodes["qpos"][-1]
