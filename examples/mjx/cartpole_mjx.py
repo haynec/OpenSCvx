@@ -278,7 +278,7 @@ if __name__ == "__main__":
     print()
 
     problem.initialize()
-    results = problem.solve()
+    problem.solve()
     results = problem.post_process()
 
     final_theta = float(results.nodes["qpos"][-1, 1])
