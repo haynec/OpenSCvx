@@ -16,8 +16,9 @@ Available adapters
     Use instead of the symbolic ``"qpos": qvel`` shorthand whenever the model
     contains a free/floating-base joint.
 
-Both adapters are imported lazily so that ``mujoco.mjx`` only needs to be
-installed when they are actually used.
+:func:`mjx_dynamics` and :func:`free_joint_qpos_dynamics` delegate to
+``openscvx.integrations.mjx`` on first call so ``mujoco.mjx`` is only imported
+when used. The :mod:`menagerie` submodule is loaded lazily via attribute access.
 
 Example
 -------
@@ -56,16 +57,27 @@ For a quadrotor with a free joint (nq=7, nv=6)::
     }
 """
 
+from typing import Any
 
-def __getattr__(name):
-    if name == "mjx_dynamics":
-        from .mjx import mjx_dynamics
-        return mjx_dynamics
-    if name == "free_joint_qpos_dynamics":
-        from .mjx import free_joint_qpos_dynamics
-        return free_joint_qpos_dynamics
+
+def mjx_dynamics(*args: Any, **kwargs: Any) -> Any:
+    """Lazy delegate; imports ``mujoco.mjx`` on first call."""
+    from .mjx import mjx_dynamics as _mjx_dynamics
+
+    return _mjx_dynamics(*args, **kwargs)
+
+
+def free_joint_qpos_dynamics(*args: Any, **kwargs: Any) -> Any:
+    """Lazy delegate; imports ``mujoco.mjx`` on first call."""
+    from .mjx import free_joint_qpos_dynamics as _free_joint_qpos_dynamics
+
+    return _free_joint_qpos_dynamics(*args, **kwargs)
+
+
+def __getattr__(name: str) -> Any:
     if name == "menagerie":
         from . import menagerie
+
         return menagerie
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
