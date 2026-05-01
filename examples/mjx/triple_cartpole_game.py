@@ -499,7 +499,7 @@ def run() -> None:
     # ── Persistent scene ──────────────────────────────────────────────────────
     server.scene.add_grid("/ground", width=10.0, height=4.0, cell_size=0.5,
                           position=(0.0, 0.0, -0.115))
-    server.scene.add_box("/rail", dimensions=(8.1, 0.04, 0.015),
+    server.scene.add_box("/rail", dimensions=(2 * RAIL_LIMIT + 0.1, 0.04, 0.015),
                          position=(0.0, 0.0, 0.0), color=(130, 130, 130))
     for sign in (-1, 1):
         server.scene.add_box(
@@ -729,8 +729,11 @@ def run() -> None:
             "/lvl/tip", points=np.array([pts[-1]], dtype=np.float32),
             colors=np.array([[255, 200, 50]], dtype=np.uint8), point_size=0.025))
 
+        # Use a generation-unique path so Viser always sends a fresh node to
+        # the client on reset — prevents the old gizmo position from bleeding
+        # into the new level.
         gizmo = reg(server.scene.add_transform_controls(
-            "/lvl/gizmo", scale=0.9,
+            f"/lvl/gizmo_{my_gen}", scale=0.9,
             active_axes=(True, False, False), disable_rotations=True,
             translation_limits=((-RAIL_LIMIT, RAIL_LIMIT), (0, 0), (0, 0)),
             position=(0.0, 0.0, 0.0)))
