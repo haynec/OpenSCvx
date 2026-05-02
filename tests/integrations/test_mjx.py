@@ -17,9 +17,6 @@ Coverage
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -54,6 +51,7 @@ _CARTPOLE_XML = """
 try:
     import mujoco as _mujoco  # noqa: F401
     import mujoco.mjx as _mjx  # noqa: F401
+
     _MUJOCO_AVAILABLE = True
 except ImportError:
     _MUJOCO_AVAILABLE = False
@@ -73,6 +71,7 @@ class TestResolveSlice:
 
     def _import(self):
         from openscvx.integrations.mjx import _resolve_slice
+
         return _resolve_slice
 
     def test_plain_slice_passthrough(self):
@@ -83,6 +82,7 @@ class TestResolveSlice:
     def test_state_with_slice_returns_slice(self):
         _resolve_slice = self._import()
         import openscvx as ox
+
         state = ox.State("q", shape=(3,))
         state._slice = slice(0, 3)  # inject manually
         result = _resolve_slice(state, "q")
@@ -91,6 +91,7 @@ class TestResolveSlice:
     def test_state_without_slice_raises(self):
         _resolve_slice = self._import()
         import openscvx as ox
+
         state = ox.State("q", shape=(3,))
         # .slice is None until Problem assigns it
         with pytest.raises(ValueError, match="no .slice yet"):
@@ -117,6 +118,7 @@ def cartpole_mjx_model():
     """Build and return a minimal cartpole MJX model (contacts disabled)."""
     import mujoco
     import mujoco.mjx as mjx
+
     mj_model = mujoco.MjModel.from_xml_string(_CARTPOLE_XML)
     mj_model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
     return mjx.put_model(mj_model)
@@ -128,6 +130,7 @@ class TestMjxDynamics:
 
     def test_returns_callable(self, cartpole_mjx_model):
         from openscvx.integrations.mjx import mjx_dynamics
+
         f = mjx_dynamics(
             cartpole_mjx_model,
             qpos=slice(0, 2),
@@ -138,6 +141,7 @@ class TestMjxDynamics:
 
     def test_invalid_return_component_raises(self, cartpole_mjx_model):
         from openscvx.integrations.mjx import mjx_dynamics
+
         with pytest.raises(ValueError, match="return_component"):
             mjx_dynamics(
                 cartpole_mjx_model,
@@ -226,6 +230,7 @@ class TestMjxDynamics:
         """mjx_dynamics with an unresolved State should raise ValueError on first call."""
         import mujoco
         import mujoco.mjx as mjx
+
         import openscvx as ox
         from openscvx.integrations.mjx import mjx_dynamics
 
@@ -233,7 +238,7 @@ class TestMjxDynamics:
         mj_model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
         mjx_m = mjx.put_model(mj_model)
 
-        qpos = ox.State("qpos", shape=(2,))   # .slice is None
+        qpos = ox.State("qpos", shape=(2,))  # .slice is None
         qvel = ox.State("qvel", shape=(2,))
         ctrl = ox.Control("ctrl", shape=(1,))
 
@@ -269,6 +274,7 @@ class TestFreeJointQposDynamics:
 
     def _make(self, n_free=1, extra_joints=0):
         from openscvx.integrations.mjx import free_joint_qpos_dynamics
+
         nq = 7 * n_free + extra_joints
         nv = 6 * n_free + extra_joints
         f = free_joint_qpos_dynamics(
@@ -280,6 +286,7 @@ class TestFreeJointQposDynamics:
 
     def test_returns_callable(self):
         from openscvx.integrations.mjx import free_joint_qpos_dynamics
+
         f = free_joint_qpos_dynamics(qpos=slice(0, 7), qvel=slice(7, 13))
         assert callable(f)
 
@@ -307,8 +314,23 @@ class TestFreeJointQposDynamics:
         f, nq, nv = self._make(n_free=1)
         # qpos: identity pose [x=0,y=0,z=0, qw=1,qx=0,qy=0,qz=0]
         # qvel: all zeros
-        x = jnp.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0,   # qpos
-                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0])         # qvel
+        x = jnp.array(
+            [
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                0.0,
+                0.0,
+                0.0,  # qpos
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ]
+        )  # qvel
         out = f(x, jnp.zeros(1), 0, {})
         np.testing.assert_allclose(np.array(out), np.zeros(nq), atol=1e-6)
 
@@ -316,10 +338,13 @@ class TestFreeJointQposDynamics:
         """Linear velocity [vx,vy,vz] must appear as qdot for translation."""
         f, nq, nv = self._make(n_free=1)
         v = jnp.array([1.0, 2.0, 3.0])
-        x = jnp.concatenate([
-            jnp.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]),  # qpos
-            v, jnp.zeros(3),                                    # qvel: linear + angular
-        ])
+        x = jnp.concatenate(
+            [
+                jnp.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]),  # qpos
+                v,
+                jnp.zeros(3),  # qvel: linear + angular
+            ]
+        )
         out = f(x, jnp.zeros(1), 0, {})
         np.testing.assert_allclose(np.array(out[:3]), np.array(v), atol=1e-6)
 
@@ -327,10 +352,12 @@ class TestFreeJointQposDynamics:
         """Identity quaternion + angular velocity [wx, 0, 0] → quat_dot = [0, wx/2, 0, 0]."""
         f, nq, nv = self._make(n_free=1)
         wx = 2.0
-        x = jnp.concatenate([
-            jnp.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]),  # qpos
-            jnp.array([0.0, 0.0, 0.0, wx, 0.0, 0.0]),          # qvel
-        ])
+        x = jnp.concatenate(
+            [
+                jnp.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]),  # qpos
+                jnp.array([0.0, 0.0, 0.0, wx, 0.0, 0.0]),  # qvel
+            ]
+        )
         out = f(x, jnp.zeros(1), 0, {})
         quat_dot = np.array(out[3:7])
         expected = np.array([0.0, wx / 2, 0.0, 0.0])
@@ -340,10 +367,12 @@ class TestFreeJointQposDynamics:
         """Identity quaternion + angular velocity [0, wy, 0] → quat_dot = [0, 0, wy/2, 0]."""
         f, nq, nv = self._make(n_free=1)
         wy = 3.0
-        x = jnp.concatenate([
-            jnp.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]),
-            jnp.array([0.0, 0.0, 0.0, 0.0, wy, 0.0]),
-        ])
+        x = jnp.concatenate(
+            [
+                jnp.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]),
+                jnp.array([0.0, 0.0, 0.0, 0.0, wy, 0.0]),
+            ]
+        )
         out = f(x, jnp.zeros(1), 0, {})
         quat_dot = np.array(out[3:7])
         expected = np.array([0.0, 0.0, wy / 2, 0.0])
@@ -353,10 +382,12 @@ class TestFreeJointQposDynamics:
         """Identity quaternion + angular velocity [0, 0, wz] → quat_dot = [0, 0, 0, wz/2]."""
         f, nq, nv = self._make(n_free=1)
         wz = 5.0
-        x = jnp.concatenate([
-            jnp.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]),
-            jnp.array([0.0, 0.0, 0.0, 0.0, 0.0, wz]),
-        ])
+        x = jnp.concatenate(
+            [
+                jnp.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]),
+                jnp.array([0.0, 0.0, 0.0, 0.0, 0.0, wz]),
+            ]
+        )
         out = f(x, jnp.zeros(1), 0, {})
         quat_dot = np.array(out[3:7])
         expected = np.array([0.0, 0.0, 0.0, wz / 2])
@@ -366,12 +397,14 @@ class TestFreeJointQposDynamics:
         """Revolute/prismatic joint velocities after the free joint must be copied 1-to-1."""
         f, nq, nv = self._make(n_free=1, extra_joints=3)
         joint_vel = jnp.array([0.5, -1.2, 0.7])
-        x = jnp.concatenate([
-            jnp.zeros(7),           # qpos (free joint pose)
-            jnp.zeros(3),           # qpos extra joints
-            jnp.zeros(6),           # qvel (free joint)
-            joint_vel,              # qvel extra joints
-        ])
+        x = jnp.concatenate(
+            [
+                jnp.zeros(7),  # qpos (free joint pose)
+                jnp.zeros(3),  # qpos extra joints
+                jnp.zeros(6),  # qvel (free joint)
+                joint_vel,  # qvel extra joints
+            ]
+        )
         out = f(x, jnp.zeros(1), 0, {})
         np.testing.assert_allclose(np.array(out[7:]), np.array(joint_vel), atol=1e-6)
 
@@ -380,22 +413,29 @@ class TestFreeJointQposDynamics:
         f, nq, nv = self._make(n_free=2)
         # qpos: [pose1(7), pose2(7)], qvel: [vel1(6), vel2(6)]
         v2 = jnp.array([4.0, 5.0, 6.0])
-        x = jnp.concatenate([
-            jnp.zeros(3), jnp.array([1.0, 0.0, 0.0, 0.0]),  # joint 1 pose
-            jnp.zeros(3), jnp.array([1.0, 0.0, 0.0, 0.0]),  # joint 2 pose
-            jnp.zeros(6),                                      # joint 1 vel
-            v2, jnp.zeros(3),                                  # joint 2 vel
-        ])
+        x = jnp.concatenate(
+            [
+                jnp.zeros(3),
+                jnp.array([1.0, 0.0, 0.0, 0.0]),  # joint 1 pose
+                jnp.zeros(3),
+                jnp.array([1.0, 0.0, 0.0, 0.0]),  # joint 2 pose
+                jnp.zeros(6),  # joint 1 vel
+                v2,
+                jnp.zeros(3),  # joint 2 vel
+            ]
+        )
         out = f(x, jnp.zeros(1), 0, {})
         np.testing.assert_allclose(np.array(out[7:10]), np.array(v2), atol=1e-6)
 
     def test_u_node_params_ignored(self):
         """u, node, and params must not affect the output."""
         f, nq, nv = self._make(n_free=1)
-        x = jnp.concatenate([
-            jnp.array([1.0, 2.0, 3.0, 1.0, 0.0, 0.0, 0.0]),
-            jnp.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]),
-        ])
+        x = jnp.concatenate(
+            [
+                jnp.array([1.0, 2.0, 3.0, 1.0, 0.0, 0.0, 0.0]),
+                jnp.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6]),
+            ]
+        )
         out1 = f(x, jnp.zeros(5), 0, {})
         out2 = f(x, jnp.ones(5) * 999, 42, {"key": "val"})
         np.testing.assert_allclose(np.array(out1), np.array(out2), atol=1e-9)
@@ -413,6 +453,7 @@ class TestFindMenagerieRoot:
         """A valid MUJOCO_MENAGERIE_PATH env var takes priority over all else."""
         monkeypatch.setenv("MUJOCO_MENAGERIE_PATH", str(tmp_path))
         import openscvx.integrations.menagerie as m
+
         result = m.find_menagerie_root()
         assert result == tmp_path
 
@@ -433,6 +474,7 @@ class TestFindMenagerieRoot:
     def test_env_var_not_set_returns_non_none_when_submodule_present(self, monkeypatch):
         """When the git submodule is initialised the function must return a Path."""
         import openscvx.integrations.menagerie as m
+
         monkeypatch.delenv("MUJOCO_MENAGERIE_PATH", raising=False)
         root = m.find_menagerie_root()
         # The submodule lives at third_party/mujoco_menagerie; if it is
@@ -447,18 +489,21 @@ class TestGetModelDir:
 
     def test_raises_when_root_is_none(self, monkeypatch):
         from openscvx.integrations import menagerie
+
         monkeypatch.setattr(menagerie, "find_menagerie_root", lambda: None)
         with pytest.raises(FileNotFoundError, match="Menagerie not found"):
             menagerie.get_model_dir("any_model")
 
     def test_raises_for_missing_model(self, monkeypatch, tmp_path):
         from openscvx.integrations import menagerie
+
         monkeypatch.setattr(menagerie, "find_menagerie_root", lambda: tmp_path)
         with pytest.raises(FileNotFoundError, match="not found"):
             menagerie.get_model_dir("ghost_model")
 
     def test_returns_correct_dir(self, monkeypatch, tmp_path):
         from openscvx.integrations import menagerie
+
         model_dir = tmp_path / "my_robot"
         model_dir.mkdir()
         monkeypatch.setattr(menagerie, "find_menagerie_root", lambda: tmp_path)
@@ -479,6 +524,7 @@ class TestGetXmlPath:
 
     def test_prefers_mjx_xml(self, monkeypatch, tmp_path):
         from openscvx.integrations import menagerie
+
         root = self._setup_model(tmp_path, ["robot.xml", "mjx_robot.xml"])
         monkeypatch.setattr(menagerie, "find_menagerie_root", lambda: root)
         result = menagerie.get_xml_path("robot", prefer_mjx=True)
@@ -486,6 +532,7 @@ class TestGetXmlPath:
 
     def test_falls_back_to_regular_xml(self, monkeypatch, tmp_path):
         from openscvx.integrations import menagerie
+
         root = self._setup_model(tmp_path, ["robot.xml"])
         monkeypatch.setattr(menagerie, "find_menagerie_root", lambda: root)
         result = menagerie.get_xml_path("robot", prefer_mjx=True)
@@ -493,6 +540,7 @@ class TestGetXmlPath:
 
     def test_skips_scene_xml(self, monkeypatch, tmp_path):
         from openscvx.integrations import menagerie
+
         root = self._setup_model(tmp_path, ["scene.xml", "robot.xml"])
         monkeypatch.setattr(menagerie, "find_menagerie_root", lambda: root)
         result = menagerie.get_xml_path("robot", prefer_mjx=False)
@@ -501,6 +549,7 @@ class TestGetXmlPath:
     def test_scene_xml_used_as_last_resort(self, monkeypatch, tmp_path):
         """If only scene*.xml files exist, one is returned."""
         from openscvx.integrations import menagerie
+
         root = self._setup_model(tmp_path, ["scene.xml"])
         monkeypatch.setattr(menagerie, "find_menagerie_root", lambda: root)
         result = menagerie.get_xml_path("robot")
@@ -508,6 +557,7 @@ class TestGetXmlPath:
 
     def test_raises_when_no_xml(self, monkeypatch, tmp_path):
         from openscvx.integrations import menagerie
+
         root = self._setup_model(tmp_path, [])
         monkeypatch.setattr(menagerie, "find_menagerie_root", lambda: root)
         with pytest.raises(FileNotFoundError, match="No XML file"):
@@ -515,6 +565,7 @@ class TestGetXmlPath:
 
     def test_prefer_mjx_false_returns_non_mjx(self, monkeypatch, tmp_path):
         from openscvx.integrations import menagerie
+
         root = self._setup_model(tmp_path, ["robot.xml", "mjx_robot.xml"])
         monkeypatch.setattr(menagerie, "find_menagerie_root", lambda: root)
         result = menagerie.get_xml_path("robot", prefer_mjx=False)
@@ -529,14 +580,16 @@ class TestListModels:
 
     def test_returns_empty_list_when_no_menagerie(self, monkeypatch):
         from openscvx.integrations import menagerie
+
         monkeypatch.setattr(menagerie, "find_menagerie_root", lambda: None)
         assert menagerie.list_models() == []
 
     def test_returns_model_names(self, monkeypatch, tmp_path):
         from openscvx.integrations import menagerie
+
         (tmp_path / "robot_a").mkdir()
         (tmp_path / "robot_b").mkdir()
-        (tmp_path / ".hidden").mkdir()   # should be excluded
+        (tmp_path / ".hidden").mkdir()  # should be excluded
         (tmp_path / "README.md").touch()  # file, not dir; should be excluded
         monkeypatch.setattr(menagerie, "find_menagerie_root", lambda: tmp_path)
         models = menagerie.list_models()
@@ -544,6 +597,7 @@ class TestListModels:
 
     def test_sorted_output(self, monkeypatch, tmp_path):
         from openscvx.integrations import menagerie
+
         for name in ["zebra", "antelope", "meerkat"]:
             (tmp_path / name).mkdir()
         monkeypatch.setattr(menagerie, "find_menagerie_root", lambda: tmp_path)
@@ -556,6 +610,7 @@ class TestGetAssetDir:
 
     def test_returns_assets_dir(self, monkeypatch, tmp_path):
         from openscvx.integrations import menagerie
+
         model_dir = tmp_path / "robot"
         assets = model_dir / "assets"
         assets.mkdir(parents=True)
@@ -565,6 +620,7 @@ class TestGetAssetDir:
 
     def test_raises_when_no_assets_dir(self, monkeypatch, tmp_path):
         from openscvx.integrations import menagerie
+
         (tmp_path / "robot").mkdir()
         monkeypatch.setattr(menagerie, "find_menagerie_root", lambda: tmp_path)
         with pytest.raises(FileNotFoundError, match="assets/"):
@@ -598,6 +654,7 @@ class TestMjxByof:
         """nq > nv model: mjx_byof must include both 'qpos' and 'qvel'."""
         import mujoco
         import mujoco.mjx as mjx
+
         from openscvx.integrations.mjx import mjx_byof
 
         _FREE_XML = """
@@ -643,29 +700,35 @@ class TestIntegrationsPublicAPI:
 
     def test_mjx_byof_importable(self):
         from openscvx.integrations import mjx_byof
+
         assert callable(mjx_byof)
 
     def test_mjx_dynamics_importable(self):
         from openscvx.integrations import mjx_dynamics
+
         assert callable(mjx_dynamics)
 
     def test_free_joint_qpos_dynamics_importable(self):
         from openscvx.integrations import free_joint_qpos_dynamics
+
         assert callable(free_joint_qpos_dynamics)
 
     def test_menagerie_importable(self):
         from openscvx.integrations import menagerie
+
         assert hasattr(menagerie, "find_menagerie_root")
         assert hasattr(menagerie, "load_mjmodel")
         assert hasattr(menagerie, "list_models")
 
     def test_unknown_attribute_raises(self):
         import openscvx.integrations as integrations
+
         with pytest.raises(AttributeError):
             _ = integrations.does_not_exist
 
     def test_all_list_contents(self):
         import openscvx.integrations as integrations
+
         assert "mjx_byof" in integrations.__all__
         assert "mjx_dynamics" in integrations.__all__
         assert "free_joint_qpos_dynamics" in integrations.__all__

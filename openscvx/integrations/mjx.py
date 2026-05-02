@@ -222,11 +222,11 @@ def free_joint_qpos_dynamics(
             _resolved.append(_resolve_slice(_qvel_arg, "qvel"))
         qpos_sl, qvel_sl = _resolved
 
-        q  = x[qpos_sl]   # (7 * n_free + n_joints,)
-        qd = x[qvel_sl]   # (6 * n_free + n_joints,)
+        q = x[qpos_sl]  # (7 * n_free + n_joints,)
+        qd = x[qvel_sl]  # (6 * n_free + n_joints,)
 
         parts_q: list = []
-        q_offset  = 0
+        q_offset = 0
         qd_offset = 0
 
         for _ in range(n_free_joints):
@@ -246,15 +246,17 @@ def free_joint_qpos_dynamics(
             wx = qd[qd_offset + 3]
             wy = qd[qd_offset + 4]
             wz = qd[qd_offset + 5]
-            quat_dot = 0.5 * jnp.array([
-                -qx * wx - qy * wy - qz * wz,
-                 qw * wx + qy * wz - qz * wy,
-                 qw * wy - qx * wz + qz * wx,
-                 qw * wz + qx * wy - qy * wx,
-            ])
+            quat_dot = 0.5 * jnp.array(
+                [
+                    -qx * wx - qy * wy - qz * wz,
+                    qw * wx + qy * wz - qz * wy,
+                    qw * wy - qx * wz + qz * wx,
+                    qw * wz + qx * wy - qy * wx,
+                ]
+            )
             parts_q.append(quat_dot)
 
-            q_offset  += 7
+            q_offset += 7
             qd_offset += 6
 
         # Remaining revolute / prismatic joints: 1-to-1 pass-through

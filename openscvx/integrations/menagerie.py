@@ -93,10 +93,11 @@ def get_model_dir(model_name: str) -> Path:
         )
     model_dir = root / model_name
     if not model_dir.is_dir():
-        available = sorted(d.name for d in root.iterdir() if d.is_dir() and not d.name.startswith("."))
+        available = sorted(
+            d.name for d in root.iterdir() if d.is_dir() and not d.name.startswith(".")
+        )
         raise FileNotFoundError(
-            f"Model '{model_name}' not found in {root}.\n"
-            f"Available models: {available}"
+            f"Model '{model_name}' not found in {root}.\nAvailable models: {available}"
         )
     return model_dir
 
@@ -165,8 +166,7 @@ def load_mjmodel(model_name: str, prefer_mjx: bool = True):
         import mujoco
     except ImportError as exc:
         raise ImportError(
-            "mujoco is required to load menagerie models. "
-            "Install with: pip install mujoco"
+            "mujoco is required to load menagerie models. Install with: pip install mujoco"
         ) from exc
 
     xml_path = get_xml_path(model_name, prefer_mjx=prefer_mjx)
@@ -181,10 +181,7 @@ def list_models() -> list[str]:
     root = find_menagerie_root()
     if root is None:
         return []
-    return sorted(
-        d.name for d in root.iterdir()
-        if d.is_dir() and not d.name.startswith(".")
-    )
+    return sorted(d.name for d in root.iterdir() if d.is_dir() and not d.name.startswith("."))
 
 
 def get_asset_dir(model_name: str) -> Path:
