@@ -1,21 +1,26 @@
 """MuJoCo MJX dynamics adapters for OpenSCvx BYOF.
 
-This module provides two adapters:
+The recommended entry-point is :func:`mjx_byof`, which returns a complete
+``byof["dynamics"]`` dict and automatically handles free-joint quaternion
+kinematics — no separate imports required:
 
-* :func:`mjx_dynamics` — wraps a JAX-compatible MuJoCo MJX model so its
-  forward dynamics can be plugged into OpenSCvx's BYOF layer. The returned
-  function maps the unified ``(x, u)`` vectors onto MJX's ``qpos`` / ``qvel``
-  / ``ctrl`` arrays, runs ``mjx.forward`` to obtain ``qacc``, and returns the
-  generalized acceleration for use as the ``qvel`` state derivative.
+    byof = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
 
-* :func:`free_joint_qpos_dynamics` — pure-JAX quaternion kinematics for
-  systems with floating-base free joints where ``nq > nv`` (e.g. quadrotors,
-  humanoids). Use this instead of the symbolic ``"qpos": qvel`` shorthand
-  when the model has one or more free joints.
+For models **without** free joints (cartpoles, manipulators, etc.) the
+returned dict contains only ``"qvel"``, and qpos kinematics must still be
+specified symbolically via ``dynamics={"qpos": qvel}``.  For models **with**
+free joints (drones, humanoids) ``"qpos"`` is included automatically and no
+symbolic dynamics entry is needed.
+
+Lower-level building blocks (for advanced users):
+
+* :func:`mjx_dynamics` — returns a single BYOF callable for ``qvel`` (qacc).
+* :func:`free_joint_qpos_dynamics` — returns a BYOF callable for ``qpos``
+  when ``nq > nv`` (quaternion free-joint kinematics).
 
 Note:
-    Time dilation is handled automatically by the BYOF lowering pipeline; both
-    adapters return physical (un-dilated) quantities.
+    Time dilation is handled automatically by the BYOF lowering pipeline; all
+    functions return physical (un-dilated) quantities.
 """
 
 from typing import TYPE_CHECKING, Any, Callable, Optional
@@ -258,3 +263,83 @@ def free_joint_qpos_dynamics(
         return jnp.concatenate(parts_q)
 
     return f
+
+
+def mjx_byof(
+    mjx_model: Any,
+    *,
+    qpos: "State | slice",
+    qvel: "State | slice",
+    ctrl: "Control | slice",
+    return_component: str = "qacc",
+    extra_postprocess: Optional[Callable[[Any], Any]] = None,
+) -> dict:
+    """Return a complete ``byof["dynamics"]`` dict for a MuJoCo MJX model.
+
+    This is the recommended high-level entry-point.  It inspects the model's
+    ``nq`` and ``nv`` to detect free joints and automatically includes the
+    quaternion kinematics callable for ``qpos`` when needed — no separate
+    import of :func:`free_joint_qpos_dynamics` is required.
+
+    Args:
+        mjx_model: A model produced by :func:`mujoco.mjx.put_model`.
+        qpos: Position state (or slice). Length must equal ``mjx_model.nq``.
+        qvel: Velocity state (or slice). Length must equal ``mjx_model.nv``.
+        ctrl: Control variable (or slice). Length must equal ``mjx_model.nu``.
+        return_component: Passed to :func:`mjx_dynamics`. ``"qacc"``
+            (default) uses the generalized acceleration as the ``qvel``
+            derivative; ``"qvel"`` returns qvel directly (rarely needed).
+        extra_postprocess: Optional callable applied to the MJX ``data``
+            object after ``mjx.forward``. Passed through to
+            :func:`mjx_dynamics`.
+
+    Returns:
+        A dict suitable for use as ``byof["dynamics"]``.
+
+        * Models **without** free joints (``nq == nv``): returns
+          ``{"qvel": <callable>}``.  Position kinematics should be provided
+          symbolically via ``dynamics={"qpos": qvel}``.
+        * Models **with** free joints (``nq > nv``): returns
+          ``{"qpos": <callable>, "qvel": <callable>}``.  No symbolic
+          ``dynamics`` entry is needed for ``qpos``.
+
+    Example:
+        Cartpole (nq == nv, no free joint)::
+
+            byof = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
+            problem = ox.Problem(
+                dynamics={"qpos": qvel},   # still required for non-free models
+                byof=byof, ...
+            )
+
+        Quadrotor / drone (nq > nv, one free joint)::
+
+            byof = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
+            problem = ox.Problem(
+                dynamics={},               # qpos handled automatically
+                byof=byof, ...
+            )
+    """
+    nq = int(mjx_model.nq)
+    nv = int(mjx_model.nv)
+
+    result: dict = {
+        "qvel": mjx_dynamics(
+            mjx_model,
+            qpos=qpos,
+            qvel=qvel,
+            ctrl=ctrl,
+            return_component=return_component,
+            extra_postprocess=extra_postprocess,
+        ),
+    }
+
+    n_free = nq - nv  # each free joint contributes exactly 1 extra position DOF
+    if n_free > 0:
+        result["qpos"] = free_joint_qpos_dynamics(
+            qpos=qpos,
+            qvel=qvel,
+            n_free_joints=n_free,
+        )
+
+    return result

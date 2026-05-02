@@ -35,7 +35,7 @@ except ImportError:
 
 import openscvx as ox
 from openscvx import ByofSpec, Minimize, Problem
-from openscvx.integrations import mjx_dynamics
+from openscvx.integrations import mjx_byof
 
 CARTPOLE_XML = """
 <mujoco model="cartpole">
@@ -94,11 +94,7 @@ dynamics = {
     "qpos": qvel,
 }
 
-byof: ByofSpec = {
-    "dynamics": {
-        "qvel": mjx_dynamics(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl),
-    }
-}
+byof: ByofSpec = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
 
 constraints = []
 for state in states:

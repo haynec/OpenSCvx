@@ -36,7 +36,7 @@ except ImportError:
 
 import openscvx as ox
 from openscvx import ByofSpec, Minimize, Problem
-from openscvx.integrations import mjx_dynamics
+from openscvx.integrations import mjx_byof
 
 L1, L2, L3 = 0.5, 0.4, 0.3   # link lengths (m)
 
@@ -112,11 +112,7 @@ controls = [ctrl]
 # ── Dynamics: position kinematics symbolically, velocity via MJX ──────────────
 dynamics: dict = {"qpos": qvel}   # nq==nv so this is always valid
 
-byof: ByofSpec = {
-    "dynamics": {
-        "qvel": mjx_dynamics(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl),
-    }
-}
+byof: ByofSpec = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
 
 # ── Constraints (CTCS on state / control bounds) ───────────────────────────────
 constraints = []

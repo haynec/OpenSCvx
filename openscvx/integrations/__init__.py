@@ -1,63 +1,53 @@
 """Adapters for MuJoCo MJX dynamics in OpenSCvx BYOF.
 
-Bridges OpenSCvx's BYOF dynamics interface to MuJoCo MJX, a JAX-native
-rigid-body physics backend. The adapters return functions matching the BYOF
-dynamics signature ``(x, u, node, params) -> xdot`` so they can be plugged
-directly into :class:`~openscvx.expert.ByofSpec`.
+The recommended entry-point is :func:`mjx_byof`, which returns a complete
+``byof["dynamics"]`` dict and automatically handles free-joint quaternion
+kinematics for floating-base models (drones, humanoids, etc.):
 
-Available adapters
-------------------
+    from openscvx.integrations import mjx_byof
+
+    byof = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
+
+For models without free joints (cartpoles, manipulators) the returned dict
+contains only ``"qvel"`` and ``dynamics={"qpos": qvel}`` should still be
+provided to :class:`~openscvx.Problem`.  For models with free joints
+(``nq > nv``) ``"qpos"`` is included automatically — no extra imports needed.
+
+Lower-level building blocks (advanced use)
+------------------------------------------
 :func:`mjx_dynamics`
-    Wraps a MuJoCo MJX model to provide generalized accelerations (``qacc``)
-    for use as the ``qvel`` state derivative.
+    Returns a single BYOF callable for the ``qvel`` derivative (qacc).
 
 :func:`free_joint_qpos_dynamics`
-    Pure-JAX quaternion kinematics for floating-base systems where ``nq > nv``.
-    Use instead of the symbolic ``"qpos": qvel`` shorthand whenever the model
-    contains a free/floating-base joint.
+    Returns a BYOF callable for ``qpos`` when the model has quaternion free
+    joints (``nq > nv``).
 
-:func:`mjx_dynamics` and :func:`free_joint_qpos_dynamics` delegate to
-``openscvx.integrations.mjx`` on first call so ``mujoco.mjx`` is only imported
-when used. The :mod:`menagerie` submodule is loaded lazily via attribute access.
+All symbols delegate lazily so ``mujoco.mjx`` is only imported when used.
+The :mod:`menagerie` submodule is loaded lazily via attribute access.
 
-Example
--------
-Wrapping MuJoCo MJX dynamics for a cartpole::
+Example — cartpole (nq == nv)::
 
-    import mujoco
-    import mujoco.mjx as mjx
-    import openscvx as ox
-    from openscvx.integrations import mjx_dynamics
+    from openscvx.integrations import mjx_byof
 
-    mj_model = mujoco.MjModel.from_xml_path("cartpole.xml")
-    mj_model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
-    mjx_model = mjx.put_model(mj_model)
+    byof = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
+    problem = ox.Problem(dynamics={"qpos": qvel}, byof=byof, ...)
 
-    qpos = ox.State("qpos", shape=(mjx_model.nq,))
-    qvel = ox.State("qvel", shape=(mjx_model.nv,))
-    ctrl = ox.Control("ctrl", shape=(mjx_model.nu,))
+Example — quadrotor with free joint (nq=7, nv=6)::
 
-    problem = ox.Problem(
-        dynamics={"qpos": qvel},
-        states=[qpos, qvel],
-        controls=[ctrl],
-        byof={"dynamics": {"qvel": mjx_dynamics(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}},
-        ...
-    )
+    from openscvx.integrations import mjx_byof
 
-For a quadrotor with a free joint (nq=7, nv=6)::
-
-    from openscvx.integrations import free_joint_qpos_dynamics, mjx_dynamics
-
-    byof = {
-        "dynamics": {
-            "qpos": free_joint_qpos_dynamics(qpos=qpos, qvel=qvel),
-            "qvel": mjx_dynamics(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl),
-        }
-    }
+    byof = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
+    problem = ox.Problem(dynamics={}, byof=byof, ...)
 """
 
 from typing import Any
+
+
+def mjx_byof(*args: Any, **kwargs: Any) -> Any:
+    """Lazy delegate; imports ``mujoco.mjx`` on first call."""
+    from .mjx import mjx_byof as _mjx_byof
+
+    return _mjx_byof(*args, **kwargs)
 
 
 def mjx_dynamics(*args: Any, **kwargs: Any) -> Any:
@@ -82,4 +72,4 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["mjx_dynamics", "free_joint_qpos_dynamics", "menagerie"]
+__all__ = ["mjx_byof", "mjx_dynamics", "free_joint_qpos_dynamics", "menagerie"]

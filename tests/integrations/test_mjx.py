@@ -576,8 +576,74 @@ class TestGetAssetDir:
 # ===========================================================================
 
 
+@requires_mujoco
+class TestMjxByof:
+    """Tests for the high-level ``mjx_byof`` convenience wrapper."""
+
+    def test_no_free_joints_returns_qvel_only(self, cartpole_mjx_model):
+        """nq == nv model: mjx_byof should only include 'qvel'."""
+        from openscvx.integrations.mjx import mjx_byof
+
+        nq, nv, nu = 2, 2, 1
+        result = mjx_byof(
+            cartpole_mjx_model,
+            qpos=slice(0, nq),
+            qvel=slice(nq, nq + nv),
+            ctrl=slice(0, nu),
+        )
+        assert set(result.keys()) == {"qvel"}
+        assert callable(result["qvel"])
+
+    def test_free_joint_model_returns_qpos_and_qvel(self):
+        """nq > nv model: mjx_byof must include both 'qpos' and 'qvel'."""
+        import mujoco
+        import mujoco.mjx as mjx
+        from openscvx.integrations.mjx import mjx_byof
+
+        _FREE_XML = """
+        <mujoco><option gravity="0 0 -9.81"/>
+          <worldbody>
+            <body name="b"><freejoint/><geom type="sphere" size="0.1" mass="1"/></body>
+          </worldbody>
+        </mujoco>"""
+        mj_model = mujoco.MjModel.from_xml_string(_FREE_XML)
+        mj_model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
+        mjx_model = mjx.put_model(mj_model)
+        assert mjx_model.nq == 7 and mjx_model.nv == 6
+
+        result = mjx_byof(
+            mjx_model,
+            qpos=slice(0, 7),
+            qvel=slice(7, 13),
+            ctrl=slice(0, 0),
+        )
+        assert set(result.keys()) == {"qpos", "qvel"}
+        assert callable(result["qpos"])
+        assert callable(result["qvel"])
+
+    def test_qvel_callable_output_shape(self, cartpole_mjx_model):
+        """qvel callable must return shape (nv,)."""
+        from openscvx.integrations.mjx import mjx_byof
+
+        nq, nv, nu = 2, 2, 1
+        result = mjx_byof(
+            cartpole_mjx_model,
+            qpos=slice(0, nq),
+            qvel=slice(nq, nq + nv),
+            ctrl=slice(0, nu),
+        )
+        x = jnp.zeros(nq + nv)
+        u = jnp.zeros(nu)
+        out = result["qvel"](x, u, 0, {})
+        assert out.shape == (nv,)
+
+
 class TestIntegrationsPublicAPI:
     """Tests for lazy attribute exports in openscvx.integrations."""
+
+    def test_mjx_byof_importable(self):
+        from openscvx.integrations import mjx_byof
+        assert callable(mjx_byof)
 
     def test_mjx_dynamics_importable(self):
         from openscvx.integrations import mjx_dynamics
@@ -600,6 +666,7 @@ class TestIntegrationsPublicAPI:
 
     def test_all_list_contents(self):
         import openscvx.integrations as integrations
+        assert "mjx_byof" in integrations.__all__
         assert "mjx_dynamics" in integrations.__all__
         assert "free_joint_qpos_dynamics" in integrations.__all__
         assert "menagerie" in integrations.__all__

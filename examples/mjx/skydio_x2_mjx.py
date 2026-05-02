@@ -47,7 +47,7 @@ except ImportError:
 
 import openscvx as ox
 from openscvx import ByofSpec, Problem
-from openscvx.integrations import free_joint_qpos_dynamics, mjx_dynamics
+from openscvx.integrations import mjx_byof
 from openscvx.utils import rot
 
 # ── Inline XML fallback ───────────────────────────────────────────────────────
@@ -142,14 +142,9 @@ controls = [ctrl]
 
 # ── Dynamics via BYOF ─────────────────────────────────────────────────────────
 # The free joint has nq=7 but nv=6 (quaternion adds one extra position DOF).
-# "qpos": qvel would fail a shape check, so qpos dynamics go through BYOF
-# using the quaternion kinematic equation: q̇ = ½ Ξ(q) ω.
-byof: ByofSpec = {
-    "dynamics": {
-        "qpos": free_joint_qpos_dynamics(qpos=qpos, qvel=qvel, n_free_joints=1),
-        "qvel": mjx_dynamics(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl),
-    }
-}
+# nq=7, nv=6 (free joint): mjx_byof detects nq > nv and automatically
+# includes quaternion kinematics for "qpos" alongside the MJX "qvel" dynamics.
+byof: ByofSpec = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
 
 # ── Gate parameters (matching examples/drone/drone_racing.py) ───────────────
 n_gates = 10
