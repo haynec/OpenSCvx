@@ -63,12 +63,6 @@ from .animated import (
     add_thrust_vector,
     add_viewcone,
 )
-from .dashboard import (
-    add_constraint_activity_overlay,
-    add_dashboard_panel,
-    activity_to_colors,
-    compute_constraint_activity_per_node,
-)
 from .orbits import add_circular_orbit
 from .plotly_integration import (
     add_animated_plotly_marker,
@@ -125,9 +119,4 @@ __all__ = [
     "extract_propagation_positions",
     "add_scp_propagation_lines",
     "add_scp_animation_controls",
-    # Constraint dashboard overlay
-    "add_constraint_activity_overlay",
-    "add_dashboard_panel",
-    "compute_constraint_activity_per_node",
-    "activity_to_colors",
 ]
