@@ -21,7 +21,6 @@ import time
 from typing import Dict, List, Optional, Union
 
 import jax
-import numpy as np
 
 os.environ["EQX_ON_ERROR"] = "nan"
 
@@ -671,30 +670,6 @@ class Problem:
         for control in self.symbolic.controls:
             nodes_dict[control.name] = state.u[:, control._slice]
 
-        # Derive human-readable names for each (nonconvex) constraint so the
-        # dashboard can label rows. We deliberately keep names short — full
-        # symbolic reprs can be very large for nontrivial problems. Only
-        # nonconvex constraints appear here because convex constraints are
-        # handled by CVXPy directly and have no virtual-buffer slacks.
-        def _short_name(prefix: str, i: int, expr) -> str:
-            r = repr(expr)
-            if len(r) > 64:
-                r = r[:61] + "..."
-            return f"{prefix}[{i}]: {r}"
-
-        nodal_names: list[str] = []
-        for i, c in enumerate(self.symbolic.constraints.nodal):
-            try:
-                nodal_names.append(_short_name("nodal", i, getattr(c, "constraint", c)))
-            except Exception:  # noqa: BLE001
-                nodal_names.append(f"nodal[{i}]")
-        cross_names: list[str] = []
-        for i, c in enumerate(self.symbolic.constraints.cross_node):
-            try:
-                cross_names.append(_short_name("cross", i, c))
-            except Exception:  # noqa: BLE001
-                cross_names.append(f"cross[{i}]")
-
         return OptimizationResults(
             converged=converged,
             t_final=state.x[:, self.settings.sim.time_slice][-1],
@@ -705,23 +680,15 @@ class Problem:
             X=state.X,  # Single source of truth - x and u are properties
             U=state.U,
             discretization_history=state.V_history,
-            # True per-iteration scalar histories (replaces previous behavior
-            # which only stored the latest scalar).
-            J_tr_history=state.J_tr_scalar_history.copy(),
-            J_vb_history=state.J_vb_scalar_history.copy(),
-            J_vc_history=state.J_vc_scalar_history.copy(),
+            J_tr_history=state.J_tr,
+            J_vb_history=state.J_vb,
+            J_vc_history=state.J_vc,
             TR_history=state.TR_history,
             VC_history=state.VC_history,
             lam_prox_history=state.lam_prox_history.copy(),
             actual_reduction_history=state.actual_reduction_history.copy(),
             pred_reduction_history=state.pred_reduction_history.copy(),
             acceptance_ratio_history=state.acceptance_ratio_history.copy(),
-            # Constraint activity diagnostics (for the dashboard).
-            nu_history=[np.asarray(v) for v in state.nu_history],
-            nu_vb_history=[list(v) for v in state.nu_vb_history],
-            nu_vb_cross_history=[list(v) for v in state.nu_vb_cross_history],
-            constraint_names=nodal_names,
-            cross_node_constraint_names=cross_names,
         )
 
     def initialize(self):

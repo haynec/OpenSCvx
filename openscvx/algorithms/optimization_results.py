@@ -84,29 +84,11 @@ class OptimizationResults:
     discretization_history: list[np.ndarray] = field(
         default_factory=list, metadata={"npz": "array_list"}
     )
-    # Convergence scalars per accepted SCP iteration. ``J_tr_history`` etc.
-    # were previously documented as histories but stored only the latest scalar;
-    # they are now true lists, one entry per accepted iteration.
-    J_tr_history: list[float] = field(default_factory=list, metadata={"npz": "float_list"})
-    J_vb_history: list[float] = field(default_factory=list, metadata={"npz": "float_list"})
-    J_vc_history: list[float] = field(default_factory=list, metadata={"npz": "float_list"})
+    J_tr_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
+    J_vb_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
+    J_vc_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
     TR_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
     VC_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
-
-    # Per-iteration constraint activity diagnostics (for the dashboard).
-    # ``nu_history``: list of ``(N-1, n_x)`` dynamics defect arrays.
-    # ``nu_vb_history``: nested list. Outer list is per-iteration; inner list
-    #   is one entry per nodal nonconvex constraint. Each inner array has
-    #   shape ``(N,)`` (per-node violation magnitude).
-    # ``nu_vb_cross_history``: nested list of per-iteration cross-node scalars.
-    # ``constraint_names``: human-readable labels matching the order of
-    #   ``nu_vb_history[k]`` and ``nu_vb_cross_history[k]``. Stored as a list
-    #   of strings; serialization-safe.
-    nu_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})
-    nu_vb_history: list[list] = field(default_factory=list, repr=False)
-    nu_vb_cross_history: list[list] = field(default_factory=list, repr=False)
-    constraint_names: list[str] = field(default_factory=list, repr=False)
-    cross_node_constraint_names: list[str] = field(default_factory=list, repr=False)
 
     # Convergence histories
     lam_prox_history: list[np.ndarray] = field(default_factory=list, metadata={"npz": "array_list"})

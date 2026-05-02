@@ -432,23 +432,6 @@ class PenalizedTrustRegion(Algorithm):
         state.J_vb = np.sum(np.array(J_vb_vec))
         state.J_vc = np.sum(np.array(J_vc_vec))
 
-        # Per-iteration constraint activity diagnostics. The autotuner will
-        # decide whether to accept this candidate; if it does,
-        # AlgorithmState.accept_solution copies these onto the history lists.
-        candidate.J_tr = float(state.J_tr)
-        candidate.J_vb = float(state.J_vb)
-        candidate.J_vc = float(state.J_vc)
-        # PTRSolveResult fields preserve per-node detail. Some custom solvers
-        # may not cache the last result; degrade gracefully when missing.
-        result_payload = getattr(self._solver, "_last_solve_result", None)
-        if result_payload is not None:
-            try:
-                candidate.nu = np.asarray(result_payload.nu)
-                candidate.nu_vb = [np.asarray(v) for v in result_payload.nu_vb]
-                candidate.nu_vb_cross = [float(v) for v in result_payload.nu_vb_cross]
-            except Exception:  # noqa: BLE001
-                pass
-
         # Update weights in state using configured autotuning method
         adaptive_state = self.autotuner.update_weights(
             state, candidate, self._jax_constraints, settings, params, self.weights

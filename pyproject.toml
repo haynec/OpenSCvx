@@ -60,9 +60,6 @@ mjx = [
     "mujoco>=3.0",
     "mujoco-mjx>=3.0",
 ]
-brax = [
-    "brax>=0.10",
-]
 test = [
     "pytest",
     "scipy",

@@ -157,9 +157,6 @@ class PTRSolver(ConvexSolver):
         self._ocp_vars: "CVXPyVariables" = None
         self._problem: cp.Problem = None
         self._solve_fn: callable = None
-        # Cache of the most recent PTRSolveResult; used by the algorithm layer
-        # to surface per-node constraint slacks for the activity dashboard.
-        self._last_solve_result: Optional[PTRSolveResult] = None
 
     @property
     def ocp_vars(self) -> "CVXPyVariables":
@@ -909,7 +906,7 @@ class PTRSolver(ConvexSolver):
         # Get cross-node constraint violation slacks
         nu_vb_cross = [var.value for var in self._ocp_vars.nu_vb_cross]
 
-        result = PTRSolveResult(
+        return PTRSolveResult(
             x=x,
             u=u,
             nu=nu,
@@ -918,8 +915,6 @@ class PTRSolver(ConvexSolver):
             cost=self._problem.value,
             status=self._problem.status,
         )
-        self._last_solve_result = result
-        return result
 
     def citation(self) -> List[str]:
         """Return BibTeX citations for CVXPy.
