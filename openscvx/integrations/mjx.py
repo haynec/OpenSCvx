@@ -297,13 +297,11 @@ def mjx_byof(
 
     Returns:
         A dict suitable for use as ``byof["dynamics"]``.
-
-        * Models **without** free joints (``nq == nv``): returns
-          ``{"qvel": <callable>}``.  Position kinematics should be provided
-          symbolically via ``dynamics={"qpos": qvel}``.
-        * Models **with** free joints (``nq > nv``): returns
-          ``{"qpos": <callable>, "qvel": <callable>}``.  No symbolic
-          ``dynamics`` entry is needed for ``qpos``.
+        For models **without** free joints (``nq == nv``) only ``"qvel"`` is
+        included; position kinematics should still be provided symbolically
+        via ``dynamics={"qpos": qvel}``.
+        For models **with** free joints (``nq > nv``) both ``"qpos"`` and
+        ``"qvel"`` are included and no symbolic ``dynamics`` entry is needed.
 
     Example:
         Cartpole (nq == nv, no free joint)::

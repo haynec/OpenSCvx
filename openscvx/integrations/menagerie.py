@@ -44,7 +44,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    pass  # mujoco imported lazily
+    import mujoco
 
 
 def find_menagerie_root() -> Path | None:
@@ -135,7 +135,7 @@ def get_xml_path(model_name: str, prefer_mjx: bool = True) -> Path:
     raise FileNotFoundError(f"No XML file found in {model_dir}")
 
 
-def load_mjmodel(model_name: str, prefer_mjx: bool = True):
+def load_mjmodel(model_name: str, prefer_mjx: bool = True) -> "mujoco.MjModel":
     """Load a ``mujoco.MjModel`` for *model_name* from the menagerie.
 
     Asset paths (meshes, textures) are resolved automatically by MuJoCo
