@@ -308,7 +308,7 @@ if __name__ == "__main__":
     if vehicle_mesh is not None:
         print("[viser] vehicle_mesh: Skydio X2 low-poly (menagerie assets)")
     else:
-        print("[viser] vehicle_mesh: None — default attitude axes (see load_skydio_x2_vehicle_mesh)")
+        print("[viser] vehicle_mesh: None — default axes (see load_skydio_x2_vehicle_mesh)")
 
     traj_server = create_animated_plotting_server(
         results,
