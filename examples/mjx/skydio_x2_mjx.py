@@ -63,14 +63,21 @@ _X2_XML_FALLBACK = """
   <worldbody>
     <body name="x2" pos="0 0 0.3">
       <freejoint name="root"/>
-      <geom name="body"   type="box"       size="0.08 0.08 0.04"      mass="0.325" rgba="0.25 0.25 0.25 1"/>
-      <geom name="arm_lr" type="box"       size="0.18 0.015 0.008"    mass="0"     rgba="0.4 0.4 0.4 1"/>
-      <geom name="arm_fb" type="box"       size="0.015 0.14 0.008"    mass="0"     rgba="0.4 0.4 0.4 1"/>
+      <geom name="body" type="box" size="0.08 0.08 0.04"
+            mass="0.325" rgba="0.25 0.25 0.25 1"/>
+      <geom name="arm_lr" type="box" size="0.18 0.015 0.008"
+            mass="0" rgba="0.4 0.4 0.4 1"/>
+      <geom name="arm_fb" type="box" size="0.015 0.14 0.008"
+            mass="0" rgba="0.4 0.4 0.4 1"/>
       <!-- Rotor discs — positions and masses from menagerie -->
-      <geom name="rotor1" type="ellipsoid" size="0.13 0.13 0.01" pos="-.14 -.18 .05" mass=".25" rgba="0.15 0.15 0.15 1"/>
-      <geom name="rotor2" type="ellipsoid" size="0.13 0.13 0.01" pos="-.14  .18 .05" mass=".25" rgba="0.15 0.15 0.15 1"/>
-      <geom name="rotor3" type="ellipsoid" size="0.13 0.13 0.01" pos=" .14  .18 .08" mass=".25" rgba="0.85 0.35 0.1  1"/>
-      <geom name="rotor4" type="ellipsoid" size="0.13 0.13 0.01" pos=" .14 -.18 .08" mass=".25" rgba="0.85 0.35 0.1  1"/>
+      <geom name="rotor1" type="ellipsoid" size="0.13 0.13 0.01"
+            pos="-.14 -.18 .05" mass=".25" rgba="0.15 0.15 0.15 1"/>
+      <geom name="rotor2" type="ellipsoid" size="0.13 0.13 0.01"
+            pos="-.14  .18 .05" mass=".25" rgba="0.15 0.15 0.15 1"/>
+      <geom name="rotor3" type="ellipsoid" size="0.13 0.13 0.01"
+            pos=" .14  .18 .08" mass=".25" rgba="0.85 0.35 0.1  1"/>
+      <geom name="rotor4" type="ellipsoid" size="0.13 0.13 0.01"
+            pos=" .14 -.18 .08" mass=".25" rgba="0.85 0.35 0.1  1"/>
       <!-- Thrust sites at rotor positions -->
       <site name="thrust1" pos="-.14 -.18 .05"/>
       <site name="thrust2" pos="-.14  .18 .05"/>
@@ -90,14 +97,15 @@ _X2_XML_FALLBACK = """
 </mujoco>
 """
 
-HOVER_CTRL = 3.2495625   # N per motor for level hover (from menagerie keyframe)
-START_POS  = np.array([10.0, 0.0, 20.0])
+HOVER_CTRL = 3.2495625  # N per motor for level hover (from menagerie keyframe)
+START_POS = np.array([10.0, 0.0, 20.0])
 HOVER_QUAT = np.array([1.0, 0.0, 0.0, 0.0])  # w=1 → level attitude
 
 # ── Load MuJoCo model — try menagerie first, fall back to inline XML ──────────
 _menagerie_xml_path: "str | None" = None
 try:
     from openscvx.integrations.menagerie import get_xml_path
+
     _menagerie_xml_path = str(get_xml_path("skydio_x2"))
     mj_model = mujoco.MjModel.from_xml_path(_menagerie_xml_path)
     print(f"[skydio_x2] loaded from MuJoCo Menagerie: {_menagerie_xml_path}")
@@ -112,32 +120,32 @@ except FileNotFoundError:
 mj_model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
 mjx_model = mjx.put_model(mj_model)
 
-n_q = int(mjx_model.nq)   # 7 — xyz + quaternion (free joint)
-n_v = int(mjx_model.nv)   # 6 — linear + angular velocity
-n_u = int(mjx_model.nu)   # 4 — rotor thrusts
+n_q = int(mjx_model.nq)  # 7 — xyz + quaternion (free joint)
+n_v = int(mjx_model.nv)  # 6 — linear + angular velocity
+n_u = int(mjx_model.nu)  # 4 — rotor thrusts
 
 n = 22
 total_time = 24.0
 
 # ── State / control definitions ───────────────────────────────────────────────
 qpos = ox.State("qpos", shape=(n_q,))
-qpos.min     = np.array([-200.0, -100.0, 15.0, -1.0, -1.0, -1.0, -1.0])
-qpos.max     = np.array([200.0, 100.0, 200.0, 1.0, 1.0, 1.0, 1.0])
+qpos.min = np.array([-200.0, -100.0, 15.0, -1.0, -1.0, -1.0, -1.0])
+qpos.max = np.array([200.0, 100.0, 200.0, 1.0, 1.0, 1.0, 1.0])
 qpos.initial = np.concatenate([START_POS, HOVER_QUAT])
-qpos.final   = [10.0, 0.0, 20.0, ("free", 1.0), ("free", 0.0), ("free", 0.0), ("free", 0.0)]
+qpos.final = [10.0, 0.0, 20.0, ("free", 1.0), ("free", 0.0), ("free", 0.0), ("free", 0.0)]
 
 qvel = ox.State("qvel", shape=(n_v,))
-qvel.min     = np.array([-100.0, -100.0, -100.0, -10.0, -10.0, -10.0])
-qvel.max     = np.array([100.0, 100.0, 100.0, 10.0, 10.0, 10.0])
+qvel.min = np.array([-100.0, -100.0, -100.0, -10.0, -10.0, -10.0])
+qvel.max = np.array([100.0, 100.0, 100.0, 10.0, 10.0, 10.0])
 qvel.initial = np.zeros(n_v)
-qvel.final   = [("free", 0.0), ("free", 0.0), ("free", 0.0), ("free", 0.0), ("free", 0.0), ("free", 0.0)]
+qvel.final = [("free", 0.0)] * n_v
 
 ctrl = ox.Control("ctrl", shape=(n_u,))
-ctrl.min   = np.zeros(n_u)
-ctrl.max   = 13.0 * np.ones(n_u)
+ctrl.min = np.zeros(n_u)
+ctrl.max = 13.0 * np.ones(n_u)
 ctrl.guess = HOVER_CTRL * np.ones((n, n_u))
 
-states   = [qpos, qvel]
+states = [qpos, qvel]
 controls = [ctrl]
 
 # ── Dynamics via BYOF ─────────────────────────────────────────────────────────
@@ -213,7 +221,7 @@ time = ox.Time(
 )
 
 problem = Problem(
-    dynamics={},           # all dynamics go through BYOF
+    dynamics={},  # all dynamics go through BYOF
     states=states,
     controls=controls,
     time=time,
@@ -223,19 +231,21 @@ problem = Problem(
     algorithm={
         "lam_prox": 1e-1,
         "lam_cost": 1e-2,
-        "lam_vc":   1e0,
+        "lam_vc": 1e0,
         "autotuner": ox.ConstantProximalWeight(),
     },
     float_dtype="float64",
 )
 
 # ── Rotor positions in body frame (for visualization) ─────────────────────────
-ROTOR_OFFSETS = np.array([
-    [-.14, -.18, .05],
-    [-.14,  .18, .05],
-    [ .14,  .18, .08],
-    [ .14, -.18, .08],
-])
+ROTOR_OFFSETS = np.array(
+    [
+        [-0.14, -0.18, 0.05],
+        [-0.14, 0.18, 0.05],
+        [0.14, 0.18, 0.08],
+        [0.14, -0.18, 0.08],
+    ]
+)
 
 
 def quat_rotate(q: np.ndarray, v: np.ndarray) -> np.ndarray:
@@ -260,12 +270,12 @@ def visualize(results) -> None:
     from openscvx.plotting.viser.plotly_integration import add_animated_plotly_vline
 
     # ── Extract trajectory data ────────────────────────────────────────────────
-    t_vec  = results.trajectory["time"].flatten()   # (N_fine,)
-    q_traj = results.trajectory["qpos"]             # (N_fine, 7)
-    u_traj = results.trajectory["ctrl"]             # (N_fine, 4)
+    t_vec = results.trajectory["time"].flatten()  # (N_fine,)
+    q_traj = results.trajectory["qpos"]  # (N_fine, 7)
+    u_traj = results.trajectory["ctrl"]  # (N_fine, 4)
 
-    pos  = q_traj[:, :3]                            # (N_fine, 3)
-    quat = q_traj[:, 3:]                            # (N_fine, 4) [qw,qx,qy,qz]
+    pos = q_traj[:, :3]  # (N_fine, 3)
+    quat = q_traj[:, 3:]  # (N_fine, 4) [qw,qx,qy,qz]
 
     N = len(t_vec)
 
@@ -311,10 +321,12 @@ def visualize(results) -> None:
     _use_mesh = False
     if _menagerie_xml_path is not None:
         try:
-            import trimesh  # type: ignore
             from pathlib import Path
+
+            import trimesh  # type: ignore
+
             _asset_dir = Path(_menagerie_xml_path).parent / "assets"
-            _obj_path  = _asset_dir / "X2_lowpoly.obj"
+            _obj_path = _asset_dir / "X2_lowpoly.obj"
             _tm = trimesh.load(_obj_path, force="mesh", process=False)
 
             # Apply menagerie mesh defaults: scale="0.01 0.01 0.01"
@@ -327,7 +339,7 @@ def visualize(results) -> None:
             _tm.vertices = (_tm.vertices @ _R_vis.T).astype(np.float32)
 
             _verts = np.array(_tm.vertices, dtype=np.float32)
-            _faces = np.array(_tm.faces,    dtype=np.uint32)
+            _faces = np.array(_tm.faces, dtype=np.uint32)
 
             mesh_handle = server.scene.add_mesh_simple(
                 "/drone/mesh",
@@ -354,19 +366,26 @@ def visualize(results) -> None:
         rotor_colors = [(40, 40, 40), (40, 40, 40), (220, 90, 30), (220, 90, 30)]
         for j in range(4):
             h = server.scene.add_icosphere(
-                f"/drone/rotor{j+1}",
+                f"/drone/rotor{j + 1}",
                 radius=0.06,
                 color=rotor_colors[j],
                 position=tuple(float(v) for v in rotor_world[0, j]),
             )
             rotor_handles.append(h)
 
-        arm_pts_0 = np.array([
-            [[float(rotor_world[0, 0, k]) for k in range(3)],
-             [float(rotor_world[0, 2, k]) for k in range(3)]],
-            [[float(rotor_world[0, 1, k]) for k in range(3)],
-             [float(rotor_world[0, 3, k]) for k in range(3)]],
-        ], dtype=np.float32)
+        arm_pts_0 = np.array(
+            [
+                [
+                    [float(rotor_world[0, 0, k]) for k in range(3)],
+                    [float(rotor_world[0, 2, k]) for k in range(3)],
+                ],
+                [
+                    [float(rotor_world[0, 1, k]) for k in range(3)],
+                    [float(rotor_world[0, 3, k]) for k in range(3)],
+                ],
+            ],
+            dtype=np.float32,
+        )
         arm_handle = server.scene.add_line_segments(
             "/drone/arms",
             points=arm_pts_0,
@@ -389,11 +408,15 @@ def visualize(results) -> None:
 
     # ── Sidebar: altitude + rotor thrusts ─────────────────────────────────────
     fig_alt = go.Figure()
-    fig_alt.add_trace(go.Scatter(
-        x=t_vec.tolist(), y=pos[:, 2].tolist(),
-        mode="lines", name="Altitude (m)",
-        line={"color": "royalblue", "width": 2},
-    ))
+    fig_alt.add_trace(
+        go.Scatter(
+            x=t_vec.tolist(),
+            y=pos[:, 2].tolist(),
+            mode="lines",
+            name="Altitude (m)",
+            line={"color": "royalblue", "width": 2},
+        )
+    )
     fig_alt.add_hline(
         y=float(START_POS[2]),
         line_dash="dash",
@@ -402,7 +425,8 @@ def visualize(results) -> None:
     )
     fig_alt.update_layout(
         title="Altitude",
-        xaxis_title="Time (s)", yaxis_title="z (m)",
+        xaxis_title="Time (s)",
+        yaxis_title="z (m)",
         margin={"l": 40, "r": 10, "t": 40, "b": 40},
     )
 
@@ -410,22 +434,26 @@ def visualize(results) -> None:
     labels = ["Rotor 1", "Rotor 2", "Rotor 3", "Rotor 4"]
     colors_u = ["royalblue", "darkorange", "green", "red"]
     for k in range(4):
-        fig_thrust.add_trace(go.Scatter(
-            x=t_vec.tolist(), y=u_traj[:, k].tolist(),
-            mode="lines", name=labels[k],
-            line={"color": colors_u[k], "width": 1.5},
-        ))
-    fig_thrust.add_hline(y=HOVER_CTRL, line_dash="dash",
-                         line_color="gray", annotation_text="Hover")
+        fig_thrust.add_trace(
+            go.Scatter(
+                x=t_vec.tolist(),
+                y=u_traj[:, k].tolist(),
+                mode="lines",
+                name=labels[k],
+                line={"color": colors_u[k], "width": 1.5},
+            )
+        )
+    fig_thrust.add_hline(y=HOVER_CTRL, line_dash="dash", line_color="gray", annotation_text="Hover")
     fig_thrust.update_layout(
         title="Rotor thrusts (N)",
-        xaxis_title="Time (s)", yaxis_title="Thrust (N)",
+        xaxis_title="Time (s)",
+        yaxis_title="Thrust (N)",
         legend={"orientation": "h"},
         margin={"l": 40, "r": 10, "t": 40, "b": 40},
     )
 
     with server.gui.add_folder("Plots"):
-        _, update_alt    = add_animated_plotly_vline(server, fig_alt,    t_vec, folder_name=None)
+        _, update_alt = add_animated_plotly_vline(server, fig_alt, t_vec, folder_name=None)
         _, update_thrust = add_animated_plotly_vline(server, fig_thrust, t_vec, folder_name=None)
 
     # ── Per-frame drone update ─────────────────────────────────────────────────
@@ -433,20 +461,27 @@ def visualize(results) -> None:
         p = tuple(float(v) for v in pos[frame_idx])
         q = tuple(float(v) for v in quat[frame_idx])
         frame_handle.position = p
-        frame_handle.wxyz     = q
+        frame_handle.wxyz = q
         if _use_mesh and mesh_handle is not None:
             mesh_handle.position = p
-            mesh_handle.wxyz     = q
+            mesh_handle.wxyz = q
         else:
             for j, h in enumerate(rotor_handles):
                 h.position = tuple(float(v) for v in rotor_world[frame_idx, j])
             if arm_handle is not None:
-                arm_pts = np.array([
-                    [[float(rotor_world[frame_idx, 0, k]) for k in range(3)],
-                     [float(rotor_world[frame_idx, 2, k]) for k in range(3)]],
-                    [[float(rotor_world[frame_idx, 1, k]) for k in range(3)],
-                     [float(rotor_world[frame_idx, 3, k]) for k in range(3)]],
-                ], dtype=np.float32)
+                arm_pts = np.array(
+                    [
+                        [
+                            [float(rotor_world[frame_idx, 0, k]) for k in range(3)],
+                            [float(rotor_world[frame_idx, 2, k]) for k in range(3)],
+                        ],
+                        [
+                            [float(rotor_world[frame_idx, 1, k]) for k in range(3)],
+                            [float(rotor_world[frame_idx, 3, k]) for k in range(3)],
+                        ],
+                    ],
+                    dtype=np.float32,
+                )
                 arm_handle.points = arm_pts
 
     # ── Animation controls ─────────────────────────────────────────────────────
@@ -474,7 +509,7 @@ if __name__ == "__main__":
 
     final_pos = results.nodes["qpos"][-1, :3]
     final_vel = results.nodes["qvel"][-1]
-    pos_err   = np.linalg.norm(final_pos - START_POS)
+    pos_err = np.linalg.norm(final_pos - START_POS)
 
     print()
     print(f"Final position: {final_pos}")

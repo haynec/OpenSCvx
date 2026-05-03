@@ -155,13 +155,13 @@ def visualize(results) -> None:
     from openscvx.plotting.viser.plotly_integration import add_animated_plotly_vline
 
     # ── Pull data from results.trajectory ─────────────────────────────────────
-    t_vec   = results.trajectory["time"].flatten()          # (N_fine,)
-    q_traj  = results.trajectory["qpos"]                   # (N_fine, 2)
-    qd_traj = results.trajectory["qvel"]                   # (N_fine, 2)
-    u_traj  = results.trajectory["ctrl"]                   # (N_fine, 1)
+    t_vec = results.trajectory["time"].flatten()  # (N_fine,)
+    q_traj = results.trajectory["qpos"]  # (N_fine, 2)
+    qd_traj = results.trajectory["qvel"]  # (N_fine, 2)
+    u_traj = results.trajectory["ctrl"]  # (N_fine, 1)
 
     cart_x = q_traj[:, 0]
-    theta  = q_traj[:, 1]
+    theta = q_traj[:, 1]
 
     # Pole tip in world frame (hinge rotates around y-axis)
     tip_x = cart_x + POLE_LENGTH * np.sin(theta)
@@ -209,13 +209,15 @@ def visualize(results) -> None:
 
     # ── Sidebar plots (phase portrait + control) ───────────────────────────────
     fig_phase = go.Figure()
-    fig_phase.add_trace(go.Scatter(
-        x=np.rad2deg(theta).tolist(),
-        y=qd_traj[:, 1].tolist(),
-        mode="lines",
-        line={"color": "royalblue", "width": 2},
-        name="Phase",
-    ))
+    fig_phase.add_trace(
+        go.Scatter(
+            x=np.rad2deg(theta).tolist(),
+            y=qd_traj[:, 1].tolist(),
+            mode="lines",
+            line={"color": "royalblue", "width": 2},
+            name="Phase",
+        )
+    )
     fig_phase.update_layout(
         title="Phase portrait (θ vs θ̇)",
         xaxis_title="θ (deg)",
@@ -224,13 +226,15 @@ def visualize(results) -> None:
     )
 
     fig_ctrl = go.Figure()
-    fig_ctrl.add_trace(go.Scatter(
-        x=t_vec.tolist(),
-        y=u_traj[:, 0].tolist(),
-        mode="lines",
-        line={"color": "darkorange", "width": 2},
-        name="Control",
-    ))
+    fig_ctrl.add_trace(
+        go.Scatter(
+            x=t_vec.tolist(),
+            y=u_traj[:, 0].tolist(),
+            mode="lines",
+            line={"color": "darkorange", "width": 2},
+            name="Control",
+        )
+    )
     fig_ctrl.update_layout(
         title="Control force (normalized)",
         xaxis_title="Time (s)",
@@ -239,22 +243,16 @@ def visualize(results) -> None:
     )
 
     with server.gui.add_folder("Plots"):
-        _, update_phase = add_animated_plotly_vline(
-            server, fig_phase, t_vec, folder_name=None
-        )
-        _, update_ctrl = add_animated_plotly_vline(
-            server, fig_ctrl, t_vec, folder_name=None
-        )
+        _, update_phase = add_animated_plotly_vline(server, fig_phase, t_vec, folder_name=None)
+        _, update_ctrl = add_animated_plotly_vline(server, fig_ctrl, t_vec, folder_name=None)
 
     # ── Per-frame cart + pole update ───────────────────────────────────────────
     def update_cartpole(frame_idx: int) -> None:
-        cx  = float(cart_x[frame_idx])
-        tx  = float(tip_x[frame_idx])
-        tz  = float(tip_z[frame_idx])
+        cx = float(cart_x[frame_idx])
+        tx = float(tip_x[frame_idx])
+        tz = float(tip_z[frame_idx])
         cart_handle.position = (cx, 0.0, 0.0)
-        pole_handle.points = np.array(
-            [[[cx, 0.0, 0.0], [tx, 0.0, tz]]], dtype=np.float32
-        )
+        pole_handle.points = np.array([[[cx, 0.0, 0.0], [tx, 0.0, tz]]], dtype=np.float32)
 
     # ── Animation controls (play / pause / scrub) ──────────────────────────────
     add_animation_controls(
