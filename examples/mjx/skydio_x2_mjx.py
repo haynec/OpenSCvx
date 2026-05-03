@@ -18,9 +18,10 @@ Model loading (in priority order)
 
 Visualisation
 -------------
-When the menagerie mesh is available and ``trimesh`` is installed the Viser
-scene shows the actual Skydio X2 low-poly mesh.  Otherwise it falls back to
-a box-and-disc primitive representation.
+Uses ``examples.plotting_viser.create_animated_plotting_server`` — same layout
+as ``examples/drone/drone_racing.py`` (gates, ghost path, thrust vector, controls).
+When the menagerie asset and ``trimesh`` are available, pass the Skydio X2
+low-poly mesh so the drone body is drawn instead of the default attitude axes.
 
 Requires:
     pip install openscvx[mjx]
@@ -46,9 +47,13 @@ except ImportError:
     sys.exit(1)
 
 import openscvx as ox
+from examples.plotting_viser import (
+    create_animated_plotting_server,
+    create_scp_animated_plotting_server,
+)
 from openscvx import ByofSpec, Problem
 from openscvx.integrations import mjx_byof
-from openscvx.utils import rot
+from openscvx.utils import gen_vertices, rot
 
 # ── Inline XML fallback ───────────────────────────────────────────────────────
 # Used when the MuJoCo Menagerie submodule is not available.
@@ -103,18 +108,11 @@ HOVER_QUAT = np.array([1.0, 0.0, 0.0, 0.0])  # w=1 → level attitude
 
 # ── Load MuJoCo model — try menagerie first, fall back to inline XML ──────────
 _menagerie_xml_path: "str | None" = None
-try:
-    from openscvx.integrations.menagerie import get_xml_path
+from openscvx.integrations.menagerie import get_xml_path
 
-    _menagerie_xml_path = str(get_xml_path("skydio_x2"))
-    mj_model = mujoco.MjModel.from_xml_path(_menagerie_xml_path)
-    print(f"[skydio_x2] loaded from MuJoCo Menagerie: {_menagerie_xml_path}")
-except FileNotFoundError:
-    mj_model = mujoco.MjModel.from_xml_string(_X2_XML_FALLBACK)
-    print("[skydio_x2] MuJoCo Menagerie not found — using inline XML fallback.")
-    print("  To enable mesh rendering, run:")
-    print("    git submodule update --init third_party/mujoco_menagerie")
-
+_menagerie_xml_path = str(get_xml_path("skydio_x2"))
+mj_model = mujoco.MjModel.from_xml_path(_menagerie_xml_path)
+print(f"[skydio_x2] loaded from MuJoCo Menagerie: {_menagerie_xml_path}")
 # Disable contact solver: MJX's contact pipeline uses lax.while_loop which is
 # not forward-mode differentiable. Quadrotors don't rely on contact dynamics.
 mj_model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
@@ -231,268 +229,37 @@ problem = Problem(
     algorithm={
         "lam_prox": 1e-1,
         "lam_cost": 1e-2,
-        "lam_vc": 1e0,
-        "autotuner": ox.ConstantProximalWeight(),
+        "lam_vc": 1e1,
+        # "autotuner": ox.ConstantProximalWeight(),
     },
     float_dtype="float64",
 )
 
-# ── Rotor positions in body frame (for visualization) ─────────────────────────
-ROTOR_OFFSETS = np.array(
-    [
-        [-0.14, -0.18, 0.05],
-        [-0.14, 0.18, 0.05],
-        [0.14, 0.18, 0.08],
-        [0.14, -0.18, 0.08],
-    ]
-)
 
+def load_skydio_x2_vehicle_mesh() -> tuple[np.ndarray, np.ndarray] | None:
+    """Return ``(vertices, faces)`` for Viser, or ``None`` to use default attitude axes.
 
-def quat_rotate(q: np.ndarray, v: np.ndarray) -> np.ndarray:
-    """Rotate vector v by quaternion q = [qw, qx, qy, qz]."""
-    qw, qx, qy, qz = q
-    # Rodrigues formula via double cross product
-    uv = np.cross([qx, qy, qz], v)
-    uuv = np.cross([qx, qy, qz], uv)
-    return v + 2.0 * (qw * uv + uuv)
+    Matches MuJoCo Menagerie visual geom: scale 0.01 and visual euler rotation.
+    """
+    if _menagerie_xml_path is None:
+        return None
+    try:
+        from pathlib import Path
 
+        import trimesh  # type: ignore
 
-def visualize(results) -> None:
-    """Animate the Skydio X2 racing trajectory in a Viser 3D scene."""
-    import plotly.graph_objects as go
-    import viser
-
-    from openscvx.plotting.viser import (
-        add_animated_trail,
-        add_animation_controls,
-        compute_velocity_colors,
-    )
-    from openscvx.plotting.viser.plotly_integration import add_animated_plotly_vline
-
-    # ── Extract trajectory data ────────────────────────────────────────────────
-    t_vec = results.trajectory["time"].flatten()  # (N_fine,)
-    q_traj = results.trajectory["qpos"]  # (N_fine, 7)
-    u_traj = results.trajectory["ctrl"]  # (N_fine, 4)
-
-    pos = q_traj[:, :3]  # (N_fine, 3)
-    quat = q_traj[:, 3:]  # (N_fine, 4) [qw,qx,qy,qz]
-
-    N = len(t_vec)
-
-    # ── Precompute world-frame rotor positions ─────────────────────────────────
-    rotor_world = np.zeros((N, 4, 3))
-    for i in range(N):
-        for j, offset in enumerate(ROTOR_OFFSETS):
-            rotor_world[i, j] = pos[i] + quat_rotate(quat[i], offset)
-
-    # ── Viser server ───────────────────────────────────────────────────────────
-    server = viser.ViserServer()
-    server.scene.set_up_direction("+z")
-    server.scene.add_grid(
-        "/ground",
-        width=220.0,
-        height=120.0,
-        cell_size=5.0,
-        position=(80.0, -40.0, 0.0),
-    )
-
-    # Gate center markers
-    for idx, center in enumerate(gate_centers):
-        center_tuple = tuple(float(v) for v in center)
-        server.scene.add_icosphere(
-            f"/gates/gate_{idx + 1}",
-            radius=0.25,
-            color=(40, 180, 255),
-            position=center_tuple,
-        )
-        server.scene.add_label(
-            f"/gates/gate_{idx + 1}/label",
-            text=f"G{idx + 1}",
-            position=tuple(float(v) for v in center + np.array([0.0, 0.0, 0.6])),
-        )
-
-    # ── Animated drone body ────────────────────────────────────────────────────
-    # Try to load the Skydio X2 low-poly mesh from the menagerie for a richer
-    # visualisation.  Fall back to primitive-geom representation otherwise.
-    mesh_handle = None
-    rotor_handles: list = []
-    arm_handle = None
-
-    _use_mesh = False
-    if _menagerie_xml_path is not None:
-        try:
-            from pathlib import Path
-
-            import trimesh  # type: ignore
-
-            _asset_dir = Path(_menagerie_xml_path).parent / "assets"
-            _obj_path = _asset_dir / "X2_lowpoly.obj"
-            _tm = trimesh.load(_obj_path, force="mesh", process=False)
-
-            # Apply menagerie mesh defaults: scale="0.01 0.01 0.01"
-            _tm.apply_scale(0.01)
-
-            # Apply visual geom rotation quat="0 0 1 1" (MuJoCo [w,x,y,z]).
-            # Normalised: [0, 0, 1/√2, 1/√2].  Rotation matrix:
-            #   R = [[-1, 0, 0], [0, 0, 1], [0, 1, 0]]
-            _R_vis = np.array([[-1, 0, 0], [0, 0, 1], [0, 1, 0]], dtype=float)
-            _tm.vertices = (_tm.vertices @ _R_vis.T).astype(np.float32)
-
-            _verts = np.array(_tm.vertices, dtype=np.float32)
-            _faces = np.array(_tm.faces, dtype=np.uint32)
-
-            mesh_handle = server.scene.add_mesh_simple(
-                "/drone/mesh",
-                vertices=_verts,
-                faces=_faces,
-                color=(200, 200, 210),
-                position=tuple(float(v) for v in pos[0]),
-                wxyz=tuple(float(v) for v in quat[0]),
-            )
-            _use_mesh = True
-            print("[viser] rendering Skydio X2 low-poly mesh from menagerie.")
-        except Exception as _mesh_err:
-            print(f"[viser] mesh load failed ({_mesh_err}), using primitives.")
-
-    if not _use_mesh:
-        # Primitive-geom fallback: box body + rotor discs + arm wires
-        server.scene.add_box(
-            "/drone/body",
-            dimensions=(0.16, 0.16, 0.08),
-            position=tuple(float(v) for v in pos[0]),
-            wxyz=tuple(float(v) for v in quat[0]),
-            color=(60, 60, 60),
-        )
-        rotor_colors = [(40, 40, 40), (40, 40, 40), (220, 90, 30), (220, 90, 30)]
-        for j in range(4):
-            h = server.scene.add_icosphere(
-                f"/drone/rotor{j + 1}",
-                radius=0.06,
-                color=rotor_colors[j],
-                position=tuple(float(v) for v in rotor_world[0, j]),
-            )
-            rotor_handles.append(h)
-
-        arm_pts_0 = np.array(
-            [
-                [
-                    [float(rotor_world[0, 0, k]) for k in range(3)],
-                    [float(rotor_world[0, 2, k]) for k in range(3)],
-                ],
-                [
-                    [float(rotor_world[0, 1, k]) for k in range(3)],
-                    [float(rotor_world[0, 3, k]) for k in range(3)],
-                ],
-            ],
-            dtype=np.float32,
-        )
-        arm_handle = server.scene.add_line_segments(
-            "/drone/arms",
-            points=arm_pts_0,
-            colors=np.array([80, 80, 80], dtype=np.uint8),
-            line_width=3.0,
-        )
-
-    # Attitude frame axes (always visible)
-    frame_handle = server.scene.add_frame(
-        "/drone/frame",
-        axes_length=0.25,
-        axes_radius=0.008,
-        position=tuple(float(v) for v in pos[0]),
-        wxyz=tuple(float(v) for v in quat[0]),
-    )
-
-    # ── Animated COM trail ─────────────────────────────────────────────────────
-    trail_colors = compute_velocity_colors(pos)
-    _, update_trail = add_animated_trail(server, pos, trail_colors, point_size=0.03)
-
-    # ── Sidebar: altitude + rotor thrusts ─────────────────────────────────────
-    fig_alt = go.Figure()
-    fig_alt.add_trace(
-        go.Scatter(
-            x=t_vec.tolist(),
-            y=pos[:, 2].tolist(),
-            mode="lines",
-            name="Altitude (m)",
-            line={"color": "royalblue", "width": 2},
-        )
-    )
-    fig_alt.add_hline(
-        y=float(START_POS[2]),
-        line_dash="dash",
-        line_color="gray",
-        annotation_text="Track altitude",
-    )
-    fig_alt.update_layout(
-        title="Altitude",
-        xaxis_title="Time (s)",
-        yaxis_title="z (m)",
-        margin={"l": 40, "r": 10, "t": 40, "b": 40},
-    )
-
-    fig_thrust = go.Figure()
-    labels = ["Rotor 1", "Rotor 2", "Rotor 3", "Rotor 4"]
-    colors_u = ["royalblue", "darkorange", "green", "red"]
-    for k in range(4):
-        fig_thrust.add_trace(
-            go.Scatter(
-                x=t_vec.tolist(),
-                y=u_traj[:, k].tolist(),
-                mode="lines",
-                name=labels[k],
-                line={"color": colors_u[k], "width": 1.5},
-            )
-        )
-    fig_thrust.add_hline(y=HOVER_CTRL, line_dash="dash", line_color="gray", annotation_text="Hover")
-    fig_thrust.update_layout(
-        title="Rotor thrusts (N)",
-        xaxis_title="Time (s)",
-        yaxis_title="Thrust (N)",
-        legend={"orientation": "h"},
-        margin={"l": 40, "r": 10, "t": 40, "b": 40},
-    )
-
-    with server.gui.add_folder("Plots"):
-        _, update_alt = add_animated_plotly_vline(server, fig_alt, t_vec, folder_name=None)
-        _, update_thrust = add_animated_plotly_vline(server, fig_thrust, t_vec, folder_name=None)
-
-    # ── Per-frame drone update ─────────────────────────────────────────────────
-    def update_drone(frame_idx: int) -> None:
-        p = tuple(float(v) for v in pos[frame_idx])
-        q = tuple(float(v) for v in quat[frame_idx])
-        frame_handle.position = p
-        frame_handle.wxyz = q
-        if _use_mesh and mesh_handle is not None:
-            mesh_handle.position = p
-            mesh_handle.wxyz = q
-        else:
-            for j, h in enumerate(rotor_handles):
-                h.position = tuple(float(v) for v in rotor_world[frame_idx, j])
-            if arm_handle is not None:
-                arm_pts = np.array(
-                    [
-                        [
-                            [float(rotor_world[frame_idx, 0, k]) for k in range(3)],
-                            [float(rotor_world[frame_idx, 2, k]) for k in range(3)],
-                        ],
-                        [
-                            [float(rotor_world[frame_idx, 1, k]) for k in range(3)],
-                            [float(rotor_world[frame_idx, 3, k]) for k in range(3)],
-                        ],
-                    ],
-                    dtype=np.float32,
-                )
-                arm_handle.points = arm_pts
-
-    # ── Animation controls ─────────────────────────────────────────────────────
-    add_animation_controls(
-        server,
-        t_vec,
-        [update_drone, update_trail, update_alt, update_thrust],
-    )
-
-    print("Viser running — open http://localhost:8080 in your browser.")
-    server.sleep_forever()
+        asset_dir = Path(_menagerie_xml_path).parent / "assets"
+        obj_path = asset_dir / "X2_lowpoly.obj"
+        tm = trimesh.load(obj_path, force="mesh", process=False)
+        tm.apply_scale(0.01)
+        # Visual geom quat="0 0 1 1" (MuJoCo [w,x,y,z]) → fixed rotation matrix
+        r_vis = np.array([[-1, 0, 0], [0, 0, 1], [0, 1, 0]], dtype=float)
+        tm.vertices = (tm.vertices @ r_vis.T).astype(np.float32)
+        verts = np.asarray(tm.vertices, dtype=np.float32)
+        faces = np.asarray(tm.faces, dtype=np.uint32)
+        return verts, faces
+    except Exception:
+        return None
 
 
 if __name__ == "__main__":
@@ -516,4 +283,44 @@ if __name__ == "__main__":
     print(f"Loop-closure position error: {pos_err:.4f} m")
     print(f"Final velocity:  {np.linalg.norm(final_vel):.4f} m/s")
     print()
-    visualize(results)
+
+    # ── Viser: same template as examples/drone/drone_racing.py ────────────────
+    traj = results.trajectory
+    traj["position"] = np.asarray(traj["qpos"][:, :3], dtype=np.float64)
+    traj["velocity"] = np.asarray(traj["qvel"][:, :3], dtype=np.float64)
+    traj["attitude"] = np.asarray(traj["qpos"][:, 3:7], dtype=np.float64)
+    ctrl_tr = np.asarray(traj["ctrl"], dtype=np.float64)
+    thrust_body = np.zeros((ctrl_tr.shape[0], 3), dtype=np.float64)
+    thrust_body[:, 2] = np.sum(ctrl_tr, axis=1)
+    traj["thrust_force"] = thrust_body
+
+    gate_vertices = [gen_vertices(center, radii) for center in modified_centers]
+    results.update(
+        {
+            "vertices": gate_vertices,
+            "gate_centers": modified_centers,
+            "A_gate": A_gate_const,
+            "A_gate_c_params": [A_gate_const @ np.asarray(c) for c in modified_centers],
+        }
+    )
+
+    vehicle_mesh = load_skydio_x2_vehicle_mesh()
+    if vehicle_mesh is not None:
+        print("[viser] vehicle_mesh: Skydio X2 low-poly (menagerie assets)")
+    else:
+        print("[viser] vehicle_mesh: None — default attitude axes (see load_skydio_x2_vehicle_mesh)")
+
+    traj_server = create_animated_plotting_server(
+        results,
+        thrust_key="thrust_force",
+        viewcone_scale=10.0,
+        show_control_plot="ctrl",
+        show_control_norm_plot="ctrl",
+        vehicle_mesh=vehicle_mesh,
+    )
+    scp_server = create_scp_animated_plotting_server(
+        results,
+        position_slice=slice(0, 3),
+        attitude_slice=slice(3, 7),
+    )
+    traj_server.sleep_forever()

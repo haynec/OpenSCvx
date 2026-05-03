@@ -90,6 +90,8 @@ def create_animated_plotting_server(
     thrust_scale: float = 0.3,
     attitude_key: str = "attitude",
     attitude_axes_length: float = 2.0,
+    vehicle_mesh: tuple[np.ndarray, np.ndarray] | None = None,
+    vehicle_mesh_color: tuple[int, int, int] = (200, 200, 210),
     show_viewcone: bool = True,
     viewcone_scale: float = 10.0,
     viewcone_ring_only: bool = False,
@@ -113,7 +115,8 @@ def create_animated_plotting_server(
     - Velocity-colored trail that grows as animation progresses
     - Current position marker
     - Thrust vector visualization (if thrust data available)
-    - Body frame attitude visualization (if attitude data available, for 6DOF)
+    - Body frame attitude visualization (if attitude data available, for 6DOF), or a
+      posed vehicle mesh when ``vehicle_mesh`` is passed instead of axes
     - Viewcone mesh (if R_sb in results and show_viewcone=True)
     - Target markers for viewplanning (if init_poses in results)
     - Optional ghost trajectory showing full path
@@ -135,7 +138,11 @@ def create_animated_plotting_server(
         thrust_key: Key for thrust/force data in trajectory dict (default: "force")
         thrust_scale: Scale factor for thrust vector visualization
         attitude_key: Key for attitude quaternion data (default: "attitude")
-        attitude_axes_length: Length of body frame axes
+        attitude_axes_length: Length of body frame axes (ignored when ``vehicle_mesh`` is set)
+        vehicle_mesh: Optional ``(vertices, faces)`` for a body-fixed mesh (e.g. drone geometry).
+            When provided, the mesh is posed at ``position`` with quaternion ``attitude`` each
+            frame instead of drawing the default attitude axes / frame.
+        vehicle_mesh_color: RGB color for ``vehicle_mesh`` when provided.
         show_viewcone: If True and R_sb is in results, show camera viewcone
         viewcone_scale: Size/depth of viewcone mesh
         viewcone_ring_only: If True, render viewcone as a base-ring outline only
@@ -502,10 +509,29 @@ def create_animated_plotting_server(
                     )
                     update_callbacks.append(update_axes)
             else:
-                _, update_attitude = add_attitude_frame(
-                    server, pos, attitude, axes_length=attitude_axes_length
-                )
-                update_callbacks.append(update_attitude)
+                if vehicle_mesh is not None:
+                    mesh_verts, mesh_faces = vehicle_mesh
+                    mesh_verts = np.asarray(mesh_verts, dtype=np.float32)
+                    mesh_faces = np.asarray(mesh_faces, dtype=np.uint32)
+                    mesh_handle = server.scene.add_mesh_simple(
+                        "/vehicle_mesh",
+                        vertices=mesh_verts,
+                        faces=mesh_faces,
+                        color=vehicle_mesh_color,
+                        position=tuple(float(x) for x in pos[0]),
+                        wxyz=tuple(float(x) for x in attitude[0]),
+                    )
+
+                    def update_vehicle_mesh(frame_idx: int) -> None:
+                        mesh_handle.position = tuple(float(x) for x in pos[frame_idx])
+                        mesh_handle.wxyz = tuple(float(x) for x in attitude[frame_idx])
+
+                    update_callbacks.append(update_vehicle_mesh)
+                else:
+                    _, update_attitude = add_attitude_frame(
+                        server, pos, attitude, axes_length=attitude_axes_length
+                    )
+                    update_callbacks.append(update_attitude)
         else:
             _, update_marker = add_position_marker(server, pos)
             update_callbacks.append(update_marker)
