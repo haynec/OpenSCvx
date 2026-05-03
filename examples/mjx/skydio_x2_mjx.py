@@ -55,53 +55,6 @@ from openscvx import ByofSpec, Problem
 from openscvx.integrations import mjx_byof
 from openscvx.utils import gen_vertices, rot
 
-# ── Inline XML fallback ───────────────────────────────────────────────────────
-# Used when the MuJoCo Menagerie submodule is not available.
-# Physics matches the official model (same rotor positions, gear vectors,
-# masses, and hover thrust) but replaces mesh assets with primitive geoms.
-_X2_XML_FALLBACK = """
-<mujoco model="skydio_x2">
-  <option timestep="0.01" integrator="Euler" gravity="0 0 -9.81"/>
-  <default>
-    <motor ctrlrange="0 13"/>
-  </default>
-  <worldbody>
-    <body name="x2" pos="0 0 0.3">
-      <freejoint name="root"/>
-      <geom name="body" type="box" size="0.08 0.08 0.04"
-            mass="0.325" rgba="0.25 0.25 0.25 1"/>
-      <geom name="arm_lr" type="box" size="0.18 0.015 0.008"
-            mass="0" rgba="0.4 0.4 0.4 1"/>
-      <geom name="arm_fb" type="box" size="0.015 0.14 0.008"
-            mass="0" rgba="0.4 0.4 0.4 1"/>
-      <!-- Rotor discs — positions and masses from menagerie -->
-      <geom name="rotor1" type="ellipsoid" size="0.13 0.13 0.01"
-            pos="-.14 -.18 .05" mass=".25" rgba="0.15 0.15 0.15 1"/>
-      <geom name="rotor2" type="ellipsoid" size="0.13 0.13 0.01"
-            pos="-.14  .18 .05" mass=".25" rgba="0.15 0.15 0.15 1"/>
-      <geom name="rotor3" type="ellipsoid" size="0.13 0.13 0.01"
-            pos=" .14  .18 .08" mass=".25" rgba="0.85 0.35 0.1  1"/>
-      <geom name="rotor4" type="ellipsoid" size="0.13 0.13 0.01"
-            pos=" .14 -.18 .08" mass=".25" rgba="0.85 0.35 0.1  1"/>
-      <!-- Thrust sites at rotor positions -->
-      <site name="thrust1" pos="-.14 -.18 .05"/>
-      <site name="thrust2" pos="-.14  .18 .05"/>
-      <site name="thrust3" pos=" .14  .18 .08"/>
-      <site name="thrust4" pos=" .14 -.18 .08"/>
-    </body>
-  </worldbody>
-  <actuator>
-    <!-- gear: [Fx,Fy,Fz, Tx,Ty,Tz] in site frame.
-         Rotors 1 & 3 spin CW  → negative yaw torque (−0.0201).
-         Rotors 2 & 4 spin CCW → positive yaw torque (+0.0201). -->
-    <motor name="thrust1" site="thrust1" gear="0 0 1 0 0 -.0201"/>
-    <motor name="thrust2" site="thrust2" gear="0 0 1 0 0  .0201"/>
-    <motor name="thrust3" site="thrust3" gear="0 0 1 0 0 -.0201"/>
-    <motor name="thrust4" site="thrust4" gear="0 0 1 0 0  .0201"/>
-  </actuator>
-</mujoco>
-"""
-
 HOVER_CTRL = 3.2495625  # N per motor for level hover (from menagerie keyframe)
 START_POS = np.array([10.0, 0.0, 20.0])
 HOVER_QUAT = np.array([1.0, 0.0, 0.0, 0.0])  # w=1 → level attitude
