@@ -33,7 +33,6 @@ except ImportError:
     )
     sys.exit(1)
 
-import openscvx as ox
 from openscvx import ByofSpec, Minimize, Problem
 from openscvx.integrations import mjx_byof
 
