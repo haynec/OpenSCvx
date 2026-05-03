@@ -34,7 +34,6 @@ except ImportError:
     sys.exit(1)
 
 import openscvx as ox
-from openscvx import ByofSpec, Problem
 from openscvx.integrations import mjx_byof
 
 L1, L2 = 0.5, 0.4  # link lengths (m)
