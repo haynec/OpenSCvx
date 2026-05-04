@@ -116,8 +116,8 @@ byof: ByofSpec = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctr
 
 # ── Constraints (CTCS on state / control bounds) ───────────────────────────────
 constraints = []
-# for state in states:
-#     constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
+for state in states:
+    constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
 # ── Initial guess: linearly swing θ₁ from π → 0, others stay 0 ───────────────
 th1_guess = np.linspace(np.pi, 0.0, n)
