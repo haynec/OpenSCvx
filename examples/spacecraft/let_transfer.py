@@ -734,15 +734,6 @@ s_uniform = np.linspace(0.0, 1.0, n_nodes)
 node_grid = _normalized_node_grid(n_nodes, NODE_DISTRIBUTION_MODE)
 node_idx = np.round((guess_dense.shape[0] - 1) * node_grid).astype(int)
 nodal_guess = guess_dense[node_idx].copy()
-# nodal_guess[0, 3:6] -= delta_v0_guess
-
-# Broad bounds (required by OpenSCvx for robust scaling/bounding).
-position.min = np.array([-2.0, -2.0, -2.0])
-position.max = np.array([2.0, 2.0, 2.0])
-velocity.min = np.array([-3.0, -3.0, -3.0])
-velocity.max = np.array([3.0, 3.0, 3.0])
-fuel.min = np.array([0.95])
-fuel.max = np.array([1.00])
 
 # Boundary conditions
 position.initial = pos_0
@@ -778,13 +769,31 @@ time = ox.Time(
     min=0.0,
     max=3.0 * t_f_guess,
     guess=time_guess,
-    time_dilation_min=0.01 * t_f_guess,
+    time_dilation_min=0.0001 * t_f_guess,
     time_dilation_max=3.0 * t_f_guess,
     uniform_time_grid=False,
 )
 dtdtau_guess = np.gradient(time_guess[:, 0], s_uniform)
 dtdtau_guess = np.clip(dtdtau_guess, 0.01 * t_f_guess, 3.0 * t_f_guess)
 time.time_dilation_guess = dtdtau_guess.reshape(-1, 1)
+
+# Scaling
+position.scaling_max    =  jnp.array([0.01, 0.01, 0.01])
+position.scaling_min    = -jnp.array([0.01, 0.01, 0.01])
+velocity.scaling_max    =  jnp.array([0.5, 0.5, 0.5])
+velocity.scaling_min    = -jnp.array([0.5, 0.5, 0.5])
+fuel.scaling_min        =  jnp.array([0.95])     
+fuel.scaling_max        =  jnp.array([1.00])     
+delta_v.scaling_min     = velocity.scaling_min     
+delta_v.scaling_max     = velocity.scaling_max    
+
+# Bounds
+position.min    = position.scaling_min
+position.max    = position.scaling_max  
+velocity.min    = velocity.scaling_min
+velocity.max    = velocity.scaling_max
+fuel.min        = fuel.scaling_min
+fuel.max        = fuel.scaling_max
 
 states = [position, velocity, fuel]
 controls = [delta_v]
@@ -798,7 +807,7 @@ algorithm = {
     "lam_prox": 5e-2,
     "lam_vc": 3e1,
     "lam_vb": 2e-1,
-    "lam_cost": 5e-1,
+    "lam_cost": 0.5,
     "ep_tr": 1e-9,
     "ep_vc": 1e-6,
     "autotuner": ox.AugmentedLagrangian(),
@@ -845,18 +854,17 @@ problem = Problem(
     discretizer=discretizer,
     algorithm=algorithm,
     float_dtype="float64",
-    solver={"solver_args":{"abstol": 1e-9, "reltol": 1e-9}},
-)
+    solver={
+        "solver_args": {"abstol": 1e-9, "reltol": 1e-9, "verbose": True}
+    }
 
 # Keep post-process propagation tolerances aligned with discretization.
 problem.settings.prp.solver = "Dopri8"
 problem.settings.prp.atol = integration_tol
 problem.settings.prp.rtol = integration_tol
+problem.settings.prp.dt = 1e-4
 
 if __name__ == "__main__":
-    print(f"Ephemeris source: {spice_source}")
-    print(f"Reference date: {REFERENCE_DATE}")
-    print(f"Reference scales: L={r_ref:.6f} km, T={t_ref:.6f} s, v_ref={v_ref:.9f} km/s")
     hohmann_metrics = _hohmann_transfer_metrics(
         mu_central_km3_s2=mu_earth,
         r1_km=r_0,
@@ -965,6 +973,7 @@ if __name__ == "__main__":
     print(f"||Final delta-v|| (km/s): {dvf_opt_norm * v_ref:.9f}")
     print(f"Total ||delta-v|| (solution only, km/s): {total_dv_opt_norm * v_ref:.9f}")
     print(f"Total ||delta-v|| (+delta_v0_guess, km/s): {total_dv_with_guess_norm * v_ref:.9f}")
+    print(f"Final distance from Moon center (km): {final_distance_error_km:.6f}")
     print(f"Hohmann dv1 (km/s): {hohmann_metrics['dv1_km_s']:.9f}")
     print(f"Hohmann dv2 (km/s): {hohmann_metrics['dv2_km_s']:.9f}")
     print(f"Hohmann total delta-v (km/s): {hohmann_metrics['total_dv_km_s']:.9f}")
