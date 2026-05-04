@@ -537,7 +537,7 @@ if __name__ == "__main__":
     print()
 
     problem.initialize()
-    results = problem.solve()
+    problem.solve()
     results = problem.post_process()
 
     ee_pos_traj = results.trajectory["ee_position"]  # (T_frames, 3)
