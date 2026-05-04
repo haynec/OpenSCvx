@@ -12,11 +12,8 @@ specified symbolically via ``dynamics={"qpos": qvel}``.  For models **with**
 free joints (drones, humanoids) ``"qpos"`` is included automatically and no
 symbolic dynamics entry is needed.
 
-Lower-level building blocks (for advanced users):
-
-* :func:`mjx_dynamics` — returns a single BYOF callable for ``qvel`` (qacc).
-* :func:`free_joint_qpos_dynamics` — returns a BYOF callable for ``qpos``
-  when ``nq > nv`` (quaternion free-joint kinematics).
+The lower-level :func:`mjx_dynamics` is also public for advanced users who
+need direct access to the BYOF callable for the ``qvel`` derivative.
 
 Note:
     Time dilation is handled automatically by the BYOF lowering pipeline; all
@@ -159,20 +156,20 @@ def mjx_dynamics(
     return f
 
 
-def free_joint_qpos_dynamics(
+def _free_joint_qpos_dynamics(
     *,
     qpos: "State | slice",
     qvel: "State | slice",
     n_free_joints: int = 1,
 ) -> Callable:
-    """BYOF dynamics for ``qpos`` when the system has quaternion free joints.
+    """BYOF callable for ``qpos`` when the model has quaternion free joints.
 
-    When a MuJoCo model has a floating-base free joint, ``nq > nv`` because
-    each quaternion orientation contributes 4 position DOF but only 3 angular
-    velocity DOF. The simple symbolic shorthand ``"qpos": qvel`` therefore
-    fails a shape check. This function returns a BYOF dynamics callable that
-    correctly computes ``qdot`` from ``(q, qd)`` by applying the quaternion
-    kinematic equation::
+    Used internally by :func:`mjx_byof`.  When a MuJoCo model has a
+    floating-base free joint, ``nq > nv`` because each quaternion orientation
+    contributes 4 position DOF but only 3 angular velocity DOF. The simple
+    symbolic shorthand ``"qpos": qvel`` therefore fails a shape check. This
+    function returns a BYOF dynamics callable that correctly computes ``qdot``
+    from ``(q, qd)`` by applying the quaternion kinematic equation::
 
         [x_dot; q_dot; joint_dot] = [v; 0.5 * Xi(q) @ omega; qdot_joints]
 
@@ -195,21 +192,6 @@ def free_joint_qpos_dynamics(
         MuJoCo MJX's free-joint convention. If your system expresses angular
         velocity in the body frame, negate the off-diagonal terms in the
         integration matrix.
-
-    Example:
-        Quadrotor with one free joint (position + attitude)::
-
-            from openscvx.integrations import free_joint_qpos_dynamics, mjx_dynamics
-
-            qpos = ox.State("qpos", shape=(mjx_model.nq,))  # nq = 7
-            qvel = ox.State("qvel", shape=(mjx_model.nv,))  # nv = 6
-
-            byof = {
-                "dynamics": {
-                    "qpos": free_joint_qpos_dynamics(qpos=qpos, qvel=qvel),
-                    "qvel": mjx_dynamics(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl),
-                }
-            }
     """
     _qpos_arg = qpos
     _qvel_arg = qvel
@@ -280,8 +262,7 @@ def mjx_byof(
 
     This is the recommended high-level entry-point.  It inspects the model's
     ``nq`` and ``nv`` to detect free joints and automatically includes the
-    quaternion kinematics callable for ``qpos`` when needed — no separate
-    import of :func:`free_joint_qpos_dynamics` is required.
+    quaternion kinematics callable for ``qpos`` when needed.
 
     Args:
         mjx_model: A model produced by :func:`mujoco.mjx.put_model`.
@@ -336,7 +317,7 @@ def mjx_byof(
 
     n_free = nq - nv  # each free joint contributes exactly 1 extra position DOF
     if n_free > 0:
-        result["qpos"] = free_joint_qpos_dynamics(
+        result["qpos"] = _free_joint_qpos_dynamics(
             qpos=qpos,
             qvel=qvel,
             n_free_joints=n_free,

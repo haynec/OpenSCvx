@@ -13,14 +13,8 @@ contains only ``"qvel"`` and ``dynamics={"qpos": qvel}`` should still be
 provided to :class:`~openscvx.Problem`.  For models with free joints
 (``nq > nv``) ``"qpos"`` is included automatically — no extra imports needed.
 
-Lower-level building blocks (advanced use)
-------------------------------------------
-:func:`mjx_dynamics`
-    Returns a single BYOF callable for the ``qvel`` derivative (qacc).
-
-:func:`free_joint_qpos_dynamics`
-    Returns a BYOF callable for ``qpos`` when the model has quaternion free
-    joints (``nq > nv``).
+:func:`mjx_dynamics` is also available for advanced users who need direct
+access to the BYOF callable for the ``qvel`` (acceleration) derivative.
 
 All symbols delegate lazily so ``mujoco.mjx`` is only imported when used.
 The :mod:`menagerie` submodule is loaded lazily via attribute access.
@@ -57,11 +51,25 @@ def mjx_dynamics(*args: Any, **kwargs: Any) -> Any:
     return _mjx_dynamics(*args, **kwargs)
 
 
-def free_joint_qpos_dynamics(*args: Any, **kwargs: Any) -> Any:
-    """Lazy delegate; imports ``mujoco.mjx`` on first call."""
-    from .mjx import free_joint_qpos_dynamics as _free_joint_qpos_dynamics
+def free_joint_qpos_dynamics(*args: Any, **kwargs: Any) -> Any:  # noqa: F401 — kept for backwards compat
+    """Deprecated public shim; use :func:`mjx_byof` instead.
 
-    return _free_joint_qpos_dynamics(*args, **kwargs)
+    .. deprecated::
+        This symbol will be removed in a future release.  Use
+        :func:`mjx_byof` which handles free-joint quaternion kinematics
+        automatically.
+    """
+    import warnings
+
+    warnings.warn(
+        "free_joint_qpos_dynamics is deprecated and will be removed in a future release. "
+        "Use mjx_byof instead, which handles free-joint kinematics automatically.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    from .mjx import _free_joint_qpos_dynamics as _f
+
+    return _f(*args, **kwargs)
 
 
 def __getattr__(name: str) -> Any:
@@ -72,4 +80,4 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["mjx_byof", "mjx_dynamics", "free_joint_qpos_dynamics", "menagerie"]
+__all__ = ["mjx_byof", "mjx_dynamics", "menagerie"]

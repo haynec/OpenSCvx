@@ -6,7 +6,7 @@ Coverage
 * ``mjx_dynamics``   — return type, output shape, return_component, lazy slice
                        resolution, extra_postprocess.  Skipped when
                        ``mujoco.mjx`` is not installed.
-* ``free_joint_qpos_dynamics`` — output shape, quaternion kinematics identity,
+* ``_free_joint_qpos_dynamics`` — output shape, quaternion kinematics identity,
                        angular-velocity derivative, two free joints, revolute
                        pass-through, no-free-joints path.
 * ``menagerie``      — ``find_menagerie_root``, ``get_model_dir``,
@@ -264,19 +264,19 @@ class TestMjxDynamics:
 
 
 # ===========================================================================
-# free_joint_qpos_dynamics
+# _free_joint_qpos_dynamics
 # ===========================================================================
 
 
 class TestFreeJointQposDynamics:
-    """Tests for ``free_joint_qpos_dynamics`` (pure JAX, no MuJoCo required)."""
+    """Tests for ``_free_joint_qpos_dynamics`` (pure JAX, no MuJoCo required)."""
 
     def _make(self, n_free=1, extra_joints=0):
-        from openscvx.integrations.mjx import free_joint_qpos_dynamics
+        from openscvx.integrations.mjx import _free_joint_qpos_dynamics
 
         nq = 7 * n_free + extra_joints
         nv = 6 * n_free + extra_joints
-        f = free_joint_qpos_dynamics(
+        f = _free_joint_qpos_dynamics(
             qpos=slice(0, nq),
             qvel=slice(nq, nq + nv),
             n_free_joints=n_free,
@@ -284,9 +284,9 @@ class TestFreeJointQposDynamics:
         return f, nq, nv
 
     def test_returns_callable(self):
-        from openscvx.integrations.mjx import free_joint_qpos_dynamics
+        from openscvx.integrations.mjx import _free_joint_qpos_dynamics
 
-        f = free_joint_qpos_dynamics(qpos=slice(0, 7), qvel=slice(7, 13))
+        f = _free_joint_qpos_dynamics(qpos=slice(0, 7), qvel=slice(7, 13))
         assert callable(f)
 
     def test_output_shape_single_free_joint(self):
@@ -708,9 +708,15 @@ class TestIntegrationsPublicAPI:
         assert callable(mjx_dynamics)
 
     def test_free_joint_qpos_dynamics_importable(self):
-        from openscvx.integrations import free_joint_qpos_dynamics
+        """Public shim still importable but raises DeprecationWarning."""
+        import warnings
 
-        assert callable(free_joint_qpos_dynamics)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            from openscvx.integrations import free_joint_qpos_dynamics
+
+            _ = free_joint_qpos_dynamics(qpos=slice(0, 7), qvel=slice(7, 13))
+        assert any(issubclass(warning.category, DeprecationWarning) for warning in w)
 
     def test_menagerie_importable(self):
         from openscvx.integrations import menagerie
@@ -730,5 +736,5 @@ class TestIntegrationsPublicAPI:
 
         assert "mjx_byof" in integrations.__all__
         assert "mjx_dynamics" in integrations.__all__
-        assert "free_joint_qpos_dynamics" in integrations.__all__
+        assert "free_joint_qpos_dynamics" not in integrations.__all__
         assert "menagerie" in integrations.__all__
