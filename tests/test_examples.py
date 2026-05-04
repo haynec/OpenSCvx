@@ -26,6 +26,7 @@ EXCLUDED_EXAMPLES = {
     # Heavy MJX examples (keep cartpole + skydio below)
     "mjx/double_cartpole_mjx.py",
     "mjx/triple_cartpole_mjx.py",
+    "mjx/triple_cartpole_game.py",
     "mjx/triple_cartpole_3d_mjx.py",
 }
 
