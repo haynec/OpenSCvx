@@ -45,7 +45,7 @@ TRIPLE_CARTPOLE_XML = f"""
   <option gravity="0 0 -9.81" timestep="0.005" integrator="Euler"/>
   <worldbody>
     <body name="cart" pos="0 0 0">
-      <joint name="slider" type="slide" axis="1 0 0" limited="true" range="-4 4"/>
+      <joint name="slider" type="slide" axis="1 0 0" limited="true" range="-10 10"/>
       <geom name="cart_geom" type="box" size="0.25 0.15 0.1"
             mass="2.0" rgba="0.35 0.35 0.75 1"/>
       <!-- Link 1 — pivot at cart centre (z=0) -->
@@ -71,7 +71,7 @@ TRIPLE_CARTPOLE_XML = f"""
   <actuator>
     <!-- Single actuator on the cart slider; gear scales ctrl ∈ [−1,1] to force in N -->
     <motor joint="slider" name="cart_force" gear="60"
-           ctrlrange="-1 1" ctrllimited="true"/>
+           ctrlrange="-3 3" ctrllimited="true"/>
   </actuator>
 </mujoco>
 """
@@ -86,12 +86,12 @@ n_v = int(mjx_model.nv)  # 4: ẋ, θ̇1, θ̇2, θ̇3  (nq == nv, no quaternion
 n_u = int(mjx_model.nu)  # 1: cart force
 
 n = 60  # more nodes → finer resolution near the unstable upright equilibrium
-total_time = 3.0
+total_time = 2.5
 
 # ── State / control definitions ───────────────────────────────────────────────
 qpos = ox.State("qpos", shape=(n_q,))
-qpos.min = np.array([-1.0, -2 * np.pi, -2 * np.pi, -2 * np.pi])
-qpos.max = np.array([1.0, 2 * np.pi, 2 * np.pi, 2 * np.pi])
+qpos.min = np.array([-100.0, -2 * np.pi, -2 * np.pi, -2 * np.pi])
+qpos.max = np.array([100.0, 2 * np.pi, 2 * np.pi, 2 * np.pi])
 qpos.initial = np.array([0.0, np.pi, 0.0, 0.0])  # all links hanging down
 qpos.final = [ox.Free(0.0), 0.0, 0.0, 0.0]  # all links upright
 
@@ -99,11 +99,11 @@ qvel = ox.State("qvel", shape=(n_v,))
 qvel.min = np.array([-12.0, -12.0, -12.0, -12.0])
 qvel.max = np.array([12.0, 12.0, 12.0, 12.0])
 qvel.initial = np.zeros(n_v)
-qvel.final = [ox.Free(0.0), ox.Free(0.0), ox.Free(0.0), ox.Free(0.0)]
+qvel.final = [0.0, 0.0, 0.0, 0.0]
 
 ctrl = ox.Control("ctrl", shape=(n_u,))
-ctrl.min = np.array([-2.0])
-ctrl.max = np.array([2.0])
+ctrl.min = np.array([-3.0])
+ctrl.max = np.array([3.0])
 ctrl.guess = np.zeros((n, n_u))
 
 states = [qpos, qvel]
@@ -116,8 +116,8 @@ byof: ByofSpec = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctr
 
 # ── Constraints (CTCS on state / control bounds) ───────────────────────────────
 constraints = []
-for state in states:
-    constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
+# for state in states:
+#     constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
 # ── Initial guess: linearly swing θ₁ from π → 0, others stay 0 ───────────────
 th1_guess = np.linspace(np.pi, 0.0, n)
@@ -129,7 +129,6 @@ time = ox.Time(
     final=total_time,
     min=0.0,
     max=total_time,
-    # uniform_time_grid=True,
 )
 
 problem = Problem(
@@ -141,19 +140,10 @@ problem = Problem(
     N=n,
     byof=byof,
     algorithm={
-        "lam_prox": 1e-1,
+        "lam_prox": 1e0,
         "lam_cost": 0e0,
-        "lam_vc": 4e0,
+        "lam_vc": 4e1,
         "autotuner": ox.ConstantProximalWeight(),
-    },
-    discretizer={"diffrax_kwargs": {"atol": 1e-12, "rtol": 1e-12}, "ode_solver": "Dopri8"},
-    solver={
-        "solver_args": {
-            "enforce_dpp": True,
-            "canon_backend": "COO",
-            "abs_tol": 1e-12,
-            "rel_tol": 1e-12,
-        }
     },
     float_dtype="float64",
 )
@@ -170,78 +160,6 @@ def fk_joints(q: np.ndarray) -> tuple[np.ndarray, ...]:
     h3 = h2 + np.array([L2 * np.sin(t1 + t2), 0.0, L2 * np.cos(t1 + t2)])
     tip = h3 + np.array([L3 * np.sin(t1 + t2 + t3), 0.0, L3 * np.cos(t1 + t2 + t3)])
     return cart, h1, h2, h3, tip
-
-
-def simulate_mujoco(results) -> dict:
-    """Run the optimised control sequence through MuJoCo's CPU simulator.
-
-    Matches the setup used by ``post_process``:
-
-    * **dt = 0.01 s (100 Hz)** — same as ``PropagationConfig.dt`` default.
-    * **FOH**: control linearly interpolated between consecutive SCP nodes,
-      exactly as ``simulate_nonlinear_time`` passes ``u_interp[k]`` /
-      ``u_interp[k+1]`` to the propagation ODE.
-    * **Actual node times**: read from ``results.nodes["time"]`` when
-      available (non-uniform for time-optimal problems); falls back to
-      ``linspace`` for fixed-time problems — identical to what the visualize
-      function does.
-    * **Initial state**: taken from the converged SCP node 0.
-
-    MuJoCo's ``opt.timestep`` is overridden to exactly 0.01 s before stepping
-    so the integrator rate is independent of the XML value.
-
-    Returns a dict with keys ``"time"``, ``"qpos"``, ``"qvel"``.
-    """
-    # ── dt matches PropagationConfig default (0.01 s = 100 Hz) ────────────────
-    dt = 0.01
-    mj_model.opt.timestep = dt
-
-    data = mujoco.MjData(mj_model)
-    data.qpos[:] = results.nodes["qpos"][0]
-    data.qvel[:] = results.nodes["qvel"][0]
-    mujoco.mj_forward(mj_model, data)
-
-    # ── Actual node times (mirrors how visualize and post_process obtain them) ─
-    u_nodes = results.nodes["ctrl"]  # (N, n_u)
-    n_nodes = len(u_nodes)
-
-    raw_t = results.trajectory["time"].flatten()
-    t_start, t_end = float(raw_t[0]), float(raw_t[-1])
-
-    t_nodes_raw = results.nodes.get("time", None)
-    if t_nodes_raw is not None:
-        t_nodes_sim = np.asarray(t_nodes_raw).flatten()
-    else:
-        # Fixed-time problem: nodes are uniformly spaced
-        t_nodes_sim = np.linspace(t_start, t_end, n_nodes)
-
-    # ── Simulate ──────────────────────────────────────────────────────────────
-    n_steps = int(round((t_end - t_start) / dt)) + 1
-    rec_t = np.empty(n_steps)
-    rec_q = np.empty((n_steps, n_q))
-    rec_qd = np.empty((n_steps, n_v))
-
-    sim_t = t_start
-    for step in range(n_steps):
-        rec_t[step] = sim_t
-        rec_q[step] = data.qpos.copy()
-        rec_qd[step] = data.qvel.copy()
-
-        # FOH: linearly interpolate u between the two bracketing nodes,
-        # exactly as post_process passes u_interp[k] / u_interp[k+1]
-        k = int(np.clip(np.searchsorted(t_nodes_sim, sim_t, side="right") - 1, 0, n_nodes - 2))
-        t0, t1 = float(t_nodes_sim[k]), float(t_nodes_sim[k + 1])
-        alpha = float(np.clip((sim_t - t0) / (t1 - t0) if t1 > t0 else 0.0, 0.0, 1.0))
-        data.ctrl[:] = (1.0 - alpha) * u_nodes[k] + alpha * u_nodes[k + 1]
-
-        mujoco.mj_step(mj_model, data)
-        sim_t += dt
-
-    print(
-        f"MuJoCo simulation: {n_steps} steps, dt={dt * 1e3:.1f} ms (FOH, 100 Hz)  "
-        f"| final θ₁={np.rad2deg(rec_q[-1, 1]):.2f}°"
-    )
-    return {"time": rec_t, "qpos": rec_q, "qvel": rec_qd}
 
 
 def qpos_from_V_multishot(
@@ -290,14 +208,8 @@ def qpos_from_V_multishot(
     return np.stack(q_rows, axis=0), np.asarray(t_rows, dtype=np.float64)
 
 
-def visualize(results, sim: dict | None = None) -> None:
-    """Animate the triple-link cartpole in a Viser 3D scene.
-
-    Args:
-        results: OptimizationResults from ``problem.post_process()``.
-        sim:     Optional dict from ``simulate_mujoco(results)`` — when provided,
-                 a second (orange) pendulum tracks the actual MuJoCo simulation.
-    """
+def visualize(results) -> None:
+    """Animate the triple-link cartpole in a Viser 3D scene (multi-shoot integrated path only)."""
     import plotly.graph_objects as go
     import viser
 
@@ -309,11 +221,9 @@ def visualize(results, sim: dict | None = None) -> None:
     from openscvx.plotting.viser.plotly_integration import add_animated_plotly_vline
 
     # ── Extract trajectory data ────────────────────────────────────────────────
-    t_vec = results.trajectory["time"].flatten()  # (N_fine,)
-    q_traj = results.trajectory["qpos"]  # (N_fine, 4)
+    t_vec = results.trajectory["time"].flatten()  # (N_fine,) — playback clock
     u_traj = results.trajectory["ctrl"]  # (N_fine, 1)
 
-    # Discretization nodes (coarser grid from the SCP solution)
     q_nodes = results.nodes["qpos"]  # (n_nodes, 4)
     t_nodes = results.nodes.get("time", None)
     if t_nodes is None:
@@ -322,13 +232,6 @@ def visualize(results, sim: dict | None = None) -> None:
         t_nodes = np.asarray(t_nodes).flatten()
 
     N = len(t_vec)
-
-    # Precompute FK for every frame
-    fk_all = [fk_joints(q_traj[i]) for i in range(N)]
-    tip_pos = np.array([j[4] for j in fk_all])  # (N, 3)
-
-    # FK at each discretization node
-    fk_nodes = [fk_joints(q_nodes[i]) for i in range(len(q_nodes))]
 
     # Multi-shoot integrated trajectory from ``V`` (last SCP discretization matrix).
     _dh = getattr(results, "discretization_history", None) or []
@@ -348,6 +251,8 @@ def visualize(results, sim: dict | None = None) -> None:
     if q_ms_v is not None and t_ms_v is not None:
         fk_multishot_anim = [fk_joints(q_ms_v[i]) for i in range(len(q_ms_v))]
         t_multishot_lookup = t_ms_v
+        t_angle = t_ms_v
+        q_angle = q_ms_v
     else:
         # Fallback: interpolate nodal qpos onto the post-process time grid.
         q_aligned = np.column_stack(
@@ -355,6 +260,15 @@ def visualize(results, sim: dict | None = None) -> None:
         )
         fk_multishot_anim = [fk_joints(q_aligned[i]) for i in range(N)]
         t_multishot_lookup = t_vec
+        t_angle = t_vec
+        q_angle = q_aligned
+
+    # Tip trail samples (multi-shoot pose at each playback time)
+    tip_pos = np.zeros((N, 3))
+    for i in range(N):
+        ms_i = int(np.argmin(np.abs(t_multishot_lookup - float(t_vec[i]))))
+        ms_i = int(np.clip(ms_i, 0, len(fk_multishot_anim) - 1))
+        tip_pos[i] = fk_multishot_anim[ms_i][4]
 
     # ── Viser server ───────────────────────────────────────────────────────────
     server = viser.ViserServer()
@@ -378,52 +292,7 @@ def visualize(results, sim: dict | None = None) -> None:
         position=tuple(float(v) for v in upright_tip),
     )
 
-    # ── Static discretization node markers ────────────────────────────────────
-    # Ghost pendulums at every SCP node — shows where the optimizer placed nodes.
-    n_nodes = len(fk_nodes)
-    # One ghost segment set per link, faded gray
-    ghost_segs = np.stack(
-        [
-            np.stack(
-                [
-                    np.array(fk_nodes[i][j], dtype=np.float32),
-                    np.array(fk_nodes[i][j + 1], dtype=np.float32),
-                ],
-                axis=0,
-            )
-            for i in range(n_nodes)
-            for j in range(1, 4)  # joints h1→h2, h2→h3, h3→tip
-        ],
-        axis=0,
-    )  # (n_nodes*3, 2, 3)
-
-    server.scene.add_line_segments(
-        "/nodes/links",
-        points=ghost_segs,
-        colors=np.array([160, 160, 160], dtype=np.uint8),
-        line_width=1.5,
-    )
-
-    # Cart positions at each node: small diamonds on the rail
-    cart_node_pos = np.array(
-        [[float(fk_nodes[i][0][0]), 0.0, 0.0] for i in range(n_nodes)],
-        dtype=np.float32,
-    )
-    server.scene.add_point_cloud(
-        "/nodes/cart",
-        points=cart_node_pos,
-        colors=np.tile(np.array([100, 100, 220], dtype=np.uint8), (n_nodes, 1)),
-        point_size=0.04,
-    )
-
-    # Tip positions at each node: small colored dots
-    tip_node_pos = np.array([fk_nodes[i][4] for i in range(n_nodes)], dtype=np.float32)
-    server.scene.add_point_cloud(
-        "/nodes/tips",
-        points=tip_node_pos,
-        colors=np.tile(np.array([220, 180, 50], dtype=np.uint8), (n_nodes, 1)),
-        point_size=0.05,
-    )
+    n_nodes = len(q_nodes)
 
     # Multishot path: dense integrated samples from ``V_multishot``, else chords between nodes.
     if q_ms_v is not None and len(q_ms_v) >= 2:
@@ -445,17 +314,23 @@ def visualize(results, sim: dict | None = None) -> None:
             axis=0,
         )
     elif n_nodes >= 2:
+        fk_nd = [fk_joints(q_nodes[i]) for i in range(n_nodes)]
+        cart_node_pos = np.array(
+            [[float(fk_nd[i][0][0]), 0.0, 0.0] for i in range(n_nodes)],
+            dtype=np.float32,
+        )
+        tip_node_pos = np.array([fk_nd[i][4] for i in range(n_nodes)], dtype=np.float32)
         cart_multishot_segs = np.stack(
             [
                 np.stack([cart_node_pos[i], cart_node_pos[i + 1]], axis=0)
                 for i in range(n_nodes - 1)
             ],
             axis=0,
-        ).astype(np.float32)
+        )
         tip_multishot_segs = np.stack(
             [np.stack([tip_node_pos[i], tip_node_pos[i + 1]], axis=0) for i in range(n_nodes - 1)],
             axis=0,
-        ).astype(np.float32)
+        )
     else:
         cart_multishot_segs = None
 
@@ -472,46 +347,6 @@ def visualize(results, sim: dict | None = None) -> None:
             colors=np.array([230, 170, 40], dtype=np.uint8),
             line_width=3.5,
         )
-
-    # ── Animated cart ──────────────────────────────────────────────────────────
-    cart_handle = server.scene.add_box(
-        "/cart",
-        dimensions=(0.5, 0.3, 0.2),
-        position=tuple(float(v) for v in fk_all[0][0]),
-        color=(90, 90, 190),
-    )
-
-    # ── Animated links (3 segments: h1→h2, h2→h3, h3→tip) ────────────────────
-    def _link_segments(i: int) -> np.ndarray:
-        _, h1, h2, h3, tip = fk_all[i]
-        return np.array([[h1, h2], [h2, h3], [h3, tip]], dtype=np.float32)
-
-    # Viser requires colors shape (N, 2, 3): one RGB per endpoint per segment.
-    link_colors = np.array(
-        [
-            [[220, 80, 80], [220, 80, 80]],  # link 1 — red
-            [[80, 200, 80], [80, 200, 80]],  # link 2 — green
-            [[80, 80, 220], [80, 80, 220]],  # link 3 — blue
-        ],
-        dtype=np.uint8,
-    )  # shape (3, 2, 3)
-    link_handle = server.scene.add_line_segments(
-        "/links",
-        points=_link_segments(0),
-        colors=link_colors,
-        line_width=7.0,
-    )
-
-    # Joint spheres at h1, h2, h3
-    joint_handles = []
-    for jname, jcol in [("/j1", (200, 60, 60)), ("/j2", (60, 200, 60)), ("/j3", (60, 60, 200))]:
-        h = server.scene.add_icosphere(
-            jname,
-            radius=0.04,
-            color=jcol,
-            position=tuple(float(v) for v in fk_all[0][1]),
-        )
-        joint_handles.append(h)
 
     # ── Animated multishot rig (aligned to same playback clock) ───────────────
     ms_cart_handle = server.scene.add_box(
@@ -561,8 +396,8 @@ def visualize(results, sim: dict | None = None) -> None:
     for k in range(3):
         fig_angles.add_trace(
             go.Scatter(
-                x=t_vec.tolist(),
-                y=np.rad2deg(q_traj[:, k + 1]).tolist(),
+                x=t_angle.tolist(),
+                y=np.rad2deg(q_angle[:, k + 1]).tolist(),
                 mode="lines",
                 name=angle_names[k],
                 line={"color": angle_colors[k], "width": 2},
@@ -600,98 +435,6 @@ def visualize(results, sim: dict | None = None) -> None:
         _, update_angles = add_animated_plotly_vline(server, fig_angles, t_vec, folder_name=None)
         _, update_ctrl = add_animated_plotly_vline(server, fig_ctrl, t_vec, folder_name=None)
 
-    # ── MuJoCo simulation overlay (orange chain) ──────────────────────────────
-    sim_callbacks: list = []
-    if sim is not None:
-        sim_t = sim["time"]
-        sim_q = sim["qpos"]
-        fk_sim = [fk_joints(sim_q[i]) for i in range(len(sim_t))]
-
-        # Tip trail for simulated trajectory
-        sim_tip = np.array([j[4] for j in fk_sim], dtype=np.float32)
-        sim_tip_colors = np.tile(np.array([230, 120, 30], dtype=np.uint8), (len(sim_t), 1))
-        server.scene.add_point_cloud(
-            "/sim/tip_trail",
-            points=sim_tip,
-            colors=sim_tip_colors,
-            point_size=0.01,
-        )
-
-        sim_link_colors = np.array(
-            [
-                [[230, 100, 20], [230, 100, 20]],
-                [[230, 140, 40], [230, 140, 40]],
-                [[230, 180, 60], [230, 180, 60]],
-            ],
-            dtype=np.uint8,
-        )
-
-        def _sim_link_segments(i: int) -> np.ndarray:
-            _, h1, h2, h3, tip = fk_sim[i]
-            return np.array([[h1, h2], [h2, h3], [h3, tip]], dtype=np.float32)
-
-        sim_cart_handle = server.scene.add_box(
-            "/sim/cart",
-            dimensions=(0.5, 0.3, 0.2),
-            position=tuple(float(v) for v in fk_sim[0][0]),
-            color=(200, 80, 20),
-        )
-        sim_link_handle = server.scene.add_line_segments(
-            "/sim/links",
-            points=_sim_link_segments(0),
-            colors=sim_link_colors,
-            line_width=4.0,
-        )
-        sim_joint_handles = []
-        for jname, jcol in [
-            ("/sim/j1", (200, 80, 20)),
-            ("/sim/j2", (210, 110, 30)),
-            ("/sim/j3", (220, 150, 50)),
-        ]:
-            h = server.scene.add_icosphere(
-                jname,
-                radius=0.035,
-                color=jcol,
-                position=tuple(float(v) for v in fk_sim[0][1]),
-            )
-            sim_joint_handles.append(h)
-
-        # Add simulation angles to the sidebar plot
-        for k, (name, col) in enumerate(
-            zip(["θ₁ sim", "θ₂ sim", "θ₃ sim"], ["#e85", "#ea6", "#ec7"])
-        ):
-            fig_angles.add_trace(
-                go.Scatter(
-                    x=sim_t.tolist(),
-                    y=np.rad2deg(sim_q[:, k + 1]).tolist(),
-                    mode="lines",
-                    name=name,
-                    line={"color": col, "width": 1.5, "dash": "dot"},
-                )
-            )
-        # Re-render the updated figure in the GUI panel
-        update_angles(0)
-
-        def update_sim(frame_idx: int) -> None:
-            t_cur = float(t_vec[frame_idx])
-            si = int(np.clip(np.searchsorted(sim_t, t_cur) - 1, 0, len(sim_t) - 1))
-            _, h1, h2, h3, _ = fk_sim[si]
-            sim_cart_handle.position = (float(fk_sim[si][0][0]), 0.0, 0.0)
-            sim_link_handle.points = _sim_link_segments(si)
-            for handle, pos in zip(sim_joint_handles, (h1, h2, h3)):
-                handle.position = tuple(float(v) for v in pos)
-
-        sim_callbacks.append(update_sim)
-
-    # ── Per-frame update ───────────────────────────────────────────────────────
-    def update_scene(frame_idx: int) -> None:
-        _, h1, h2, h3, _ = fk_all[frame_idx]
-        cart_x = float(q_traj[frame_idx, 0])
-        cart_handle.position = (cart_x, 0.0, 0.0)
-        link_handle.points = _link_segments(frame_idx)
-        for handle, pos in zip(joint_handles, (h1, h2, h3)):
-            handle.position = tuple(float(v) for v in pos)
-
     def update_multishot_scene(frame_idx: int) -> None:
         t_cur = float(t_vec[frame_idx])
         ms_i = int(np.argmin(np.abs(t_multishot_lookup - t_cur)))
@@ -708,12 +451,10 @@ def visualize(results, sim: dict | None = None) -> None:
         server,
         t_vec,
         [
-            update_scene,
             update_multishot_scene,
             update_trail,
             update_angles,
             update_ctrl,
-            *sim_callbacks,
         ],
     )
 
@@ -739,13 +480,9 @@ if __name__ == "__main__":
     print(f"Final cart position:      {final_q[0]:.4f} m")
     print(f"Final joint rates [rad/s]:{final_qd[1:]}")
 
-    print()
-    print("Running MuJoCo CPU simulation with solved controls…")
-    sim = simulate_mujoco(results)
-
     from openscvx.plotting import plot_controls, plot_states
 
     plot_states(results).show()
     plot_controls(results).show()
 
-    visualize(results, sim=sim)
+    visualize(results)

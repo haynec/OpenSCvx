@@ -78,7 +78,7 @@ n_v = int(mjx_model.nv)  # 3: ẋ, θ̇₁, θ̇₂  (nq == nv, no quaternion)
 n_u = int(mjx_model.nu)  # 1: cart force
 
 n = 400
-total_time = 3.0
+total_time = 2.5
 
 # ── State / control definitions ───────────────────────────────────────────────
 qpos = ox.State("qpos", shape=(n_q,))
@@ -121,7 +121,7 @@ time = ox.Time(
     max=total_time,
 )
 
-problem = Problem(
+problem = ox.Problem(
     dynamics=dynamics,
     states=states,
     controls=controls,
@@ -135,7 +135,7 @@ problem = Problem(
         "lam_vc": 4e0,
         "autotuner": ox.ConstantProximalWeight(),
     },
-    discretizer={"diffrax_kwargs": {"atol": 1e-12, "rtol": 1e-12}, "ode_solver": "Dopri8"},
+    discretizer={"diffrax_kwargs": {"atol": 1e-12, "rtol": 1e-12}},
     solver={
         "solver_args": {
             "enforce_dpp": True,

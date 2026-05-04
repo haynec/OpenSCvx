@@ -277,3 +277,4 @@ if __name__ == "__main__":
         attitude_slice=slice(3, 7),
     )
     traj_server.sleep_forever()
+    scp_server.sleep_forever()

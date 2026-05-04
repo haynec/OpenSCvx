@@ -33,7 +33,7 @@ except ImportError:
     )
     sys.exit(1)
 
-from openscvx import ByofSpec, Minimize, Problem
+import openscvx as ox
 from openscvx.integrations import mjx_byof
 
 CARTPOLE_XML = """
@@ -93,7 +93,7 @@ dynamics = {
     "qpos": qvel,
 }
 
-byof: ByofSpec = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
+byof: ox.ByofSpec = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
 
 constraints = []
 for state in states:
@@ -107,14 +107,14 @@ qvel.guess = np.zeros((n, n_v))
 
 time = ox.Time(
     initial=0.0,
-    final=Minimize(total_time),
+    final=ox.Minimize(total_time),
     min=0.0,
     max=2.0 * total_time,
     time_dilation_min=0.05 * total_time,
     time_dilation_max=2.0 * total_time,
 )
 
-problem = Problem(
+problem = ox.Problem(
     dynamics=dynamics,
     states=states,
     controls=controls,
@@ -259,8 +259,6 @@ def visualize(results) -> None:
         t_vec,
         [update_cartpole, update_trail, update_phase, update_ctrl],
     )
-
-    print("Viser running — open http://localhost:8080 in your browser.")
     server.sleep_forever()
 
 
