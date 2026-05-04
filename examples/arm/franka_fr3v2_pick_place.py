@@ -20,12 +20,22 @@ Five-segment trajectory with EE position and approach-orientation constraints:
 
     home → pre_grasp → grasp → pre_grasp → pre_place → place
 
+Self-collision and a spherical workspace obstacle are enforced with the same
+sampled-segment model as ``7_dof_arm_collision.py`` (non-adjacent link
+capsule pairs + obstacle clearance along each link).
+
 Visualisation
 -------------
 When ``mujoco`` and ``trimesh`` are installed the Viser window renders the
 actual FR3 v2 CAD meshes (OBJ files from the menagerie ``assets/`` directory)
 with per-link colouring animated via MuJoCo FK.  Falls back to animated line
 segments if those packages are unavailable.
+
+After optimisation, the converged torque sequence is replayed in MuJoCo's
+CPU simulator using ``data.qfrc_applied`` (generalized joint torques in Nm) on a
+patched MJCF with **no** position/motor actuators, matching OpenSCvx's τ in
+``q̈ = diag(I)^{-1} τ``. A semi-transparent orange duplicate arm and flange trail
+show the rollout alongside the propagated SCP trajectory.
 
 Requires
 --------
@@ -34,7 +44,9 @@ Requires
 """
 
 import os
+import re
 import sys
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -133,6 +145,20 @@ T_home = np.array(
     ]
 )
 
+# Joint-axis anchor points at q = 0 (world frame, m). Used for collision
+# geometry keypoints and Viser fallback kinematics (matches PoE comments above).
+_joint_zero_pos = np.array(
+    [
+        [0.0, 0.0, z1],
+        [0.0, 0.0, z1],
+        [0.0, 0.0, z35],
+        [a4, 0.0, z35],
+        [0.0, 0.0, z567],
+        [0.0, 0.0, z567],
+        [d7, 0.0, z567],
+    ]
+)
+
 # =============================================================================
 # Pick-and-Place Waypoints
 # =============================================================================
@@ -162,6 +188,14 @@ n_segments        = len(waypoint_positions) - 1
 n                 = nodes_per_segment * n_segments + 1
 waypoint_nodes    = [i * nodes_per_segment for i in range(len(waypoint_positions))]
 total_time        = 5.0
+
+# =============================================================================
+# Collision / obstacle (same structure as 7_dof_arm_collision.py)
+# =============================================================================
+# Spherical obstacle in the task workspace (between pedestal height and home).
+obstacle_center = np.array([0.45, 0.0, 0.28])
+obstacle_radius = 0.055
+n_collision_samples = 4
 
 # =============================================================================
 # States and Controls
@@ -259,6 +293,47 @@ constraints.append(
     (ori_norm <= ori_tol_tight).over((waypoint_nodes[4], waypoint_nodes[5]))
 )
 
+# Self-collision: sampled segment--segment distance for non-adjacent link pairs.
+# Spherical obstacle: sample each link segment; enforce distance to obstacle
+# center >= obstacle_radius + link radius.
+joint_axis_home_h = [np.append(_joint_zero_pos[i], 1.0) for i in range(N_JOINTS)]
+
+kp = {}
+T_I = ox.Constant(np.eye(4))
+p_base_h = T_I @ ox.Constant(np.array([0.0, 0.0, 0.0, 1.0]))
+kp["base"] = ox.Concat(p_base_h[0], p_base_h[1], p_base_h[2])
+for k in range(N_JOINTS):
+    T_k = joint_transforms[f"T_j{k + 1}"]
+    ph = T_k @ ox.Constant(joint_axis_home_h[k])
+    kp[f"j{k + 1}"] = ox.Concat(ph[0], ph[1], ph[2])
+kp["ee"] = p_ee
+
+link_specs = [
+    ("base", "j1", 0.065),
+    ("j1", "j2", 0.055),
+    ("j2", "j3", 0.052),
+    ("j3", "j4", 0.048),
+    ("j4", "j5", 0.042),
+    ("j5", "j6", 0.038),
+    ("j6", "j7", 0.035),
+    ("j7", "ee", 0.032),
+]
+
+ts = np.linspace(0.0, 1.0, n_collision_samples)
+tt = np.stack(np.meshgrid(ts, ts, indexing="ij"), axis=-1).reshape(-1, 2)
+
+p_obstacle = ox.Constant(obstacle_center)
+for a_start, a_end, r_link in link_specs:
+    pa0, pa1 = kp[a_start], kp[a_end]
+    r_clear = obstacle_radius + r_link
+    obs_dists = ox.Vmap(
+        lambda t, pa0=pa0, pa1=pa1: ox.linalg.Norm(
+            ((1 - t) * pa0 + t * pa1) - p_obstacle
+        ),
+        batch=ts,
+    )
+    constraints.append(ox.ctcs(r_clear <= obs_dists))
+
 # =============================================================================
 # Initial Guess (IK interpolation)
 # =============================================================================
@@ -298,7 +373,8 @@ problem = ox.Problem(
     N=n,
     algorithm={
         "lam_vb":    1e1,
-        "lam_vc":    1e2,
+        "lam_vc":    4e2,
+        "lam_cost":  4e-1,
         "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
     },
     algebraic_prop={
@@ -309,6 +385,150 @@ problem = ox.Problem(
 
 problem.settings.prp.dt = 0.01
 
+# MuJoCo rollout: ``results.t_full`` + ``results.u_full[:, true_control_slice]`` matches
+# ``post_process`` timing and **true** controls only (excludes ``_time_dilation``).
+# Torques are applied as ``data.qfrc_applied`` on an actuator-free model — OpenSCvx τ is a
+# generalized joint torque (Nm), not Menagerie ``position`` / ``motor`` ``ctrl``.
+MUJOCO_ROLLOUT_ZERO_GRAVITY = True
+
+
+def _patch_fr3_xml_no_actuators(xml_text: str) -> str:
+    """Remove Menagerie PD actuators; rollout uses ``qfrc_applied`` only."""
+    m = re.search(r"<actuator>.*?</actuator>", xml_text, flags=re.DOTALL)
+    if m is None:
+        raise ValueError("Expected an <actuator>...</actuator> block in fr3v2.xml")
+    return xml_text[: m.start()] + "  <actuator>\n  </actuator>\n" + xml_text[m.end() :]
+
+
+def simulate_franka_torque_rollout(results, xml_path: Path, *, problem) -> dict:
+    """Replay SCP generalized torques with MuJoCo ``qfrc_applied``.
+
+    Torques are read from ``results.u_full[:, problem.settings.sim.true_control_slice]`` —
+    exactly the **true** (non-``_``) control components of the unified vector produced in
+    ``propagate_trajectory_results``, i.e. the same τ as in ``velocity_dot = I^{-1} τ``.
+
+    Menagerie ``motor`` / ``position`` ``ctrl`` semantics do **not** match that model; we
+    clear ``<actuator>`` and write τ into ``data.qfrc_applied`` at each hinge DOF address.
+
+    Returns:
+        dict with keys ``time``, ``qpos``, ``qvel``, ``ee_link8``.
+    """
+    import mujoco
+
+    if getattr(results, "t_full", None) is None or getattr(results, "u_full", None) is None:
+        raise RuntimeError("Run ``problem.post_process()`` before MuJoCo rollout (needs t_full / u_full).")
+
+    t_series = np.asarray(results.t_full, dtype=np.float64).ravel()
+    torque_sl = problem.settings.sim.true_control_slice
+    traj_torque = np.asarray(results.u_full[:, torque_sl], dtype=np.float64)
+    if traj_torque.ndim == 1:
+        traj_torque = traj_torque.reshape(-1, N_JOINTS)
+    if traj_torque.shape[1] != N_JOINTS:
+        raise ValueError(
+            f"Expected {N_JOINTS} torque columns from true_control_slice {torque_sl}, got {traj_torque.shape}."
+        )
+
+    traj_angle = np.asarray(results.trajectory["angle"], dtype=np.float64)
+    traj_vel = np.asarray(results.trajectory["velocity"], dtype=np.float64)
+
+    n_t = len(t_series)
+    if traj_torque.shape[0] != n_t:
+        raise ValueError(
+            f"Trajectory/time length mismatch: len(t_full)={n_t}, torque rows={traj_torque.shape[0]}."
+        )
+
+    xml_path = Path(xml_path)
+    patched_xml = _patch_fr3_xml_no_actuators(xml_path.read_text(encoding="utf-8"))
+
+    fd, tmp_path = tempfile.mkstemp(
+        suffix="_fr3_qfrc_rollout.xml",
+        dir=str(xml_path.parent),
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fp:
+            fp.write(patched_xml)
+        mj_roll = mujoco.MjModel.from_xml_path(tmp_path)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    if MUJOCO_ROLLOUT_ZERO_GRAVITY:
+        mj_roll.opt.gravity[:] = 0.0
+    mj_roll.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
+
+    if mj_roll.nu != 0:
+        raise ValueError(
+            f"Expected actuator-free rollout model (nu=0); got nu={mj_roll.nu}. "
+            "XML patch should leave an empty <actuator> block."
+        )
+    if mj_roll.nv < N_JOINTS or mj_roll.nq < N_JOINTS:
+        raise ValueError(f"Unexpected MuJoCo dims nq={mj_roll.nq}, nv={mj_roll.nv}.")
+
+    dof_addrs: list[int] = []
+    for i in range(1, N_JOINTS + 1):
+        jid = mujoco.mj_name2id(mj_roll, mujoco.mjtObj.mjOBJ_JOINT, f"fr3v2_joint{i}")
+        if jid < 0:
+            raise ValueError(f"Joint fr3v2_joint{i} not found in MuJoCo model.")
+        dof_addrs.append(int(mj_roll.jnt_dofadr[jid]))
+
+    data = mujoco.MjData(mj_roll)
+    data.qpos[:N_JOINTS] = traj_angle[0, :N_JOINTS]
+    data.qvel[:N_JOINTS] = traj_vel[0, :N_JOINTS]
+
+    t_lim = np.asarray(torque_max, dtype=np.float64)
+
+    ee_bid = mujoco.mj_name2id(mj_roll, mujoco.mjtObj.mjOBJ_BODY, "fr3v2_link8")
+    if ee_bid < 0:
+        raise ValueError("Body fr3v2_link8 not found (menagerie flange link).")
+
+    rec_t = np.zeros(n_t)
+    rec_q = np.zeros((n_t, mj_roll.nq))
+    rec_qd = np.zeros((n_t, mj_roll.nv))
+    rec_ee = np.zeros((n_t, 3))
+
+    rec_t[0] = t_series[0]
+    rec_q[0] = data.qpos.copy()
+    rec_qd[0] = data.qvel.copy()
+    mujoco.mj_forward(mj_roll, data)
+    rec_ee[0] = data.xpos[ee_bid].copy()
+
+    for i in range(n_t - 1):
+        dt_seg = float(t_series[i + 1] - t_series[i])
+        if dt_seg <= 1e-12:
+            rec_t[i + 1] = t_series[i + 1]
+            rec_q[i + 1] = data.qpos.copy()
+            rec_qd[i + 1] = data.qvel.copy()
+            mujoco.mj_forward(mj_roll, data)
+            rec_ee[i + 1] = data.xpos[ee_bid].copy()
+            continue
+
+        mj_roll.opt.timestep = dt_seg
+        tau_mid = 0.5 * (traj_torque[i] + traj_torque[i + 1])
+        tau_mid = np.clip(tau_mid, -t_lim, t_lim)
+
+        data.qfrc_applied[:] = 0.0
+        for k, adr in enumerate(dof_addrs):
+            data.qfrc_applied[adr] = float(tau_mid[k])
+
+        mujoco.mj_step(mj_roll, data)
+
+        rec_t[i + 1] = t_series[i + 1]
+        rec_q[i + 1] = data.qpos.copy()
+        rec_qd[i + 1] = data.qvel.copy()
+        rec_ee[i + 1] = data.xpos[ee_bid].copy()
+
+    q_fin_prop = traj_angle[-1, :N_JOINTS]
+    q_fin_sim = rec_q[-1, :N_JOINTS]
+    print(
+        f"MuJoCo τ rollout (qfrc_applied, u_full slice {torque_sl}): {n_t - 1} segments | "
+        f"‖τ‖_max={float(np.max(np.abs(traj_torque))):.3f} Nm | "
+        f"‖q_sim − q_prop‖ at t_end = {np.linalg.norm(q_fin_sim - q_fin_prop):.4f} rad"
+    )
+    return {"time": rec_t, "qpos": rec_q, "qvel": rec_qd, "ee_link8": rec_ee}
+
+
 # =============================================================================
 # Main
 # =============================================================================
@@ -316,6 +536,10 @@ problem.settings.prp.dt = 0.01
 if __name__ == "__main__":
     print("Franka FR3 v2 Pick-and-Place — PoE FK + OpenSCvx")
     print("=" * 60)
+    print(
+        f"Obstacle: center={list(np.round(obstacle_center, 3))} m, "
+        f"r={obstacle_radius} m (spherical; samples/link={n_collision_samples})"
+    )
     print(f"Nodes: {n}  ({nodes_per_segment} per segment, {n_segments} segments)")
     for name, pos, node in zip(waypoint_names, waypoint_positions, waypoint_nodes):
         print(f"  {name:>12s} (node {node:2d}): {list(np.round(pos, 3))}")
@@ -347,15 +571,23 @@ if __name__ == "__main__":
     plot_scp_iterations(results).show()
     plot_controls(results).show()
 
+    sim_rollout = None
+    try:
+        from openscvx.integrations.menagerie import get_xml_path
+
+        _xml_roll = Path(str(get_xml_path("franka_fr3_v2", prefer_mjx=False)))
+        sim_rollout = simulate_franka_torque_rollout(results, _xml_roll, problem=problem)
+    except Exception as exc:
+        print(f"[mujoco rollout] skipped ({type(exc).__name__}: {exc})")
+
     # =========================================================================
     # Viser 3D Visualisation
     # =========================================================================
 
-    import jaxlie
-
     from openscvx.plotting.viser import (
         add_animated_trail,
         add_animation_controls,
+        add_ellipsoid_obstacles,
         add_ghost_trajectory,
         add_position_marker,
         add_target_markers,
@@ -365,6 +597,22 @@ if __name__ == "__main__":
 
     angle_traj = np.asarray(results.trajectory["angle"])   # (T_frames, 7)
     n_frames   = len(angle_traj)
+    traj_time  = np.asarray(results.trajectory["time"]).flatten()
+
+    angle_sim_on_prop_grid = None
+    ee_sim_on_prop_grid = None
+    if sim_rollout is not None:
+        sim_t = sim_rollout["time"]
+        sim_q = sim_rollout["qpos"][:, :N_JOINTS]
+        ee_sim_raw = sim_rollout["ee_link8"]
+        angle_sim_on_prop_grid = np.stack(
+            [np.interp(traj_time, sim_t, sim_q[:, j]) for j in range(N_JOINTS)],
+            axis=1,
+        )
+        ee_sim_on_prop_grid = np.stack(
+            [np.interp(traj_time, sim_t, ee_sim_raw[:, k]) for k in range(3)],
+            axis=1,
+        ).astype(np.float32)
 
     # -------------------------------------------------------------------------
     # Attempt to load actual FR3 v2 CAD meshes (trimesh) and
@@ -374,6 +622,9 @@ if __name__ == "__main__":
     _link_meshes_local: dict = {}   # link_name → (vertices_local, faces)
     _link_body_ids:     dict = {}   # link_name → MuJoCo body_id
     _link_world_T: dict      = {}   # link_name → (n_frames, 4, 4)
+    _link_world_T_sim: dict = {}   # same, MuJoCo rollout (interpolated to traj_time)
+    mj_model_vis = None
+    mj_data_vis = None
 
     try:
         import mujoco
@@ -443,6 +694,18 @@ if __name__ == "__main__":
                 T[:3,  3]     = mj_data_vis.xpos[body_id].copy()
                 _link_world_T[name][t_idx] = T
 
+        if angle_sim_on_prop_grid is not None:
+            for name in _link_meshes_local:
+                _link_world_T_sim[name] = np.zeros((n_frames, 4, 4))
+            for t_idx in range(n_frames):
+                mj_data_vis.qpos[:N_JOINTS] = angle_sim_on_prop_grid[t_idx]
+                mujoco.mj_kinematics(mj_model_vis, mj_data_vis)
+                for name, body_id in _link_body_ids.items():
+                    T_sim = np.eye(4)
+                    T_sim[:3, :3] = mj_data_vis.xmat[body_id].copy().reshape(3, 3)
+                    T_sim[:3, 3] = mj_data_vis.xpos[body_id].copy()
+                    _link_world_T_sim[name][t_idx] = T_sim
+
         _use_cad_mesh = len(_link_meshes_local) > 0
         if _use_cad_mesh:
             print(
@@ -461,19 +724,7 @@ if __name__ == "__main__":
     # and joint frame axes (always computed, independent of CAD meshes).
     # -------------------------------------------------------------------------
     # Each T_j{k} is the cumulative PoE product after k joints.
-    # Applying the zero-config joint position gives its world-frame location.
-
-    _joint_zero_pos = np.array(
-        [
-            [0.0,  0.0, z1  ],   # J1
-            [0.0,  0.0, z1  ],   # J2  (same position, different axis)
-            [0.0,  0.0, z35 ],   # J3
-            [a4,   0.0, z35 ],   # J4
-            [0.0,  0.0, z567],   # J5
-            [0.0,  0.0, z567],   # J6
-            [d7,   0.0, z567],   # J7
-        ]
-    )
+    # _joint_zero_pos is defined with kinematic parameters at module scope.
 
     # (n_frames, N_JOINTS+1, 3): joint world positions + EE
     keypoints = np.zeros((n_frames, N_JOINTS + 1, 3))
@@ -494,6 +745,12 @@ if __name__ == "__main__":
     server = create_server(ee_pos, show_grid=False)
     server.scene.add_grid("/grid", width=1.5, height=1.5, cell_size=0.2)
     server.scene.add_frame("/origin", axes_length=0.08, axes_radius=0.003)
+
+    add_ellipsoid_obstacles(
+        server,
+        centers=[obstacle_center],
+        radii=[np.full(3, 1.0 / obstacle_radius)],
+    )
 
     # Waypoint spheres
     _marker_colors = {
@@ -516,10 +773,21 @@ if __name__ == "__main__":
     _, update_trail  = add_animated_trail(server, ee_pos, ee_colors, point_size=0.008)
     _, update_marker = add_position_marker(server, ee_pos, radius=0.012)
 
+    if ee_sim_on_prop_grid is not None:
+        sim_ghost_rgb = np.tile(np.array([255, 130, 45], dtype=np.uint8), (n_frames, 1))
+        sim_ghost_rgb = (sim_ghost_rgb * 0.35).astype(np.uint8)
+        server.scene.add_point_cloud(
+            "/ghost_traj_mujoco",
+            points=ee_sim_on_prop_grid.astype(np.float32),
+            colors=sim_ghost_rgb,
+            point_size=0.005,
+        )
+
     # -------------------------------------------------------------------------
     # Robot body: actual CAD meshes OR line-segment fallback
     # -------------------------------------------------------------------------
     update_robot = None
+    update_robot_sim = None
 
     if _use_cad_mesh:
         # Per-link colour: darker base, lighter links, slight blue tint on wrist
@@ -552,6 +820,27 @@ if __name__ == "__main__":
                 verts_world = (T[:3, :3] @ verts_local.T).T + T[:3, 3]
                 handle.vertices = verts_world.astype(np.float32)
 
+        if _link_world_T_sim:
+            _sim_rgb = (220, 110, 55)
+            _link_handles_sim: dict = {}
+            for link_name, (verts_local, faces) in _link_meshes_local.items():
+                T0s = _link_world_T_sim[link_name][0]
+                verts_w = (T0s[:3, :3] @ verts_local.T).T + T0s[:3, 3]
+                h_sim = server.scene.add_mesh_simple(
+                    f"/robot_mujoco/{link_name}",
+                    vertices=verts_w.astype(np.float32),
+                    faces=faces,
+                    color=_sim_rgb,
+                    opacity=0.48,
+                )
+                _link_handles_sim[link_name] = (h_sim, verts_local)
+
+            def update_robot_sim(frame_idx: int) -> None:
+                for link_name, (handle, verts_local) in _link_handles_sim.items():
+                    Tm = _link_world_T_sim[link_name][frame_idx]
+                    verts_w = (Tm[:3, :3] @ verts_local.T).T + Tm[:3, 3]
+                    handle.vertices = verts_w.astype(np.float32)
+
     else:
         # Fallback: 8 line segments (world origin → J1 → ··· → J7 → EE)
         n_segs  = N_JOINTS + 1   # 8 segments
@@ -580,10 +869,13 @@ if __name__ == "__main__":
     # Animation controls
     # -------------------------------------------------------------------------
     traj_time = np.asarray(results.trajectory["time"])
+    _anim_cb = [update_trail, update_marker, update_robot]
+    if update_robot_sim is not None:
+        _anim_cb.append(update_robot_sim)
     add_animation_controls(
         server,
         traj_time,
-        [update_trail, update_marker, update_robot],
+        _anim_cb,
         loop=True,
     )
 
