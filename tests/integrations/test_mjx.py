@@ -49,7 +49,6 @@ _CARTPOLE_XML = """
 # Availability flags (used as skip decorators on MuJoCo-dependent classes)
 # ---------------------------------------------------------------------------
 try:
-    import mujoco
     import mujoco.mjx as _mjx  # noqa: F401
 
     _MUJOCO_AVAILABLE = True

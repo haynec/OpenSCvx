@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional
 import jax.numpy as jnp
 
 if TYPE_CHECKING:
+    from openscvx.symbolic.expr.control import Control
     from openscvx.symbolic.expr.state import State
 
 

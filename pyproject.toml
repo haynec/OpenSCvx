@@ -98,6 +98,7 @@ exclude = [
     "venv",
     ".venv",
     "node_modules",
+    "third_party",
 ]
 
 [tool.ruff.lint]
