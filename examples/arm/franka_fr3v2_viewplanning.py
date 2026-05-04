@@ -181,16 +181,12 @@ target = ox.Parameter("target", shape=(3,), value=goal_ee_pos)
 constraints = []
 
 for state in states:
-    constraints.extend(
-        [ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)]
-    )
+    constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
 constraints.append(ox.ctcs(p_ee[2] >= 0.0))
 
 ee_tolerance = 0.01
-constraints.append(
-    (ox.linalg.Norm(p_ee - target, ord=2) <= ee_tolerance).at([n - 1])
-)
+constraints.append((ox.linalg.Norm(p_ee - target, ord=2) <= ee_tolerance).at([n - 1]))
 
 
 def g_vp(p_target):
@@ -221,9 +217,7 @@ def look_at_quat(ee_pos, target_pos):
     d = target_pos - ee_pos
     d = d / np.linalg.norm(d)
     q_xyz = np.cross(boresight_body, d)
-    q_w = np.sqrt(np.dot(boresight_body, boresight_body) * np.dot(d, d)) + np.dot(
-        boresight_body, d
-    )
+    q_w = np.sqrt(np.dot(boresight_body, boresight_body) * np.dot(d, d)) + np.dot(boresight_body, d)
     q = np.hstack(([q_w], q_xyz))
     return q / np.linalg.norm(q)
 
@@ -444,15 +438,11 @@ if __name__ == "__main__":
         _use_cad_mesh = len(_link_meshes_local) > 0
         if _use_cad_mesh:
             print(
-                f"[viser] Loaded {len(_link_meshes_local)} CAD link meshes "
-                f"from menagerie assets."
+                f"[viser] Loaded {len(_link_meshes_local)} CAD link meshes from menagerie assets."
             )
 
     except Exception as exc:
-        print(
-            f"[viser] CAD mesh unavailable ({type(exc).__name__}: {exc}); "
-            f"using line segments."
-        )
+        print(f"[viser] CAD mesh unavailable ({type(exc).__name__}: {exc}); using line segments.")
 
     server = create_server(ee_pos, show_grid=False)
     server.scene.add_grid("/grid", width=1.5, height=1.5, cell_size=0.2)

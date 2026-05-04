@@ -143,7 +143,7 @@ problem = Problem(
         "solver_args": {
             "canon_backend": "COO",
             "enforce_dpp": True,
-        }
+        },
     },
 )
 

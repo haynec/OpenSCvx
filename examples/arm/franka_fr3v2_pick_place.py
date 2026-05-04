@@ -74,22 +74,22 @@ from openscvx.plotting import plot_controls, plot_scp_iterations
 N_JOINTS = 7
 
 # Body-offset distances from fr3v2.xml <body pos="..."> attributes (metres)
-d1   = 0.333    # world-z of joint 1 (link0 → link1)
-d3   = 0.316    # z-offset link2 → link3 (in link2 local frame)
-a4   = 0.0825   # x-offset link3 → link4 (in link3 local frame)
-d5   = 0.384    # z-offset link4 → link5 (in link4 local frame)
-d7   = 0.088    # x-offset link6 → link7 (in link6 local frame)
-d_ee = 0.107    # z-offset link7 → flange (in link7 local; maps to −z world)
+d1 = 0.333  # world-z of joint 1 (link0 → link1)
+d3 = 0.316  # z-offset link2 → link3 (in link2 local frame)
+a4 = 0.0825  # x-offset link3 → link4 (in link3 local frame)
+d5 = 0.384  # z-offset link4 → link5 (in link4 local frame)
+d7 = 0.088  # x-offset link6 → link7 (in link6 local frame)
+d_ee = 0.107  # z-offset link7 → flange (in link7 local; maps to −z world)
 
 # World-frame z-heights of joint axes at zero configuration
-z1   = d1
-z35  = d1 + d3           # joints 3 and 4
-z567 = d1 + d3 + d5      # joints 5, 6 and 7
+z1 = d1
+z35 = d1 + d3  # joints 3 and 4
+z567 = d1 + d3 + d5  # joints 5, 6 and 7
 
 # Joint limits (rad) — from fr3v2.xml <joint range="lo hi"/>
 # Note: J4 is always negative (elbow stay bent), J6 always positive.
-angle_min = np.array([-2.7437, -1.7837, -2.9007, -3.0421, -2.8065,  0.5445, -3.0159])
-angle_max = np.array([ 2.7437,  1.7837,  2.9007, -0.1518,  2.8065,  4.5169,  3.0159])
+angle_min = np.array([-2.7437, -1.7837, -2.9007, -3.0421, -2.8065, 0.5445, -3.0159])
+angle_max = np.array([2.7437, 1.7837, 2.9007, -0.1518, 2.8065, 4.5169, 3.0159])
 
 # Torque limits (Nm) — from fr3v2.xml <joint actuatorfrcrange="−τ τ"/>
 torque_max = np.array([87.0, 87.0, 87.0, 87.0, 12.0, 12.0, 12.0])
@@ -117,19 +117,19 @@ q_home = np.array([0.0, 0.0, 0.0, -np.pi / 2, 0.0, np.pi / 2, -np.pi / 4])
 screw_axes = np.array(
     [
         # J1  z-axis through (x=0, y=0): v = −[0,0,1] × [0,0,z1] = 0
-        [0.0,  0.0,  0.0,  0.0,  0.0,  1.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
         # J2  y-axis at [0,0,z1]: v = −[0,1,0] × [0,0,z1] = [−z1, 0, 0]
-        [-z1,  0.0,  0.0,  0.0,  1.0,  0.0],
+        [-z1, 0.0, 0.0, 0.0, 1.0, 0.0],
         # J3  z-axis through (x=0, y=0): v = 0
-        [0.0,  0.0,  0.0,  0.0,  0.0,  1.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
         # J4  −y at [a4,0,z35]: v = −[0,−1,0] × [a4,0,z35] = [z35, 0, −a4]
-        [z35,  0.0, -a4,   0.0, -1.0,  0.0],
+        [z35, 0.0, -a4, 0.0, -1.0, 0.0],
         # J5  z-axis through (x=0, y=0): v = 0
-        [0.0,  0.0,  0.0,  0.0,  0.0,  1.0],
+        [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
         # J6  −y at [0,0,z567]: v = −[0,−1,0] × [0,0,z567] = [z567, 0, 0]
-        [z567, 0.0,  0.0,  0.0, -1.0,  0.0],
+        [z567, 0.0, 0.0, 0.0, -1.0, 0.0],
         # J7  −z at [d7,0,z567]: v = −[0,0,−1] × [d7,0,z567] = [0, d7, 0]
-        [0.0,  d7,   0.0,  0.0,  0.0, -1.0],
+        [0.0, d7, 0.0, 0.0, 0.0, -1.0],
     ]
 )
 
@@ -138,10 +138,10 @@ screw_axes = np.array(
 # Position = [d7, 0, z567 − d_ee]  (d_ee flips sign under Rx(π))
 T_home = np.array(
     [
-        [1.0,  0.0,  0.0,  d7],
-        [0.0, -1.0,  0.0,  0.0],
-        [0.0,  0.0, -1.0,  z567 - d_ee],
-        [0.0,  0.0,  0.0,  1.0],
+        [1.0, 0.0, 0.0, d7],
+        [0.0, -1.0, 0.0, 0.0],
+        [0.0, 0.0, -1.0, z567 - d_ee],
+        [0.0, 0.0, 0.0, 1.0],
     ]
 )
 
@@ -166,28 +166,27 @@ _joint_zero_pos = np.array(
 # This matches T_home, whose z-column is [0, 0, −1].
 # Quaternion wxyz for Rx(π): [0, 1, 0, 0].
 
-R_des  = np.array([[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]])
-q_down = np.array([0.0, 1.0, 0.0, 0.0])   # wxyz, Rx(π), EE −z → world −z
+R_des = np.array([[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]])
+q_down = np.array([0.0, 1.0, 0.0, 0.0])  # wxyz, Rx(π), EE −z → world −z
 
-pre_height    = 0.15   # m above grasp / place positions
+pre_height = 0.15  # m above grasp / place positions
 
-home_pos      = np.array([0.45,  0.00,  0.55])
-grasp_pos     = np.array([0.45, -0.25,  0.06])
-place_pos     = np.array([0.45,  0.25,  0.06])
+home_pos = np.array([0.45, 0.00, 0.55])
+grasp_pos = np.array([0.45, -0.25, 0.06])
+place_pos = np.array([0.45, 0.25, 0.06])
 pre_grasp_pos = grasp_pos + np.array([0.0, 0.0, pre_height])
 pre_place_pos = place_pos + np.array([0.0, 0.0, pre_height])
 
-waypoint_names     = ["home", "pre_grasp", "grasp", "pre_grasp", "pre_place", "place"]
-waypoint_positions = [home_pos, pre_grasp_pos, grasp_pos,
-                      pre_grasp_pos, pre_place_pos, place_pos]
+waypoint_names = ["home", "pre_grasp", "grasp", "pre_grasp", "pre_place", "place"]
+waypoint_positions = [home_pos, pre_grasp_pos, grasp_pos, pre_grasp_pos, pre_place_pos, place_pos]
 # Use EE-pointing-down orientation for all IK keyframes
 waypoint_orientations = [q_down] * len(waypoint_names)
 
 nodes_per_segment = 2
-n_segments        = len(waypoint_positions) - 1
-n                 = nodes_per_segment * n_segments + 1
-waypoint_nodes    = [i * nodes_per_segment for i in range(len(waypoint_positions))]
-total_time        = 5.0
+n_segments = len(waypoint_positions) - 1
+n = nodes_per_segment * n_segments + 1
+waypoint_nodes = [i * nodes_per_segment for i in range(len(waypoint_positions))]
+total_time = 5.0
 
 # =============================================================================
 # Collision / obstacle (same structure as 7_dof_arm_collision.py)
@@ -202,18 +201,18 @@ n_collision_samples = 4
 # =============================================================================
 
 angle = ox.State("angle", shape=(N_JOINTS,))
-angle.max     = angle_max
-angle.min     = angle_min
+angle.max = angle_max
+angle.min = angle_min
 angle.initial = np.clip(q_home, angle_min, angle_max)
-angle.final   = [("free", 0.0)] * N_JOINTS
+angle.final = [("free", 0.0)] * N_JOINTS
 
 velocity = ox.State("velocity", shape=(N_JOINTS,))
-velocity.max     = np.full(N_JOINTS, 2.5)
-velocity.min     = -velocity.max
+velocity.max = np.full(N_JOINTS, 2.5)
+velocity.min = -velocity.max
 velocity.initial = np.zeros(N_JOINTS)
-velocity.final   = np.zeros(N_JOINTS)
+velocity.final = np.zeros(N_JOINTS)
 
-states   = [angle, velocity]
+states = [angle, velocity]
 
 torque = ox.Control("torque", shape=(N_JOINTS,))
 torque.max = torque_max
@@ -227,10 +226,10 @@ controls = [torque]
 # Build the FK chain incrementally so intermediate transforms are available
 # for algebraic_prop (used in post-processing for visualisation).
 
-T_chain          = ox.Constant(np.eye(4))
+T_chain = ox.Constant(np.eye(4))
 joint_transforms = {}
 for j in range(N_JOINTS):
-    xi      = ox.Constant(screw_axes[j])
+    xi = ox.Constant(screw_axes[j])
     T_chain = T_chain @ ox.lie.SE3Exp(xi * angle[j])
     joint_transforms[f"T_j{j + 1}"] = T_chain
 
@@ -243,9 +242,9 @@ p_ee = ox.Concat(T_ee[0, 3], T_ee[1, 3], T_ee[2, 3])
 # A full Lagrangian model would add Coriolis, gravity and coupled inertia.
 # The simple model here is sufficient to demonstrate the PoE FK constraints.
 
-I_inv    = ox.Constant(1.0 / inertia)
+I_inv = ox.Constant(1.0 / inertia)
 dynamics = {
-    "angle":    velocity,
+    "angle": velocity,
     "velocity": I_inv * torque,
 }
 
@@ -257,9 +256,7 @@ constraints = []
 
 # State box constraints (CTCS = continuous-time constraint satisfaction)
 for state in states:
-    constraints.extend(
-        [ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)]
-    )
+    constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
 # EE must stay above the floor
 constraints.append(ox.ctcs(p_ee[2] >= 0.0))
@@ -268,30 +265,22 @@ constraints.append(ox.ctcs(p_ee[2] >= 0.0))
 ee_tol = 0.01
 for i, (wp, node) in enumerate(zip(waypoint_positions, waypoint_nodes)):
     wp_param = ox.Parameter(f"wp_{i}", shape=(3,), value=wp)
-    constraints.append(
-        (ox.linalg.Norm(p_ee - wp_param, ord=2) <= ee_tol).at([node])
-    )
+    constraints.append((ox.linalg.Norm(p_ee - wp_param, ord=2) <= ee_tol).at([node]))
 
 # Orientation constraint: keep EE z-axis pointing down during approach / contact.
 # ori_error = SO3Log(R_des.T @ R_ee); its norm is the geodesic rotation angle.
 ori_error = ox.lie.SO3Log(R_des.T @ T_ee[:3, :3])
-ori_norm  = ox.linalg.Norm(ori_error, ord=2)
+ori_norm = ox.linalg.Norm(ori_error, ord=2)
 
 ori_tol_loose = np.deg2rad(60.0)  # relaxed during transit
-ori_tol_tight = np.deg2rad(5.0)   # precise at grasp / place approach
+ori_tol_tight = np.deg2rad(5.0)  # precise at grasp / place approach
 
 # Loose over the full approach-to-place range
-constraints.append(
-    (ori_norm <= ori_tol_loose).over((waypoint_nodes[1], waypoint_nodes[-1]))
-)
+constraints.append((ori_norm <= ori_tol_loose).over((waypoint_nodes[1], waypoint_nodes[-1])))
 # Tight from pre_grasp through the grasp-return waypoint
-constraints.append(
-    (ori_norm <= ori_tol_tight).over((waypoint_nodes[1], waypoint_nodes[3]))
-)
+constraints.append((ori_norm <= ori_tol_tight).over((waypoint_nodes[1], waypoint_nodes[3])))
 # Tight from pre_place to place
-constraints.append(
-    (ori_norm <= ori_tol_tight).over((waypoint_nodes[4], waypoint_nodes[5]))
-)
+constraints.append((ori_norm <= ori_tol_tight).over((waypoint_nodes[4], waypoint_nodes[5])))
 
 # Self-collision: sampled segment--segment distance for non-adjacent link pairs.
 # Spherical obstacle: sample each link segment; enforce distance to obstacle
@@ -327,9 +316,7 @@ for a_start, a_end, r_link in link_specs:
     pa0, pa1 = kp[a_start], kp[a_end]
     r_clear = obstacle_radius + r_link
     obs_dists = ox.Vmap(
-        lambda t, pa0=pa0, pa1=pa1: ox.linalg.Norm(
-            ((1 - t) * pa0 + t * pa1) - p_obstacle
-        ),
+        lambda t, pa0=pa0, pa1=pa1: ox.linalg.Norm(((1 - t) * pa0 + t * pa1) - p_obstacle),
         batch=ts,
     )
     constraints.append(ox.ctcs(r_clear <= obs_dists))
@@ -349,9 +336,9 @@ angle.guess = ox.init.ik_interpolation(
     angles_max=angle_max,
     sequential=True,
 )
-angle.initial  = np.clip(angle.guess[0], angle_min, angle_max)
+angle.initial = np.clip(angle.guess[0], angle_min, angle_max)
 velocity.guess = np.zeros((n, N_JOINTS))
-torque.guess   = np.zeros((n, N_JOINTS))
+torque.guess = np.zeros((n, N_JOINTS))
 
 # =============================================================================
 # Problem
@@ -372,9 +359,9 @@ problem = ox.Problem(
     constraints=constraints,
     N=n,
     algorithm={
-        "lam_vb":    1e1,
-        "lam_vc":    4e2,
-        "lam_cost":  4e-1,
+        "lam_vb": 1e1,
+        "lam_vc": 4e2,
+        "lam_cost": 4e-1,
         "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
     },
     algebraic_prop={
@@ -416,7 +403,9 @@ def simulate_franka_torque_rollout(results, xml_path: Path, *, problem) -> dict:
     import mujoco
 
     if getattr(results, "t_full", None) is None or getattr(results, "u_full", None) is None:
-        raise RuntimeError("Run ``problem.post_process()`` before MuJoCo rollout (needs t_full / u_full).")
+        raise RuntimeError(
+            "Run ``problem.post_process()`` before MuJoCo rollout (needs t_full / u_full)."
+        )
 
     t_series = np.asarray(results.t_full, dtype=np.float64).ravel()
     torque_sl = problem.settings.sim.true_control_slice
@@ -425,7 +414,8 @@ def simulate_franka_torque_rollout(results, xml_path: Path, *, problem) -> dict:
         traj_torque = traj_torque.reshape(-1, N_JOINTS)
     if traj_torque.shape[1] != N_JOINTS:
         raise ValueError(
-            f"Expected {N_JOINTS} torque columns from true_control_slice {torque_sl}, got {traj_torque.shape}."
+            f"Expected {N_JOINTS} torque columns from "
+            f"true_control_slice {torque_sl}, got {traj_torque.shape}."
         )
 
     traj_angle = np.asarray(results.trajectory["angle"], dtype=np.float64)
@@ -434,7 +424,8 @@ def simulate_franka_torque_rollout(results, xml_path: Path, *, problem) -> dict:
     n_t = len(t_series)
     if traj_torque.shape[0] != n_t:
         raise ValueError(
-            f"Trajectory/time length mismatch: len(t_full)={n_t}, torque rows={traj_torque.shape[0]}."
+            f"Trajectory/time length mismatch: len(t_full)={n_t}, "
+            f"torque rows={traj_torque.shape[0]}."
         )
 
     xml_path = Path(xml_path)
@@ -549,19 +540,17 @@ if __name__ == "__main__":
     results = problem.solve()
     results = problem.post_process()
 
-    ee_pos_traj = results.trajectory["ee_position"]   # (T_frames, 3)
-    final_q     = results.trajectory["angle"][-1]
+    ee_pos_traj = results.trajectory["ee_position"]  # (T_frames, 3)
+    final_q = results.trajectory["angle"][-1]
 
     print()
     print("Results:")
     print(f"  Final joint angles [deg]: {np.round(np.rad2deg(final_q), 1)}")
-    for i, (name, wp, node) in enumerate(
-        zip(waypoint_names, waypoint_positions, waypoint_nodes)
-    ):
-        t_node    = node / (n - 1)
+    for i, (name, wp, node) in enumerate(zip(waypoint_names, waypoint_positions, waypoint_nodes)):
+        t_node = node / (n - 1)
         frame_idx = int(round(t_node * (len(ee_pos_traj) - 1)))
-        ee_at_wp  = ee_pos_traj[frame_idx]
-        err       = np.linalg.norm(ee_at_wp - wp)
+        ee_at_wp = ee_pos_traj[frame_idx]
+        err = np.linalg.norm(ee_at_wp - wp)
         print(
             f"  {name:>12s}: "
             f"pos=[{ee_at_wp[0]:.3f}, {ee_at_wp[1]:.3f}, {ee_at_wp[2]:.3f}]  "
@@ -595,9 +584,9 @@ if __name__ == "__main__":
         create_server,
     )
 
-    angle_traj = np.asarray(results.trajectory["angle"])   # (T_frames, 7)
-    n_frames   = len(angle_traj)
-    traj_time  = np.asarray(results.trajectory["time"]).flatten()
+    angle_traj = np.asarray(results.trajectory["angle"])  # (T_frames, 7)
+    n_frames = len(angle_traj)
+    traj_time = np.asarray(results.trajectory["time"]).flatten()
 
     angle_sim_on_prop_grid = None
     ee_sim_on_prop_grid = None
@@ -618,11 +607,11 @@ if __name__ == "__main__":
     # Attempt to load actual FR3 v2 CAD meshes (trimesh) and
     # compute per-frame link world-transforms (MuJoCo FK).
     # -------------------------------------------------------------------------
-    _use_cad_mesh          = False
-    _link_meshes_local: dict = {}   # link_name → (vertices_local, faces)
-    _link_body_ids:     dict = {}   # link_name → MuJoCo body_id
-    _link_world_T: dict      = {}   # link_name → (n_frames, 4, 4)
-    _link_world_T_sim: dict = {}   # same, MuJoCo rollout (interpolated to traj_time)
+    _use_cad_mesh = False
+    _link_meshes_local: dict = {}  # link_name → (vertices_local, faces)
+    _link_body_ids: dict = {}  # link_name → MuJoCo body_id
+    _link_world_T: dict = {}  # link_name → (n_frames, 4, 4)
+    _link_world_T_sim: dict = {}  # same, MuJoCo rollout (interpolated to traj_time)
     mj_model_vis = None
     mj_data_vis = None
 
@@ -632,18 +621,22 @@ if __name__ == "__main__":
 
         from openscvx.integrations.menagerie import get_xml_path
 
-        xml_path       = str(get_xml_path("franka_fr3_v2", prefer_mjx=False))
-        mj_model_vis   = mujoco.MjModel.from_xml_path(xml_path)
+        xml_path = str(get_xml_path("franka_fr3_v2", prefer_mjx=False))
+        mj_model_vis = mujoco.MjModel.from_xml_path(xml_path)
         # Disable contacts — we only need kinematics for visualisation.
         mj_model_vis.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
-        mj_data_vis    = mujoco.MjData(mj_model_vis)
-        asset_dir      = Path(xml_path).parent / "assets"
+        mj_data_vis = mujoco.MjData(mj_model_vis)
+        asset_dir = Path(xml_path).parent / "assets"
 
         # Visual OBJ files per body — taken from <geom class="visual" mesh="..."/>
         link_visual_files = {
             "fr3v2_link0": [
-                "link0_0.obj", "link0_1.obj", "link0_2.obj",
-                "link0_3.obj", "link0_4.obj", "link0_5.obj",
+                "link0_0.obj",
+                "link0_1.obj",
+                "link0_2.obj",
+                "link0_3.obj",
+                "link0_4.obj",
+                "link0_5.obj",
             ],
             "fr3v2_link1": ["link1_3.obj"],
             "fr3v2_link2": ["link2_3.obj"],
@@ -651,13 +644,25 @@ if __name__ == "__main__":
             "fr3v2_link4": ["link4_3.obj"],
             "fr3v2_link5": ["link5_3.obj", "link5_4.obj"],
             "fr3v2_link6": [
-                "link6_0.obj", "link6_1.obj", "link6_2.obj", "link6_3.obj",
-                "link6_4.obj", "link6_5.obj", "link6_6.obj", "link6_7.obj",
-                "link6_8.obj", "link6_9.obj",
+                "link6_0.obj",
+                "link6_1.obj",
+                "link6_2.obj",
+                "link6_3.obj",
+                "link6_4.obj",
+                "link6_5.obj",
+                "link6_6.obj",
+                "link6_7.obj",
+                "link6_8.obj",
+                "link6_9.obj",
             ],
             "fr3v2_link7": [
-                "link7_0.obj", "link7_1.obj", "link7_2.obj", "link7_3.obj",
-                "link7_4.obj", "link7_5.obj", "link7_6.obj",
+                "link7_0.obj",
+                "link7_1.obj",
+                "link7_2.obj",
+                "link7_3.obj",
+                "link7_4.obj",
+                "link7_5.obj",
+                "link7_6.obj",
             ],
         }
 
@@ -669,7 +674,7 @@ if __name__ == "__main__":
                     continue
                 tm = trimesh.load(str(obj_path), force="mesh", process=False)
                 all_verts.append(np.asarray(tm.vertices, dtype=np.float32))
-                all_faces.append(np.asarray(tm.faces,    dtype=np.uint32) + offset)
+                all_faces.append(np.asarray(tm.faces, dtype=np.uint32) + offset)
                 offset += len(tm.vertices)
             if not all_verts:
                 continue
@@ -689,9 +694,9 @@ if __name__ == "__main__":
             mj_data_vis.qpos[:N_JOINTS] = angle_traj[t_idx]
             mujoco.mj_kinematics(mj_model_vis, mj_data_vis)
             for name, body_id in _link_body_ids.items():
-                T             = np.eye(4)
-                T[:3, :3]     = mj_data_vis.xmat[body_id].copy().reshape(3, 3)
-                T[:3,  3]     = mj_data_vis.xpos[body_id].copy()
+                T = np.eye(4)
+                T[:3, :3] = mj_data_vis.xmat[body_id].copy().reshape(3, 3)
+                T[:3, 3] = mj_data_vis.xpos[body_id].copy()
                 _link_world_T[name][t_idx] = T
 
         if angle_sim_on_prop_grid is not None:
@@ -709,8 +714,7 @@ if __name__ == "__main__":
         _use_cad_mesh = len(_link_meshes_local) > 0
         if _use_cad_mesh:
             print(
-                f"[viser] Loaded {len(_link_meshes_local)} CAD link meshes "
-                f"from menagerie assets."
+                f"[viser] Loaded {len(_link_meshes_local)} CAD link meshes from menagerie assets."
             )
 
     except Exception as exc:
@@ -731,7 +735,7 @@ if __name__ == "__main__":
     for t_idx in range(n_frames):
         for k in range(N_JOINTS):
             T_k = np.asarray(results.trajectory[f"T_j{k + 1}"])[t_idx]  # (4, 4)
-            q0  = np.append(_joint_zero_pos[k], 1.0)
+            q0 = np.append(_joint_zero_pos[k], 1.0)
             keypoints[t_idx, k] = (T_k @ q0)[:3]
         # EE = after all joints + T_home translation
         T_7 = np.asarray(results.trajectory["T_j7"])[t_idx]
@@ -754,11 +758,11 @@ if __name__ == "__main__":
 
     # Waypoint spheres
     _marker_colors = {
-        "home":      (100, 150, 255),
-        "pre_grasp": (255, 180,  50),
-        "grasp":     (255,  50,  50),
-        "pre_place": (255, 180,  50),
-        "place":     (255,  50,  50),
+        "home": (100, 150, 255),
+        "pre_grasp": (255, 180, 50),
+        "grasp": (255, 50, 50),
+        "pre_place": (255, 180, 50),
+        "place": (255, 50, 50),
     }
     add_target_markers(
         server,
@@ -770,7 +774,7 @@ if __name__ == "__main__":
     # Ghost EE path and animated trail
     ee_colors = compute_velocity_colors(np.asarray(results.trajectory.get("velocity")))
     add_ghost_trajectory(server, ee_pos, ee_colors, point_size=0.005)
-    _, update_trail  = add_animated_trail(server, ee_pos, ee_colors, point_size=0.008)
+    _, update_trail = add_animated_trail(server, ee_pos, ee_colors, point_size=0.008)
     _, update_marker = add_position_marker(server, ee_pos, radius=0.012)
 
     if ee_sim_on_prop_grid is not None:
@@ -803,9 +807,9 @@ if __name__ == "__main__":
         }
         _link_handles = {}
         for link_name, (verts_local, faces) in _link_meshes_local.items():
-            T0          = _link_world_T[link_name][0]
+            T0 = _link_world_T[link_name][0]
             verts_world = (T0[:3, :3] @ verts_local.T).T + T0[:3, 3]
-            handle      = server.scene.add_mesh_simple(
+            handle = server.scene.add_mesh_simple(
                 f"/robot/{link_name}",
                 vertices=verts_world.astype(np.float32),
                 faces=faces,
@@ -816,7 +820,7 @@ if __name__ == "__main__":
 
         def update_robot(frame_idx: int) -> None:
             for link_name, (handle, verts_local) in _link_handles.items():
-                T           = _link_world_T[link_name][frame_idx]
+                T = _link_world_T[link_name][frame_idx]
                 verts_world = (T[:3, :3] @ verts_local.T).T + T[:3, 3]
                 handle.vertices = verts_world.astype(np.float32)
 
@@ -843,16 +847,15 @@ if __name__ == "__main__":
 
     else:
         # Fallback: 8 line segments (world origin → J1 → ··· → J7 → EE)
-        n_segs  = N_JOINTS + 1   # 8 segments
+        n_segs = N_JOINTS + 1  # 8 segments
         seg_col = np.full((n_segs, 2, 3), [200, 200, 200], dtype=np.uint8)
 
         def _build_segments(frame_idx: int) -> np.ndarray:
-            pts         = np.zeros((n_segs, 2, 3), dtype=np.float32)
-            pts[0]      = [np.zeros(3), keypoints[frame_idx, 0]]
+            pts = np.zeros((n_segs, 2, 3), dtype=np.float32)
+            pts[0] = [np.zeros(3), keypoints[frame_idx, 0]]
             for k in range(N_JOINTS - 1):
                 pts[k + 1] = [keypoints[frame_idx, k], keypoints[frame_idx, k + 1]]
-            pts[N_JOINTS] = [keypoints[frame_idx, N_JOINTS - 1],
-                             keypoints[frame_idx, N_JOINTS]]
+            pts[N_JOINTS] = [keypoints[frame_idx, N_JOINTS - 1], keypoints[frame_idx, N_JOINTS]]
             return pts
 
         arm_handle = server.scene.add_line_segments(
