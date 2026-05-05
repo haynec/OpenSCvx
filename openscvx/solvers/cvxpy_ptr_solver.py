@@ -46,6 +46,32 @@ except ImportError:
 ## TODO: (fabio) add support for impulsive controls
 
 
+def _ctcs_impulse_effect(
+    n_states: int,
+    ctcs_slice: slice | None,
+    slice_imp: slice,
+    B_d_segment,
+    C_d_segment,
+    du_prev,
+    du_next,
+):
+    """Scatter continuous CTCS impulse sensitivity into full state rows."""
+    if ctcs_slice is None or slice_imp.stop <= slice_imp.start:
+        return 0
+
+    n_ctcs = ctcs_slice.stop - ctcs_slice.start
+    if n_ctcs <= 0:
+        return 0
+
+    ctcs_scatter = np.zeros((n_states, n_ctcs))
+    ctcs_rows = np.arange(ctcs_slice.start, ctcs_slice.stop)
+    ctcs_scatter[ctcs_rows, np.arange(n_ctcs)] = 1.0
+    return ctcs_scatter @ (
+        B_d_segment[ctcs_slice, slice_imp] @ du_prev[slice_imp]
+        + C_d_segment[ctcs_slice, slice_imp] @ du_next[slice_imp]
+    )
+
+
 def _unstack_nodal(
     data: SubproblemData,
     jax_constraints: "LoweredJaxConstraints",
@@ -536,8 +562,10 @@ class CVXPyPTRSolver(PTRSolver):
         du_nonscaled = ocp_vars.du_nonscaled
         slice_cont = settings.sim.u.slice_continuous
         slice_imp = settings.sim.u.slice_impulsive
+        ctcs_slice = settings.sim.ctcs_slice
         has_continuous = bool(slice_cont.stop > slice_cont.start)
         has_impulsive = bool(slice_imp.stop > slice_imp.start)
+        has_ctcs = ctcs_slice is not None and bool(ctcs_slice.stop > ctcs_slice.start)
 
         constr = []
 
@@ -605,24 +633,37 @@ class CVXPyPTRSolver(PTRSolver):
             (u[i] - inv_S_u @ (u_bar[i] - c_u) - du[i]) == 0 for i in range(settings.sim.n)
         ]  # Control Error
 
-        constr += [
-            inv_S_x @ (x_nonscaled[i] - c_x)
-            == inv_S_x
-            @ (
-                A_d[i - 1] @ dx_nonscaled[i - 1]
-                + (
-                    B_d[i - 1][:, slice_cont] @ du_nonscaled[i - 1][slice_cont]
-                    if has_continuous
-                    else 0
+        # Dynamics Constraint
+        for i in range(1, settings.sim.n):
+            continuous_control_effect = (
+                B_d[i - 1][:, slice_cont] @ du_nonscaled[i - 1][slice_cont]
+                + C_d[i - 1][:, slice_cont] @ du_nonscaled[i][slice_cont]
+                if has_continuous
+                else 0
+            )
+            impulse_jump_effect = (
+                E_d[i][:, slice_imp] @ du_nonscaled[i][slice_imp] if has_impulsive else 0
+            )
+            ctcs_impulse_effect = 0
+            if has_impulsive and has_ctcs:
+                ctcs_impulse_effect = _ctcs_impulse_effect(
+                    settings.sim.n_states,
+                    ctcs_slice,
+                    slice_imp,
+                    B_d[i - 1],
+                    C_d[i - 1],
+                    du_nonscaled[i - 1],
+                    du_nonscaled[i],
                 )
-                + (C_d[i - 1][:, slice_cont] @ du_nonscaled[i][slice_cont] if has_continuous else 0)
-                + (E_d[i][:, slice_imp] @ du_nonscaled[i][slice_imp] if has_impulsive else 0)
+            dynamics_rhs = (
+                A_d[i - 1] @ dx_nonscaled[i - 1]
+                + continuous_control_effect
+                + impulse_jump_effect
+                + ctcs_impulse_effect
                 + (x_prop_plus[i] if has_impulsive else x_prop[i - 1])
                 - c_x
             )
-            + nu[i - 1]
-            for i in range(1, settings.sim.n)
-        ]  # Dynamics Constraint
+            constr += [inv_S_x @ (x_nonscaled[i] - c_x) == inv_S_x @ dynamics_rhs + nu[i - 1]]
 
         constr += [
             inv_S_u @ (u_nonscaled[i] - c_u) <= inv_S_u @ (settings.sim.u.max - c_u)
@@ -643,16 +684,17 @@ class CVXPyPTRSolver(PTRSolver):
             for i in range(settings.sim.n)
         ]  # State Constraints (Also implemented in CTCS but included for numerical stability)
 
-        for idx, nodes in zip(
-            np.arange(settings.sim.ctcs_slice.start, settings.sim.ctcs_slice.stop),
-            settings.sim.ctcs_node_intervals,
-        ):
-            start_idx = 1 if nodes[0] == 0 else nodes[0]
-            constr += [
-                cp.abs(x_nonscaled[i][idx] - x_nonscaled[i - 1][idx]) <= settings.sim.x.max[idx]
-                for i in range(start_idx, nodes[1])
-            ]
-            constr += [x_nonscaled[0][idx] == 0]
+        if has_ctcs:
+            for idx, nodes in zip(
+                np.arange(settings.sim.ctcs_slice.start, settings.sim.ctcs_slice.stop),
+                settings.sim.ctcs_node_intervals,
+            ):
+                start_idx = 1 if nodes[0] == 0 else nodes[0]
+                constr += [
+                    cp.abs(x_nonscaled[i][idx] - x_nonscaled[i - 1][idx]) <= settings.sim.x.max[idx]
+                    for i in range(start_idx, nodes[1])
+                ]
+                constr += [x_nonscaled[0][idx] == 0]
 
         return constr
 
