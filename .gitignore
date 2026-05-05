@@ -160,7 +160,7 @@ celerybeat.pid
 *.sage.py
 
 # Cursor
-.cursor/
+# .cursor/
 
 # Environments
 .env
