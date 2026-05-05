@@ -12,6 +12,7 @@ from openscvx.discretization import (
     LinearizeDiscretizeSparse,
     color_columns,
     make_sparse_jacobian_fns,
+    resolve_discretizer_config,
 )
 from openscvx.discretization.base import _make_foh_mask, _resolve_foh_mask
 from openscvx.discretization.linearize_discretize import _dVdt
@@ -369,6 +370,15 @@ def test_sparse_fallback_when_no_sparsity(settings, dynamics):
     A_d, B_d, C_d, xp, _ = solver(x, u, {})
 
     assert A_d.shape == (settings.sim.n - 1, 2, 2)
+
+
+def test_discretizer_spec_build_preserves_stepsize_controller():
+    """Dict-config discretizers must not serialize Diffrax controllers to dicts."""
+    controller = dfx.StepTo(ts=np.linspace(0.0, 1.0, 12))
+    disc = resolve_discretizer_config(
+        {"diffrax_kwargs": {"stepsize_controller": controller}}
+    ).build()
+    assert disc.diffrax_kwargs["stepsize_controller"] is controller
 
 
 def test_diffrax_kwargs_routed_to_diffrax_kwargs():

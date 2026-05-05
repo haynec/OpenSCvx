@@ -236,4 +236,14 @@ class DiscretizerSpec(BaseModel):
             raise ValueError(
                 f"Unknown discretizer {self.type!r}; expected one of {sorted(_DISCRETIZER_MAP)}"
             )
-        return cls(**self.model_dump(exclude={"type"}, exclude_unset=True))
+        # ``model_dump()`` turns some Equinox/Diffrax objects (e.g. ``StepTo``)
+        # into plain dicts; keep integrator kwargs from the validated model.
+        kwargs = self.model_dump(
+            exclude={"type", "diffrax_kwargs", "args"},
+            exclude_unset=True,
+        )
+        if "diffrax_kwargs" in self.model_fields_set:
+            kwargs["diffrax_kwargs"] = self.diffrax_kwargs
+        if "args" in self.model_fields_set:
+            kwargs["args"] = self.args
+        return cls(**kwargs)
