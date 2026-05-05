@@ -789,6 +789,40 @@ def lower_symbolic_problem(
             problem.N,
         )
 
+    # Build STM metadata up-front so sparsity augmentation below can see it.
+    stm_slots: list[StmSlot] = []
+    n_phys_stm = 0
+    psi_offset = 0
+    for state in problem.states:
+        if getattr(state, "_is_stm", False) is not True:
+            continue
+        mode = getattr(state, "mode", "approx")
+        control = getattr(state, "control", None)
+        ctrl_slice = control._slice if control is not None else None
+        ctrl_name = control.name if control is not None else None
+        # Ψ (second-order sensitivity) is only integrated for exact-mode
+        # *physical* slots. Impulse Ψ is trivially zero in continuous segments
+        # (Φ_imp resets to 0 and stays 0 until the discrete impulsive jump).
+        psi_slice = None
+        if mode == "exact" and state._stm_kind == "physical":
+            psi_size = state.n_phys ** 3
+            psi_slice = slice(psi_offset, psi_offset + psi_size)
+            psi_offset += psi_size
+        stm_slots.append(
+            StmSlot(
+                name=state.name,
+                kind=state._stm_kind,
+                slice=state._slice,
+                n_phys=state.n_phys,
+                control_slice=ctrl_slice,
+                control_name=ctrl_name,
+                mode=mode,
+                psi_slice=psi_slice,
+            )
+        )
+        n_phys_stm = state.n_phys
+    stm_meta = StmMeta(slots=tuple(stm_slots), n_phys=n_phys_stm, psi_size=psi_offset)
+
     # Compute dynamics Jacobian sparsity from the symbolic AST.
     # Only available for symbolic dynamics (not byof).  Always use FOH
     # patterns (the superset) since dis_type isn't known yet.
@@ -801,6 +835,17 @@ def lower_symbolic_problem(
         A_c, B_c = problem.dynamics.sparsity(n_x, n_u)
 
         dynamics_sparsity = discrete_sparsity(A_c, B_c, dis_type="FOH")
+
+        # Augment A_d sparsity for exact-mode STM slots: their rows get
+        # populated by Ψ (∂Φ/∂x_phys(0)) in columns [0, n_phys).
+        if stm_meta.psi_size > 0:
+            A_d, B_d, C_d = dynamics_sparsity
+            A_d = A_d.copy()
+            for slot in stm_meta.slots:
+                if slot.psi_slice is None or slot.kind != "physical":
+                    continue
+                A_d[slot.slice, : stm_meta.n_phys] = True
+            dynamics_sparsity = (A_d, B_d, C_d)
 
         # Attach continuous-time sparsity to the Dynamics object so the
         # discretizer can exploit it for sparse Jacobian computation.
@@ -850,39 +895,6 @@ def lower_symbolic_problem(
             # Vmap over time axis: (T, n_x), (T, n_u) -> (T, output_dim)
             output_fn_vmapped = jax.vmap(output_fn, in_axes=(0, 0, None, None))
             algebraic_prop_lowered[name] = output_fn_vmapped
-
-    stm_slots: list[StmSlot] = []
-    n_phys_stm = 0
-    psi_offset = 0
-    for state in problem.states:
-        if getattr(state, "_is_stm", False) is not True:
-            continue
-        mode = getattr(state, "mode", "approx")
-        control = getattr(state, "control", None)
-        ctrl_slice = control._slice if control is not None else None
-        ctrl_name = control.name if control is not None else None
-        # Ψ (second-order sensitivity) is only integrated for exact-mode
-        # *physical* slots. Impulse Ψ is trivially zero in continuous segments
-        # (Φ_imp resets to 0 and stays 0 until the discrete impulsive jump).
-        psi_slice = None
-        if mode == "exact" and state._stm_kind == "physical":
-            psi_size = state.n_phys ** 3
-            psi_slice = slice(psi_offset, psi_offset + psi_size)
-            psi_offset += psi_size
-        stm_slots.append(
-            StmSlot(
-                name=state.name,
-                kind=state._stm_kind,
-                slice=state._slice,
-                n_phys=state.n_phys,
-                control_slice=ctrl_slice,
-                control_name=ctrl_name,
-                mode=mode,
-                psi_slice=psi_slice,
-            )
-        )
-        n_phys_stm = state.n_phys
-    stm_meta = StmMeta(slots=tuple(stm_slots), n_phys=n_phys_stm, psi_size=psi_offset)
 
     dynamics.stm_meta = stm_meta
     dynamics_discrete.stm_meta = stm_meta

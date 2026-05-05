@@ -6,10 +6,13 @@ Visitors: State, Time
 import jax
 
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.expr.stm import STMImpulse, STMPhysical
 from openscvx.symbolic.expr.time import Time
 from openscvx.symbolic.lowerers.jax._registry import visitor  # noqa: F401
 
 
+@visitor(STMImpulse)
+@visitor(STMPhysical)
 @visitor(Time)
 @visitor(State)
 def _visit_state(lowerer, node: State):

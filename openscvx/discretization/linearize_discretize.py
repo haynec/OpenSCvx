@@ -304,12 +304,13 @@ def _dVdt(
         for slot in stm_meta.slots:
             if slot.psi_slice is None or slot.kind != "physical":
                 continue
+            psi_abs = slice(i4 + slot.psi_slice.start, i4 + slot.psi_slice.stop)
             phi = V[:, slot.slice].reshape(-1, n_phys, n_phys)
-            psi = V[:, slot.psi_slice].reshape(-1, n_phys, n_phys, n_phys)
+            psi = V[:, psi_abs].reshape(-1, n_phys, n_phys, n_phys)
             dpsi = jnp.einsum("bil,bljk->bijk", A_phys, psi) + jnp.einsum(
                 "bilm,bmk,blj->bijk", H_phys, phi, phi
             )
-            dVdt = dVdt.at[:, slot.psi_slice].set(dpsi.reshape(-1, n_phys ** 3))
+            dVdt = dVdt.at[:, psi_abs].set(dpsi.reshape(-1, n_phys ** 3))
     # fmt: on
 
     # TODO Implement scaling of V vector
@@ -437,7 +438,6 @@ def _calculate_discretization(
         )
 
     Vend = sol[-1].T.reshape(-1, i5)
-    Vmulti = sol.T
 
     x_prop = Vend[:, i0:i1]
 
@@ -454,9 +454,18 @@ def _calculate_discretization(
         for slot in stm_meta.slots:
             if slot.psi_slice is None or slot.kind != "physical":
                 continue
-            psi_end = Vend[:, slot.psi_slice].reshape(N - 1, n_phys * n_phys, n_phys)
+            psi_abs = slice(i4 + slot.psi_slice.start, i4 + slot.psi_slice.stop)
+            psi_end = Vend[:, psi_abs].reshape(N - 1, n_phys * n_phys, n_phys)
             A_bar = A_bar.at[:, slot.slice, :].set(0.0)
             A_bar = A_bar.at[:, slot.slice, :n_phys].set(psi_end)
+
+    # Strip Ψ from V before returning; downstream consumers expect i4 per segment.
+    # Patch the final column's Φ block with the Ψ-corrected A_bar rows so that
+    # ``DiscretizationResult.from_V`` yields the exact-mode linearization.
+    sol_mat = sol.reshape(sol.shape[0], N - 1, i5)[:, :, :i4]
+    if stm_meta.psi_size > 0:
+        sol_mat = sol_mat.at[-1, :, i1:i2].set(A_bar.reshape(N - 1, n_x * n_x))
+    Vmulti = sol_mat.reshape(sol.shape[0], (N - 1) * i4).T
 
     return A_bar, B_bar, C_bar, x_prop, Vmulti
 
