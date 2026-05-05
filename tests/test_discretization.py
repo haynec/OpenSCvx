@@ -16,6 +16,7 @@ from openscvx.discretization import (
 )
 from openscvx.discretization.base import _make_foh_mask, _resolve_foh_mask
 from openscvx.discretization.linearize_discretize import _dVdt
+from openscvx.lowered.stm_meta import StmMeta
 
 # --- fixtures for dummy params, state_dot, A, B  ------------------
 
@@ -110,6 +111,7 @@ def test_jit_dVdt_compiles(settings):
             f_vmapped,
             A_vmapped,
             B_vmapped,
+            None,
             n_x,
             n_u,
             N,
@@ -121,6 +123,7 @@ def test_jit_dVdt_compiles(settings):
             settings.sim.inv_S_x,
             settings.sim.inv_S_u,
             {},
+            StmMeta(),
         )
 
     # now JIT only over (tau_, V_)
