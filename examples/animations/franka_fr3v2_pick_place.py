@@ -22,7 +22,6 @@ sys.path.append(grandparent_dir)
 
 from examples.animations._camera import overview_pose
 from examples.animations._render import render_animation_to_video
-from examples.plotting_viser import AnimatedServerHandle
 from examples.arm.franka_fr3v2_pick_place import (
     N_JOINTS,
     _joint_zero_pos,
@@ -31,6 +30,7 @@ from examples.arm.franka_fr3v2_pick_place import (
     problem,
     waypoint_positions,
 )
+from examples.plotting_viser import AnimatedServerHandle
 from openscvx.plotting.viser import (
     add_animated_trail,
     add_ellipsoid_obstacles,
