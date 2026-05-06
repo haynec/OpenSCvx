@@ -35,7 +35,7 @@ Authoritative details live in **`openscvx/problem.py`** (`Problem.__init__` docs
 | **`dynamics_prop`** | Extra states’ \(\dot x\) for propagation only (not duplicated in `dynamics`). |
 | **`states_prop`** | Extra `State` objects for those propagation dynamics. |
 | **`algebraic_prop`** | `dict` name → expression evaluated during propagation (not integrated). |
-| **`licq_min`**, **`licq_max`** | CTCS LICQ tube bounds: scalar or `dict` mapping CTCS group **`idx`** → bound (`Problem` docstring). |
+| **`licq_min`** | CTCS LICQ max bound. |
 | **`algorithm`** | `None` → default PTR; or `PenalizedTrustRegion` / `dict` validated as `PenalizedTrustRegionConfig`; or nested **`autotuner`**. |
 | **`discretizer`** | `None` / `dict` / `Discretizer` — resolved by `resolve_discretizer_config` (default type `VectorizeDiscretizeLinearize` when type omitted). |
 | **`solver`** | `None` / `dict` / `ConvexSolver` — default `PTRSolver` kwargs. |
