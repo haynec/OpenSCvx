@@ -155,7 +155,7 @@ uv pip install -e .
 > git clone --recurse-submodules https://github.com/OpenSCvx/OpenSCvx.git
 > ```
 >
-> After a clone without submodules, initialise Menagerie whenever you need it:
+> After a clone without submodules, initialize Menagerie whenever you need it:
 >
 > ```bash
 > git submodule update --init third_party/mujoco_menagerie
