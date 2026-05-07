@@ -45,6 +45,10 @@
          <lastmod>2026-05-07</lastmod>
     </url>
     <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/animations/franka_fr3v2_pick_place/</loc>
+         <lastmod>2026-05-07</lastmod>
+    </url>
+    <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/animations/logo/</loc>
          <lastmod>2026-05-07</lastmod>
     </url>
@@ -66,6 +70,14 @@
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/arm/7_dof_arm_vp/</loc>
+         <lastmod>2026-05-07</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/arm/franka_fr3v2_pick_place/</loc>
+         <lastmod>2026-05-07</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/arm/franka_fr3v2_viewplanning/</loc>
          <lastmod>2026-05-07</lastmod>
     </url>
     <url>
@@ -134,6 +146,30 @@
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/drone/logo_utils/svg_path_utils/</loc>
+         <lastmod>2026-05-07</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/mjx/cartpole_mjx/</loc>
+         <lastmod>2026-05-07</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/mjx/double_cartpole_mjx/</loc>
+         <lastmod>2026-05-07</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/mjx/skydio_x2_mjx/</loc>
+         <lastmod>2026-05-07</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/mjx/triple_cartpole_3d_mjx/</loc>
+         <lastmod>2026-05-07</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/mjx/triple_cartpole_game/</loc>
+         <lastmod>2026-05-07</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Examples/mjx/triple_cartpole_mjx/</loc>
          <lastmod>2026-05-07</lastmod>
     </url>
     <url>
@@ -354,6 +390,18 @@
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/init/inverse_kinematics/</loc>
+         <lastmod>2026-05-07</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/integrations/</loc>
+         <lastmod>2026-05-07</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/integrations/menagerie/</loc>
+         <lastmod>2026-05-07</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/integrations/mjx/</loc>
          <lastmod>2026-05-07</lastmod>
     </url>
     <url>
