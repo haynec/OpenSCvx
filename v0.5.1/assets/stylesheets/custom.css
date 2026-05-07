@@ -1,0 +1,135 @@
+/* ===== ESSENTIAL STYLES FOR OPENSCVX ===== */
+
+/* --- OpenSCvx: API signature sizing (make signatures more readable) --- */
+.doc-heading code,
+.doc-heading .doc-signature,
+.doc-object-name {
+  font-size: 1.1em !important;
+  font-weight: 500 !important;
+}
+
+.doc-heading {
+  font-size: 1em !important;
+}
+
+/* Make parameter lists in signatures more readable */
+.doc-signature .n,
+.doc-signature .p {
+  font-size: 1em !important;
+}
+
+/* Code block and admonition basic styling */
+.md-typeset pre,
+.md-typeset .highlight {
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.md-typeset .admonition {
+  border-radius: 8px;
+}
+
+/* --- OpenSCvx: Code block width fixes (ESSENTIAL) --- */
+.md-content__inner .md-typeset pre {
+  max-width: 100% !important;
+  width: auto !important;
+  box-sizing: border-box !important;
+  overflow-x: auto !important;
+  white-space: pre !important;
+  word-wrap: normal !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.md-typeset .highlight,
+.md-typeset .highlight pre {
+  background: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+
+/* --- OpenSCvx: Admonition/details width fixes (ESSENTIAL) --- */
+.md-content__inner > .md-typeset > .admonition,
+.md-content__inner > .md-typeset > details,
+.md-content__inner .admonition,
+.md-content__inner details {
+  max-width: 100% !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  /* Don't remove padding - it's needed for content spacing */
+  overflow-x: auto !important;
+}
+
+/* --- OpenSCvx: Code block background (ESSENTIAL) --- */
+pre, code, .highlight, .md-typeset pre, .md-typeset code, .md-typeset .highlight,
+.md-content__inner pre, .md-content__inner code, .md-content__inner .highlight {
+  background: var(--md-code-bg-color) !important;
+  background-color: var(--md-code-bg-color) !important;
+}
+
+/* Basic accessibility - focus states */
+.md-typeset a:focus,
+.md-typeset button:focus,
+.md-nav__link:focus {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Smooth scroll behavior */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Remove rounded corners from header (if desired) */
+.md-header,
+.md-header__inner,
+.md-header__source,
+.md-header__title,
+.md-header__button,
+.md-search__inner,
+.md-search__input {
+  border-radius: 0 !important;
+}
+
+.md-source__repository,
+.md-source__icon,
+.md-source__facts,
+.md-source__fact {
+  border-radius: 0 !important;
+}
+
+.md-header * {
+  border-radius: 0 !important;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .md-typeset pre,
+  .md-typeset .admonition {
+    margin: 1em -1rem;
+    border-radius: 8px;
+  }
+  
+  .md-typeset table {
+    font-size: 0.9em;
+  }
+}
+
+/* Print-friendly styles */
+@media print {
+  .md-typeset pre,
+  .md-typeset .admonition {
+    box-shadow: none;
+    border: 1px solid #ccc;
+  }
+  
+  .md-typeset * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
