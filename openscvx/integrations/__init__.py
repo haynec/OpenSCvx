@@ -51,27 +51,6 @@ def mjx_dynamics(*args: Any, **kwargs: Any) -> Any:
     return _mjx_dynamics(*args, **kwargs)
 
 
-def free_joint_qpos_dynamics(*args: Any, **kwargs: Any) -> Any:  # noqa: F401 — kept for backwards compat
-    """Deprecated public shim; use :func:`mjx_byof` instead.
-
-    .. deprecated::
-        This symbol will be removed in a future release.  Use
-        :func:`mjx_byof` which handles free-joint quaternion kinematics
-        automatically.
-    """
-    import warnings
-
-    warnings.warn(
-        "free_joint_qpos_dynamics is deprecated and will be removed in a future release. "
-        "Use mjx_byof instead, which handles free-joint kinematics automatically.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    from .mjx import _free_joint_qpos_dynamics as _f
-
-    return _f(*args, **kwargs)
-
-
 def __getattr__(name: str) -> Any:
     if name == "menagerie":
         from . import menagerie
