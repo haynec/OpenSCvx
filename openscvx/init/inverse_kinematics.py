@@ -22,7 +22,6 @@ from typing import Sequence, Tuple, Union
 
 import jax
 import jax.numpy as jnp
-import jaxlie
 import numpy as np
 
 from openscvx.init.interpolation import linspace, slerp
@@ -71,6 +70,7 @@ def _so3_log(R):
 @jax.jit
 def _poe_fk_pose(screw_axes, T_home, angles):
     """PoE FK returning (4, 4) end-effector transform."""
+    import jaxlie
 
     def step(T, xi_angle):
         xi, angle = xi_angle[:6], xi_angle[6]
@@ -181,6 +181,13 @@ def ik_interpolation(
                 T_home=T_home,
             )
     """
+    try:
+        import jaxlie  # noqa: F401
+    except ImportError as e:
+        raise ImportError(
+            "ik_interpolation requires jaxlie. Install with: pip install openscvx[lie]"
+        ) from e
+
     positions = [np.asarray(kf[0], dtype=np.float64) for kf in keyframes]
     quaternions = [np.asarray(kf[1], dtype=np.float64) for kf in keyframes]
 

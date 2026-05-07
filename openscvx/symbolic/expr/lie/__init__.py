@@ -53,14 +53,16 @@ References:
 # Core operators - no dependencies
 from .adjoint import Adjoint, AdjointDual, SE3Adjoint, SE3AdjointDual
 
-# jaxlie-backed operators - optional dependency
+# jaxlie-backed operators - optional dependency.
+# These AST nodes don't import jaxlie themselves (lowering does), so we probe
+# for jaxlie explicitly to gate construction with a clear install hint instead
+# of letting users build nodes that blow up later inside the lowerer.
 try:
+    import jaxlie  # noqa: F401
+
     from .se3 import SE3Exp, SE3Log
     from .so3 import SO3Exp, SO3Log
-
-    _JAXLIE_AVAILABLE = True
 except ImportError:
-    _JAXLIE_AVAILABLE = False
 
     def _make_stub(name: str):
         """Create a stub class that raises ImportError on instantiation."""
