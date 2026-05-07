@@ -109,7 +109,6 @@ def validate_byof(
                 )
 
             # Test that forward-mode AD works (the discretizer uses jax.jacfwd,
-            # so we test jax.jvp rather than jax.grad / jacrev).
             try:
                 tangent = jnp.ones_like(dummy_x)
                 jax.jvp(
@@ -159,7 +158,12 @@ def validate_byof(
                     f"expected {expected_shape} (state '{state_name}' shape)"
                 )
             try:
-                jax.grad(lambda x: jnp.sum(fn(x, dummy_u, dummy_node, dummy_params)))(dummy_x)
+                tangent = jnp.ones_like(dummy_x)
+                jax.jvp(
+                    lambda x: jnp.sum(fn(x, dummy_u, dummy_node, dummy_params)),
+                    (dummy_x,),
+                    (tangent,),
+                )
             except Exception as e:
                 raise ValueError(
                     f"byof dynamics_discrete '{state_name}' is not differentiable with JAX. "
@@ -201,9 +205,14 @@ def validate_byof(
                 f"got {type(result)}: {e}"
             ) from e
 
-        # Test gradient
+        # Test forward-mode AD
         try:
-            jax.grad(lambda x: jnp.sum(fn(x, dummy_u, dummy_node, dummy_params)))(dummy_x)
+            tangent = jnp.ones_like(dummy_x)
+            jax.jvp(
+                lambda x: jnp.sum(fn(x, dummy_u, dummy_node, dummy_params)),
+                (dummy_x,),
+                (tangent,),
+            )
         except Exception as e:
             raise ValueError(
                 f"byof nodal_constraints[{i}]['constraint_fn'] is not differentiable with JAX: {e}"
@@ -262,9 +271,14 @@ def validate_byof(
                 f"got {type(result)}: {e}"
             ) from e
 
-        # Test gradient
+        # Test forward-mode AD
         try:
-            jax.grad(lambda X: jnp.sum(fn(X, dummy_U, dummy_params)))(dummy_X)
+            tangent = jnp.ones_like(dummy_X)
+            jax.jvp(
+                lambda X: jnp.sum(fn(X, dummy_U, dummy_params)),
+                (dummy_X,),
+                (tangent,),
+            )
         except Exception as e:
             raise ValueError(
                 f"byof cross_nodal_constraints[{i}] is not differentiable with JAX: {e}"
@@ -303,9 +317,14 @@ def validate_byof(
                 f"got shape {result_array.shape}"
             )
 
-        # Test gradient
+        # Test forward-mode AD
         try:
-            jax.grad(lambda x: fn(x, dummy_u, dummy_node, dummy_params))(dummy_x)
+            tangent = jnp.ones_like(dummy_x)
+            jax.jvp(
+                lambda x: fn(x, dummy_u, dummy_node, dummy_params),
+                (dummy_x,),
+                (tangent,),
+            )
         except Exception as e:
             raise ValueError(
                 f"byof ctcs_constraints[{i}]['constraint_fn'] is not differentiable with JAX: {e}"

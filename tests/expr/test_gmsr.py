@@ -32,10 +32,11 @@ from openscvx.symbolic.lowerers.jax.stl import gmsr_IfThen_lite as IfThen_lite
 C = 1e-4  # default smoothing constant
 
 
-def _grad_ok(fn, *args):
-    """Return True if jax.grad(fn)(*args) does not raise and is finite."""
+def _jvp_ok(fn, x):
+    """Return True if jax.jvp(fn, x) does not raise and is finite."""
     try:
-        g = jax.grad(fn)(*args)
+        tangent = jnp.ones_like(x)
+        _, g = jax.jvp(fn, (x,), (tangent,))
         return bool(jnp.all(jnp.isfinite(g)))
     except Exception:
         return False
@@ -74,14 +75,14 @@ class TestSmoothEquality:
         def fn(y):
             return _smooth_equality(y, c=C)
 
-        g = jax.grad(fn)(jnp.array(0.0))
+        _, g = jax.jvp(fn, (jnp.array(0.0),), (jnp.array(1.0),))
         assert jnp.isfinite(g)
 
     def test_differentiable_away_from_zero(self):
         def fn(y):
             return _smooth_equality(y, c=C)
 
-        assert _grad_ok(fn, jnp.array(1.5))
+        assert _jvp_ok(fn, jnp.array(1.5))
 
 
 # =============================================================================
@@ -122,7 +123,11 @@ class TestAND:
         def fn(y):
             return AND(y, c=C)
 
-        g = jax.grad(fn)(jnp.array([-1.0, 1.0, 0.5]))
+        _, g = jax.jvp(
+            fn,
+            (jnp.array([-1.0, 1.0, 0.5]),),
+            (jnp.array([1.0, 1.0, 1.0]),),
+        )
         assert jnp.all(jnp.isfinite(g))
 
     def test_or_is_negated_and(self):
@@ -163,7 +168,7 @@ class TestOR:
         def fn(y):
             return OR(y, c=C)
 
-        g = jax.grad(fn)(jnp.array([0.5, -0.3]))
+        _, g = jax.jvp(fn, (jnp.array([0.5, -0.3]),), (jnp.array([1.0, 1.0]),))
         assert jnp.all(jnp.isfinite(g))
 
 
@@ -202,7 +207,7 @@ class TestIfThen:
         def fn(y):
             return IfThen(y, c=C)
 
-        g = jax.grad(fn)(jnp.array([-0.3, 0.7]))
+        _, g = jax.jvp(fn, (jnp.array([-0.3, 0.7]),), (jnp.array([1.0, 1.0]),))
         assert jnp.all(jnp.isfinite(g))
 
 
@@ -239,14 +244,14 @@ class TestIntegerVariable:
         def fn(y):
             return integer_variable(y, jnp.array([0.0, 1.0, 2.0]), c=C)
 
-        g = jax.grad(fn)(jnp.array(0.5))
+        _, g = jax.jvp(fn, (jnp.array(0.5),), (jnp.array(1.0),))
         assert jnp.isfinite(g)
 
     def test_differentiable_at_exact_value(self):
         def fn(y):
             return integer_variable(y, jnp.array([0.0, 1.0]), c=C)
 
-        g = jax.grad(fn)(jnp.array(1.0))
+        _, g = jax.jvp(fn, (jnp.array(1.0),), (jnp.array(1.0),))
         assert jnp.isfinite(g)
 
 
@@ -275,7 +280,7 @@ class TestANDLite:
         def fn(y):
             return AND_lite(y, c=C)
 
-        g = jax.grad(fn)(jnp.array([-0.5, 0.3]))
+        _, g = jax.jvp(fn, (jnp.array([-0.5, 0.3]),), (jnp.array([1.0, 1.0]),))
         assert jnp.all(jnp.isfinite(g))
 
 
@@ -304,7 +309,7 @@ class TestORLite:
         def fn(y):
             return OR_lite(y, c=C)
 
-        g = jax.grad(fn)(jnp.array([0.5, -0.3]))
+        _, g = jax.jvp(fn, (jnp.array([0.5, -0.3]),), (jnp.array([1.0, 1.0]),))
         assert jnp.all(jnp.isfinite(g))
 
 
@@ -342,5 +347,5 @@ class TestIfThenLite:
         def fn(y):
             return IfThen_lite(y, c=C)
 
-        g = jax.grad(fn)(jnp.array([-0.3, 0.7]))
+        _, g = jax.jvp(fn, (jnp.array([-0.3, 0.7]),), (jnp.array([1.0, 1.0]),))
         assert jnp.all(jnp.isfinite(g))
