@@ -3,42 +3,38 @@
 Pick-and-place trajectory optimisation for the Franka Research 3 v2 arm
 from MuJoCo Menagerie (``third_party/mujoco_menagerie/franka_fr3_v2``).
 
-Kinematics
-----------
-Space-frame Product of Exponentials (PoE) forward kinematics with screw
-axes derived analytically from the FR3 v2 MJCF kinematic chain:
+Kinematics:
+    Space-frame Product of Exponentials (PoE) forward kinematics with screw
+    axes derived analytically from the FR3 v2 MJCF kinematic chain:
 
-    T_ee(q) = exp(ξ₁q₁) @ ··· @ exp(ξ₇q₇) @ T_home
+        T_ee(q) = exp(ξ₁q₁) @ ··· @ exp(ξ₇q₇) @ T_home
 
-Contacts are **not** modelled; dynamics use a simple diagonal-inertia
-approximation (I q̈ = τ), sufficient to demonstrate the Lie-algebra FK and
-IK-seeded trajectory planning.
+    Contacts are **not** modelled; dynamics use a simple diagonal-inertia
+    approximation (I q̈ = τ), sufficient to demonstrate Lie-algebra FK and
+    IK-seeded trajectory planning.
 
-Task
-----
-Five-segment trajectory with EE position and approach-orientation constraints:
+Task:
+    Five-segment trajectory with EE position and approach-orientation constraints:
 
-    home → pre_grasp → grasp → pre_grasp → pre_place → place
+        home → pre_grasp → grasp → pre_grasp → pre_place → place
 
-Self-collision and a spherical workspace obstacle are enforced with the same
-sampled-segment model as ``7_dof_arm_collision.py`` (non-adjacent link
-capsule pairs + obstacle clearance along each link).
+    Self-collision and a spherical workspace obstacle are enforced with the same
+    sampled-segment model as ``7_dof_arm_collision.py`` (non-adjacent link
+    capsule pairs + obstacle clearance along each link).
 
-Visualisation
--------------
-When ``mujoco`` and ``trimesh`` are installed the Viser window renders the
-actual FR3 v2 CAD meshes (OBJ files from the menagerie ``assets/`` directory)
-with per-link colouring animated via MuJoCo FK.  Falls back to animated line
-segments if those packages are unavailable.
+Visualization:
+    When ``mujoco`` and ``trimesh`` are installed, the Viser window renders the
+    actual FR3 v2 CAD meshes (OBJ files from the menagerie ``assets/`` directory)
+    with per-link colouring animated via MuJoCo FK. Falls back to animated line
+    segments if those packages are unavailable.
 
-After optimisation, the converged torque sequence is replayed in MuJoCo's
-CPU simulator using ``data.qfrc_applied`` (generalized joint torques in Nm) on a
-patched MJCF with **no** position/motor actuators, matching OpenSCvx's τ in
-``q̈ = diag(I)^{-1} τ``. A semi-transparent orange duplicate arm and flange trail
-show the rollout alongside the propagated SCP trajectory.
+    After optimisation, the converged torque sequence is replayed in MuJoCo's
+    CPU simulator using ``data.qfrc_applied`` (generalized joint torques in Nm) on a
+    patched MJCF with **no** position/motor actuators, matching OpenSCvx's τ in
+    ``q̈ = diag(I)^{-1} τ``. A semi-transparent orange duplicate arm and flange trail
+    show the rollout alongside the propagated SCP trajectory.
 
-Requires
---------
+Requirements:
     pip install openscvx[lie]                # jaxlie for SE3Exp / SO3Log
     (optional) pip install mujoco trimesh    # full Viser mesh visualisation
 """
@@ -397,8 +393,14 @@ def simulate_franka_torque_rollout(results, xml_path: Path, *, problem) -> dict:
     Menagerie ``motor`` / ``position`` ``ctrl`` semantics do **not** match that model; we
     clear ``<actuator>`` and write τ into ``data.qfrc_applied`` at each hinge DOF address.
 
+    Args:
+        results: Post-processed OpenSCvx results containing ``t_full``, ``u_full``,
+            and propagated state trajectories.
+        xml_path: Path to the FR3 menagerie XML file.
+        problem: OpenSCvx problem instance used to read ``true_control_slice``.
+
     Returns:
-        dict with keys ``time``, ``qpos``, ``qvel``, ``ee_link8``.
+        dict: Rollout record with keys ``time``, ``qpos``, ``qvel``, ``ee_link8``.
     """
     import mujoco
 
