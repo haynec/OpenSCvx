@@ -187,11 +187,18 @@ def _free_joint_qpos_dynamics(
         output has the same shape as ``qpos``.
 
     Note:
-        The quaternion convention assumed here is ``[qw, qx, qy, qz]`` with
-        angular velocity expressed in the **world frame**, which matches
-        MuJoCo MJX's free-joint convention. If your system expresses angular
-        velocity in the body frame, negate the off-diagonal terms in the
-        integration matrix.
+        The quaternion convention is scalar-first quaternion ``[qw, qx, qy, qz]``,
+        identical to MuJoCo. For free joints MuJoCo stores **linear velocity in
+        the global frame** and **angular velocity in the body (local) frame**
+        (``qvel[0:3]`` and ``qvel[3:6]`` respectively — see upstream discussion:
+        `<https://github.com/google-deepmind/mujoco/issues/691>`_). The
+        quaternion kinematics implemented here reproduce ``mju_derivQuat``: the
+        three angular-rate components fed into the ``Xi(q) @ omega`` block are
+        **body-fixed**, matching ``mujoco.mjx`` dynamics for the same state. If you
+        have spatial angular velocity in the global frame ``omega_world``,
+        convert with ``omega_body = R(q).T @ omega_world`` where ``R(q)``
+        rotates body vectors into the global frame (`mju_quat2Mat`), before
+        using this kinematics.
     """
     _qpos_arg = qpos
     _qvel_arg = qvel
