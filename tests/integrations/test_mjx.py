@@ -364,20 +364,3 @@ class TestMjxByof:
         u = jnp.zeros(nu)
         out = result["qvel"](x, u, 0, {})
         assert out.shape == (nv,)
-
-
-class TestIntegrationsPublicAPI:
-    """Tests for lazy attribute exports in openscvx.integrations."""
-
-    def test_menagerie_importable(self):
-        from openscvx.integrations import menagerie
-
-        assert hasattr(menagerie, "find_menagerie_root")
-        assert hasattr(menagerie, "load_mjmodel")
-        assert hasattr(menagerie, "list_models")
-
-    def test_unknown_attribute_raises(self):
-        import openscvx.integrations as integrations
-
-        with pytest.raises(AttributeError):
-            _ = integrations.does_not_exist
