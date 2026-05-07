@@ -48,7 +48,7 @@ handle every case.
     - SCP iteration: ``add_scp_animation_controls``, ``add_scp_iteration_nodes``, etc.
 
 For problem-specific examples (drones with viewcones, rockets with glideslope
-constraints, etc.), see ``examples/plotting_viser.py``.
+constraints, etc.), see the files under ``examples/``.
 """
 
 # Server setup, animated components, Plotly integration, static primitives, and SCP visualization

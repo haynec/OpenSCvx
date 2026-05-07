@@ -117,6 +117,8 @@ time = ox.Time(
     final=ox.Minimize(total_time),
     min=0.0,
     max=5.0,
+    time_dilation_min=0.01 * total_time,
+    # time_dilation_max= * total_time,
 )
 
 problem = Problem(
@@ -128,14 +130,21 @@ problem = Problem(
     N=n,
     algorithm={
         "autotuner": ox.ConstantProximalWeight(),
-        "lam_prox": 1e-3,
+        "lam_prox": 6e-3,
         "lam_vc": 1e1,
         "lam_cost": 1e-3,
         "ep_vc": 1e-6,
-        "ep_tr": 5e-4,
+        "ep_tr": 1e-3,
     },
     float_dtype="float64",
     licq_max=1e-10,
+    solver={
+        "cvx_solver": "CLARABEL",
+        "solver_args": {
+            "canon_backend": "COO",
+            "enforce_dpp": True,
+        },
+    },
 )
 
 plotting_dict = {

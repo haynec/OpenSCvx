@@ -23,7 +23,21 @@ EXCLUDED_EXAMPLES = {
     "animations/*.py",
     "arm/7_dof_arm_collision.py",
     "drone/logo.py",
+    # Heavy MJX examples (keep cartpole + skydio below)
+    "mjx/double_cartpole_mjx.py",
+    "mjx/triple_cartpole_mjx.py",
+    "mjx/triple_cartpole_game.py",
+    "mjx/triple_cartpole_3d_mjx.py",
 }
+
+# MJX examples included in discovery only when mujoco.mjx is installed (others
+# call sys.exit on ImportError, which would abort pytest if imported blindly).
+_MJX_EXAMPLES_REQUIRE_MUJOCO = frozenset(
+    {
+        "mjx/cartpole_mjx.py",
+        "mjx/skydio_x2_mjx.py",
+    }
+)
 
 # Timing bounds for specific examples (in seconds)
 # Format: "relative/path/to/example.py": {"init": max_init, "solve": max_solve, "post": max_post}
@@ -92,6 +106,13 @@ def discover_examples():
         # Skip explicitly excluded examples (glob patterns, e.g. "animations/*.py")
         if any(rel_path.match(pat) for pat in EXCLUDED_EXAMPLES):
             continue
+
+        rel_str = rel_path.as_posix()
+        if rel_str in _MJX_EXAMPLES_REQUIRE_MUJOCO:
+            try:
+                import mujoco.mjx  # noqa: F401
+            except ImportError:
+                continue
 
         module_name = str(rel_path.with_suffix("")).replace("/", ".")
 

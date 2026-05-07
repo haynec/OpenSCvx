@@ -146,6 +146,21 @@ source .venv/bin/activate
 uv pip install -e .
 ```
 
+> [!NOTE]
+> **MuJoCo Menagerie (optional submodule)**
+>
+> Core OpenSCvx installs fine from a plain clone—you do **not** need the submodule unless you want bundled [MuJoCo Menagerie](https://github.com/google-deepmind/mujoco_menagerie) assets. To fetch it in one step, clone with `--recurse-submodules`, or add it later to `third_party/mujoco_menagerie` so `openscvx.integrations.menagerie` can load those MuJoCo XML/models/meshes without a separate checkout:
+>
+> ```bash
+> git clone --recurse-submodules https://github.com/OpenSCvx/OpenSCvx.git
+> ```
+>
+> After a clone without submodules, initialise Menagerie whenever you need it:
+>
+> ```bash
+> git submodule update --init third_party/mujoco_menagerie
+> ```
+
 ## Getting Started
 
 Check out the OpenSCvx documentation to help you get started

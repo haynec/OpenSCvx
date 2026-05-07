@@ -129,7 +129,6 @@ class VectorizeDiscretizeLinearize(Discretizer):
             u_next: np.ndarray,
             params: dict,
         ) -> jnp.ndarray:
-
             beta = tau * N * foh_mask
 
             x = x.reshape(N - 1, n_x)
@@ -144,7 +143,6 @@ class VectorizeDiscretizeLinearize(Discretizer):
             u_next: np.ndarray,
             params: dict,
         ) -> jnp.ndarray:
-
             if self.custom_integrator:
                 rk45_kwargs = self._resolve_rk45_kwargs(is_not_compiled=settings.dev.debug)
                 sol = solve_ivp_rk45(
@@ -357,7 +355,6 @@ class DiscretizeLinearizeVectorize(Discretizer):
             node: int,
             params: dict,
         ) -> jnp.ndarray:
-
             beta = tau * N * foh_mask
 
             u = u_cur + beta * (u_next - u_cur)
@@ -372,7 +369,6 @@ class DiscretizeLinearizeVectorize(Discretizer):
             node: int,
             params: dict,
         ) -> jnp.ndarray:
-
             if self.custom_integrator:
                 rk45_kwargs = self._resolve_rk45_kwargs(is_not_compiled=settings.dev.debug)
                 sol = solve_ivp_rk45(
