@@ -62,10 +62,7 @@ try:
 
     from .se3 import SE3Exp, SE3Log
     from .so3 import SO3Exp, SO3Log
-
-    _JAXLIE_AVAILABLE = True
 except ImportError:
-    _JAXLIE_AVAILABLE = False
 
     def _make_stub(name: str):
         """Create a stub class that raises ImportError on instantiation."""
