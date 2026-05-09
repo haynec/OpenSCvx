@@ -107,7 +107,7 @@ def _show_plot(fig):
 
 if __name__ == "__main__":
     problem.initialize()
-    results = problem.solve()
+    problem.solve()
     results = problem.post_process()
 
     _show_plot(plot_states(results))
