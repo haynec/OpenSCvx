@@ -81,7 +81,7 @@ problem = ox.Problem(
         "lam_vc": 1e0,
         "autotuner": ox.AugmentedLagrangian(),
     },
-    solver={"cvx_solver":"QOCO", "solver_args":{"enforce_dpp":True}},
+    solver={"cvx_solver": "QOCO", "solver_args": {"enforce_dpp": True}},
     discretizer={
         "dis_type": "ZOH",
         "ode_solver": "Dopri8",
