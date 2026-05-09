@@ -17,8 +17,8 @@ from openscvx.plotting import plot_controls, plot_states
 
 n = 20
 time_final = 1000.0
-time_dilation_min = 0.0001
-time_dilation_max = 1000.0
+time_dilation_min = 1e-4
+time_dilation_max = 1e4
 
 x = ox.State("x", shape=(1,))
 x.min = [0]
@@ -76,16 +76,12 @@ problem = ox.Problem(
     licq_max=1e-8,
     algorithm={
         "k_max": 1000,
-        "lam_prox": 4e0,
-        "lam_cost": {"cost":1e-2},
+        "lam_prox": 1e0,
+        "lam_cost": {"cost": 1e-1},
         "lam_vc": 1e0,
-        "autotuner": ox.AugmentedLagrangian(
-            gamma_1=1.8,
-            lam_prox_max=1e3,
-            lam_cost_drop=10,
-            lam_cost_relax=0.8,
-        ),
+        "autotuner": ox.AugmentedLagrangian(),
     },
+    solver={"cvx_solver":"QOCO", "solver_args":{"enforce_dpp":True}},
     discretizer={
         "dis_type": "ZOH",
         "ode_solver": "Dopri8",
