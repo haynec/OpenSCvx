@@ -857,6 +857,7 @@ problem = Problem(
     solver={
         "solver_args": {"abstol": 1e-9, "reltol": 1e-9, "verbose": True}
     }
+)
 
 # Keep post-process propagation tolerances aligned with discretization.
 problem.settings.prp.solver = "Dopri8"
