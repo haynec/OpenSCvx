@@ -219,5 +219,5 @@ src/
 # Database for astrodynamics application
 **/ker/**
 
-# Solver_data folder
+# Solver information
 solver_data/
