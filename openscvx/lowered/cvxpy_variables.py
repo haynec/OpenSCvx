@@ -29,6 +29,8 @@ class CVXPyVariables:
 
     Attributes:
         lam_prox: Trust region weight parameter (N x (n_states+n_controls), nonneg)
+        prox_c: Linear proximal coefficient parameter (N x (n_states+n_controls))
+        prox_cc: Constant proximal offset parameter (N,)
         lam_cost: Cost function weight parameter (n_states, nonneg)
         lam_vc: Virtual control penalty weights (N-1 x n_states, nonneg)
         lam_vb_nodal: Virtual buffer penalty weights for nodal constraints (N x n_nodal, nonneg)
@@ -78,7 +80,9 @@ class CVXPyVariables:
     lam_vc: "cp.Parameter"
     lam_vb_nodal: "cp.Parameter"
     lam_vb_cross: "cp.Parameter"
-
+    prox_c: "cp.Parameter"
+    prox_cc: "cp.Parameter"
+    
     # State variables and parameters
     x: "cp.Variable"
     x_bar: "cp.Parameter"

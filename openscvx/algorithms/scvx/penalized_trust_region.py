@@ -701,6 +701,7 @@ class PenalizedTrustRegion(Algorithm):
             lam_vb_nodal=np.asarray(state.lam_vb_nodal),
             lam_vb_cross=np.asarray(state.lam_vb_cross),
         )
+        self._solver.update_proximal_terms()
 
         t0 = time.time()
         result = self._solver.solve()
