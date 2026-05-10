@@ -35,13 +35,11 @@ class CVXPyVariables:
         lam_vb_cross: Virtual buffer penalty weights for cross-node constraints (n_cross, nonneg)
 
         x: State variable (N x n_states)
-        dx: State error variable (N x n_states)
         x_bar: Previous SCP state parameter (N x n_states)
         x_init: Initial state parameter (n_states,)
         x_term: Terminal state parameter (n_states,)
 
         u: Control variable (N x n_controls)
-        du: Control error variable (N x n_controls)
         u_bar: Previous SCP control parameter (N x n_controls)
 
         A_d: Discretized state Jacobian parameter (N-1 x n_states*n_states)
@@ -72,8 +70,6 @@ class CVXPyVariables:
 
         x_nonscaled: List of scaled state expressions at each node
         u_nonscaled: List of scaled control expressions at each node
-        dx_nonscaled: List of scaled state error expressions at each node
-        du_nonscaled: List of scaled control error expressions at each node
     """
 
     # SCP weight parameters
@@ -85,14 +81,12 @@ class CVXPyVariables:
 
     # State variables and parameters
     x: "cp.Variable"
-    dx: "cp.Variable"
     x_bar: "cp.Parameter"
     x_init: "cp.Parameter"
     x_term: "cp.Parameter"
 
     # Control variables and parameters
     u: "cp.Variable"
-    du: "cp.Variable"
     u_bar: "cp.Parameter"
 
     # Dynamics discretization parameters
@@ -128,5 +122,3 @@ class CVXPyVariables:
     # Scaled CVXPy expressions at each node (lists of length N)
     x_nonscaled: List = field(default_factory=list)
     u_nonscaled: List = field(default_factory=list)
-    dx_nonscaled: List = field(default_factory=list)
-    du_nonscaled: List = field(default_factory=list)

@@ -421,9 +421,16 @@ class CVXPyPTRSolver(PTRSolver):
         lam_vc = ocp_vars.lam_vc
         lam_vb_nodal = ocp_vars.lam_vb_nodal
         lam_vb_cross = ocp_vars.lam_vb_cross
-        _ = ocp_vars.x_nonscaled
-        dx = ocp_vars.dx
-        du = ocp_vars.du
+        x = ocp_vars.x
+        u = ocp_vars.u
+        x_bar = ocp_vars.x_bar
+        u_bar = ocp_vars.u_bar
+        inv_S_x = ocp_vars.inv_S_x
+        c_x = ocp_vars.c_x
+        inv_S_u = ocp_vars.inv_S_u
+        c_u = ocp_vars.c_u
+        dx = [x[i] - inv_S_x @ (x_bar[i] - c_x) for i in range(settings.sim.n)]
+        du = [u[i] - inv_S_u @ (u_bar[i] - c_u) for i in range(settings.sim.n)]
         nu = ocp_vars.nu
         nu_vb = ocp_vars.nu_vb
         nu_vb_cross = ocp_vars.nu_vb_cross
@@ -433,7 +440,6 @@ class CVXPyPTRSolver(PTRSolver):
         cost += cp.sum(lam_vb_cross) * 0
 
         # Boundary condition cost terms (use scaled x for numerical conditioning)
-        x = ocp_vars.x
         for i in range(settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop):
             if settings.sim.x.initial_type[i] == "Minimize":
                 cost += lam_cost[i] * x[0][i]
@@ -504,12 +510,10 @@ class CVXPyPTRSolver(PTRSolver):
         cvxpy_constraints = lowered.cvxpy_constraints
 
         x = ocp_vars.x
-        dx = ocp_vars.dx
         x_bar = ocp_vars.x_bar
         x_init = ocp_vars.x_init
         x_term = ocp_vars.x_term
         u = ocp_vars.u
-        du = ocp_vars.du
         u_bar = ocp_vars.u_bar
         A_d = ocp_vars.A_d
         B_d = ocp_vars.B_d
@@ -532,8 +536,10 @@ class CVXPyPTRSolver(PTRSolver):
         c_u = ocp_vars.c_u
         x_nonscaled = ocp_vars.x_nonscaled
         u_nonscaled = ocp_vars.u_nonscaled
-        dx_nonscaled = ocp_vars.dx_nonscaled
-        du_nonscaled = ocp_vars.du_nonscaled
+        dx = [x[i] - inv_S_x @ (x_bar[i] - c_x) for i in range(settings.sim.n)]
+        du = [u[i] - inv_S_u @ (u_bar[i] - c_u) for i in range(settings.sim.n)]
+        dx_nonscaled = [x_nonscaled[i] - x_bar[i] for i in range(settings.sim.n)]
+        du_nonscaled = [u_nonscaled[i] - u_bar[i] for i in range(settings.sim.n)]
         slice_cont = settings.sim.u.slice_continuous
         slice_imp = settings.sim.u.slice_impulsive
         has_continuous = bool(slice_cont.stop > slice_cont.start)
@@ -597,13 +603,6 @@ class CVXPyPTRSolver(PTRSolver):
                 == S_u_inv_td @ (u_nonscaled[i - 1][settings.sim.time_dilation_slice] - c_u_td)
                 for i in range(1, settings.sim.n)
             ]
-
-        constr += [
-            (x[i] - inv_S_x @ (x_bar[i] - c_x) - dx[i]) == 0 for i in range(settings.sim.n)
-        ]  # State Error
-        constr += [
-            (u[i] - inv_S_u @ (u_bar[i] - c_u) - du[i]) == 0 for i in range(settings.sim.n)
-        ]  # Control Error
 
         constr += [
             inv_S_x @ (x_nonscaled[i] - c_x)

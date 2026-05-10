@@ -286,14 +286,12 @@ def create_cvxpy_variables(
 
     # State
     x = cp.Variable((N, n_states), name="x")  # Current State
-    dx = cp.Variable((N, n_states), name="dx")  # State Error
     x_bar = cp.Parameter((N, n_states), name="x_bar")  # Previous SCP State
     x_init = cp.Parameter(n_states, name="x_init")  # Initial State
     x_term = cp.Parameter(n_states, name="x_term")  # Final State
 
     # Control
     u = cp.Variable((N, n_controls), name="u")  # Current Control
-    du = cp.Variable((N, n_controls), name="du")  # Control Error
     u_bar = cp.Parameter((N, n_controls), name="u_bar")  # Previous SCP Control
 
     # Discretized Augmented Dynamics Constraints
@@ -346,13 +344,9 @@ def create_cvxpy_variables(
     # Applying the affine scaling to state and control
     x_nonscaled = []
     u_nonscaled = []
-    dx_nonscaled = []
-    du_nonscaled = []
     for k in range(N):
         x_nonscaled.append(S_x @ x[k] + c_x)
         u_nonscaled.append(S_u @ u[k] + c_u)
-        dx_nonscaled.append(S_x @ dx[k])
-        du_nonscaled.append(S_u @ du[k])
 
     return CVXPyVariables(
         lam_prox=lam_prox,
@@ -361,12 +355,10 @@ def create_cvxpy_variables(
         lam_vb_nodal=lam_vb_nodal,
         lam_vb_cross=lam_vb_cross,
         x=x,
-        dx=dx,
         x_bar=x_bar,
         x_init=x_init,
         x_term=x_term,
         u=u,
-        du=du,
         u_bar=u_bar,
         A_d=A_d,
         B_d=B_d,
@@ -392,8 +384,6 @@ def create_cvxpy_variables(
         c_u=c_u,
         x_nonscaled=x_nonscaled,
         u_nonscaled=u_nonscaled,
-        dx_nonscaled=dx_nonscaled,
-        du_nonscaled=du_nonscaled,
     )
 
 
