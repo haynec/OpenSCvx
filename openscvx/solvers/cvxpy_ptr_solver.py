@@ -556,8 +556,8 @@ class CVXPyPTRSolver(PTRSolver):
                 for node in nodes:
                     residual = (
                         g[idx_ncvx][node]
-                        + grad_g_x[idx_ncvx][node] @ dx[node]
-                        + grad_g_u[idx_ncvx][node] @ du[node]
+                        + grad_g_x[idx_ncvx][node] @ x_nonscaled[node]
+                        + grad_g_u[idx_ncvx][node] @ u_nonscaled[node]
                     )
                     constr += [residual == nu_vb[idx_ncvx][node]]
                 idx_ncvx += 1
@@ -566,14 +566,15 @@ class CVXPyPTRSolver(PTRSolver):
         idx_cross = 0
         if jax_constraints.cross_node:
             for constraint in jax_constraints.cross_node:
-                # Linearization: g(X_bar, U_bar) + ∇g_X @ dX + ∇g_U @ dU == nu_vb
+                # Linearization in affine form:
+                # g_tilde + Σ_k(∇g_X[k]·X[k] + ∇g_U[k]·U[k]) == nu_vb
                 # Sum over all trajectory nodes to couple multiple nodes
                 residual = g_cross[idx_cross]
                 for k in range(settings.sim.n):
                     # Contribution from state at node k
-                    residual += grad_g_X_cross[idx_cross][k, :] @ dx[k]
+                    residual += grad_g_X_cross[idx_cross][k, :] @ x_nonscaled[k]
                     # Contribution from control at node k
-                    residual += grad_g_U_cross[idx_cross][k, :] @ du[k]
+                    residual += grad_g_U_cross[idx_cross][k, :] @ u_nonscaled[k]
                 # Add constraint: residual == slack variable
                 constr += [residual == nu_vb_cross[idx_cross]]
                 idx_cross += 1
@@ -780,16 +781,47 @@ class CVXPyPTRSolver(PTRSolver):
                 - ``grad_g_U``: Gradient w.r.t. full control trajectory
         """
         if nodal:
+            x_bar = self._ocp_vars.x_bar.value
+            u_bar = self._ocp_vars.u_bar.value
+            x_bar_arr = np.asarray(x_bar)
+            u_bar_arr = np.asarray(u_bar)
             for g_id, constraint_data in enumerate(nodal):
-                self._set_param(f"g_{g_id}", constraint_data["g"])
-                self._set_param(f"grad_g_x_{g_id}", constraint_data["grad_g_x"])
-                self._set_param(f"grad_g_u_{g_id}", constraint_data["grad_g_u"])
+                g_arr = np.asarray(constraint_data["g"])
+                grad_x_arr = np.asarray(constraint_data["grad_g_x"])
+                grad_u_arr = np.asarray(constraint_data["grad_g_u"])
+
+                # Convert to affine form in (X, U):
+                # g_tilde + grad_x·X + grad_u·U, where
+                # g_tilde = g(X_bar, U_bar) - grad_x·X_bar - grad_u·U_bar.
+                g_tilde = (
+                    g_arr
+                    - np.sum(grad_x_arr * x_bar_arr, axis=1)
+                    - np.sum(grad_u_arr * u_bar_arr, axis=1)
+                )
+
+                self._set_param(f"g_{g_id}", g_tilde)
+                self._set_param(f"grad_g_x_{g_id}", grad_x_arr)
+                self._set_param(f"grad_g_u_{g_id}", grad_u_arr)
 
         if cross_node:
+            x_bar = self._ocp_vars.x_bar.value
+            u_bar = self._ocp_vars.u_bar.value
+            x_bar_arr = np.asarray(x_bar)
+            u_bar_arr = np.asarray(u_bar)
             for g_id, constraint_data in enumerate(cross_node):
-                self._set_param(f"g_cross_{g_id}", constraint_data["g"])
-                self._set_param(f"grad_g_X_cross_{g_id}", constraint_data["grad_g_X"])
-                self._set_param(f"grad_g_U_cross_{g_id}", constraint_data["grad_g_U"])
+                g_val = np.asarray(constraint_data["g"])
+                grad_X_arr = np.asarray(constraint_data["grad_g_X"])
+                grad_U_arr = np.asarray(constraint_data["grad_g_U"])
+
+                g_tilde = (
+                    g_val
+                    - np.sum(grad_X_arr * x_bar_arr)
+                    - np.sum(grad_U_arr * u_bar_arr)
+                )
+
+                self._set_param(f"g_cross_{g_id}", g_tilde)
+                self._set_param(f"grad_g_X_cross_{g_id}", grad_X_arr)
+                self._set_param(f"grad_g_U_cross_{g_id}", grad_U_arr)
 
     def update_penalties(
         self,
