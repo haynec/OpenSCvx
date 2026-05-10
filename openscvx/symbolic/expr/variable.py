@@ -1,10 +1,56 @@
 import hashlib
-from typing import List, Optional, Tuple
+import inspect
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 from .expr import Leaf
+
+# Reserved parameter names usable in guess callables. Currently only
+# ``tau`` (normalized [0, 1] grid). Any state/control with one of these
+# names would shadow the reserved meaning; preprocessing validates that.
+RESERVED_GUESS_PARAMS: frozenset = frozenset({"tau"})
+
+
+def _inspect_guess_callable(fn: Callable, owner_name: str, owner_class: str):
+    """Inspect a guess callable's signature, rejecting unsupported forms.
+
+    Returns the list of (name, has_default) tuples for parameters the
+    dispatcher will try to fill in. Errors are raised eagerly at assignment
+    time so they point at the user's callable, not at preprocessing.
+    """
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError) as e:
+        raise ValueError(
+            f"{owner_class} '{owner_name}': could not introspect guess callable "
+            f"signature ({e}). If you used a decorator, ensure it preserves the "
+            "wrapped signature (e.g. functools.wraps)."
+        ) from e
+
+    params: List[Tuple[str, bool]] = []
+    for name, p in sig.parameters.items():
+        if p.kind is inspect.Parameter.VAR_POSITIONAL:
+            raise ValueError(
+                f"{owner_class} '{owner_name}': guess callable uses '*{name}', which "
+                "is incompatible with name-based dispatch. Declare each parameter "
+                "explicitly."
+            )
+        if p.kind is inspect.Parameter.VAR_KEYWORD:
+            raise ValueError(
+                f"{owner_class} '{owner_name}': guess callable uses '**{name}', which "
+                "is incompatible with name-based dispatch. Declare each parameter "
+                "explicitly."
+            )
+        if p.kind is inspect.Parameter.POSITIONAL_ONLY:
+            raise ValueError(
+                f"{owner_class} '{owner_name}': guess callable parameter '{name}' is "
+                "positional-only; the dispatcher calls by keyword. Remove the '/' "
+                "marker or rewrite as a regular parameter."
+            )
+        params.append((name, p.default is not inspect.Parameter.empty))
+    return params
 
 
 class Variable(Leaf):
@@ -51,6 +97,8 @@ class Variable(Leaf):
         self._min = None
         self._max = None
         self._guess = None
+        self._guess_callable: Optional[Callable] = None
+        self._guess_callable_params: Optional[List[Tuple[str, bool]]] = None
 
     def __repr__(self) -> str:
         return f"Var({self.name!r})"
@@ -207,27 +255,60 @@ class Variable(Leaf):
         return self._guess
 
     @guess.setter
-    def guess(self, arr):
+    def guess(self, val):
         """Set the initial guess for the variable trajectory.
 
-        The guess should be a 2D array where each row represents the variable value
-        at a particular time point or trajectory node.
+        Accepts either:
+
+        - A 2D array of shape ``(N, n)`` — assigned directly.
+        - A callable ``f(variables, ...) -> array``, deferred until the
+          discretization size is known. Each parameter name is dispatched
+          against the other states and controls in the problem (so e.g.
+          ``lambda pos: np.gradient(pos, axis=0)`` declares "this guess
+          depends on the resolved ``pos`` guess"). The reserved name
+          ``tau`` is the one special parameter — it receives a normalized
+          ``[0, 1]`` grid of length N for shape-only callables that don't
+          reference any other variable. Resolution happens inside problem
+          build / sync, so the array form of ``.guess`` reads back as
+          ``None`` until then.
+
+        Assigning either form clears the other. Callable signatures are
+        validated immediately so errors point at the user's lambda rather
+        than at preprocessing.
 
         Args:
-            arr: 2D array of shape (n_points, n_vars) where n_vars matches the
-                variable dimension. Can be fewer points than the final trajectory -
-                the solver will interpolate as needed.
+            val: 2D array of shape ``(N, n)`` where ``n`` matches the variable
+                dimension, OR a callable returning such an array.
 
         Raises:
-            ValueError: If the array is not 2D or if the second dimension doesn't
-                match the variable dimension
+            ValueError: If the array is not 2D, the second dimension doesn't
+                match the variable dimension, or the callable signature uses
+                ``*args`` / ``**kwargs`` / positional-only parameters.
 
         Example:
                 pos = Variable("pos", shape=(3,))
-                # Create a straight-line trajectory from origin to target
-                n_points = 50
-                pos.guess = np.linspace([0, 0, 0], [10, 5, 3], n_points)
+                # Eager array form
+                pos.guess = np.linspace([0, 0, 0], [10, 5, 3], 50)
+                # Lazy form referencing another state
+                vel = Variable("vel", shape=(3,))
+                vel.guess = lambda pos: np.gradient(pos, axis=0)
+                # Lazy form using the reserved tau grid (no cross-var dep)
+                pos.guess = lambda tau: np.outer(tau, [10, 5, 3])
         """
+        if callable(val) and not isinstance(val, np.ndarray):
+            self._guess_callable_params = _inspect_guess_callable(
+                val, self.name, self.__class__.__name__
+            )
+            self._guess_callable = val
+            self._guess = None
+            return
+
+        self._assign_guess_array(val)
+        self._guess_callable = None
+        self._guess_callable_params = None
+
+    def _assign_guess_array(self, arr) -> None:
+        """Validate and store an explicit guess array. Shared by setter and resolver."""
         arr = np.asarray(arr, dtype=float)
         if arr.ndim != 2:
             raise ValueError(
@@ -240,6 +321,62 @@ class Variable(Leaf):
                 f" {self.shape[0]}, got {arr.shape[1]}"
             )
         self._guess = arr
+
+    def _guess_dependencies(self) -> List[str]:
+        """Names this variable's guess callable depends on, excluding reserved
+        names and parameters with defaults. Empty if no callable is set.
+        """
+        if self._guess_callable_params is None:
+            return []
+        return [
+            name
+            for name, has_default in self._guess_callable_params
+            if name not in RESERVED_GUESS_PARAMS and not has_default
+        ]
+
+    def _resolve_guess(self, N: int, tau: np.ndarray, resolved_vars: Dict[str, np.ndarray]) -> None:
+        """Resolve a deferred guess callable into a concrete ``(N, n)`` array.
+
+        No-op if no callable was registered (an explicit array stays in place).
+        Dispatches parameters by name: ``tau`` gets the normalized grid, names
+        matching known states/controls get their resolved guess arrays. Params
+        with defaults are skipped permissively when no match is found.
+        """
+        if self._guess_callable is None:
+            return
+
+        kwargs: Dict[str, Any] = {}
+        for name, has_default in self._guess_callable_params or []:
+            if name == "tau":
+                kwargs[name] = tau
+            elif name in resolved_vars:
+                kwargs[name] = resolved_vars[name]
+            elif has_default:
+                continue
+            else:
+                raise ValueError(
+                    f"{self.__class__.__name__} '{self.name}': guess callable parameter "
+                    f"'{name}' is not a reserved name (tau) and does not match any "
+                    f"state or control in the problem."
+                )
+
+        try:
+            result = self._guess_callable(**kwargs)
+        except Exception as e:
+            raise type(e)(
+                f"{self.__class__.__name__} '{self.name}': guess callable raised: {e}"
+            ) from e
+
+        arr = np.asarray(result, dtype=float)
+        # Subclasses (e.g. Time) may override array shape coercion; route
+        # through the same helper they use for the array path.
+        try:
+            self._assign_guess_array(arr)
+        except ValueError as e:
+            raise ValueError(
+                f"{self.__class__.__name__} '{self.name}': guess callable returned shape "
+                f"{arr.shape}, expected ({N}, {self.shape[0]})."
+            ) from e
 
     def append(
         self,

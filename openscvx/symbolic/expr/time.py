@@ -1,10 +1,14 @@
-from typing import Any, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from pydantic import ConfigDict, field_validator
 
 from openscvx.symbolic.expr.state import State, StateSpec
-from openscvx.symbolic.expr.variable import Variable
+from openscvx.symbolic.expr.variable import (
+    RESERVED_GUESS_PARAMS,
+    Variable,
+    _inspect_guess_callable,
+)
 
 
 class Time(State):
@@ -91,9 +95,14 @@ class Time(State):
             final: Final time. Same format as initial.
             min: Minimum time bound.
             max: Maximum time bound.
-            guess: Initial guess for the time trajectory. 1D array of shape
-                (N,) or 2D of shape (N, 1). If not provided, a linear
-                interpolation from initial to final is generated.
+            guess: Initial guess for the time trajectory. Either an array of
+                shape ``(N,)`` or ``(N, 1)``, or a callable
+                ``f(variables, ...) -> array`` that returns one once N is
+                known. Parameter names are matched against the problem's
+                states and controls; the reserved name ``tau`` (a normalized
+                ``[0, 1]`` grid) is also available for shape-only callables.
+                If not provided, a linear interpolation from initial to final
+                is generated.
             time_dilation_min: Absolute minimum bound for time dilation.
                 Defaults to `0.3 * time_final` if not set.
             time_dilation_max: Absolute maximum bound for time dilation.
@@ -110,6 +119,8 @@ class Time(State):
         self._time_dilation_min = None
         self._time_dilation_max = None
         self._time_dilation_guess = None
+        self._time_dilation_guess_callable: Optional[Callable] = None
+        self._time_dilation_guess_callable_params: Optional[List[Tuple[str, bool]]] = None
         self._time_dilation_control = None  # set by augmentation for live propagation
 
         # Wrap scalars into the array forms that State/Variable setters expect.
@@ -125,11 +136,8 @@ class Time(State):
 
         super().__init__("time", shape=(1,), min=min, max=max, initial=initial, final=final)
 
-        # guess: normalize 1D → 2D before assigning
         if guess is not None:
-            guess = np.asarray(guess, dtype=float)
-            if guess.ndim == 1:
-                guess = guess.reshape(-1, 1)
+            # The setter handles arrays (with 1D → 2D reshape) and callables uniformly.
             self.guess = guess
         if time_dilation_min is not None:
             self.time_dilation_min = time_dilation_min
@@ -167,12 +175,37 @@ class Time(State):
         State.final.fset(self, val)
 
     @Variable.guess.setter
-    def guess(self, arr):
-        """Set the time guess. Accepts 1D (N,) or 2D (N, 1) arrays."""
-        arr = np.asarray(arr, dtype=float)
+    def guess(self, val):
+        """Set the time guess. Accepts 1D ``(N,)`` or 2D ``(N, 1)`` arrays,
+        or a callable that returns either form."""
+        if callable(val) and not isinstance(val, np.ndarray):
+            Variable.guess.fset(self, val)
+            return
+        arr = np.asarray(val, dtype=float)
         if arr.ndim == 1:
             arr = arr.reshape(-1, 1)
         Variable.guess.fset(self, arr)
+
+    def _assign_guess_array(self, arr) -> None:
+        """Time accepts ``(N,)`` or ``(N, 1)`` arrays — coerce before validating."""
+        arr = np.asarray(arr, dtype=float)
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+        super()._assign_guess_array(arr)
+
+    def _install_default_guess_callable(self) -> None:
+        """Install a default ``tau``-driven linspace from initial to final time.
+
+        Called by preprocessing when the user has not supplied a guess.
+        Captures current ``_initial`` / ``_final`` by closure so a later
+        change still flows through on re-resolution.
+        """
+        time_self = self
+
+        def _default_time_guess(tau):
+            return np.linspace(time_self._initial[0], time_self._final[0], len(tau))
+
+        self.guess = _default_time_guess
 
     @property
     def time_dilation_min(self) -> Optional[float]:
@@ -203,12 +236,74 @@ class Time(State):
         return self._time_dilation_guess
 
     @time_dilation_guess.setter
-    def time_dilation_guess(self, arr):
-        arr = np.asarray(arr, dtype=float)
+    def time_dilation_guess(self, val):
+        """Set the time dilation guess. Accepts an array of shape ``(N,)`` or
+        ``(N, 1)``, or a callable ``f(variables, ...) -> array`` using the
+        same name-dispatch rules as ``Variable.guess`` (parameters match the
+        problem's states/controls; the reserved name ``tau`` is the
+        normalized ``[0, 1]`` grid)."""
+        if callable(val) and not isinstance(val, np.ndarray):
+            self._time_dilation_guess_callable_params = _inspect_guess_callable(
+                val, "time_dilation_guess", "Time"
+            )
+            self._time_dilation_guess_callable = val
+            self._time_dilation_guess = None
+            return
+
+        arr = np.asarray(val, dtype=float)
         if arr.ndim == 1:
             arr = arr.reshape(-1, 1)
         if arr.ndim != 2 or arr.shape[1] != 1:
             raise ValueError(f"time_dilation_guess expected shape (N, 1), got {arr.shape}")
+        self._time_dilation_guess = arr
+        self._time_dilation_guess_callable = None
+        self._time_dilation_guess_callable_params = None
+        self._sync_time_dilation_control()
+
+    def _time_dilation_dependencies(self) -> List[str]:
+        """State/control names that the time-dilation guess callable depends on."""
+        if self._time_dilation_guess_callable_params is None:
+            return []
+        return [
+            name
+            for name, has_default in self._time_dilation_guess_callable_params
+            if name not in RESERVED_GUESS_PARAMS and not has_default
+        ]
+
+    def _resolve_time_dilation_guess(
+        self, N: int, tau: np.ndarray, resolved_vars: Dict[str, np.ndarray]
+    ) -> None:
+        """Resolve the time-dilation guess callable, if any, into an ``(N, 1)`` array."""
+        if self._time_dilation_guess_callable is None:
+            return
+
+        kwargs: Dict[str, Any] = {}
+        for name, has_default in self._time_dilation_guess_callable_params or []:
+            if name == "tau":
+                kwargs[name] = tau
+            elif name in resolved_vars:
+                kwargs[name] = resolved_vars[name]
+            elif has_default:
+                continue
+            else:
+                raise ValueError(
+                    f"Time 'time_dilation_guess': callable parameter '{name}' is not "
+                    f"a reserved name (tau) and does not match any state or control."
+                )
+
+        try:
+            result = self._time_dilation_guess_callable(**kwargs)
+        except Exception as e:
+            raise type(e)(f"Time 'time_dilation_guess': callable raised: {e}") from e
+
+        arr = np.asarray(result, dtype=float)
+        if arr.ndim == 1:
+            arr = arr.reshape(-1, 1)
+        if arr.shape != (N, 1):
+            raise ValueError(
+                f"Time 'time_dilation_guess': callable returned shape {arr.shape}, "
+                f"expected ({N}, 1)."
+            )
         self._time_dilation_guess = arr
         self._sync_time_dilation_control()
 
@@ -223,18 +318,6 @@ class Time(State):
             ctrl.max = np.array([self._time_dilation_max])
         if self._time_dilation_guess is not None:
             ctrl.guess = self._time_dilation_guess
-
-    def _generate_default_guess(self, N: int) -> np.ndarray:
-        """Generate linear interpolation guess from initial to final time.
-
-        Args:
-            N: Number of discretization nodes.
-
-        Returns:
-            Array of shape (N, 1) with linear interpolation.
-        """
-        # _initial and _final hold the numeric values (State parses tuples)
-        return np.linspace(self._initial[0], self._final[0], N).reshape(-1, 1)
 
     def __repr__(self):
         parts = []
