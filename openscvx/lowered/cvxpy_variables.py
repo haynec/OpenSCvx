@@ -29,12 +29,15 @@ class CVXPyVariables:
 
     Attributes:
         lam_prox: Trust region weight parameter (N x (n_states+n_controls), nonneg)
-        prox_c: Linear proximal coefficient parameter (N x (n_states+n_controls))
-        prox_cc: Constant proximal offset parameter (N,)
         lam_cost: Cost function weight parameter (n_states, nonneg)
         lam_vc: Virtual control penalty weights (N-1 x n_states, nonneg)
         lam_vb_nodal: Virtual buffer penalty weights for nodal constraints (N x n_nodal, nonneg)
         lam_vb_cross: Virtual buffer penalty weights for cross-node constraints (n_cross, nonneg)
+
+        prox_c: Linear proximal coefficient parameter (N x (n_states+n_controls))
+        prox_cc: Constant proximal offset parameter (N,)
+        dyn_bias: Dynamics affine bias parameter (N-1 x n_states)
+        x0_imp_bias: Initial impulsive affine bias parameter (n_states,)
 
         x: State variable (N x n_states)
         x_bar: Previous SCP state parameter (N x n_states)
@@ -82,7 +85,6 @@ class CVXPyVariables:
     lam_vb_cross: "cp.Parameter"
     prox_c: "cp.Parameter"
     prox_cc: "cp.Parameter"
-    
     # State variables and parameters
     x: "cp.Variable"
     x_bar: "cp.Parameter"
@@ -102,7 +104,9 @@ class CVXPyVariables:
     E_d: "cp.Parameter | None"
     x_prop: "cp.Parameter"
     nu: "cp.Variable"
-
+    dyn_bias: "cp.Parameter"
+    x0_imp_bias: "cp.Parameter"
+    
     # Nodal constraint linearization (lists, one per constraint)
     g: List["cp.Parameter"] = field(default_factory=list)
     grad_g_x: List["cp.Parameter"] = field(default_factory=list)

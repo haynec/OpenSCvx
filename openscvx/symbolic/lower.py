@@ -304,6 +304,8 @@ def create_cvxpy_variables(
     D_d = cp.Parameter((N, n_states, n_states), name="D_d")
     E_d = cp.Parameter((N, n_states, n_controls), name="E_d")
     x_prop = cp.Parameter((N - 1, n_states), name="x_prop")
+    dyn_bias = cp.Parameter((N - 1, n_states), name="dyn_bias")
+    x0_imp_bias = cp.Parameter(n_states, name="x0_imp_bias")
     nu = cp.Variable((N - 1, n_states), name="nu")  # Virtual Control
 
     # Linearized Nonconvex Nodal Constraints
@@ -371,6 +373,8 @@ def create_cvxpy_variables(
         D_d=D_d,
         E_d=E_d,
         x_prop=x_prop,
+        dyn_bias=dyn_bias,
+        x0_imp_bias=x0_imp_bias,
         nu=nu,
         g=g,
         grad_g_x=grad_g_x,
