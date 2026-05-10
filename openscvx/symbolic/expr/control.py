@@ -73,6 +73,14 @@ class Control(Variable):
             steer.min = [-1, -1]
             steer.max = [1, 1]
             steer.guess = np.linspace([0, 0], [0, 1], 50)  # Gradual acceleration
+
+        ``.guess`` also accepts a callable ``f(variables, ...) -> array``
+        resolved once the discretization size is known. Parameter names are
+        matched against the problem's states/controls; the reserved name
+        ``tau`` (a normalized ``[0, 1]`` grid of length N) is also available::
+
+            thrust = Control("thrust", shape=(3,))
+            thrust.guess = lambda pos: np.gradient(pos, axis=0)  # depends on pos
     """
 
     def __init__(

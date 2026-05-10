@@ -237,14 +237,16 @@ class Variable(Leaf):
 
     @property
     def guess(self) -> Optional[np.ndarray]:
-        """Get the initial guess for the variable trajectory.
+        """Get the resolved initial guess for the variable trajectory.
 
         The guess provides a starting point for the optimizer. A good initial guess
         can significantly improve convergence speed and help avoid local minima.
 
         Returns:
-            2D array of shape (n_points, n_vars) representing the variable trajectory
-            over time, or None if no guess is provided.
+            2D array of shape ``(N, n)`` representing the variable trajectory,
+            or ``None`` if no guess has been set, or if a callable was assigned
+            but has not yet been resolved (resolution happens during problem
+            build and on each ``Problem.sync`` / ``solve`` / ``reset``).
 
         Example:
                 x = Variable("x", shape=(2,))

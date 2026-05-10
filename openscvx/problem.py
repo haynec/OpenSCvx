@@ -516,6 +516,11 @@ class Problem:
         workflows where the initial trajectory guess is updated between solves (e.g., shifting
         the previous solution).
 
+        Any state or control whose guess was set as a callable is re-resolved
+        here, so that callables which capture mutable state (e.g.
+        ``lambda tau: state.initial + ...``) reflect the current problem
+        configuration on every sync.
+
         Note:
             This only updates the unified representation. The AlgorithmState is
             created from these values in reset() or initialize(), so this must
@@ -523,6 +528,13 @@ class Problem:
         """
         if self._lowered is None:
             return
+
+        from openscvx.symbolic.preprocessing import resolve_guesses
+
+        N = self.symbolic.N
+        # Re-resolve callable guesses against the current N. States/controls
+        # whose guess is an explicit array are left untouched.
+        resolve_guesses(self.symbolic.states, self.symbolic.controls, N)
 
         # Sync optimization state guesses
         for state in self.symbolic.states:

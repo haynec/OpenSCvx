@@ -195,6 +195,15 @@ class State(Variable):
             pos.max = [10, 10, 200]
             pos.initial = [0, ("free", 1), 50]  # x fixed, y free, z fixed
             pos.final = [10, ("free", 5), ("maximize", 150)]  # Maximize final altitude
+
+        Trajectory guesses default to a linear interpolation from ``initial`` to
+        ``final``. Override eagerly with an array, or lazily with a callable
+        ``f(variables, ...) -> array`` whose parameter names are matched against
+        the problem's other states/controls; the reserved name ``tau`` (a
+        normalized ``[0, 1]`` grid of length N) is also available::
+
+            vel = State("vel", (3,))
+            vel.guess = lambda pos: np.gradient(pos, axis=0)  # depends on resolved pos
     """
 
     def __init__(
