@@ -729,14 +729,14 @@ def test_time_guess_setter():
 
 
 def test_time_guess_overrides_default():
-    """Test that user-provided guess prevents _generate_default_guess."""
+    """Test that an explicit user-provided guess survives default-callable installation."""
 
     from openscvx import Time
 
     custom_guess = np.array([0, 2, 5, 8, 10]).reshape(-1, 1)
     t = Time(initial=0.0, final=10.0, min=0.0, max=20.0, guess=custom_guess)
-    # guess is already set, so _generate_default_guess should not be needed
     assert np.allclose(t.guess, custom_guess)
+    assert t._guess_callable is None
 
 
 # --- Time: Time Dilation ---

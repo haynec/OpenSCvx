@@ -13,7 +13,7 @@ from openscvx.symbolic.expr import (
 from openscvx.symbolic.preprocessing import (
     collect_and_assign_slices,
     convert_dynamics_dict_to_expr,
-    fill_default_guesses,
+    resolve_guesses,
     validate_boundary_conditions,
     validate_bounds,
     validate_constraints_at_root,
@@ -817,30 +817,28 @@ def test_cross_node_constraint_both_sides():
 
 
 # =============================================================================
-# fill_default_guesses Tests
+# resolve_guesses Tests (default-callable installation path)
 # =============================================================================
 
 
-def test_fill_default_guesses_state_linspace():
+def test_resolve_guesses_state_linspace():
     """Test that state guesses are filled with linspace from initial to final."""
     N = 11  # Use 11 so middle index (5) is exactly at midpoint
     x = State("x", shape=(3,))
     x.initial = np.array([0.0, 1.0, 2.0])
     x.final = np.array([10.0, 11.0, 12.0])
 
-    fill_default_guesses([x], N)
+    resolve_guesses([x], [], N)
 
     assert x.guess is not None
     assert x.guess.shape == (N, 3)
-    # Check first and last rows match initial and final
     np.testing.assert_array_almost_equal(x.guess[0], [0.0, 1.0, 2.0])
     np.testing.assert_array_almost_equal(x.guess[-1], [10.0, 11.0, 12.0])
-    # Check it's actually a linspace (middle index should be exactly at midpoint)
     np.testing.assert_array_almost_equal(x.guess[N // 2], [5.0, 6.0, 7.0])
 
 
-def test_fill_default_guesses_preserves_existing():
-    """Test that existing guesses are not overwritten."""
+def test_resolve_guesses_preserves_existing_array():
+    """An explicitly assigned array guess survives resolution untouched."""
     N = 10
     x = State("x", shape=(2,))
     x.initial = np.array([0.0, 0.0])
@@ -848,31 +846,28 @@ def test_fill_default_guesses_preserves_existing():
     custom_guess = np.ones((N, 2)) * 99.0
     x.guess = custom_guess
 
-    fill_default_guesses([x], N)
+    resolve_guesses([x], [], N)
 
-    # Guess should be unchanged
     np.testing.assert_array_equal(x.guess, custom_guess)
 
 
-def test_fill_default_guesses_with_free_boundary_conditions():
-    """Test that states with free boundary conditions use the guess values."""
+def test_resolve_guesses_with_free_boundary_conditions():
+    """Free boundary conditions still seed the linspace from their guess values."""
     N = 10
     x = State("x", shape=(3,))
-    # Mixed: first fixed, second free, third fixed
     x.initial = [0.0, ("free", 5.0), 2.0]
     x.final = [10.0, ("free", 15.0), 12.0]
 
-    fill_default_guesses([x], N)
+    resolve_guesses([x], [], N)
 
     assert x.guess is not None
     assert x.guess.shape == (N, 3)
-    # The setter extracts values from tuples, so initial=[0, 5, 2], final=[10, 15, 12]
     np.testing.assert_array_almost_equal(x.guess[0], [0.0, 5.0, 2.0])
     np.testing.assert_array_almost_equal(x.guess[-1], [10.0, 15.0, 12.0])
 
 
-def test_fill_default_guesses_multiple_states():
-    """Test filling guesses for multiple states at once."""
+def test_resolve_guesses_multiple_states():
+    """Resolve default callables for several states in one pass."""
     N = 5
     x1 = State("x1", shape=(2,))
     x1.initial = np.array([0.0, 0.0])
@@ -882,14 +877,12 @@ def test_fill_default_guesses_multiple_states():
     x2.initial = np.array([10.0])
     x2.final = np.array([20.0])
 
-    fill_default_guesses([x1, x2], N)
+    resolve_guesses([x1, x2], [], N)
 
-    # Check x1
     assert x1.guess.shape == (N, 2)
     np.testing.assert_array_almost_equal(x1.guess[0], [0.0, 0.0])
     np.testing.assert_array_almost_equal(x1.guess[-1], [4.0, 8.0])
 
-    # Check x2
     assert x2.guess.shape == (N, 1)
     np.testing.assert_array_almost_equal(x2.guess[0], [10.0])
     np.testing.assert_array_almost_equal(x2.guess[-1], [20.0])

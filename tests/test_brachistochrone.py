@@ -873,7 +873,7 @@ def test_propagation():
     controls = [theta]
 
     # Define propagation-only state for tracking total distance traveled
-    # Note: propagation states need explicit guesses since fill_default_guesses
+    # Note: propagation states need explicit guesses since resolve_guesses
     # only runs on main optimization states
     distance = ox.State("distance", shape=(1,))
     distance.initial = np.array([0.0])
