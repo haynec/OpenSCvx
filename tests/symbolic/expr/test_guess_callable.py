@@ -192,6 +192,28 @@ def test_callable_reflects_mutated_state_on_re_resolve():
     np.testing.assert_array_almost_equal(pos.guess[0], [5.0])
 
 
+def test_default_state_guess_reflects_mutated_initial_final():
+    """The fallback default callable (installed when the user provides neither
+    an array nor a callable) must read State.initial/final live, so that an
+    MPC-style mutation between solves shows up on the next resolve."""
+    N = 5
+    pos = State("pos", shape=(2,))
+    pos.initial = [0.0, 0.0]
+    pos.final = [10.0, 10.0]
+    # No explicit guess — fallback default callable will be installed.
+
+    resolve_guesses([pos], [], N)
+    np.testing.assert_array_almost_equal(pos.guess[0], [0.0, 0.0])
+    np.testing.assert_array_almost_equal(pos.guess[-1], [10.0, 10.0])
+
+    pos.initial = [2.0, 2.0]
+    pos.final = [12.0, 12.0]
+    resolve_guesses([pos], [], N)
+
+    np.testing.assert_array_almost_equal(pos.guess[0], [2.0, 2.0])
+    np.testing.assert_array_almost_equal(pos.guess[-1], [12.0, 12.0])
+
+
 # ===========================================================================
 # User-wrapped ox.init.linspace via lambda
 # ===========================================================================

@@ -687,15 +687,14 @@ def _install_default_state_guess(state: State) -> None:
     """Install a ``tau``-driven linspace from ``state.initial`` to ``state.final``.
 
     Used as the fallback when the user supplied neither an array nor a callable
-    guess but did supply both boundary conditions. Captures the boundary values
-    by closure so that re-resolution after a boundary mutation picks up the new
-    values automatically.
+    guess but did supply both boundary conditions. Captures the State object
+    itself (not snapshotted values) so that mutations to ``initial``/``final``
+    between solves — e.g. MPC-style warm-starts — flow through on the next
+    re-resolution.
     """
-    init = np.asarray(state.initial, dtype=float).copy()
-    final = np.asarray(state.final, dtype=float).copy()
 
-    def _default_state_guess(tau, _init=init, _final=final):
-        return np.linspace(_init, _final, len(tau))
+    def _default_state_guess(tau, _state=state):
+        return np.linspace(_state.initial, _state.final, len(tau))
 
     state.guess = _default_state_guess
 

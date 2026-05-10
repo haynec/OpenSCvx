@@ -278,6 +278,11 @@ class Variable(Leaf):
         validated immediately so errors point at the user's lambda rather
         than at preprocessing.
 
+        When a callable is set, the resolved array on ``.guess`` is derived
+        — it is recomputed on every solve / sync, so in-place edits won't
+        stick. Reassign ``.guess`` (with an array or a new callable) to
+        change what's used.
+
         Args:
             val: 2D array of shape ``(N, n)`` where ``n`` matches the variable
                 dimension, OR a callable returning such an array.
