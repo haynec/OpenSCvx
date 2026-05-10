@@ -683,28 +683,129 @@ def convert_dynamics_dict_to_expr(
     return dynamics_converted, dynamics_concat
 
 
-def fill_default_guesses(states: List[State], N: int) -> None:
-    """Fill in default linspace guesses for states with guess=None.
+def _install_default_state_guess(state: State) -> None:
+    """Install a ``tau``-driven linspace from ``state.initial`` to ``state.final``.
 
-    For states with both initial and final conditions set, generates a linear
-    interpolation from initial to final values.
+    Used as the fallback when the user supplied neither an array nor a callable
+    guess but did supply both boundary conditions. Captures the boundary values
+    by closure so that re-resolution after a boundary mutation picks up the new
+    values automatically.
+    """
+    init = np.asarray(state.initial, dtype=float).copy()
+    final = np.asarray(state.final, dtype=float).copy()
 
-    This function modifies states in-place.
+    def _default_state_guess(tau, _init=init, _final=final):
+        return np.linspace(_init, _final, len(tau))
+
+    state.guess = _default_state_guess
+
+
+def validate_no_reserved_guess_names(variables: List[Variable]) -> None:
+    """Ensure no state/control name shadows a reserved guess-callable parameter.
+
+    Raises:
+        ValueError: if any variable's name collides with a reserved name like ``tau``.
+    """
+    from openscvx.symbolic.expr.variable import RESERVED_GUESS_PARAMS
+
+    for var in variables:
+        if var.name in RESERVED_GUESS_PARAMS:
+            raise ValueError(
+                f"{type(var).__name__} '{var.name}' shadows a reserved guess-callable "
+                f"parameter name. Reserved names: {sorted(RESERVED_GUESS_PARAMS)}. "
+                f"Rename the {type(var).__name__.lower()}."
+            )
+
+
+def resolve_guesses(states: List[State], controls: List["Control"], N: int) -> None:
+    """Resolve all callable guesses on states and controls into concrete arrays.
+
+    Installs default callables for states with boundary conditions but no guess,
+    then runs a topological sort over the variables whose guesses are deferred
+    callables and resolves them in dependency order. Cross-variable references
+    in callables (e.g. ``lambda time: ...``) are dispatched by parameter name;
+    the reserved name ``tau`` receives a normalized ``[0, 1]`` grid of length N.
+
+    Variables already holding an explicit array are treated as pre-resolved.
+
+    For Time, a deferred ``time_dilation_guess`` callable is also resolved here
+    so that downstream augmentation reads a concrete array.
 
     Args:
-        states: List of State objects to fill guesses for
-        N: Number of discretization nodes
-    """
-    from openscvx.init import linspace
+        states: All state variables (including Time, which may already be in the list).
+        controls: All control variables.
+        N: Number of discretization nodes.
 
+    Raises:
+        ValueError: on cycle detection, missing dependencies, or shape mismatches.
+    """
+    from openscvx.symbolic.expr.time import Time
+
+    tau = np.linspace(0.0, 1.0, N)
+    all_vars: List[Variable] = list(states) + list(controls)
+
+    # 1. Install fallback default callables.
     for state in states:
-        if state.guess is None and state.initial is not None and state.final is not None:
-            # state.initial and state.final are already numpy arrays of values
-            # (the setter handles parsing tuples like ("free", value))
-            state.guess = linspace(
-                keyframes=[state.initial, state.final],
-                nodes=[0, N - 1],
+        if state.guess is None and state._guess_callable is None:
+            if isinstance(state, Time):
+                state._install_default_guess_callable()
+            elif state.initial is not None and state.final is not None:
+                _install_default_state_guess(state)
+
+    # 2. Bucket variables. Pre-resolved (array) entries seed the resolved map;
+    # the rest go into the dependency graph.
+    name_to_var: Dict[str, Variable] = {v.name: v for v in all_vars}
+    resolved_vars: Dict[str, np.ndarray] = {}
+    pending: List[Variable] = []
+    for v in all_vars:
+        if v._guess_callable is None:
+            if v._guess is not None:
+                resolved_vars[v.name] = v._guess
+        else:
+            pending.append(v)
+
+    pending_names = {v.name for v in pending}
+    # Edges: pending var → set of pending dependency names.
+    # (Deps that are already resolved or are unknown-but-defaulted don't block.)
+    blockers: Dict[str, Set[str]] = {}
+    for v in pending:
+        deps = v._guess_dependencies()
+        unknown = [d for d in deps if d not in name_to_var]
+        if unknown:
+            raise ValueError(
+                f"{type(v).__name__} '{v.name}': guess callable parameter "
+                f"{unknown[0]!r} is not a reserved name (tau) and does not match "
+                f"any state or control in the problem."
             )
+        blockers[v.name] = {d for d in deps if d in pending_names}
+
+    # 3. Kahn's algorithm.
+    ready = [v for v in pending if not blockers[v.name]]
+    resolved_pending: Set[str] = set()
+    while ready:
+        v = ready.pop()
+        v._resolve_guess(N, tau, resolved_vars)
+        resolved_vars[v.name] = v._guess
+        resolved_pending.add(v.name)
+        for other in pending:
+            if other.name in resolved_pending or other in ready:
+                continue
+            blockers[other.name].discard(v.name)
+            if not blockers[other.name]:
+                ready.append(other)
+
+    # 4. Anything still pending is part of a cycle.
+    cycle = [v.name for v in pending if v.name not in resolved_pending]
+    if cycle:
+        raise ValueError(
+            f"Cycle detected in guess-callable dependencies: {cycle}. "
+            f"One of these variables transitively references itself."
+        )
+
+    # 5. Resolve Time's deferred time_dilation_guess callable, if present.
+    for state in states:
+        if isinstance(state, Time):
+            state._resolve_time_dilation_guess(N, tau, resolved_vars)
 
 
 def validate_boundary_conditions(states: List[State]) -> None:

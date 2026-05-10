@@ -47,7 +47,7 @@ from openscvx.symbolic.expr.time import Time
 from openscvx.symbolic.preprocessing import (
     collect_and_assign_slices,
     convert_dynamics_dict_to_expr,
-    fill_default_guesses,
+    resolve_guesses,
     validate_and_normalize_constraint_nodes,
     validate_boundary_conditions,
     validate_bounds,
@@ -57,6 +57,7 @@ from openscvx.symbolic.preprocessing import (
     validate_dynamics_dimension,
     validate_guesses,
     validate_input_types,
+    validate_no_reserved_guess_names,
     validate_propagation_input_types,
     validate_shapes,
     validate_variable_names,
@@ -206,13 +207,7 @@ def preprocess_symbolic_problem(
     # Validate user-provided variables have required attributes
     validate_boundary_conditions(states)
     validate_bounds(states + controls)
-
-    # Fill in default guesses for user-provided states
-    # (augmented states get their guesses set by augmentation code)
-    fill_default_guesses(states, N)
-
-    # Validate that all user-provided variables have guesses
-    validate_guesses(states + controls)
+    validate_no_reserved_guess_names(states + controls)
 
     # ==================== PHASE 1: Time Handling ====================
 
@@ -224,9 +219,12 @@ def preprocess_symbolic_problem(
         states = list(states) + [time]
         time_state = time
 
-    # Fill in default guess if needed (for Time instances)
-    if isinstance(time_state, Time) and time_state.guess is None:
-        time_state.guess = time_state._generate_default_guess(N)
+    # Resolve callable guesses (and install defaults) now that Time is in
+    # the variable set. Must run before augmentation reads time_state.guess.
+    resolve_guesses(states, controls, N)
+
+    # Validate that all user-provided variables now have guesses
+    validate_guesses(states + controls)
 
     # Add CTCS constraints for time bounds
     from openscvx.symbolic.expr import CTCS
