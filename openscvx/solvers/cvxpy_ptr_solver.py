@@ -742,13 +742,9 @@ class CVXPyPTRSolver(PTRSolver):
         self._set_param("B_d", B_eff)
         self._set_param("C_d", C_eff)
         x_prop_arr = np.asarray(x_prop)
-        self._ocp_vars.x_prop.value = x_prop_arr
-        x_prop_plus_arr = None
-        if x_prop_plus is not None and self._ocp_vars.x_prop_plus is not None:
-            x_prop_plus_arr = np.asarray(x_prop_plus)
-            self._ocp_vars.x_prop_plus.value = x_prop_plus_arr
+        x_prop_plus_arr = np.asarray(x_prop_plus) if x_prop_plus is not None else None
         E_arr = None
-        if E_d is not None and self._ocp_vars.E_d is not None:
+        if E_d is not None:
             E_arr = np.asarray(E_d)
             self._ocp_vars.E_d.value = E_arr
 
@@ -909,9 +905,9 @@ class CVXPyPTRSolver(PTRSolver):
         prox_cc = np.sum(lam_prox * np.square(z_ref), axis=1)
         return prox_c, prox_cc
 
-    def update_proximal_cost_terms(self) -> None:
+    def update_proximal_terms(self) -> None:
         """Update proximal expansion parameters from current references and weights."""
-        lam_prox_arr = np.asarray(self._problem.param_dict["lam_prox"].value)
+        lam_prox_arr = np.asarray(self._ocp_vars.lam_prox.value)
         x_bar = np.asarray(self._ocp_vars.x_bar.value)
         u_bar = np.asarray(self._ocp_vars.u_bar.value)
         prox_c, prox_cc = self.proximal_cost_terms(lam_prox_arr, x_bar, u_bar)
