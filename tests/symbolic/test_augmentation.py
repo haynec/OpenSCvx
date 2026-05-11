@@ -1002,6 +1002,7 @@ def test_time_dilation_overrides_from_time_object():
 def test_time_dilation_partial_override():
     """Test that partial overrides work (e.g. only min, not max)."""
     from openscvx.symbolic.expr.time import Time
+    from openscvx.symbolic.preprocessing import resolve_guesses
 
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
     time.guess = np.linspace(0, 10, 5).reshape(-1, 1)
@@ -1016,6 +1017,7 @@ def test_time_dilation_partial_override():
 
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
 
+    resolve_guesses(states, controls, N)
     _, _, _, controls_aug = augment_dynamics_with_ctcs(
         xdot,
         states,
@@ -1032,6 +1034,7 @@ def test_time_dilation_partial_override():
 def test_time_dilation_live_propagation():
     """Test that mutating Time.time_dilation_* after augmentation propagates to the control."""
     from openscvx.symbolic.expr.time import Time
+    from openscvx.symbolic.preprocessing import resolve_guesses
 
     time = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
     time.guess = np.linspace(0, 10, 5).reshape(-1, 1)
@@ -1043,6 +1046,7 @@ def test_time_dilation_live_propagation():
 
     constraint = ctcs(x[0] <= 1.0, penalty="squared_relu")
 
+    resolve_guesses(states, [], N)
     _, _, _, controls_aug = augment_dynamics_with_ctcs(
         x,
         states,

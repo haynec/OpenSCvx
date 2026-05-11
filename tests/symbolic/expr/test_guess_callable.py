@@ -290,6 +290,27 @@ def test_time_dilation_callable_guess():
     np.testing.assert_array_almost_equal(t.time_dilation_guess.flatten(), 8.0 * np.ones(N))
 
 
+def test_time_dilation_default_tracks_time_guess_on_re_resolve():
+    """No user-supplied time_dilation_guess: resolve_guesses installs a default
+    that finite-differences time.guess. After mutating time.final and
+    re-resolving, the derived time-dilation must reflect the new slope."""
+    N = 5
+    t = Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+    assert t.time_dilation_guess is None
+
+    resolve_guesses([t], [], N)
+
+    # Default time.guess is linspace(0, 10, N), so dt/dtau = 10 across the grid.
+    assert t.time_dilation_guess.shape == (N, 1)
+    np.testing.assert_array_almost_equal(t.time_dilation_guess.flatten(), np.full(N, 10.0))
+
+    # MPC-style mutation: shrink the horizon.
+    t.final = 4.0
+    resolve_guesses([t], [], N)
+
+    np.testing.assert_array_almost_equal(t.time_dilation_guess.flatten(), np.full(N, 4.0))
+
+
 # ===========================================================================
 # End-to-end: Problem build with callable guesses
 # ===========================================================================

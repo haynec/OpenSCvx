@@ -699,6 +699,36 @@ def _install_default_state_guess(state: State) -> None:
     state.guess = _default_state_guess
 
 
+def _finite_diff_dt_dtau(time_arr: np.ndarray, time_final: float) -> np.ndarray:
+    """Compute dt/dtau as an ``(N, 1)`` array from a 1D ``time`` trajectory.
+
+    Forward differences with the last node copied from its neighbor. Falls
+    back to ``time_final`` for the degenerate single-node case.
+    """
+    n = len(time_arr)
+    if n <= 1:
+        return np.full((n, 1), float(time_final))
+    dtau = 1.0 / (n - 1)
+    td = np.empty(n)
+    td[:-1] = (time_arr[1:] - time_arr[:-1]) / dtau
+    td[-1] = td[-2]
+    return td.reshape(-1, 1)
+
+
+def _install_default_time_dilation_guess(time_state) -> None:
+    """Install a default ``time_dilation_guess`` derived from ``time.guess``.
+
+    Captures ``time_state`` by closure so a later re-resolve (e.g. after
+    ``time.initial`` is mutated and ``time.guess`` re-resolves) re-derives
+    a consistent dt/dtau seed.
+    """
+
+    def _default_time_dilation_guess(tau, _t=time_state):
+        return _finite_diff_dt_dtau(_t._guess.flatten(), _t._final[0])
+
+    time_state.time_dilation_guess = _default_time_dilation_guess
+
+
 def validate_no_reserved_guess_names(variables: List[Variable]) -> None:
     """Ensure no state/control name shadows a reserved guess-callable parameter.
 
@@ -802,10 +832,16 @@ def resolve_guesses(states: List[State], controls: List["Control"], N: int) -> N
             f"One of these variables transitively references itself."
         )
 
-    # 5. Resolve Time's deferred time_dilation_guess callable, if present.
+    # 5. Resolve Time's deferred time_dilation_guess callable. If neither an
+    # array nor a callable was supplied, install a default that
+    # finite-differences ``time.guess`` (captured by closure so re-resolves
+    # track mutations to ``time.guess``).
     for state in states:
-        if isinstance(state, Time):
-            state._resolve_time_dilation_guess(N, tau, resolved_vars)
+        if not isinstance(state, Time):
+            continue
+        if state._time_dilation_guess is None and state._time_dilation_guess_callable is None:
+            _install_default_time_dilation_guess(state)
+        state._resolve_time_dilation_guess(N, tau, resolved_vars)
 
 
 def validate_boundary_conditions(states: List[State]) -> None:
