@@ -312,6 +312,90 @@ def test_time_dilation_default_tracks_time_guess_on_re_resolve():
 
 
 # ===========================================================================
+# Propagation-only state guesses
+# ===========================================================================
+
+
+def test_prop_state_default_broadcast_initial():
+    """A propagation-style state (initial only, no final) gets a default
+    that broadcasts initial across N — no explicit guess needed."""
+    N = 6
+    distance = State("distance", shape=(1,))
+    distance.initial = np.array([0.0])
+
+    resolve_guesses([distance], [], N)
+
+    assert distance.guess.shape == (N, 1)
+    np.testing.assert_array_equal(distance.guess, np.zeros((N, 1)))
+
+
+def test_prop_state_callable_referencing_opt_state():
+    """A propagation-only state can reference an optimization state via the
+    dispatch namespace when both are passed to resolve_guesses together."""
+    N = 5
+    pos = State("pos", shape=(1,))
+    pos.initial = [0.0]
+    pos.final = [10.0]
+
+    energy = State("energy", shape=(1,))
+    energy.initial = np.array([0.0])
+    energy.guess = lambda pos: pos.guess**2
+
+    resolve_guesses([pos, energy], [], N)
+
+    np.testing.assert_array_almost_equal(
+        energy.guess.flatten(),
+        np.linspace(0.0, 10.0, N) ** 2,
+    )
+
+
+def test_prop_state_callable_through_full_problem():
+    """End-to-end: a propagation-only state with a callable guess resolves
+    correctly through Problem build (covers the PHASE-5 resolve_guesses call)."""
+    import openscvx as ox
+
+    N = 8
+
+    pos = ox.State("pos", shape=(1,))
+    pos.min = np.array([-10.0])
+    pos.max = np.array([10.0])
+    pos.initial = np.array([0.0])
+    pos.final = np.array([5.0])
+
+    u = ox.Control("u", shape=(1,))
+    u.min = np.array([-1.0])
+    u.max = np.array([1.0])
+    u.guess = np.zeros((N, 1))
+
+    # Propagation-only state with a lambda referencing pos.
+    distance = ox.State("distance", shape=(1,))
+    distance.initial = np.array([0.0])
+    distance.min = np.array([0.0])
+    distance.max = np.array([100.0])
+    distance.guess = lambda pos: np.abs(pos.guess)
+
+    time = ox.Time(initial=0.0, final=10.0, min=0.0, max=20.0)
+
+    problem = ox.Problem(
+        dynamics={"pos": u},
+        dynamics_prop={"distance": u},
+        states=[pos],
+        states_prop=[distance],
+        controls=[u],
+        time=time,
+        constraints=[],
+        N=N,
+    )
+
+    distance_state = next(s for s in problem.symbolic.states_prop if s.name == "distance")
+    assert distance_state.guess.shape == (N, 1)
+    np.testing.assert_array_almost_equal(
+        distance_state.guess.flatten(),
+        np.abs(np.linspace(0.0, 5.0, N)),
+    )
+
+
+# ===========================================================================
 # End-to-end: Problem build with callable guesses
 # ===========================================================================
 

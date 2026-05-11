@@ -381,6 +381,11 @@ def preprocess_symbolic_problem(
             parameters=parameters,
         )
 
+        # Resolve guesses for propagation-only states. Opt states/controls
+        # are already resolved (PHASE 1) and re-resolve idempotently; the
+        # dispatch namespace lets prop callables reference any opt variable.
+        resolve_guesses(states_prop, controls_prop, N)
+
     # ==================== PHASE 6: Apply Time-Dilation Multiplication ===========
     #
     # Multiply all dynamics by the time-dilation control symbolically.

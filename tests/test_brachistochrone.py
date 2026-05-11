@@ -872,14 +872,13 @@ def test_propagation():
     states = [position, velocity]
     controls = [theta]
 
-    # Define propagation-only state for tracking total distance traveled
-    # Note: propagation states need explicit guesses since resolve_guesses
-    # only runs on main optimization states
+    # Define propagation-only state for tracking total distance traveled.
+    # No explicit guess needed — resolve_guesses installs a broadcast-initial
+    # default for accumulator-style states (initial only, no final).
     distance = ox.State("distance", shape=(1,))
     distance.initial = np.array([0.0])
     distance.min = np.array([0.0])
     distance.max = np.array([100.0])
-    distance.guess = np.zeros((n, 1))
 
     # Extra propagation states: only the NEW states, not optimization states
     states_prop_extra = [distance]

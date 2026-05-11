@@ -532,9 +532,11 @@ class Problem:
         from openscvx.symbolic.preprocessing import resolve_guesses
 
         N = self.symbolic.N
-        # Re-resolve callable guesses against the current N. States/controls
-        # whose guess is an explicit array are left untouched.
-        resolve_guesses(self.symbolic.states, self.symbolic.controls, N)
+        # Re-resolve callable guesses against the current N. ``states_prop``
+        # is a superset of ``states`` (includes propagation-only extras), so
+        # this covers opt and prop in one pass. States/controls whose guess
+        # is an explicit array are left untouched.
+        resolve_guesses(self.symbolic.states_prop, self.symbolic.controls, N)
 
         # Sync optimization state guesses
         for state in self.symbolic.states:

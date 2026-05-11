@@ -699,6 +699,21 @@ def _install_default_state_guess(state: State) -> None:
     state.guess = _default_state_guess
 
 
+def _install_default_prop_guess(state: State) -> None:
+    """Broadcast ``state.initial`` across N nodes.
+
+    Fallback for propagation-only states (e.g. distance, fuel) that have an
+    ``initial`` but no ``final`` — there's no meaningful endpoint to linspace
+    to, so we just hold ``initial`` constant. Captured by closure so mutations
+    to ``initial`` flow through on re-resolution.
+    """
+
+    def _default_prop_guess(tau, _state=state):
+        return np.tile(_state.initial, (len(tau), 1))
+
+    state.guess = _default_prop_guess
+
+
 def _finite_diff_dt_dtau(time_arr: np.ndarray, time_final: float) -> np.ndarray:
     """Compute dt/dtau as an ``(N, 1)`` array from a 1D ``time`` trajectory.
 
@@ -780,6 +795,9 @@ def resolve_guesses(states: List[State], controls: List["Control"], N: int) -> N
                 state._install_default_guess_callable()
             elif state.initial is not None and state.final is not None:
                 _install_default_state_guess(state)
+            elif state.initial is not None:
+                # Propagation-style accumulator (initial only, no final).
+                _install_default_prop_guess(state)
 
     # 2. Bucket variables. Pre-resolved entries seed the resolved map with the
     # Variable itself (so callables receive State/Control objects and access
