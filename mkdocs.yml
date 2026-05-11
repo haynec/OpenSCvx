@@ -3,7 +3,8 @@ site_name: OpenSCvx
 site_url: https://openscvx.github.io/OpenSCvx/
 site_author: Chris Hayner
 site_description: >-
-  Warning this repo is currently in beta testing! Documentation for OpenSCvx, a JAX-based Python library for solving nonconvex trajectory optimization problems
+  Trajectory optimization with a composable problem API, JAX compiling (including jax.export),
+  and vectorization for scaling to batches of scenarios—built on successive convexification.
 # Repository
 repo_name: OpenSCvx/OpenSCvx
 repo_url: https://github.com/OpenSCvx/OpenSCvx
@@ -73,6 +74,8 @@ theme:
   icon:
     logo: logo
 
+# Plugin choices preserve API docs from docstrings (mkdocstrings + gen-files). Before moving to
+# Zensical, confirm parity for mkdocstrings, mkdocs-gen-files, literate-nav, section-index, and mike.
 # Plugins
 plugins:
   - meta

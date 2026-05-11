@@ -38,7 +38,7 @@ jobs:
     - name: Cache MkDocs build
       uses: actions/cache@v4
       with:
-        key: mkdocs-material-${{ hashFiles('mkdocs.yml', 'docs/**') }}
+        key: mkdocs-material-${{ hashFiles('mkdocs.yml', 'docs/**', 'material/overrides/**', 'scripts/gen_ref_pages.py', 'scripts/gen_example_pages.py') }}
         path: .cache
         restore-keys: |
           mkdocs-material-

@@ -120,6 +120,54 @@ html {
   }
 }
 
+/* Homepage strip graphic (index.md) — layered “stack” diagram */
+.osc-home-strip {
+  margin: 0.75rem 0 1.5rem;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 1rem 1rem 1.05rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--md-typeset-color) 11%, transparent);
+  background: color-mix(in srgb, var(--md-typeset-color) 5%, var(--md-default-bg-color));
+  box-shadow: 0 8px 28px -16px color-mix(in srgb, var(--md-typeset-color) 28%, transparent);
+}
+
+[data-md-color-scheme="slate"] .osc-home-strip {
+  border-color: color-mix(in srgb, var(--md-typeset-color) 14%, transparent);
+  background: color-mix(in srgb, #fff 4%, #0a0a0a);
+  box-shadow: 0 12px 36px -18px rgba(0, 0, 0, 0.55);
+}
+
+.osc-home-strip__svg {
+  width: min(100%, 28rem);
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.osc-home-strip__layer {
+  fill: color-mix(in srgb, var(--md-typeset-color) 8%, var(--md-default-bg-color));
+  stroke: color-mix(in srgb, var(--md-typeset-color) 22%, transparent);
+  stroke-width: 1;
+}
+
+.osc-home-strip__layer--accent {
+  fill: color-mix(in srgb, var(--md-accent-fg-color) 14%, var(--md-default-bg-color));
+  stroke: color-mix(in srgb, var(--md-accent-fg-color) 40%, var(--md-typeset-color));
+}
+
+.osc-home-strip__text {
+  font-family: system-ui, sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  fill: color-mix(in srgb, var(--md-typeset-color) 72%, transparent);
+}
+
+.osc-home-strip__text--strong {
+  fill: var(--md-typeset-color);
+  font-size: 10px;
+}
+
 /* Print-friendly styles */
 @media print {
   .md-typeset pre,
