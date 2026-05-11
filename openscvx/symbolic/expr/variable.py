@@ -265,14 +265,16 @@ class Variable(Leaf):
         - A 2D array of shape ``(N, n)`` — assigned directly.
         - A callable ``f(variables, ...) -> array``, deferred until the
           discretization size is known. Each parameter name is dispatched
-          against the other states and controls in the problem (so e.g.
-          ``lambda pos: np.gradient(pos, axis=0)`` declares "this guess
-          depends on the resolved ``pos`` guess"). The reserved name
+          against the other states and controls in the problem and receives
+          the **State/Control object itself**, so the callable reads
+          ``.guess`` to access the resolved array (e.g.
+          ``lambda pos: np.gradient(pos.guess, axis=0)`` declares "this
+          guess depends on the resolved ``pos`` guess"). The reserved name
           ``tau`` is the one special parameter — it receives a normalized
-          ``[0, 1]`` grid of length N for shape-only callables that don't
-          reference any other variable. Resolution happens inside problem
-          build / sync, so the array form of ``.guess`` reads back as
-          ``None`` until then.
+          ``[0, 1]`` ndarray grid of length N for shape-only callables that
+          don't reference any other variable. Resolution happens inside
+          problem build / sync, so the array form of ``.guess`` reads back
+          as ``None`` until then.
 
         Assigning either form clears the other. Callable signatures are
         validated immediately so errors point at the user's lambda rather
@@ -296,9 +298,10 @@ class Variable(Leaf):
                 pos = Variable("pos", shape=(3,))
                 # Eager array form
                 pos.guess = np.linspace([0, 0, 0], [10, 5, 3], 50)
-                # Lazy form referencing another state
+                # Lazy form referencing another state — pos is the State
+                # object; read pos.guess for the resolved array
                 vel = Variable("vel", shape=(3,))
-                vel.guess = lambda pos: np.gradient(pos, axis=0)
+                vel.guess = lambda pos: np.gradient(pos.guess, axis=0)
                 # Lazy form using the reserved tau grid (no cross-var dep)
                 pos.guess = lambda tau: np.outer(tau, [10, 5, 3])
         """
@@ -341,13 +344,14 @@ class Variable(Leaf):
             if name not in RESERVED_GUESS_PARAMS and not has_default
         ]
 
-    def _resolve_guess(self, N: int, tau: np.ndarray, resolved_vars: Dict[str, np.ndarray]) -> None:
+    def _resolve_guess(self, N: int, tau: np.ndarray, resolved_vars: Dict[str, "Variable"]) -> None:
         """Resolve a deferred guess callable into a concrete ``(N, n)`` array.
 
         No-op if no callable was registered (an explicit array stays in place).
         Dispatches parameters by name: ``tau`` gets the normalized grid, names
-        matching known states/controls get their resolved guess arrays. Params
-        with defaults are skipped permissively when no match is found.
+        matching known states/controls get the Variable object itself (the
+        callable reads ``.guess`` to access the resolved array). Params with
+        defaults are skipped permissively when no match is found.
         """
         if self._guess_callable is None:
             return

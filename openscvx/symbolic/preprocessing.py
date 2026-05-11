@@ -751,15 +751,16 @@ def resolve_guesses(states: List[State], controls: List["Control"], N: int) -> N
             elif state.initial is not None and state.final is not None:
                 _install_default_state_guess(state)
 
-    # 2. Bucket variables. Pre-resolved (array) entries seed the resolved map;
-    # the rest go into the dependency graph.
+    # 2. Bucket variables. Pre-resolved entries seed the resolved map with the
+    # Variable itself (so callables receive State/Control objects and access
+    # ``.guess`` explicitly); the rest go into the dependency graph.
     name_to_var: Dict[str, Variable] = {v.name: v for v in all_vars}
-    resolved_vars: Dict[str, np.ndarray] = {}
+    resolved_vars: Dict[str, Variable] = {}
     pending: List[Variable] = []
     for v in all_vars:
         if v._guess_callable is None:
             if v._guess is not None:
-                resolved_vars[v.name] = v._guess
+                resolved_vars[v.name] = v
         else:
             pending.append(v)
 
@@ -784,7 +785,7 @@ def resolve_guesses(states: List[State], controls: List["Control"], N: int) -> N
     while ready:
         v = ready.pop()
         v._resolve_guess(N, tau, resolved_vars)
-        resolved_vars[v.name] = v._guess
+        resolved_vars[v.name] = v
         resolved_pending.add(v.name)
         for other in pending:
             if other.name in resolved_pending or other in ready:

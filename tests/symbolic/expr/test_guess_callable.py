@@ -108,7 +108,8 @@ def test_control_callable_resolves():
 
 
 def test_cross_var_dependency_resolves_in_order():
-    """A guess that names another variable receives that variable's resolved array."""
+    """A guess that names another variable receives that variable (State/Control)
+    object — the callable reads ``.guess`` to access the resolved array."""
     N = 6
     pos = State("pos", shape=(1,))
     pos.initial = [0.0]
@@ -119,7 +120,7 @@ def test_cross_var_dependency_resolves_in_order():
     vel.initial = [0.0]
     vel.final = [0.0]
     # vel is finite-difference of pos
-    vel.guess = lambda pos: np.gradient(pos.flatten()).reshape(-1, 1)
+    vel.guess = lambda pos: np.gradient(pos.guess.flatten()).reshape(-1, 1)
 
     resolve_guesses([pos, vel], [], N)
 
@@ -161,8 +162,8 @@ def test_cycle_detected_with_named_vars():
     N = 5
     a = State("a", shape=(1,))
     b = State("b", shape=(1,))
-    a.guess = lambda b: b
-    b.guess = lambda a: a
+    a.guess = lambda b: b.guess
+    b.guess = lambda a: a.guess
 
     with pytest.raises(ValueError, match="Cycle detected"):
         resolve_guesses([a, b], [], N)
@@ -312,8 +313,8 @@ def test_problem_builds_with_callable_guesses():
     vel = ox.Control("vel", shape=(2,))
     vel.min = np.array([-2.0, -2.0])
     vel.max = np.array([2.0, 2.0])
-    # Cross-variable dispatch: depend on the resolved pos guess.
-    vel.guess = lambda pos: np.gradient(pos, axis=0)
+    # Cross-variable dispatch: pos is the State; read pos.guess for the array.
+    vel.guess = lambda pos: np.gradient(pos.guess, axis=0)
 
     time = ox.Time(
         initial=0.0,

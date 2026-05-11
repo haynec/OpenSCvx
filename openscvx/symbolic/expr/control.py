@@ -76,11 +76,14 @@ class Control(Variable):
 
         ``.guess`` also accepts a callable ``f(variables, ...) -> array``
         resolved once the discretization size is known. Parameter names are
-        matched against the problem's states/controls; the reserved name
-        ``tau`` (a normalized ``[0, 1]`` grid of length N) is also available::
+        matched against the problem's states/controls (each parameter
+        receives the matched State/Control object — read ``.guess`` for the
+        resolved array). The reserved name ``tau`` is the one special
+        parameter, receiving a normalized ``[0, 1]`` ndarray grid of length
+        N::
 
             thrust = Control("thrust", shape=(3,))
-            thrust.guess = lambda pos: np.gradient(pos, axis=0)  # depends on pos
+            thrust.guess = lambda pos: np.gradient(pos.guess, axis=0)
     """
 
     def __init__(

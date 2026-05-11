@@ -199,11 +199,13 @@ class State(Variable):
         Trajectory guesses default to a linear interpolation from ``initial`` to
         ``final``. Override eagerly with an array, or lazily with a callable
         ``f(variables, ...) -> array`` whose parameter names are matched against
-        the problem's other states/controls; the reserved name ``tau`` (a
-        normalized ``[0, 1]`` grid of length N) is also available::
+        the problem's other states/controls (each parameter receives the matched
+        State/Control object — read ``.guess`` for the resolved array). The
+        reserved name ``tau`` is the one special parameter, receiving a
+        normalized ``[0, 1]`` ndarray grid of length N::
 
             vel = State("vel", (3,))
-            vel.guess = lambda pos: np.gradient(pos, axis=0)  # depends on resolved pos
+            vel.guess = lambda pos: np.gradient(pos.guess, axis=0)
     """
 
     def __init__(

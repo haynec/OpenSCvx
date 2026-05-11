@@ -99,10 +99,12 @@ class Time(State):
                 shape ``(N,)`` or ``(N, 1)``, or a callable
                 ``f(variables, ...) -> array`` that returns one once N is
                 known. Parameter names are matched against the problem's
-                states and controls; the reserved name ``tau`` (a normalized
-                ``[0, 1]`` grid) is also available for shape-only callables.
-                If not provided, a linear interpolation from initial to final
-                is generated.
+                states and controls (each parameter receives the matched
+                State/Control object — read ``.guess`` for the resolved
+                array). The reserved name ``tau`` is the one special
+                parameter, receiving a normalized ``[0, 1]`` ndarray grid.
+                If not provided, a linear interpolation from initial to
+                final is generated.
             time_dilation_min: Absolute minimum bound for time dilation.
                 Defaults to `0.3 * time_final` if not set.
             time_dilation_max: Absolute maximum bound for time dilation.
@@ -240,8 +242,9 @@ class Time(State):
         """Set the time dilation guess. Accepts an array of shape ``(N,)`` or
         ``(N, 1)``, or a callable ``f(variables, ...) -> array`` using the
         same name-dispatch rules as ``Variable.guess`` (parameters match the
-        problem's states/controls; the reserved name ``tau`` is the
-        normalized ``[0, 1]`` grid)."""
+        problem's states/controls and receive the matched State/Control
+        object — read ``.guess`` for the resolved array; the reserved name
+        ``tau`` is the normalized ``[0, 1]`` ndarray grid)."""
         if callable(val) and not isinstance(val, np.ndarray):
             self._time_dilation_guess_callable_params = _inspect_guess_callable(
                 val, "time_dilation_guess", "Time"
@@ -271,7 +274,7 @@ class Time(State):
         ]
 
     def _resolve_time_dilation_guess(
-        self, N: int, tau: np.ndarray, resolved_vars: Dict[str, np.ndarray]
+        self, N: int, tau: np.ndarray, resolved_vars: Dict[str, "Variable"]
     ) -> None:
         """Resolve the time-dilation guess callable, if any, into an ``(N, 1)`` array."""
         if self._time_dilation_guess_callable is None:
