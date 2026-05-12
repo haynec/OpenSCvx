@@ -1,0 +1,66 @@
+{#- Problem → OpenSCvx → solution — minimal copy, scales without inner scroll. -#}
+<section class="osc-home-pipeline" aria-labelledby="osc-home-pipeline-title">
+  <h2 id="osc-home-pipeline-title" class="osc-home-pipeline__title">From nonconvex problem to trajectory</h2>
+  <p class="osc-home-pipeline__lede">
+    Model in Python, compile with JAX, and scale batches on CPU or GPU—successive convexification turns a nonlinear OCP into a sequence of convex subproblems.
+  </p>
+
+  <div class="osc-home-pipeline__row">
+    <article class="osc-home-pipeline__card" aria-label="Nonlinear optimal control formulation">
+      <span class="osc-home-pipeline__eyebrow">Nonlinear problem</span>
+      <div class="osc-home-pipeline__body">
+        <div class="osc-home-formula" aria-hidden="true">
+          <div class="osc-home-formula__line">
+            <span class="osc-home-formula__op">min</span>
+            <span class="osc-home-formula__expr">J(x, u)</span>
+          </div>
+          <div class="osc-home-formula__line osc-home-formula__line--muted">
+            <span class="osc-home-formula__w">s.t.</span>
+            <span class="osc-home-formula__expr">x&#775; = f(x, u)</span>
+          </div>
+          <div class="osc-home-formula__line osc-home-formula__line--muted">
+            <span class="osc-home-formula__w"></span>
+            <span class="osc-home-formula__expr">g(x, u) &#8804; 0</span>
+          </div>
+          <div class="osc-home-formula__line osc-home-formula__line--muted">
+            <span class="osc-home-formula__w"></span>
+            <span class="osc-home-formula__expr">h(x, u) = 0</span>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <div class="osc-home-pipeline__connector" aria-hidden="true">
+      <span class="osc-home-pipeline__arrow"></span>
+    </div>
+
+    <article class="osc-home-pipeline__card osc-home-pipeline__card--accent" aria-label="OpenSCvx stack">
+      <span class="osc-home-pipeline__eyebrow">OpenSCvx</span>
+      <div class="osc-home-pipeline__body">
+        <p class="osc-home-pipeline__stack-title">Vectorized · CPU · GPU</p>
+        <p class="osc-home-pipeline__detail">JAX · CVXPY</p>
+      </div>
+    </article>
+
+    <div class="osc-home-pipeline__connector" aria-hidden="true">
+      <span class="osc-home-pipeline__arrow"></span>
+    </div>
+
+    <article class="osc-home-pipeline__card" aria-label="Optimized trajectory solution">
+      <span class="osc-home-pipeline__eyebrow">Solution</span>
+      <div class="osc-home-pipeline__body osc-home-pipeline__body--viz">
+        <div class="osc-home-traj-wrap">
+          <svg class="osc-home-traj" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 120" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <rect class="osc-home-traj__frame" x="8" y="8" width="204" height="104" rx="8"/>
+            <line class="osc-home-traj__axis" x1="24" y1="96" x2="200" y2="96"/>
+            <line class="osc-home-traj__axis" x1="24" y1="96" x2="24" y2="24"/>
+            <path class="osc-home-traj__path" d="M 32 88 C 72 86, 88 40, 118 36 S 168 28, 196 24"/>
+            <circle class="osc-home-traj__dot" cx="32" cy="88" r="4"/>
+            <circle class="osc-home-traj__dot osc-home-traj__dot--mid" cx="118" cy="36" r="3"/>
+            <circle class="osc-home-traj__dot osc-home-traj__dot--end" cx="196" cy="24" r="4"/>
+          </svg>
+        </div>
+      </div>
+    </article>
+  </div>
+</section>
