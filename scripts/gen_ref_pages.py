@@ -184,7 +184,7 @@ mkdocs_gen_files.set_edit_path(Path("Reference", "index.md"), Path("scripts/gen_
 # Write the navigation file for literate-nav (API landing page must be first so the Reference tab
 # and section index open Reference/index.md — see mkdocs-literate-nav resolve_directories_in_nav).
 # Important: no blank line between this item and the rest — a blank line makes Markdown emit a
-# "loose" list (<li><p><a>), which mkdocs-literate-nav's parser rejects ("Expected no more elements").
+# "loose" list (<li><p><a>), which mkdocs-literate-nav's parser rejects.
 _REFERENCE_SUMMARY_HEAD = "* [API reference](index.md)\n"
 with mkdocs_gen_files.open("Reference/SUMMARY.md", "w") as nav_file:
     nav_file.write(_REFERENCE_SUMMARY_HEAD)
