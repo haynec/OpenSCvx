@@ -75,6 +75,8 @@ class Time(State):
         min: Optional[float] = None,
         max: Optional[float] = None,
         *,
+        scaling_min: Optional[float] = None,
+        scaling_max: Optional[float] = None,
         guess: Optional[np.ndarray] = None,
         time_dilation_min: Optional[float] = None,
         time_dilation_max: Optional[float] = None,
@@ -91,6 +93,8 @@ class Time(State):
             final: Final time. Same format as initial.
             min: Minimum time bound.
             max: Maximum time bound.
+            scaling_min: Optional scaling minimum for the time variable (solver scaling).
+            scaling_max: Optional scaling maximum for the time variable (solver scaling).
             guess: Initial guess for the time trajectory. 1D array of shape
                 (N,) or 2D of shape (N, 1). If not provided, a linear
                 interpolation from initial to final is generated.
@@ -118,12 +122,21 @@ class Time(State):
             min = np.array([min], dtype=float)
         if isinstance(max, (int, float, np.number)):
             max = np.array([max], dtype=float)
+        if isinstance(scaling_min, (int, float, np.number)):
+            scaling_min = np.array([scaling_min], dtype=float)
+        if isinstance(scaling_max, (int, float, np.number)):
+            scaling_max = np.array([scaling_max], dtype=float)
         if initial is not None and not isinstance(initial, (list, np.ndarray)):
             initial = [initial]
         if final is not None and not isinstance(final, (list, np.ndarray)):
             final = [final]
 
         super().__init__("time", shape=(1,), min=min, max=max, initial=initial, final=final)
+
+        if scaling_min is not None:
+            self.scaling_min = scaling_min
+        if scaling_max is not None:
+            self.scaling_max = scaling_max
 
         # guess: normalize 1D → 2D before assigning
         if guess is not None:
@@ -151,6 +164,20 @@ class Time(State):
         if isinstance(val, (int, float, np.number)):
             val = np.array([val], dtype=float)
         State.max.fset(self, val)
+
+    @State.scaling_min.setter
+    def scaling_min(self, val):
+        """Set scaling minimum for time. Accepts a scalar or array."""
+        if isinstance(val, (int, float, np.number)):
+            val = np.array([val], dtype=float)
+        State.scaling_min.fset(self, val)
+
+    @State.scaling_max.setter
+    def scaling_max(self, val):
+        """Set scaling maximum for time. Accepts a scalar or array."""
+        if isinstance(val, (int, float, np.number)):
+            val = np.array([val], dtype=float)
+        State.scaling_max.fset(self, val)
 
     @State.initial.setter
     def initial(self, val):
@@ -246,6 +273,10 @@ class Time(State):
             parts.append(f"min={self._min[0]}")
         if self._max is not None:
             parts.append(f"max={self._max[0]}")
+        if self._scaling_min is not None:
+            parts.append(f"scaling_min={self._scaling_min[0]}")
+        if self._scaling_max is not None:
+            parts.append(f"scaling_max={self._scaling_max[0]}")
         return f"Time({', '.join(parts)})"
 
 
@@ -307,7 +338,7 @@ class TimeSpec(StateSpec):
             return [v]
         return v
 
-    @field_validator("min", "max", mode="before")
+    @field_validator("min", "max", "scaling_min", "scaling_max", mode="before")
     @classmethod
     def _wrap_scalar_bound(cls, v: Any) -> Any:
         """Wrap a scalar float into a single-element list."""
@@ -323,6 +354,8 @@ class TimeSpec(StateSpec):
             final=_parse_time_boundary(self.final[0]) if self.final else None,
             min=self.min[0] if self.min else None,
             max=self.max[0] if self.max else None,
+            scaling_min=self.scaling_min[0] if self.scaling_min else None,
+            scaling_max=self.scaling_max[0] if self.scaling_max else None,
             uniform_time_grid=self.uniform_time_grid,
             time_dilation_min=self.time_dilation_min,
             time_dilation_max=self.time_dilation_max,
