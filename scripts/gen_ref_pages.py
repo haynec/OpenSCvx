@@ -86,9 +86,7 @@ def _reference_index_markdown(package_names: list[str]) -> str:
     """Build the Reference landing page (Markdown + Material grid cards)."""
     core_lines = []
     for mod, icon, blurb in _REFERENCE_CORE_MODULES:
-        core_lines.append(
-            f"- {icon} __[`openscvx.{mod}`]({mod}.md)__ — {blurb}"
-        )
+        core_lines.append(f"- {icon} __[`openscvx.{mod}`]({mod}.md)__ — {blurb}")
 
     pkg_lines = []
     for name in package_names:
@@ -96,9 +94,7 @@ def _reference_index_markdown(package_names: list[str]) -> str:
             name,
             (":material-package-variant:", "Python subpackage; see module index for contents."),
         )
-        pkg_lines.append(
-            f"- {icon} __[`openscvx.{name}`]({name}/index.md)__ — {blurb}"
-        )
+        pkg_lines.append(f"- {icon} __[`openscvx.{name}`]({name}/index.md)__ — {blurb}")
 
     core_block = "\n".join(core_lines)
     pkg_block = "\n".join(pkg_lines)

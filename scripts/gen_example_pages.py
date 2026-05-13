@@ -144,15 +144,13 @@ def _examples_index_markdown(
         cards = []
         for doc_path, title, teaser in grouped[category]:
             rel = doc_path.as_posix()
-            cards.append(
-                f"- :material-file-code: __[{title}]({rel})__ — {teaser}"
-            )
+            cards.append(f"- :material-file-code: __[{title}]({rel})__ — {teaser}")
         card_block = "\n".join(cards)
         heading = _category_section_title(category)
         section_blocks.append(
             f"## {heading}\n\n"
             f"{icon} {blurb}\n\n"
-            f"<div class=\"grid cards\" markdown>\n\n"
+            f'<div class="grid cards" markdown>\n\n'
             f"{card_block}\n\n"
             f"</div>\n"
         )
@@ -213,9 +211,7 @@ for path in sorted(examples_dir.rglob("*.py")):
     source_code = get_source_without_docstring(path)
     page_title = format_title(path.stem)
     category = rel_path.parts[0]
-    _index_entries.append(
-        (category, doc_path, page_title, _docstring_teaser(docstring))
-    )
+    _index_entries.append((category, doc_path, page_title, _docstring_teaser(docstring)))
 
     # Generate the markdown content
     with mkdocs_gen_files.open(full_doc_path, "w") as fd:
