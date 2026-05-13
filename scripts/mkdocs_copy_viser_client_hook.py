@@ -1,10 +1,15 @@
-"""MkDocs hook: sync Viser's prebuilt web client into ``docs/assets/viser-client``.
+"""MkDocs hook: ensure ``docs/assets/viser-client`` exists for embedded Viser iframes.
 
-The Viser wheel ships ``viser/client/build/`` (see ``viser._client_autobuild``). Copying it
-before ``mkdocs build`` makes the home-page iframes resolve without committing the client.
+**Vendored client (preferred):** If ``docs/assets/viser-client/index.html`` is already present
+(e.g. committed in git), this hook does nothing so docs builds and clones use the **same**
+static files as the repository—no dependency on a local ``viser`` install.
 
-If the bundled build is missing (unusual pip layout), print a hint to run
-``viser-build-client --out-dir docs/assets/viser-client``.
+**Fallback:** If that file is missing, copy from ``viser/client/build`` in the installed
+``viser`` package (see ``viser._client_autobuild``), or install Viser and run::
+
+    viser-build-client --out-dir docs/assets/viser-client
+
+Then commit ``docs/assets/viser-client/`` so teammates and CI get working embeds.
 """
 
 from __future__ import annotations
@@ -18,12 +23,17 @@ def on_pre_build(config, **kwargs) -> None:  # noqa: ARG001
     docs_dir = Path(config.docs_dir)
     dest = docs_dir / "assets" / "viser-client"
 
+    if (dest / "index.html").is_file():
+        # Committed bundle: do not overwrite so git state and clone behavior stay predictable.
+        return
+
     try:
         import viser
     except ImportError:
         print(
-            "[mkdocs] viser is not installed; skipping viser client sync "
-            "(install the project or run viser-build-client --out-dir docs/assets/viser-client).",
+            "[mkdocs] docs/assets/viser-client/ is missing and viser is not installed. "
+            "Run: viser-build-client --out-dir docs/assets/viser-client\n"
+            "  then commit that directory so clones do not need Viser to build docs.",
             file=sys.stderr,
         )
         return

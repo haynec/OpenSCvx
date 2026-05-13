@@ -125,7 +125,11 @@ def print_viser_embed_followup(saved: Path) -> None:
     print()
     print(f"Wrote Viser recording: {saved}")
     print("Next steps (see https://viser.studio/main/embedded_visualizations/):")
-    print("  1) viser-build-client --out-dir docs/assets/viser-client")
+    print(
+        "  1) If the repo does not include docs/assets/viser-client/: run\n"
+        "       viser-build-client --out-dir docs/assets/viser-client\n"
+        "     then commit that directory so static hosting and clones work without Viser."
+    )
     print(
         "  2) Serve the docs assets tree, then open e.g.\n"
         f"       .../viser-client/?playbackPath=.../viser-recordings/{rel}"
