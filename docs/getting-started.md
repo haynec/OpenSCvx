@@ -109,7 +109,7 @@ For setting up a local development environment, we recommend using Conda to mana
     ```
 2.  Create and activate a conda environment with Python:
     ```sh
-    conda create -n openscvx python>=3.9
+    conda create -n openscvx "python>=3.11"
     conda activate openscvx
     ```
 3.  Install the package in editable mode with all optional dependencies:

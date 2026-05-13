@@ -11,7 +11,7 @@ license = {text = "Apache Software License"}
 authors = [
     {name = "Chris Hayner and Griffin Norris", email = "haynec@uw.edu"},
 ]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: Apache Software License",
