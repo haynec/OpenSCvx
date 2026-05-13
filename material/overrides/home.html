@@ -6,12 +6,14 @@
   {{ super() }}
   <link rel="stylesheet" href="{{ 'assets/stylesheets/home-hero.css' | url }}">
   <link rel="stylesheet" href="{{ 'assets/stylesheets/home-dropin.css' | url }}">
+  <link rel="stylesheet" href="{{ 'assets/stylesheets/home-viser.css' | url }}">
 {% endblock %}
 {% block hero %}
   {% include "partials/home-hero.html" %}
 {% endblock %}
 {% block content %}
   {% include "partials/home-pipeline.html" %}
+  {% include "partials/home-viser-strip.html" %}
   {% include "partials/home-dropin-banner.html" %}
   <div class="osc-home-below-fold">
     {{ super() }}

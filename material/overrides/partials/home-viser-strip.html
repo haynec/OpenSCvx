@@ -1,0 +1,71 @@
+{#-
+  Embedded Viser playback (static client + .viser recordings). See
+  https://viser.studio/main/embedded_visualizations/
+
+  The Viser client resolves ``playbackPath`` relative to ``viser-client/index.html``, so we must
+  not use MkDocs' ``| url`` filter for recordings (it emits paths relative to the *docs* page, e.g.
+  ``assets/...``, which become ``.../viser-client/assets/...`` and 404). Use a **root-absolute** path
+  derived from ``config.site_url`` instead (e.g. ``/OpenSCvx/assets/viser-recordings/...``).
+-#}
+{% set _su = (config.site_url or "") %}
+{% set _osc_prefix = "" %}
+{% if _su and "://" in _su %}
+  {% set _hostpath = _su.split("://", 1)[1] %}
+  {% if "/" in _hostpath %}
+    {% set _tail = _hostpath.split("/", 1)[1].rstrip("/") %}
+    {% if _tail %}
+      {% set _osc_prefix = "/" + _tail %}
+    {% endif %}
+  {% endif %}
+{% endif %}
+{% set osc_viser_client = ('assets/viser-client/index.html') | url %}
+{% set osc_viser_play_drone = _osc_prefix ~ "/assets/viser-recordings/drone_racing.viser" %}
+{% set osc_viser_play_franka = _osc_prefix ~ "/assets/viser-recordings/franka_fr3v2_pick_place.viser" %}
+<section class="osc-home-dropin osc-home-viser" aria-labelledby="osc-home-viser-title">
+  <div class="osc-home-dropin__inner md-typeset">
+    <h2 id="osc-home-viser-title" class="osc-home-dropin__title">Trajectory previews</h2>
+    <div class="osc-home-viser__grid">
+      <div class="osc-home-viser__cell" role="group" aria-labelledby="osc-home-viser-drone-label">
+        <!-- <div id="osc-home-viser-drone-label" class="osc-home-viser__caption">Drone racing</div> -->
+        <div class="osc-home-viser__plot">
+          <div class="osc-home-viser__iframe-shell">
+            <iframe
+              class="osc-home-viser__iframe"
+              src="{{ osc_viser_client }}?playbackPath={{ osc_viser_play_drone }}"
+              title="Drone racing — embedded Viser playback"
+              loading="eager"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen
+            ></iframe>
+          </div>
+          <p class="osc-home-viser__example-link-row">
+            <a href="{{ 'Examples/drone/drone_racing/' | url }}" class="osc-home-viser__example-link">
+              Drone racing example (source)
+            </a>
+          </p>
+        </div>
+      </div>
+
+      <div class="osc-home-viser__cell" role="group" aria-labelledby="osc-home-viser-franka-label">
+        <!-- <div id="osc-home-viser-franka-label" class="osc-home-viser__caption">Franka FR3 pick &amp; place</div> -->
+        <div class="osc-home-viser__plot">
+          <div class="osc-home-viser__iframe-shell">
+            <iframe
+              class="osc-home-viser__iframe"
+              src="{{ osc_viser_client }}?playbackPath={{ osc_viser_play_franka }}"
+              title="Franka FR3 pick and place — embedded Viser playback"
+              loading="lazy"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen
+            ></iframe>
+          </div>
+          <p class="osc-home-viser__example-link-row">
+            <a href="{{ 'Examples/arm/franka_fr3v2_pick_place/' | url }}" class="osc-home-viser__example-link">
+              Franka FR3 pick &amp; place example (source)
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

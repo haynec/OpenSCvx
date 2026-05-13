@@ -20,7 +20,8 @@
   border-bottom-color: color-mix(in srgb, var(--md-typeset-color) 12%, transparent);
 }
 
-[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .osc-home-dropin {
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-dropin.osc-home-viser {
   background: color-mix(in srgb, var(--md-typeset-color) 5%, var(--md-default-bg-color));
   border-top-color: rgb(34 26 21 / 0.1);
   border-bottom-color: rgb(34 26 21 / 0.1);
@@ -217,4 +218,29 @@
     flex: 1 1 100%;
     justify-content: flex-start;
   }
+}
+
+/* --- Light + custom: install strip band only (not trajectory previews). ----- */
+/* Brown-tinted full-bleed background behind the section. The ``.osc-mac`` window keeps the */
+/* default warm-black chrome (#231f1e / #1c1917), same as other palettes. */
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-dropin:not(.osc-home-viser) {
+  background: color-mix(in srgb, var(--md-primary-bg-color) 10%, var(--md-default-bg-color));
+  border-top-color: rgb(61 43 32 / 0.14);
+  border-bottom-color: rgb(61 43 32 / 0.14);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-dropin:not(.osc-home-viser) .osc-mac {
+  --osc-mac-bg: #231f1e;
+  --osc-mac-bg-deep: #1c1917;
+  --osc-mac-tab-muted: rgb(245 245 244 / 0.42);
+  --osc-mac-tab-active-bg: rgb(255 255 255 / 0.12);
+  --osc-mac-code: rgb(250 250 249 / 0.94);
+
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.06) inset,
+    0 24px 64px rgb(0 0 0 / 0.28),
+    0 0 0 1px rgb(0 0 0 / 0.35);
 }

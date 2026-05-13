@@ -50,6 +50,41 @@
   --md-shadow-z3: 0 0.5rem 1.5rem rgb(26 20 17 / 0.12), 0 0 0.25rem rgb(26 20 17 / 0.075);
 }
 
+/*
+ * Light + custom: cream header so the brown-tinted logo reads clearly. Vector logo stays white
+ * in the SVG; filter below maps it to --md-primary-bg-color on this palette only.
+ */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header {
+  background-color: var(--md-default-bg-color);
+  color: var(--md-typeset-color);
+  box-shadow: 0 0 0.05rem 0.05rem rgb(34 26 21 / 0.1), 0 0.2rem 0.5rem rgb(34 26 21 / 0.05);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header__button.md-logo img,
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-nav__button.md-logo img {
+  filter: brightness(0) saturate(100%) invert(16%) sepia(22%) saturate(2200%) hue-rotate(342deg) brightness(0.93) contrast(0.94);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header__title {
+  color: var(--md-typeset-color);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header__button.md-icon {
+  color: var(--md-primary-bg-color);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header__option .md-header__button.md-icon {
+  color: var(--md-primary-bg-color);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-source {
+  color: rgb(34 26 21 / 0.88);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-source:hover {
+  color: var(--md-typeset-color);
+}
+
 /* Secondary chrome (tabs strip): lift off page + stronger tab labels */
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-tabs {
   background-color: var(--md-default-bg-color--light);
@@ -69,21 +104,21 @@
   color: var(--md-typeset-color);
 }
 
-/* Search field: readable placeholder + input on warm chrome */
+/* Search field: readable on cream header (light + custom) */
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-search__form {
-  background-color: rgb(241 237 228 / 0.18);
-  border: 1px solid rgb(241 237 228 / 0.32);
+  background-color: rgb(34 26 21 / 0.06);
+  border: 1px solid rgb(34 26 21 / 0.12);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-search__input {
-  color: var(--md-primary-fg-color);
+  color: var(--md-typeset-color);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-search__input::placeholder {
-  color: rgb(241 237 228 / 0.62);
+  color: rgb(34 26 21 / 0.48);
 }
 
 /* Right-hand TOC / nav: avoid “washed” inherited opacity on nested links */

@@ -149,17 +149,17 @@
   color: var(--md-typeset-color);
 }
 
-/* Slate: hero copy in warm brown (same hue as light theme #5b3d24), not cool white/grey */
+/* Slate: hero copy in white (light mode keeps warm custom palette above). */
 [data-md-color-scheme="slate"] .osc-home-hero__inner.md-typeset h1#osc-home-hero-title.osc-home-hero__title {
-  color: color-mix(in srgb, #5b3d24 26%, #f6efe8 74%) !important;
+  color: #fff !important;
 }
 
 [data-md-color-scheme="slate"] .osc-home-hero__inner .osc-home-hero__kicker {
-  color: color-mix(in srgb, #5b3d24 44%, #ebe2d9 56%) !important;
+  color: rgb(255 255 255 / 0.9) !important;
 }
 
 [data-md-color-scheme="slate"] .osc-home-hero__inner .osc-home-hero__tagline {
-  color: color-mix(in srgb, #5b3d24 34%, #f0e6de 66%) !important;
+  color: rgb(255 255 255 / 0.88) !important;
 }
 
 .osc-home-hero__tagline {
@@ -183,48 +183,21 @@
   border-radius: 22px;
   font-weight: 600;
   letter-spacing: 0.015em;
+  /* Stable compositing layer: reduces hover shimmer when backdrop-filter and box-shadow animate together. */
+  transform: translateZ(0);
   transition:
     background-color 0.22s ease,
     border-color 0.22s ease,
     box-shadow 0.22s ease,
-    color 0.18s ease,
-    transform 0.18s ease;
+    color 0.18s ease;
 }
 
 /*
- * Hero CTAs — Apple-style “liquid glass” (frosted blur + luminous rim).
- * Scoped to .osc-home-hero__actions so site-wide buttons stay unchanged.
+ * Hero CTAs — shared "liquid glass" (frosted blur + rim). All three use the same rules;
+ * scoped to .osc-home-hero__actions so site-wide buttons stay unchanged.
  */
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
-  .osc-home-hero__actions .md-button.md-button--primary {
-  color: var(--md-primary-bg-color) !important;
-  background-color: rgb(255 253 249 / 0.42) !important;
-  border: 1px solid rgb(255 255 255 / 0.72) !important;
-  -webkit-backdrop-filter: saturate(185%) blur(22px);
-  backdrop-filter: saturate(185%) blur(22px);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.85),
-    inset 0 -1px 0 rgb(61 43 32 / 0.05),
-    0 4px 6px rgb(34 26 21 / 0.04),
-    0 14px 36px rgb(34 26 21 / 0.1);
-}
-
-[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
-  .osc-home-hero__actions .md-button.md-button--primary:hover,
-[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
-  .osc-home-hero__actions .md-button.md-button--primary:focus {
-  color: var(--md-primary-bg-color) !important;
-  background-color: rgb(255 253 249 / 0.58) !important;
-  border-color: rgb(255 255 255 / 0.88) !important;
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.95),
-    inset 0 -1px 0 rgb(61 43 32 / 0.06),
-    0 6px 10px rgb(34 26 21 / 0.06),
-    0 18px 44px rgb(34 26 21 / 0.12);
-}
-
-[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
-  .osc-home-hero__actions .md-button:not(.md-button--primary) {
+  .osc-home-hero__actions .md-button {
   color: color-mix(in srgb, var(--md-primary-bg-color) 92%, #1a1411 8%) !important;
   background-color: rgb(255 255 255 / 0.34) !important;
   border: 1px solid rgb(255 255 255 / 0.58) !important;
@@ -238,9 +211,9 @@
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
-  .osc-home-hero__actions .md-button:not(.md-button--primary):hover,
+  .osc-home-hero__actions .md-button:hover,
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
-  .osc-home-hero__actions .md-button:not(.md-button--primary):focus {
+  .osc-home-hero__actions .md-button:focus {
   color: var(--md-primary-bg-color) !important;
   background-color: rgb(255 255 255 / 0.52) !important;
   border-color: rgb(255 255 255 / 0.78) !important;
@@ -251,32 +224,7 @@
     0 16px 38px rgb(34 26 21 / 0.1);
 }
 
-[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button.md-button--primary {
-  color: rgb(248 250 252 / 0.96) !important;
-  background-color: rgb(255 255 255 / 0.14) !important;
-  border: 1px solid rgb(255 255 255 / 0.26) !important;
-  -webkit-backdrop-filter: saturate(200%) blur(26px);
-  backdrop-filter: saturate(200%) blur(26px);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.22),
-    inset 0 -1px 0 rgb(0 0 0 / 0.25),
-    0 6px 10px rgb(0 0 0 / 0.25),
-    0 18px 42px rgb(0 0 0 / 0.4);
-}
-
-[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button.md-button--primary:hover,
-[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button.md-button--primary:focus {
-  color: rgb(255 255 255 / 0.99) !important;
-  background-color: rgb(255 255 255 / 0.2) !important;
-  border-color: rgb(255 255 255 / 0.36) !important;
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.3),
-    inset 0 -1px 0 rgb(0 0 0 / 0.28),
-    0 8px 14px rgb(0 0 0 / 0.3),
-    0 22px 50px rgb(0 0 0 / 0.45);
-}
-
-[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button:not(.md-button--primary) {
+[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button {
   color: rgb(241 245 249 / 0.92) !important;
   background-color: rgb(255 255 255 / 0.08) !important;
   border: 1px solid rgb(255 255 255 / 0.16) !important;
@@ -289,8 +237,8 @@
     0 12px 32px rgb(0 0 0 / 0.32);
 }
 
-[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button:not(.md-button--primary):hover,
-[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button:not(.md-button--primary):focus {
+[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button:hover,
+[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button:focus {
   color: rgb(255 255 255 / 0.98) !important;
   background-color: rgb(255 255 255 / 0.13) !important;
   border-color: rgb(255 255 255 / 0.26) !important;
@@ -303,20 +251,11 @@
 
 @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
   [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
-    .osc-home-hero__actions .md-button.md-button--primary {
-    background-color: rgb(255 253 249 / 0.92) !important;
-  }
-
-  [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
-    .osc-home-hero__actions .md-button:not(.md-button--primary) {
+    .osc-home-hero__actions .md-button {
     background-color: rgb(255 255 255 / 0.88) !important;
   }
 
-  [data-md-color-scheme="slate"] .osc-home-hero__actions .md-button.md-button--primary {
-    background-color: rgb(55 58 68 / 0.92) !important;
-  }
-
-  [data-md-color-scheme="slate"] .osc-home-hero__actions .md-button:not(.md-button--primary) {
+  [data-md-color-scheme="slate"] .osc-home-hero__actions .md-button {
     background-color: rgb(45 48 58 / 0.88) !important;
   }
 }
@@ -827,6 +766,11 @@
   margin: 0 auto;
   padding-inline: clamp(0.5rem, 2vw, 0.75rem);
   box-sizing: border-box;
+}
+
+/* Nav label is rendered as a duplicate <h1> ("Home"); hero already has the document <h1>. */
+.osc-home-below-fold > h1 {
+  display: none;
 }
 
 .osc-home-below-fold .md-typeset h2 {

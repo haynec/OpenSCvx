@@ -16,7 +16,7 @@ from pathlib import Path
 import jax
 import pytest
 
-IGNORED_FILES = ["__init__.py", "plotting.py"]
+IGNORED_FILES = ["__init__.py", "plotting.py", "_viser_embed_export.py"]
 
 # Examples excluded from CI (e.g. exceeds runner memory)
 EXCLUDED_EXAMPLES = {

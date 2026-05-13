@@ -13,15 +13,18 @@ social:
 
 ## Why OpenSCvx
 
-**Interface.** Dynamics, costs, and constraints live in one structured problem object—enough rigor for
-research-grade models, enough flexibility to iterate quickly. Pair with the Users Guide when you
-want a guided path from sketch to solve.
+**Modeling.** Dynamics, costs, and constraints are defined together in a structured problem object.
+The Users Guide is the place to see how the pieces fit from a first model to a solve.
 
-**JAX & XLA.** Inner loops are shaped for **`jax.jit`** and **`jax.export`**: successive convexification
-dispatches as compiled programs where it matters, with the same code path on CPU or GPU.
+**JAX.** The symbolic layer lowers to JAX. On the compiled hot paths we **`jax.jit`** and **immediately `jax.export`**: export is always part of that pipeline, not an extra step you opt into later. CPU and GPU use the same problem definition; performance still depends on problem size and settings.
 
-**Vectorization.** Batch scenarios, ensembles, and parameter grids with **`vmap`** so one program
-describes many solves without a slow Python outer loop.
+**Vectorization.** Two ideas show up in practice: the discretized dynamics and many nonlinear terms
+are evaluated **across decision nodes** in parallel inside the solver (see
+[Vectorization and vmapping](UnderTheHood/vectorization_and_vmapping.md)). When
+your model has a **batch axis** you want to treat uniformly—many obstacles, repeated geometry, and
+similar—**`ox.Vmap`** writes that data-parallel piece symbolically and lowers to **`jax.vmap`**. It
+helps avoid hand-written Python loops over those batch dimensions; it is not a general substitute
+for every outer loop (see [Obstacle avoidance with Vmap](UsersGuide/03_obstacle_avoidance_vmap.md)).
 
 ## Where to go next
 
@@ -33,9 +36,3 @@ describes many solves without a slow Python outer loop.
 - :material-view-dashboard: __[Examples](Examples/index.md)__ — runnable scripts organized by topic.
 
 </div>
-
-## API documentation
-
-The **Reference** section is generated from the `openscvx` Python package using [mkdocstrings](https://mkdocstrings.github.io/)
-with the Python handler. Public APIs should use **Google-style** docstrings so signatures,
-parameters, and descriptions render consistently in the docs.

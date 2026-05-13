@@ -36,7 +36,6 @@ theme:
     - navigation.instant
     - navigation.instant.prefetch
     - navigation.instant.progress
-    - navigation.instant.preview
     # - navigation.path
     # - navigation.prune
     - navigation.sections
@@ -73,6 +72,10 @@ theme:
   favicon: assets/favicon.png
   icon:
     logo: logo
+
+# Copy Viser's bundled ``client/build`` into ``docs/assets/viser-client`` so home-page embeds resolve.
+hooks:
+  - scripts/mkdocs_copy_viser_client_hook.py
 
 # Plugin choices preserve API docs from docstrings (mkdocstrings + gen-files). Before moving to
 # Zensical, confirm parity for mkdocstrings, mkdocs-gen-files, literate-nav, section-index, and mike.
