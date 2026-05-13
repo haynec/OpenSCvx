@@ -1,6 +1,9 @@
 ---
 template: home.html
 title: OpenSCvx
+hide:
+  - navigation
+  - toc
 description: >-
   An Open-Source Modular and Extensible Nonlinear Trajectory Optimization Package
 social:

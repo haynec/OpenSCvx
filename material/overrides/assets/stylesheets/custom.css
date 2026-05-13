@@ -7,24 +7,24 @@
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] {
   color-scheme: light;
 
-  /* Body copy: raisin-ish brown (higher contrast than mid vandyke on isabelline) */
-  --md-default-fg-color: #2a211c;
-  --md-default-fg-color--light: rgb(42 33 28 / 0.88);
-  --md-default-fg-color--lighter: rgb(42 33 28 / 0.72);
-  --md-default-fg-color--lightest: rgb(42 33 28 / 0.56);
+  /* Body copy: slightly deeper ink on cream for clearer hierarchy vs muted tiers */
+  --md-default-fg-color: #221a15;
+  --md-default-fg-color--light: rgb(34 26 21 / 0.9);
+  --md-default-fg-color--lighter: rgb(34 26 21 / 0.76);
+  --md-default-fg-color--lightest: rgb(34 26 21 / 0.58);
 
-  --md-default-bg-color: #f7f5ef;
-  --md-default-bg-color--light: #f0ede5;
-  --md-default-bg-color--lighter: #e6e2d8;
-  --md-default-bg-color--lightest: #d9d3c7;
+  --md-default-bg-color: #f1ede4;
+  --md-default-bg-color--light: #e9e4da;
+  --md-default-bg-color--lighter: #ded8cc;
+  --md-default-bg-color--lightest: #d1cac0;
 
   --md-typeset-color: var(--md-default-fg-color);
   /* Links / accents: clearly distinct from body text */
   --md-typeset-a-color: #5b3d24;
   --md-typeset-a-color--hover: #1a1411;
 
-  --md-code-fg-color: #1a1411;
-  --md-code-bg-color: #e2ddd2;
+  --md-code-fg-color: #161210;
+  --md-code-bg-color: #dad4c8;
 
   --md-accent-fg-color: #5b3d24;
   --md-accent-bg-color: rgb(91 61 36 / 0.18);
@@ -40,10 +40,10 @@
   --md-primary-bg-color--lighter: #5d4535;
   --md-primary-bg-color--lightest: #6e5240;
 
-  --md-footer-bg-color: #e8e4da;
-  --md-footer-fg-color: #2a211c;
-  --md-footer-fg-color--light: rgb(42 33 28 / 0.72);
-  --md-footer-fg-color--lighter: rgb(42 33 28 / 0.52);
+  --md-footer-bg-color: #e2ddd2;
+  --md-footer-fg-color: #221a15;
+  --md-footer-fg-color--light: rgb(34 26 21 / 0.76);
+  --md-footer-fg-color--lighter: rgb(34 26 21 / 0.54);
 
   --md-shadow-z1: 0 0.125rem 0.5rem rgb(26 20 17 / 0.08), 0 0 0.0625rem rgb(26 20 17 / 0.07);
   --md-shadow-z2: 0 0.25rem 1rem rgb(26 20 17 / 0.1), 0 0 0.125rem rgb(26 20 17 / 0.07);
@@ -53,12 +53,12 @@
 /* Secondary chrome (tabs strip): lift off page + stronger tab labels */
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-tabs {
   background-color: var(--md-default-bg-color--light);
-  border-bottom: 1px solid rgb(42 33 28 / 0.12);
+  border-bottom: 1px solid rgb(34 26 21 / 0.14);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-tabs__link {
-  color: rgb(42 33 28 / 0.78);
+  color: rgb(34 26 21 / 0.82);
   opacity: 1;
 }
 
@@ -72,8 +72,8 @@
 /* Search field: readable placeholder + input on warm chrome */
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-search__form {
-  background-color: rgb(247 245 239 / 0.14);
-  border: 1px solid rgb(247 245 239 / 0.28);
+  background-color: rgb(241 237 228 / 0.18);
+  border: 1px solid rgb(241 237 228 / 0.32);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
@@ -83,14 +83,14 @@
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-search__input::placeholder {
-  color: rgb(247 245 239 / 0.62);
+  color: rgb(241 237 228 / 0.62);
 }
 
 /* Right-hand TOC / nav: avoid “washed” inherited opacity on nested links */
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-sidebar--secondary
   .md-nav__link {
-  color: rgb(42 33 28 / 0.82);
+  color: rgb(34 26 21 / 0.86);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
@@ -133,7 +133,7 @@
   border: 1.5px solid color-mix(in srgb, var(--md-typeset-color) 55%, transparent);
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.75),
-    0 1px 2px rgb(42 33 28 / 0.08);
+    0 1px 2px rgb(34 26 21 / 0.1);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]

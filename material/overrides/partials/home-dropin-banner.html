@@ -1,0 +1,37 @@
+{#- Full-bleed install strip + macOS-style code window (inline tabs + warm dark chrome). -#}
+<section class="osc-home-dropin" aria-labelledby="osc-home-dropin-title">
+  <div class="osc-home-dropin__inner md-typeset">
+    <h2 id="osc-home-dropin-title" class="osc-home-dropin__title">Drop-in install</h2>
+    <p class="osc-home-dropin__lede">
+      Same commands as
+      <a href="{{ 'getting-started/' | url }}">Getting started</a>—CPU or GPU once JAX is configured.
+    </p>
+
+    <div class="osc-mac" aria-label="Install OpenSCvx">
+      <input class="osc-mac__sr" type="radio" name="osc-home-install" id="osc-home-install-uv" checked />
+      <input class="osc-mac__sr" type="radio" name="osc-home-install" id="osc-home-install-pip" />
+      <input class="osc-mac__sr" type="radio" name="osc-home-install" id="osc-home-install-dev" />
+
+      <div class="osc-mac__chrome">
+        <div class="osc-mac__traffic" aria-hidden="true">
+          <span class="osc-mac__dot osc-mac__dot--close"></span>
+          <span class="osc-mac__dot osc-mac__dot--min"></span>
+          <span class="osc-mac__dot osc-mac__dot--max"></span>
+        </div>
+        <div class="osc-mac__tabs" role="tablist" aria-label="Install method">
+          <label class="osc-mac__tab" for="osc-home-install-uv">UV</label>
+          <label class="osc-mac__tab" for="osc-home-install-pip">pip</label>
+          <label class="osc-mac__tab" for="osc-home-install-dev">editable</label>
+        </div>
+      </div>
+
+      <div class="osc-mac__viewport">
+        <pre class="osc-mac__pre osc-mac__pre--uv"><code class="osc-mac__code">uv pip install openscvx[gui,cvxpygen]</code></pre>
+        <pre class="osc-mac__pre osc-mac__pre--pip"><code class="osc-mac__code">pip install openscvx[gui,cvxpygen]</code></pre>
+        <pre class="osc-mac__pre osc-mac__pre--dev"><code class="osc-mac__code">git clone https://github.com/OpenSCvx/OpenSCvx.git
+cd OpenSCvx
+pip install -e ".[gui,cvxpygen]"</code></pre>
+      </div>
+    </div>
+  </div>
+</section>

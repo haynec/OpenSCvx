@@ -1,0 +1,11 @@
+{
+  "name": "openscvx-docs-dev",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "screenshot-home": "node screenshot-home.mjs"
+  },
+  "devDependencies": {
+    "puppeteer": "^24.8.2"
+  }
+}

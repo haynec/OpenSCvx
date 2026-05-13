@@ -1,0 +1,220 @@
+/* -------------------------------------------------------------------------- */
+/* Home — Drop-in install (full-bleed band + warm dark mac-style window)      */
+/* -------------------------------------------------------------------------- */
+
+.osc-home-dropin {
+  margin: 0 calc(50% - 50vw);
+  width: 100vw;
+  max-width: 100vw;
+  box-sizing: border-box;
+  padding: clamp(2rem, 5vw, 2.75rem) clamp(0.75rem, 3vw, 1.5rem);
+  background: color-mix(in srgb, var(--md-typeset-color) 4.5%, var(--md-default-bg-color));
+  border-top: 1px solid color-mix(in srgb, var(--md-typeset-color) 8%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-typeset-color) 8%, transparent);
+  overflow-x: clip;
+}
+
+[data-md-color-scheme="slate"] .osc-home-dropin {
+  background: color-mix(in srgb, #fff 4%, #0a0a0c);
+  border-top-color: color-mix(in srgb, var(--md-typeset-color) 12%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--md-typeset-color) 12%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .osc-home-dropin {
+  background: color-mix(in srgb, var(--md-typeset-color) 5%, var(--md-default-bg-color));
+  border-top-color: rgb(34 26 21 / 0.1);
+  border-bottom-color: rgb(34 26 21 / 0.1);
+}
+
+.osc-home-dropin__inner {
+  margin: 0 auto;
+  max-width: min(52rem, 100%);
+  text-align: center;
+}
+
+.osc-home-dropin__title {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.35rem, 2.5vw + 0.6rem, 1.75rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--md-typeset-color);
+}
+
+.osc-home-dropin__lede {
+  margin: 0 auto 1.35rem;
+  max-width: 40rem;
+  font-size: clamp(0.9rem, 1.4vw + 0.55rem, 1.02rem);
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--md-typeset-color) 74%, transparent);
+}
+
+.osc-home-dropin__lede a {
+  font-weight: 600;
+}
+
+/* --- Warm dark window (self-contained palette) ----------------------------- */
+
+.osc-mac {
+  --osc-mac-bg: #231f1e;
+  --osc-mac-bg-deep: #1c1917;
+  --osc-mac-tab-muted: rgb(245 245 244 / 0.42);
+  --osc-mac-tab-active-bg: rgb(255 255 255 / 0.12);
+  --osc-mac-code: rgb(250 250 249 / 0.94);
+
+  position: relative;
+  margin: 0 auto;
+  max-width: min(44rem, 100%);
+  text-align: left;
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--osc-mac-bg);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.06) inset,
+    0 24px 64px rgb(0 0 0 / 0.28),
+    0 0 0 1px rgb(0 0 0 / 0.35);
+}
+
+.osc-mac__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.osc-mac__chrome {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem 0.85rem;
+  padding: 0.55rem 0.85rem 0.45rem;
+  background: var(--osc-mac-bg);
+  border-bottom: 1px solid rgb(0 0 0 / 0.22);
+}
+
+.osc-mac__traffic {
+  display: flex;
+  align-items: center;
+  gap: 7px; /* ~½ dot diameter, matches flat mac-style chrome */
+  flex-shrink: 0;
+}
+
+/* Flat traffic lights — solid fills, no border / gloss (Moreau-style) */
+.osc-mac__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: none;
+  outline: none;
+  box-shadow: none;
+}
+
+.osc-mac__dot--close {
+  background: #ec6a5e;
+}
+
+.osc-mac__dot--min {
+  background: #f4bf4f;
+}
+
+.osc-mac__dot--max {
+  background: #61c554;
+}
+
+.osc-mac__tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.osc-mac__tab {
+  padding: 0.38rem 0.78rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--osc-mac-tab-muted);
+  cursor: pointer;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.osc-mac__tab:hover {
+  color: rgb(250 250 249 / 0.72);
+}
+
+#osc-home-install-uv:checked ~ .osc-mac__chrome .osc-mac__tabs label[for="osc-home-install-uv"],
+#osc-home-install-pip:checked ~ .osc-mac__chrome .osc-mac__tabs label[for="osc-home-install-pip"],
+#osc-home-install-dev:checked ~ .osc-mac__chrome .osc-mac__tabs label[for="osc-home-install-dev"] {
+  color: var(--osc-mac-code);
+  background: var(--osc-mac-tab-active-bg);
+  border-color: rgb(255 255 255 / 0.08);
+}
+
+.osc-mac__viewport {
+  position: relative;
+  background: var(--osc-mac-bg-deep);
+  min-height: 4.5rem;
+}
+
+/* Only one panel visible; avoid theme / hljs backgrounds on nested spans */
+.osc-mac__viewport .osc-mac__pre {
+  display: none !important;
+  margin: 0 !important;
+  padding: clamp(1.25rem, 3.5vw, 2rem) clamp(1.1rem, 3vw, 1.85rem) clamp(1.35rem, 3.5vw, 2.1rem) !important;
+  overflow-x: auto;
+  font-size: clamp(0.8rem, 1.05vw + 0.58rem, 0.9375rem);
+  line-height: 1.6;
+  background: var(--osc-mac-bg-deep) !important;
+  background-color: var(--osc-mac-bg-deep) !important;
+  color: var(--osc-mac-code) !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.osc-mac__pre .osc-mac__code,
+.osc-mac__pre .osc-mac__code * {
+  color: var(--osc-mac-code) !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-weight: 400 !important;
+  font-style: normal !important;
+}
+
+.osc-mac__pre .osc-mac__code {
+  display: block;
+  padding: 0 !important;
+  font-family: var(--md-code-font-family), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  white-space: pre;
+  -webkit-font-smoothing: antialiased;
+}
+
+#osc-home-install-uv:checked ~ .osc-mac__viewport .osc-mac__pre--uv,
+#osc-home-install-pip:checked ~ .osc-mac__viewport .osc-mac__pre--pip,
+#osc-home-install-dev:checked ~ .osc-mac__viewport .osc-mac__pre--dev {
+  display: block !important;
+}
+
+@media (max-width: 520px) {
+  .osc-mac__chrome {
+    padding: 0.5rem 0.65rem 0.4rem;
+  }
+
+  .osc-mac__tabs {
+    flex: 1 1 100%;
+    justify-content: flex-start;
+  }
+}

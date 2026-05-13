@@ -208,6 +208,10 @@ check_lint.py
 # MuJoCo runtime log
 MUJOCO_LOG.TXT
 
+# Docs dev tooling (Puppeteer; install with conda env Node + `npm install` in docs-dev/)
+docs-dev/node_modules/
+docs-dev/home-light.png
+
 # MkDocs Material Insiders (installed from GitHub in CI, not committed)
 # Ignore contents of material/ but not material/overrides/ (Git cannot un-ignore
 # paths inside an ignored directory when the rule is material/).

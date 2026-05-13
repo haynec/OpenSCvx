@@ -4,6 +4,8 @@
 
 /* --- Hero ---------------------------------------------------------------- */
 .osc-home-hero {
+  position: relative;
+  isolation: isolate;
   margin: 0 calc(50% - 50vw);
   width: 100vw;
   max-width: 100vw;
@@ -14,11 +16,110 @@
   overflow-x: clip;
 }
 
+/* Decorative layer (radials + grid) — content sits in .osc-home-hero__inner */
+.osc-home-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
 [data-md-color-scheme="slate"] .osc-home-hero {
   border-bottom-color: color-mix(in srgb, var(--md-typeset-color) 12%, transparent);
 }
 
+/*
+ * Hero backdrops — data-osc-hero-bg on .osc-home-hero (see home-hero.html).
+ * nebula (default): glow + engineering grid
+ * orbit: soft overlapping “lenses”, no grid
+ * beams: diagonal light rays + top glow
+ * horizon: horizontal luminous band (control-theory horizon metaphor)
+ * mesh: layered wavy lines (SVG data-URIs) + soft glow
+ */
+
+/* --- Slate (dark) -------------------------------------------------------- */
+
+[data-md-color-scheme="slate"] .osc-home-hero:not([data-osc-hero-bg])::before,
+[data-md-color-scheme="slate"] .osc-home-hero[data-osc-hero-bg="nebula"]::before {
+  background:
+    radial-gradient(ellipse 110% 75% at 50% -32%, rgb(99 102 241 / 0.26), transparent 58%),
+    radial-gradient(ellipse 50% 42% at 92% 88%, rgb(14 165 233 / 0.14), transparent 52%),
+    radial-gradient(ellipse 45% 38% at 8% 55%, rgb(167 139 250 / 0.1), transparent 58%),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 30px,
+      rgb(255 255 255 / 0.028) 30px,
+      rgb(255 255 255 / 0.028) 31px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 30px,
+      rgb(255 255 255 / 0.028) 30px,
+      rgb(255 255 255 / 0.028) 31px
+    );
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero[data-osc-hero-bg="orbit"]::before {
+  background:
+    radial-gradient(ellipse 85% 70% at 50% 115%, rgb(99 102 241 / 0.22), transparent 52%),
+    radial-gradient(ellipse 60% 85% at -5% 35%, rgb(14 165 233 / 0.14), transparent 58%),
+    radial-gradient(ellipse 55% 75% at 108% 22%, rgb(167 139 250 / 0.16), transparent 55%),
+    radial-gradient(ellipse 50% 45% at 50% -5%, rgb(99 102 241 / 0.12), transparent 70%);
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero[data-osc-hero-bg="beams"]::before {
+  background:
+    radial-gradient(ellipse 85% 55% at 50% -18%, rgb(99 102 241 / 0.24), transparent 58%),
+    repeating-linear-gradient(
+      108deg,
+      transparent 0,
+      transparent 44px,
+      rgb(255 255 255 / 0.022) 44px,
+      rgb(255 255 255 / 0.022) 45px
+    ),
+    repeating-linear-gradient(
+      72deg,
+      transparent 0,
+      transparent 56px,
+      rgb(99 102 241 / 0.04) 56px,
+      rgb(99 102 241 / 0.04) 57px
+    );
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero[data-osc-hero-bg="horizon"]::before {
+  background:
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      rgb(99 102 241 / 0.14) 38%,
+      rgb(14 165 233 / 0.1) 50%,
+      transparent 64%
+    ),
+    radial-gradient(ellipse 130% 55% at 50% 52%, rgb(99 102 241 / 0.09), transparent 72%),
+    radial-gradient(ellipse 90% 45% at 50% -25%, rgb(167 139 250 / 0.12), transparent 55%);
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero[data-osc-hero-bg="mesh"]::before {
+  background:
+    radial-gradient(ellipse 105% 68% at 50% -32%, rgb(99 102 241 / 0.24), transparent 58%),
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201200%20320%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%23a5b4fc%22%20stroke-width%3D%221.35%22%20stroke-opacity%3D%220.26%22%20d%3D%22M0%2072%20C200%2022%20400%20128%20600%2072%20S1000%2022%201200%2072%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%2338bdf8%22%20stroke-width%3D%221.1%22%20stroke-opacity%3D%220.2%22%20d%3D%22M0%20118%20C220%2062%20420%20178%20640%20118%20S980%2062%201200%20118%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%23c4b5fd%22%20stroke-width%3D%221%22%20stroke-opacity%3D%220.16%22%20d%3D%22M0%20168%20C180%20218%20380%20112%20560%20168%20S920%20218%201200%20168%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%23e2e8f0%22%20stroke-width%3D%220.9%22%20stroke-opacity%3D%220.055%22%20d%3D%22M0%20218%20C260%20178%20460%20258%20720%20218%20S1060%20178%201200%20218%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%23818cf8%22%20stroke-width%3D%220.85%22%20stroke-opacity%3D%220.12%22%20d%3D%22M0%20268%20C240%20308%20420%20228%20680%20268%20S1040%20308%201200%20268%22%2F%3E%3C%2Fsvg%3E")
+      center 52% / 142% auto no-repeat,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201200%20320%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%2338bdf8%22%20stroke-width%3D%220.75%22%20stroke-opacity%3D%220.11%22%20d%3D%22M-40%2040%20C160%20100%20360%20-20%20560%2040%20S960%20100%201240%2040%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%23a5b4fc%22%20stroke-width%3D%220.7%22%20stroke-opacity%3D%220.1%22%20d%3D%22M-20%20290%20C200%20230%20400%20350%20620%20290%20S1000%20230%201220%20290%22%2F%3E%3C%2Fsvg%3E")
+      center / 125% auto no-repeat;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-md-color-scheme="slate"] .osc-home-hero::before {
+    background: radial-gradient(ellipse 100% 80% at 50% -25%, rgb(99 102 241 / 0.2), transparent 60%) !important;
+  }
+}
+
 .osc-home-hero__inner {
+  position: relative;
+  z-index: 1;
   margin: 0 auto;
   max-width: min(40rem, 100%);
   padding-inline: clamp(0.25rem, 2vw, 0.5rem);
@@ -35,13 +136,30 @@
   color: color-mix(in srgb, var(--md-typeset-color) 48%, transparent);
 }
 
-.osc-home-hero__title {
-  margin: 0 0 0.85rem;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.08;
-  font-size: clamp(2.1rem, 5vw, 2.85rem);
+/*
+ * Hero title: Material's .md-typeset h1 beats a lone class — use h1 + id + .md-typeset
+ * so OpenSCvx actually renders at display size.
+ */
+.osc-home-hero__inner.md-typeset h1#osc-home-hero-title.osc-home-hero__title {
+  margin: 0 0 1rem;
+  font-weight: 700 !important;
+  letter-spacing: -0.045em;
+  line-height: 1.02;
+  font-size: clamp(3.75rem, 14vw + 1rem, 8.5rem) !important;
   color: var(--md-typeset-color);
+}
+
+/* Slate: hero copy in warm brown (same hue as light theme #5b3d24), not cool white/grey */
+[data-md-color-scheme="slate"] .osc-home-hero__inner.md-typeset h1#osc-home-hero-title.osc-home-hero__title {
+  color: color-mix(in srgb, #5b3d24 26%, #f6efe8 74%) !important;
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero__inner .osc-home-hero__kicker {
+  color: color-mix(in srgb, #5b3d24 44%, #ebe2d9 56%) !important;
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero__inner .osc-home-hero__tagline {
+  color: color-mix(in srgb, #5b3d24 34%, #f0e6de 66%) !important;
 }
 
 .osc-home-hero__tagline {
@@ -62,6 +180,145 @@
 
 .osc-home-hero__actions .md-button {
   margin: 0;
+  border-radius: 22px;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+  transition:
+    background-color 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+/*
+ * Hero CTAs — Apple-style “liquid glass” (frosted blur + luminous rim).
+ * Scoped to .osc-home-hero__actions so site-wide buttons stay unchanged.
+ */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__actions .md-button.md-button--primary {
+  color: var(--md-primary-bg-color) !important;
+  background-color: rgb(255 253 249 / 0.42) !important;
+  border: 1px solid rgb(255 255 255 / 0.72) !important;
+  -webkit-backdrop-filter: saturate(185%) blur(22px);
+  backdrop-filter: saturate(185%) blur(22px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.85),
+    inset 0 -1px 0 rgb(61 43 32 / 0.05),
+    0 4px 6px rgb(34 26 21 / 0.04),
+    0 14px 36px rgb(34 26 21 / 0.1);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__actions .md-button.md-button--primary:hover,
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__actions .md-button.md-button--primary:focus {
+  color: var(--md-primary-bg-color) !important;
+  background-color: rgb(255 253 249 / 0.58) !important;
+  border-color: rgb(255 255 255 / 0.88) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.95),
+    inset 0 -1px 0 rgb(61 43 32 / 0.06),
+    0 6px 10px rgb(34 26 21 / 0.06),
+    0 18px 44px rgb(34 26 21 / 0.12);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__actions .md-button:not(.md-button--primary) {
+  color: color-mix(in srgb, var(--md-primary-bg-color) 92%, #1a1411 8%) !important;
+  background-color: rgb(255 255 255 / 0.34) !important;
+  border: 1px solid rgb(255 255 255 / 0.58) !important;
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.65),
+    inset 0 -1px 0 rgb(34 26 21 / 0.04),
+    0 3px 5px rgb(34 26 21 / 0.03),
+    0 12px 30px rgb(34 26 21 / 0.08);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__actions .md-button:not(.md-button--primary):hover,
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__actions .md-button:not(.md-button--primary):focus {
+  color: var(--md-primary-bg-color) !important;
+  background-color: rgb(255 255 255 / 0.52) !important;
+  border-color: rgb(255 255 255 / 0.78) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.8),
+    inset 0 -1px 0 rgb(34 26 21 / 0.05),
+    0 5px 8px rgb(34 26 21 / 0.05),
+    0 16px 38px rgb(34 26 21 / 0.1);
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button.md-button--primary {
+  color: rgb(248 250 252 / 0.96) !important;
+  background-color: rgb(255 255 255 / 0.14) !important;
+  border: 1px solid rgb(255 255 255 / 0.26) !important;
+  -webkit-backdrop-filter: saturate(200%) blur(26px);
+  backdrop-filter: saturate(200%) blur(26px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    inset 0 -1px 0 rgb(0 0 0 / 0.25),
+    0 6px 10px rgb(0 0 0 / 0.25),
+    0 18px 42px rgb(0 0 0 / 0.4);
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button.md-button--primary:hover,
+[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button.md-button--primary:focus {
+  color: rgb(255 255 255 / 0.99) !important;
+  background-color: rgb(255 255 255 / 0.2) !important;
+  border-color: rgb(255 255 255 / 0.36) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.3),
+    inset 0 -1px 0 rgb(0 0 0 / 0.28),
+    0 8px 14px rgb(0 0 0 / 0.3),
+    0 22px 50px rgb(0 0 0 / 0.45);
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button:not(.md-button--primary) {
+  color: rgb(241 245 249 / 0.92) !important;
+  background-color: rgb(255 255 255 / 0.08) !important;
+  border: 1px solid rgb(255 255 255 / 0.16) !important;
+  -webkit-backdrop-filter: saturate(190%) blur(22px);
+  backdrop-filter: saturate(190%) blur(22px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.12),
+    inset 0 -1px 0 rgb(0 0 0 / 0.2),
+    0 4px 8px rgb(0 0 0 / 0.2),
+    0 12px 32px rgb(0 0 0 / 0.32);
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button:not(.md-button--primary):hover,
+[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button:not(.md-button--primary):focus {
+  color: rgb(255 255 255 / 0.98) !important;
+  background-color: rgb(255 255 255 / 0.13) !important;
+  border-color: rgb(255 255 255 / 0.26) !important;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.18),
+    inset 0 -1px 0 rgb(0 0 0 / 0.22),
+    0 6px 12px rgb(0 0 0 / 0.25),
+    0 16px 40px rgb(0 0 0 / 0.38);
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+    .osc-home-hero__actions .md-button.md-button--primary {
+    background-color: rgb(255 253 249 / 0.92) !important;
+  }
+
+  [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+    .osc-home-hero__actions .md-button:not(.md-button--primary) {
+    background-color: rgb(255 255 255 / 0.88) !important;
+  }
+
+  [data-md-color-scheme="slate"] .osc-home-hero__actions .md-button.md-button--primary {
+    background-color: rgb(55 58 68 / 0.92) !important;
+  }
+
+  [data-md-color-scheme="slate"] .osc-home-hero__actions .md-button:not(.md-button--primary) {
+    background-color: rgb(45 48 58 / 0.88) !important;
+  }
 }
 
 /* --- Pipeline (problem → OpenSCvx → solution) ----------------------------- */
@@ -112,12 +369,10 @@
   container-name: osc-home-pipeline;
 }
 
+/* Shared tile layout (problem, OpenSCvx, solution) */
 .osc-home-pipeline__card {
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--md-typeset-color) 10%, transparent);
-  background: color-mix(in srgb, var(--md-typeset-color) 3.5%, var(--md-default-bg-color));
   box-sizing: border-box;
-  /* Hug inner layout; cap width so lines don’t sprawl on huge screens */
   width: fit-content;
   max-width: min(22rem, 100%);
   text-align: center;
@@ -128,15 +383,20 @@
   flex-direction: column;
   align-items: center;
   overflow: hidden;
+}
+
+/* Outer tiles (problem, solution): no CSS border — edge from shadow stack only */
+.osc-home-pipeline__card:not(.osc-home-pipeline__card--accent) {
+  border: none;
+  background: color-mix(in srgb, var(--md-typeset-color) 3.5%, var(--md-default-bg-color));
   box-shadow:
     0 1px 2px rgb(26 20 17 / 0.05),
     0 6px 16px rgb(26 20 17 / 0.07),
     0 0 0 1px color-mix(in srgb, var(--md-typeset-color) 8%, transparent);
 }
 
-[data-md-color-scheme="slate"] .osc-home-pipeline__card {
+[data-md-color-scheme="slate"] .osc-home-pipeline__card:not(.osc-home-pipeline__card--accent) {
   background: color-mix(in srgb, #fff 3.5%, #0c0c0c);
-  border-color: color-mix(in srgb, var(--md-typeset-color) 14%, transparent);
   box-shadow:
     0 1px 2px rgb(0 0 0 / 0.35),
     0 10px 28px rgb(0 0 0 / 0.45),
@@ -168,71 +428,162 @@
     0 0 0 1px color-mix(in srgb, var(--md-accent-fg-color) 22%, transparent);
 }
 
-/* Light + custom palette: stronger separation between page, cards, and accent tile */
+/* Light + custom palette: outer tiles borderless; full shadow ring retained */
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
-  .osc-home-pipeline__card {
-  background: #fffdf8;
-  border-color: rgb(42 33 28 / 0.14);
+  .osc-home-pipeline__card:not(.osc-home-pipeline__card--accent) {
+  background: #fffbf5;
   box-shadow:
-    0 1px 2px rgb(42 33 28 / 0.06),
-    0 8px 22px rgb(42 33 28 / 0.08),
-    0 0 0 1px rgb(42 33 28 / 0.08);
+    0 1px 2px rgb(34 26 21 / 0.08),
+    0 8px 22px rgb(34 26 21 / 0.11),
+    0 0 0 1px rgb(34 26 21 / 0.11);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .osc-home-pipeline__card--accent {
-  border: 1px solid rgb(42 33 28 / 0.14);
-  background: linear-gradient(125deg, #ddd4c4, #c9bba8);
+  border: none;
+  background: linear-gradient(125deg, #d8cfbd, #bcab96);
   box-shadow:
-    0 1px 2px rgb(42 33 28 / 0.08),
-    0 10px 26px rgb(42 33 28 / 0.12),
-    0 0 0 1px rgb(42 33 28 / 0.1);
+    0 1px 2px rgb(34 26 21 / 0.1),
+    0 10px 26px rgb(34 26 21 / 0.14),
+    0 0 0 1px rgb(34 26 21 / 0.12);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .osc-home-pipeline__eyebrow {
-  color: rgb(42 33 28 / 0.62);
+  color: rgb(34 26 21 / 0.7);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .osc-home-pipeline__lede {
-  color: rgb(42 33 28 / 0.76);
+  color: rgb(34 26 21 / 0.82);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .osc-home-pipeline__detail {
-  color: rgb(42 33 28 / 0.72);
+  color: rgb(34 26 21 / 0.78);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .osc-home-hero {
-  border-bottom-color: rgb(42 33 28 / 0.1);
+  background: color-mix(in srgb, var(--md-typeset-color) 5.5%, var(--md-default-bg-color));
+  border-bottom-color: rgb(34 26 21 / 0.14);
+}
+
+/* Light hero title = same fill as .md-button--primary (“Getting started”) */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__inner.md-typeset h1#osc-home-hero-title.osc-home-hero__title {
+  color: var(--md-primary-bg-color) !important;
+}
+
+/* Light + custom — same preset names as slate (warm ink / accent browns) */
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero:not([data-osc-hero-bg])::before,
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero[data-osc-hero-bg="nebula"]::before {
+  background:
+    radial-gradient(ellipse 95% 65% at 50% -28%, rgb(91 61 36 / 0.1), transparent 56%),
+    radial-gradient(ellipse 45% 40% at 88% 92%, rgb(91 61 36 / 0.06), transparent 52%),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 28px,
+      rgb(34 26 21 / 0.035) 28px,
+      rgb(34 26 21 / 0.035) 29px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 28px,
+      rgb(34 26 21 / 0.035) 28px,
+      rgb(34 26 21 / 0.035) 29px
+    );
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
-  .osc-home-hero__kicker {
-  color: rgb(42 33 28 / 0.55);
+  .osc-home-hero[data-osc-hero-bg="orbit"]::before {
+  background:
+    radial-gradient(ellipse 90% 72% at 50% 108%, rgb(91 61 36 / 0.09), transparent 52%),
+    radial-gradient(ellipse 55% 70% at -8% 38%, rgb(91 61 36 / 0.065), transparent 58%),
+    radial-gradient(ellipse 50% 65% at 105% 18%, rgb(91 61 36 / 0.07), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 50% -12%, rgb(91 61 36 / 0.06), transparent 68%);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
-  .osc-home-hero__tagline {
-  color: rgb(42 33 28 / 0.78);
+  .osc-home-hero[data-osc-hero-bg="beams"]::before {
+  background:
+    radial-gradient(ellipse 88% 58% at 50% -22%, rgb(91 61 36 / 0.095), transparent 56%),
+    repeating-linear-gradient(
+      108deg,
+      transparent 0,
+      transparent 40px,
+      rgb(34 26 21 / 0.028) 40px,
+      rgb(34 26 21 / 0.028) 41px
+    ),
+    repeating-linear-gradient(
+      72deg,
+      transparent 0,
+      transparent 52px,
+      rgb(91 61 36 / 0.04) 52px,
+      rgb(91 61 36 / 0.04) 53px
+    );
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero[data-osc-hero-bg="horizon"]::before {
+  background:
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      rgb(91 61 36 / 0.08) 40%,
+      rgb(91 61 36 / 0.05) 50%,
+      transparent 66%
+    ),
+    radial-gradient(ellipse 120% 50% at 50% 48%, rgb(91 61 36 / 0.05), transparent 72%),
+    radial-gradient(ellipse 85% 48% at 50% -22%, rgb(91 61 36 / 0.07), transparent 58%);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero[data-osc-hero-bg="mesh"]::before {
+  background:
+    radial-gradient(ellipse 100% 72% at 50% -24%, rgb(91 61 36 / 0.11), transparent 56%),
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201200%20320%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%235b3d24%22%20stroke-width%3D%221.25%22%20stroke-opacity%3D%220.14%22%20d%3D%22M0%2078%20C200%2028%20400%20132%20600%2078%20S1000%2028%201200%2078%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%238b6342%22%20stroke-width%3D%221.05%22%20stroke-opacity%3D%220.12%22%20d%3D%22M0%20128%20C230%2072%20430%20182%20650%20128%20S990%2072%201200%20128%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%235b3d24%22%20stroke-width%3D%220.95%22%20stroke-opacity%3D%220.1%22%20d%3D%22M0%20178%20C170%20228%20390%20118%20570%20178%20S910%20228%201200%20178%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%23221a15%22%20stroke-width%3D%220.85%22%20stroke-opacity%3D%220.06%22%20d%3D%22M0%20228%20C270%20188%20470%20268%20740%20228%20S1070%20188%201200%20228%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%23914d2a%22%20stroke-width%3D%220.8%22%20stroke-opacity%3D%220.09%22%20d%3D%22M0%20278%20C220%20318%20400%20238%20660%20278%20S1020%20318%201200%20278%22%2F%3E%3C%2Fsvg%3E")
+      center 52% / 138% auto no-repeat,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201200%20320%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%235b3d24%22%20stroke-width%3D%220.72%22%20stroke-opacity%3D%220.08%22%20d%3D%22M-30%2048%20C170%20108%20380%20-12%20580%2048%20S970%20108%201230%2048%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%238b6342%22%20stroke-width%3D%220.68%22%20stroke-opacity%3D%220.07%22%20d%3D%22M-10%20278%20C210%20218%20410%20338%20630%20278%20S1010%20218%201210%20278%22%2F%3E%3C%2Fsvg%3E")
+      center / 122% auto no-repeat;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+    .osc-home-hero::before {
+    background: radial-gradient(ellipse 90% 60% at 50% -25%, rgb(91 61 36 / 0.08), transparent 60%) !important;
+  }
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__inner .osc-home-hero__kicker {
+  color: var(--md-primary-bg-color--light) !important;
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__inner .osc-home-hero__tagline {
+  color: color-mix(in srgb, var(--md-primary-bg-color) 78%, var(--md-default-bg-color) 22%) !important;
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .osc-home-formula__w {
-  color: rgb(42 33 28 / 0.58);
+  color: rgb(34 26 21 / 0.64);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .osc-home-traj__frame {
-  fill: #faf7f2;
-  stroke: rgb(42 33 28 / 0.14);
+  fill: #f5f1ea;
+  stroke: rgb(34 26 21 / 0.18);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .osc-home-traj__axes line {
-  stroke: rgb(42 33 28 / 0.22);
+  stroke: rgb(34 26 21 / 0.28);
 }
 
 /* Wraps eyebrow + body; sizes to content (card grows with it up to max-width) */
