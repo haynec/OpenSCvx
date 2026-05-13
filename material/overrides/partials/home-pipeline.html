@@ -7,24 +7,26 @@
 
   <div class="osc-home-pipeline__row">
     <article class="osc-home-pipeline__card" aria-label="Nonlinear optimal control formulation">
-      <span class="osc-home-pipeline__eyebrow">Nonlinear problem</span>
-      <div class="osc-home-pipeline__body">
-        <div class="osc-home-formula" aria-hidden="true">
-          <div class="osc-home-formula__line">
-            <span class="osc-home-formula__op">min</span>
-            <span class="osc-home-formula__expr">J(x, u)</span>
-          </div>
-          <div class="osc-home-formula__line osc-home-formula__line--muted">
-            <span class="osc-home-formula__w">s.t.</span>
-            <span class="osc-home-formula__expr">x&#775; = f(x, u)</span>
-          </div>
-          <div class="osc-home-formula__line osc-home-formula__line--muted">
-            <span class="osc-home-formula__w"></span>
-            <span class="osc-home-formula__expr">g(x, u) &#8804; 0</span>
-          </div>
-          <div class="osc-home-formula__line osc-home-formula__line--muted">
-            <span class="osc-home-formula__w"></span>
-            <span class="osc-home-formula__expr">h(x, u) = 0</span>
+      <div class="osc-home-pipeline__card-content">
+        <span class="osc-home-pipeline__eyebrow">Nonlinear problem</span>
+        <div class="osc-home-pipeline__body">
+          <div class="osc-home-formula" aria-hidden="true">
+            <div class="osc-home-formula__line">
+              <span class="osc-home-formula__op">min</span>
+              <span class="osc-home-formula__expr">J(x, u)</span>
+            </div>
+            <div class="osc-home-formula__line osc-home-formula__line--muted">
+              <span class="osc-home-formula__w">s.t.</span>
+              <span class="osc-home-formula__expr">x&#775; = f(x, u)</span>
+            </div>
+            <div class="osc-home-formula__line osc-home-formula__line--muted">
+              <span class="osc-home-formula__w"></span>
+              <span class="osc-home-formula__expr">g(x, u) &#8804; 0</span>
+            </div>
+            <div class="osc-home-formula__line osc-home-formula__line--muted">
+              <span class="osc-home-formula__w"></span>
+              <span class="osc-home-formula__expr">h(x, u) = 0</span>
+            </div>
           </div>
         </div>
       </div>
@@ -35,10 +37,12 @@
     </div>
 
     <article class="osc-home-pipeline__card osc-home-pipeline__card--accent" aria-label="OpenSCvx stack">
-      <span class="osc-home-pipeline__eyebrow">OpenSCvx</span>
-      <div class="osc-home-pipeline__body">
-        <p class="osc-home-pipeline__stack-title">Vectorized · CPU · GPU</p>
-        <p class="osc-home-pipeline__detail">JAX · CVXPY</p>
+      <div class="osc-home-pipeline__card-content">
+        <span class="osc-home-pipeline__eyebrow">Batched · CPU · GPU</span>
+        <div class="osc-home-pipeline__body">
+          <p class="osc-home-pipeline__stack-title osc-home-pipeline__stack-title--brand">OpenSCvx</p>
+        </div>
+        <span class="osc-home-pipeline__eyebrow">JAX · CVXPY</span>
       </div>
     </article>
 
@@ -47,18 +51,38 @@
     </div>
 
     <article class="osc-home-pipeline__card" aria-label="Optimized trajectory solution">
-      <span class="osc-home-pipeline__eyebrow">Solution</span>
-      <div class="osc-home-pipeline__body osc-home-pipeline__body--viz">
-        <div class="osc-home-traj-wrap">
-          <svg class="osc-home-traj" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 120" fill="none" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
-            <rect class="osc-home-traj__frame" x="8" y="8" width="204" height="104" rx="8"/>
-            <line class="osc-home-traj__axis" x1="24" y1="96" x2="200" y2="96"/>
-            <line class="osc-home-traj__axis" x1="24" y1="96" x2="24" y2="24"/>
-            <path class="osc-home-traj__path" d="M 32 88 C 72 86, 88 40, 118 36 S 168 28, 196 24"/>
-            <circle class="osc-home-traj__dot" cx="32" cy="88" r="4"/>
-            <circle class="osc-home-traj__dot osc-home-traj__dot--mid" cx="118" cy="36" r="3"/>
-            <circle class="osc-home-traj__dot osc-home-traj__dot--end" cx="196" cy="24" r="4"/>
-          </svg>
+      <div class="osc-home-pipeline__card-content">
+        <span class="osc-home-pipeline__eyebrow">Solution</span>
+        <div class="osc-home-pipeline__body osc-home-pipeline__body--viz">
+          <div class="osc-home-traj-wrap">
+            <svg
+              class="osc-home-traj"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 260 148"
+              width="260"
+              height="148"
+              fill="none"
+              preserveAspectRatio="xMidYMid meet"
+              aria-hidden="true"
+            >
+              <rect class="osc-home-traj__frame" x="10" y="10" width="240" height="128" rx="12" />
+              <!-- plot centered in frame (frame center 130,74 vs path bbox ~146,63) -->
+              <g class="osc-home-traj__plot" transform="translate(-16 11)">
+                <g class="osc-home-traj__axes">
+                  <line x1="36" y1="116" x2="228" y2="116" />
+                  <line x1="36" y1="116" x2="36" y2="28" />
+                </g>
+                <path
+                  class="osc-home-traj__path osc-home-traj__path--main"
+                  d="M 40 108 C 62 106, 76 88, 92 68 C 108 48, 136 32, 168 38 C 196 44, 214 58, 232 36 C 242 26, 246 22, 252 18"
+                />
+                <circle class="osc-home-traj__dot osc-home-traj__dot--start" cx="40" cy="108" r="3.5" />
+                <circle class="osc-home-traj__dot osc-home-traj__dot--way" cx="92" cy="68" r="2.8" />
+                <circle class="osc-home-traj__dot osc-home-traj__dot--way" cx="168" cy="38" r="2.8" />
+                <circle class="osc-home-traj__dot osc-home-traj__dot--end" cx="252" cy="18" r="4.5" />
+              </g>
+            </svg>
+          </div>
         </div>
       </div>
     </article>

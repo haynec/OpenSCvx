@@ -2,8 +2,7 @@
 template: home.html
 title: OpenSCvx
 description: >-
-  Open-source JAX trajectory optimization: composable models, compiled SCP iterations on CPU and GPU,
-  and vmap-friendly batches for parameter sweeps and scenarios.
+  An Open-Source Modular and Extensible Nonlinear Trajectory Optimization Package
 social:
   cards_layout_options:
     title: Fast and Easy Nonconvex Trajectory Optimization
@@ -37,11 +36,3 @@ describes many solves without a slow Python outer loop.
 The **Reference** section is generated from the `openscvx` Python package using [mkdocstrings](https://mkdocstrings.github.io/)
 with the Python handler. Public APIs should use **Google-style** docstrings so signatures,
 parameters, and descriptions render consistently in the docs.
-
-## Documentation tooling
-
-The site is built with **MkDocs** and **Material for MkDocs**. The team behind Material is also
-developing **[Zensical](https://zensical.org/)**, which can read existing `mkdocs.yml` files and
-offers preliminary [mkdocstrings](https://zensical.org/docs/setup/extensions/mkdocstrings/)
-integration. A future switch is possible once plugin coverage matches this project’s needs
-(for example **mkdocs-gen-files**, **literate-nav**, **section-index**, and **mike** versioning).

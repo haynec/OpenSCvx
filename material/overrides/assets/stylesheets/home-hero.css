@@ -117,36 +117,162 @@
   border: 1px solid color-mix(in srgb, var(--md-typeset-color) 10%, transparent);
   background: color-mix(in srgb, var(--md-typeset-color) 3.5%, var(--md-default-bg-color));
   box-sizing: border-box;
-  width: 100%;
+  /* Hug inner layout; cap width so lines don’t sprawl on huge screens */
+  width: fit-content;
+  max-width: min(22rem, 100%);
   text-align: center;
-  /* ~one third of the row minus connector gutters, capped for very wide screens */
-  max-width: min(
-    21rem,
-    max(8.5rem, calc((100cqi - 2 * var(--osc-pipeline-connector) - 0.5rem) / 3))
-  );
-  aspect-ratio: 1 / 1;
   min-width: 0;
   min-height: 0;
-  padding: clamp(0.55rem, 2.5cqi, 0.85rem) clamp(0.45rem, 2cqi, 0.7rem);
+  padding: clamp(0.55rem, 2.5cqi, 0.85rem) clamp(0.55rem, 2.2cqi, 0.8rem);
   display: flex;
   flex-direction: column;
+  align-items: center;
   overflow: hidden;
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--md-typeset-color) 6%, transparent);
+  box-shadow:
+    0 1px 2px rgb(26 20 17 / 0.05),
+    0 6px 16px rgb(26 20 17 / 0.07),
+    0 0 0 1px color-mix(in srgb, var(--md-typeset-color) 8%, transparent);
 }
 
 [data-md-color-scheme="slate"] .osc-home-pipeline__card {
   background: color-mix(in srgb, #fff 3.5%, #0c0c0c);
   border-color: color-mix(in srgb, var(--md-typeset-color) 14%, transparent);
-  box-shadow: 0 12px 40px -28px rgba(0, 0, 0, 0.65);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.35),
+    0 10px 28px rgb(0 0 0 / 0.45),
+    0 0 0 1px color-mix(in srgb, var(--md-typeset-color) 12%, transparent);
 }
 
 .osc-home-pipeline__card--accent {
-  border-color: color-mix(in srgb, var(--md-accent-fg-color) 35%, var(--md-typeset-color));
-  background: color-mix(in srgb, var(--md-accent-fg-color) 9%, var(--md-default-bg-color));
+  border: none;
+  background: linear-gradient(
+    125deg,
+    color-mix(in srgb, var(--md-accent-fg-color) 22%, var(--md-default-bg-color)),
+    color-mix(in srgb, var(--md-accent-fg-color) 4%, var(--md-default-bg-color))
+  );
+  box-shadow:
+    0 1px 2px rgb(26 20 17 / 0.06),
+    0 8px 20px rgb(26 20 17 / 0.09),
+    0 0 0 1px color-mix(in srgb, var(--md-typeset-color) 10%, transparent);
 }
 
 [data-md-color-scheme="slate"] .osc-home-pipeline__card--accent {
-  background: color-mix(in srgb, var(--md-accent-fg-color) 12%, #0a0a0a);
+  background: linear-gradient(
+    125deg,
+    color-mix(in srgb, var(--md-accent-fg-color) 26%, #080808),
+    color-mix(in srgb, var(--md-accent-fg-color) 4%, #141414)
+  );
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.4),
+    0 12px 32px rgb(0 0 0 / 0.5),
+    0 0 0 1px color-mix(in srgb, var(--md-accent-fg-color) 22%, transparent);
+}
+
+/* Light + custom palette: stronger separation between page, cards, and accent tile */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-pipeline__card {
+  background: #fffdf8;
+  border-color: rgb(42 33 28 / 0.14);
+  box-shadow:
+    0 1px 2px rgb(42 33 28 / 0.06),
+    0 8px 22px rgb(42 33 28 / 0.08),
+    0 0 0 1px rgb(42 33 28 / 0.08);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-pipeline__card--accent {
+  border: 1px solid rgb(42 33 28 / 0.14);
+  background: linear-gradient(125deg, #ddd4c4, #c9bba8);
+  box-shadow:
+    0 1px 2px rgb(42 33 28 / 0.08),
+    0 10px 26px rgb(42 33 28 / 0.12),
+    0 0 0 1px rgb(42 33 28 / 0.1);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-pipeline__eyebrow {
+  color: rgb(42 33 28 / 0.62);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-pipeline__lede {
+  color: rgb(42 33 28 / 0.76);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-pipeline__detail {
+  color: rgb(42 33 28 / 0.72);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero {
+  border-bottom-color: rgb(42 33 28 / 0.1);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__kicker {
+  color: rgb(42 33 28 / 0.55);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__tagline {
+  color: rgb(42 33 28 / 0.78);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-formula__w {
+  color: rgb(42 33 28 / 0.58);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-traj__frame {
+  fill: #faf7f2;
+  stroke: rgb(42 33 28 / 0.14);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-traj__axes line {
+  stroke: rgb(42 33 28 / 0.22);
+}
+
+/* Wraps eyebrow + body; sizes to content (card grows with it up to max-width) */
+.osc-home-pipeline__card-content {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  min-width: 0;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.osc-home-pipeline__card-content > .osc-home-pipeline__eyebrow {
+  margin-bottom: 0;
+}
+
+.osc-home-pipeline__card-content > .osc-home-pipeline__body {
+  flex: 0 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+/*
+  Solution tile: avoid cyclic % width (body width:100% inside width:fit-content),
+  which can collapse the SVG to 0×0 in some browsers. Let this body shrink-wrap
+  the graphic and still cap to the card.
+*/
+.osc-home-pipeline__card-content > .osc-home-pipeline__body--viz {
+  width: auto;
+  min-width: min(100%, 15rem);
+  max-width: 100%;
+  min-height: 4.75rem;
+  flex: 0 1 auto;
+}
+
+.osc-home-pipeline__card-content p {
+  margin: 0;
 }
 
 .osc-home-pipeline__eyebrow {
@@ -163,7 +289,7 @@
 }
 
 .osc-home-pipeline__body {
-  flex: 1 1 0;
+  flex: 0 1 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -183,12 +309,25 @@
 .osc-home-pipeline__stack-title {
   margin: 0;
   flex-shrink: 0;
-  font-size: clamp(0.78rem, 2cqi + 0.48rem, 0.95rem);
-  font-weight: 600;
+  font-size: clamp(0.92rem, 2.5cqi + 0.55rem, 1.12rem);
+  font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--md-typeset-color);
   line-height: 1.3;
   text-wrap: balance;
+}
+
+/*
+  OpenSCvx wordmark: same family as the site text (CMU Sans Serif = Computer Modern Sans on the web).
+  Material’s Google Fonts link only includes 300/400/700 — do not use 600 or the browser fakes bold
+  and the face looks “wrong”.
+*/
+.md-content__inner.md-typeset p.osc-home-pipeline__stack-title--brand {
+  font-family: var(--md-text-font-family);
+  font-feature-settings: "kern", "liga";
+  font-synthesis: none;
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 
 .osc-home-pipeline__detail {
@@ -210,8 +349,8 @@
   flex-direction: column;
   align-items: center;
   font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
-  font-size: clamp(0.78rem, 2.2cqi + 0.45rem, 0.98rem);
-  line-height: 1.4;
+  font-size: clamp(0.66rem, 1.85cqi + 0.36rem, 0.84rem);
+  line-height: 1.35;
   color: var(--md-typeset-color);
   min-width: 0;
   text-align: center;
@@ -232,7 +371,7 @@
 }
 
 .osc-home-formula__op {
-  font-size: clamp(1rem, 2.8cqi + 0.48rem, 1.18rem);
+  font-size: clamp(0.86rem, 2.35cqi + 0.4rem, 1.02rem);
   font-weight: 600;
   margin-right: 0.1rem;
   flex-shrink: 0;
@@ -246,33 +385,30 @@
 }
 
 .osc-home-formula__w {
-  min-width: 1.35rem;
+  min-width: 1.2rem;
   flex-shrink: 0;
-  font-size: clamp(0.62rem, 1.35cqi + 0.38rem, 0.75rem);
+  font-size: clamp(0.54rem, 1.15cqi + 0.32rem, 0.68rem);
   font-style: italic;
   font-family: var(--md-text-font-family), system-ui, sans-serif;
   color: color-mix(in srgb, var(--md-typeset-color) 58%, transparent);
 }
 
-/* Trajectory SVG — fills slot inside square; stacked layout caps height below */
+/* Trajectory SVG — intrinsic size with caps so the card stays content-sized */
 .osc-home-traj-wrap {
-  flex: 1 1 0;
-  align-self: stretch;
-  min-width: 0;
-  min-height: 0;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  max-height: 7rem;
+  min-width: 0;
 }
 
 .osc-home-traj {
   display: block;
-  width: 100%;
+  /* Explicit box: viewBox-only SVG + width:auto can collapse inside fit-content flex. */
+  width: min(13rem, 100%);
   height: auto;
-  max-width: 100%;
-  max-height: 100%;
-  min-height: 0;
+  aspect-ratio: 260 / 148;
+  max-height: 7rem;
 }
 
 .osc-home-traj__frame {
@@ -281,34 +417,37 @@
   stroke-width: 1;
 }
 
-.osc-home-traj__axis {
-  stroke: color-mix(in srgb, var(--md-typeset-color) 14%, transparent);
-  stroke-width: 1;
-  stroke-dasharray: 3 4;
+.osc-home-traj__axes line {
+  stroke: color-mix(in srgb, var(--md-typeset-color) 18%, transparent);
+  stroke-width: 1.25;
+  stroke-dasharray: 4 5;
+  stroke-linecap: square;
 }
 
-.osc-home-traj__path {
+.osc-home-traj__path--main {
   fill: none;
   stroke: var(--md-accent-fg-color);
-  stroke-width: 2.25;
+  stroke-width: 2.75;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
-.osc-home-traj__dot {
+.osc-home-traj__dot--start {
   fill: var(--md-accent-fg-color);
+  stroke: var(--md-default-bg-color);
+  stroke-width: 1.5;
 }
 
-.osc-home-traj__dot--mid {
-  fill: color-mix(in srgb, var(--md-accent-fg-color) 65%, var(--md-default-bg-color));
+.osc-home-traj__dot--way {
+  fill: var(--md-default-bg-color);
   stroke: var(--md-accent-fg-color);
-  stroke-width: 1;
+  stroke-width: 1.75;
 }
 
 .osc-home-traj__dot--end {
   fill: var(--md-default-bg-color);
   stroke: var(--md-accent-fg-color);
-  stroke-width: 2;
+  stroke-width: 2.25;
 }
 
 /* Connectors */
@@ -348,13 +487,14 @@
 @media (max-width: 880px) {
   .osc-home-pipeline__row {
     grid-template-columns: 1fr;
-    gap: var(--osc-pipeline-gap);
-    justify-items: stretch;
+    gap: clamp(0.25rem, 1.2vw, 0.45rem);
+    /* Center tiles; stretch was forcing full column width (wide rectangles). */
+    justify-items: center;
   }
 
   .osc-home-pipeline__connector {
-    min-height: 1.35rem;
-    padding: 0.1rem 0;
+    min-height: 1rem;
+    padding: 0.05rem 0;
   }
 
   .osc-home-pipeline__arrow {
@@ -363,60 +503,66 @@
   }
 
   .osc-home-pipeline__card {
-    aspect-ratio: auto;
-    width: 100%;
-    max-width: min(22rem, 100%);
+    width: fit-content;
+    max-width: min(22rem, 94vw);
     margin-inline: auto;
-    min-height: 0;
-    padding: 1.15rem 1.35rem 1.25rem;
+    padding: clamp(0.5rem, 2vw, 0.75rem) clamp(0.5rem, 2vw, 0.75rem);
+    box-sizing: border-box;
+  }
+
+  .osc-home-pipeline__card-content {
+    gap: 0.22rem;
   }
 
   .osc-home-pipeline__eyebrow {
-    font-size: clamp(0.62rem, 2.2vw, 0.72rem);
-    margin-bottom: 0.55rem;
+    font-size: clamp(0.52rem, 1.9vw, 0.64rem);
+    margin-bottom: 0;
   }
 
   .osc-home-pipeline__body {
     flex: 0 1 auto;
     min-height: 0;
-    gap: 0.45rem;
+    gap: 0.25rem;
   }
 
   .osc-home-pipeline__body--viz {
-    min-height: 7.5rem;
+    min-height: 4.25rem;
+  }
+
+  .osc-home-pipeline__card-content .osc-home-pipeline__body--viz {
+    max-height: none;
   }
 
   .osc-home-formula {
-    font-size: clamp(0.88rem, 3.6vw, 1.05rem);
+    font-size: clamp(0.62rem, 2.5vw, 0.78rem);
   }
 
   .osc-home-formula__op {
-    font-size: clamp(1.08rem, 4.5vw, 1.28rem);
+    font-size: clamp(0.76rem, 3.1vw, 0.92rem);
   }
 
   .osc-home-formula__w {
-    font-size: clamp(0.68rem, 2.4vw, 0.78rem);
+    font-size: clamp(0.5rem, 1.7vw, 0.6rem);
   }
 
   .osc-home-pipeline__stack-title {
-    font-size: clamp(0.88rem, 3.2vw, 1.02rem);
+    font-size: clamp(0.82rem, 2.9vw, 0.98rem);
   }
 
   .osc-home-pipeline__detail {
     max-width: min(100%, 18rem);
-    font-size: clamp(0.78rem, 2.8vw, 0.9rem);
+    font-size: clamp(0.65rem, 2.35vw, 0.8rem);
   }
 
   .osc-home-traj-wrap {
     flex: 0 0 auto;
-    max-height: none;
-    min-height: 6.5rem;
-    max-width: min(14rem, 72vw);
     margin-inline: auto;
   }
 
   .osc-home-traj {
-    max-height: 6.25rem;
+    width: min(11rem, 88vw);
+    aspect-ratio: 260 / 148;
+    max-height: 5.5rem;
   }
 }
 
@@ -435,11 +581,12 @@
 /* @supports fallback when container queries are unavailable (older browsers) */
 @supports not (container-type: inline-size) {
   .osc-home-pipeline__card {
-    max-width: min(21rem, 30vw);
+    width: fit-content;
+    max-width: min(22rem, 92vw);
   }
 
   .osc-home-formula {
-    font-size: clamp(0.78rem, 2.6vw, 0.98rem);
+    font-size: clamp(0.66rem, 2.2vw, 0.86rem);
   }
 
   .osc-home-pipeline__eyebrow {
@@ -447,7 +594,7 @@
   }
 
   .osc-home-pipeline__stack-title {
-    font-size: clamp(0.78rem, 2.8vw, 0.95rem);
+    font-size: clamp(0.95rem, 3.2vw, 1.12rem);
   }
 
   .osc-home-pipeline__detail {
