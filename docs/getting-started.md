@@ -10,7 +10,7 @@ OpenSCvx is a JAX-based Python library for trajectory optimization using Success
 - **JAX-based**: Automatic differentiation, vectorization, and compilation
 - **Continuous-time constraints**: Support for path constraints that must be satisfied at all times
 - **Successive Convexification**: Robust optimization algorithm for non-convex problems
-- **Multiple constraint types**: Continuous-time, nodal, and boundary constraints
+- **Multiple constraint types**: Continuous-time, nodal, and Signal-Temporal Logic (STL) constraints
 - **Interactive visualization**: 3D plotting and real-time optimization visualization
 - **Code generation**: Automatic C++ code generation for optimization problems
 - Faster solver performance through compiled code for smaller problems

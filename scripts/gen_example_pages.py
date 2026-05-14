@@ -166,13 +166,6 @@ description: >-
 
 # Examples
 
-This section lists **every example script** under `examples/` that ships with OpenSCvx (at least
-one subdirectory deep). Each page shows the module docstring (if any) and the **full Python
-source** so you can copy patterns into your own problems.
-
-For **how to run** examples locally (editable install, command line), see the
-[Examples overview](../examples.md) in *Getting started*.
-
 ---
 
 {sections}
