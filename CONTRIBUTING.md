@@ -204,8 +204,10 @@ def solve(self, max_iterations: int = 100) -> OptimizationResult:
 To preview documentation locally, first install the dependencies:
 
 ```bash
-pip install mkdocs-material mkdocstrings-python mkdocs-gen-files mkdocs-literate-nav mkdocs-section-index
+pip install "mkdocs-material[imaging]" mkdocstrings-python mkdocs-gen-files mkdocs-literate-nav mkdocs-section-index
 ```
+
+The `social` plugin (enabled in `mkdocs.yml`) uses **CairoSVG**, which loads the native **Cairo** library. A `pip`-only `cairosvg` on macOS often cannot find `libcairo` and will spam warnings during `mkdocs build` / `mkdocs serve`. Install Cairo into the same environment (for example `conda install -c conda-forge cairo cairosvg`) or install Cairo via Homebrew so the dynamic linker can resolve it. Uninstalling `cairosvg` does not silence the build: the plugin will warn on every page that imaging dependencies are missing.
 
 Then serve the documentation locally:
 
