@@ -81,21 +81,6 @@ results = problem.solve()
 results = problem.post_process()
 ```
 
-## Trajectory previews
-
-The [documentation home](https://openscvx.github.io/OpenSCvx/latest/#trajectory-previews) embeds two [**viser**](https://viser.studio/) playbacks (recorded trajectories + static client). GitHub’s README view does not allow the same inline iframes, so use the links below to open the **identical** interactive sessions in your browser.
-
-<p align="center">
-  <a href="https://openscvx.github.io/OpenSCvx/latest/assets/viser-client/index.html?playbackPath=/OpenSCvx/assets/viser-recordings/drone_racing.viser"><img src="https://img.shields.io/badge/Viser-Drone_racing-4285F4?style=for-the-badge" alt="Open Viser: drone racing playback"/></a>
-  &nbsp;
-  <a href="https://openscvx.github.io/OpenSCvx/latest/assets/viser-client/index.html?playbackPath=/OpenSCvx/assets/viser-recordings/franka_fr3v2_pick_place.viser"><img src="https://img.shields.io/badge/Viser-Franka_FR3_pick_place-4285F4?style=for-the-badge" alt="Open Viser: Franka FR3 pick and place playback"/></a>
-</p>
-
-| Demo | Source |
-|------|--------|
-| [Drone racing (Viser)](https://openscvx.github.io/OpenSCvx/latest/assets/viser-client/index.html?playbackPath=/OpenSCvx/assets/viser-recordings/drone_racing.viser) | [`examples/drone/drone_racing.py`](https://github.com/OpenSCvx/OpenSCvx/blob/main/examples/drone/drone_racing.py) |
-| [Franka FR3 pick & place (Viser)](https://openscvx.github.io/OpenSCvx/latest/assets/viser-client/index.html?playbackPath=/OpenSCvx/assets/viser-recordings/franka_fr3v2_pick_place.viser) | [`examples/arm/franka_fr3v2_pick_place.py`](https://github.com/OpenSCvx/OpenSCvx/blob/main/examples/arm/franka_fr3v2_pick_place.py) |
-
 ## Installation
 
 OpenSCvx is available on [PyPI](https://pypi.org/project/openscvx/) and can be trivially installed with pip.
