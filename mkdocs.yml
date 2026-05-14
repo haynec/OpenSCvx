@@ -73,9 +73,11 @@ theme:
   icon:
     logo: logo
 
-# Copy Viser's bundled ``client/build`` into ``docs/assets/viser-client`` so home-page embeds resolve.
+# Copy Viser's bundled ``client/build`` into ``docs/assets/viser-client`` so home-page embeds resolve,
+# and fetch Viser playback recordings from a GitHub Release (kept out of git to keep clones small).
 hooks:
   - scripts/mkdocs_copy_viser_client_hook.py
+  - scripts/mkdocs_fetch_viser_recordings_hook.py
 
 # Plugin choices preserve API docs from docstrings (mkdocstrings + gen-files). Before moving to
 # Zensical, confirm parity for mkdocstrings, mkdocs-gen-files, literate-nav, section-index, and mike.
