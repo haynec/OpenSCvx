@@ -81,6 +81,9 @@
 .osc-home-viser__iframe-shell {
   position: relative;
   border-radius: clamp(12px, 2vw, 16px);
+  /* Clip embedded Viser’s top titlebar (playback client always mounts it when the recording includes
+     titlebar theme data). Iframe is taller than the shell and shifted up so only the canvas fills
+     the rounded viewport; bottom playback bar stays in view inside the iframe. */
   overflow: hidden;
   aspect-ratio: 16 / 10;
   min-height: clamp(220px, 28vw, 320px);
@@ -111,9 +114,12 @@
 
 .osc-home-viser__iframe {
   position: absolute;
-  inset: 0;
+  left: 0;
   width: 100%;
-  height: 100%;
+  /* Match Viser titlebar stack height (~48px); tweak if client/theme updates leave a sliver. */
+  --osc-viser-titlebar-offset: 3rem;
+  top: calc(-1 * var(--osc-viser-titlebar-offset));
+  height: calc(100% + var(--osc-viser-titlebar-offset));
   border: 0;
   display: block;
 }
