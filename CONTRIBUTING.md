@@ -214,3 +214,5 @@ Then serve the documentation locally:
 ```bash
 mkdocs serve
 ```
+
+The version dropdown uses Material’s **mike** integration and expects a `versions.json` at the site root. Plain `mkdocs serve` does not run `mike deploy`, so the repo includes a minimal **`docs/versions.json`** (copied into the build) to avoid a 404 in local previews. On **GitHub Pages**, CI replaces the published root with **`mike deploy`**, which writes the real multi-version manifest. To preview multiple versions locally the same way as production, use **`mike serve`** after you have a `gh-pages` branch with deployed versions.
