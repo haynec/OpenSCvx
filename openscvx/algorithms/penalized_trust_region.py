@@ -6,8 +6,9 @@ optimization problems through iterative convex approximation.
 
 import time
 import warnings
-from typing import TYPE_CHECKING, Callable, Dict, List, Union
+from typing import TYPE_CHECKING, Callable, Dict, List, Tuple, Union
 
+import jax
 import numpy as np
 import numpy.linalg as la
 
@@ -188,6 +189,15 @@ class PenalizedTrustRegion(Algorithm):
             return solver.call(*args)
         return solver(*args)
 
+    @staticmethod
+    def _block_until_ready_outputs(outputs: Tuple[object, ...]) -> None:
+        """Finish any pending XLA work from discretization exports (warm-up helper)."""
+        try:
+            jax.block_until_ready(outputs)
+        except (TypeError, ValueError):
+            # Non-JAX leaves (e.g. pure NumPy); nothing to wait on.
+            pass
+
     def _recover_prior_node_from_initial(
         self,
         settings: Config,
@@ -286,7 +296,8 @@ class PenalizedTrustRegion(Algorithm):
         """Initialize PTR algorithm.
 
         Stores compiled infrastructure and performs a warm-start solve to
-        initialize DPP and JAX jacobians.
+        initialize DPP and JAX jacobians. Also runs post-subproblem discretization
+        on the throwaway CVX solution so XLA/export caches match the first ``step()``.
 
         Args:
             solver: Convex subproblem solver (e.g., CVXPySolver)
@@ -333,7 +344,41 @@ class PenalizedTrustRegion(Algorithm):
                 params,
             )
             init_state.add_impulsive_discretization(W_multi_shoot.__array__())
-        _ = self._subproblem(params, init_state, settings)
+        (
+            x_sol,
+            u_sol,
+            _costs,
+            _result_cost,
+            _J_vb_vec,
+            _J_vc_vec,
+            _J_tr_vec,
+            _prob_stat,
+            _subprop_time,
+            _vc_mat,
+            _tr_mat,
+        ) = self._subproblem(params, init_state, settings)
+
+        # Prime the same exported discretization calls used after every subproblem in
+        # step() (candidate trajectory). initialize() previously only discretized the
+        # initial guess, so the first step() in solve() could still hit an XLA cache_miss
+        # on post-CVX (x_sol, u_sol). Running that path here moves compilation into init.
+        cont_out = self._invoke_solver(
+            self._discretization_solver, x_sol, u_sol.astype(float), params
+        )
+        x_prop_c = cont_out[3]
+        u_candidate = u_sol.astype(float)
+        x0_prior_c = self._recover_prior_node_from_initial(settings, x_sol[0])
+        x_nodes_prior_c = np.vstack((x0_prior_c, np.asarray(x_prop_c)))
+        if self._discretization_solver_impulsive is not None:
+            imp_out = self._invoke_solver(
+                self._discretization_solver_impulsive,
+                x_nodes_prior_c,
+                u_candidate,
+                params,
+            )
+            self._block_until_ready_outputs(cont_out + imp_out)
+        else:
+            self._block_until_ready_outputs(cont_out)
 
     def step(
         self,
