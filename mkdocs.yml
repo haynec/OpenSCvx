@@ -82,7 +82,10 @@ hooks:
 # Plugins
 plugins:
   - meta
-  - social
+  # Social cards render via Pillow + fonts from Google Fonts only (not self-hosted CMU).
+  - social:
+      cards_layout_options:
+        font_family: Source Sans 3
   # - optimize
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
