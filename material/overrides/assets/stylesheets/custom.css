@@ -7,47 +7,73 @@
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] {
   color-scheme: light;
 
-  /* Body copy: slightly deeper ink on cream for clearer hierarchy vs muted tiers */
-  --md-default-fg-color: #221a15;
-  --md-default-fg-color--light: rgb(34 26 21 / 0.9);
-  --md-default-fg-color--lighter: rgb(34 26 21 / 0.76);
-  --md-default-fg-color--lightest: rgb(34 26 21 / 0.58);
+  /* Four anchor shades — every other tone is color-mix / alpha from these only */
+  --osc-palette-1: #221a15;
+  --osc-palette-2: #3d2b20;
+  --osc-palette-3: #5b3d24;
+  --osc-palette-4: #f1ede4;
 
-  --md-default-bg-color: #f1ede4;
-  --md-default-bg-color--light: #e9e4da;
-  --md-default-bg-color--lighter: #ded8cc;
-  --md-default-bg-color--lightest: #d1cac0;
+  --md-default-fg-color: var(--osc-palette-1);
+  --md-default-fg-color--light: color-mix(in srgb, var(--osc-palette-1) 90%, var(--osc-palette-4) 10%);
+  --md-default-fg-color--lighter: color-mix(in srgb, var(--osc-palette-1) 76%, var(--osc-palette-4) 24%);
+  --md-default-fg-color--lightest: color-mix(in srgb, var(--osc-palette-1) 58%, var(--osc-palette-4) 42%);
+
+  --md-default-bg-color: var(--osc-palette-4);
+  --md-default-bg-color--light: color-mix(in srgb, var(--osc-palette-4) 90%, var(--osc-palette-2) 10%);
+  --md-default-bg-color--lighter: color-mix(in srgb, var(--osc-palette-4) 78%, var(--osc-palette-2) 22%);
+  --md-default-bg-color--lightest: color-mix(in srgb, var(--osc-palette-4) 66%, var(--osc-palette-2) 34%);
 
   --md-typeset-color: var(--md-default-fg-color);
-  /* Links / accents: clearly distinct from body text */
-  --md-typeset-a-color: #5b3d24;
-  --md-typeset-a-color--hover: #1a1411;
+  --md-typeset-a-color: var(--osc-palette-3);
+  --md-typeset-a-color--hover: var(--osc-palette-1);
 
-  --md-code-fg-color: #161210;
-  --md-code-bg-color: #dad4c8;
+  --md-code-fg-color: color-mix(in srgb, var(--osc-palette-1) 94%, var(--osc-palette-2) 6%);
+  --md-code-bg-color: color-mix(in srgb, var(--osc-palette-4) 58%, var(--osc-palette-2) 42%);
 
-  --md-accent-fg-color: #5b3d24;
-  --md-accent-bg-color: rgb(91 61 36 / 0.18);
+  --md-accent-fg-color: var(--osc-palette-3);
+  --md-accent-bg-color: color-mix(in srgb, var(--osc-palette-3) 18%, var(--osc-palette-4));
 
-  /* Primary: darker brown + brighter label text (header, primary buttons, chrome) */
-  --md-primary-fg-color: #fffefc;
-  --md-primary-fg-color--light: rgb(255 254 252 / 0.9);
-  --md-primary-fg-color--lighter: rgb(255 254 252 / 0.68);
-  --md-primary-fg-color--lightest: rgb(255 254 252 / 0.48);
+  --md-primary-fg-color: color-mix(in srgb, var(--osc-palette-4) 99%, var(--osc-palette-3) 1%);
+  --md-primary-fg-color--light: color-mix(in srgb, var(--osc-palette-4) 92%, var(--osc-palette-3) 8%);
+  --md-primary-fg-color--lighter: color-mix(in srgb, var(--osc-palette-4) 72%, var(--osc-palette-3) 28%);
+  --md-primary-fg-color--lightest: color-mix(in srgb, var(--osc-palette-4) 52%, var(--osc-palette-3) 48%);
 
-  --md-primary-bg-color: #3d2b20;
-  --md-primary-bg-color--light: #4d382a;
-  --md-primary-bg-color--lighter: #5d4535;
-  --md-primary-bg-color--lightest: #6e5240;
+  --md-primary-bg-color: var(--osc-palette-2);
+  --md-primary-bg-color--light: color-mix(in srgb, var(--osc-palette-2) 78%, var(--osc-palette-4) 22%);
+  --md-primary-bg-color--lighter: color-mix(in srgb, var(--osc-palette-2) 62%, var(--osc-palette-4) 38%);
+  --md-primary-bg-color--lightest: color-mix(in srgb, var(--osc-palette-2) 48%, var(--osc-palette-4) 52%);
 
-  --md-footer-bg-color: #e2ddd2;
-  --md-footer-fg-color: #221a15;
-  --md-footer-fg-color--light: rgb(34 26 21 / 0.76);
-  --md-footer-fg-color--lighter: rgb(34 26 21 / 0.54);
+  --md-footer-bg-color: color-mix(in srgb, var(--osc-palette-4) 42%, var(--osc-palette-2) 58%);
+  --md-footer-fg-color: var(--osc-palette-1);
+  --md-footer-fg-color--light: color-mix(in srgb, var(--osc-palette-1) 76%, var(--osc-palette-4) 24%);
+  --md-footer-fg-color--lighter: color-mix(in srgb, var(--osc-palette-1) 54%, var(--osc-palette-4) 46%);
 
-  --md-shadow-z1: 0 0.125rem 0.5rem rgb(26 20 17 / 0.08), 0 0 0.0625rem rgb(26 20 17 / 0.07);
-  --md-shadow-z2: 0 0.25rem 1rem rgb(26 20 17 / 0.1), 0 0 0.125rem rgb(26 20 17 / 0.07);
-  --md-shadow-z3: 0 0.5rem 1.5rem rgb(26 20 17 / 0.12), 0 0 0.25rem rgb(26 20 17 / 0.075);
+  --md-shadow-z1: 0 0.125rem 0.5rem color-mix(in srgb, var(--osc-palette-1) 8%, transparent),
+    0 0 0.0625rem color-mix(in srgb, var(--osc-palette-1) 7%, transparent);
+  --md-shadow-z2: 0 0.25rem 1rem color-mix(in srgb, var(--osc-palette-1) 10%, transparent),
+    0 0 0.125rem color-mix(in srgb, var(--osc-palette-1) 7%, transparent);
+  --md-shadow-z3: 0 0.5rem 1.5rem color-mix(in srgb, var(--osc-palette-1) 12%, transparent),
+    0 0 0.25rem color-mix(in srgb, var(--osc-palette-1) 7.5%, transparent);
+
+  /* Hero backdrops — only mixes of the four anchors */
+  --osc-hero-warm-glow: color-mix(in srgb, var(--osc-palette-3) 10%, transparent);
+  --osc-hero-warm-glow-soft: color-mix(in srgb, var(--osc-palette-3) 6.5%, transparent);
+  --osc-hero-warm-grid: color-mix(in srgb, var(--osc-palette-1) 3.5%, transparent);
+  --osc-hero-warm-beam: color-mix(in srgb, var(--osc-palette-3) 4%, transparent);
+}
+
+/* Dark (slate) — four anchors for home / overrides; Material fills in the rest */
+[data-md-color-scheme="slate"] {
+  --osc-palette-1: #0a0a0c;
+  --osc-palette-2: #161618;
+  --osc-palette-3: #6366f1;
+  --osc-palette-4: #f4f4f5;
+
+  /* Hero backdrops — derived from the four anchors (no extra hue literals) */
+  --osc-hero-slate-glow: color-mix(in srgb, var(--osc-palette-3) 26%, transparent);
+  --osc-hero-slate-glow-mid: color-mix(in srgb, var(--osc-palette-3) 14%, transparent);
+  --osc-hero-slate-glow-soft: color-mix(in srgb, var(--osc-palette-3) 10%, transparent);
+  --osc-hero-slate-grid: color-mix(in srgb, var(--osc-palette-4) 4.8%, transparent);
 }
 
 /*
@@ -57,7 +83,9 @@
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header {
   background-color: var(--md-default-bg-color);
   color: var(--md-typeset-color);
-  box-shadow: 0 0 0.05rem 0.05rem rgb(34 26 21 / 0.1), 0 0.2rem 0.5rem rgb(34 26 21 / 0.05);
+  box-shadow:
+    0 0 0.05rem 0.05rem color-mix(in srgb, var(--osc-palette-1) 10%, transparent),
+    0 0.2rem 0.5rem color-mix(in srgb, var(--osc-palette-1) 5%, transparent);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header__button.md-logo img[src$=".svg"],
@@ -78,7 +106,7 @@
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-source {
-  color: rgb(34 26 21 / 0.88);
+  color: color-mix(in srgb, var(--osc-palette-1) 88%, transparent);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-source:hover {
@@ -88,12 +116,12 @@
 /* Secondary chrome (tabs strip): lift off page + stronger tab labels */
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-tabs {
   background-color: var(--md-default-bg-color--light);
-  border-bottom: 1px solid rgb(34 26 21 / 0.14);
+  border-bottom: 1px solid color-mix(in srgb, var(--osc-palette-1) 14%, transparent);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-tabs__link {
-  color: rgb(34 26 21 / 0.82);
+  color: color-mix(in srgb, var(--osc-palette-1) 82%, transparent);
   opacity: 1;
 }
 
@@ -107,8 +135,8 @@
 /* Search field: readable on cream header (light + custom) */
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-search__form {
-  background-color: rgb(34 26 21 / 0.06);
-  border: 1px solid rgb(34 26 21 / 0.12);
+  background-color: color-mix(in srgb, var(--osc-palette-1) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--osc-palette-1) 12%, transparent);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
@@ -118,14 +146,14 @@
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-search__input::placeholder {
-  color: rgb(34 26 21 / 0.48);
+  color: color-mix(in srgb, var(--osc-palette-1) 48%, transparent);
 }
 
 /* Right-hand TOC / nav: avoid “washed” inherited opacity on nested links */
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-sidebar--secondary
   .md-nav__link {
-  color: rgb(34 26 21 / 0.86);
+  color: color-mix(in srgb, var(--osc-palette-1) 86%, transparent);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
@@ -149,7 +177,7 @@
   .md-button.md-button--primary {
   color: var(--md-primary-fg-color);
   background-color: var(--md-primary-bg-color);
-  border: 1px solid color-mix(in srgb, #1a1411 22%, var(--md-primary-bg-color));
+  border: 1px solid color-mix(in srgb, var(--osc-palette-1) 22%, var(--md-primary-bg-color));
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
@@ -158,25 +186,25 @@
   .md-button.md-button--primary:focus {
   color: var(--md-primary-fg-color);
   background-color: var(--md-primary-bg-color--light);
-  border-color: color-mix(in srgb, #1a1411 28%, var(--md-primary-bg-color--light));
+  border-color: color-mix(in srgb, var(--osc-palette-1) 28%, var(--md-primary-bg-color--light));
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-button:not(.md-button--primary) {
   color: var(--md-typeset-color);
-  background-color: #fffdf9;
+  background-color: color-mix(in srgb, var(--osc-palette-4) 94%, var(--osc-palette-3) 6%);
   border: 1.5px solid color-mix(in srgb, var(--md-typeset-color) 55%, transparent);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.75),
-    0 1px 2px rgb(34 26 21 / 0.1);
+    inset 0 1px 0 color-mix(in srgb, var(--osc-palette-4) 75%, transparent),
+    0 1px 2px color-mix(in srgb, var(--osc-palette-1) 10%, transparent);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-button:not(.md-button--primary):hover,
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .md-button:not(.md-button--primary):focus {
-  color: #1a1411;
-  background-color: #f3ebe1;
+  color: var(--osc-palette-1);
+  background-color: color-mix(in srgb, var(--osc-palette-4) 88%, var(--osc-palette-2) 12%);
   border-color: color-mix(in srgb, var(--md-typeset-color) 78%, transparent);
 }
 
@@ -287,6 +315,101 @@ html {
   border-radius: 0 !important;
 }
 
+/* Home pipeline diagram (SVG) — uses per-theme --osc-palette-* (four anchors) */
+.osc-home-diagram {
+  margin: 0 auto;
+  max-width: min(24rem, 100%);
+}
+
+.osc-home-diagram__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.osc-home-diagram__panel {
+  fill: color-mix(in srgb, var(--osc-palette-1) 5%, var(--osc-palette-4));
+  stroke: color-mix(in srgb, var(--osc-palette-1) 12%, transparent);
+  stroke-width: 1;
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__panel {
+  fill: color-mix(in srgb, var(--osc-palette-4) 6%, var(--osc-palette-1));
+  stroke: color-mix(in srgb, var(--osc-palette-4) 14%, transparent);
+}
+
+.osc-home-diagram__panel--accent {
+  fill: color-mix(in srgb, var(--osc-palette-3) 22%, var(--osc-palette-4));
+  stroke: color-mix(in srgb, var(--osc-palette-3) 32%, transparent);
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__panel--accent {
+  fill: color-mix(in srgb, var(--osc-palette-3) 18%, var(--osc-palette-1));
+  stroke: color-mix(in srgb, var(--osc-palette-3) 45%, transparent);
+}
+
+.osc-home-diagram__cap,
+.osc-home-diagram__micro {
+  fill: color-mix(in srgb, var(--osc-palette-1) 58%, var(--osc-palette-4));
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__cap,
+[data-md-color-scheme="slate"] .osc-home-diagram__micro {
+  fill: color-mix(in srgb, var(--osc-palette-4) 55%, var(--osc-palette-1));
+}
+
+.osc-home-diagram__title {
+  fill: var(--osc-palette-1);
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__title {
+  fill: var(--osc-palette-4);
+}
+
+.osc-home-diagram__brand {
+  fill: var(--osc-palette-3);
+}
+
+.osc-home-diagram__connector,
+.osc-home-diagram__curve {
+  stroke: color-mix(in srgb, var(--osc-palette-1) 26%, transparent);
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__connector,
+[data-md-color-scheme="slate"] .osc-home-diagram__curve {
+  stroke: color-mix(in srgb, var(--osc-palette-4) 24%, transparent);
+}
+
+.osc-home-diagram__arrow-fill {
+  fill: color-mix(in srgb, var(--osc-palette-1) 26%, transparent);
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__arrow-fill {
+  fill: color-mix(in srgb, var(--osc-palette-4) 24%, transparent);
+}
+
+.osc-home-diagram__grad-start {
+  stop-color: var(--osc-palette-3);
+}
+
+.osc-home-diagram__grad-stop {
+  stop-color: color-mix(in srgb, var(--osc-palette-3) 50%, var(--osc-palette-1));
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__grad-stop {
+  stop-color: color-mix(in srgb, var(--osc-palette-3) 42%, var(--osc-palette-4));
+}
+
+.osc-home-diagram__dot {
+  fill: var(--osc-palette-3);
+  stroke: var(--osc-palette-4);
+  stroke-width: 1;
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__dot {
+  stroke: var(--osc-palette-1);
+}
+
 /* Mobile responsiveness */
 @media (max-width: 768px) {
   .md-typeset pre,
@@ -305,7 +428,7 @@ html {
   .md-typeset pre,
   .md-typeset .admonition {
     box-shadow: none;
-    border: 1px solid #ccc;
+    border: 1px solid color-mix(in srgb, var(--md-typeset-color) 22%, transparent);
   }
   
   .md-typeset * {

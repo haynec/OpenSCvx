@@ -10,7 +10,7 @@
 }
 
 [data-md-color-scheme="slate"] .osc-home-viser .osc-home-viser__code {
-  background: rgb(255 255 255 / 0.08);
+  background: color-mix(in srgb, var(--osc-palette-4) 8%, transparent);
 }
 
 .osc-home-viser .osc-home-dropin__inner {
@@ -88,25 +88,25 @@
   background: color-mix(in srgb, var(--md-typeset-color) 6%, var(--md-default-bg-color));
   border: 1px solid color-mix(in srgb, var(--md-typeset-color) 12%, transparent);
   box-shadow:
-    0 1px 2px rgb(0 0 0 / 0.05),
-    0 10px 28px rgb(0 0 0 / 0.08);
+    0 1px 2px color-mix(in srgb, var(--osc-palette-1) 5%, transparent),
+    0 10px 28px color-mix(in srgb, var(--osc-palette-1) 8%, transparent);
 }
 
 [data-md-color-scheme="slate"] .osc-home-viser__iframe-shell {
-  background: color-mix(in srgb, #fff 5%, #0c0c0c);
+  background: color-mix(in srgb, var(--osc-palette-4) 5%, var(--osc-palette-1));
   border-color: color-mix(in srgb, var(--md-typeset-color) 14%, transparent);
   box-shadow:
-    0 1px 2px rgb(0 0 0 / 0.35),
-    0 12px 32px rgb(0 0 0 / 0.4);
+    0 1px 2px color-mix(in srgb, var(--osc-palette-1) 35%, transparent),
+    0 12px 32px color-mix(in srgb, var(--osc-palette-1) 40%, transparent);
 }
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .osc-home-viser__iframe-shell {
-  background: #fffbf5;
-  border-color: rgb(34 26 21 / 0.12);
+  background: color-mix(in srgb, var(--osc-palette-4) 96%, var(--osc-palette-3) 4%);
+  border-color: color-mix(in srgb, var(--osc-palette-1) 12%, transparent);
   box-shadow:
-    0 1px 2px rgb(34 26 21 / 0.06),
-    0 10px 26px rgb(34 26 21 / 0.1);
+    0 1px 2px color-mix(in srgb, var(--osc-palette-1) 6%, transparent),
+    0 10px 26px color-mix(in srgb, var(--osc-palette-1) 10%, transparent);
 }
 
 .osc-home-viser__iframe {

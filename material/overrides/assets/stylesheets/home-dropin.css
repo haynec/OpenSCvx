@@ -15,7 +15,7 @@
 }
 
 [data-md-color-scheme="slate"] .osc-home-dropin {
-  background: color-mix(in srgb, #fff 4%, #0a0a0c);
+  background: color-mix(in srgb, var(--osc-palette-4) 4%, var(--osc-palette-1));
   border-top-color: color-mix(in srgb, var(--md-typeset-color) 12%, transparent);
   border-bottom-color: color-mix(in srgb, var(--md-typeset-color) 12%, transparent);
 }
@@ -23,8 +23,8 @@
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .osc-home-dropin.osc-home-viser {
   background: color-mix(in srgb, var(--md-typeset-color) 5%, var(--md-default-bg-color));
-  border-top-color: rgb(34 26 21 / 0.1);
-  border-bottom-color: rgb(34 26 21 / 0.1);
+  border-top-color: color-mix(in srgb, var(--osc-palette-1) 10%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--osc-palette-1) 10%, transparent);
 }
 
 .osc-home-dropin__inner {
@@ -53,11 +53,12 @@
   font-weight: 600;
 }
 
-/* --- Warm dark window (self-contained palette) ----------------------------- */
+/* --- macOS-style window (black chrome; traffic lights match real macOS dots) --- */
 
 .osc-mac {
-  --osc-mac-bg: #231f1e;
-  --osc-mac-bg-deep: #1c1917;
+  /* Intentionally not tied to theme --osc-palette-*: reads as neutral black in every scheme */
+  --osc-mac-bg: #1e1e1e;
+  --osc-mac-bg-deep: #0a0a0a;
   --osc-mac-tab-muted: rgb(245 245 244 / 0.42);
   --osc-mac-tab-active-bg: rgb(255 255 255 / 0.12);
   --osc-mac-code: rgb(250 250 249 / 0.94);
@@ -104,7 +105,7 @@
   flex-shrink: 0;
 }
 
-/* Flat traffic lights — solid fills, no border / gloss (Moreau-style) */
+/* Traffic lights — classic close / minimize / maximize (same hues as before palette consolidation) */
 .osc-mac__dot {
   width: 14px;
   height: 14px;
@@ -220,27 +221,11 @@
   }
 }
 
-/* --- Light + custom: install strip band only (not trajectory previews). ----- */
-/* Brown-tinted full-bleed background behind the section. The ``.osc-mac`` window keeps the */
-/* default warm-black chrome (#231f1e / #1c1917), same as other palettes. */
+/* default warm strip: band tint from palette; ``.osc-mac`` stays black (see ``.osc-mac`` above). */
 
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
   .osc-home-dropin:not(.osc-home-viser) {
   background: color-mix(in srgb, var(--md-primary-bg-color) 10%, var(--md-default-bg-color));
-  border-top-color: rgb(61 43 32 / 0.14);
-  border-bottom-color: rgb(61 43 32 / 0.14);
-}
-
-[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
-  .osc-home-dropin:not(.osc-home-viser) .osc-mac {
-  --osc-mac-bg: #231f1e;
-  --osc-mac-bg-deep: #1c1917;
-  --osc-mac-tab-muted: rgb(245 245 244 / 0.42);
-  --osc-mac-tab-active-bg: rgb(255 255 255 / 0.12);
-  --osc-mac-code: rgb(250 250 249 / 0.94);
-
-  box-shadow:
-    0 1px 0 rgb(255 255 255 / 0.06) inset,
-    0 24px 64px rgb(0 0 0 / 0.28),
-    0 0 0 1px rgb(0 0 0 / 0.35);
+  border-top-color: color-mix(in srgb, var(--osc-palette-2) 14%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--osc-palette-2) 14%, transparent);
 }
