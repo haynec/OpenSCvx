@@ -4,6 +4,7 @@
 
 This example was adapted from the SCvxGEN repository by Abhi Kamath, https://scvxgen.mintlify.app/introduction.
 """
+
 import os
 import sys
 
@@ -160,15 +161,26 @@ constraint_exprs.append((position[0:2] == final_position).convex().at([n - 1]))
 
 constraint_exprs.append(ox.ctcs(1.0 * (mass - m_dry) >= 0))
 constraint_exprs.append(
-    ox.ctcs(0.1 * ox.linalg.Norm(position[1:]) - ox.Tan(ox.Constant(np.array(gamma * np.pi / 180.0))) * position[0] <= 0)
+    ox.ctcs(
+        0.1 * ox.linalg.Norm(position[1:])
+        - ox.Tan(ox.Constant(np.array(gamma * np.pi / 180.0))) * position[0]
+        <= 0
+    )
 )
 constraint_exprs.append(ox.ctcs(0.1 * ox.linalg.Norm(velocity) ** 2 - v_max**2 <= 0))
 constraint_exprs.append(
-    ox.ctcs(1.0 * ox.Cos(ox.Constant(np.array(theta_max * np.pi / 180.0))) - 1.0 + 2.0 * (q2**2 + q3**2) <= 0)
+    ox.ctcs(
+        1.0 * ox.Cos(ox.Constant(np.array(theta_max * np.pi / 180.0))) - 1.0 + 2.0 * (q2**2 + q3**2)
+        <= 0
+    )
 )
 constraint_exprs.append(ox.ctcs(1.0 * ox.linalg.Norm(angular_velocity) ** 2 - w_max**2 <= 0))
 constraint_exprs.append(
-    ox.ctcs(0.1 * ox.linalg.Norm(thrust) - thrust[0] / ox.Cos(ox.Constant(np.array(del_max * np.pi / 180.0))) <= 0)
+    ox.ctcs(
+        0.1 * ox.linalg.Norm(thrust)
+        - thrust[0] / ox.Cos(ox.Constant(np.array(del_max * np.pi / 180.0)))
+        <= 0
+    )
 )
 constraint_exprs.append(ox.ctcs(0.1 * ox.linalg.Norm(thrust) ** 2 - T_max**2 <= 0))
 constraint_exprs.append(ox.ctcs(0.1 * T_min**2 - ox.linalg.Norm(thrust) ** 2 <= 0))
@@ -185,8 +197,7 @@ time = ox.Time(
     time_dilation_max=2.0 * t_final_guess,
 )
 
-# Please ignore this for linting
-import diffrax as dfx # noqa: F401
+import diffrax as dfx  # noqa: F401
 
 problem = Problem(
     N=n,
@@ -204,7 +215,9 @@ problem = Problem(
         "ep_tr": 5e-3,
         "ep_vc": 1e-6,
     },
-    discretizer={"diffrax_kwargs": {"stepsize_controller": dfx.StepTo(np.linspace(0.0, 1/(n-1), 3))}},
+    discretizer={
+        "diffrax_kwargs": {"stepsize_controller": dfx.StepTo(np.linspace(0.0, 1 / (n - 1), 3))}
+    },
 )
 
 problem.settings.dev.printing = False
