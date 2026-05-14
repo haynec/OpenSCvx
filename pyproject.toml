@@ -36,16 +36,9 @@ dependencies = [
 openscvx = "openscvx.__main__:main"
 
 [project.urls]
-Homepage = "https://openscvx.github.io/openscvx/"
+Homepage = "https://openscvx.github.io/OpenSCvx/"
 
 [project.optional-dependencies]
-gui = [
-    "pyqtgraph",
-    "PyQt5",
-    "scipy",
-    "PyOpenGL",
-    "PyOpenGL_accelerate",
-]
 cvxpygen = [
     "cvxpygen",
     "qocogen",

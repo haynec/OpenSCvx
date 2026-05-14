@@ -20,7 +20,6 @@ pip install -e ".[test]"
 ```
 
 For additional features, you can install optional dependencies:
-- `pip install -e ".[gui]"` - GUI visualization tools
 - `pip install -e ".[cvxpygen]"` - Code generation support
 - `pip install -e ".[stl]"` - STL (Signal Temporal Logic) constraints
 

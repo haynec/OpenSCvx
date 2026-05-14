@@ -18,12 +18,12 @@ OpenSCvx is a JAX-based Python library for trajectory optimization using Success
 
 ## Installation
 
-You can install OpenSCvx using pip or uv. For the most common use case, which includes support for interactive plotting and code generation, you can install the library with the `gui` and `cvxpygen` extras:
+You can install OpenSCvx using pip or uv. Interactive visualization (e.g. Viser, Plotly) is included in the core package. For **CVXPYGen** code generation, add the `cvxpygen` extra:
 
 ```sh
-pip install openscvx[gui,cvxpygen]
+pip install openscvx[cvxpygen]
 # or with uv
-uv pip install openscvx[gui,cvxpygen]
+uv pip install openscvx[cvxpygen]
 ```
 
 If you only need the core library without the optional features, you can run:
@@ -39,9 +39,9 @@ uv pip install openscvx
 To install the latest development version (nightly) from PyPI:
 
 ```sh
-pip install --pre openscvx[gui,cvxpygen]
+pip install --pre openscvx[cvxpygen]
 # or with uv
-uv pip install --pre openscvx[gui,cvxpygen]
+uv pip install --pre openscvx[cvxpygen]
 ```
 
 Or for just the core library:
@@ -64,10 +64,10 @@ For local development, you can clone the repository and install it in editable m
 git clone https://github.com/OpenSCvx/OpenSCvx.git
 cd OpenSCvx
 
-# Install in editable mode with all optional dependencies
-pip install -e ".[gui,cvxpygen]"
+# Install in editable mode with optional code-generation dependencies
+pip install -e ".[cvxpygen]"
 # or with uv
-uv pip install -e ".[gui,cvxpygen]"
+uv pip install -e ".[cvxpygen]"
 ```
 
 ### Dependencies
@@ -82,22 +82,15 @@ The core dependencies are installed automatically with `openscvx`:
 - `diffrax` - for automatic differentiation
 - `termcolor` - for colored terminal output
 - `plotly` - for basic interactive 3D plotting
-
-
-- **`gui`**: For interactive 3D plotting and real-time visualization. This includes:
-    - `pyqtgraph` - for realtime 3D plotting
-    - `PyQt5` - for GUI
-    - `scipy` - for spatial operations
-    - `PyOpenGL` - for 3D plotting
-    - `PyOpenGL_accelerate` (optional, for speed) - for 3D plotting
+- `viser` - for 3D visualization and browser-based UIs in examples and tooling
 
 - **`cvxpygen`**: For C++ code generation, enabling faster solver performance on smaller problems. This includes:
     - `cvxpygen` - for C++ code generation
     - `qocogen` - fast SOCP solver
 
-### Local Development
+### Detailed setup (Conda, uv, or venv)
 
-For setting up a local development environment, we recommend using Conda to manage environments.
+For setting up a local development environment, use one of the following.
 
 <details>
 <summary>Via Conda</summary>
@@ -112,9 +105,9 @@ For setting up a local development environment, we recommend using Conda to mana
     conda create -n openscvx "python>=3.11"
     conda activate openscvx
     ```
-3.  Install the package in editable mode with all optional dependencies:
+3.  Install the package in editable mode with optional code-generation dependencies:
     ```sh
-    pip install -e ".[gui,cvxpygen]"
+    pip install -e ".[cvxpygen]"
     ```
 </details>
 
@@ -132,9 +125,9 @@ For setting up a local development environment, we recommend using Conda to mana
     uv venv
     source .venv/bin/activate  # On Windows: .venv\Scripts\activate
     ```
-4.  Install the package in editable mode with all optional dependencies:
+4.  Install the package in editable mode with optional code-generation dependencies:
     ```sh
-    uv pip install -e ".[gui,cvxpygen]"
+    uv pip install -e ".[cvxpygen]"
     ```
 </details>
 
@@ -151,9 +144,9 @@ For setting up a local development environment, we recommend using Conda to mana
     python3 -m venv venv
     source venv/bin/activate
     ```
-3.  Install the package in editable mode with all optional dependencies:
+3.  Install the package in editable mode with optional code-generation dependencies:
     ```sh
-    pip install -e ".[gui,cvxpygen]"
+    pip install -e ".[cvxpygen]"
     ```
 </details>
 

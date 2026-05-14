@@ -107,11 +107,11 @@ uv pip install openscvx
 ```
 
 > [!TIP]
-> **Optional Dependencies**
+> **Optional dependencies**
 >
-> For GUI support or CVXPYGen code generation:
+> For CVXPYGen code generation:
 > ```bash
-> pip install openscvx[gui,cvxpygen]
+> pip install openscvx[cvxpygen]
 > ```
 
 > [!TIP]
