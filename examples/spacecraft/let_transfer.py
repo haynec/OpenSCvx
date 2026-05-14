@@ -778,22 +778,22 @@ dtdtau_guess = np.clip(dtdtau_guess, 0.01 * t_f_guess, 3.0 * t_f_guess)
 time.time_dilation_guess = dtdtau_guess.reshape(-1, 1)
 
 # Scaling
-position.scaling_max    =  jnp.array([0.01, 0.01, 0.01])
-position.scaling_min    = -jnp.array([0.01, 0.01, 0.01])
-velocity.scaling_max    =  jnp.array([0.5, 0.5, 0.5])
-velocity.scaling_min    = -jnp.array([0.5, 0.5, 0.5])
-fuel.scaling_min        =  jnp.array([0.95])     
-fuel.scaling_max        =  jnp.array([1.00])     
-delta_v.scaling_min     = velocity.scaling_min     
-delta_v.scaling_max     = velocity.scaling_max    
+position.scaling_max = jnp.array([0.01, 0.01, 0.01])
+position.scaling_min = -jnp.array([0.01, 0.01, 0.01])
+velocity.scaling_max = jnp.array([0.5, 0.5, 0.5])
+velocity.scaling_min = -jnp.array([0.5, 0.5, 0.5])
+fuel.scaling_min = jnp.array([0.95])
+fuel.scaling_max = jnp.array([1.00])
+delta_v.scaling_min = velocity.scaling_min
+delta_v.scaling_max = velocity.scaling_max
 
 # Bounds
-position.min    = position.scaling_min
-position.max    = position.scaling_max  
-velocity.min    = velocity.scaling_min
-velocity.max    = velocity.scaling_max
-fuel.min        = fuel.scaling_min
-fuel.max        = fuel.scaling_max
+position.min = position.scaling_min
+position.max = position.scaling_max
+velocity.min = velocity.scaling_min
+velocity.max = velocity.scaling_max
+fuel.min = fuel.scaling_min
+fuel.max = fuel.scaling_max
 
 states = [position, velocity, fuel]
 controls = [delta_v]
@@ -854,9 +854,7 @@ problem = Problem(
     discretizer=discretizer,
     algorithm=algorithm,
     float_dtype="float64",
-    solver={
-        "solver_args": {"abstol": 1e-9, "reltol": 1e-9, "verbose": True}
-    }
+    solver={"solver_args": {"abstol": 1e-9, "reltol": 1e-9, "verbose": True}},
 )
 
 # Keep post-process propagation tolerances aligned with discretization.
