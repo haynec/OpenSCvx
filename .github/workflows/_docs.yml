@@ -44,14 +44,17 @@ jobs:
           mkdocs-material-
 
     - name: Install system dependencies
-      run: sudo apt-get update && sudo apt-get install -y pngquant
+      run: >-
+        sudo apt-get update &&
+        sudo apt-get install -y pngquant libcairo2-dev libfreetype6-dev libffi-dev
+        libjpeg-dev libpng-dev zlib1g-dev
 
     # - name: Install MkDocs Material Insiders
     #   run: uv pip install --system git+https://${{ secrets.MKDOCS_INSIDERS_TOKEN }}@github.com/squidfunk/mkdocs-material-insiders.git
 
     - name: Install documentation tools
       run: |
-        uv pip install --system mkdocs-material mkdocstrings-python
+        uv pip install --system "mkdocs-material[imaging]" mkdocstrings-python
         uv pip install --system mkdocs-gen-files mkdocs-literate-nav mkdocs-section-index
         uv pip install --system mike
 
