@@ -12,6 +12,11 @@ jobs:
   docs:
     name: 📖 Documentation
     runs-on: ubuntu-latest
+    env:
+      # Material stderr banner (MkDocs 2.0 blog); CI uses MkDocs 1.x + --strict.
+      NO_MKDOCS_2_WARNING: "true"
+      # ProperDocs may emit a follow-up WARNING; keep --strict clean.
+      DISABLE_MKDOCS_2_WARNING: "true"
 
     steps:
     - name: Checkout repository
