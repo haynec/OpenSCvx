@@ -67,9 +67,13 @@ def set_initial_camera_look_at_trajectory(
     server,
     positions: np.ndarray,
     *,
-    eye_offset: tuple[float, float, float] | np.ndarray = (-0.65, -0.95, 0.5),
+    eye_offset: tuple[float, float, float] | np.ndarray = (-0.65, 0.95, 0.5),
 ) -> None:
-    """Configure ``server.initial_camera`` from a (N, 3) trajectory (before serialize)."""
+    """Configure ``server.initial_camera`` from a (N, 3) trajectory (before serialize).
+
+    Default ``eye_offset`` uses **+y** lateral bias (world frame) so desk-mounted
+    arms like the Franka FR3 face the camera; pass a custom offset for other scenes.
+    """
     pts = np.asarray(positions, dtype=np.float64)
     center = np.mean(pts, axis=0)
     offset = np.asarray(eye_offset, dtype=np.float64).reshape(3)
