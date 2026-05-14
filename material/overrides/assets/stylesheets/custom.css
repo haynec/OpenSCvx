@@ -28,7 +28,22 @@
   --md-typeset-a-color--hover: var(--osc-palette-1);
 
   --md-code-fg-color: color-mix(in srgb, var(--osc-palette-1) 94%, var(--osc-palette-2) 6%);
-  --md-code-bg-color: color-mix(in srgb, var(--osc-palette-4) 58%, var(--osc-palette-2) 42%);
+  /* Inline ``code`` + fenced blocks: keep a warm tint but much lighter than 42% ink (was hard to read). */
+  --md-code-bg-color: color-mix(in srgb, var(--osc-palette-4) 88%, var(--osc-palette-2) 12%);
+  --md-code-bg-color--light: color-mix(in srgb, var(--osc-palette-4) 82%, var(--osc-palette-2) 18%);
+  --md-code-bg-color--lighter: color-mix(in srgb, var(--osc-palette-4) 72%, var(--osc-palette-2) 28%);
+
+  /*
+   * Line highlights (``hl_lines`` / .hll): Material defaults assume a light gray code
+   * background; on our warmer, darker --md-code-bg-color the default blue wash reads
+   * too heavy. Use a light cream fill + theme-colored gutter bar.
+   */
+  --md-code-hl-color: color-mix(in srgb, var(--osc-palette-3) 70%, var(--osc-palette-2) 30%);
+  /* Slightly more accent than before so ``hl_lines`` stays visible on the lighter code surface */
+  --md-code-hl-color--light: color-mix(in srgb, var(--osc-palette-4) 82%, var(--osc-palette-3) 18%);
+
+  /* Search / ``==mark==`` — default semi-opaque yellow can swamp tokens on dark code bg */
+  --md-typeset-mark-color: color-mix(in srgb, hsl(48 100% 92%) 78%, var(--osc-palette-3) 22%);
 
   --md-accent-fg-color: var(--osc-palette-3);
   --md-accent-bg-color: color-mix(in srgb, var(--osc-palette-3) 18%, var(--osc-palette-4));
