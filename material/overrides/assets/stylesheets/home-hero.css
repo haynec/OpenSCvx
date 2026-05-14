@@ -155,6 +155,7 @@
   line-height: 1.02;
   font-size: clamp(3.75rem, 14vw + 1rem, 8.5rem) !important;
   color: var(--md-typeset-color);
+  white-space: nowrap;
 }
 
 /* Slate: hero copy in white (light mode keeps warm custom palette above). */
