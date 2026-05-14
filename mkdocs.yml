@@ -16,7 +16,7 @@ copyright: Copyright &copy; 2025 Chris Hayner
 theme:
   name: material
   custom_dir: material/overrides
-  logo: assets/logo.svg
+  logo: assets/openscvx_logo_square.png
   toc:
     depth: 2
   features:

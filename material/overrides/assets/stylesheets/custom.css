@@ -51,8 +51,8 @@
 }
 
 /*
- * Light + custom: cream header so the brown-tinted logo reads clearly. Vector logo stays white
- * in the SVG; filter below maps it to --md-primary-bg-color on this palette only.
+ * Light + custom: cream header. SVG header logo uses white paths; filter maps to primary brown.
+ * Raster logos (e.g. openscvx_logo_square.png) keep natural colors — no filter.
  */
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header {
   background-color: var(--md-default-bg-color);
@@ -60,8 +60,8 @@
   box-shadow: 0 0 0.05rem 0.05rem rgb(34 26 21 / 0.1), 0 0.2rem 0.5rem rgb(34 26 21 / 0.05);
 }
 
-[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header__button.md-logo img,
-[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-nav__button.md-logo img {
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header__button.md-logo img[src$=".svg"],
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-nav__button.md-logo img[src$=".svg"] {
   filter: brightness(0) saturate(100%) invert(16%) sepia(22%) saturate(2200%) hue-rotate(342deg) brightness(0.93) contrast(0.94);
 }
 
