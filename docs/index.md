@@ -9,6 +9,7 @@ description: >-
 social:
   cards_layout_options:
     title: Fast and Easy Nonconvex Trajectory Optimization
+    logo: assets/openscvx_logo_square.png
 ---
 
 ## Why OpenSCvx
