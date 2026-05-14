@@ -436,3 +436,15 @@ html {
     animation: none !important;
   }
 }
+
+/* Site-wide headings: League Spartan for that Futura/NASA-worm display feel.
+   Body, lists, captions, code, etc. stay on Inter / Source Code Pro. */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+  font-family: "League Spartan", var(--md-text-font-family), system-ui, sans-serif;
+  letter-spacing: -0.0em;
+}

@@ -137,9 +137,10 @@
 
 .osc-home-hero__kicker {
   margin: 0 0 0.5rem;
+  font-family: "League Spartan", var(--md-text-font-family), system-ui, sans-serif;
   font-size: clamp(0.62rem, 1.8vw, 0.72rem);
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--md-typeset-color) 48%, transparent);
 }
@@ -150,8 +151,9 @@
  */
 .osc-home-hero__inner.md-typeset h1#osc-home-hero-title.osc-home-hero__title {
   margin: 0 0 1rem;
-  font-weight: 700 !important;
-  letter-spacing: -0.045em;
+  font-family: "League Spartan", var(--md-text-font-family), system-ui, sans-serif;
+  font-weight: 600 !important;
+  letter-spacing: -0.0em;
   line-height: 1.02;
   font-size: clamp(3.75rem, 14vw + 1rem, 8.5rem) !important;
   color: var(--md-typeset-color);
@@ -285,9 +287,10 @@
 
 .osc-home-pipeline__title {
   margin: 0 0 0.65rem;
+  font-family: "League Spartan", var(--md-text-font-family), system-ui, sans-serif;
   font-size: clamp(1rem, 2.2vw + 0.5rem, 1.35rem);
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   text-align: center;
   color: var(--md-typeset-color);
   text-wrap: balance;
@@ -621,16 +624,15 @@
 }
 
 /*
-  OpenSCvx wordmark: same family as the site text (CMU Sans Serif = Computer Modern Sans on the web).
-  Material’s Google Fonts link only includes 300/400/700 — do not use 600 or the browser fakes bold
-  and the face looks “wrong”.
+  OpenSCvx wordmark: League Spartan for the Futura/NASA-worm display feel.
+  Loaded via home.html with weights 500/600/700.
 */
 .md-content__inner.md-typeset p.osc-home-pipeline__stack-title--brand {
-  font-family: var(--md-text-font-family);
+  font-family: "League Spartan", var(--md-text-font-family), system-ui, sans-serif;
   font-feature-settings: "kern", "liga";
   font-synthesis: none;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .osc-home-pipeline__detail {

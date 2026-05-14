@@ -67,8 +67,8 @@ theme:
         icon: material/toggle-switch-off
         name: Switch to system preference
   font:
-    text: CMU Sans Serif
-    code: Roboto Mono
+    text: Inter
+    code: Source Code Pro
   favicon: assets/favicon.png
   icon:
     logo: logo
