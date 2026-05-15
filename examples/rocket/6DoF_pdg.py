@@ -222,7 +222,7 @@ problem = Problem(
         "cvxpygen": True,
         "cvx_solver": "qocogen",
         "solver_args": {},
-    }
+    },
 )
 
 problem.settings.dev.printing = False

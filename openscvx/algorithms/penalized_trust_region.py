@@ -193,7 +193,7 @@ class PenalizedTrustRegion(Algorithm):
     def _block_until_ready_outputs(outputs: Tuple[object, ...]) -> None:
         """Finish any pending XLA work from discretization exports (warm-up helper)."""
         jax.block_until_ready(outputs)
-        
+
     def _recover_prior_node_from_initial(
         self,
         settings: Config,
@@ -340,11 +340,7 @@ class PenalizedTrustRegion(Algorithm):
                 params,
             )
             init_state.add_impulsive_discretization(W_multi_shoot.__array__())
-        (
-            x_sol,
-            u_sol,
-            *_
-        ) = self._subproblem(params, init_state, settings)
+        (x_sol, u_sol, *_) = self._subproblem(params, init_state, settings)
 
         # Prime the same exported discretization calls used after every subproblem in
         # step() (candidate trajectory). initialize() previously only discretized the
