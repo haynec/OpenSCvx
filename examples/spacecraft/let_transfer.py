@@ -864,9 +864,8 @@ problem.settings.prp.rtol = integration_tol
 problem.settings.prp.dt = 1e-4
 
 if __name__ == "__main__":
-
     jax.config.update("jax_enable_x64", True)
-    
+
     hohmann_metrics = _hohmann_transfer_metrics(
         mu_central_km3_s2=mu_earth,
         r1_km=r_0,
