@@ -6,7 +6,7 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Warning this repo is currently in beta testing! Documentation for OpenSCvx, a JAX-based Python library for solving nonconvex trajectory optimization problems">
+        <meta name="description" content="An Open-Source Modular and Extensible Nonlinear Trajectory Optimization Package">
       
       
         <meta name="author" content="Chris Hayner">
@@ -16,7 +16,7 @@
       
       
       
-        <link rel="next" href="getting-started/">
+        <link rel="next" href="examples/">
       
       
         
@@ -40,10 +40,14 @@
 
 
     
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700&display=swap">
   <link rel="stylesheet" href="assets/stylesheets/custom.css">
 
-  <link rel="stylesheet" href="assets/stylesheets/parallax.css">
-  <script>"Apple Computer, Inc."===navigator.vendor&&document.documentElement.classList.add("safari")</script>
+  <link rel="stylesheet" href="assets/stylesheets/home-hero.css">
+  <link rel="stylesheet" href="assets/stylesheets/home-dropin.css">
+  <link rel="stylesheet" href="assets/stylesheets/home-viser.css">
 
     
       
@@ -53,8 +57,8 @@
         
         
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=CMU+Sans+Serif:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
-        <style>:root{--md-text-font:"CMU Sans Serif";--md-code-font:"Roboto Mono"}</style>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,300i,400,400i,700,700i%7CSource+Code+Pro:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Inter";--md-code-font:"Source Code Pro"}</style>
       
     
     
@@ -66,9 +70,20 @@
 
     
     
-  <link rel="me" href="https://fosstodon.org/@squidfunk">
-
-  </head>
+  
+<meta property="og:type" content="website" />
+<meta property="og:title" content="OpenSCvx" />
+<meta property="og:description" content="An Open-Source Modular and Extensible Nonlinear Trajectory Optimization Package" />
+<meta property="og:image" content="https://openscvx.github.io/OpenSCvx/nightly/assets/images/social/index.png" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:url" content="https://openscvx.github.io/OpenSCvx/nightly/" />
+<meta property="twitter:card" content="summary_large_image" />
+<meta property="twitter:title" content="OpenSCvx" />
+<meta property="twitter:description" content="An Open-Source Modular and Extensible Nonlinear Trajectory Optimization Package" />
+<meta property="twitter:image" content="https://openscvx.github.io/OpenSCvx/nightly/assets/images/social/index.png" />
+</head>
   
   
     
@@ -86,6 +101,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#why-openscvx" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -102,7 +122,7 @@
   <nav class="md-header__inner md-grid" aria-label="Header">
     <a href="." title="OpenSCvx" class="md-header__button md-logo" aria-label="OpenSCvx" data-md-component="logo">
       
-  <img src="assets/logo.svg" alt="logo">
+  <img src="assets/openscvx_logo_square.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -142,7 +162,7 @@
     
     
     
-    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="custom"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
     
       <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 7H7a5 5 0 0 0-5 5 5 5 0 0 0 5 5h10a5 5 0 0 0 5-5 5 5 0 0 0-5-5m0 8a3 3 0 0 1-3-3 3 3 0 0 1 3-3 3 3 0 0 1 3 3 3 3 0 0 1-3 3"/></svg>
@@ -233,79 +253,27 @@
     
     <div class="md-container" data-md-component="container">
       
-  <div class="mdx-parallax" data-mdx-component="parallax">
-  <section class="mdx-parallax__group" data-md-color-scheme="slate">
-  
-    
-    
-    <picture class="mdx-parallax__layer" style="--md-parallax-depth: 8;--md-image-position: 70%">
+  <section class="osc-home-hero" data-osc-hero-bg="mesh" aria-labelledby="osc-home-hero-title">
+  <div class="osc-home-hero__inner md-typeset">
+    <p class="osc-home-hero__kicker">Nonconvex trajectory optimization</p>
+    <h1 id="osc-home-hero-title" class="osc-home-hero__title">OpenSCvx</h1>
+    <p class="osc-home-hero__tagline">
       
-        <source type="image/avif" srcset="assets/images/layers/1-background.avif 1280w, assets/images/layers/1-background@2x.avif 1920w, assets/images/layers/1-background@3x.avif 2560w, assets/images/layers/1-background@4x.avif 3840w">
+        An Open-Source Modular and Extensible Nonlinear Trajectory Optimization Package
       
-        <source type="image/webp" srcset="assets/images/layers/1-background.webp 1280w, assets/images/layers/1-background@2x.webp 1920w, assets/images/layers/1-background@3x.webp 2560w, assets/images/layers/1-background@4x.webp 3840w">
+    </p>
+    <div class="osc-home-hero__actions">
+      <a href="Reference/" class="md-button">API Reference</a>
+      <a href="UsersGuide/00_introduction/" class="md-button">Users guide</a>
+      <a href="Examples/" class="md-button">Examples</a>
+    </div>
+  </div>
+</section>
+
       
-      <img srcset="assets/images/layers/1-background.png 1280w, assets/images/layers/1-background@2x.png 1920w, assets/images/layers/1-background@3x.png 2560w, assets/images/layers/1-background@4x.png 3840w" src="assets/images/layers/1-background.png" alt="" class="mdx-parallax__image">
-    </picture>
-  
-    
-    
-    <picture class="mdx-parallax__layer" style="--md-parallax-depth: 5;--md-image-position: 25%">
-      
-        <source type="image/avif" srcset="assets/images/layers/2-mars.avif 1280w, assets/images/layers/2-mars@2x.avif 1920w, assets/images/layers/2-mars@3x.avif 2560w, assets/images/layers/2-mars@4x.avif 3840w">
-      
-        <source type="image/webp" srcset="assets/images/layers/2-mars.webp 1280w, assets/images/layers/2-mars@2x.webp 1920w, assets/images/layers/2-mars@3x.webp 2560w, assets/images/layers/2-mars@4x.webp 3840w">
-      
-      <img srcset="assets/images/layers/2-mars.png 1280w, assets/images/layers/2-mars@2x.png 1920w, assets/images/layers/2-mars@3x.png 2560w, assets/images/layers/2-mars@4x.png 3840w" src="assets/images/layers/2-mars.png" alt="" class="mdx-parallax__image">
-    </picture>
-  
-    
-    
-    <picture class="mdx-parallax__layer" style="--md-parallax-depth: 4;--md-image-position: 20%">
-      
-        <source type="image/avif" srcset="assets/images/layers/3-moon.avif 1280w, assets/images/layers/3-moon@2x.avif 1920w, assets/images/layers/3-moon@3x.avif 2560w, assets/images/layers/3-moon@4x.avif 3840w">
-      
-        <source type="image/webp" srcset="assets/images/layers/3-moon.webp 1280w, assets/images/layers/3-moon@2x.webp 1920w, assets/images/layers/3-moon@3x.webp 2560w, assets/images/layers/3-moon@4x.webp 3840w">
-      
-      <img srcset="assets/images/layers/3-moon.png 1280w, assets/images/layers/3-moon@2x.png 1920w, assets/images/layers/3-moon@3x.png 2560w, assets/images/layers/3-moon@4x.png 3840w" src="assets/images/layers/3-moon.png" alt="" class="mdx-parallax__image">
-    </picture>
-  
-    
-    
-    <picture class="mdx-parallax__layer" style="--md-parallax-depth: 3;--md-image-position: 30%">
-      
-        <source type="image/avif" srcset="assets/images/layers/4-sat1.avif 1280w, assets/images/layers/4-sat1@2x.avif 1920w, assets/images/layers/4-sat1@3x.avif 2560w, assets/images/layers/4-sat1@4x.avif 3840w">
-      
-        <source type="image/webp" srcset="assets/images/layers/4-sat1.webp 1280w, assets/images/layers/4-sat1@2x.webp 1920w, assets/images/layers/4-sat1@3x.webp 2560w, assets/images/layers/4-sat1@4x.webp 3840w">
-      
-      <img srcset="assets/images/layers/4-sat1.png 1280w, assets/images/layers/4-sat1@2x.png 1920w, assets/images/layers/4-sat1@3x.png 2560w, assets/images/layers/4-sat1@4x.png 3840w" src="assets/images/layers/4-sat1.png" alt="" class="mdx-parallax__image">
-    </picture>
-  
-    
-    
-    <picture class="mdx-parallax__layer" style="--md-parallax-depth: 2;--md-image-position: 50%">
-      
-        <source type="image/avif" srcset="assets/images/layers/6-earth.avif 1280w, assets/images/layers/6-earth@2x.avif 1920w, assets/images/layers/6-earth@3x.avif 2560w, assets/images/layers/6-earth@4x.avif 3840w">
-      
-        <source type="image/webp" srcset="assets/images/layers/6-earth.webp 1280w, assets/images/layers/6-earth@2x.webp 1920w, assets/images/layers/6-earth@3x.webp 2560w, assets/images/layers/6-earth@4x.webp 3840w">
-      
-      <img srcset="assets/images/layers/6-earth.png 1280w, assets/images/layers/6-earth@2x.png 1920w, assets/images/layers/6-earth@3x.png 2560w, assets/images/layers/6-earth@4x.png 3840w" src="assets/images/layers/6-earth.png" alt="" class="mdx-parallax__image">
-    </picture>
-  
-    
-    
-    <picture class="mdx-parallax__layer" style="--md-parallax-depth: 2;--md-image-position: 50%">
-      
-        <source type="image/avif" srcset="assets/images/layers/5-space.avif 1280w, assets/images/layers/5-space@2x.avif 1920w, assets/images/layers/5-space@3x.avif 2560w, assets/images/layers/5-space@4x.avif 3840w">
-      
-        <source type="image/webp" srcset="assets/images/layers/5-space.webp 1280w, assets/images/layers/5-space@2x.webp 1920w, assets/images/layers/5-space@3x.webp 2560w, assets/images/layers/5-space@4x.webp 3840w">
-      
-      <img srcset="assets/images/layers/5-space.png 1280w, assets/images/layers/5-space@2x.png 1920w, assets/images/layers/5-space@3x.png 2560w, assets/images/layers/5-space@4x.png 3840w" src="assets/images/layers/5-space.png" alt="" class="mdx-parallax__image">
-    </picture>
-  
-  <div class="mdx-parallax__layer mdx-parallax__blend"></div>
-  <div class="mdx-hero" data-mdx-component="hero">
-    <div class="mdx-hero__scrollwrap md-grid">
-      
+        
+          
+            
 <nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
   <div class="md-grid">
     <ul class="md-tabs__list">
@@ -337,13 +305,13 @@
   
   
     <li class="md-tabs__item">
-      <a href="getting-started/" class="md-tabs__link">
+      <a href="examples/" class="md-tabs__link">
         
   
   
     
   
-  Getting Started
+  Resources
 
       </a>
     </li>
@@ -376,15 +344,8 @@
   
     
     
-      
-  
-  
-  
-  
-    
-    
       <li class="md-tabs__item">
-        <a href="Examples/abstract/brachistochrone/" class="md-tabs__link">
+        <a href="Examples/" class="md-tabs__link">
           
   
   
@@ -397,9 +358,6 @@
     
   
 
-    
-  
-
       
         
   
@@ -409,7 +367,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="Reference/algorithms/" class="md-tabs__link">
+        <a href="Reference/" class="md-tabs__link">
           
   
   
@@ -464,96 +422,17 @@
     </ul>
   </div>
 </nav>
-      <div class="mdx-hero__inner">
-        <div class="mdx-hero__teaser md-typeset">
-          <h1>Fast and Easy Nonconvex Trajectory Optimization</h1>
-          <p>Warning this repo is currently in beta testing! Documentation for OpenSCvx, a JAX-based Python library for solving nonconvex trajectory optimization problems.</p>
-          <a href="getting-started/" class="md-button">
-            Get started
-          </a>
-          <a href="getting-started/" class="md-button md-button--secondary">
-            Learn more
-          </a>
-        </div>
-        <div class="mdx-hero__more">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11 4h2v12l5.5-5.5 1.42 1.42L12 19.84l-7.92-7.92L5.5 10.5 11 16z"/></svg>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-  <div class="mdx-parallax__group" data-md-color-scheme="slate">
-    <footer class="md-footer">
-  
-    
-      
-      <nav class="md-footer__inner md-grid" aria-label="Footer" >
-        
-        
           
-          <a href="getting-started/" class="md-footer__link md-footer__link--next" aria-label="Next: Getting Started">
-            <div class="md-footer__title">
-              <span class="md-footer__direction">
-                Next
-              </span>
-              <div class="md-ellipsis">
-                Getting Started
-              </div>
-            </div>
-            <div class="md-footer__button md-icon">
-              
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
-            </div>
-          </a>
         
-      </nav>
-    
-  
-  <div class="md-footer-meta md-typeset">
-    <div class="md-footer-meta__inner md-grid">
-      <div class="md-copyright">
-  
-    <div class="md-copyright__highlight">
-      Copyright &copy; 2025 Chris Hayner
-    </div>
-  
-  
-    Made with
-    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
-      Material for MkDocs
-    </a>
-  
-</div>
-      
-        
-<div class="md-social">
-  
-    
-    
-    
-    
-      
-      
-    
-    <a href="https://openscvx.github.io/" target="_blank" rel="noopener" title="openscvx.github.io" class="md-social__link">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M0 256c0-46.6 12.5-90.4 34.3-128.9l109.8 191.2C166 357.5 207.9 384 256 384c14.3 0 27.1-2.3 40.8-6.6l-76.3 132.2C95.9 492.3 0 385.3 0 256m365.1 65.6c12.3-19.2 18.9-42.5 18.9-65.6 0-38.2-16.8-72.5-43.3-96h152.7c12 29.6 18.6 62.1 18.6 96 0 141.4-114.6 255.1-256 256zM477.8 128H256c-62.9 0-113.7 44.1-125.5 102.7L54.2 98.5C101 38.5 174 0 256 0c94.8 0 177.5 51.5 221.8 128M344 256a88 88 0 1 1-176 0 88 88 0 1 1 176 0"/></svg>
-    </a>
-  
-</div>
-      
-    </div>
-  </div>
-</footer>
-  </div>
-</div>
-
       
       <main class="md-main" data-md-component="main">
         <div class="md-main__inner md-grid">
           
             
               
-              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" hidden>
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
                     
@@ -566,7 +445,7 @@
   <label class="md-nav__title" for="__drawer">
     <a href="." title="OpenSCvx" class="md-nav__button md-logo" aria-label="OpenSCvx" data-md-component="logo">
       
-  <img src="assets/logo.svg" alt="logo">
+  <img src="assets/openscvx_logo_square.png" alt="logo">
 
     </a>
     OpenSCvx
@@ -600,6 +479,24 @@
       
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="." class="md-nav__link md-nav__link--active">
         
   
@@ -617,6 +514,45 @@
 
       </a>
       
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-openscvx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why OpenSCvx
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-to-go-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where to go next
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -629,8 +565,6 @@
   
     
     
-      
-        
       
         
       
@@ -653,14 +587,14 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="getting-started/" class="md-nav__link ">
+            <a href="examples/" class="md-nav__link ">
               
   
   
   <span class="md-ellipsis">
     
   
-    Getting Started
+    Resources
   
 
     
@@ -682,39 +616,11 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Getting Started
+    Resources
   
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="examples/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Examples
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
             
               
                 
@@ -1071,6 +977,10 @@
     
       
         
+          
+        
+      
+        
       
         
       
@@ -1108,8 +1018,9 @@
         <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
         
           
-          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
-            
+          <div class="md-nav__link md-nav__container">
+            <a href="Examples/" class="md-nav__link ">
+              
   
   
   <span class="md-ellipsis">
@@ -1123,8 +1034,14 @@
   
   
 
-            <span class="md-nav__icon md-icon"></span>
-          </label>
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
         
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_4">
@@ -1136,6 +1053,8 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
             
               
                 
@@ -1169,10 +1088,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_1" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_2" >
         
           
-          <label class="md-nav__link" for="__nav_4_1" id="__nav_4_1_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
             
   
   
@@ -1190,8 +1109,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_1_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_1">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_2">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1355,10 +1274,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_2" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_3" >
         
           
-          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
             
   
   
@@ -1376,8 +1295,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_2">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1571,10 +1490,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_3" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_4" >
         
           
-          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_4" id="__nav_4_4_label" tabindex="0">
             
   
   
@@ -1592,8 +1511,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1815,10 +1734,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_4" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_5" >
         
           
-          <label class="md-nav__link" for="__nav_4_4" id="__nav_4_4_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_5" id="__nav_4_5_label" tabindex="0">
             
   
   
@@ -1836,8 +1755,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_4">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2069,10 +1988,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_5" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_6" >
         
           
-          <label class="md-nav__link" for="__nav_4_5" id="__nav_4_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_6" id="__nav_4_6_label" tabindex="0">
             
   
   
@@ -2090,8 +2009,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_5">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_6">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2323,10 +2242,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_5_8" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_6_8" >
         
           
-          <label class="md-nav__link" for="__nav_4_5_8" id="__nav_4_5_8_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_6_8" id="__nav_4_6_8_label" tabindex="0">
             
   
   
@@ -2344,8 +2263,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_5_8_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_5_8">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_6_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_6_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2519,10 +2438,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_6" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_7" >
         
           
-          <label class="md-nav__link" for="__nav_4_6" id="__nav_4_6_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_7" id="__nav_4_7_label" tabindex="0">
             
   
   
@@ -2540,8 +2459,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_6">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2761,10 +2680,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_7" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_8" >
         
           
-          <label class="md-nav__link" for="__nav_4_7" id="__nav_4_7_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_8" id="__nav_4_8_label" tabindex="0">
             
   
   
@@ -2782,8 +2701,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_7">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2979,10 +2898,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_8" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_9" >
         
           
-          <label class="md-nav__link" for="__nav_4_8" id="__nav_4_8_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_9" id="__nav_4_9_label" tabindex="0">
             
   
   
@@ -3000,8 +2919,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_8_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_8">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_9">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3103,10 +3022,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_8_3" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_9_3" >
         
           
-          <label class="md-nav__link" for="__nav_4_8_3" id="__nav_4_8_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_9_3" id="__nav_4_9_3_label" tabindex="0">
             
   
   
@@ -3124,8 +3043,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_8_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_8_3">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_9_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_9_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3459,10 +3378,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_9" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_10" >
         
           
-          <label class="md-nav__link" for="__nav_4_9" id="__nav_4_9_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_10" id="__nav_4_10_label" tabindex="0">
             
   
   
@@ -3480,8 +3399,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_9">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3585,10 +3504,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_10" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_11" >
         
           
-          <label class="md-nav__link" for="__nav_4_10" id="__nav_4_10_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_4_11" id="__nav_4_11_label" tabindex="0">
             
   
   
@@ -3606,8 +3525,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_10">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3757,6 +3676,8 @@
       
         
       
+        
+      
     
     
     
@@ -3776,7 +3697,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="Reference/algorithms/" class="md-nav__link ">
+            <a href="Reference/" class="md-nav__link ">
               
   
   
@@ -3811,6 +3732,287 @@
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_2" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="Reference/algorithms/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    algorithms
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    algorithms
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Reference/algorithms/augmented_lagrangian/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    augmented_lagrangian
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Reference/algorithms/base/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    base
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Reference/algorithms/constant_proximal_weight/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    constant_proximal_weight
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Reference/algorithms/optimization_results/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    optimization_results
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Reference/algorithms/penalized_trust_region/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    penalized_trust_region
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Reference/algorithms/ramp_proximal_weight/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ramp_proximal_weight
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="Reference/algorithms/weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
               
             
               
@@ -3875,7 +4077,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_3" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_4" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -3897,14 +4099,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4054,7 +4256,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_3_5" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_4_5" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -4076,14 +4278,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_3_5" id="__nav_5_3_5_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_4_5" id="__nav_5_4_5_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_3_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_3_5">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_4_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_4_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4195,7 +4397,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_4" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_5" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -4217,14 +4419,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_5" id="__nav_5_5_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_4">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4354,7 +4556,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_5" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_6" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -4376,14 +4578,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_5" id="__nav_5_5_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_5">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4485,7 +4687,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_6" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_7" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -4507,14 +4709,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_7" id="__nav_5_7_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_6">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4616,7 +4818,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_7" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_8" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -4638,14 +4840,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_7" id="__nav_5_7_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_8" id="__nav_5_8_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_7">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4785,7 +4987,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_9" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_10" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -4807,14 +5009,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_9" id="__nav_5_9_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_9">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5058,7 +5260,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_10" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_11" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -5080,14 +5282,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_11" id="__nav_5_11_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_10">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5189,7 +5391,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_10_3" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_11_3" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -5211,14 +5413,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_10_3" id="__nav_5_10_3_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_11_3" id="__nav_5_11_3_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_10_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_10_3">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_11_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_11_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5468,7 +5670,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_12" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_13" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -5490,14 +5692,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_12" id="__nav_5_12_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_13" id="__nav_5_13_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_12_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_12">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_13">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5599,7 +5801,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_13" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_14" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -5621,14 +5823,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_13" id="__nav_5_13_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_14" id="__nav_5_14_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_13_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_13">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_14_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_14">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5750,7 +5952,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_14" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -5772,14 +5974,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_14" id="__nav_5_14_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_15" id="__nav_5_15_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_14_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_14">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_15_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_15">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5931,7 +6133,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_14_4" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15_4" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -5953,14 +6155,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_14_4" id="__nav_5_14_4_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_15_4" id="__nav_5_15_4_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_14_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_14_4">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_15_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_15_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -6140,7 +6342,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_14_4_6" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15_4_6" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -6162,14 +6364,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_14_4_6" id="__nav_5_14_4_6_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_15_4_6" id="__nav_5_15_4_6_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_5_14_4_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_14_4_6">
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_5_15_4_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_15_4_6">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -6671,7 +6873,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_14_7" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15_7" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -6693,14 +6895,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_14_7" id="__nav_5_14_7_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_15_7" id="__nav_5_15_7_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_14_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_14_7">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_15_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_15_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -6752,7 +6954,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_14_7_1" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15_7_1" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -6774,14 +6976,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_14_7_1" id="__nav_5_14_7_1_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_15_7_1" id="__nav_5_15_7_1_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_5_14_7_1_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_14_7_1">
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_5_15_7_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_15_7_1">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -7103,7 +7305,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_14_7_2" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15_7_2" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -7125,14 +7327,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_14_7_2" id="__nav_5_14_7_2_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_15_7_2" id="__nav_5_15_7_2_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_5_14_7_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_14_7_2">
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_5_15_7_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_15_7_2">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -7596,7 +7798,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_14_8" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15_8" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -7618,14 +7820,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_14_8" id="__nav_5_14_8_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_15_8" id="__nav_5_15_8_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_14_8_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_14_8">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_15_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_15_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -8105,7 +8307,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_16" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -8127,14 +8329,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_15" id="__nav_5_15_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5_16" id="__nav_5_16_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_15_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_15">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_16_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_16">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -8627,7 +8829,9 @@
             
             
               
-              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" hidden>
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
                     
@@ -8636,6 +8840,36 @@
   
   
   
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#why-openscvx" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Why OpenSCvx
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-to-go-next" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where to go next
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
   
 </nav>
                   </div>
@@ -8648,6 +8882,264 @@
               
               <article class="md-content__inner md-typeset">
                 
+  <section class="osc-home-pipeline" aria-labelledby="osc-home-pipeline-title">
+  <h2 id="osc-home-pipeline-title" class="osc-home-pipeline__title">From a nonlinear optimal control problem to a dynamically feasible trajectory</h2>
+  <p class="osc-home-pipeline__lede">
+    Model in Python, compile with JAX, and scale batches on CPU or GPU—successive convexification turns a nonlinear OCP into a sequence of convex subproblems.
+  </p>
+
+  <div class="osc-home-pipeline__row">
+    <article class="osc-home-pipeline__card" aria-label="Nonlinear optimal control formulation">
+      <div class="osc-home-pipeline__card-content">
+        <span class="osc-home-pipeline__eyebrow">Nonlinear Optimal Control Problem</span>
+        <div class="osc-home-pipeline__body">
+          <div class="osc-home-formula" aria-hidden="true">
+            <div class="osc-home-formula__line">
+              <span class="osc-home-formula__op">min</span>
+              <span class="osc-home-formula__expr">J(x, u)</span>
+            </div>
+            <div class="osc-home-formula__line osc-home-formula__line--muted">
+              <span class="osc-home-formula__w">s.t.</span>
+              <span class="osc-home-formula__expr">x&#775; = f(x, u)</span>
+            </div>
+            <div class="osc-home-formula__line osc-home-formula__line--muted">
+              <span class="osc-home-formula__w"></span>
+              <span class="osc-home-formula__expr">g(x, u) &#8804; 0</span>
+            </div>
+            <div class="osc-home-formula__line osc-home-formula__line--muted">
+              <span class="osc-home-formula__w"></span>
+              <span class="osc-home-formula__expr">h(x, u) = 0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <div class="osc-home-pipeline__connector" aria-hidden="true">
+      <span class="osc-home-pipeline__arrow"></span>
+    </div>
+
+    <article class="osc-home-pipeline__card osc-home-pipeline__card--accent" aria-label="OpenSCvx stack">
+      <div class="osc-home-pipeline__card-content">
+        <span class="osc-home-pipeline__eyebrow">Batched · CPU · GPU</span>
+        <div class="osc-home-pipeline__body">
+          <p class="osc-home-pipeline__stack-title osc-home-pipeline__stack-title--brand">OpenSCvx</p>
+        </div>
+        <span class="osc-home-pipeline__eyebrow">JAX · CVXPY</span>
+      </div>
+    </article>
+
+    <div class="osc-home-pipeline__connector" aria-hidden="true">
+      <span class="osc-home-pipeline__arrow"></span>
+    </div>
+
+    <article class="osc-home-pipeline__card" aria-label="Optimized trajectory solution">
+      <div class="osc-home-pipeline__card-content">
+        <span class="osc-home-pipeline__eyebrow">Solution</span>
+        <div class="osc-home-pipeline__body osc-home-pipeline__body--viz">
+          <div class="osc-home-traj-wrap">
+            <svg
+              class="osc-home-traj"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 260 148"
+              width="260"
+              height="148"
+              fill="none"
+              preserveAspectRatio="xMidYMid meet"
+              aria-hidden="true"
+            >
+              <rect class="osc-home-traj__frame" x="10" y="10" width="240" height="128" rx="12" />
+              <!-- plot centered in frame (frame center 130,74 vs path bbox ~146,63) -->
+              <g class="osc-home-traj__plot" transform="translate(-16 11)">
+                <g class="osc-home-traj__axes">
+                  <line x1="36" y1="116" x2="228" y2="116" />
+                  <line x1="36" y1="116" x2="36" y2="28" />
+                </g>
+                <path
+                  class="osc-home-traj__path osc-home-traj__path--main"
+                  d="M 40 108 C 62 106, 76 88, 92 68 C 108 48, 136 32, 168 38 C 196 44, 214 58, 232 36 C 242 26, 246 22, 252 18"
+                />
+                <circle class="osc-home-traj__dot osc-home-traj__dot--start" cx="40" cy="108" r="3.5" />
+                <circle class="osc-home-traj__dot osc-home-traj__dot--way" cx="92" cy="68" r="2.8" />
+                <circle class="osc-home-traj__dot osc-home-traj__dot--way" cx="168" cy="38" r="2.8" />
+                <circle class="osc-home-traj__dot osc-home-traj__dot--end" cx="252" cy="18" r="4.5" />
+              </g>
+            </svg>
+          </div>
+        </div>
+      </div>
+    </article>
+  </div>
+</section>
+  
+
+
+  
+  
+    
+    
+      
+    
+  
+
+
+
+
+<section class="osc-home-dropin osc-home-viser" aria-labelledby="osc-home-viser-title">
+  <div class="osc-home-dropin__inner md-typeset">
+    <h2 id="osc-home-viser-title" class="osc-home-dropin__title">Trajectory Previews</h2>
+    <p class="osc-home-dropin__lede">Click. Drag. Zoom.</p>
+    <div class="osc-home-viser__grid">
+      <div class="osc-home-viser__cell" role="group" aria-labelledby="osc-home-viser-drone-label">
+        <!-- <div id="osc-home-viser-drone-label" class="osc-home-viser__caption">Drone racing</div> -->
+        <div class="osc-home-viser__plot">
+          <div class="osc-home-viser__iframe-shell">
+            <iframe
+              class="osc-home-viser__iframe"
+              src="assets/viser-client/index.html?playbackPath=/OpenSCvx/nightly/assets/viser-recordings/drone_racing.viser"
+              title="Drone racing — embedded Viser playback"
+              loading="eager"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen
+            ></iframe>
+          </div>
+          <p class="osc-home-viser__example-link-row">
+            <a href="Examples/drone/drone_racing/" class="osc-home-viser__example-link">
+              Drone Racing Example
+            </a>
+          </p>
+        </div>
+      </div>
+
+      <div class="osc-home-viser__cell" role="group" aria-labelledby="osc-home-viser-franka-label">
+        <!-- <div id="osc-home-viser-franka-label" class="osc-home-viser__caption">Franka FR3 pick &amp; place</div> -->
+        <div class="osc-home-viser__plot">
+          <div class="osc-home-viser__iframe-shell">
+            <iframe
+              class="osc-home-viser__iframe"
+              src="assets/viser-client/index.html?playbackPath=/OpenSCvx/nightly/assets/viser-recordings/franka_fr3v2_pick_place.viser"
+              title="Franka FR3 pick and place — embedded Viser playback"
+              loading="lazy"
+              referrerpolicy="strict-origin-when-cross-origin"
+              allowfullscreen
+            ></iframe>
+          </div>
+          <p class="osc-home-viser__example-link-row">
+            <a href="Examples/arm/franka_fr3v2_pick_place/" class="osc-home-viser__example-link">
+              Franka FR3 Pick &amp; Place Example
+            </a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+  <section class="osc-home-dropin" aria-labelledby="osc-home-dropin-title">
+  <div class="osc-home-dropin__inner md-typeset">
+    <h2 id="osc-home-dropin-title" class="osc-home-dropin__title">Installation instructions</h2>
+    <div class="osc-mac" aria-label="Install OpenSCvx">
+      <input class="osc-mac__sr" type="radio" name="osc-home-install" id="osc-home-install-uv" checked />
+      <input class="osc-mac__sr" type="radio" name="osc-home-install" id="osc-home-install-pip" />
+      <input class="osc-mac__sr" type="radio" name="osc-home-install" id="osc-home-install-dev" />
+
+      <div class="osc-mac__chrome">
+        <div class="osc-mac__traffic" aria-hidden="true">
+          <span class="osc-mac__dot osc-mac__dot--close"></span>
+          <span class="osc-mac__dot osc-mac__dot--min"></span>
+          <span class="osc-mac__dot osc-mac__dot--max"></span>
+        </div>
+        <div class="osc-mac__tabs" role="tablist" aria-label="Install method">
+          <label class="osc-mac__tab" for="osc-home-install-uv">uv</label>
+          <label class="osc-mac__tab" for="osc-home-install-pip">pip</label>
+          <label class="osc-mac__tab" for="osc-home-install-dev">editable</label>
+        </div>
+      </div>
+
+      <div class="osc-mac__viewport">
+        <pre class="osc-mac__pre osc-mac__pre--uv"><code class="osc-mac__code">uv pip install openscvx
+
+# Optional: cvxpygen, stljax, jaxlie, mujoco-mjx extras
+uv pip install "openscvx[cvxpygen,stl,lie,mjx]"</code></pre>
+        <pre class="osc-mac__pre osc-mac__pre--pip"><code class="osc-mac__code">pip install openscvx
+
+# Optional: cvxpygen, stljax, jaxlie, mujoco-mjx extras
+pip install "openscvx[cvxpygen,stl,lie,mjx]"</code></pre>
+        <pre class="osc-mac__pre osc-mac__pre--dev"><code class="osc-mac__code">git clone https://github.com/OpenSCvx/OpenSCvx.git
+cd OpenSCvx
+uv pip install -e .
+
+# Optional: cvxpygen, stljax, jaxlie, mujoco-mjx extras
+uv pip install -e ".[cvxpygen,stl,lie,mjx]"</code></pre>
+      </div>
+    </div>
+  </div>
+</section>
+  <div class="osc-home-below-fold">
+    
+                  
+  
+
+
+
+  
+    <a href="https://github.com/OpenSCvx/OpenSCvx/edit/master/docs/index.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+    
+      
+    
+    <a href="https://github.com/OpenSCvx/OpenSCvx/raw/master/docs/index.md" title="View source of this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 18c.56 0 1 .44 1 1s-.44 1-1 1-1-.44-1-1 .44-1 1-1m0-3c-2.73 0-5.06 1.66-6 4 .94 2.34 3.27 4 6 4s5.06-1.66 6-4c-.94-2.34-3.27-4-6-4m0 6.5a2.5 2.5 0 0 1-2.5-2.5 2.5 2.5 0 0 1 2.5-2.5 2.5 2.5 0 0 1 2.5 2.5 2.5 2.5 0 0 1-2.5 2.5M9.27 20H6V4h7v5h5v4.07c.7.08 1.36.25 2 .49V8l-6-6H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h4.5a8.2 8.2 0 0 1-1.23-2"/></svg>
+    </a>
+  
+
+
+  <h1>Home</h1>
+
+<h2 id="why-openscvx">Why OpenSCvx<a class="headerlink" href="#why-openscvx" title="Permanent link">&para;</a></h2>
+<p><strong>Modeling.</strong> Dynamics, costs, and constraints are defined together in a structured problem object.
+The Users Guide is the place to see how the pieces fit from a first model to a solve.</p>
+<p><strong>JAX.</strong> The symbolic layer lowers to JAX. On the compiled hot paths we <strong><code>jax.jit</code></strong> and <strong>immediately <code>jax.export</code></strong>: export is always part of that pipeline, not an extra step you opt into later. CPU and GPU use the same problem definition; performance still depends on problem size and settings.</p>
+<p><strong>Vectorization.</strong> Two ideas show up in practice: the discretized dynamics and many nonlinear terms
+are evaluated <strong>across decision nodes</strong> in parallel inside the solver (see
+<a href="UnderTheHood/vectorization_and_vmapping/">Vectorization and vmapping</a>). When
+your model has a <strong>batch axis</strong> you want to treat uniformly—many obstacles, repeated geometry, and
+similar—<strong><code>ox.Vmap</code></strong> writes that data-parallel piece symbolically and lowers to <strong><code>jax.vmap</code></strong>. It
+helps avoid hand-written Python loops over those batch dimensions; it is not a general substitute
+for every outer loop (see <a href="UsersGuide/03_obstacle_avoidance_vmap/">Obstacle avoidance with Vmap</a>).</p>
+<h2 id="where-to-go-next">Where to go next<a class="headerlink" href="#where-to-go-next" title="Permanent link">&para;</a></h2>
+<div class="grid cards">
+<ul>
+<li><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m13.13 22.19-1.63-3.83c1.57-.58 3.04-1.36 4.4-2.27zM5.64 12.5l-3.83-1.63 6.1-2.77C7 9.46 6.22 10.93 5.64 12.5M21.61 2.39S16.66.269 11 5.93c-2.19 2.19-3.5 4.6-4.35 6.71-.28.75-.09 1.57.46 2.13l2.13 2.12c.55.56 1.37.74 2.12.46A19.1 19.1 0 0 0 18.07 13c5.66-5.66 3.54-10.61 3.54-10.61m-7.07 7.07c-.78-.78-.78-2.05 0-2.83s2.05-.78 2.83 0c.77.78.78 2.05 0 2.83s-2.05.78-2.83 0m-5.66 7.07-1.41-1.41zM6.24 22l3.64-3.64c-.34-.09-.67-.24-.97-.45L4.83 22zM2 22h1.41l4.77-4.76-1.42-1.41L2 20.59zm0-2.83 4.09-4.08c-.21-.3-.36-.62-.45-.97L2 17.76z"/></svg></span> <strong><a href="examples/">Run examples</a></strong> — locate scripts in the repo, run them locally, and browse problem categories.</li>
+<li><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 21.5c-1.35-.85-3.8-1.5-5.5-1.5-1.65 0-3.35.3-4.75 1.05-.1.05-.15.05-.25.05-.25 0-.5-.25-.5-.5V6c.6-.45 1.25-.75 2-1 1.11-.35 2.33-.5 3.5-.5 1.95 0 4.05.4 5.5 1.5 1.45-1.1 3.55-1.5 5.5-1.5 1.17 0 2.39.15 3.5.5.75.25 1.4.55 2 1v14.6c0 .25-.25.5-.5.5-.1 0-.15 0-.25-.05-1.4-.75-3.1-1.05-4.75-1.05-1.7 0-4.15.65-5.5 1.5M12 8v11.5c1.35-.85 3.8-1.5 5.5-1.5 1.2 0 2.4.15 3.5.5V7c-1.1-.35-2.3-.5-3.5-.5-1.7 0-4.15.65-5.5 1.5m1 3.5c1.11-.68 2.6-1 4.5-1 .91 0 1.76.09 2.5.28V9.23c-.87-.15-1.71-.23-2.5-.23q-2.655 0-4.5.84zm4.5.17c-1.71 0-3.21.26-4.5.79v1.69c1.11-.65 2.6-.99 4.5-.99 1.04 0 1.88.08 2.5.24v-1.5c-.87-.16-1.71-.23-2.5-.23m2.5 2.9c-.87-.16-1.71-.24-2.5-.24-1.83 0-3.33.27-4.5.8v1.69c1.11-.66 2.6-.99 4.5-.99 1.04 0 1.88.08 2.5.24z"/></svg></span> <strong><a href="UsersGuide/00_introduction/">Users guide</a></strong> — modeling, constraints, and visualization.</li>
+<li><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M8 3a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2H3v2h1a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h2v-2H8v-5a2 2 0 0 0-2-2 2 2 0 0 0 2-2V5h2V3m6 0a2 2 0 0 1 2 2v4a2 2 0 0 0 2 2h1v2h-1a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-2v-2h2v-5a2 2 0 0 1 2-2 2 2 0 0 1-2-2V5h-2V3z"/></svg></span> <strong><a href="Reference/">API reference</a></strong> — modules and functions generated from source with docstrings.</li>
+<li><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 3v6h8V3m-8 18h8V11h-8M3 21h8v-6H3m0-2h8V3H3z"/></svg></span> <strong><a href="Examples/">Examples</a></strong> — runnable scripts organized by topic.</li>
+</ul>
+</div>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+  
+
+
+
+                
+  </div>
+
               </article>
             </div>
           
@@ -8663,6 +9155,70 @@
         
       </main>
       
+        <footer class="md-footer">
+  
+    
+      
+        
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+        
+          
+          <a href="examples/" class="md-footer__link md-footer__link--next" aria-label="Next: Resources">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Resources
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Copyright &copy; 2025 Chris Hayner
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+      
+      
+    
+    <a href="https://openscvx.github.io/" target="_blank" rel="noopener" title="openscvx.github.io" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M0 256c0-46.6 12.5-90.4 34.3-128.9l109.8 191.2C166 357.5 207.9 384 256 384c14.3 0 27.1-2.3 40.8-6.6l-76.3 132.2C95.9 492.3 0 385.3 0 256m365.1 65.6c12.3-19.2 18.9-42.5 18.9-65.6 0-38.2-16.8-72.5-43.3-96h152.7c12 29.6 18.6 62.1 18.6 96 0 141.4-114.6 255.1-256 256zM477.8 128H256c-62.9 0-113.7 44.1-125.5 102.7L54.2 98.5C101 38.5 174 0 256 0c94.8 0 177.5 51.5 221.8 128M344 256a88 88 0 1 1-176 0 88 88 0 1 1 176 0"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
     </div>
     <div class="md-dialog" data-md-component="dialog">
       <div class="md-dialog__inner md-typeset"></div>
@@ -8674,10 +9230,9 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["announce.dismiss", "content.action.edit", "content.action.view", "content.code.annotate", "content.code.copy", "content.code.select", "content.footnote.tooltips", "content.tooltips", "header.autohide", "navigation.expand", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.instant.preview", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": ".", "features": ["announce.dismiss", "content.action.edit", "content.action.view", "content.code.annotate", "content.code.copy", "content.code.select", "content.footnote.tooltips", "content.tooltips", "header.autohide", "navigation.expand", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-  
       <script src="assets/javascripts/bundle.79ae519e.min.js"></script>
       
         <script src="javascripts/mathjax.js"></script>
@@ -8685,7 +9240,5 @@
         <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
       
     
-  <script src="assets/javascripts/parallax.js"></script>
-
   </body>
 </html>

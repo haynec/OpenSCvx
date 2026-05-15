@@ -1,0 +1,930 @@
+/* -------------------------------------------------------------------------- */
+/* Home landing — hero, pipeline (Moreau-inspired rhythm), below-fold spacing */
+/* -------------------------------------------------------------------------- */
+
+/* --- Hero ---------------------------------------------------------------- */
+.osc-home-hero {
+  position: relative;
+  isolation: isolate;
+  margin: 0 calc(50% - 50vw);
+  width: 100vw;
+  max-width: 100vw;
+  box-sizing: border-box;
+  padding: clamp(2rem, 5vw, 3rem) clamp(0.75rem, 3vw, 1.25rem) clamp(2.25rem, 5vw, 3.25rem);
+  background: var(--md-default-bg-color);
+  border-bottom: 1px solid color-mix(in srgb, var(--md-typeset-color) 8%, transparent);
+  overflow-x: clip;
+}
+
+/* Decorative layer (radials + grid) — content sits in .osc-home-hero__inner */
+.osc-home-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero {
+  border-bottom-color: color-mix(in srgb, var(--md-typeset-color) 12%, transparent);
+}
+
+/*
+ * Hero backdrops — data-osc-hero-bg on .osc-home-hero (see home-hero.html).
+ * nebula (default): glow + engineering grid
+ * orbit: soft overlapping “lenses”, no grid
+ * beams: diagonal light rays + top glow
+ * horizon: horizontal luminous band (control-theory horizon metaphor)
+ * mesh: layered wavy lines (SVG data-URIs) + soft glow
+ */
+
+/* --- Slate (dark) -------------------------------------------------------- */
+
+[data-md-color-scheme="slate"] .osc-home-hero:not([data-osc-hero-bg])::before,
+[data-md-color-scheme="slate"] .osc-home-hero[data-osc-hero-bg="nebula"]::before {
+  background:
+    radial-gradient(ellipse 110% 75% at 50% -32%, var(--osc-hero-slate-glow), transparent 58%),
+    radial-gradient(ellipse 50% 42% at 92% 88%, var(--osc-hero-slate-glow-mid), transparent 52%),
+    radial-gradient(ellipse 45% 38% at 8% 55%, var(--osc-hero-slate-glow-soft), transparent 58%),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 30px,
+      var(--osc-hero-slate-grid) 30px,
+      var(--osc-hero-slate-grid) 31px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 30px,
+      var(--osc-hero-slate-grid) 30px,
+      var(--osc-hero-slate-grid) 31px
+    );
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero[data-osc-hero-bg="orbit"]::before {
+  background:
+    radial-gradient(ellipse 85% 70% at 50% 115%, var(--osc-hero-slate-glow-mid), transparent 52%),
+    radial-gradient(ellipse 60% 85% at -5% 35%, var(--osc-hero-slate-glow-mid), transparent 58%),
+    radial-gradient(ellipse 55% 75% at 108% 22%, var(--osc-hero-slate-glow-soft), transparent 55%),
+    radial-gradient(
+      ellipse 50% 45% at 50% -5%,
+      color-mix(in srgb, var(--osc-palette-3) 12%, transparent),
+      transparent 70%
+    );
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero[data-osc-hero-bg="beams"]::before {
+  background:
+    radial-gradient(ellipse 85% 55% at 50% -18%, var(--osc-hero-slate-glow), transparent 58%),
+    repeating-linear-gradient(
+      108deg,
+      transparent 0,
+      transparent 44px,
+      color-mix(in srgb, var(--osc-palette-4) 3.8%, transparent) 44px,
+      color-mix(in srgb, var(--osc-palette-4) 3.8%, transparent) 45px
+    ),
+    repeating-linear-gradient(
+      72deg,
+      transparent 0,
+      transparent 56px,
+      color-mix(in srgb, var(--osc-palette-3) 4.5%, transparent) 56px,
+      color-mix(in srgb, var(--osc-palette-3) 4.5%, transparent) 57px
+    );
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero[data-osc-hero-bg="horizon"]::before {
+  background:
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      var(--osc-hero-slate-glow-mid) 38%,
+      var(--osc-hero-slate-glow-soft) 50%,
+      transparent 64%
+    ),
+    radial-gradient(
+      ellipse 130% 55% at 50% 52%,
+      color-mix(in srgb, var(--osc-palette-3) 9.5%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(ellipse 90% 45% at 50% -25%, var(--osc-hero-slate-glow-soft), transparent 55%);
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero[data-osc-hero-bg="mesh"]::before {
+  background:
+    radial-gradient(ellipse 105% 68% at 50% -32%, var(--osc-hero-slate-glow), transparent 58%),
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201200%20320%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%236366f1%22%20stroke-width%3D%221.35%22%20stroke-opacity%3D%220.22%22%20d%3D%22M0%2072%20C200%2022%20400%20128%20600%2072%20S1000%2022%201200%2072%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%236366f1%22%20stroke-width%3D%221.05%22%20stroke-opacity%3D%220.14%22%20d%3D%22M0%20118%20C220%2062%20420%20178%20640%20118%20S980%2062%201200%20118%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%236366f1%22%20stroke-width%3D%220.9%22%20stroke-opacity%3D%220.1%22%20d%3D%22M0%20168%20C180%20218%20380%20112%20560%20168%20S910%20218%201200%20168%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%236366f1%22%20stroke-width%3D%220.75%22%20stroke-opacity%3D%220.06%22%20d%3D%22M0%20218%20C260%20178%20460%20258%20720%20218%20S1060%20178%201200%20218%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%236366f1%22%20stroke-width%3D%220.7%22%20stroke-opacity%3D%220.05%22%20d%3D%22M0%20268%20C240%20308%20420%20228%20680%20268%20S1040%20308%201200%20268%22%2F%3E%3C%2Fsvg%3E")
+      center 52% / 142% auto no-repeat,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201200%20320%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%236366f1%22%20stroke-width%3D%220.72%22%20stroke-opacity%3D%220.08%22%20d%3D%22M-40%2040%20C160%20100%20360%20-20%20560%2040%20S960%20100%201240%2040%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%236366f1%22%20stroke-width%3D%220.68%22%20stroke-opacity%3D%220.06%22%20d%3D%22M-20%20290%20C200%20230%20400%20350%20620%20290%20S1010%20230%201210%20290%22%2F%3E%3C%2Fsvg%3E")
+      center / 125% auto no-repeat;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-md-color-scheme="slate"] .osc-home-hero::before {
+    background: radial-gradient(ellipse 100% 80% at 50% -25%, var(--osc-hero-slate-glow), transparent 60%) !important;
+  }
+}
+
+.osc-home-hero__inner {
+  position: relative;
+  z-index: 1;
+  margin: 0 auto;
+  max-width: min(40rem, 100%);
+  padding-inline: clamp(0.25rem, 2vw, 0.5rem);
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.osc-home-hero__kicker {
+  margin: 0 0 0.5rem;
+  font-family: "League Spartan", var(--md-text-font-family), system-ui, sans-serif;
+  font-size: clamp(0.62rem, 1.8vw, 0.72rem);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--md-typeset-color) 48%, transparent);
+}
+
+/*
+ * Hero title: Material's .md-typeset h1 beats a lone class — use h1 + id + .md-typeset
+ * so OpenSCvx actually renders at display size.
+ */
+.osc-home-hero__inner.md-typeset h1#osc-home-hero-title.osc-home-hero__title {
+  margin: 0 0 1rem;
+  font-family: "League Spartan", var(--md-text-font-family), system-ui, sans-serif;
+  font-weight: 600 !important;
+  letter-spacing: -0.0em;
+  line-height: 1.02;
+  font-size: clamp(3.75rem, 14vw + 1rem, 8.5rem) !important;
+  color: var(--md-typeset-color);
+  white-space: nowrap;
+}
+
+/* Slate: hero copy in white (light mode keeps warm custom palette above). */
+[data-md-color-scheme="slate"] .osc-home-hero__inner.md-typeset h1#osc-home-hero-title.osc-home-hero__title {
+  color: var(--osc-palette-4) !important;
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero__inner .osc-home-hero__kicker {
+  color: color-mix(in srgb, var(--osc-palette-4) 90%, var(--osc-palette-1) 10%) !important;
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero__inner .osc-home-hero__tagline {
+  color: color-mix(in srgb, var(--osc-palette-4) 88%, var(--osc-palette-1) 12%) !important;
+}
+
+.osc-home-hero__tagline {
+  margin: 0 auto 1.5rem;
+  max-width: 34rem;
+  font-size: clamp(1rem, 2.2vw, 1.12rem);
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--md-typeset-color) 72%, transparent);
+}
+
+.osc-home-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: center;
+  align-items: center;
+}
+
+.osc-home-hero__actions .md-button {
+  margin: 0;
+  border-radius: 22px;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+  /* Stable compositing layer: reduces hover shimmer when backdrop-filter and box-shadow animate together. */
+  transform: translateZ(0);
+  transition:
+    background-color 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease,
+    color 0.18s ease;
+}
+
+/*
+ * Hero CTAs — shared "liquid glass" (frosted blur + rim). All three use the same rules;
+ * scoped to .osc-home-hero__actions so site-wide buttons stay unchanged.
+ */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__actions .md-button {
+  color: color-mix(in srgb, var(--osc-palette-2) 92%, var(--osc-palette-1) 8%) !important;
+  background-color: color-mix(in srgb, var(--osc-palette-4) 58%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--osc-palette-4) 48%, var(--osc-palette-2) 52%) !important;
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--osc-palette-4) 65%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--osc-palette-1) 4%, transparent),
+    0 3px 5px color-mix(in srgb, var(--osc-palette-1) 3%, transparent),
+    0 12px 30px color-mix(in srgb, var(--osc-palette-1) 8%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__actions .md-button:hover,
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__actions .md-button:focus {
+  color: var(--osc-palette-2) !important;
+  background-color: color-mix(in srgb, var(--osc-palette-4) 72%, transparent) !important;
+  border-color: color-mix(in srgb, var(--osc-palette-4) 62%, var(--osc-palette-2) 38%) !important;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--osc-palette-4) 80%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--osc-palette-1) 5%, transparent),
+    0 5px 8px color-mix(in srgb, var(--osc-palette-1) 5%, transparent),
+    0 16px 38px color-mix(in srgb, var(--osc-palette-1) 10%, transparent);
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button {
+  color: color-mix(in srgb, var(--osc-palette-4) 92%, var(--osc-palette-1) 8%) !important;
+  background-color: color-mix(in srgb, var(--osc-palette-4) 8%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--osc-palette-4) 16%, transparent) !important;
+  -webkit-backdrop-filter: saturate(190%) blur(22px);
+  backdrop-filter: saturate(190%) blur(22px);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--osc-palette-4) 12%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--osc-palette-1) 20%, transparent),
+    0 4px 8px color-mix(in srgb, var(--osc-palette-1) 20%, transparent),
+    0 12px 32px color-mix(in srgb, var(--osc-palette-1) 32%, transparent);
+}
+
+[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button:hover,
+[data-md-color-scheme="slate"] .osc-home-hero__actions .md-button:focus {
+  color: color-mix(in srgb, var(--osc-palette-4) 98%, var(--osc-palette-1) 2%) !important;
+  background-color: color-mix(in srgb, var(--osc-palette-4) 13%, transparent) !important;
+  border-color: color-mix(in srgb, var(--osc-palette-4) 26%, transparent) !important;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--osc-palette-4) 18%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--osc-palette-1) 22%, transparent),
+    0 6px 12px color-mix(in srgb, var(--osc-palette-1) 25%, transparent),
+    0 16px 40px color-mix(in srgb, var(--osc-palette-1) 38%, transparent);
+}
+
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+    .osc-home-hero__actions .md-button {
+    background-color: color-mix(in srgb, var(--osc-palette-4) 88%, transparent) !important;
+  }
+
+  [data-md-color-scheme="slate"] .osc-home-hero__actions .md-button {
+    background-color: color-mix(in srgb, var(--osc-palette-2) 88%, var(--osc-palette-4) 12%) !important;
+  }
+}
+
+/* --- Pipeline (problem → OpenSCvx → solution) ----------------------------- */
+/*
+  - Row: inline-size container (cqi); columns minmax(0,1fr) avoid grid blowout.
+  - Wide: square tiles (aspect-ratio 1); narrow stack: aspect auto, content-sized height, no scroll.
+  - Bodies: flex center; typography scales with cqi; overflow visible (no inner scrollbars).
+*/
+.osc-home-pipeline {
+  margin: 0 auto;
+  max-width: min(96vw, 84rem);
+  padding: clamp(1.5rem, 4vw, 2.25rem) clamp(0.65rem, 2.5vw, 1.25rem) clamp(1.75rem, 4vw, 2.5rem);
+  box-sizing: border-box;
+  overflow-x: clip;
+}
+
+.osc-home-pipeline__title {
+  margin: 0 0 0.65rem;
+  font-family: "League Spartan", var(--md-text-font-family), system-ui, sans-serif;
+  font-size: clamp(1rem, 2.2vw + 0.5rem, 1.35rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-align: center;
+  color: var(--md-typeset-color);
+  text-wrap: balance;
+  padding-inline: 0.25rem;
+}
+
+.osc-home-pipeline__lede {
+  margin: 0 auto clamp(1.25rem, 3vw, 1.65rem);
+  max-width: min(46rem, 100%);
+  text-align: center;
+  font-size: clamp(0.82rem, 1.5vw + 0.55rem, 0.95rem);
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--md-typeset-color) 70%, transparent);
+  text-wrap: pretty;
+  padding-inline: 0.25rem;
+}
+
+.osc-home-pipeline__row {
+  --osc-pipeline-gap: clamp(0.35rem, 1.5vw, 0.75rem);
+  --osc-pipeline-connector: clamp(1rem, 2.5vw, 1.35rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: var(--osc-pipeline-gap) var(--osc-pipeline-connector);
+  align-items: center;
+  justify-items: center;
+  container-type: inline-size;
+  container-name: osc-home-pipeline;
+}
+
+/* Shared tile layout (problem, OpenSCvx, solution) */
+.osc-home-pipeline__card {
+  border-radius: 14px;
+  box-sizing: border-box;
+  width: fit-content;
+  max-width: min(22rem, 100%);
+  text-align: center;
+  min-width: 0;
+  min-height: 0;
+  padding: clamp(0.55rem, 2.5cqi, 0.85rem) clamp(0.55rem, 2.2cqi, 0.8rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+}
+
+/* Outer tiles (problem, solution): no CSS border — edge from shadow stack only */
+.osc-home-pipeline__card:not(.osc-home-pipeline__card--accent) {
+  border: none;
+  background: color-mix(in srgb, var(--md-typeset-color) 3.5%, var(--md-default-bg-color));
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--osc-palette-1) 5%, transparent),
+    0 6px 16px color-mix(in srgb, var(--osc-palette-1) 7%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--md-typeset-color) 8%, transparent);
+}
+
+[data-md-color-scheme="slate"] .osc-home-pipeline__card:not(.osc-home-pipeline__card--accent) {
+  background: color-mix(in srgb, var(--osc-palette-4) 3.5%, var(--osc-palette-1));
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--osc-palette-1) 35%, transparent),
+    0 10px 28px color-mix(in srgb, var(--osc-palette-1) 45%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--md-typeset-color) 12%, transparent);
+}
+
+.osc-home-pipeline__card--accent {
+  border: none;
+  background: linear-gradient(
+    125deg,
+    color-mix(in srgb, var(--md-accent-fg-color) 22%, var(--md-default-bg-color)),
+    color-mix(in srgb, var(--md-accent-fg-color) 4%, var(--md-default-bg-color))
+  );
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--osc-palette-1) 6%, transparent),
+    0 8px 20px color-mix(in srgb, var(--osc-palette-1) 9%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--md-typeset-color) 10%, transparent);
+}
+
+[data-md-color-scheme="slate"] .osc-home-pipeline__card--accent {
+  background: linear-gradient(
+    125deg,
+    color-mix(in srgb, var(--md-accent-fg-color) 26%, var(--osc-palette-1)),
+    color-mix(in srgb, var(--osc-palette-1) 92%, var(--md-accent-fg-color) 8%)
+  );
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--osc-palette-1) 40%, transparent),
+    0 12px 32px color-mix(in srgb, var(--osc-palette-1) 50%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--md-accent-fg-color) 22%, transparent);
+}
+
+/* Light + custom palette: outer tiles borderless; full shadow ring retained */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-pipeline__card:not(.osc-home-pipeline__card--accent) {
+  background: color-mix(in srgb, var(--osc-palette-4) 96%, var(--osc-palette-3) 4%);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--osc-palette-1) 8%, transparent),
+    0 8px 22px color-mix(in srgb, var(--osc-palette-1) 11%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--osc-palette-1) 11%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-pipeline__card--accent {
+  border: none;
+  background: linear-gradient(
+    125deg,
+    color-mix(in srgb, var(--osc-palette-4) 38%, var(--osc-palette-3) 62%),
+    color-mix(in srgb, var(--osc-palette-4) 18%, var(--osc-palette-2) 82%)
+  );
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--osc-palette-1) 10%, transparent),
+    0 10px 26px color-mix(in srgb, var(--osc-palette-1) 14%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--osc-palette-1) 12%, transparent);
+}
+
+/* Middle pipeline tile: white copy on saturated gradient (light + custom palette only). */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-pipeline__card--accent .osc-home-pipeline__eyebrow {
+  color: color-mix(in srgb, #fff 92%, transparent) !important;
+  text-shadow: 0 1px 2px color-mix(in srgb, var(--osc-palette-1) 28%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-pipeline__card--accent .osc-home-pipeline__stack-title,
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-content__inner.md-typeset
+  .osc-home-pipeline__card--accent
+  p.osc-home-pipeline__stack-title--brand {
+  color: #fff !important;
+  text-shadow: 0 1px 3px color-mix(in srgb, var(--osc-palette-1) 32%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-pipeline__eyebrow {
+  color: color-mix(in srgb, var(--osc-palette-1) 70%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-pipeline__lede {
+  color: color-mix(in srgb, var(--osc-palette-1) 82%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-pipeline__detail {
+  color: color-mix(in srgb, var(--osc-palette-1) 78%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero {
+  background: color-mix(in srgb, var(--md-typeset-color) 5.5%, var(--md-default-bg-color));
+  border-bottom-color: color-mix(in srgb, var(--osc-palette-1) 14%, transparent);
+}
+
+/* Light hero title = same fill as .md-button--primary (“Getting started”) */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__inner.md-typeset h1#osc-home-hero-title.osc-home-hero__title {
+  color: var(--md-primary-bg-color) !important;
+}
+
+/* Light + custom — same preset names as slate (warm ink / accent browns) */
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero:not([data-osc-hero-bg])::before,
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero[data-osc-hero-bg="nebula"]::before {
+  background:
+    radial-gradient(ellipse 95% 65% at 50% -28%, var(--osc-hero-warm-glow), transparent 56%),
+    radial-gradient(ellipse 45% 40% at 88% 92%, var(--osc-hero-warm-glow-soft), transparent 52%),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0,
+      transparent 28px,
+      var(--osc-hero-warm-grid) 28px,
+      var(--osc-hero-warm-grid) 29px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 28px,
+      var(--osc-hero-warm-grid) 28px,
+      var(--osc-hero-warm-grid) 29px
+    );
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero[data-osc-hero-bg="orbit"]::before {
+  background:
+    radial-gradient(ellipse 90% 72% at 50% 108%, color-mix(in srgb, var(--osc-palette-3) 9%, transparent), transparent 52%),
+    radial-gradient(ellipse 55% 70% at -8% 38%, color-mix(in srgb, var(--osc-palette-3) 6.5%, transparent), transparent 58%),
+    radial-gradient(ellipse 50% 65% at 105% 18%, color-mix(in srgb, var(--osc-palette-3) 7%, transparent), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 50% -12%, color-mix(in srgb, var(--osc-palette-3) 6%, transparent), transparent 68%);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero[data-osc-hero-bg="beams"]::before {
+  background:
+    radial-gradient(ellipse 88% 58% at 50% -22%, color-mix(in srgb, var(--osc-palette-3) 9.5%, transparent), transparent 56%),
+    repeating-linear-gradient(
+      108deg,
+      transparent 0,
+      transparent 40px,
+      color-mix(in srgb, var(--osc-palette-1) 2.8%, transparent) 40px,
+      color-mix(in srgb, var(--osc-palette-1) 2.8%, transparent) 41px
+    ),
+    repeating-linear-gradient(
+      72deg,
+      transparent 0,
+      transparent 52px,
+      var(--osc-hero-warm-beam) 52px,
+      var(--osc-hero-warm-beam) 53px
+    );
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero[data-osc-hero-bg="horizon"]::before {
+  background:
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      color-mix(in srgb, var(--osc-palette-3) 8%, transparent) 40%,
+      color-mix(in srgb, var(--osc-palette-3) 5%, transparent) 50%,
+      transparent 66%
+    ),
+    radial-gradient(ellipse 120% 50% at 50% 48%, color-mix(in srgb, var(--osc-palette-3) 5%, transparent), transparent 72%),
+    radial-gradient(ellipse 85% 48% at 50% -22%, color-mix(in srgb, var(--osc-palette-3) 7%, transparent), transparent 58%);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero[data-osc-hero-bg="mesh"]::before {
+  background:
+    radial-gradient(ellipse 100% 72% at 50% -24%, color-mix(in srgb, var(--osc-palette-3) 11%, transparent), transparent 56%),
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201200%20320%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%235b3d24%22%20stroke-width%3D%221.25%22%20stroke-opacity%3D%220.14%22%20d%3D%22M0%2078%20C200%2028%20400%20132%20600%2078%20S1000%2028%201200%2078%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%23221a15%22%20stroke-width%3D%220.85%22%20stroke-opacity%3D%220.06%22%20d%3D%22M0%20228%20C270%20188%20470%20268%20740%20228%20S1070%20188%201200%20228%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%235b3d24%22%20stroke-width%3D%220.95%22%20stroke-opacity%3D%220.1%22%20d%3D%22M0%20178%20C170%20228%20390%20118%20570%20178%20S910%20228%201200%20178%22%2F%3E%3C%2Fsvg%3E")
+      center 52% / 138% auto no-repeat,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%201200%20320%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%235b3d24%22%20stroke-width%3D%220.72%22%20stroke-opacity%3D%220.08%22%20d%3D%22M-30%2048%20C170%20108%20380%20-12%20580%2048%20S970%20108%201230%2048%22%2F%3E%3Cpath%20fill%3D%22none%22%20stroke%3D%22%23221a15%22%20stroke-width%3D%220.68%22%20stroke-opacity%3D%220.05%22%20d%3D%22M-10%20278%20C210%20218%20410%20338%20630%20278%20S1010%20218%201210%20278%22%2F%3E%3C%2Fsvg%3E")
+      center / 122% auto no-repeat;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+    .osc-home-hero::before {
+    background: radial-gradient(ellipse 90% 60% at 50% -25%, var(--osc-hero-warm-glow-soft), transparent 60%) !important;
+  }
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__inner .osc-home-hero__kicker {
+  color: var(--md-primary-bg-color--light) !important;
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-hero__inner .osc-home-hero__tagline {
+  color: color-mix(in srgb, var(--md-primary-bg-color) 78%, var(--md-default-bg-color) 22%) !important;
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-formula__w {
+  color: color-mix(in srgb, var(--osc-palette-1) 64%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-traj__frame {
+  fill: color-mix(in srgb, var(--osc-palette-4) 96%, var(--osc-palette-2) 4%);
+  stroke: color-mix(in srgb, var(--osc-palette-1) 18%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .osc-home-traj__axes line {
+  stroke: color-mix(in srgb, var(--osc-palette-1) 28%, transparent);
+}
+
+/* Wraps eyebrow + body; sizes to content (card grows with it up to max-width) */
+.osc-home-pipeline__card-content {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.28rem;
+  min-width: 0;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.osc-home-pipeline__card-content > .osc-home-pipeline__eyebrow {
+  margin-bottom: 0;
+}
+
+.osc-home-pipeline__card-content > .osc-home-pipeline__body {
+  flex: 0 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+/*
+  Solution tile: avoid cyclic % width (body width:100% inside width:fit-content),
+  which can collapse the SVG to 0×0 in some browsers. Let this body shrink-wrap
+  the graphic and still cap to the card.
+*/
+.osc-home-pipeline__card-content > .osc-home-pipeline__body--viz {
+  width: auto;
+  min-width: min(100%, 15rem);
+  max-width: 100%;
+  min-height: 4.75rem;
+  flex: 0 1 auto;
+}
+
+.osc-home-pipeline__card-content p {
+  margin: 0;
+}
+
+.osc-home-pipeline__eyebrow {
+  display: block;
+  flex-shrink: 0;
+  margin-bottom: clamp(0.35rem, 1.5cqi, 0.55rem);
+  font-size: clamp(0.58rem, 1.5cqi + 0.38rem, 0.68rem);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--md-typeset-color) 52%, transparent);
+  line-height: 1.2;
+  text-align: center;
+}
+
+.osc-home-pipeline__body {
+  flex: 0 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.35rem, 1.5cqi, 0.55rem);
+  min-width: 0;
+  min-height: 0;
+  text-align: center;
+  overflow: visible;
+}
+
+/* Solution tile: give the SVG a stable vertical slot inside the square */
+.osc-home-pipeline__body--viz {
+  gap: 0;
+}
+
+.osc-home-pipeline__stack-title {
+  margin: 0;
+  flex-shrink: 0;
+  font-size: clamp(0.92rem, 2.5cqi + 0.55rem, 1.12rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--md-typeset-color);
+  line-height: 1.3;
+  text-wrap: balance;
+}
+
+/*
+  OpenSCvx wordmark: League Spartan for the Futura/NASA-worm display feel.
+  Loaded via home.html with weights 500/600/700.
+*/
+.md-content__inner.md-typeset p.osc-home-pipeline__stack-title--brand {
+  font-family: "League Spartan", var(--md-text-font-family), system-ui, sans-serif;
+  font-feature-settings: "kern", "liga";
+  font-synthesis: none;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.osc-home-pipeline__detail {
+  margin: 0;
+  max-width: min(100%, 15rem);
+  font-size: clamp(0.68rem, 1.65cqi + 0.42rem, 0.82rem);
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--md-typeset-color) 78%, transparent);
+  text-wrap: balance;
+}
+
+.osc-home-pipeline__detail code {
+  font-size: 0.92em;
+}
+
+/* Formula block (nonlinear problem) */
+.osc-home-formula {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: ui-serif, Georgia, "Times New Roman", Times, serif;
+  font-size: clamp(0.66rem, 1.85cqi + 0.36rem, 0.84rem);
+  line-height: 1.35;
+  color: var(--md-typeset-color);
+  min-width: 0;
+  text-align: center;
+}
+
+.osc-home-formula__line {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.4rem;
+  margin-bottom: 0.06rem;
+  min-width: 0;
+}
+
+.osc-home-formula__line--muted {
+  opacity: 0.88;
+}
+
+.osc-home-formula__op {
+  font-size: clamp(0.86rem, 2.35cqi + 0.4rem, 1.02rem);
+  font-weight: 600;
+  margin-right: 0.1rem;
+  flex-shrink: 0;
+}
+
+.osc-home-formula__expr {
+  font-style: italic;
+  letter-spacing: 0.02em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.osc-home-formula__w {
+  min-width: 1.2rem;
+  flex-shrink: 0;
+  font-size: clamp(0.54rem, 1.15cqi + 0.32rem, 0.68rem);
+  font-style: italic;
+  font-family: var(--md-text-font-family), system-ui, sans-serif;
+  color: color-mix(in srgb, var(--md-typeset-color) 58%, transparent);
+}
+
+/* Trajectory SVG — intrinsic size with caps so the card stays content-sized */
+.osc-home-traj-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
+.osc-home-traj {
+  display: block;
+  /* Explicit box: viewBox-only SVG + width:auto can collapse inside fit-content flex. */
+  width: min(13rem, 100%);
+  height: auto;
+  aspect-ratio: 260 / 148;
+  max-height: 7rem;
+}
+
+.osc-home-traj__frame {
+  fill: color-mix(in srgb, var(--md-typeset-color) 4%, var(--md-default-bg-color));
+  stroke: color-mix(in srgb, var(--md-typeset-color) 12%, transparent);
+  stroke-width: 1;
+}
+
+.osc-home-traj__axes line {
+  stroke: color-mix(in srgb, var(--md-typeset-color) 18%, transparent);
+  stroke-width: 1.25;
+  stroke-dasharray: 4 5;
+  stroke-linecap: square;
+}
+
+.osc-home-traj__path--main {
+  fill: none;
+  stroke: var(--md-accent-fg-color);
+  stroke-width: 2.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.osc-home-traj__dot--start {
+  fill: var(--md-accent-fg-color);
+  stroke: var(--md-default-bg-color);
+  stroke-width: 1.5;
+}
+
+.osc-home-traj__dot--way {
+  fill: var(--md-default-bg-color);
+  stroke: var(--md-accent-fg-color);
+  stroke-width: 1.75;
+}
+
+.osc-home-traj__dot--end {
+  fill: var(--md-default-bg-color);
+  stroke: var(--md-accent-fg-color);
+  stroke-width: 2.25;
+}
+
+/* Connectors */
+.osc-home-pipeline__connector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0.85rem;
+  flex-shrink: 0;
+}
+
+.osc-home-pipeline__arrow {
+  display: block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-top: 2px solid color-mix(in srgb, var(--md-typeset-color) 28%, transparent);
+  border-right: 2px solid color-mix(in srgb, var(--md-typeset-color) 28%, transparent);
+  transform: rotate(45deg);
+  margin: 0 0.15rem;
+}
+
+/* --- Below markdown ------------------------------------------------------- */
+.osc-home-below-fold {
+  padding-top: 0.25rem;
+  max-width: min(48rem, 100%);
+  margin: 0 auto;
+  padding-inline: clamp(0.5rem, 2vw, 0.75rem);
+  box-sizing: border-box;
+}
+
+/* Nav label is rendered as a duplicate <h1> ("Home"); hero already has the document <h1>. */
+.osc-home-below-fold > h1 {
+  display: none;
+}
+
+.osc-home-below-fold .md-typeset h2 {
+  margin-top: 2.25rem;
+}
+
+/* --- Responsive ----------------------------------------------------------- */
+
+@media (max-width: 880px) {
+  .osc-home-pipeline__row {
+    grid-template-columns: 1fr;
+    gap: clamp(0.25rem, 1.2vw, 0.45rem);
+    /* Center tiles; stretch was forcing full column width (wide rectangles). */
+    justify-items: center;
+  }
+
+  .osc-home-pipeline__connector {
+    min-height: 1rem;
+    padding: 0.05rem 0;
+  }
+
+  .osc-home-pipeline__arrow {
+    transform: rotate(135deg);
+    margin: 0.15rem 0;
+  }
+
+  .osc-home-pipeline__card {
+    width: fit-content;
+    max-width: min(22rem, 94vw);
+    margin-inline: auto;
+    padding: clamp(0.5rem, 2vw, 0.75rem) clamp(0.5rem, 2vw, 0.75rem);
+    box-sizing: border-box;
+  }
+
+  .osc-home-pipeline__card-content {
+    gap: 0.22rem;
+  }
+
+  .osc-home-pipeline__eyebrow {
+    font-size: clamp(0.52rem, 1.9vw, 0.64rem);
+    margin-bottom: 0;
+  }
+
+  .osc-home-pipeline__body {
+    flex: 0 1 auto;
+    min-height: 0;
+    gap: 0.25rem;
+  }
+
+  .osc-home-pipeline__body--viz {
+    min-height: 4.25rem;
+  }
+
+  .osc-home-pipeline__card-content .osc-home-pipeline__body--viz {
+    max-height: none;
+  }
+
+  .osc-home-formula {
+    font-size: clamp(0.62rem, 2.5vw, 0.78rem);
+  }
+
+  .osc-home-formula__op {
+    font-size: clamp(0.76rem, 3.1vw, 0.92rem);
+  }
+
+  .osc-home-formula__w {
+    font-size: clamp(0.5rem, 1.7vw, 0.6rem);
+  }
+
+  .osc-home-pipeline__stack-title {
+    font-size: clamp(0.82rem, 2.9vw, 0.98rem);
+  }
+
+  .osc-home-pipeline__detail {
+    max-width: min(100%, 18rem);
+    font-size: clamp(0.65rem, 2.35vw, 0.8rem);
+  }
+
+  .osc-home-traj-wrap {
+    flex: 0 0 auto;
+    margin-inline: auto;
+  }
+
+  .osc-home-traj {
+    width: min(11rem, 88vw);
+    aspect-ratio: 260 / 148;
+    max-height: 5.5rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .osc-home-hero__actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .osc-home-hero__actions .md-button {
+    width: 100%;
+    max-width: 18rem;
+  }
+}
+
+/* @supports fallback when container queries are unavailable (older browsers) */
+@supports not (container-type: inline-size) {
+  .osc-home-pipeline__card {
+    width: fit-content;
+    max-width: min(22rem, 92vw);
+  }
+
+  .osc-home-formula {
+    font-size: clamp(0.66rem, 2.2vw, 0.86rem);
+  }
+
+  .osc-home-pipeline__eyebrow {
+    font-size: clamp(0.58rem, 2vw, 0.68rem);
+  }
+
+  .osc-home-pipeline__stack-title {
+    font-size: clamp(0.95rem, 3.2vw, 1.12rem);
+  }
+
+  .osc-home-pipeline__detail {
+    font-size: clamp(0.68rem, 2.5vw, 0.82rem);
+  }
+}
