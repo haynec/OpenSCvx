@@ -29,7 +29,7 @@ from examples.plotting import (
 from openscvx import Problem
 
 n = 2
-total_time = 2.0
+total_time = 1.9
 g = 9.81
 
 # Define state components
@@ -102,11 +102,6 @@ problem = Problem(
             },
     },
 )
-
-# Dense output grid + tight IVP tolerances for trajectory vs analytical validation
-problem.settings.prp.dt = 0.005
-problem.settings.prp.atol = 1e-8
-problem.settings.prp.rtol = 1e-10
 
 plotting_dict = {}
 
