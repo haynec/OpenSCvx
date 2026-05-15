@@ -29,7 +29,7 @@ from examples.plotting import (
 from openscvx import Problem
 
 n = 2
-total_time = 1.9
+total_time = 2.0
 g = 9.81
 
 # Define state components
@@ -84,7 +84,6 @@ problem = Problem(
     time=time,
     constraints=constraint_exprs,
     N=n,
-    licq_max=1e-8,
     algorithm={
         "autotuner": "ConstantProximalWeight",
         "lam_prox": 1e0,
