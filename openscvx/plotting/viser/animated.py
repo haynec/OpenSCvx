@@ -542,8 +542,6 @@ def add_animation_controls(
     update_callbacks: list[UpdateCallback],
     loop: bool = True,
     folder_name: str = "Animation",
-    time_label: str = "Time (s)",
-    reset_callbacks: list[Callable[[], None]] | None = None,
 ) -> None:
     """Add animation GUI controls and start the animation loop.
 
@@ -564,7 +562,6 @@ def add_animation_controls(
 
     # Filter out None callbacks
     callbacks = [cb for cb in update_callbacks if cb is not None]
-    reset_cbs = [] if reset_callbacks is None else [cb for cb in reset_callbacks if cb is not None]
 
     def time_to_frame(t: float) -> int:
         """Convert simulation time to frame index."""
@@ -581,7 +578,7 @@ def add_animation_controls(
         play_button = server.gui.add_button("Play")
         reset_button = server.gui.add_button("Reset")
         time_slider = server.gui.add_slider(
-            time_label,
+            "Time (s)",
             min=t_start,
             max=t_end,
             step=duration / 100,
@@ -589,9 +586,9 @@ def add_animation_controls(
         )
         speed_slider = server.gui.add_slider(
             "Speed",
-            min=0.01,
+            min=0.1,
             max=5.0,
-            step=0.01,
+            step=0.1,
             initial_value=1.0,
         )
         loop_checkbox = server.gui.add_checkbox("Loop", initial_value=loop)
@@ -606,19 +603,9 @@ def add_animation_controls(
 
     @reset_button.on_click
     def _(_) -> None:
-        state["playing"] = False
-        play_button.name = "Play"
         state["sim_time"] = t_start
         time_slider.value = t_start
         update_all(t_start)
-        for callback in reset_cbs:
-            callback()
-        # Flush pending messages so reset is reflected immediately in the client.
-        for client in server.get_clients().values():
-            try:
-                client.flush()
-            except Exception:
-                pass
 
     @time_slider.on_update
     def _(_) -> None:
@@ -653,6 +640,3 @@ def add_animation_controls(
     # Start animation thread
     thread = threading.Thread(target=animation_loop, daemon=True)
     thread.start()
-
-    # Ensure all animated elements are initialized at the first frame.
-    update_all(t_start)

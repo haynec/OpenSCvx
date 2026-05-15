@@ -31,9 +31,10 @@ from openscvx.algorithms import OptimizationResults
 from openscvx.integrators import solve_ivp_diffrax
 from openscvx.plotting import plot_projections_2d, plot_states
 from openscvx.symbolic.lower import lower_to_jax
+from openscvx.symbolic.lowerers.jax.logic import set_default_float_dtype
 
-# Use float64 in JAX for high-accuracy propagation.
-jax.config.update("jax_enable_x64", True)
+# Keep JAX precision aligned with the problem dtype before any lowering/integration runs.
+LET_FLOAT_DTYPE = "float64"
 
 REFERENCE_DATE = "26 December 2025"
 ENABLE_VISER_ANIMATION = True
@@ -44,7 +45,7 @@ VISER_TARGET_FPS = 60.0
 VISER_MAX_RESAMPLED_POINTS = 120000
 VISER_ROTATING_PORT = 8080
 VISER_INERTIAL_PORT = 8081
-VISER_REQUEST_SHARE_URLS = False
+VISER_REQUEST_SHARE_URLS = True
 KERNEL_DIR = Path(current_dir) / "ker"
 KERNEL_URLS = {
     "naif0012.tls": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls",
@@ -128,6 +129,14 @@ def _normalized_node_grid(n: int, mode: str) -> np.ndarray:
     raise ValueError(f"Unknown NODE_DISTRIBUTION_MODE={mode!r}. Expected 'uniform' or 'cosine'.")
 
 
+def _configure_jax_float_dtype(float_dtype: str) -> None:
+    """Synchronize JAX/lowerer float precision before any JAX computations."""
+    dtype_l = float_dtype.lower()
+    enable_x64 = dtype_l in ("float64", "f64", "double")
+    jax.config.update("jax_enable_x64", enable_x64)
+    set_default_float_dtype(float_dtype)
+
+
 def _add_moon_orbit_overlay(fig, earth_pos: np.ndarray, moon_radius: float) -> None:
     """Overlay Moon orbit projections (XY/XZ/YZ) on the 2D projection figure."""
     theta = np.linspace(0.0, 2.0 * np.pi, 361)
@@ -201,6 +210,42 @@ def _set_projection_speed_colorbar_kms(fig) -> None:
             marker.colorbar.title = "‖velocity‖ (km/s)"
 
 
+def _create_viser_server_compat(ox_viser, pos: np.ndarray, show_grid: bool, port: int):
+    """Create a viser server across both create_server() API variants.
+
+    Some branches expose create_server(..., port=...), while others do not.
+    For the latter, use viser's `_VISER_PORT_OVERRIDE` env hook so we can still
+    bind to the requested port without changing the plotting module.
+    """
+    try:
+        return ox_viser.create_server(pos, show_grid=show_grid, port=port)
+    except TypeError as exc:
+        if "unexpected keyword argument 'port'" not in str(exc):
+            raise
+
+        previous_port_override = os.environ.get("_VISER_PORT_OVERRIDE")
+        os.environ["_VISER_PORT_OVERRIDE"] = str(port)
+        try:
+            return ox_viser.create_server(pos, show_grid=show_grid)
+        finally:
+            if previous_port_override is None:
+                os.environ.pop("_VISER_PORT_OVERRIDE", None)
+            else:
+                os.environ["_VISER_PORT_OVERRIDE"] = previous_port_override
+
+
+def _server_local_url(server, fallback_port: int) -> str:
+    """Build a localhost URL from a viser server handle, with fallback."""
+    try:
+        host = str(server.get_host())
+        port = int(server.get_port())
+        if host == "0.0.0.0":
+            host = "localhost"
+        return f"http://{host}:{port}"
+    except Exception:
+        return f"http://localhost:{fallback_port}"
+
+
 def _create_let_viser_server(
     trajectory: np.ndarray,
     traj_time_days: np.ndarray,
@@ -225,7 +270,9 @@ def _create_let_viser_server(
         moon_radius_vis = (float(moon_radius) / scale) * VISER_VISUAL_SCALE
 
         colors = ox_viser.compute_velocity_colors(vel, fallback_length=pos.shape[0])
-        server = ox_viser.create_server(pos_vis, show_grid=True, port=port)
+        server = _create_viser_server_compat(
+            ox_viser=ox_viser, pos=pos_vis, show_grid=True, port=port
+        )
 
         ox_viser.add_circular_orbit(
             server,
@@ -301,7 +348,6 @@ def _create_let_viser_server(
             [update_trail, update_marker, update_moon],
             loop=True,
             folder_name="LET Animation",
-            time_label="Time (days)",
         )
         return server
     except Exception as exc:
@@ -403,7 +449,9 @@ def _create_let_viser_server_inertial(
         sun_vis = np.zeros(3, dtype=np.float64)
 
         colors = ox_viser.compute_velocity_colors(vel_rot, fallback_length=pos_vis.shape[0])
-        server = ox_viser.create_server(pos_vis, show_grid=True, port=port)
+        server = _create_viser_server_compat(
+            ox_viser=ox_viser, pos=pos_vis, show_grid=True, port=port
+        )
 
         sun_radius = max(0.04 * VISER_VISUAL_SCALE, 0.2)
         earth_radius = max(0.0018 * VISER_VISUAL_SCALE, 0.035)
@@ -543,21 +591,12 @@ def _create_let_viser_server_inertial(
         def update_moon(frame_idx: int) -> None:
             moon_handle.position = moon_vis[frame_idx]
 
-        def reset_camera_tracking() -> None:
-            camera_view_dir.clear()
-            camera_view_dist.clear()
-            earth_start = earth_vis[0]
-            for client in server.get_clients().values():
-                _initialize_camera_tracking(client, earth_start)
-
         ox_viser.add_animation_controls(
             server,
             traj_time_days,
             [update_trail, update_marker, update_earth, update_moon],
             loop=True,
             folder_name="LET Inertial (Sun-Centered)",
-            time_label="Time (days)",
-            reset_callbacks=[reset_camera_tracking],
         )
         return server
     except Exception as exc:
@@ -712,6 +751,10 @@ dynamics_discrete = {
     "fuel": fuel - ox.linalg.Norm(delta_v + eps_impulse),
 }
 
+# Important: this script performs JAX lowering/integration before Problem(...)
+# is instantiated, so precision must be configured explicitly here.
+_configure_jax_float_dtype(LET_FLOAT_DTYPE)
+
 cr3bp_rhs = lower_to_jax(ox.Concat(velocity, velocity_dot))
 # Dense propagation for an initialization trajectory.
 guess_dense = np.asarray(
@@ -853,7 +896,7 @@ problem = Problem(
     N=n_nodes,
     discretizer=discretizer,
     algorithm=algorithm,
-    float_dtype="float64",
+    float_dtype=LET_FLOAT_DTYPE,
     solver={"cvx_solver": "CLARABEL", "solver_args": {}},
 )
 
@@ -864,8 +907,6 @@ problem.settings.prp.rtol = integration_tol
 problem.settings.prp.dt = 1e-4
 
 if __name__ == "__main__":
-    jax.config.update("jax_enable_x64", True)
-
     hohmann_metrics = _hohmann_transfer_metrics(
         mu_central_km3_s2=mu_earth,
         r1_km=r_0,
@@ -1019,8 +1060,8 @@ if __name__ == "__main__":
             )
 
         if viser_server is not None or inertial_server is not None:
-            rotating_url = f"http://localhost:{VISER_ROTATING_PORT}"
-            inertial_url = f"http://localhost:{VISER_INERTIAL_PORT}"
+            rotating_url = _server_local_url(viser_server, VISER_ROTATING_PORT)
+            inertial_url = _server_local_url(inertial_server, VISER_INERTIAL_PORT)
             print("Launching viser animation server(s) (Ctrl+C to exit)...")
             if viser_server is not None:
                 print(f"Rotating frame viewer: {rotating_url}")
