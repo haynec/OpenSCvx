@@ -11,6 +11,8 @@ Each function is tested for:
 """
 
 import jax
+# Use float64 for more accurate tests
+jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 import pytest
 
