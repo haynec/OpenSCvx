@@ -93,6 +93,11 @@ def test_example():
     """
     from examples.abstract.brachistochrone import problem
 
+    # Dense output grid + tight IVP tolerances for trajectory vs analytical validation
+    problem.settings.prp.dt = 0.005
+    problem.settings.prp.atol = 1e-8
+    problem.settings.prp.rtol = 1e-10
+
     # Disable printing for cleaner test output
     if hasattr(problem.settings, "dev"):
         problem.settings.dev.printing = False
