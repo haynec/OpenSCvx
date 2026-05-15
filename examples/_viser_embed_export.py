@@ -67,16 +67,46 @@ def set_initial_camera_look_at_trajectory(
     server,
     positions: np.ndarray,
     *,
-    eye_offset: tuple[float, float, float] | np.ndarray = (-0.65, 0.95, 0.5),
+    eye_offset: tuple[float, float, float] | np.ndarray | None = None,
+    front_world_axis: int | None = None,
+    front_from_positive: bool = False,
 ) -> None:
     """Configure ``server.initial_camera`` from a (N, 3) trajectory (before serialize).
 
-    Default ``eye_offset`` uses **+y** lateral bias (world frame) so desk-mounted
-    arms like the Franka FR3 face the camera; pass a custom offset for other scenes.
+    Args:
+        positions: Sample positions, shape ``(N, 3)``.
+        eye_offset: When ``front_world_axis`` is ``None``, camera eye is
+            ``mean(positions) + eye_offset`` (default matches the original desk-arm
+            oblique view: ``(-0.65, 0.95, 0.5)``).
+        front_world_axis: If ``0``, ``1``, or ``2``, place the eye along that world
+            axis on the **negative** side (default) or **positive** side (if
+            ``front_from_positive``), at a distance scaled by the **largest span in the
+            two axes perpendicular** to ``front_world_axis``. Pick an axis **perpendicular**
+            to the dominant motion for a face-on shot (e.g. motion along **Y** → ``0``
+            gives **±X** side cameras).
+        front_from_positive: When ``True`` with ``front_world_axis`` set, place the eye
+            on the **positive** side of that axis (180°/opposite horizontal view vs
+            ``front_from_positive=False``).
     """
     pts = np.asarray(positions, dtype=np.float64)
     center = np.mean(pts, axis=0)
-    offset = np.asarray(eye_offset, dtype=np.float64).reshape(3)
+    if front_world_axis is not None:
+        ax = int(front_world_axis) % 3
+        span = np.ptp(pts, axis=0).astype(np.float64) + 1e-6
+        in_plane = max(float(span[i]) for i in range(3) if i != ax)
+        dist = 0.30 + 0.55 * in_plane
+        dist = min(dist, 0.88)
+        offset = np.zeros(3, dtype=np.float64)
+        sign = 1.0 if front_from_positive else -1.0
+        offset[ax] = sign * dist
+        offset[2] = 0.22 + 0.42 * float(span[2])
+        other = (ax + 1) % 3
+        if other != 2:
+            offset[other] = 0.04 * float(span[other])
+    else:
+        if eye_offset is None:
+            eye_offset = (-0.65, 0.95, 0.5)
+        offset = np.asarray(eye_offset, dtype=np.float64).reshape(3)
     eye = center + offset
     server.initial_camera.position = tuple(float(x) for x in eye)
     server.initial_camera.look_at = tuple(float(x) for x in center)
@@ -101,8 +131,10 @@ def export_animated_viser_recording(
         n_frames: Number of trajectory samples (last index ``n_frames - 1``).
         output_path: Destination ``.viser`` file.
         fps: Frames per second for sleep spacing between keyframes.
-        max_keyframes: Uniformly subsample indices if ``n_frames`` exceeds this cap
-            (keeps export size reasonable for the web; lower = smaller file, slightly fewer poses).
+        max_keyframes: Uniformly subsample indices if ``n_frames`` exceeds this cap.
+            For rigid meshes, prefer updating ``MeshHandle.position`` / ``.wxyz`` each
+            frame instead of rewriting ``.vertices`` so recordings stay small even at
+            higher keyframe counts.
     """
     n_frames = int(n_frames)
     if n_frames < 1:

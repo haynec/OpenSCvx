@@ -25,20 +25,36 @@ Task:
 Visualization:
     When ``mujoco`` and ``trimesh`` are installed, the Viser window renders the
     actual FR3 v2 CAD meshes (OBJ files from the menagerie ``assets/`` directory)
-    with per-link colouring animated via MuJoCo FK. Falls back to animated line
-    segments if those packages are unavailable.
+    with per-link colouring animated via MuJoCo FK. Each link mesh is drawn in its
+    body frame and posed with ``position`` / ``wxyz`` each frame (not full vertex
+    rewrites), which keeps Viser recordings much smaller. Falls back to animated line
+    segments if those packages are unavailable. The EE path uses a growing trail
+    plus a moving marker (no separate full-path point cloud).
 
     After optimisation, the converged torque sequence is replayed in MuJoCo's
     CPU simulator using ``data.qfrc_applied`` (generalized joint torques in Nm) on a
     patched MJCF with **no** position/motor actuators, matching OpenSCvx's τ in
-    ``q̈ = diag(I)^{-1} τ``. A semi-transparent orange duplicate arm and flange trail
-    show the rollout alongside the propagated SCP trajectory.
+    ``q̈ = diag(I)^{-1} τ`` (printed diagnostics when rollout runs).
+
+    Embedded Viser recording (``--export-viser``) uses the **same CAD link meshes**
+    as the interactive viewer when ``mujoco`` and ``trimesh`` are available; export
+    fails fast with an error if CAD cannot be loaded (line fallback is not accepted
+    for embedded docs). Prefer rigid link poses over vertex streaming so exports stay
+    smaller without aggressive temporal subsampling::
+
+        python examples/arm/franka_fr3v2_pick_place.py --export-viser
+
+    Default output: ``docs/assets/viser-recordings/franka_fr3v2_pick_place.viser``
+    (from repo root). The initial camera sits on **world +X** (motion mostly in **Y**)
+    so the path is seen face-on from the opposite side as −X. See
+    ``examples/_viser_embed_export.py``.
 
 Requirements:
     pip install openscvx[lie]                # jaxlie for SE3Exp / SO3Log
-    (optional) pip install mujoco trimesh    # full Viser mesh visualisation
+    pip install mujoco trimesh               # CAD Viser (required for ``--export-viser``)
 """
 
+import importlib.util
 import os
 import re
 import sys
@@ -522,11 +538,34 @@ def simulate_franka_torque_rollout(results, xml_path: Path, *, problem) -> dict:
     return {"time": rec_t, "qpos": rec_q, "qvel": rec_qd, "ee_link8": rec_ee}
 
 
+def _load_viser_embed_export_module():
+    """Load ``examples/_viser_embed_export.py`` (no ``examples`` package required)."""
+    embed_py = Path(__file__).resolve().parent.parent / "_viser_embed_export.py"
+    spec = importlib.util.spec_from_file_location("_viser_embed_export_franka", embed_py)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load Viser export helpers from {embed_py}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 # =============================================================================
 # Main
 # =============================================================================
 
 if __name__ == "__main__":
+    _vis_embed_mod = None
+    _export_viser_path: Path | None = None
+    if "--export-viser" in sys.argv:
+        _vis_embed_mod = _load_viser_embed_export_module()
+        _export_viser_path = _vis_embed_mod.parse_export_viser_path(
+            default_output=Path(__file__).resolve().parent.parent.parent
+            / "docs"
+            / "assets"
+            / "viser-recordings"
+            / "franka_fr3v2_pick_place.viser"
+        )
+
     print("Franka FR3 v2 Pick-and-Place — PoE FK + OpenSCvx")
     print("=" * 60)
     print(
@@ -559,8 +598,9 @@ if __name__ == "__main__":
             f"err={err:.4f} m"
         )
 
-    plot_scp_iterations(results).show()
-    plot_controls(results).show()
+    if _export_viser_path is None:
+        plot_scp_iterations(results).show()
+        plot_controls(results).show()
 
     sim_rollout = None
     try:
@@ -579,7 +619,6 @@ if __name__ == "__main__":
         add_animated_trail,
         add_animation_controls,
         add_ellipsoid_obstacles,
-        add_ghost_trajectory,
         add_position_marker,
         add_target_markers,
         compute_velocity_colors,
@@ -590,30 +629,13 @@ if __name__ == "__main__":
     n_frames = len(angle_traj)
     traj_time = np.asarray(results.trajectory["time"]).flatten()
 
-    angle_sim_on_prop_grid = None
-    ee_sim_on_prop_grid = None
-    if sim_rollout is not None:
-        sim_t = sim_rollout["time"]
-        sim_q = sim_rollout["qpos"][:, :N_JOINTS]
-        ee_sim_raw = sim_rollout["ee_link8"]
-        angle_sim_on_prop_grid = np.stack(
-            [np.interp(traj_time, sim_t, sim_q[:, j]) for j in range(N_JOINTS)],
-            axis=1,
-        )
-        ee_sim_on_prop_grid = np.stack(
-            [np.interp(traj_time, sim_t, ee_sim_raw[:, k]) for k in range(3)],
-            axis=1,
-        ).astype(np.float32)
-
     # -------------------------------------------------------------------------
-    # Attempt to load actual FR3 v2 CAD meshes (trimesh) and
-    # compute per-frame link world-transforms (MuJoCo FK).
+    # Load FR3 v2 CAD meshes (trimesh) and per-frame link transforms (MuJoCo FK).
     # -------------------------------------------------------------------------
     _use_cad_mesh = False
     _link_meshes_local: dict = {}  # link_name → (vertices_local, faces)
     _link_body_ids: dict = {}  # link_name → MuJoCo body_id
     _link_world_T: dict = {}  # link_name → (n_frames, 4, 4)
-    _link_world_T_sim: dict = {}  # same, MuJoCo rollout (interpolated to traj_time)
     mj_model_vis = None
     mj_data_vis = None
 
@@ -701,18 +723,6 @@ if __name__ == "__main__":
                 T[:3, 3] = mj_data_vis.xpos[body_id].copy()
                 _link_world_T[name][t_idx] = T
 
-        if angle_sim_on_prop_grid is not None:
-            for name in _link_meshes_local:
-                _link_world_T_sim[name] = np.zeros((n_frames, 4, 4))
-            for t_idx in range(n_frames):
-                mj_data_vis.qpos[:N_JOINTS] = angle_sim_on_prop_grid[t_idx]
-                mujoco.mj_kinematics(mj_model_vis, mj_data_vis)
-                for name, body_id in _link_body_ids.items():
-                    T_sim = np.eye(4)
-                    T_sim[:3, :3] = mj_data_vis.xmat[body_id].copy().reshape(3, 3)
-                    T_sim[:3, 3] = mj_data_vis.xpos[body_id].copy()
-                    _link_world_T_sim[name][t_idx] = T_sim
-
         _use_cad_mesh = len(_link_meshes_local) > 0
         if _use_cad_mesh:
             print(
@@ -723,6 +733,13 @@ if __name__ == "__main__":
         print(
             f"[viser] CAD mesh unavailable "
             f"({type(exc).__name__}: {exc}); falling back to line segments."
+        )
+
+    if _export_viser_path is not None and not _use_cad_mesh:
+        raise SystemExit(
+            "--export-viser requires FR3 v2 CAD meshes (mujoco + trimesh and menagerie "
+            "``franka_fr3_v2`` assets). Interactive mode can still use line segments; "
+            "embed export does not. Underlying error was printed above."
         )
 
     # -------------------------------------------------------------------------
@@ -771,31 +788,30 @@ if __name__ == "__main__":
         waypoint_positions,
         radius=0.012,
         colors=[_marker_colors[name] for name in waypoint_names],
+        show_trails=False,
     )
 
-    # Ghost EE path and animated trail
     ee_colors = compute_velocity_colors(np.asarray(results.trajectory.get("velocity")))
-    add_ghost_trajectory(server, ee_pos, ee_colors, point_size=0.005)
     _, update_trail = add_animated_trail(server, ee_pos, ee_colors, point_size=0.008)
     _, update_marker = add_position_marker(server, ee_pos, radius=0.012)
-
-    if ee_sim_on_prop_grid is not None:
-        sim_ghost_rgb = np.tile(np.array([255, 130, 45], dtype=np.uint8), (n_frames, 1))
-        sim_ghost_rgb = (sim_ghost_rgb * 0.35).astype(np.uint8)
-        server.scene.add_point_cloud(
-            "/ghost_traj_mujoco",
-            points=ee_sim_on_prop_grid.astype(np.float32),
-            colors=sim_ghost_rgb,
-            point_size=0.005,
-        )
 
     # -------------------------------------------------------------------------
     # Robot body: actual CAD meshes OR line-segment fallback
     # -------------------------------------------------------------------------
     update_robot = None
-    update_robot_sim = None
 
     if _use_cad_mesh:
+        from scipy.spatial.transform import Rotation as _Rotation
+
+        def _pose_from_T(T: np.ndarray) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
+            """Body pose for Viser: position + wxyz quaternion (mesh vertices stay link-local)."""
+            R = np.asarray(T, dtype=np.float64)[:3, :3]
+            t = T[:3, 3]
+            q_xyzw = _Rotation.from_matrix(R).as_quat()
+            wxyz = (float(q_xyzw[3]), float(q_xyzw[0]), float(q_xyzw[1]), float(q_xyzw[2]))
+            pos = (float(t[0]), float(t[1]), float(t[2]))
+            return pos, wxyz
+
         # Per-link colour: darker base, lighter links, slight blue tint on wrist
         _link_color = {
             "fr3v2_link0": (120, 120, 120),
@@ -810,42 +826,24 @@ if __name__ == "__main__":
         _link_handles = {}
         for link_name, (verts_local, faces) in _link_meshes_local.items():
             T0 = _link_world_T[link_name][0]
-            verts_world = (T0[:3, :3] @ verts_local.T).T + T0[:3, 3]
+            pos0, wxyz0 = _pose_from_T(T0)
             handle = server.scene.add_mesh_simple(
                 f"/robot/{link_name}",
-                vertices=verts_world.astype(np.float32),
+                vertices=np.asarray(verts_local, dtype=np.float32, order="C"),
                 faces=faces,
                 color=_link_color.get(link_name, (210, 210, 215)),
                 opacity=1.0,
+                position=pos0,
+                wxyz=wxyz0,
             )
-            _link_handles[link_name] = (handle, verts_local)
+            _link_handles[link_name] = handle
 
         def update_robot(frame_idx: int) -> None:
-            for link_name, (handle, verts_local) in _link_handles.items():
+            for link_name, handle in _link_handles.items():
                 T = _link_world_T[link_name][frame_idx]
-                verts_world = (T[:3, :3] @ verts_local.T).T + T[:3, 3]
-                handle.vertices = verts_world.astype(np.float32)
-
-        if _link_world_T_sim:
-            _sim_rgb = (220, 110, 55)
-            _link_handles_sim: dict = {}
-            for link_name, (verts_local, faces) in _link_meshes_local.items():
-                T0s = _link_world_T_sim[link_name][0]
-                verts_w = (T0s[:3, :3] @ verts_local.T).T + T0s[:3, 3]
-                h_sim = server.scene.add_mesh_simple(
-                    f"/robot_mujoco/{link_name}",
-                    vertices=verts_w.astype(np.float32),
-                    faces=faces,
-                    color=_sim_rgb,
-                    opacity=0.48,
-                )
-                _link_handles_sim[link_name] = (h_sim, verts_local)
-
-            def update_robot_sim(frame_idx: int) -> None:
-                for link_name, (handle, verts_local) in _link_handles_sim.items():
-                    Tm = _link_world_T_sim[link_name][frame_idx]
-                    verts_w = (Tm[:3, :3] @ verts_local.T).T + Tm[:3, 3]
-                    handle.vertices = verts_w.astype(np.float32)
+                pos, wxyz = _pose_from_T(T)
+                handle.position = pos
+                handle.wxyz = wxyz
 
     else:
         # Fallback: 8 line segments (world origin → J1 → ··· → J7 → EE)
@@ -871,12 +869,36 @@ if __name__ == "__main__":
             arm_handle.points = _build_segments(frame_idx)
 
     # -------------------------------------------------------------------------
-    # Animation controls
+    # Animation controls (interactive) or embedded ``.viser`` export
     # -------------------------------------------------------------------------
-    traj_time = np.asarray(results.trajectory["time"])
     _anim_cb = [update_trail, update_marker, update_robot]
-    if update_robot_sim is not None:
-        _anim_cb.append(update_robot_sim)
+
+    _vis_cam_mod = _vis_embed_mod if _vis_embed_mod is not None else _load_viser_embed_export_module()
+    # Motion is mostly along world Y; camera on +X (opposite of −X) for the other
+    # face-on horizontal view of the pick→place sweep.
+    _vis_cam_mod.set_initial_camera_look_at_trajectory(
+        server, ee_pos, front_world_axis=0, front_from_positive=True
+    )
+
+    if _export_viser_path is not None:
+        assert _vis_embed_mod is not None
+
+        def step_frame(frame_idx: int) -> None:
+            for cb in _anim_cb:
+                if cb is not None:
+                    cb(int(frame_idx))
+
+        saved = _vis_embed_mod.export_animated_viser_recording(
+            server,
+            step_frame=step_frame,
+            n_frames=n_frames,
+            output_path=_export_viser_path,
+            fps=24.0,
+            max_keyframes=80,
+        )
+        _vis_embed_mod.print_viser_embed_followup(saved)
+        raise SystemExit(0)
+
     add_animation_controls(
         server,
         traj_time,
