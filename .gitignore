@@ -212,10 +212,6 @@ MUJOCO_LOG.TXT
 docs-dev/node_modules/
 docs-dev/home-light.png
 
-# Viser recordings — fetched at build time by scripts/mkdocs_fetch_viser_recordings_hook.py
-# from a GitHub Release (tag: docs-assets-v1). Not committed because they're large.
-docs/assets/viser-recordings/*.viser
-
 # MkDocs Material Insiders (installed from GitHub in CI, not committed)
 # Ignore contents of material/ but not material/overrides/ (Git cannot un-ignore
 # paths inside an ignored directory when the rule is material/).
