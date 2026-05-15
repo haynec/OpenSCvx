@@ -854,7 +854,7 @@ problem = Problem(
     discretizer=discretizer,
     algorithm=algorithm,
     float_dtype="float64",
-    solver={"solver_args": {"abstol": 1e-9, "reltol": 1e-9, "verbose": True}},
+    solver={"cvx_solver": "CLARABEL", "solver_args": {}},
 )
 
 # Keep post-process propagation tolerances aligned with discretization.
@@ -957,6 +957,10 @@ if __name__ == "__main__":
     )
     fig_solution.show()
 
+    final_pos = np.asarray(traj_solution[-1, :3], dtype=float)
+    final_radius_vec = final_pos - pos_earth_rot
+    final_distance_km = float(np.linalg.norm(final_radius_vec)) * r_ref
+    final_distance_error_km = final_distance_km - d_earth_moon
     dv0_guess_norm = float(np.linalg.norm(delta_v0_guess))
     dv0_opt_norm = float(np.linalg.norm(dv0_opt))
     dvf_opt_norm = float(np.linalg.norm(dvf_opt))
