@@ -129,11 +129,16 @@ def _normalized_node_grid(n: int, mode: str) -> np.ndarray:
     raise ValueError(f"Unknown NODE_DISTRIBUTION_MODE={mode!r}. Expected 'uniform' or 'cosine'.")
 
 
-def _configure_jax_float_dtype(float_dtype: str) -> None:
-    """Synchronize JAX/lowerer float precision before any JAX computations."""
+def _configure_jax_float_dtype(
+    float_dtype: str,
+    *,
+    update_jax_enable_x64: bool = False,
+) -> None:
+    """Synchronize lowerer precision and optionally JAX global float mode."""
     dtype_l = float_dtype.lower()
     enable_x64 = dtype_l in ("float64", "f64", "double")
-    jax.config.update("jax_enable_x64", enable_x64)
+    if update_jax_enable_x64:
+        jax.config.update("jax_enable_x64", enable_x64)
     set_default_float_dtype(float_dtype)
 
 
@@ -697,216 +702,256 @@ integration_max_steps = 3000
 # - "cosine": denser near interval endpoints
 NODE_DISTRIBUTION_MODE = "cosine"
 
-# Build symbolic CR3BP model once and reuse it for optimization and propagation.
-position = ox.State("position", shape=(3,))
-velocity = ox.State("velocity", shape=(3,))
-fuel = ox.State("fuel", shape=(1,))
-
-# Assign slices for standalone lowering/evaluation on [x, y, z, vx, vy, vz].
-position._slice = slice(0, 3)
-velocity._slice = slice(3, 6)
-
-x_e = position[0]
-y_e = position[1]
-z_e = position[2]
-
-# In this shifted frame: Earth is at x=0 and Sun is at x=-1.
-# For general reference distance L, Sun is at x = -d_earth_sun / L = -rho_es.
-sun_dx = x_e + rho_es
-earth_dx = x_e
-
-d_sun = ox.Sqrt(sun_dx**2 + y_e**2 + z_e**2)
-d_earth = ox.Sqrt(earth_dx**2 + y_e**2 + z_e**2)
-
-ax = (
-    2.0 * kappa * velocity[1]
-    + kappa**2 * (x_e + rho_es * (1.0 - mu))
-    - grav_scale * (mu_sun * sun_dx / d_sun**3 + mu_earth * earth_dx / d_earth**3)
-)
-ay = (
-    -2.0 * kappa * velocity[0]
-    + kappa**2 * y_e
-    - grav_scale * (mu_sun * y_e / d_sun**3 + mu_earth * y_e / d_earth**3)
-)
-az = -grav_scale * (mu_sun * z_e / d_sun**3 + mu_earth * z_e / d_earth**3)
-
-velocity_dot = ox.Concat(ax, ay, az)
-dynamics = {
-    "position": velocity,
-    "velocity": velocity_dot,
-    "fuel": 0.0,
-}
-
-delta_v = ox.Control(
-    "delta_v",
-    shape=(3,),
-    parameterization="impulsive",
-    nodes=[0, n_nodes - 1],
-)
-
-eps_impulse = 1e-12
-dynamics_discrete = {
-    "position": position,
-    "velocity": velocity + delta_v,
-    "fuel": fuel - ox.linalg.Norm(delta_v + eps_impulse),
-}
-
-# Important: this script performs JAX lowering/integration before Problem(...)
-# is instantiated, so precision must be configured explicitly here.
-_configure_jax_float_dtype(LET_FLOAT_DTYPE)
-
-cr3bp_rhs = lower_to_jax(ox.Concat(velocity, velocity_dot))
-# Dense propagation for an initialization trajectory.
-guess_dense = np.asarray(
-    solve_ivp_diffrax(
-        lambda t, x: cr3bp_rhs(x, jnp.zeros((0,), dtype=x.dtype), 0, {}),
-        tau_final=t_f_guess,
-        y_0=jnp.asarray(x0_seed, dtype=jnp.float64),
-        args=(),
-        tau_0=0.0,
-        num_substeps=3000,
-        solver_name="Dopri8",
-        rtol=integration_tol,
-        atol=integration_tol,
-    ),
-    dtype=float,
-)
-
-# Build nodal guess and apply the pre-impulse state offset at node 0.
-s_uniform = np.linspace(0.0, 1.0, n_nodes)
-node_grid = _normalized_node_grid(n_nodes, NODE_DISTRIBUTION_MODE)
-node_idx = np.round((guess_dense.shape[0] - 1) * node_grid).astype(int)
-nodal_guess = guess_dense[node_idx].copy()
-
-# Boundary conditions
-position.initial = pos_0
-velocity.initial = vel_0
-fuel.initial = np.array([1.0])
-
-position.final = [
-    ox.Free(float(pos_f[0])),
-    ox.Free(float(pos_f[1])),
-    ox.Free(float(pos_f[2])),
-]
-velocity.final = [
-    ox.Free(float(vel_f[0])),
-    ox.Free(float(vel_f[1])),
-    ox.Free(float(vel_f[2])),
-]
-fuel.final = [("maximize", 0.95)]
-
-# Guesses
-position.guess = nodal_guess[:, :3]
-velocity.guess = nodal_guess[:, 3:6]
-fuel.guess = np.ones((n_nodes, 1))
-
-delta_v.min = -np.ones(3)
-delta_v.max = np.ones(3)
-delta_v_guess = np.zeros((n_nodes, 3))
-delta_v.guess = delta_v_guess
-
-time_guess = (t_f_guess * node_grid).reshape(-1, 1)
-time = ox.Time(
-    initial=0.0,
-    final=ox.Free(float(t_f_guess)),
-    min=0.0,
-    max=3.0 * t_f_guess,
-    guess=time_guess,
-    time_dilation_min=0.0001 * t_f_guess,
-    time_dilation_max=3.0 * t_f_guess,
-    uniform_time_grid=False,
-)
-dtdtau_guess = np.gradient(time_guess[:, 0], s_uniform)
-dtdtau_guess = np.clip(dtdtau_guess, 0.01 * t_f_guess, 3.0 * t_f_guess)
-time.time_dilation_guess = dtdtau_guess.reshape(-1, 1)
-
-# Scaling
-position.scaling_max = jnp.array([0.01, 0.01, 0.01])
-position.scaling_min = -jnp.array([0.01, 0.01, 0.01])
-velocity.scaling_max = jnp.array([0.5, 0.5, 0.5])
-velocity.scaling_min = -jnp.array([0.5, 0.5, 0.5])
-fuel.scaling_min = jnp.array([0.95])
-fuel.scaling_max = jnp.array([1.00])
-delta_v.scaling_min = velocity.scaling_min
-delta_v.scaling_max = velocity.scaling_max
-
-# Bounds
-position.min = position.scaling_min
-position.max = position.scaling_max
-velocity.min = velocity.scaling_min
-velocity.max = velocity.scaling_max
-fuel.min = fuel.scaling_min
-fuel.max = fuel.scaling_max
-
-states = [position, velocity, fuel]
-controls = [delta_v]
-
-discretizer = {
-    "ode_solver": "Dopri8",
-    "diffrax_kwargs": {"atol": integration_tol, "rtol": integration_tol},
-}
-algorithm = {
-    "k_max": 150,
-    "lam_prox": 5e-2,
-    "lam_vc": 3e1,
-    "lam_vb": 2e-1,
-    "lam_cost": 0.5,
-    "ep_tr": 1e-9,
-    "ep_vc": 1e-6,
-    "autotuner": ox.AugmentedLagrangian(),
-}
-
-constraints = []
-# Enforce final distance from Earth in normalized Sun-Earth rotating frame.
-final_radius_target = d_earth_moon / r_ref
-eps_radius = 1e-4
-constraints += [
-    (ox.linalg.Norm(position - pos_earth_rot) <= final_radius_target).at([n_nodes - 1]).convex(),
-]
-constraints += [
-    (ox.linalg.Norm(position - pos_earth_rot) >= (1 + eps_radius) * final_radius_target).at(
-        [n_nodes - 1]
-    ),
-]
-
-# Final orbit tangency: radius and velocity orthogonal at terminal node.
-constraints += [
-    (ox.Sum((position - pos_earth_rot) * velocity) >= 0.0).at([n_nodes - 1]),
-]
-constraints += [
-    (ox.Sum((position - pos_earth_rot) * velocity) <= 0.0).at([n_nodes - 1]),
-]
-
-# Final speed magnitude: velocity should match the moon one
-constraints += [
-    (ox.linalg.Norm(velocity) - v_moon >= 0.0).at([n_nodes - 1]),
-]
-constraints += [
-    (ox.linalg.Norm(velocity) - v_moon <= 0.0).at([n_nodes - 1]).convex(),
-]
+def _is_float64_dtype(float_dtype: str) -> bool:
+    return float_dtype.lower() in ("float64", "f64", "double")
 
 
-problem = Problem(
-    dynamics=dynamics,
-    dynamics_discrete=dynamics_discrete,
-    states=states,
-    controls=controls,
-    time=time,
-    constraints=constraints,
-    N=n_nodes,
-    discretizer=discretizer,
-    algorithm=algorithm,
-    float_dtype=LET_FLOAT_DTYPE,
-    solver={"cvx_solver": "CLARABEL", "solver_args": {}},
-)
+def _build_let_problem_bundle(float_dtype: str = LET_FLOAT_DTYPE) -> dict:
+    """Construct LET problem and precomputed JAX artifacts for one dtype."""
+    _configure_jax_float_dtype(float_dtype, update_jax_enable_x64=False)
+    jax_float_dtype = jnp.float64 if _is_float64_dtype(float_dtype) else jnp.float32
 
-# Keep post-process propagation tolerances aligned with discretization.
-problem.settings.prp.solver = "Dopri8"
-problem.settings.prp.atol = integration_tol
-problem.settings.prp.rtol = integration_tol
-problem.settings.prp.dt = 1e-4
+    # Build symbolic CR3BP model once and reuse it for optimization and propagation.
+    position = ox.State("position", shape=(3,))
+    velocity = ox.State("velocity", shape=(3,))
+    fuel = ox.State("fuel", shape=(1,))
+
+    # Assign slices for standalone lowering/evaluation on [x, y, z, vx, vy, vz].
+    position._slice = slice(0, 3)
+    velocity._slice = slice(3, 6)
+
+    x_e = position[0]
+    y_e = position[1]
+    z_e = position[2]
+
+    # In this shifted frame: Earth is at x=0 and Sun is at x=-1.
+    # For general reference distance L, Sun is at x = -d_earth_sun / L = -rho_es.
+    sun_dx = x_e + rho_es
+    earth_dx = x_e
+
+    d_sun = ox.Sqrt(sun_dx**2 + y_e**2 + z_e**2)
+    d_earth = ox.Sqrt(earth_dx**2 + y_e**2 + z_e**2)
+
+    ax = (
+        2.0 * kappa * velocity[1]
+        + kappa**2 * (x_e + rho_es * (1.0 - mu))
+        - grav_scale * (mu_sun * sun_dx / d_sun**3 + mu_earth * earth_dx / d_earth**3)
+    )
+    ay = (
+        -2.0 * kappa * velocity[0]
+        + kappa**2 * y_e
+        - grav_scale * (mu_sun * y_e / d_sun**3 + mu_earth * y_e / d_earth**3)
+    )
+    az = -grav_scale * (mu_sun * z_e / d_sun**3 + mu_earth * z_e / d_earth**3)
+
+    velocity_dot = ox.Concat(ax, ay, az)
+    dynamics = {
+        "position": velocity,
+        "velocity": velocity_dot,
+        "fuel": 0.0,
+    }
+
+    delta_v = ox.Control(
+        "delta_v",
+        shape=(3,),
+        parameterization="impulsive",
+        nodes=[0, n_nodes - 1],
+    )
+
+    eps_impulse = 1e-12
+    dynamics_discrete = {
+        "position": position,
+        "velocity": velocity + delta_v,
+        "fuel": fuel - ox.linalg.Norm(delta_v + eps_impulse),
+    }
+
+    cr3bp_rhs = lower_to_jax(ox.Concat(velocity, velocity_dot))
+    # Dense propagation for an initialization trajectory.
+    guess_dense = np.asarray(
+        solve_ivp_diffrax(
+            lambda t, x: cr3bp_rhs(x, jnp.zeros((0,), dtype=x.dtype), 0, {}),
+            tau_final=t_f_guess,
+            y_0=jnp.asarray(x0_seed, dtype=jax_float_dtype),
+            args=(),
+            tau_0=0.0,
+            num_substeps=3000,
+            solver_name="Dopri8",
+            rtol=integration_tol,
+            atol=integration_tol,
+        ),
+        dtype=float,
+    )
+
+    # Build nodal guess and apply the pre-impulse state offset at node 0.
+    s_uniform = np.linspace(0.0, 1.0, n_nodes)
+    node_grid = _normalized_node_grid(n_nodes, NODE_DISTRIBUTION_MODE)
+    node_idx = np.round((guess_dense.shape[0] - 1) * node_grid).astype(int)
+    nodal_guess = guess_dense[node_idx].copy()
+
+    # Boundary conditions
+    position.initial = pos_0
+    velocity.initial = vel_0
+    fuel.initial = np.array([1.0])
+
+    position.final = [
+        ox.Free(float(pos_f[0])),
+        ox.Free(float(pos_f[1])),
+        ox.Free(float(pos_f[2])),
+    ]
+    velocity.final = [
+        ox.Free(float(vel_f[0])),
+        ox.Free(float(vel_f[1])),
+        ox.Free(float(vel_f[2])),
+    ]
+    fuel.final = [("maximize", 0.95)]
+
+    # Guesses
+    position.guess = nodal_guess[:, :3]
+    velocity.guess = nodal_guess[:, 3:6]
+    fuel.guess = np.ones((n_nodes, 1))
+
+    delta_v.min = -np.ones(3)
+    delta_v.max = np.ones(3)
+    delta_v_guess = np.zeros((n_nodes, 3))
+    delta_v.guess = delta_v_guess
+
+    time_guess = (t_f_guess * node_grid).reshape(-1, 1)
+    time = ox.Time(
+        initial=0.0,
+        final=ox.Free(float(t_f_guess)),
+        min=0.0,
+        max=3.0 * t_f_guess,
+        guess=time_guess,
+        time_dilation_min=0.0001 * t_f_guess,
+        time_dilation_max=3.0 * t_f_guess,
+        uniform_time_grid=False,
+    )
+    dtdtau_guess = np.gradient(time_guess[:, 0], s_uniform)
+    dtdtau_guess = np.clip(dtdtau_guess, 0.01 * t_f_guess, 3.0 * t_f_guess)
+    time.time_dilation_guess = dtdtau_guess.reshape(-1, 1)
+
+    # Scaling
+    position.scaling_max = jnp.array([0.01, 0.01, 0.01])
+    position.scaling_min = -jnp.array([0.01, 0.01, 0.01])
+    velocity.scaling_max = jnp.array([0.5, 0.5, 0.5])
+    velocity.scaling_min = -jnp.array([0.5, 0.5, 0.5])
+    fuel.scaling_min = jnp.array([0.95])
+    fuel.scaling_max = jnp.array([1.00])
+    delta_v.scaling_min = velocity.scaling_min
+    delta_v.scaling_max = velocity.scaling_max
+
+    # Bounds
+    position.min = position.scaling_min
+    position.max = position.scaling_max
+    velocity.min = velocity.scaling_min
+    velocity.max = velocity.scaling_max
+    fuel.min = fuel.scaling_min
+    fuel.max = fuel.scaling_max
+
+    states = [position, velocity, fuel]
+    controls = [delta_v]
+
+    discretizer = {
+        "ode_solver": "Dopri8",
+        "diffrax_kwargs": {"atol": integration_tol, "rtol": integration_tol},
+    }
+    algorithm = {
+        "k_max": 150,
+        "lam_prox": 5e-2,
+        "lam_vc": 3e1,
+        "lam_vb": 2e-1,
+        "lam_cost": 0.5,
+        "ep_tr": 1e-9,
+        "ep_vc": 1e-6,
+        "autotuner": ox.AugmentedLagrangian(),
+    }
+
+    constraints = []
+    # Enforce final distance from Earth in normalized Sun-Earth rotating frame.
+    final_radius_target = d_earth_moon / r_ref
+    eps_radius = 1e-4
+    constraints += [
+        (ox.linalg.Norm(position - pos_earth_rot) <= final_radius_target)
+        .at([n_nodes - 1])
+        .convex(),
+    ]
+    constraints += [
+        (ox.linalg.Norm(position - pos_earth_rot) >= (1 + eps_radius) * final_radius_target).at(
+            [n_nodes - 1]
+        ),
+    ]
+
+    # Final orbit tangency: radius and velocity orthogonal at terminal node.
+    constraints += [
+        (ox.Sum((position - pos_earth_rot) * velocity) >= 0.0).at([n_nodes - 1]),
+    ]
+    constraints += [
+        (ox.Sum((position - pos_earth_rot) * velocity) <= 0.0).at([n_nodes - 1]),
+    ]
+
+    # Final speed magnitude: velocity should match the moon one
+    constraints += [
+        (ox.linalg.Norm(velocity) - v_moon >= 0.0).at([n_nodes - 1]),
+    ]
+    constraints += [
+        (ox.linalg.Norm(velocity) - v_moon <= 0.0).at([n_nodes - 1]).convex(),
+    ]
+
+    problem = Problem(
+        dynamics=dynamics,
+        dynamics_discrete=dynamics_discrete,
+        states=states,
+        controls=controls,
+        time=time,
+        constraints=constraints,
+        N=n_nodes,
+        discretizer=discretizer,
+        algorithm=algorithm,
+        float_dtype=float_dtype,
+        solver={"cvx_solver": "CLARABEL", "solver_args": {}},
+    )
+
+    # Keep post-process propagation tolerances aligned with discretization.
+    problem.settings.prp.solver = "Dopri8"
+    problem.settings.prp.atol = integration_tol
+    problem.settings.prp.rtol = integration_tol
+    problem.settings.prp.dt = 1e-4
+
+    return {
+        "problem": problem,
+        "cr3bp_rhs": cr3bp_rhs,
+        "nodal_guess": nodal_guess,
+        "time_guess": time_guess,
+    }
+
+
+class _LazyLETProblem:
+    """Lazy proxy so test discovery does not instantiate the LET problem at import time."""
+
+    _float_dtype = LET_FLOAT_DTYPE
+
+    def __init__(self) -> None:
+        self._bundle: dict | None = None
+
+    def _ensure_bundle(self) -> dict:
+        if self._bundle is None:
+            self._bundle = _build_let_problem_bundle(float_dtype=self._float_dtype)
+        return self._bundle
+
+    def __getattr__(self, name: str):
+        return getattr(self._ensure_bundle()["problem"], name)
+
+
+problem = _LazyLETProblem()
 
 if __name__ == "__main__":
+    _configure_jax_float_dtype(LET_FLOAT_DTYPE, update_jax_enable_x64=True)
+    let_bundle = _build_let_problem_bundle(float_dtype=LET_FLOAT_DTYPE)
+    problem = let_bundle["problem"]
+    cr3bp_rhs = let_bundle["cr3bp_rhs"]
+    nodal_guess = let_bundle["nodal_guess"]
+    time_guess = let_bundle["time_guess"]
+
     hohmann_metrics = _hohmann_transfer_metrics(
         mu_central_km3_s2=mu_earth,
         r1_km=r_0,
