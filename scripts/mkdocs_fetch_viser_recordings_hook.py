@@ -18,9 +18,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-RELEASE_URL = (
-    "https://github.com/OpenSCvx/OpenSCvx/releases/download/docs-assets-v1"
-)
+RELEASE_URL = "https://github.com/OpenSCvx/OpenSCvx/releases/download/docs-assets-v1"
 RECORDINGS = ("drone_racing.viser", "franka_fr3v2_pick_place.viser")
 
 
