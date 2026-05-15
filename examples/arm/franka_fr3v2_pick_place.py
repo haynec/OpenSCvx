@@ -63,6 +63,9 @@ from pathlib import Path
 
 import numpy as np
 
+Vec3 = tuple[float, float, float]
+QuatWxyz = tuple[float, float, float, float]
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
@@ -803,7 +806,7 @@ if __name__ == "__main__":
     if _use_cad_mesh:
         from scipy.spatial.transform import Rotation as _Rotation
 
-        def _pose_from_T(T: np.ndarray) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
+        def _pose_from_T(T: np.ndarray) -> tuple[Vec3, QuatWxyz]:
             """Body pose for Viser: position + wxyz quaternion (mesh vertices stay link-local)."""
             R = np.asarray(T, dtype=np.float64)[:3, :3]
             t = T[:3, 3]
@@ -873,7 +876,7 @@ if __name__ == "__main__":
     # -------------------------------------------------------------------------
     _anim_cb = [update_trail, update_marker, update_robot]
 
-    _vis_cam_mod = _vis_embed_mod if _vis_embed_mod is not None else _load_viser_embed_export_module()
+    _vis_cam_mod = _vis_embed_mod or _load_viser_embed_export_module()
     # Motion is mostly along world Y; camera on +X (opposite of −X) for the other
     # face-on horizontal view of the pick→place sweep.
     _vis_cam_mod.set_initial_camera_look_at_trajectory(
