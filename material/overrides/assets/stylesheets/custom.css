@@ -1,5 +1,228 @@
 /* ===== ESSENTIAL STYLES FOR OPENSCVX ===== */
 
+/*
+ * Light theme — warm neutrals (Moreau-adjacent), tuned for readability.
+ * Requires mkdocs palette: scheme default + primary custom + accent custom.
+ */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] {
+  color-scheme: light;
+
+  /* Four anchor shades — every other tone is color-mix / alpha from these only */
+  --osc-palette-1: #221a15;
+  --osc-palette-2: #3d2b20;
+  --osc-palette-3: #5b3d24;
+  --osc-palette-4: #f1ede4;
+
+  --md-default-fg-color: var(--osc-palette-1);
+  --md-default-fg-color--light: color-mix(in srgb, var(--osc-palette-1) 90%, var(--osc-palette-4) 10%);
+  --md-default-fg-color--lighter: color-mix(in srgb, var(--osc-palette-1) 76%, var(--osc-palette-4) 24%);
+  --md-default-fg-color--lightest: color-mix(in srgb, var(--osc-palette-1) 58%, var(--osc-palette-4) 42%);
+
+  --md-default-bg-color: var(--osc-palette-4);
+  --md-default-bg-color--light: color-mix(in srgb, var(--osc-palette-4) 90%, var(--osc-palette-2) 10%);
+  --md-default-bg-color--lighter: color-mix(in srgb, var(--osc-palette-4) 78%, var(--osc-palette-2) 22%);
+  --md-default-bg-color--lightest: color-mix(in srgb, var(--osc-palette-4) 66%, var(--osc-palette-2) 34%);
+
+  --md-typeset-color: var(--md-default-fg-color);
+  --md-typeset-a-color: var(--osc-palette-3);
+  --md-typeset-a-color--hover: var(--osc-palette-1);
+
+  --md-code-fg-color: color-mix(in srgb, var(--osc-palette-1) 94%, var(--osc-palette-2) 6%);
+  /* Inline ``code`` + fenced blocks: keep a warm tint but much lighter than 42% ink (was hard to read). */
+  --md-code-bg-color: color-mix(in srgb, var(--osc-palette-4) 88%, var(--osc-palette-2) 12%);
+  --md-code-bg-color--light: color-mix(in srgb, var(--osc-palette-4) 82%, var(--osc-palette-2) 18%);
+  --md-code-bg-color--lighter: color-mix(in srgb, var(--osc-palette-4) 72%, var(--osc-palette-2) 28%);
+
+  /*
+   * Line highlights (``hl_lines`` / .hll): Material defaults assume a light gray code
+   * background; on our warmer, darker --md-code-bg-color the default blue wash reads
+   * too heavy. Use a light cream fill + theme-colored gutter bar.
+   */
+  --md-code-hl-color: color-mix(in srgb, var(--osc-palette-3) 70%, var(--osc-palette-2) 30%);
+  /* Slightly more accent than before so ``hl_lines`` stays visible on the lighter code surface */
+  --md-code-hl-color--light: color-mix(in srgb, var(--osc-palette-4) 82%, var(--osc-palette-3) 18%);
+
+  /* Search / ``==mark==`` — default semi-opaque yellow can swamp tokens on dark code bg */
+  --md-typeset-mark-color: color-mix(in srgb, hsl(48 100% 92%) 78%, var(--osc-palette-3) 22%);
+
+  --md-accent-fg-color: var(--osc-palette-3);
+  --md-accent-bg-color: color-mix(in srgb, var(--osc-palette-3) 18%, var(--osc-palette-4));
+
+  --md-primary-fg-color: color-mix(in srgb, var(--osc-palette-4) 99%, var(--osc-palette-3) 1%);
+  --md-primary-fg-color--light: color-mix(in srgb, var(--osc-palette-4) 92%, var(--osc-palette-3) 8%);
+  --md-primary-fg-color--lighter: color-mix(in srgb, var(--osc-palette-4) 72%, var(--osc-palette-3) 28%);
+  --md-primary-fg-color--lightest: color-mix(in srgb, var(--osc-palette-4) 52%, var(--osc-palette-3) 48%);
+
+  --md-primary-bg-color: var(--osc-palette-2);
+  --md-primary-bg-color--light: color-mix(in srgb, var(--osc-palette-2) 78%, var(--osc-palette-4) 22%);
+  --md-primary-bg-color--lighter: color-mix(in srgb, var(--osc-palette-2) 62%, var(--osc-palette-4) 38%);
+  --md-primary-bg-color--lightest: color-mix(in srgb, var(--osc-palette-2) 48%, var(--osc-palette-4) 52%);
+
+  --md-footer-bg-color: color-mix(in srgb, var(--osc-palette-4) 42%, var(--osc-palette-2) 58%);
+  --md-footer-fg-color: var(--osc-palette-1);
+  --md-footer-fg-color--light: color-mix(in srgb, var(--osc-palette-1) 76%, var(--osc-palette-4) 24%);
+  --md-footer-fg-color--lighter: color-mix(in srgb, var(--osc-palette-1) 54%, var(--osc-palette-4) 46%);
+
+  --md-shadow-z1: 0 0.125rem 0.5rem color-mix(in srgb, var(--osc-palette-1) 8%, transparent),
+    0 0 0.0625rem color-mix(in srgb, var(--osc-palette-1) 7%, transparent);
+  --md-shadow-z2: 0 0.25rem 1rem color-mix(in srgb, var(--osc-palette-1) 10%, transparent),
+    0 0 0.125rem color-mix(in srgb, var(--osc-palette-1) 7%, transparent);
+  --md-shadow-z3: 0 0.5rem 1.5rem color-mix(in srgb, var(--osc-palette-1) 12%, transparent),
+    0 0 0.25rem color-mix(in srgb, var(--osc-palette-1) 7.5%, transparent);
+
+  /* Hero backdrops — only mixes of the four anchors */
+  --osc-hero-warm-glow: color-mix(in srgb, var(--osc-palette-3) 10%, transparent);
+  --osc-hero-warm-glow-soft: color-mix(in srgb, var(--osc-palette-3) 6.5%, transparent);
+  --osc-hero-warm-grid: color-mix(in srgb, var(--osc-palette-1) 3.5%, transparent);
+  --osc-hero-warm-beam: color-mix(in srgb, var(--osc-palette-3) 4%, transparent);
+}
+
+/* Dark (slate) — four anchors for home / overrides; Material fills in the rest */
+[data-md-color-scheme="slate"] {
+  --osc-palette-1: #0a0a0c;
+  --osc-palette-2: #161618;
+  --osc-palette-3: #6366f1;
+  --osc-palette-4: #f4f4f5;
+
+  /* Hero backdrops — derived from the four anchors (no extra hue literals) */
+  --osc-hero-slate-glow: color-mix(in srgb, var(--osc-palette-3) 26%, transparent);
+  --osc-hero-slate-glow-mid: color-mix(in srgb, var(--osc-palette-3) 14%, transparent);
+  --osc-hero-slate-glow-soft: color-mix(in srgb, var(--osc-palette-3) 10%, transparent);
+  --osc-hero-slate-grid: color-mix(in srgb, var(--osc-palette-4) 4.8%, transparent);
+}
+
+/*
+ * Light + custom: cream header. SVG header logo uses white paths; filter maps to primary brown.
+ * Raster logos (e.g. openscvx_logo_square.png) keep natural colors — no filter.
+ */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header {
+  background-color: var(--md-default-bg-color);
+  color: var(--md-typeset-color);
+  box-shadow:
+    0 0 0.05rem 0.05rem color-mix(in srgb, var(--osc-palette-1) 10%, transparent),
+    0 0.2rem 0.5rem color-mix(in srgb, var(--osc-palette-1) 5%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header__button.md-logo img[src$=".svg"],
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-nav__button.md-logo img[src$=".svg"] {
+  filter: brightness(0) saturate(100%) invert(16%) sepia(22%) saturate(2200%) hue-rotate(342deg) brightness(0.93) contrast(0.94);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header__title {
+  color: var(--md-typeset-color);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header__button.md-icon {
+  color: var(--md-primary-bg-color);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-header__option .md-header__button.md-icon {
+  color: var(--md-primary-bg-color);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-source {
+  color: color-mix(in srgb, var(--osc-palette-1) 88%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-source:hover {
+  color: var(--md-typeset-color);
+}
+
+/* Secondary chrome (tabs strip): lift off page + stronger tab labels */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-tabs {
+  background-color: var(--md-default-bg-color--light);
+  border-bottom: 1px solid color-mix(in srgb, var(--osc-palette-1) 14%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-tabs__link {
+  color: color-mix(in srgb, var(--osc-palette-1) 82%, transparent);
+  opacity: 1;
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-tabs__link--active,
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-tabs__link:hover {
+  color: var(--md-typeset-color);
+}
+
+/* Search field: readable on cream header (light + custom) */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-search__form {
+  background-color: color-mix(in srgb, var(--osc-palette-1) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--osc-palette-1) 12%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-search__input {
+  color: var(--md-typeset-color);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-search__input::placeholder {
+  color: color-mix(in srgb, var(--osc-palette-1) 48%, transparent);
+}
+
+/* Right-hand TOC / nav: avoid “washed” inherited opacity on nested links */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-sidebar--secondary
+  .md-nav__link {
+  color: color-mix(in srgb, var(--osc-palette-1) 86%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-sidebar--secondary
+  .md-nav__link--active,
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-sidebar--secondary
+  .md-nav__link:focus,
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-sidebar--secondary
+  .md-nav__link:hover {
+  color: var(--md-typeset-color);
+}
+
+/* Buttons — Material defaults are easy to lose on warm off-white; tighten both styles */
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"] .md-button {
+  font-weight: 600;
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-button.md-button--primary {
+  color: var(--md-primary-fg-color);
+  background-color: var(--md-primary-bg-color);
+  border: 1px solid color-mix(in srgb, var(--osc-palette-1) 22%, var(--md-primary-bg-color));
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-button.md-button--primary:hover,
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-button.md-button--primary:focus {
+  color: var(--md-primary-fg-color);
+  background-color: var(--md-primary-bg-color--light);
+  border-color: color-mix(in srgb, var(--osc-palette-1) 28%, var(--md-primary-bg-color--light));
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-button:not(.md-button--primary) {
+  color: var(--md-typeset-color);
+  background-color: color-mix(in srgb, var(--osc-palette-4) 94%, var(--osc-palette-3) 6%);
+  border: 1.5px solid color-mix(in srgb, var(--md-typeset-color) 55%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--osc-palette-4) 75%, transparent),
+    0 1px 2px color-mix(in srgb, var(--osc-palette-1) 10%, transparent);
+}
+
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-button:not(.md-button--primary):hover,
+[data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
+  .md-button:not(.md-button--primary):focus {
+  color: var(--osc-palette-1);
+  background-color: color-mix(in srgb, var(--osc-palette-4) 88%, var(--osc-palette-2) 12%);
+  border-color: color-mix(in srgb, var(--md-typeset-color) 78%, transparent);
+}
+
 /* --- OpenSCvx: API signature sizing (make signatures more readable) --- */
 .doc-heading code,
 .doc-heading .doc-signature,
@@ -107,6 +330,101 @@ html {
   border-radius: 0 !important;
 }
 
+/* Home pipeline diagram (SVG) — uses per-theme --osc-palette-* (four anchors) */
+.osc-home-diagram {
+  margin: 0 auto;
+  max-width: min(24rem, 100%);
+}
+
+.osc-home-diagram__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.osc-home-diagram__panel {
+  fill: color-mix(in srgb, var(--osc-palette-1) 5%, var(--osc-palette-4));
+  stroke: color-mix(in srgb, var(--osc-palette-1) 12%, transparent);
+  stroke-width: 1;
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__panel {
+  fill: color-mix(in srgb, var(--osc-palette-4) 6%, var(--osc-palette-1));
+  stroke: color-mix(in srgb, var(--osc-palette-4) 14%, transparent);
+}
+
+.osc-home-diagram__panel--accent {
+  fill: color-mix(in srgb, var(--osc-palette-3) 22%, var(--osc-palette-4));
+  stroke: color-mix(in srgb, var(--osc-palette-3) 32%, transparent);
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__panel--accent {
+  fill: color-mix(in srgb, var(--osc-palette-3) 18%, var(--osc-palette-1));
+  stroke: color-mix(in srgb, var(--osc-palette-3) 45%, transparent);
+}
+
+.osc-home-diagram__cap,
+.osc-home-diagram__micro {
+  fill: color-mix(in srgb, var(--osc-palette-1) 58%, var(--osc-palette-4));
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__cap,
+[data-md-color-scheme="slate"] .osc-home-diagram__micro {
+  fill: color-mix(in srgb, var(--osc-palette-4) 55%, var(--osc-palette-1));
+}
+
+.osc-home-diagram__title {
+  fill: var(--osc-palette-1);
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__title {
+  fill: var(--osc-palette-4);
+}
+
+.osc-home-diagram__brand {
+  fill: var(--osc-palette-3);
+}
+
+.osc-home-diagram__connector,
+.osc-home-diagram__curve {
+  stroke: color-mix(in srgb, var(--osc-palette-1) 26%, transparent);
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__connector,
+[data-md-color-scheme="slate"] .osc-home-diagram__curve {
+  stroke: color-mix(in srgb, var(--osc-palette-4) 24%, transparent);
+}
+
+.osc-home-diagram__arrow-fill {
+  fill: color-mix(in srgb, var(--osc-palette-1) 26%, transparent);
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__arrow-fill {
+  fill: color-mix(in srgb, var(--osc-palette-4) 24%, transparent);
+}
+
+.osc-home-diagram__grad-start {
+  stop-color: var(--osc-palette-3);
+}
+
+.osc-home-diagram__grad-stop {
+  stop-color: color-mix(in srgb, var(--osc-palette-3) 50%, var(--osc-palette-1));
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__grad-stop {
+  stop-color: color-mix(in srgb, var(--osc-palette-3) 42%, var(--osc-palette-4));
+}
+
+.osc-home-diagram__dot {
+  fill: var(--osc-palette-3);
+  stroke: var(--osc-palette-4);
+  stroke-width: 1;
+}
+
+[data-md-color-scheme="slate"] .osc-home-diagram__dot {
+  stroke: var(--osc-palette-1);
+}
+
 /* Mobile responsiveness */
 @media (max-width: 768px) {
   .md-typeset pre,
@@ -125,11 +443,23 @@ html {
   .md-typeset pre,
   .md-typeset .admonition {
     box-shadow: none;
-    border: 1px solid #ccc;
+    border: 1px solid color-mix(in srgb, var(--md-typeset-color) 22%, transparent);
   }
   
   .md-typeset * {
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* Site-wide headings: League Spartan for that Futura/NASA-worm display feel.
+   Body, lists, captions, code, etc. stay on Inter / Source Code Pro. */
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-typeset h4,
+.md-typeset h5,
+.md-typeset h6 {
+  font-family: "League Spartan", var(--md-text-font-family), system-ui, sans-serif;
+  letter-spacing: -0.0em;
 }

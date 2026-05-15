@@ -1,0 +1,25 @@
+{#-
+  Landing hero — clean, product-style (inspired by moreau.so layout rhythm).
+
+  Backdrop presets (data-osc-hero-bg): nebula | orbit | beams | horizon | mesh
+  mesh: soft top glow + layered SVG wavy lines (see home-hero.css).
+  Omit the attribute for CSS default (nebula). Current: mesh. Styles in home-hero.css.
+-#}
+<section class="osc-home-hero" data-osc-hero-bg="mesh" aria-labelledby="osc-home-hero-title">
+  <div class="osc-home-hero__inner md-typeset">
+    <p class="osc-home-hero__kicker">Nonconvex trajectory optimization</p>
+    <h1 id="osc-home-hero-title" class="osc-home-hero__title">{{ config.site_name }}</h1>
+    <p class="osc-home-hero__tagline">
+      {% if page.meta and page.meta.description %}
+        {{ page.meta.description }}
+      {% elif config.site_description %}
+        {{ config.site_description }}
+      {% endif %}
+    </p>
+    <div class="osc-home-hero__actions">
+      <a href="{{ 'Reference/' | url }}" class="md-button">API Reference</a>
+      <a href="{{ 'UsersGuide/00_introduction/' | url }}" class="md-button">Users guide</a>
+      <a href="{{ 'Examples/' | url }}" class="md-button">Examples</a>
+    </div>
+  </div>
+</section>

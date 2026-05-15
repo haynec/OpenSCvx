@@ -3,7 +3,8 @@ site_name: OpenSCvx
 site_url: https://openscvx.github.io/OpenSCvx/
 site_author: Chris Hayner
 site_description: >-
-  Warning this repo is currently in beta testing! Documentation for OpenSCvx, a JAX-based Python library for solving nonconvex trajectory optimization problems
+  Trajectory optimization with a composable problem API, JAX compiling (including jax.export),
+  and vectorization for scaling to batches of scenarios—built on successive convexification.
 # Repository
 repo_name: OpenSCvx/OpenSCvx
 repo_url: https://github.com/OpenSCvx/OpenSCvx
@@ -15,7 +16,7 @@ copyright: Copyright &copy; 2025 Chris Hayner
 theme:
   name: material
   custom_dir: material/overrides
-  logo: assets/logo.svg
+  logo: assets/openscvx_logo_square.png
   toc:
     depth: 2
   features:
@@ -35,7 +36,6 @@ theme:
     - navigation.instant
     - navigation.instant.prefetch
     - navigation.instant.progress
-    - navigation.instant.preview
     # - navigation.path
     # - navigation.prune
     - navigation.sections
@@ -54,8 +54,8 @@ theme:
         name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/toggle-switch
         name: Switch to dark mode
@@ -67,15 +67,25 @@ theme:
         icon: material/toggle-switch-off
         name: Switch to system preference
   font:
-    text: CMU Sans Serif
-    code: Roboto Mono
+    text: Inter
+    code: Source Code Pro
   favicon: assets/favicon.png
   icon:
     logo: logo
 
+# Copy Viser's bundled ``client/build`` into ``docs/assets/viser-client`` so home-page embeds resolve.
+hooks:
+  - scripts/mkdocs_copy_viser_client_hook.py
+
+# Plugin choices preserve API docs from docstrings (mkdocstrings + gen-files). Before moving to
+# Zensical, confirm parity for mkdocstrings, mkdocs-gen-files, literate-nav, section-index, and mike.
 # Plugins
 plugins:
   - meta
+  # Social cards render via Pillow + fonts from Google Fonts only (not self-hosted CMU).
+  - social:
+      cards_layout_options:
+        font_family: Source Sans 3
   # - optimize
   - search:
       separator: '[\s\u200b\-_,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
@@ -162,8 +172,7 @@ extra_javascript:
 # Page tree
 nav:
     - Home: index.md
-    - Getting Started:
-      -  'getting-started.md'
+    - Resources:
       - 'examples.md'
       - 'citation.md'
     - Users Guide:

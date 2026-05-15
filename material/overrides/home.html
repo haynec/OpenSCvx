@@ -1,26 +1,21 @@
-{#-
-  This file was automatically generated - do not edit
--#}
 {% extends "main.html" %}
 {% block htmltitle %}
   <title>{{ config.site_name }}</title>
 {% endblock %}
-{% block extrahead %}
-  <link rel="me" href="https://fosstodon.org/@squidfunk">
-{% endblock %}
 {% block styles %}
   {{ super() }}
-  <link rel="stylesheet" href="{{ 'assets/stylesheets/parallax.css' | url }}">
-  <script>"Apple Computer, Inc."===navigator.vendor&&document.documentElement.classList.add("safari")</script>
+  <link rel="stylesheet" href="{{ 'assets/stylesheets/home-hero.css' | url }}">
+  <link rel="stylesheet" href="{{ 'assets/stylesheets/home-dropin.css' | url }}">
+  <link rel="stylesheet" href="{{ 'assets/stylesheets/home-viser.css' | url }}">
 {% endblock %}
-{% block scripts %}
-  {{ super() }}
-  <script src="{{ 'assets/javascripts/parallax.js' | url }}"></script>
-{% endblock %}
-{% block announce %}{% endblock %}
 {% block hero %}
-  {% include "partials/parallax.html" %}
+  {% include "partials/home-hero.html" %}
 {% endblock %}
-{% block tabs %}{% endblock %}
-{% block content %}{% endblock %}
-{% block footer %}{% endblock %}
+{% block content %}
+  {% include "partials/home-pipeline.html" %}
+  {% include "partials/home-viser-strip.html" %}
+  {% include "partials/home-dropin-banner.html" %}
+  <div class="osc-home-below-fold">
+    {{ super() }}
+  </div>
+{% endblock %}

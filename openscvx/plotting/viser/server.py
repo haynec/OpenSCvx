@@ -84,9 +84,9 @@ def create_server(
     # TitlebarButton and TitlebarConfig are TypedDict classes (create as plain dicts)
     buttons = (
         TitlebarButton(
-            text="Getting Started",
+            text="API Reference",
             icon="Description",
-            href="https://openscvx.github.io/OpenSCvx/latest/getting-started/",
+            href="https://openscvx.github.io/OpenSCvx/latest/Reference/",
         ),
         TitlebarButton(
             text="Docs",

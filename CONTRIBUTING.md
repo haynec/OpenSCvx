@@ -20,7 +20,6 @@ pip install -e ".[test]"
 ```
 
 For additional features, you can install optional dependencies:
-- `pip install -e ".[gui]"` - GUI visualization tools
 - `pip install -e ".[cvxpygen]"` - Code generation support
 - `pip install -e ".[stl]"` - STL (Signal Temporal Logic) constraints
 
@@ -204,11 +203,17 @@ def solve(self, max_iterations: int = 100) -> OptimizationResult:
 To preview documentation locally, first install the dependencies:
 
 ```bash
-pip install mkdocs-material mkdocstrings-python mkdocs-gen-files mkdocs-literate-nav mkdocs-section-index
+pip install "mkdocs-material[imaging]" mkdocstrings-python mkdocs-gen-files mkdocs-literate-nav mkdocs-section-index
 ```
+
+The `social` plugin (enabled in `mkdocs.yml`) uses **CairoSVG**, which loads the native **Cairo** library. A `pip`-only `cairosvg` on macOS often cannot find `libcairo` and will spam warnings during `mkdocs build` / `mkdocs serve`. Install Cairo into the same environment (for example `conda install -c conda-forge cairo cairosvg`) or install Cairo via Homebrew so the dynamic linker can resolve it. Uninstalling `cairosvg` does not silence the build: the plugin will warn on every page that imaging dependencies are missing.
 
 Then serve the documentation locally:
 
 ```bash
 mkdocs serve
 ```
+
+To silence MkDocs 2.0 / ProperDocs notices when building with **`--strict`**, set **`NO_MKDOCS_2_WARNING=true`** (Material’s stderr banner) and, if you use ProperDocs, **`DISABLE_MKDOCS_2_WARNING=true`** for the pip-style WARNING; the documentation workflow sets both for CI.
+
+The version dropdown uses Material’s **mike** integration and expects a `versions.json` at the site root. Plain `mkdocs serve` does not run `mike deploy`, so the repo includes a minimal **`docs/versions.json`** (copied into the build) to avoid a 404 in local previews. On **GitHub Pages**, CI replaces the published root with **`mike deploy`**, which writes the real multi-version manifest. To preview multiple versions locally the same way as production, use **`mike serve`** after you have a `gh-pages` branch with deployed versions.

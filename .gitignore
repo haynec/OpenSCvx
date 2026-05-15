@@ -209,7 +209,9 @@ check_lint.py
 MUJOCO_LOG.TXT
 
 # MkDocs Material Insiders (installed from GitHub in CI, not committed)
-material/
-# But allow custom overrides to be committed
+# Ignore contents of material/ but not material/overrides/ (Git cannot un-ignore
+# paths inside an ignored directory when the rule is material/).
+material/*
 !material/overrides/
+!material/overrides/**
 src/

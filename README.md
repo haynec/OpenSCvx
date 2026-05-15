@@ -107,11 +107,11 @@ uv pip install openscvx
 ```
 
 > [!TIP]
-> **Optional Dependencies**
+> **Optional dependencies**
 >
-> For GUI support or CVXPYGen code generation:
+> For CVXPYGen code generation:
 > ```bash
-> pip install openscvx[gui,cvxpygen]
+> pip install openscvx[cvxpygen]
 > ```
 
 > [!TIP]
@@ -161,13 +161,13 @@ uv pip install -e .
 > git submodule update --init third_party/mujoco_menagerie
 > ```
 
-## Getting Started
+## Documentation
 
-Check out the OpenSCvx documentation to help you get started
+Check out the OpenSCvx documentation:
 
-- [Getting Started Docs](https://openscvx.github.io/OpenSCvx/latest/getting-started/)
 - [Users Guide](https://openscvx.github.io/OpenSCvx/latest/UsersGuide/00_introduction/)
-- [API Reference](https://openscvx.github.io/OpenSCvx/latest/Reference/problem/)
+- [API Reference](https://openscvx.github.io/OpenSCvx/latest/Reference/)
+- [Examples overview](https://openscvx.github.io/OpenSCvx/latest/examples/)
 
 ### Running the Examples
 

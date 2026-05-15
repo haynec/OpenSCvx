@@ -12,6 +12,11 @@ jobs:
   docs:
     name: 📖 Documentation
     runs-on: ubuntu-latest
+    env:
+      # Material stderr banner (MkDocs 2.0 blog); CI uses MkDocs 1.x + --strict.
+      NO_MKDOCS_2_WARNING: "true"
+      # ProperDocs may emit a follow-up WARNING; keep --strict clean.
+      DISABLE_MKDOCS_2_WARNING: "true"
 
     steps:
     - name: Checkout repository
@@ -38,20 +43,23 @@ jobs:
     - name: Cache MkDocs build
       uses: actions/cache@v4
       with:
-        key: mkdocs-material-${{ hashFiles('mkdocs.yml', 'docs/**') }}
+        key: mkdocs-material-${{ hashFiles('mkdocs.yml', 'docs/**', 'material/overrides/**', 'scripts/gen_ref_pages.py', 'scripts/gen_example_pages.py', 'scripts/mkdocs_copy_viser_client_hook.py') }}
         path: .cache
         restore-keys: |
           mkdocs-material-
 
     - name: Install system dependencies
-      run: sudo apt-get update && sudo apt-get install -y pngquant
+      run: >-
+        sudo apt-get update &&
+        sudo apt-get install -y pngquant libcairo2-dev libfreetype6-dev libffi-dev
+        libjpeg-dev libpng-dev zlib1g-dev
 
     # - name: Install MkDocs Material Insiders
     #   run: uv pip install --system git+https://${{ secrets.MKDOCS_INSIDERS_TOKEN }}@github.com/squidfunk/mkdocs-material-insiders.git
 
     - name: Install documentation tools
       run: |
-        uv pip install --system mkdocs-material mkdocstrings-python
+        uv pip install --system "mkdocs-material[imaging]" mkdocstrings-python
         uv pip install --system mkdocs-gen-files mkdocs-literate-nav mkdocs-section-index
         uv pip install --system mike
 
