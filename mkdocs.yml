@@ -174,8 +174,7 @@ extra_javascript:
 # Page tree
 nav:
     - Home: index.md
-    - Getting Started:
-      -  'getting-started.md'
+    - Resources:
       - 'examples.md'
       - 'citation.md'
     - Users Guide:
