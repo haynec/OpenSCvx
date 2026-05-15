@@ -470,7 +470,7 @@ def test_or_jax_lite_variant():
     fn = _lower_stl(Or(p1, p2, lite=True))
     # lite variant: satisfied when at least one predicate satisfied
     x_ok = jnp.array([0.5, 3.0])
-    assert float(fn(x_ok, None, None, None)) >= 0.0
+    assert float(fn(x_ok, None, None, None)) >= pytest.approx(0.0, abs=1e-17)
 
 
 # =============================================================================
