@@ -702,6 +702,7 @@ integration_max_steps = 3000
 # - "cosine": denser near interval endpoints
 NODE_DISTRIBUTION_MODE = "cosine"
 
+
 def _is_float64_dtype(float_dtype: str) -> bool:
     return float_dtype.lower() in ("float64", "f64", "double")
 
