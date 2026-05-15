@@ -84,6 +84,7 @@ problem = Problem(
     time=time,
     constraints=constraint_exprs,
     N=n,
+    float_dtype="float64",
     algorithm={
         "autotuner": "ConstantProximalWeight",
         "lam_prox": 1e0,
