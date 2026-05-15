@@ -218,6 +218,11 @@ problem = Problem(
     discretizer={
         "diffrax_kwargs": {"stepsize_controller": dfx.StepTo(np.linspace(0.0, 1 / (n - 1), 3))}
     },
+    solver={
+        "cvxpygen": True,
+        "cvx_solver": "qocogen",
+        "solver_args": {},
+    }
 )
 
 problem.settings.dev.printing = False

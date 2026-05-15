@@ -9,14 +9,27 @@ the same structure, the cached compiled artifacts can be reused.
 """
 
 import hashlib
+from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from openscvx._version import __version__
-
 if TYPE_CHECKING:
     from openscvx.symbolic.problem import SymbolicProblem
+
+
+def _openscvx_version() -> str:
+    """Package version for cache invalidation; works without generated _version.py."""
+    try:
+        return version("openscvx")
+    except PackageNotFoundError:
+        pass
+    try:
+        from openscvx._version import __version__ as v
+
+        return v
+    except ImportError:
+        return "0.0.0"
 
 
 def hash_symbolic_problem(problem: "SymbolicProblem") -> str:
@@ -47,7 +60,7 @@ def hash_symbolic_problem(problem: "SymbolicProblem") -> str:
     hasher = hashlib.sha256()
 
     # Include library version to invalidate cache on version changes
-    hasher.update(f"openscvx:{__version__}:".encode())
+    hasher.update(f"openscvx:{_openscvx_version()}:".encode())
 
     # Hash the dynamics
     hasher.update(b"dynamics:")

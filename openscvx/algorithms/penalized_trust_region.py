@@ -192,12 +192,8 @@ class PenalizedTrustRegion(Algorithm):
     @staticmethod
     def _block_until_ready_outputs(outputs: Tuple[object, ...]) -> None:
         """Finish any pending XLA work from discretization exports (warm-up helper)."""
-        try:
-            jax.block_until_ready(outputs)
-        except (TypeError, ValueError):
-            # Non-JAX leaves (e.g. pure NumPy); nothing to wait on.
-            pass
-
+        jax.block_until_ready(outputs)
+        
     def _recover_prior_node_from_initial(
         self,
         settings: Config,
@@ -347,15 +343,7 @@ class PenalizedTrustRegion(Algorithm):
         (
             x_sol,
             u_sol,
-            _costs,
-            _result_cost,
-            _J_vb_vec,
-            _J_vc_vec,
-            _J_tr_vec,
-            _prob_stat,
-            _subprop_time,
-            _vc_mat,
-            _tr_mat,
+            *_
         ) = self._subproblem(params, init_state, settings)
 
         # Prime the same exported discretization calls used after every subproblem in
