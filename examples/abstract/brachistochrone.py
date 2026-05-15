@@ -88,7 +88,7 @@ problem = Problem(
     algorithm={
         "autotuner": "ConstantProximalWeight",
         "lam_prox": 1e0,
-        "lam_cost": 1e-1,
+        "lam_cost": 6e-1,
         # Tighter SCP stopping: reduces platform-dependent early exit vs analytical cycloid
         "ep_tr": 1e-5,
         "ep_vb": 1e-5,
