@@ -74,8 +74,9 @@ states = [x, cost]
 controls = [u]
 constraints = []
 for state in states:
-    constraints.extend([ox.ctcs(state <= state.max, penalty="huber"), 
-                        ox.ctcs(state.min <= state, penalty="huber")])
+    constraints.extend(
+        [ox.ctcs(state <= state.max, penalty="huber"), ox.ctcs(state.min <= state, penalty="huber")]
+    )
 
 problem = ox.Problem(
     dynamics=dynamics,
