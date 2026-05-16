@@ -195,7 +195,13 @@ class MoreauPTRSolver(PTRSolver):
     * Warm-starts automatically between SCP iterations (QPAX cold-starts).
     * Opens the path to user ``.convex()`` SOCP support in a follow-up.
 
-    Scope:
+    Differentiability hook for future work:
+        ``moreau.jax.Solver`` differentiates through the solve via implicit
+        differentiation on the KKT conditions.  Once the surrounding SCP
+        pipeline stays in ``jit``, ``jax.grad`` / ``jax.vmap`` can reach
+        through a full SCvx solve.
+
+    Note:
         Supported — state/control box, dynamics linearization, boundary Fix,
         uniform time grid, linearized nodal nonconvex, CTCS LICQ rows.
 
@@ -203,14 +209,8 @@ class MoreauPTRSolver(PTRSolver):
         ``Problem(...)`` construction time by the inherited
         :meth:`ConvexSolver.lower_convex_constraints`), cross-node
         constraints, and impulsive controls.  Each raises
-        :class:`NotImplementedError` with a "use
-        :class:`CVXPyPTRSolver`" pointer.
-
-    Differentiability note:
-        ``moreau.jax.Solver`` differentiates through the solve via implicit
-        differentiation on the KKT conditions.  Once the surrounding SCP
-        pipeline stays in ``jit``, ``jax.grad`` / ``jax.vmap`` can reach
-        through a full SCvx solve.
+        :class:`NotImplementedError` with a "use :class:`CVXPyPTRSolver`"
+        pointer.
 
     Args:
         solver_args: Keyword arguments forwarded to :class:`moreau.Settings`.
@@ -491,10 +491,15 @@ class MoreauPTRSolver(PTRSolver):
         from per-iteration data at solve time.
 
         Returns:
-            coo_rows, coo_cols: Parallel lists of row/col indices.
-            n_eq: Number of zero-cone (equality) rows.
-            n_nn: Number of nonneg-cone rows.
-            soc_dims: List of SOC cone dimensions (all 2 for scalar |nu|).
+            Tuple of (coo_rows, coo_cols, n_eq, n_nn, soc_dims):
+
+                coo_rows: Row indices of every A-matrix nonzero, in
+                    traversal order.
+                coo_cols: Corresponding column indices.
+                n_eq: Number of zero-cone (equality) rows.
+                n_nn: Number of nonneg-cone rows.
+                soc_dims: SOC cone dimensions; one entry per ``|nu[k,j]|``
+                    term, all equal to 2.
         """
         L = self.layout
         N, n_x, n_u = L.N, L.n_x, L.n_u
@@ -665,7 +670,7 @@ class MoreauPTRSolver(PTRSolver):
         the fixed ``A_indices`` built at :meth:`initialize`.
 
         Returns:
-            ``(P_data, coo_vals, q, b)`` as 1-D NumPy float arrays.
+            tuple: (P_data, coo_vals, q, b), each a 1-D NumPy float array.
         """
         if not (self._dyn and self._cons and self._pen):
             raise RuntimeError(
