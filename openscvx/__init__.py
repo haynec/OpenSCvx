@@ -29,7 +29,10 @@ from openscvx.expert import ByofSpec
 from openscvx.integrations import DynamicsAdapter, MjxDynamics
 from openscvx.loader import load_dict, load_json, load_yaml
 from openscvx.problem import Problem
-from openscvx.solvers import PTRSolver
+from openscvx.solvers import CVXPyPTRSolver, PTRSolver
+
+# QPAXPTRSolver is exposed lazily via __getattr__ below to keep `import qpax`
+# off the hot import path for users who don't install the optional extra.
 from openscvx.symbolic.expr import (
     CTCS,
     Abs,
@@ -90,6 +93,16 @@ from openscvx.symbolic.expr.time import Time
 from openscvx.utils.cache import clear_cache, get_cache_dir, get_cache_size
 
 load_results = OptimizationResults.load
+
+
+def __getattr__(name: str):
+    """Lazy export for backends that depend on optional packages."""
+    if name == "QPAXPTRSolver":
+        from openscvx.solvers.qpax_ptr_solver import QPAXPTRSolver
+
+        return QPAXPTRSolver
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     # Main Trajectory Optimization Entrypoint
@@ -188,6 +201,8 @@ __all__ = [
     "VectorizeDiscretizeLinearize",
     # Convex Solver
     "PTRSolver",
+    "CVXPyPTRSolver",
+    "QPAXPTRSolver",
     # Algorithm & Autotuning
     "PenalizedTrustRegion",
     "AugmentedLagrangian",
