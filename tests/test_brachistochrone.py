@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
+from tests.conftest import _MOREAU_OK
 
 try:
     import cvxpygen  # noqa: F401
@@ -332,8 +333,8 @@ def test_backend(backend):
 
     if backend == "qpax":
         pytest.importorskip("qpax")
-    if backend == "moreau":
-        pytest.importorskip("moreau")
+    if backend == "moreau" and not _MOREAU_OK:
+        pytest.skip("moreau not installed or license key not found (pip install openscvx[moreau])")
 
     # Problem parameters — mirrors test_monolithic so we cover the same
     # boundary conditions and analytical reference both ways.

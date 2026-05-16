@@ -19,8 +19,10 @@ import numpy as np
 import pytest
 from scipy import sparse as sp
 
-# Moreau is an optional dependency — skip the whole module if it's missing.
-pytest.importorskip("moreau")
+from tests.conftest import requires_moreau
+
+# Skip the whole module when moreau is absent or unlicensed.
+pytestmark = requires_moreau
 
 import openscvx as ox
 from openscvx import Problem
