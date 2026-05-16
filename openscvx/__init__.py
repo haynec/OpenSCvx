@@ -25,6 +25,7 @@ from openscvx.discretization import (
     VectorizeDiscretizeLinearize,
 )
 from openscvx.expert import ByofSpec
+from openscvx.integrations import DynamicsAdapter, MjxDynamics
 from openscvx.loader import load_dict, load_json, load_yaml
 from openscvx.problem import Problem
 from openscvx.solvers import PTRSolver
@@ -176,6 +177,9 @@ __all__ = [
     "lie",
     # Expert mode types
     "ByofSpec",
+    # External-backend dynamics adapters
+    "DynamicsAdapter",
+    "MjxDynamics",
     # Discretization
     "DiscretizeLinearizeVectorize",
     "LinearizeDiscretize",

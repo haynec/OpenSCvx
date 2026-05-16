@@ -51,8 +51,7 @@ from examples.plotting_viser import (
     create_animated_plotting_server,
     create_scp_animated_plotting_server,
 )
-from openscvx import ByofSpec, Problem
-from openscvx.integrations import mjx_byof
+from openscvx import Problem
 from openscvx.utils import gen_vertices, rot
 
 HOVER_CTRL = 3.2495625  # N per motor for level hover (from menagerie keyframe)
@@ -78,32 +77,27 @@ n_u = int(mjx_model.nu)  # 4 — rotor thrusts
 n = 22
 total_time = 24.0
 
-# ── State / control definitions ───────────────────────────────────────────────
-qpos = ox.State("qpos", shape=(n_q,))
+# ── MJX dynamics adapter ──────────────────────────────────────────────────────
+# The free joint has nq=7 but nv=6 (quaternion adds one extra position DOF).
+# MjxDynamics detects nq > nv and automatically routes quaternion kinematics
+# for "qpos" alongside the MJX "qvel" dynamics through the BYOF channel.
+dyn = ox.MjxDynamics(mjx_model)
+qpos, qvel = dyn.states
+(ctrl,) = dyn.controls
+
 qpos.min = np.array([-200.0, -100.0, 15.0, -1.0, -1.0, -1.0, -1.0])
 qpos.max = np.array([200.0, 100.0, 200.0, 1.0, 1.0, 1.0, 1.0])
 qpos.initial = np.concatenate([START_POS, HOVER_QUAT])
 qpos.final = [10.0, 0.0, 20.0, ("free", 1.0), ("free", 0.0), ("free", 0.0), ("free", 0.0)]
 
-qvel = ox.State("qvel", shape=(n_v,))
 qvel.min = np.array([-100.0, -100.0, -100.0, -10.0, -10.0, -10.0])
 qvel.max = np.array([100.0, 100.0, 100.0, 10.0, 10.0, 10.0])
 qvel.initial = np.zeros(n_v)
 qvel.final = [("free", 0.0)] * n_v
 
-ctrl = ox.Control("ctrl", shape=(n_u,))
 ctrl.min = np.zeros(n_u)
 ctrl.max = 13.0 * np.ones(n_u)
 ctrl.guess = HOVER_CTRL * np.ones((n, n_u))
-
-states = [qpos, qvel]
-controls = [ctrl]
-
-# ── Dynamics via BYOF ─────────────────────────────────────────────────────────
-# The free joint has nq=7 but nv=6 (quaternion adds one extra position DOF).
-# nq=7, nv=6 (free joint): mjx_byof detects nq > nv and automatically
-# includes quaternion kinematics for "qpos" alongside the MJX "qvel" dynamics.
-byof: ByofSpec = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
 
 # ── Gate parameters (matching examples/drone/drone_racing.py) ───────────────
 n_gates = 10
@@ -135,9 +129,9 @@ gate_centers = np.array(modified_centers)
 
 # ── Constraints ───────────────────────────────────────────────────────────────
 constraints = []
-for state in states:
+for state in dyn.states:
     constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
-for control in controls:
+for control in dyn.controls:
     constraints.extend([ox.ctcs(control <= control.max), ox.ctcs(control.min <= control)])
 
 # Enforce sequential gate traversal using nodal constraints on qpos position.
@@ -172,13 +166,12 @@ time = ox.Time(
 )
 
 problem = Problem(
-    dynamics={},  # all dynamics go through BYOF
-    states=states,
-    controls=controls,
+    dynamics=dyn,
+    states=dyn.states,
+    controls=dyn.controls,
     time=time,
     constraints=constraints,
     N=n,
-    byof=byof,
     algorithm={
         "lam_prox": 1e-1,
         "lam_cost": 1e-2,

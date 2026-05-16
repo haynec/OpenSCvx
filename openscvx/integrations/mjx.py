@@ -1,28 +1,34 @@
-"""MuJoCo MJX dynamics adapters for OpenSCvx BYOF.
+"""MuJoCo MJX dynamics adapters for OpenSCvx.
 
-The recommended entry-point is :func:`mjx_byof`, which returns a complete
-``byof["dynamics"]`` dict and automatically handles free-joint quaternion
-kinematics — no separate imports required:
+The recommended entry-point is `MjxDynamics`, a `DynamicsAdapter` that goes
+directly into the ``dynamics=`` slot of `Problem` and exposes the synthesized
+State/Control objects on ``.states`` / ``.controls``::
 
-    byof = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
+    dyn = ox.MjxDynamics(mjx_model)
+    problem = ox.Problem(
+        dynamics=dyn,
+        states=dyn.states,
+        controls=dyn.controls,
+        ...
+    )
 
-For models **without** free joints (cartpoles, manipulators, etc.) the
-returned dict contains only ``"qvel"``, and qpos kinematics must still be
-specified symbolically via ``dynamics={"qpos": qvel}``.  For models **with**
-free joints (drones, humanoids) ``"qpos"`` is included automatically and no
-symbolic dynamics entry is needed.
+Free-joint quaternion kinematics (``nq > nv`` models such as drones or
+humanoids) are detected and handled automatically.
 
-The lower-level :func:`mjx_dynamics` is also public for advanced users who
-need direct access to the BYOF callable for the ``qvel`` derivative.
+The lower-level `mjx_dynamics` callable factory is also public for advanced
+users who need to assemble their own BYOF dynamics dict (e.g. with custom
+State/Control names or interleaved with other states).
 
 Note:
     Time dilation is handled automatically by the BYOF lowering pipeline; all
     functions return physical (un-dilated) quantities.
 """
 
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
 
 import jax.numpy as jnp
+
+from openscvx.integrations.base import DynamicsAdapter
 
 if TYPE_CHECKING:
     from openscvx.symbolic.expr.control import Control
@@ -164,7 +170,7 @@ def _free_joint_qpos_dynamics(
 ) -> Callable:
     """BYOF callable for ``qpos`` when the model has quaternion free joints.
 
-    Used internally by :func:`mjx_byof`.  When a MuJoCo model has a
+    Used internally by `MjxDynamics`.  When a MuJoCo model has a
     floating-base free joint, ``nq > nv`` because each quaternion orientation
     contributes 4 position DOF but only 3 angular velocity DOF. The simple
     symbolic shorthand ``"qpos": qvel`` therefore fails a shape check. This
@@ -246,78 +252,245 @@ def _free_joint_qpos_dynamics(
     return f
 
 
-def mjx_byof(
-    mjx_model: Any,
-    *,
-    qpos: "State | slice",
-    qvel: "State | slice",
-    ctrl: "Control | slice",
-    return_component: str = "qacc",
-    extra_postprocess: Optional[Callable[[Any], Any]] = None,
-) -> dict:
-    """Return a complete ``byof["dynamics"]`` dict for a MuJoCo MJX model.
+# MuJoCo joint type enum (matches mujoco.mjtJoint): 0=free, 1=ball, 2=slide, 3=hinge.
+# Inlined here so we don't require `mujoco` to be importable just for type validation —
+# the user already needs mujoco to have constructed the mjx_model, but keeping the
+# numeric constants local makes this file self-contained.
+_MJ_JNT_FREE = 0
+_MJ_JNT_BALL = 1
+_MJ_JNT_SLIDE = 2
+_MJ_JNT_HINGE = 3
 
-    This is the recommended high-level entry-point.  It inspects the model's
-    ``nq`` and ``nv`` to detect free joints and automatically includes the
-    quaternion kinematics callable for ``qpos`` when needed.
 
-    Args:
-        mjx_model: A model produced by :func:`mujoco.mjx.put_model`.
-        qpos: Position state (or slice). Length must equal ``mjx_model.nq``.
-        qvel: Velocity state (or slice). Length must equal ``mjx_model.nv``.
-        ctrl: Control variable (or slice). Length must equal ``mjx_model.nu``.
-        return_component: Passed to :func:`mjx_dynamics`. ``"qacc"``
-            (default) uses the generalized acceleration as the ``qvel``
-            derivative; ``"qvel"`` returns qvel directly (rarely needed).
-        extra_postprocess: Optional callable applied to the MJX ``data``
-            object after ``mjx.forward``. Passed through to
-            :func:`mjx_dynamics`.
+def _initial_bounds_from_model(
+    mjx_model: Any, nq: int, nv: int, nu: int
+) -> Tuple[Any, Any, Any, Any, Any, Any]:
+    """Pull qpos / ctrl bounds out of the MJX model.
 
-    Returns:
-        A dict suitable for use as ``byof["dynamics"]``.
-        For models **without** free joints (``nq == nv``) only ``"qvel"`` is
-        included; position kinematics should still be provided symbolically
-        via ``dynamics={"qpos": qvel}``.
-        For models **with** free joints (``nq > nv``) both ``"qpos"`` and
-        ``"qvel"`` are included and no symbolic ``dynamics`` entry is needed.
+    Returns ``(qpos_min, qpos_max, qvel_min, qvel_max, ctrl_min, ctrl_max)``.
 
-    Example:
-        Cartpole (nq == nv, no free joint)::
-
-            byof = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
-            problem = ox.Problem(
-                dynamics={"qpos": qvel},   # still required for non-free models
-                byof=byof, ...
-            )
-
-        Quadrotor / drone (nq > nv, one free joint)::
-
-            byof = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
-            problem = ox.Problem(
-                dynamics={},               # qpos handled automatically
-                byof=byof, ...
-            )
+    - ``qpos`` bounds come from ``mjx_model.jnt_range`` for slide/hinge joints
+      flagged ``jnt_limited=True``. All other qpos slots — free-joint
+      translations and quaternion components, unlimited slide/hinge joints —
+      get ``±inf``.
+    - ``ctrl`` bounds come from ``mjx_model.actuator_ctrlrange`` for actuators
+      flagged ``actuator_ctrllimited=True``. Unlimited actuators get ``±inf``.
+    - ``qvel`` bounds are always ``±inf`` because MuJoCo has no per-joint
+      velocity-limit concept; users override as needed.
     """
-    nq = int(mjx_model.nq)
-    nv = int(mjx_model.nv)
+    import numpy as _np
 
-    result: dict = {
-        "qvel": mjx_dynamics(
-            mjx_model,
-            qpos=qpos,
-            qvel=qvel,
-            ctrl=ctrl,
-            return_component=return_component,
-            extra_postprocess=extra_postprocess,
-        ),
-    }
+    qpos_min = _np.full(nq, -_np.inf)
+    qpos_max = _np.full(nq, _np.inf)
+    qvel_min = _np.full(nv, -_np.inf)
+    qvel_max = _np.full(nv, _np.inf)
+    ctrl_min = _np.full(nu, -_np.inf)
+    ctrl_max = _np.full(nu, _np.inf)
 
-    n_free = nq - nv  # each free joint contributes exactly 1 extra position DOF
-    if n_free > 0:
-        result["qpos"] = _free_joint_qpos_dynamics(
-            qpos=qpos,
-            qvel=qvel,
-            n_free_joints=n_free,
+    # Per-joint qpos bounds — only slide/hinge can be range-limited; free
+    # joints always have jnt_limited=False so we skip them safely.
+    jnt_type = _np.asarray(mjx_model.jnt_type).astype(int)
+    jnt_qposadr = _np.asarray(mjx_model.jnt_qposadr).astype(int)
+    jnt_limited = _np.asarray(mjx_model.jnt_limited).astype(bool)
+    jnt_range = _np.asarray(mjx_model.jnt_range).astype(float)
+    for i, jtype in enumerate(jnt_type):
+        if jtype in (_MJ_JNT_SLIDE, _MJ_JNT_HINGE) and jnt_limited[i]:
+            adr = int(jnt_qposadr[i])
+            qpos_min[adr] = jnt_range[i, 0]
+            qpos_max[adr] = jnt_range[i, 1]
+
+    if nu > 0:
+        act_limited = _np.asarray(mjx_model.actuator_ctrllimited).astype(bool)
+        act_range = _np.asarray(mjx_model.actuator_ctrlrange).astype(float)
+        for i in range(nu):
+            if act_limited[i]:
+                ctrl_min[i] = act_range[i, 0]
+                ctrl_max[i] = act_range[i, 1]
+
+    return qpos_min, qpos_max, qvel_min, qvel_max, ctrl_min, ctrl_max
+
+
+def _validate_supported_joints(mjx_model: Any) -> None:
+    """Refuse models whose joint layout the adapter cannot correctly handle.
+
+    `MjxDynamics` only supports models composed of free / slide / hinge joints
+    where all free joints precede the others in the state layout. Anything else
+    (ball joints, custom joint orderings) silently breaks the
+    `_free_joint_qpos_dynamics` arithmetic, so we refuse with a clear error
+    rather than producing wrong dynamics.
+    """
+    import numpy as _np
+
+    jnt_type = _np.asarray(mjx_model.jnt_type).astype(int)
+    supported = {_MJ_JNT_FREE, _MJ_JNT_SLIDE, _MJ_JNT_HINGE}
+    bad = sorted(set(jnt_type.tolist()) - supported)
+    if bad:
+        if _MJ_JNT_BALL in bad:
+            raise NotImplementedError(
+                "MjxDynamics does not support ball joints (mjJNT_BALL): they "
+                "share nq=4, nv=3 with free joints but use different "
+                "kinematics, and the current quaternion-kinematics callable "
+                "would silently produce wrong dynamics. Use `mjx_dynamics` "
+                "directly and assemble byof['dynamics'] manually."
+            )
+        raise NotImplementedError(
+            f"MjxDynamics only supports free, slide, and hinge joints; "
+            f"model contains unsupported joint types {bad}. Use "
+            "`mjx_dynamics` directly and assemble byof['dynamics'] manually."
         )
 
-    return result
+    # _free_joint_qpos_dynamics assumes all free joints come first in the
+    # state vector. If a slide/hinge precedes a free joint, the quaternion
+    # offsets would be off.
+    free_mask = jnt_type == _MJ_JNT_FREE
+    n_free = int(free_mask.sum())
+    if n_free and not free_mask[:n_free].all():
+        raise NotImplementedError(
+            "MjxDynamics requires all free joints to come before any "
+            "slide/hinge joints in the MuJoCo model. Reorder the joints in "
+            "your MJCF/URDF, or use `mjx_dynamics` directly to assemble "
+            "byof['dynamics'] yourself."
+        )
+
+
+class MjxDynamics(DynamicsAdapter):
+    """First-class MJX dynamics adapter for `Problem`.
+
+    Wraps a ``mujoco.mjx`` model so it can be passed directly to the
+    ``dynamics=`` argument of `Problem`. The adapter
+    constructs default ``qpos`` / ``qvel`` State objects and a ``ctrl``
+    Control matching the model's ``nq`` / ``nv`` / ``nu``, exposes them via
+    ``.states`` / ``.controls``, and routes the MJX forward dynamics through
+    the BYOF channel internally — without requiring the user to know about
+    BYOF at all.
+
+    Example:
+        Cartpole (``nq == nv``)::
+
+            mj_model = mujoco.MjModel.from_xml_path("cartpole.xml")
+            mj_model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
+            mjx_model = mjx.put_model(mj_model)
+
+            dyn = ox.MjxDynamics(mjx_model)
+            problem = ox.Problem(
+                dynamics=dyn,
+                states=dyn.states,
+                controls=dyn.controls,
+                ...
+            )
+
+        Quadrotor with a free joint (``nq > nv``) — quaternion kinematics
+        are inserted automatically::
+
+            dyn = ox.MjxDynamics(mjx_model)  # nq=7, nv=6
+            problem = ox.Problem(
+                dynamics=dyn, states=dyn.states, controls=dyn.controls, ...
+            )
+
+    Custom State/Control names or shapes are *not* supported here on purpose
+    — the whole point of the adapter is "I don't want to think about names."
+    Drop to the lower-level `mjx_dynamics` helper if you need that control —
+    construct your own State/Control objects, pass them in, and assemble the
+    BYOF dict yourself.
+
+    Supported joint structure:
+        * Free (``mjJNT_FREE``), slide (``mjJNT_SLIDE``), and hinge
+          (``mjJNT_HINGE``) joints only.
+        * If the model contains any free joints, they must all come
+          *before* any slide/hinge joints in the MuJoCo layout.
+        * Ball joints (``mjJNT_BALL``) are explicitly refused — they share
+          ``nq=4, nv=3`` with free joints but use different kinematics, and
+          would silently produce wrong dynamics.
+
+        Construction raises ``NotImplementedError`` if any of these
+        conditions are violated; fall back to `mjx_dynamics` for those
+        cases.
+
+    Auto-populated bounds:
+        * ``qpos.min`` / ``qpos.max`` are read from ``mjx_model.jnt_range``
+          for slide / hinge joints flagged ``jnt_limited=True``; free-joint
+          slots and unlimited joints default to ``±inf``.
+        * ``ctrl.min`` / ``ctrl.max`` are read from ``actuator_ctrlrange``
+          for actuators flagged ``actuator_ctrllimited=True``; otherwise
+          ``±inf``.
+        * ``qvel`` bounds default to ``±inf`` (MuJoCo has no per-joint
+          velocity-limit concept).
+
+        Override any of these after construction if you want tighter
+        problem-specific bounds.
+    """
+
+    def __init__(
+        self,
+        mjx_model: Any,
+        *,
+        return_component: str = "qacc",
+        extra_postprocess: Optional[Callable[[Any], Any]] = None,
+    ) -> None:
+        from openscvx.symbolic.expr.control import Control
+        from openscvx.symbolic.expr.state import State
+
+        _validate_supported_joints(mjx_model)
+
+        self.mjx_model = mjx_model
+        self.return_component = return_component
+        self.extra_postprocess = extra_postprocess
+
+        nq = int(mjx_model.nq)
+        nv = int(mjx_model.nv)
+        nu = int(mjx_model.nu)
+
+        self._qpos = State("qpos", shape=(nq,))
+        self._qvel = State("qvel", shape=(nv,))
+        self._ctrl = Control("ctrl", shape=(nu,))
+
+        # Auto-populate bounds from the model so the user doesn't have to
+        # re-type joint / actuator limits already declared in MJCF. Users
+        # can still override any of these after construction.
+        qpos_min, qpos_max, qvel_min, qvel_max, ctrl_min, ctrl_max = _initial_bounds_from_model(
+            mjx_model, nq, nv, nu
+        )
+        self._qpos.min = qpos_min
+        self._qpos.max = qpos_max
+        self._qvel.min = qvel_min
+        self._qvel.max = qvel_max
+        self._ctrl.min = ctrl_min
+        self._ctrl.max = ctrl_max
+
+        self.states: list[State] = [self._qpos, self._qvel]
+        self.controls: list[Control] = [self._ctrl]
+
+    def expand(self) -> Tuple[dict, dict]:
+        """Return ``(dynamics_dict, byof_dict)`` for this MJX model.
+
+        - ``nq == nv``: ``dynamics_dict = {"qpos": qvel}`` (symbolic
+          kinematic identity), ``byof_dict["dynamics"] = {"qvel": ...}``.
+        - ``nq > nv``: ``dynamics_dict = {}``, ``byof_dict["dynamics"]``
+          contains both ``"qpos"`` (quaternion kinematics) and ``"qvel"``.
+        """
+        nq = int(self.mjx_model.nq)
+        nv = int(self.mjx_model.nv)
+
+        byof_dynamics: dict = {
+            "qvel": mjx_dynamics(
+                self.mjx_model,
+                qpos=self._qpos,
+                qvel=self._qvel,
+                ctrl=self._ctrl,
+                return_component=self.return_component,
+                extra_postprocess=self.extra_postprocess,
+            ),
+        }
+
+        n_free = nq - nv
+        if n_free > 0:
+            byof_dynamics["qpos"] = _free_joint_qpos_dynamics(
+                qpos=self._qpos,
+                qvel=self._qvel,
+                n_free_joints=n_free,
+            )
+            dynamics_dict: dict = {}
+        else:
+            dynamics_dict = {"qpos": self._qvel}
+
+        return dynamics_dict, {"dynamics": byof_dynamics}

@@ -42,6 +42,7 @@ from openscvx.discretization import (
     resolve_discretizer_config,
 )
 from openscvx.expert import ByofSpec
+from openscvx.integrations.base import DynamicsAdapter, _merge_byof
 from openscvx.lowered import LoweredProblem, ParameterDict
 from openscvx.lowered.dynamics import Dynamics
 from openscvx.lowered.jax_constraints import (
@@ -70,7 +71,7 @@ from openscvx.utils.caching import (
 class Problem:
     def __init__(
         self,
-        dynamics: dict,
+        dynamics: Union[dict, DynamicsAdapter],
         constraints: List[Union[Constraint, CTCS]],
         states: List[State],
         controls: List[Control],
@@ -92,9 +93,11 @@ class Problem:
         """The primary class in charge of compiling and exporting the solvers.
 
         Args:
-            dynamics (dict): Dictionary mapping state names to their dynamics expressions.
-                Each key should be a state name, and each value should be an Expr
-                representing the derivative of that state.
+            dynamics: Dictionary mapping state names to their dynamics
+                expressions. Each key should be a state name, and each value
+                should be an ``Expr`` representing the derivative of that
+                state. A ``DynamicsAdapter`` may also be passed here in
+                place of the dict.
             constraints (List[Union[CTCSConstraint, NodalConstraint]]):
                 List of constraints decorated with @ctcs or @nodal
             states (List[State]): List of State objects representing the state variables.
@@ -250,6 +253,12 @@ class Problem:
         self._float_dtype: str = float_dtype
 
         # Symbolic Preprocessing & Augmentation
+        # If `dynamics` is a DynamicsAdapter, expand it into the standard
+        # (dynamics_dict, byof_dict) representation and merge into user byof.
+        if isinstance(dynamics, DynamicsAdapter):
+            dynamics, adapter_byof = dynamics.expand()
+            byof = _merge_byof(byof, adapter_byof)
+
         # Resolve byof: dict → ByofSpec (validates keys and nested specs)
         if byof is not None:
             byof = ByofSpec.model_validate(byof)

@@ -1,47 +1,46 @@
-"""Adapters for MuJoCo MJX dynamics in OpenSCvx BYOF.
+"""External-backend dynamics adapters for OpenSCvx.
 
-The recommended entry-point is :func:`mjx_byof`, which returns a complete
-``byof["dynamics"]`` dict and automatically handles free-joint quaternion
-kinematics for floating-base models (drones, humanoids, etc.):
+The recommended entry-point is `MjxDynamics`, which goes directly into the
+``dynamics=`` slot of `Problem` and constructs the matching State/Control
+objects for the user. Free-joint quaternion kinematics for floating-base
+models (drones, humanoids) are detected and handled automatically::
 
-    from openscvx.integrations import mjx_byof
+    from openscvx.integrations import MjxDynamics
 
-    byof = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
+    dyn = MjxDynamics(mjx_model)
+    problem = ox.Problem(
+        dynamics=dyn,
+        states=dyn.states,
+        controls=dyn.controls,
+        ...
+    )
 
-For models without free joints (cartpoles, manipulators) the returned dict
-contains only ``"qvel"`` and ``dynamics={"qpos": qvel}`` should still be
-provided to :class:`~openscvx.Problem`.  For models with free joints
-(``nq > nv``) ``"qpos"`` is included automatically — no extra imports needed.
+For advanced users who need custom State/Control names (or to interleave
+them with extra custom states), `mjx_dynamics` is exposed as the underlying
+BYOF callable factory — assemble your own ``byof["dynamics"]`` dict from it.
 
-:func:`mjx_dynamics` is also available for advanced users who need direct
-access to the BYOF callable for the ``qvel`` (acceleration) derivative.
+All MJX symbols delegate lazily so ``mujoco.mjx`` is only imported when
+actually used. The ``menagerie`` submodule is also loaded lazily.
 
-All symbols delegate lazily so ``mujoco.mjx`` is only imported when used.
-The :mod:`menagerie` submodule is loaded lazily via attribute access.
+Example — cartpole (``nq == nv``)::
 
-Example — cartpole (nq == nv)::
+    from openscvx.integrations import MjxDynamics
 
-    from openscvx.integrations import mjx_byof
+    dyn = MjxDynamics(mjx_model)
+    problem = ox.Problem(dynamics=dyn, states=dyn.states, controls=dyn.controls, ...)
 
-    byof = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
-    problem = ox.Problem(dynamics={"qpos": qvel}, byof=byof, ...)
+Example — quadrotor with free joint (``nq=7``, ``nv=6``)::
 
-Example — quadrotor with free joint (nq=7, nv=6)::
+    from openscvx.integrations import MjxDynamics
 
-    from openscvx.integrations import mjx_byof
-
-    byof = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
-    problem = ox.Problem(dynamics={}, byof=byof, ...)
+    dyn = MjxDynamics(mjx_model)
+    problem = ox.Problem(dynamics=dyn, states=dyn.states, controls=dyn.controls, ...)
 """
 
 from typing import Any
 
-
-def mjx_byof(*args: Any, **kwargs: Any) -> Any:
-    """Lazy delegate; imports ``mujoco.mjx`` on first call."""
-    from .mjx import mjx_byof as _mjx_byof
-
-    return _mjx_byof(*args, **kwargs)
+from .base import DynamicsAdapter
+from .mjx import MjxDynamics
 
 
 def mjx_dynamics(*args: Any, **kwargs: Any) -> Any:
@@ -59,4 +58,9 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-__all__ = ["mjx_byof", "mjx_dynamics", "menagerie"]
+__all__ = [
+    "DynamicsAdapter",
+    "MjxDynamics",
+    "mjx_dynamics",
+    "menagerie",
+]
