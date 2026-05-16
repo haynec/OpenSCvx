@@ -6,29 +6,32 @@ toward an end-to-end JAX-differentiable SCP loop: ``qpax.solve_qp_primal``
 exposes a ``jax.custom_vjp`` rule that lets gradients flow through the QP via
 the implicit function theorem on the relaxed KKT system. The surrounding
 pipeline (discretizer, algorithm, parameter sync) still breaks out of JIT
-today; making it ``jit``-friendly is the follow-up PR that turns this
-backend from "another solver" into "differentiable SCvx".
+today; making it ``jit``-friendly is future work that turns this backend
+from "another solver" into "differentiable SCvx", and would also enable
+``jax.vmap`` batching across scenarios.
 
-Scope (v1)
-----------
+Scope
+-----
 * No user ``.convex()`` constraints (would need SOCP).
-* No cross-node constraints or impulsive controls. Each raises
+* No cross-node or impulsive controls. Each raises
   :class:`NotImplementedError` at :meth:`initialize` time and points the user
   at :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver` as the
-  alternative.
+  alternative. Either may gain support here in the future; both add
+  non-trivial QP structure (block-coupled equality rows for impulsive,
+  full-trajectory gradient stacking for cross-node).
 * CTCS constraints **are** supported — their LICQ-style absolute-value
   inequalities reduce to two affine rows per node, which is plain QP form.
-  This was a scope expansion vs the original plan: the library auto-adds
-  ``CTCS(time ≤ time.max)`` / ``CTCS(time.min ≤ time)`` for *every* problem,
-  so rejecting CTCS would mean rejecting every problem.
+  The library also auto-adds ``CTCS(time ≤ time.max)`` /
+  ``CTCS(time.min ≤ time)`` to every problem, so this support is what
+  makes QPAX usable at all.
 * No warm-start. ``qpax.solve_qp`` initializes its own primal-dual state on
   every call and exposes no init hook; only ``qpax.relax_qp`` accepts a
   warm-start tuple. SCvx warm-starting is a known performance gap vs
-  CVXPy+QOCO and a candidate for a follow-up once it lands upstream in qpax.
+  CVXPy+QOCO; could be threaded through here once upstream qpax exposes
+  the seam.
 * Dense ``Q``, ``A``, ``G``. Trust-region terms are diagonal-dominant per
-  node; the slack terms are sparse; QPAX may benefit from sparse assembly,
-  but for ``N`` ≤ 100 the dense path is simpler and fast enough — revisit if
-  the brachistochrone benchmark regresses.
+  node and slack terms are sparse, so a sparse assembly may help in the
+  future; at ``N`` ≤ 100 the dense path is simpler and fast enough.
 
 L1 / positive-part reformulation
 --------------------------------
@@ -148,9 +151,21 @@ class QPAXPTRSolver(PTRSolver):
     """JAX-native QP backend for the PTR convex subproblem.
 
     Assembles each SCP subproblem as a flat ``(Q, q, A, b, G, h)`` and
-    dispatches to ``qpax.solve_qp``. See module docstring for the v1 scope
-    (no user ``.convex()``, no cross-node, no CTCS, no impulsive) and the
-    L1 / positive-part slack reformulation.
+    dispatches to ``qpax.solve_qp``. See the module docstring for the L1 /
+    positive-part slack reformulation and the rationale behind the design.
+
+    Scope:
+        Supported — state/control box, dynamics linearization, boundary
+        ``Fix``, uniform time grid, linearized nodal nonconvex, CTCS
+        LICQ-style rows.
+
+        Not supported — user ``.convex()`` constraints, cross-node
+        constraints, and impulsive controls. Each raises
+        :class:`NotImplementedError` with a "use
+        :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`" pointer.
+        Cross-node and impulsive support may be added in the future;
+        ``.convex()`` would need a second-order-cone solver and is unlikely
+        to land here directly.
 
     Differentiability hook for future work:
         ``qpax.solve_qp_primal`` is differentiable via ``jax.custom_vjp``.
@@ -221,7 +236,7 @@ class QPAXPTRSolver(PTRSolver):
         :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver` but ignored
         — QPAX consumes dense arrays.
         """
-        del dynamics_sparsity, constraint_sparsity  # unused in v1
+        del dynamics_sparsity, constraint_sparsity  # QPAX consumes dense arrays
 
         n_x = len(x_unified.max)
         n_u = len(u_unified.max)
@@ -256,9 +271,11 @@ class QPAXPTRSolver(PTRSolver):
     def initialize(self, lowered: "LoweredProblem", settings: "Config") -> None:
         """Validate the constraint subset QPAX supports and stash settings.
 
-        QPAX v1 supports only the always-affine PTR constraint blocks. User
-        ``.convex()``, cross-node, CTCS, and impulsive controls each raise
-        here with a message pointing at :class:`CVXPyPTRSolver`.
+        Cross-node constraints and impulsive controls each raise
+        :class:`NotImplementedError` with a pointer to
+        :class:`CVXPyPTRSolver`; either may gain QP-side support here in the
+        future. User ``.convex()`` constraints are already rejected upstream
+        by the default :meth:`ConvexSolver.lower_convex_constraints`.
         """
         if self.layout is None:
             raise RuntimeError(
@@ -298,10 +315,11 @@ class QPAXPTRSolver(PTRSolver):
         D_d: np.ndarray | None = None,
         E_d: np.ndarray | None = None,
     ) -> None:
-        # No impulsive in v1 — D_d / E_d / x_prop_plus are ignored.  We've
-        # already raised at initialize() if the user actually has impulsive
-        # state, so reaching here with non-None impulsive args means the
-        # algorithm passes them unconditionally; drop them silently.
+        # Impulsive controls are rejected at initialize(); D_d / E_d /
+        # x_prop_plus only ever arrive here because the algorithm passes
+        # them unconditionally. Drop them silently. Future impulsive
+        # support would consume these to add block-coupled equality rows
+        # at the impulsive nodes.
         del x_prop_plus, D_d, E_d
         self._dyn = {
             "x_bar": np.asarray(x_bar, dtype=float),
@@ -322,7 +340,7 @@ class QPAXPTRSolver(PTRSolver):
             # may still pass an empty list.
             raise NotImplementedError(
                 "QPAXPTRSolver received cross-node linearization data; "
-                "cross-node constraints are not supported in v1."
+                "cross-node constraints are not supported."
             )
         self._cons = {
             "nodal": [

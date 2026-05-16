@@ -41,9 +41,9 @@ def _assert_brachistochrone_accuracy(comparison, problem, result, solve_budget=1
     """Common assertions for brachistochrone test validation.
 
     ``solve_budget`` is the maximum acceptable ``problem.timing_solve`` in
-    seconds. Backends with per-iteration JIT compilation overhead (QPAX in
-    v1) pass a looser budget — that overhead is on the follow-up PR's
-    radar, not a correctness concern."""
+    seconds. Backends with per-iteration JIT compilation overhead (e.g.
+    QPAX) pass a looser budget — that overhead is a separate performance
+    concern, not a correctness one."""
     # Check time accuracy: numerical should be within 1% of analytical
     time_error_pct = comparison["time_error_pct"]
     assert time_error_pct < 1.0, (
@@ -329,11 +329,10 @@ def test_backend(backend):
     )
 
     _print_comparison_metrics(comparison, f"Brachistochrone ({backend})")
-    # QPAX in v1 reassembles Q / A / G as JAX arrays each iteration; the
+    # QPAX reassembles Q / A / G as JAX arrays each iteration; the
     # qpax.solve_qp compilation cache lands per-process, and under
     # parallel test execution the first iteration's JIT cost dominates.
-    # End-to-end JIT of the SCP loop is the follow-up PR — bump the
-    # budget here rather than block on a perf-track issue.
+    # Bump the budget for QPAX rather than block on a perf-track issue.
     solve_budget = 3.5 if backend == "qpax" else 1.2
     _assert_brachistochrone_accuracy(comparison, problem, result, solve_budget=solve_budget)
 

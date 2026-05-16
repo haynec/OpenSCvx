@@ -220,7 +220,8 @@ def test_qpax_assembly_produces_consistent_shapes():
     assert A.shape[1] == n_z and A.shape[0] == b.shape[0]
     assert G.shape[1] == n_z and G.shape[0] == h.shape[0]
 
-    # Q should be symmetric (it's diagonal in v1) and have only nonneg diag.
+    # Q should be symmetric (it's diagonal — only the trust-region terms
+    # contribute) and have only nonneg diagonal entries.
     assert np.allclose(Q, Q.T)
     assert (np.diag(Q) >= 0).all()
 
