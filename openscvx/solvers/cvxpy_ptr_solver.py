@@ -203,6 +203,28 @@ class CVXPyPTRSolver(PTRSolver):
             constraint_sparsity=constraint_sparsity,
         )
 
+    def lower_convex_constraints(self, constraints, parameters=None):
+        """Lower user ``.convex()`` constraints into CVXPy constraint objects.
+
+        Delegates to :func:`openscvx.symbolic.lower.lower_cvxpy_constraints`,
+        feeding it the unscaled-state and unscaled-control CVXPy expressions
+        built by :meth:`create_variables`.
+        """
+        from openscvx.symbolic.lower import lower_cvxpy_constraints
+
+        if self._ocp_vars is None:
+            raise RuntimeError(
+                "CVXPyPTRSolver.lower_convex_constraints() called before "
+                "create_variables(); the CVXPy variables it needs don't "
+                "exist yet."
+            )
+        return lower_cvxpy_constraints(
+            constraints,
+            self._ocp_vars.x_nonscaled,
+            self._ocp_vars.u_nonscaled,
+            parameters,
+        )
+
     def initialize(
         self,
         lowered: "LoweredProblem",

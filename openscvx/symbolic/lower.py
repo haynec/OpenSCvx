@@ -830,29 +830,15 @@ def lower_symbolic_problem(
 
     _augment_impulsive_constraints(problem.constraints, problem.controls, problem.N)
 
-    # Lower convex constraints using the solver's variables — but only if the
-    # solver actually exposes CVXPy-shaped variables. Backends that don't
-    # (e.g., QPAXPTRSolver) raise in their own initialize() if any user
-    # .convex() constraints exist; we just pass through the count.
-    if hasattr(solver, "ocp_vars"):
-        lowered_cvxpy_constraint_list, cvxpy_params = lower_cvxpy_constraints(
-            problem.constraints,
-            solver.ocp_vars.x_nonscaled,
-            solver.ocp_vars.u_nonscaled,
-            problem.parameters,
-        )
-        cvxpy_constraints = LoweredCvxpyConstraints(
-            constraints=lowered_cvxpy_constraint_list,
-        )
-    else:
-        cvxpy_params = {}
-        cvxpy_constraints = LoweredCvxpyConstraints(
-            constraints=[],
-            n_skipped=(
-                len(problem.constraints.nodal_convex)
-                + len(problem.constraints.cross_node_convex)
-            ),
-        )
+    # Each solver owns its convex-lowering policy. The default
+    # implementation on ConvexSolver refuses user .convex() constraints
+    # (right for QP-only backends like QPAXPTRSolver); CVXPyPTRSolver
+    # overrides to actually lower. No branching on solver type here.
+    lowered_cvxpy_constraint_list, cvxpy_params = solver.lower_convex_constraints(
+        problem.constraints,
+        problem.parameters,
+    )
+    cvxpy_constraints = LoweredCvxpyConstraints(constraints=lowered_cvxpy_constraint_list)
 
     # Lower algebraic outputs to vmapped JAX functions
     algebraic_prop_lowered = {}

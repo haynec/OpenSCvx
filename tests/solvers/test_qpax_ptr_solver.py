@@ -119,8 +119,9 @@ def test_qpax_spec_rejects_cvxpy_only_fields():
 
 def test_qpax_rejects_user_convex_constraints():
     """User .convex() constraints lower to second-order cones — outside QP.
-    QPAX should refuse them at initialize() with a message pointing at
-    CVXPyPTRSolver."""
+    The refusal lives on ``ConvexSolver.lower_convex_constraints`` (default
+    implementation), so QPAX rejects them during ``Problem(...)`` lowering —
+    fail-fast, before any heavier setup runs."""
     n = 5
     pos = ox.State("pos", shape=(2,))
     pos.min = np.array([-10.0, -10.0])
@@ -145,19 +146,20 @@ def test_qpax_rejects_user_convex_constraints():
     # may inline trivially-affine constraints into the box pipeline.
     cvx_constraint = (ox.linalg.Norm(pos) <= 8.0).convex()
 
-    prob = Problem(
-        dynamics=dyn,
-        states=[pos, vel],
-        controls=[u],
-        time=time,
-        constraints=[cvx_constraint],
-        N=n,
-        float_dtype="float64",
-        solver={"backend": "qpax"},
-    )
-    prob.settings.dev.printing = False
-    with pytest.raises(NotImplementedError, match="QPAXPTRSolver does not support"):
-        prob.initialize()
+    with pytest.raises(
+        NotImplementedError,
+        match=r"QPAXPTRSolver does not support user-defined \.convex\(\)",
+    ):
+        Problem(
+            dynamics=dyn,
+            states=[pos, vel],
+            controls=[u],
+            time=time,
+            constraints=[cvx_constraint],
+            N=n,
+            float_dtype="float64",
+            solver={"backend": "qpax"},
+        )
 
 
 # ============================================================================

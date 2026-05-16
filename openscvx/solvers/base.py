@@ -5,12 +5,12 @@ must follow for use within successive convexification algorithms.
 
 !!! note
 
-    Solvers own their optimization variables via ``create_variables()``.
-    Convex constraint lowering remains in ``openscvx.symbolic.lower`` but uses
-    the solver's variables — non-CVXPy backends that don't support user
-    ``.convex()`` constraints (e.g.
-    :class:`openscvx.solvers.qpax_ptr_solver.QPAXPTRSolver`) raise in
-    ``initialize()`` instead of going through a lowerer.
+    Solvers own both their optimization variables (``create_variables()``) and
+    the lowering of any user ``.convex()`` constraints
+    (``lower_convex_constraints()``). The default ``lower_convex_constraints``
+    refuses user ``.convex()`` constraints with a clear error — backends that
+    accept them override it. This keeps ``openscvx.symbolic.lower``
+    backend-agnostic: it never branches on solver type, it just delegates.
 
     See :class:`openscvx.solvers.ptr_solver.PTRSolver` for the PTR-specific
     interface every PTR backend implements.
@@ -18,7 +18,7 @@ must follow for use within successive convexification algorithms.
 
 import warnings
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from openscvx.lowered import LoweredProblem
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
     from openscvx.lowered.unified import UnifiedControl, UnifiedState
+    from openscvx.symbolic.constraint_set import ConstraintSet
 
 
 class ConvexSolver(ABC):
@@ -111,6 +112,50 @@ class ConvexSolver(ABC):
                 1-D arrays, one per nodal constraint.
         """
         raise NotImplementedError
+
+    def lower_convex_constraints(
+        self,
+        constraints: "ConstraintSet",
+        parameters: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[List[Any], Dict[str, Any]]:
+        """Lower user ``.convex()`` constraints into this backend's form.
+
+        Called once by :func:`openscvx.symbolic.lower.lower_symbolic_problem`
+        after ``create_variables()`` and before ``initialize()``.
+
+        The default implementation refuses any user ``.convex()``
+        constraints — appropriate for backends like
+        :class:`openscvx.solvers.qpax_ptr_solver.QPAXPTRSolver` that don't
+        accept second-order-cone constraints. Backends that do accept them
+        (e.g. :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`)
+        override this to invoke their backend-specific lowerer.
+
+        Args:
+            constraints: Categorized symbolic constraints. Only the
+                ``nodal_convex`` / ``cross_node_convex`` lists matter here;
+                non-convex constraints go through the JAX lowering pipeline.
+            parameters: Optional dict of symbolic ``Parameter`` objects
+                referenced by the constraints. May be ``None``.
+
+        Returns:
+            ``(lowered_list, parameter_map)``. The first is a list of
+            backend-specific constraint objects (e.g. ``cp.Constraint``);
+            the second maps parameter names to backend-specific parameter
+            objects. Both are empty for the default refusal path.
+
+        Raises:
+            NotImplementedError: if the user defined any ``.convex()``
+                constraints and this backend doesn't override.
+        """
+        n = len(constraints.nodal_convex) + len(constraints.cross_node_convex)
+        if n:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support user-defined "
+                f".convex() constraints ({n} defined). Drop the .convex() "
+                "constraint or switch to a backend that supports them "
+                "(e.g. openscvx.CVXPyPTRSolver)."
+            )
+        return [], {}
 
     @abstractmethod
     def initialize(

@@ -266,17 +266,8 @@ class QPAXPTRSolver(PTRSolver):
                 "Call create_variables() first."
             )
 
-        n_convex = (
-            len(lowered.cvxpy_constraints.constraints) + lowered.cvxpy_constraints.n_skipped
-        )
-        if n_convex:
-            raise NotImplementedError(
-                f"QPAXPTRSolver does not support user-defined .convex() "
-                f"constraints ({n_convex} defined) — most of them lower to "
-                "second-order cones, which fall outside the QP class. "
-                "Either drop the .convex() constraint or switch to "
-                "CVXPyPTRSolver."
-            )
+        # User .convex() constraints are rejected upstream — the default
+        # ConvexSolver.lower_convex_constraints raises before we get here.
         if lowered.jax_constraints.cross_node:
             raise NotImplementedError(
                 "QPAXPTRSolver does not yet support cross-node constraints "
