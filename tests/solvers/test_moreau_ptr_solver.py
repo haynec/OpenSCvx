@@ -4,7 +4,7 @@ Covers:
   * Instantiation guard when ``moreau`` isn't installed.
   * ``PTRSolverSpec`` rejects CVXPy-only fields under ``backend='moreau'``.
   * ``initialize()`` raises for unsupported feature combinations
-    (.convex(), cross-node, impulsive).
+    (.convex(), cross-node).
   * Assembly produces arrays with shapes consistent with ``_ConicLayout`` and
     the fixed CSR structure built at ``initialize()``.
   * End-to-end ``solve()`` returns a :class:`PTRSolveResult`.

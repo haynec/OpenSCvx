@@ -168,8 +168,8 @@ of the abstract `PTRSolver` base. Three backends ship today:
 | Backend | Class | Selector | Notes |
 |---------|-------|----------|-------|
 | CVXPy (default) | `CVXPyPTRSolver` | `solver={"backend": "cvxpy"}` (default) | DCP graph via CVXPy, dispatched to QOCO / CLARABEL / etc. Supports user `.convex()` constraints, cross-node constraints, CTCS, and impulsive controls. Optional cvxpygen code generation. |
-| QPAX | `QPAXPTRSolver` | `solver={"backend": "qpax"}` | JAX-native QP via `qpax.solve_qp`. Flat `(Q, q, A, b, G, h)` assembly. Supports box / dynamics / CTCS / boundary-Fix; **rejects** user `.convex()`, cross-node, and impulsive at `initialize()` with a clear "use `CVXPyPTRSolver`" message. Enables a path toward an end-to-end JAX-differentiable SCP loop in follow-up work. |
-| Moreau | `MoreauPTRSolver` | `solver={"backend": "moreau"}` | JAX-native conic solver (`moreau.jax.Solver`). Sparse CSR assembly; SOC epigraphs for the L1 / pos PTR penalties (fewer variables and rows than QPAX). Warm-starts between SCP iterations. Same supported subset as QPAX. Paves the way for user `.convex()` SOC support in a follow-up. |
+| QPAX | `QPAXPTRSolver` | `solver={"backend": "qpax"}` | JAX-native QP via `qpax.solve_qp`. Flat `(Q, q, A, b, G, h)` assembly. Supports box / dynamics (continuous and impulsive) / CTCS / boundary-Fix; **rejects** user `.convex()` and cross-node at `initialize()` with a clear "use `CVXPyPTRSolver`" message. Enables a path toward an end-to-end JAX-differentiable SCP loop in follow-up work. |
+| Moreau | `MoreauPTRSolver` | `solver={"backend": "moreau"}` | JAX-native conic solver (`moreau.jax.Solver`). Sparse CSR assembly; SOC epigraphs for the L1 / pos PTR penalties (fewer variables and rows than QPAX). Warm-starts between SCP iterations. Same supported subset as QPAX (continuous and impulsive dynamics). Paves the way for user `.convex()` SOC support in a follow-up. |
 
 Picking a backend at construction time:
 

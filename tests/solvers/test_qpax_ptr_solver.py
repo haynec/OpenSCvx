@@ -3,7 +3,7 @@
 Covers:
   * Instantiation guard when ``qpax`` isn't installed.
   * ``initialize()`` raises for unsupported feature combinations
-    (.convex(), cross-node, impulsive).
+    (.convex(), cross-node).
   * End-to-end SCP loop converges on a small CTCS-free LQR-style problem.
   * Round-trip parity vs ``CVXPyPTRSolver`` on the same problem: same final
     trajectory and same final cost to within a loose tolerance.
