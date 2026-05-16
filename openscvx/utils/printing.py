@@ -232,6 +232,14 @@ def print_problem_summary(
     autotuner_name = type(autotuner).__name__ if autotuner is not None else "N/A"
     discretization_name = type(discretizer).__name__
 
+    solver_name = type(solver).__name__
+    cvx_solver_label = getattr(solver, "cvx_solver", None)
+    solver_line = (
+        f"Solver: {solver_name} ({cvx_solver_label})"
+        if cvx_solver_label is not None
+        else f"Solver: {solver_name}"
+    )
+
     lines = [
         "Problem Summary",
         (
@@ -248,7 +256,7 @@ def print_problem_summary(
         f"Autotuner: {autotuner_name}",
         f"Discretizer: {discretization_name} ({discretizer.ode_solver})",
         "SEP",
-        f"CVX Solver: {solver.cvx_solver}",
+        solver_line,
         f"Float Dtype: {float_dtype}",
         f"JAX Backend: {jax_backend} (v{jax_version})",
     ]

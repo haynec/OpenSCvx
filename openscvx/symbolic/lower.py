@@ -830,16 +830,15 @@ def lower_symbolic_problem(
 
     _augment_impulsive_constraints(problem.constraints, problem.controls, problem.N)
 
-    # Lower convex constraints using solver's variables
-    lowered_cvxpy_constraint_list, cvxpy_params = lower_cvxpy_constraints(
+    # Each solver owns its convex-lowering policy. The default
+    # implementation on ConvexSolver refuses user .convex() constraints
+    # (right for QP-only backends like QPAXPTRSolver); CVXPyPTRSolver
+    # overrides to actually lower. No branching on solver type here.
+    lowered_cvxpy_constraint_list, cvxpy_params = solver.lower_convex_constraints(
         problem.constraints,
-        solver.ocp_vars.x_nonscaled,
-        solver.ocp_vars.u_nonscaled,
         problem.parameters,
     )
-    cvxpy_constraints = LoweredCvxpyConstraints(
-        constraints=lowered_cvxpy_constraint_list,
-    )
+    cvxpy_constraints = LoweredCvxpyConstraints(constraints=lowered_cvxpy_constraint_list)
 
     # Lower algebraic outputs to vmapped JAX functions
     algebraic_prop_lowered = {}

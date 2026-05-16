@@ -5,40 +5,29 @@ must follow for use within successive convexification algorithms.
 
 !!! note
 
-    Solvers own their optimization variables via ``create_variables()``.
-    Convex constraint lowering remains in ``lower.py`` but uses the solver's
-    variables.
+    Solvers own both their optimization variables (``create_variables()``) and
+    the lowering of any user ``.convex()`` constraints
+    (``lower_convex_constraints()``). The default ``lower_convex_constraints``
+    refuses user ``.convex()`` constraints with a clear error — backends that
+    accept them override it. This keeps ``openscvx.symbolic.lower``
+    backend-agnostic: it never branches on solver type, it just delegates.
 
-    When adding non-CVXPy backends, there are two approaches:
-
-    1. **Solver owns the lowerer**: The solver implements a
-       ``lower_convex_constraints()`` method containing the lowering logic.
-
-    2. **Solver determines the lowerer**: The solver references which lowerer
-       to use, but the lowering logic stays in ``lower.py``. Example:
-
-       ```python
-       # In solver
-       @property
-       def lowerer(self):
-           from openscvx.symbolic.lower import lower_cvxpy_constraints
-           return lower_cvxpy_constraints
-
-       # In lower_symbolic_problem()
-       lowered_constraints = solver.lowerer(constraints, solver.variables, parameters)
-       ```
+    See :class:`openscvx.solvers.ptr_solver.PTRSolver` for the PTR-specific
+    interface every PTR backend implements.
 """
 
+import warnings
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 if TYPE_CHECKING:
     from openscvx.config import Config
     from openscvx.lowered import LoweredProblem
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
     from openscvx.lowered.unified import UnifiedControl, UnifiedState
+    from openscvx.symbolic.constraint_set import ConstraintSet
 
 
 class ConvexSolver(ABC):
@@ -91,10 +80,6 @@ class ConvexSolver(ABC):
                     return MyResult(...)
     """
 
-    #: Backend solver name (e.g., ``"QOCO"``, ``"CLARABEL"``).  Subclasses
-    #: must set this in ``__init__``.
-    cvx_solver: str
-
     @abstractmethod
     def create_variables(
         self,
@@ -127,6 +112,50 @@ class ConvexSolver(ABC):
                 1-D arrays, one per nodal constraint.
         """
         raise NotImplementedError
+
+    def lower_convex_constraints(
+        self,
+        constraints: "ConstraintSet",
+        parameters: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[List[Any], Dict[str, Any]]:
+        """Lower user ``.convex()`` constraints into this backend's form.
+
+        Called once by :func:`openscvx.symbolic.lower.lower_symbolic_problem`
+        after ``create_variables()`` and before ``initialize()``.
+
+        The default implementation refuses any user ``.convex()``
+        constraints — appropriate for backends like
+        :class:`openscvx.solvers.qpax_ptr_solver.QPAXPTRSolver` that don't
+        accept second-order-cone constraints. Backends that do accept them
+        (e.g. :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`)
+        override this to invoke their backend-specific lowerer.
+
+        Args:
+            constraints: Categorized symbolic constraints. Only the
+                ``nodal_convex`` / ``cross_node_convex`` lists matter here;
+                non-convex constraints go through the JAX lowering pipeline.
+            parameters: Optional dict of symbolic ``Parameter`` objects
+                referenced by the constraints. May be ``None``.
+
+        Returns:
+            ``(lowered_list, parameter_map)``. The first is a list of
+            backend-specific constraint objects (e.g. ``cp.Constraint``);
+            the second maps parameter names to backend-specific parameter
+            objects. Both are empty for the default refusal path.
+
+        Raises:
+            NotImplementedError: if the user defined any ``.convex()``
+                constraints and this backend doesn't override.
+        """
+        n = len(constraints.nodal_convex) + len(constraints.cross_node_convex)
+        if n:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support user-defined "
+                f".convex() constraints ({n} defined). Drop the .convex() "
+                "constraint or switch to a backend that supports them "
+                "(e.g. openscvx.CVXPyPTRSolver)."
+            )
+        return [], {}
 
     @abstractmethod
     def initialize(
@@ -241,11 +270,17 @@ class ConvexSolver(ABC):
 # Pydantic spec for dict / YAML validation
 # =============================================================================
 
-_SOLVER_MAP: Dict[str, type] = {}  # populated by __init__.py after all classes are imported
 
+class PTRSolverSpec(BaseModel):
+    """Validates PTR solver configuration from dict/YAML input.
 
-class SolverSpec(BaseModel):
-    """Validates solver configuration from dict/YAML input.
+    The ``backend`` discriminator selects which concrete PTR backend to build:
+    ``"cvxpy"`` (the default,
+    :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`) or ``"qpax"``
+    (:class:`openscvx.solvers.qpax_ptr_solver.QPAXPTRSolver`).
+
+    ``cvx_solver``, ``cvxpygen``, and ``cvxpygen_override`` are CVXPy-only;
+    setting them under ``backend="qpax"`` is a configuration error.
 
     !!! warning
         Enabling ``cvxpygen`` currently disables sparse parameter declarations.
@@ -255,15 +290,61 @@ class SolverSpec(BaseModel):
     """
 
     type: Literal["PTRSolver"] = "PTRSolver"
-    cvx_solver: str = "QOCO"
+    backend: Literal["cvxpy", "qpax"] = "cvxpy"
+    cvx_solver: Optional[str] = None
     solver_args: Optional[Dict[str, Any]] = None
     cvxpygen: bool = False
     cvxpygen_override: bool = False
 
     model_config = ConfigDict(extra="forbid")
 
+    @model_validator(mode="after")
+    def _check_backend_fields(self):
+        if self.backend == "qpax":
+            offenders = [
+                name
+                for name, value in (
+                    ("cvx_solver", self.cvx_solver),
+                    ("cvxpygen", self.cvxpygen),
+                    ("cvxpygen_override", self.cvxpygen_override),
+                )
+                if value
+            ]
+            if offenders:
+                raise ValueError(
+                    f"{offenders} only valid for backend='cvxpy'; "
+                    "remove these fields or set backend='cvxpy'."
+                )
+        return self
+
     def build(self) -> ConvexSolver:
-        cls = _SOLVER_MAP.get(self.type)
-        if cls is None:
-            raise ValueError(f"Unknown solver {self.type!r}; expected one of {sorted(_SOLVER_MAP)}")
-        return cls(**self.model_dump(exclude={"type"}, exclude_unset=True))
+        # Local imports keep CVXPy / qpax out of the import path until the
+        # corresponding backend is actually requested.
+        if self.backend == "cvxpy":
+            from .cvxpy_ptr_solver import CVXPyPTRSolver
+
+            return CVXPyPTRSolver(
+                cvx_solver=self.cvx_solver or "QOCO",
+                solver_args=self.solver_args,
+                cvxpygen=self.cvxpygen,
+                cvxpygen_override=self.cvxpygen_override,
+            )
+        from .qpax_ptr_solver import QPAXPTRSolver
+
+        return QPAXPTRSolver(solver_args=self.solver_args)
+
+
+def __getattr__(name: str):
+    """Deprecated alias: ``SolverSpec`` → :class:`PTRSolverSpec`.
+
+    Kept for one release so existing dict/YAML configs and tests that import
+    ``SolverSpec`` continue to work. Emit a ``DeprecationWarning`` on access.
+    """
+    if name == "SolverSpec":
+        warnings.warn(
+            "openscvx.solvers.base.SolverSpec is deprecated; use PTRSolverSpec.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return PTRSolverSpec
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

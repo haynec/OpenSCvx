@@ -40,7 +40,7 @@ from pydantic import BaseModel, ConfigDict
 from openscvx.algorithms import PenalizedTrustRegionConfig
 from openscvx.config import SettingsSpec
 from openscvx.discretization import DiscretizerSpec
-from openscvx.solvers import SolverSpec
+from openscvx.solvers import PTRSolverSpec
 from openscvx.symbolic.expr.control import ControlSpec
 from openscvx.symbolic.expr.expr import Expr
 from openscvx.symbolic.expr.parameter import ParameterSpec
@@ -66,7 +66,7 @@ class ProblemSpec(BaseModel):
     constraints: List[str] = []
     algorithm: Optional[PenalizedTrustRegionConfig] = None
     discretizer: Optional[DiscretizerSpec] = None
-    solver: Optional[SolverSpec] = None
+    solver: Optional[PTRSolverSpec] = None
     settings: Optional[SettingsSpec] = None
     states_prop: Optional[List[StateSpec]] = None
     dynamics_prop: Optional[Dict[str, Any]] = None

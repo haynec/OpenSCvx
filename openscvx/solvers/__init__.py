@@ -26,13 +26,16 @@ class ConvexSolver(ABC):
         ...
 ```
 
-This architecture enables users to implement custom solver backends such as:
+The Penalized Trust-Region (PTR) subproblem ships with two concrete backends:
 
-- Direct Clarabel solver (Rust-based, GPU-capable)
-- QPAX (JAX-based QP solver for end-to-end differentiability)
-- OSQP direct interface (specialized for QP structure)
-- Custom embedded solvers for real-time applications
-- Research solvers with specialized structure exploitation
+- :class:`CVXPyPTRSolver` — DCP graph via CVXPy, dispatched to any of its
+  supported conic solvers (QOCO, CLARABEL, ...). Optional code generation
+  via cvxpygen for improved per-iteration performance.
+- :class:`QPAXPTRSolver` — flat ``(Q, q, A, b, G, h)`` assembled as JAX
+  arrays and solved with ``qpax.solve_qp``. Aimed at end-to-end JAX
+  differentiability of the SCP loop (follow-up work).
+
+Both share the abstract :class:`PTRSolver` contract.
 
 Note:
     Solvers own their optimization variables (e.g., ``CVXPySolver.ocp_vars``).
@@ -41,36 +44,50 @@ Note:
     for the interface details.
 """
 
+import warnings
 from typing import Any
 
-from .base import _SOLVER_MAP, ConvexSolver, SolverSpec
+from .base import ConvexSolver, PTRSolverSpec
+from .cvxpy_ptr_solver import CVXPyPTRSolver
 from .ptr_solver import PTRSolver, PTRSolveResult
 
-# ---------------------------------------------------------------------------
-# Populate the solver class map now that all classes are imported
-# ---------------------------------------------------------------------------
 
-_SOLVER_MAP.update(
-    {
-        "PTRSolver": PTRSolver,
-    }
-)
-
-
-def resolve_solver_config(val: Any) -> SolverSpec:
-    """Validate a dict/Spec into a :class:`SolverSpec` instance."""
-    if isinstance(val, SolverSpec):
+def resolve_solver_config(val: Any) -> PTRSolverSpec:
+    """Validate a dict / Spec into a :class:`PTRSolverSpec` instance."""
+    if isinstance(val, PTRSolverSpec):
         return val
-    return SolverSpec.model_validate(val)
+    return PTRSolverSpec.model_validate(val)
+
+
+def __getattr__(name: str):
+    """Deprecated alias: ``SolverSpec`` → :class:`PTRSolverSpec`."""
+    if name == "SolverSpec":
+        warnings.warn(
+            "openscvx.solvers.SolverSpec is deprecated; use PTRSolverSpec.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return PTRSolverSpec
+    if name == "QPAXPTRSolver":
+        # Lazy import so users without the qpax extra don't pay a hard
+        # ImportError just for `from openscvx.solvers import QPAXPTRSolver`
+        # — the import error gets deferred to instantiation time, where the
+        # error message points at the install command.
+        from .qpax_ptr_solver import QPAXPTRSolver
+
+        return QPAXPTRSolver
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 __all__ = [
-    # Base class
+    # Base classes
     "ConvexSolver",
-    # PTR solver
     "PTRSolver",
     "PTRSolveResult",
+    # PTR backends
+    "CVXPyPTRSolver",
+    "QPAXPTRSolver",
     # Config
-    "SolverSpec",
+    "PTRSolverSpec",
     "resolve_solver_config",
 ]

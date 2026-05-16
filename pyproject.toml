@@ -43,6 +43,9 @@ cvxpygen = [
     "cvxpygen",
     "qocogen",
 ]
+qpax = [
+    "qpax>=0.1.1",
+]
 stl = [
     "stljax",
 ]

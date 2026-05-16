@@ -201,9 +201,11 @@ class Problem:
                     discretizer=ox.LinearizeDiscretize(dis_type="ZOH", ode_solver="Dopri8")
             solver: Convex subproblem solver configuration. Accepts:
 
-                - ``None`` — uses ``PTRSolver()`` with defaults (QOCO backend).
+                - ``None`` — uses ``CVXPyPTRSolver()`` with defaults (QOCO backend).
                 - A ``ConvexSolver`` instance — used directly.
-                - A ``dict`` — passed as kwargs to ``PTRSolver()``.
+                - A ``dict`` — validated as ``PTRSolverSpec``; the ``backend``
+                  field (``"cvxpy"`` or ``"qpax"``) selects the concrete
+                  backend.
 
                 Examples::
 
@@ -216,8 +218,12 @@ class Problem:
                     # Enable cvxpygen code generation
                     solver={"cvxpygen": True}
 
+                    # JAX-native QPAX backend (no cvx_solver / cvxpygen fields)
+                    solver={"backend": "qpax"}
+
                     # Instance
-                    solver=ox.PTRSolver(cvx_solver="CLARABEL")
+                    solver=ox.CVXPyPTRSolver(cvx_solver="CLARABEL")
+                    solver=ox.QPAXPTRSolver()
             byof (ByofSpec, optional): Expert mode only. Raw JAX functions to
                 bypass symbolic layer. See :class:`openscvx.expert.ByofSpec` for
                 detailed documentation.
@@ -393,9 +399,9 @@ class Problem:
     def solver(self) -> ConvexSolver:
         """Access the convex subproblem solver instance.
 
-        Attributes such as ``cvx_solver``, ``solver_args``, ``cvxpygen``, and
-        ``cvxpygen_override`` can be modified freely before ``initialize``
-        is called::
+        Backend-specific attributes (e.g. ``cvx_solver``, ``solver_args``,
+        ``cvxpygen``, ``cvxpygen_override`` on :class:`CVXPyPTRSolver`) can
+        be modified freely before ``initialize`` is called::
 
             problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
             problem.solver.cvxpygen = True
@@ -407,7 +413,7 @@ class Problem:
             will have no effect on subsequent solves.
 
         Returns:
-            The solver instance (e.g., PTRSolver).
+            The solver instance — a concrete :class:`PTRSolver` subclass.
         """
         return self._solver
 
@@ -510,12 +516,12 @@ class Problem:
                 self._lowered.x_prop_unified.final[state._slice] = state.final
                 self._lowered.x_prop_unified.final_type[state._slice] = state.final_type
 
-        # Update CVXPy solver parameters (only if solver is initialized)
-        if self._solver._problem is not None:
-            self._solver.update_boundary_conditions(
-                x_init=self._lowered.x_unified.initial,
-                x_term=self._lowered.x_unified.final,
-            )
+        # Push to the solver — both backends short-circuit on a pre-initialize
+        # call, so this is safe to invoke from any lifecycle point.
+        self._solver.update_boundary_conditions(
+            x_init=self._lowered.x_unified.initial,
+            x_term=self._lowered.x_unified.final,
+        )
 
     def _sync_guesses(self):
         """Sync trajectory guesses from State/Control objects to lowered representation.

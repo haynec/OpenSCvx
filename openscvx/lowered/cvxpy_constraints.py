@@ -17,7 +17,10 @@ class LoweredCvxpyConstraints:
 
     Attributes:
         constraints: List of CVXPy constraint objects (cp.Constraint).
-            Includes both nodal and cross-node convex constraints.
+            Includes both nodal and cross-node convex constraints. Empty
+            for backends that don't accept ``.convex()`` constraints — the
+            refusal happens earlier, in
+            :meth:`openscvx.solvers.base.ConvexSolver.lower_convex_constraints`.
     """
 
     constraints: list["cp.Constraint"] = field(default_factory=list)
