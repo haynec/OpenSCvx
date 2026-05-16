@@ -204,8 +204,8 @@ class Problem:
                 - ``None`` — uses ``CVXPyPTRSolver()`` with defaults (QOCO backend).
                 - A ``ConvexSolver`` instance — used directly.
                 - A ``dict`` — validated as ``PTRSolverSpec``; the ``backend``
-                  field (``"cvxpy"`` or ``"qpax"``) selects the concrete
-                  backend.
+                  field (``"cvxpy"``, ``"qpax"``, or ``"moreau"``) selects the
+                  concrete backend.
 
                 Examples::
 
@@ -221,9 +221,13 @@ class Problem:
                     # JAX-native QPAX backend (no cvx_solver / cvxpygen fields)
                     solver={"backend": "qpax"}
 
+                    # JAX-native Moreau conic backend (SOC epigraphs, warm-start)
+                    solver={"backend": "moreau"}
+
                     # Instance
                     solver=ox.CVXPyPTRSolver(cvx_solver="CLARABEL")
                     solver=ox.QPAXPTRSolver()
+                    solver=ox.MoreauPTRSolver()
             byof (ByofSpec, optional): Expert mode only. Raw JAX functions to
                 bypass symbolic layer. See :class:`openscvx.expert.ByofSpec` for
                 detailed documentation.

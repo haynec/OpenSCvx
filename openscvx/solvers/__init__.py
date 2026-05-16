@@ -26,16 +26,21 @@ class ConvexSolver(ABC):
         ...
 ```
 
-The Penalized Trust-Region (PTR) subproblem ships with two concrete backends:
+The Penalized Trust-Region (PTR) subproblem ships with three concrete backends:
 
 - :class:`CVXPyPTRSolver` — DCP graph via CVXPy, dispatched to any of its
   supported conic solvers (QOCO, CLARABEL, ...). Optional code generation
   via cvxpygen for improved per-iteration performance.
 - :class:`QPAXPTRSolver` — flat ``(Q, q, A, b, G, h)`` assembled as JAX
   arrays and solved with ``qpax.solve_qp``. Aimed at end-to-end JAX
-  differentiability of the SCP loop (follow-up work).
+  differentiability of the SCP loop (follow-up work).  Requires the
+  ``qpax`` optional extra.
+- :class:`MoreauPTRSolver` — sparse conic program (SOCP-capable) assembled
+  as CSR JAX arrays and solved with ``moreau.jax.Solver``.  Uses SOC
+  epigraphs for the PTR penalties instead of QPAX-style slack expansion;
+  warm-starts between iterations.  Requires the ``moreau`` optional extra.
 
-Both share the abstract :class:`PTRSolver` contract.
+All three share the abstract :class:`PTRSolver` contract.
 
 Note:
     Solvers own their optimization variables (e.g., ``CVXPySolver.ocp_vars``).
@@ -76,6 +81,10 @@ def __getattr__(name: str):
         from .qpax_ptr_solver import QPAXPTRSolver
 
         return QPAXPTRSolver
+    if name == "MoreauPTRSolver":
+        from .moreau_ptr_solver import MoreauPTRSolver
+
+        return MoreauPTRSolver
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -87,6 +96,7 @@ __all__ = [
     # PTR backends
     "CVXPyPTRSolver",
     "QPAXPTRSolver",
+    "MoreauPTRSolver",
     # Config
     "PTRSolverSpec",
     "resolve_solver_config",
