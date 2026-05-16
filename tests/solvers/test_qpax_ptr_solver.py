@@ -236,3 +236,37 @@ def test_qpax_solve_returns_PTRSolveResult():
     assert res.x.shape[0] == 5
     assert res.u.shape[0] == 5
     assert res.status in {"optimal", "infeasible"}
+
+
+# ============================================================================
+# Convergence-failure guard
+# ============================================================================
+
+
+def test_qpax_solve_raises_on_nonconvergence(monkeypatch):
+    """When ``qpax.solve_qp`` returns ``converged=False`` (typical under
+    float32 ill-conditioning) the backend must raise rather than unpack a
+    NaN-filled primal. Without the guard the next SCP linearization point
+    is NaN-poisoned and every subsequent iteration produces garbage. The
+    end-to-end coverage in ``tests/test_brachistochrone.py::test_backend_float32_raises``
+    exercises the same path through the SCvx loop; this unit test pins the
+    behavior at the solver boundary directly."""
+    import jax.numpy as jnp
+
+    import openscvx.solvers.qpax_ptr_solver as mod
+
+    prob = _make_double_integrator_problem(n=5, backend="qpax", k_max=1)
+    prob.settings.dev.printing = False
+    prob.initialize()
+
+    n_z = prob.solver.layout.n_z
+    nan_z = jnp.full((n_z,), jnp.nan)
+
+    def fake_solve_qp(Q, q, A, b, G, h, **kwargs):
+        del Q, q, A, b, G, h, kwargs
+        return nan_z, nan_z, nan_z, nan_z, jnp.bool_(False), jnp.int32(5)
+
+    monkeypatch.setattr(mod.qpax, "solve_qp", fake_solve_qp)
+
+    with pytest.raises(RuntimeError, match=r"qpax\.solve_qp failed"):
+        prob.solver.solve()
