@@ -5969,6 +5969,8 @@
       
         
       
+        
+      
     
     
     
@@ -6066,6 +6068,34 @@
     
   
     cvxpy_ptr_solver
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Reference/solvers/moreau_ptr_solver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    moreau_ptr_solver
   
 
     
@@ -9690,7 +9720,7 @@
 <p>This means JAX-lowered dynamics and constraints could be used with alternative solvers.</p>
 <h2 id="convex-subproblem-backends">Convex Subproblem Backends<a class="headerlink" href="#convex-subproblem-backends" title="Permanent link">&para;</a></h2>
 <p>The convex subproblem at each SCP iteration is solved by a concrete subclass
-of the abstract <code>PTRSolver</code> base. Two backends ship today:</p>
+of the abstract <code>PTRSolver</code> base. Three backends ship today:</p>
 <table>
 <thead>
 <tr>
@@ -9713,6 +9743,12 @@ of the abstract <code>PTRSolver</code> base. Two backends ship today:</p>
 <td><code>solver={"backend": "qpax"}</code></td>
 <td>JAX-native QP via <code>qpax.solve_qp</code>. Flat <code>(Q, q, A, b, G, h)</code> assembly. Supports box / dynamics / CTCS / boundary-Fix; <strong>rejects</strong> user <code>.convex()</code>, cross-node, and impulsive at <code>initialize()</code> with a clear "use <code>CVXPyPTRSolver</code>" message. Enables a path toward an end-to-end JAX-differentiable SCP loop in follow-up work.</td>
 </tr>
+<tr>
+<td>Moreau</td>
+<td><code>MoreauPTRSolver</code></td>
+<td><code>solver={"backend": "moreau"}</code></td>
+<td>JAX-native conic solver (<code>moreau.jax.Solver</code>). Sparse CSR assembly; SOC epigraphs for the L1 / pos PTR penalties (fewer variables and rows than QPAX). Warm-starts between SCP iterations. Same supported subset as QPAX. Paves the way for user <code>.convex()</code> SOC support in a follow-up.</td>
+</tr>
 </tbody>
 </table>
 <p>Picking a backend at construction time:</p>
@@ -9726,9 +9762,13 @@ of the abstract <code>PTRSolver</code> base. Two backends ship today:</p>
 </span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
 </span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="c1"># JAX-native QPAX (requires the `qpax` extra: pip install openscvx[qpax]).</span>
 </span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;backend&quot;</span><span class="p">:</span> <span class="s2">&quot;qpax&quot;</span><span class="p">})</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="c1"># JAX-native Moreau conic (requires the `moreau` extra: pip install openscvx[moreau]).</span>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;backend&quot;</span><span class="p">:</span> <span class="s2">&quot;moreau&quot;</span><span class="p">})</span>
 </span></code></pre></div>
-<p>QPAX consumes the global JAX dtype — pass <code>float_dtype="float64"</code> to <code>Problem</code>
-if you need tight inner-solver tolerances; the default <code>float32</code> is enough for
+<p>Both JAX backends consume the global JAX dtype — pass <code>float_dtype="float64"</code>
+to <code>Problem</code> if you need tight inner-solver tolerances; the default <code>float32</code>
+is enough for
 many problems but caps the QP's conditioning.</p>
 <h2 id="further-reading">Further Reading<a class="headerlink" href="#further-reading" title="Permanent link">&para;</a></h2>
 <ul>
