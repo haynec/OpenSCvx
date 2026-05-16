@@ -11,19 +11,24 @@ Each function is tested for:
 """
 
 import jax
-import jax.numpy as jnp
-import pytest
 
-from openscvx.symbolic.lowerers.jax.stl import (
+# Use float64 for more accurate tests; JAX must be configured before jnp.
+jax.config.update("jax_enable_x64", True)
+# isort: off
+import jax.numpy as jnp  # noqa: E402
+import pytest  # noqa: E402
+
+from openscvx.symbolic.lowerers.jax.stl import (  # noqa: E402
     AND,
     OR,
     AND_lite,
     OR_lite,
     _smooth_equality,
     integer_variable,
+    gmsr_IfThen as IfThen,
+    gmsr_IfThen_lite as IfThen_lite,
 )
-from openscvx.symbolic.lowerers.jax.stl import gmsr_IfThen as IfThen
-from openscvx.symbolic.lowerers.jax.stl import gmsr_IfThen_lite as IfThen_lite
+# isort: on
 
 # =============================================================================
 # Helpers
@@ -294,11 +299,11 @@ class TestORLite:
         # OR_lite = 0 iff all y_i ≤ 0
         y = jnp.array([-1.0, -0.5])
         val = float(OR_lite(y, c=C))
-        assert val == pytest.approx(0.0, abs=1e-3)
+        assert val == pytest.approx(0.0, abs=1e-17)
 
     def test_positive_when_any_positive(self):
         y = jnp.array([0.5, -1.0])
-        assert float(OR_lite(y, c=C)) == pytest.approx(0.0, abs=1e-3)
+        assert float(OR_lite(y, c=C)) == pytest.approx(0.0, abs=1e-17)
 
     def test_larger_positive_means_more_violated(self):
         y_small = jnp.array([0.1, 10.0])
