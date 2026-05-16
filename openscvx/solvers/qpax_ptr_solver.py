@@ -672,6 +672,20 @@ class QPAXPTRSolver(PTRSolver):
         self._last_iters = int(np.asarray(iters))
         self._last_converged = bool(np.asarray(converged))
 
+        # Silent NaN unpacking poisons the next SCP linearization and the
+        # outer loop has no status gate. Fail at the boundary instead.
+        primal_finite = bool(np.all(np.isfinite(z)))
+        if not self._last_converged or not primal_finite:
+            dtype = str(Q_j.dtype)
+            raise RuntimeError(
+                f"qpax.solve_qp failed to converge (iters={self._last_iters}, "
+                f"converged={self._last_converged}, primal finite={primal_finite}). "
+                f"JAX dtype was {dtype}; if this is float32, pass "
+                f"float_dtype='float64' to Problem(...). Otherwise tighten "
+                f"solver_args (e.g. solver_tol=1e-8, max_iter=200) or switch "
+                f"to CVXPyPTRSolver to triage."
+            )
+
         return self._unpack(z)
 
     def _unpack(self, z: np.ndarray) -> PTRSolveResult:
@@ -691,7 +705,8 @@ class QPAXPTRSolver(PTRSolver):
 
         cost = self._reconstruct_cost(z)
 
-        status = "optimal" if self._last_converged else "infeasible"
+        # solve() raises on non-convergence before reaching _unpack.
+        status = "optimal"
 
         return PTRSolveResult(
             x=x,
