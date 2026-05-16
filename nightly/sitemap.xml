@@ -537,7 +537,15 @@
          <lastmod>2026-05-16</lastmod>
     </url>
     <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/solvers/cvxpy_ptr_solver/</loc>
+         <lastmod>2026-05-16</lastmod>
+    </url>
+    <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/solvers/ptr_solver/</loc>
+         <lastmod>2026-05-16</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/solvers/qpax_ptr_solver/</loc>
          <lastmod>2026-05-16</lastmod>
     </url>
     <url>

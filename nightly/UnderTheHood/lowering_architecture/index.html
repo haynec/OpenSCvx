@@ -5965,6 +5965,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -6054,6 +6058,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../Reference/solvers/cvxpy_ptr_solver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    cvxpy_ptr_solver
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../Reference/solvers/ptr_solver/" class="md-nav__link">
         
   
@@ -6062,6 +6094,34 @@
     
   
     ptr_solver
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Reference/solvers/qpax_ptr_solver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    qpax_ptr_solver
   
 
     
@@ -9196,6 +9256,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#convex-subproblem-backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Convex Subproblem Backends
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#further-reading" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -9410,6 +9481,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#convex-subproblem-backends" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Convex Subproblem Backends
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#further-reading" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -9606,12 +9688,56 @@
 - Scaling matrices
 - CVXPy</p>
 <p>This means JAX-lowered dynamics and constraints could be used with alternative solvers.</p>
+<h2 id="convex-subproblem-backends">Convex Subproblem Backends<a class="headerlink" href="#convex-subproblem-backends" title="Permanent link">&para;</a></h2>
+<p>The convex subproblem at each SCP iteration is solved by a concrete subclass
+of the abstract <code>PTRSolver</code> base. Two backends ship today:</p>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th>Class</th>
+<th>Selector</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CVXPy (default)</td>
+<td><code>CVXPyPTRSolver</code></td>
+<td><code>solver={"backend": "cvxpy"}</code> (default)</td>
+<td>DCP graph via CVXPy, dispatched to QOCO / CLARABEL / etc. Supports user <code>.convex()</code> constraints, cross-node constraints, CTCS, and impulsive controls. Optional cvxpygen code generation.</td>
+</tr>
+<tr>
+<td>QPAX</td>
+<td><code>QPAXPTRSolver</code></td>
+<td><code>solver={"backend": "qpax"}</code></td>
+<td>JAX-native QP via <code>qpax.solve_qp</code>. Flat <code>(Q, q, A, b, G, h)</code> assembly. Supports box / dynamics / CTCS / boundary-Fix; <strong>rejects</strong> user <code>.convex()</code>, cross-node, and impulsive at <code>initialize()</code> with a clear "use <code>CVXPyPTRSolver</code>" message. Enables a path toward an end-to-end JAX-differentiable SCP loop in follow-up work.</td>
+</tr>
+</tbody>
+</table>
+<p>Picking a backend at construction time:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">openscvx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ox</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># Default — same as today&#39;s CVXPyPTRSolver.</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="c1"># Explicit CVXPy with a different inner solver.</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;backend&quot;</span><span class="p">:</span> <span class="s2">&quot;cvxpy&quot;</span><span class="p">,</span> <span class="s2">&quot;cvx_solver&quot;</span><span class="p">:</span> <span class="s2">&quot;CLARABEL&quot;</span><span class="p">})</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="c1"># JAX-native QPAX (requires the `qpax` extra: pip install openscvx[qpax]).</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a><span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">solver</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;backend&quot;</span><span class="p">:</span> <span class="s2">&quot;qpax&quot;</span><span class="p">})</span>
+</span></code></pre></div>
+<p>QPAX consumes the global JAX dtype — pass <code>float_dtype="float64"</code> to <code>Problem</code>
+if you need tight inner-solver tolerances; the default <code>float32</code> is enough for
+many problems but caps the QP's conditioning.</p>
 <h2 id="further-reading">Further Reading<a class="headerlink" href="#further-reading" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>openscvx/symbolic/lower.py</code> — Main lowering implementation</li>
 <li><code>openscvx/lowered/</code> — Dataclass definitions</li>
 <li><code>openscvx/symbolic/lowerers/jax.py</code> — JAX visitor implementation</li>
 <li><code>openscvx/symbolic/lowerers/cvxpy.py</code> — CVXPy visitor implementation</li>
+<li><code>openscvx/solvers/ptr_solver.py</code> — Abstract <code>PTRSolver</code> contract</li>
+<li><code>openscvx/solvers/cvxpy_ptr_solver.py</code> / <code>qpax_ptr_solver.py</code> — Concrete backends</li>
 </ul>
 
 

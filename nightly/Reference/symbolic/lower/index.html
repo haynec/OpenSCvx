@@ -5997,6 +5997,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -6089,6 +6093,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../solvers/cvxpy_ptr_solver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    cvxpy_ptr_solver
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../solvers/ptr_solver/" class="md-nav__link">
         
   
@@ -6097,6 +6129,34 @@
     
   
     ptr_solver
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../solvers/qpax_ptr_solver/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    qpax_ptr_solver
   
 
     
@@ -11021,8 +11081,7 @@ optimization variables before constraint lowering.</p>
 <span class="normal"><a href="#__codelineno-0-861">861</a></span>
 <span class="normal"><a href="#__codelineno-0-862">862</a></span>
 <span class="normal"><a href="#__codelineno-0-863">863</a></span>
-<span class="normal"><a href="#__codelineno-0-864">864</a></span>
-<span class="normal"><a href="#__codelineno-0-865">865</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-699"><a id="__codelineno-0-699" name="__codelineno-0-699"></a><span class="k">def</span><span class="w"> </span><span class="nf">lower_symbolic_problem</span><span class="p">(</span>
+<span class="normal"><a href="#__codelineno-0-864">864</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-699"><a id="__codelineno-0-699" name="__codelineno-0-699"></a><span class="k">def</span><span class="w"> </span><span class="nf">lower_symbolic_problem</span><span class="p">(</span>
 </span><span id="__span-0-700"><a id="__codelineno-0-700" name="__codelineno-0-700"></a>    <span class="n">problem</span><span class="p">:</span> <span class="s2">&quot;SymbolicProblem&quot;</span><span class="p">,</span>
 </span><span id="__span-0-701"><a id="__codelineno-0-701" name="__codelineno-0-701"></a>    <span class="n">solver</span><span class="p">:</span> <span class="s2">&quot;ConvexSolver&quot;</span><span class="p">,</span>
 </span><span id="__span-0-702"><a id="__codelineno-0-702" name="__codelineno-0-702"></a>    <span class="n">byof</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="s2">&quot;ByofSpec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -11156,39 +11215,38 @@ optimization variables before constraint lowering.</p>
 </span><span id="__span-0-830"><a id="__codelineno-0-830" name="__codelineno-0-830"></a>
 </span><span id="__span-0-831"><a id="__codelineno-0-831" name="__codelineno-0-831"></a>    <span class="n">_augment_impulsive_constraints</span><span class="p">(</span><span class="n">problem</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span> <span class="n">problem</span><span class="o">.</span><span class="n">controls</span><span class="p">,</span> <span class="n">problem</span><span class="o">.</span><span class="n">N</span><span class="p">)</span>
 </span><span id="__span-0-832"><a id="__codelineno-0-832" name="__codelineno-0-832"></a>
-</span><span id="__span-0-833"><a id="__codelineno-0-833" name="__codelineno-0-833"></a>    <span class="c1"># Lower convex constraints using solver&#39;s variables</span>
-</span><span id="__span-0-834"><a id="__codelineno-0-834" name="__codelineno-0-834"></a>    <span class="n">lowered_cvxpy_constraint_list</span><span class="p">,</span> <span class="n">cvxpy_params</span> <span class="o">=</span> <span class="n">lower_cvxpy_constraints</span><span class="p">(</span>
-</span><span id="__span-0-835"><a id="__codelineno-0-835" name="__codelineno-0-835"></a>        <span class="n">problem</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span>
-</span><span id="__span-0-836"><a id="__codelineno-0-836" name="__codelineno-0-836"></a>        <span class="n">solver</span><span class="o">.</span><span class="n">ocp_vars</span><span class="o">.</span><span class="n">x_nonscaled</span><span class="p">,</span>
-</span><span id="__span-0-837"><a id="__codelineno-0-837" name="__codelineno-0-837"></a>        <span class="n">solver</span><span class="o">.</span><span class="n">ocp_vars</span><span class="o">.</span><span class="n">u_nonscaled</span><span class="p">,</span>
-</span><span id="__span-0-838"><a id="__codelineno-0-838" name="__codelineno-0-838"></a>        <span class="n">problem</span><span class="o">.</span><span class="n">parameters</span><span class="p">,</span>
-</span><span id="__span-0-839"><a id="__codelineno-0-839" name="__codelineno-0-839"></a>    <span class="p">)</span>
-</span><span id="__span-0-840"><a id="__codelineno-0-840" name="__codelineno-0-840"></a>    <span class="n">cvxpy_constraints</span> <span class="o">=</span> <span class="n">LoweredCvxpyConstraints</span><span class="p">(</span>
-</span><span id="__span-0-841"><a id="__codelineno-0-841" name="__codelineno-0-841"></a>        <span class="n">constraints</span><span class="o">=</span><span class="n">lowered_cvxpy_constraint_list</span><span class="p">,</span>
-</span><span id="__span-0-842"><a id="__codelineno-0-842" name="__codelineno-0-842"></a>    <span class="p">)</span>
-</span><span id="__span-0-843"><a id="__codelineno-0-843" name="__codelineno-0-843"></a>
-</span><span id="__span-0-844"><a id="__codelineno-0-844" name="__codelineno-0-844"></a>    <span class="c1"># Lower algebraic outputs to vmapped JAX functions</span>
-</span><span id="__span-0-845"><a id="__codelineno-0-845" name="__codelineno-0-845"></a>    <span class="n">algebraic_prop_lowered</span> <span class="o">=</span> <span class="p">{}</span>
-</span><span id="__span-0-846"><a id="__codelineno-0-846" name="__codelineno-0-846"></a>    <span class="k">if</span> <span class="n">problem</span><span class="o">.</span><span class="n">algebraic_prop</span><span class="p">:</span>
-</span><span id="__span-0-847"><a id="__codelineno-0-847" name="__codelineno-0-847"></a>        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">expr</span> <span class="ow">in</span> <span class="n">problem</span><span class="o">.</span><span class="n">algebraic_prop</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-</span><span id="__span-0-848"><a id="__codelineno-0-848" name="__codelineno-0-848"></a>            <span class="c1"># Lower expression to JAX function: f(x, u, node, params) -&gt; output</span>
-</span><span id="__span-0-849"><a id="__codelineno-0-849" name="__codelineno-0-849"></a>            <span class="n">output_fn</span> <span class="o">=</span> <span class="n">lower_to_jax</span><span class="p">(</span><span class="n">expr</span><span class="p">)</span>
-</span><span id="__span-0-850"><a id="__codelineno-0-850" name="__codelineno-0-850"></a>            <span class="c1"># Vmap over time axis: (T, n_x), (T, n_u) -&gt; (T, output_dim)</span>
-</span><span id="__span-0-851"><a id="__codelineno-0-851" name="__codelineno-0-851"></a>            <span class="n">output_fn_vmapped</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">vmap</span><span class="p">(</span><span class="n">output_fn</span><span class="p">,</span> <span class="n">in_axes</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
-</span><span id="__span-0-852"><a id="__codelineno-0-852" name="__codelineno-0-852"></a>            <span class="n">algebraic_prop_lowered</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">output_fn_vmapped</span>
-</span><span id="__span-0-853"><a id="__codelineno-0-853" name="__codelineno-0-853"></a>
-</span><span id="__span-0-854"><a id="__codelineno-0-854" name="__codelineno-0-854"></a>    <span class="k">return</span> <span class="n">LoweredProblem</span><span class="p">(</span>
-</span><span id="__span-0-855"><a id="__codelineno-0-855" name="__codelineno-0-855"></a>        <span class="n">dynamics</span><span class="o">=</span><span class="n">dynamics</span><span class="p">,</span>
-</span><span id="__span-0-856"><a id="__codelineno-0-856" name="__codelineno-0-856"></a>        <span class="n">dynamics_discrete</span><span class="o">=</span><span class="n">dynamics_discrete</span><span class="p">,</span>
-</span><span id="__span-0-857"><a id="__codelineno-0-857" name="__codelineno-0-857"></a>        <span class="n">dynamics_prop</span><span class="o">=</span><span class="n">dynamics_prop</span><span class="p">,</span>
-</span><span id="__span-0-858"><a id="__codelineno-0-858" name="__codelineno-0-858"></a>        <span class="n">jax_constraints</span><span class="o">=</span><span class="n">jax_constraints</span><span class="p">,</span>
-</span><span id="__span-0-859"><a id="__codelineno-0-859" name="__codelineno-0-859"></a>        <span class="n">cvxpy_constraints</span><span class="o">=</span><span class="n">cvxpy_constraints</span><span class="p">,</span>
-</span><span id="__span-0-860"><a id="__codelineno-0-860" name="__codelineno-0-860"></a>        <span class="n">x_unified</span><span class="o">=</span><span class="n">x_unified</span><span class="p">,</span>
-</span><span id="__span-0-861"><a id="__codelineno-0-861" name="__codelineno-0-861"></a>        <span class="n">u_unified</span><span class="o">=</span><span class="n">u_unified</span><span class="p">,</span>
-</span><span id="__span-0-862"><a id="__codelineno-0-862" name="__codelineno-0-862"></a>        <span class="n">x_prop_unified</span><span class="o">=</span><span class="n">x_prop_unified</span><span class="p">,</span>
-</span><span id="__span-0-863"><a id="__codelineno-0-863" name="__codelineno-0-863"></a>        <span class="n">cvxpy_params</span><span class="o">=</span><span class="n">cvxpy_params</span><span class="p">,</span>
-</span><span id="__span-0-864"><a id="__codelineno-0-864" name="__codelineno-0-864"></a>        <span class="n">algebraic_prop</span><span class="o">=</span><span class="n">algebraic_prop_lowered</span><span class="p">,</span>
-</span><span id="__span-0-865"><a id="__codelineno-0-865" name="__codelineno-0-865"></a>    <span class="p">)</span>
+</span><span id="__span-0-833"><a id="__codelineno-0-833" name="__codelineno-0-833"></a>    <span class="c1"># Each solver owns its convex-lowering policy. The default</span>
+</span><span id="__span-0-834"><a id="__codelineno-0-834" name="__codelineno-0-834"></a>    <span class="c1"># implementation on ConvexSolver refuses user .convex() constraints</span>
+</span><span id="__span-0-835"><a id="__codelineno-0-835" name="__codelineno-0-835"></a>    <span class="c1"># (right for QP-only backends like QPAXPTRSolver); CVXPyPTRSolver</span>
+</span><span id="__span-0-836"><a id="__codelineno-0-836" name="__codelineno-0-836"></a>    <span class="c1"># overrides to actually lower. No branching on solver type here.</span>
+</span><span id="__span-0-837"><a id="__codelineno-0-837" name="__codelineno-0-837"></a>    <span class="n">lowered_cvxpy_constraint_list</span><span class="p">,</span> <span class="n">cvxpy_params</span> <span class="o">=</span> <span class="n">solver</span><span class="o">.</span><span class="n">lower_convex_constraints</span><span class="p">(</span>
+</span><span id="__span-0-838"><a id="__codelineno-0-838" name="__codelineno-0-838"></a>        <span class="n">problem</span><span class="o">.</span><span class="n">constraints</span><span class="p">,</span>
+</span><span id="__span-0-839"><a id="__codelineno-0-839" name="__codelineno-0-839"></a>        <span class="n">problem</span><span class="o">.</span><span class="n">parameters</span><span class="p">,</span>
+</span><span id="__span-0-840"><a id="__codelineno-0-840" name="__codelineno-0-840"></a>    <span class="p">)</span>
+</span><span id="__span-0-841"><a id="__codelineno-0-841" name="__codelineno-0-841"></a>    <span class="n">cvxpy_constraints</span> <span class="o">=</span> <span class="n">LoweredCvxpyConstraints</span><span class="p">(</span><span class="n">constraints</span><span class="o">=</span><span class="n">lowered_cvxpy_constraint_list</span><span class="p">)</span>
+</span><span id="__span-0-842"><a id="__codelineno-0-842" name="__codelineno-0-842"></a>
+</span><span id="__span-0-843"><a id="__codelineno-0-843" name="__codelineno-0-843"></a>    <span class="c1"># Lower algebraic outputs to vmapped JAX functions</span>
+</span><span id="__span-0-844"><a id="__codelineno-0-844" name="__codelineno-0-844"></a>    <span class="n">algebraic_prop_lowered</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span id="__span-0-845"><a id="__codelineno-0-845" name="__codelineno-0-845"></a>    <span class="k">if</span> <span class="n">problem</span><span class="o">.</span><span class="n">algebraic_prop</span><span class="p">:</span>
+</span><span id="__span-0-846"><a id="__codelineno-0-846" name="__codelineno-0-846"></a>        <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">expr</span> <span class="ow">in</span> <span class="n">problem</span><span class="o">.</span><span class="n">algebraic_prop</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+</span><span id="__span-0-847"><a id="__codelineno-0-847" name="__codelineno-0-847"></a>            <span class="c1"># Lower expression to JAX function: f(x, u, node, params) -&gt; output</span>
+</span><span id="__span-0-848"><a id="__codelineno-0-848" name="__codelineno-0-848"></a>            <span class="n">output_fn</span> <span class="o">=</span> <span class="n">lower_to_jax</span><span class="p">(</span><span class="n">expr</span><span class="p">)</span>
+</span><span id="__span-0-849"><a id="__codelineno-0-849" name="__codelineno-0-849"></a>            <span class="c1"># Vmap over time axis: (T, n_x), (T, n_u) -&gt; (T, output_dim)</span>
+</span><span id="__span-0-850"><a id="__codelineno-0-850" name="__codelineno-0-850"></a>            <span class="n">output_fn_vmapped</span> <span class="o">=</span> <span class="n">jax</span><span class="o">.</span><span class="n">vmap</span><span class="p">(</span><span class="n">output_fn</span><span class="p">,</span> <span class="n">in_axes</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">))</span>
+</span><span id="__span-0-851"><a id="__codelineno-0-851" name="__codelineno-0-851"></a>            <span class="n">algebraic_prop_lowered</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">output_fn_vmapped</span>
+</span><span id="__span-0-852"><a id="__codelineno-0-852" name="__codelineno-0-852"></a>
+</span><span id="__span-0-853"><a id="__codelineno-0-853" name="__codelineno-0-853"></a>    <span class="k">return</span> <span class="n">LoweredProblem</span><span class="p">(</span>
+</span><span id="__span-0-854"><a id="__codelineno-0-854" name="__codelineno-0-854"></a>        <span class="n">dynamics</span><span class="o">=</span><span class="n">dynamics</span><span class="p">,</span>
+</span><span id="__span-0-855"><a id="__codelineno-0-855" name="__codelineno-0-855"></a>        <span class="n">dynamics_discrete</span><span class="o">=</span><span class="n">dynamics_discrete</span><span class="p">,</span>
+</span><span id="__span-0-856"><a id="__codelineno-0-856" name="__codelineno-0-856"></a>        <span class="n">dynamics_prop</span><span class="o">=</span><span class="n">dynamics_prop</span><span class="p">,</span>
+</span><span id="__span-0-857"><a id="__codelineno-0-857" name="__codelineno-0-857"></a>        <span class="n">jax_constraints</span><span class="o">=</span><span class="n">jax_constraints</span><span class="p">,</span>
+</span><span id="__span-0-858"><a id="__codelineno-0-858" name="__codelineno-0-858"></a>        <span class="n">cvxpy_constraints</span><span class="o">=</span><span class="n">cvxpy_constraints</span><span class="p">,</span>
+</span><span id="__span-0-859"><a id="__codelineno-0-859" name="__codelineno-0-859"></a>        <span class="n">x_unified</span><span class="o">=</span><span class="n">x_unified</span><span class="p">,</span>
+</span><span id="__span-0-860"><a id="__codelineno-0-860" name="__codelineno-0-860"></a>        <span class="n">u_unified</span><span class="o">=</span><span class="n">u_unified</span><span class="p">,</span>
+</span><span id="__span-0-861"><a id="__codelineno-0-861" name="__codelineno-0-861"></a>        <span class="n">x_prop_unified</span><span class="o">=</span><span class="n">x_prop_unified</span><span class="p">,</span>
+</span><span id="__span-0-862"><a id="__codelineno-0-862" name="__codelineno-0-862"></a>        <span class="n">cvxpy_params</span><span class="o">=</span><span class="n">cvxpy_params</span><span class="p">,</span>
+</span><span id="__span-0-863"><a id="__codelineno-0-863" name="__codelineno-0-863"></a>        <span class="n">algebraic_prop</span><span class="o">=</span><span class="n">algebraic_prop_lowered</span><span class="p">,</span>
+</span><span id="__span-0-864"><a id="__codelineno-0-864" name="__codelineno-0-864"></a>    <span class="p">)</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
