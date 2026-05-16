@@ -13,6 +13,11 @@ Backends:
         Flat ``(Q, q, A, b, G, h)`` assembled as JAX arrays and solved with
         ``qpax.solve_qp``. Enables an end-to-end JAX-differentiable SCP loop
         in follow-up work.
+    :class:`openscvx.solvers.moreau_ptr_solver.MoreauPTRSolver`
+        Sparse conic program assembled as CSR JAX arrays and solved with
+        ``moreau.jax.Solver``.  Uses SOC epigraphs for the L1 / pos PTR
+        penalties instead of QPAX-style slack expansion; warm-starts between
+        SCP iterations.
 """
 
 from abc import abstractmethod

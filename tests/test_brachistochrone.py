@@ -317,14 +317,14 @@ def test_monolithic():
     jax.clear_caches()
 
 
-@pytest.mark.parametrize("backend", ["cvxpy", "qpax"])
+@pytest.mark.parametrize("backend", ["cvxpy", "qpax", "moreau"])
 def test_backend(backend):
     """End-to-end brachistochrone with each PTRSolver backend.
 
     Compares against the analytical cycloid; the same accuracy thresholds
-    apply regardless of backend (QPAX assembles the same convex subproblem,
-    so SCP convergence should land on the same minimizer to within the
-    backends' inner solver tolerances)."""
+    apply regardless of backend (each backend assembles the same convex
+    subproblem, so SCP convergence should land on the same minimizer to within
+    the backends' inner solver tolerances)."""
     import jax.numpy as jnp
 
     import openscvx as ox
@@ -332,6 +332,8 @@ def test_backend(backend):
 
     if backend == "qpax":
         pytest.importorskip("qpax")
+    if backend == "moreau":
+        pytest.importorskip("moreau")
 
     # Problem parameters — mirrors test_monolithic so we cover the same
     # boundary conditions and analytical reference both ways.
@@ -405,11 +407,10 @@ def test_backend(backend):
     )
 
     _print_comparison_metrics(comparison, f"Brachistochrone ({backend})")
-    # QPAX reassembles Q / A / G as JAX arrays each iteration; the
-    # qpax.solve_qp compilation cache lands per-process, and under
-    # parallel test execution the first iteration's JIT cost dominates.
-    # Bump the budget for QPAX rather than block on a perf-track issue.
-    solve_budget = 3.5 if backend == "qpax" else 1.2
+    # JAX backends reassemble arrays every iteration; JIT compile cost
+    # dominates under parallel test execution.  Moreau's warm-start generally
+    # compensates, but keep the budget consistent with QPAX for now.
+    solve_budget = 3.5 if backend in ("qpax", "moreau") else 1.2
     _assert_brachistochrone_accuracy(comparison, problem, result, solve_budget=solve_budget)
 
     jax.clear_caches()

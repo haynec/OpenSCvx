@@ -276,11 +276,14 @@ class PTRSolverSpec(BaseModel):
 
     The ``backend`` discriminator selects which concrete PTR backend to build:
     ``"cvxpy"`` (the default,
-    :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`) or ``"qpax"``
-    (:class:`openscvx.solvers.qpax_ptr_solver.QPAXPTRSolver`).
+    :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`),
+    ``"qpax"`` (:class:`openscvx.solvers.qpax_ptr_solver.QPAXPTRSolver`),
+    or ``"moreau"``
+    (:class:`openscvx.solvers.moreau_ptr_solver.MoreauPTRSolver`).
 
     ``cvx_solver``, ``cvxpygen``, and ``cvxpygen_override`` are CVXPy-only;
-    setting them under ``backend="qpax"`` is a configuration error.
+    setting them under ``backend="qpax"`` or ``backend="moreau"`` is a
+    configuration error.
 
     !!! warning
         Enabling ``cvxpygen`` currently disables sparse parameter declarations.
@@ -290,7 +293,7 @@ class PTRSolverSpec(BaseModel):
     """
 
     type: Literal["PTRSolver"] = "PTRSolver"
-    backend: Literal["cvxpy", "qpax"] = "cvxpy"
+    backend: Literal["cvxpy", "qpax", "moreau"] = "cvxpy"
     cvx_solver: Optional[str] = None
     solver_args: Optional[Dict[str, Any]] = None
     cvxpygen: bool = False
@@ -300,7 +303,7 @@ class PTRSolverSpec(BaseModel):
 
     @model_validator(mode="after")
     def _check_backend_fields(self):
-        if self.backend == "qpax":
+        if self.backend in ("qpax", "moreau"):
             offenders = [
                 name
                 for name, value in (
@@ -318,8 +321,8 @@ class PTRSolverSpec(BaseModel):
         return self
 
     def build(self) -> ConvexSolver:
-        # Local imports keep CVXPy / qpax out of the import path until the
-        # corresponding backend is actually requested.
+        # Local imports keep CVXPy / qpax / moreau out of the import path until
+        # the corresponding backend is actually requested.
         if self.backend == "cvxpy":
             from .cvxpy_ptr_solver import CVXPyPTRSolver
 
@@ -329,6 +332,10 @@ class PTRSolverSpec(BaseModel):
                 cvxpygen=self.cvxpygen,
                 cvxpygen_override=self.cvxpygen_override,
             )
+        if self.backend == "moreau":
+            from .moreau_ptr_solver import MoreauPTRSolver
+
+            return MoreauPTRSolver(solver_args=self.solver_args)
         from .qpax_ptr_solver import QPAXPTRSolver
 
         return QPAXPTRSolver(solver_args=self.solver_args)
