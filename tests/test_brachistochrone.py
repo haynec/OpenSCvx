@@ -417,8 +417,7 @@ def test_backend(backend, constraint_type, with_parameters):
     result = problem.post_process()
 
     assert result["converged"], (
-        f"{backend} / {constraint_type} / with_parameters={with_parameters} "
-        f"failed to converge"
+        f"{backend} / {constraint_type} / with_parameters={with_parameters} failed to converge"
     )
 
     position = result.trajectory["x"][:, :2]
