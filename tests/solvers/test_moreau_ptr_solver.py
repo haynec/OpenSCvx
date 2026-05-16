@@ -22,7 +22,7 @@ from scipy import sparse as sp
 import openscvx as ox
 from openscvx import Problem
 from openscvx.solvers import MoreauPTRSolver, PTRSolver, PTRSolveResult
-from tests.conftest import requires_moreau
+from tests._marks import requires_moreau
 
 # Skip the whole module when moreau is absent or unlicensed.
 pytestmark = requires_moreau
