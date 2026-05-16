@@ -22,8 +22,15 @@ in ``jit``, ``jax.grad`` / ``jax.vmap`` can reach through a full SCvx solve
 Scope:
     * No user ``.convex()`` constraints — rejected upstream by
       :meth:`ConvexSolver.lower_convex_constraints`.
-    * No cross-node or impulsive controls — each raises
-      :class:`NotImplementedError` at :meth:`MoreauPTRSolver.initialize`.
+    * No cross-node constraints — raises :class:`NotImplementedError` at
+      :meth:`MoreauPTRSolver.initialize`.
+    * Impulsive controls (``parameterization="impulsive"``) are supported.
+      ``D_d`` is absorbed numerically into ``A_d / B_d / C_d`` at update
+      time and ``E_d`` enters the dynamics row on the impulsive control
+      slice; the initial Fix boundary condition picks up the linearized
+      impulse at node 0.  The static CSR pattern reserves the
+      ``du[0, slice_imp]`` columns in the initial-Fix rows so warm-start
+      structure stays valid across iterations.
     * CTCS constraints are supported; LICQ-style absolute-value inequalities
       are affine and fit in the nonneg cone.
 
@@ -75,6 +82,7 @@ if TYPE_CHECKING:
     from openscvx.lowered import LoweredProblem
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
     from openscvx.lowered.unified import UnifiedControl, UnifiedState
+    from openscvx.symbolic.constraint_set import ConstraintSet
 
 # Tiny diagonal regularisation added to P on dx/du slots.  Moreau's IPM
 # Cholesky factors (P + Gᵀ diag(z/s) G); keeping the diagonal positive avoids
@@ -218,12 +226,12 @@ class MoreauPTRSolver(PTRSolver):
     SOCP support in a follow-up.
 
     Scope:
-        Supported — state/control box, dynamics linearization, boundary Fix,
-        uniform time grid, linearized nodal nonconvex, CTCS LICQ rows.
+        Supported — state/control box, dynamics linearization (continuous
+        and impulsive), boundary Fix, uniform time grid, linearized nodal
+        nonconvex, CTCS LICQ rows.
 
-        Not supported — user ``.convex()`` constraints, cross-node
-        constraints, and impulsive controls. Each raises
-        :class:`NotImplementedError` with a "use
+        Not supported — user ``.convex()`` constraints and cross-node
+        constraints. Each raises :class:`NotImplementedError` with a "use
         :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`" pointer.
 
     Differentiability hook for future work:
@@ -274,6 +282,11 @@ class MoreauPTRSolver(PTRSolver):
         self._coo_cols: Optional[np.ndarray] = None
         self._n_con: int = 0
 
+        # Populated by lower_convex_constraints. Auto-augmented impulsive
+        # zero-pin constraints land here; any genuine user .convex() trips
+        # the default refusal.
+        self._impulsive_pins: List[Tuple[List[int], slice]] = []
+
         # Per-iteration data, set by update_* methods.
         self._dyn: dict = {}
         self._cons: dict = {}
@@ -313,22 +326,11 @@ class MoreauPTRSolver(PTRSolver):
             jax_constraints: Lowered JAX constraints (nodal structure only).
             dynamics_sparsity: Ignored.
             constraint_sparsity: Ignored.
-
-        Raises:
-            NotImplementedError: If impulsive controls are present.
         """
         del dynamics_sparsity, constraint_sparsity
 
         n_x = len(x_unified.max)
         n_u = len(u_unified.max)
-
-        slice_imp = u_unified.slice_impulsive
-        if slice_imp.stop > slice_imp.start:
-            raise NotImplementedError(
-                "MoreauPTRSolver does not support impulsive controls "
-                f"(u.slice_impulsive = {slice_imp!r}). "
-                "Use CVXPyPTRSolver for problems with impulsive dynamics."
-            )
 
         S_x, c_x = self._scaling(x_unified)
         S_u, c_u = self._scaling(u_unified)
@@ -345,6 +347,28 @@ class MoreauPTRSolver(PTRSolver):
         self.layout = _ConicLayout(N=N, n_x=n_x, n_u=n_u, n_nodal=len(jax_constraints.nodal))
         self._jax_constraints = jax_constraints
 
+    def lower_convex_constraints(
+        self,
+        constraints: "ConstraintSet",
+        parameters: Optional[Dict] = None,
+    ) -> Tuple[List, Dict]:
+        """Absorb auto-generated impulsive zero-pin constraints; refuse the rest.
+
+        :func:`openscvx.symbolic.lower._augment_impulsive_constraints` injects
+        ``Control == 0`` equalities at non-impulse nodes for every impulsive
+        control. Those constraints live in ``constraints.nodal_convex`` even
+        though no user ``.convex()`` was written; we recognize their fixed
+        shape and stash a pin list for the structural pass / assembler to
+        emit as plain zero-cone rows. Anything that doesn't match the
+        auto-augmentation shape (e.g. a genuine user ``.convex()`` SOC) falls
+        through to the default refusal in :class:`ConvexSolver`.
+        """
+        pins = self._extract_impulsive_pins(constraints)
+        if pins is None:
+            return super().lower_convex_constraints(constraints, parameters)
+        self._impulsive_pins = pins
+        return [], {}
+
     def initialize(self, lowered: "LoweredProblem", settings: "Config") -> None:
         """Build the static conic structure and construct ``moreau.jax.Solver``.
 
@@ -359,7 +383,7 @@ class MoreauPTRSolver(PTRSolver):
 
         Raises:
             RuntimeError: If :meth:`create_variables` was not called first.
-            NotImplementedError: If cross-node or impulsive controls are present.
+            NotImplementedError: If cross-node constraints are present.
         """
         if self.layout is None:
             raise RuntimeError(
@@ -372,11 +396,6 @@ class MoreauPTRSolver(PTRSolver):
                 "MoreauPTRSolver does not yet support cross-node constraints "
                 f"({len(lowered.jax_constraints.cross_node)} defined). "
                 "Use CVXPyPTRSolver."
-            )
-        slice_imp = settings.sim.u.slice_impulsive
-        if slice_imp.stop > slice_imp.start:
-            raise NotImplementedError(
-                "MoreauPTRSolver does not support impulsive controls. Use CVXPyPTRSolver."
             )
 
         self._settings = settings
@@ -456,15 +475,42 @@ class MoreauPTRSolver(PTRSolver):
         D_d: Optional[np.ndarray] = None,
         E_d: Optional[np.ndarray] = None,
     ) -> None:
-        # Impulsive rejected at initialize(); D_d / E_d / x_prop_plus dropped.
-        del x_prop_plus, D_d, E_d
+        A_eff = np.asarray(A_d, dtype=float)
+        B_eff = np.asarray(B_d, dtype=float)
+        C_eff = np.asarray(C_d, dtype=float)
+
+        # Absorb the impulsive state Jacobian into the continuous step
+        # matrices so the assembly row keeps a single A_d·dx + B_d·du term,
+        # matching the recipe in CVXPyPTRSolver.update_dynamics_linearization
+        # at openscvx/solvers/cvxpy_ptr_solver.py:636-654.
+        if D_d is not None:
+            D_arr = np.asarray(D_d, dtype=float)
+            if D_arr.ndim == 3 and D_arr.shape[0] == A_eff.shape[0] + 1:
+                D_steps = D_arr[1:]
+            elif D_arr.ndim == 3 and D_arr.shape[0] == A_eff.shape[0]:
+                D_steps = D_arr
+            else:
+                raise ValueError(
+                    "Unexpected D_d shape for dynamics update: "
+                    f"{D_arr.shape}, expected "
+                    f"{(A_eff.shape[0] + 1, A_eff.shape[1], A_eff.shape[2])} "
+                    f"or {(A_eff.shape[0], A_eff.shape[1], A_eff.shape[2])}."
+                )
+            A_eff = np.einsum("kij,kjl->kil", D_steps, A_eff)
+            B_eff = np.einsum("kij,kjl->kil", D_steps, B_eff)
+            C_eff = np.einsum("kij,kjl->kil", D_steps, C_eff)
+
         self._dyn = {
             "x_bar": np.asarray(x_bar, dtype=float),
             "u_bar": np.asarray(u_bar, dtype=float),
-            "A_d": np.asarray(A_d, dtype=float),
-            "B_d": np.asarray(B_d, dtype=float),
-            "C_d": np.asarray(C_d, dtype=float),
+            "A_d": A_eff,
+            "B_d": B_eff,
+            "C_d": C_eff,
             "x_prop": np.asarray(x_prop, dtype=float),
+            "x_prop_plus": (
+                np.asarray(x_prop_plus, dtype=float) if x_prop_plus is not None else None
+            ),
+            "E_d": np.asarray(E_d, dtype=float) if E_d is not None else None,
         }
 
     def update_constraint_linearizations(
@@ -591,14 +637,31 @@ class MoreauPTRSolver(PTRSolver):
                 add(row, L.nu_vb_idx(c_idx, node))
                 row += 1
 
-        # Fix boundary conditions (initial / terminal)
+        # Fix boundary conditions (initial / terminal).  Under impulsive
+        # control the initial Fix row couples the post-impulse state at
+        # node 0 to du[0, slice_imp]; declare those columns structurally
+        # nonzero here so the static CSR pattern accommodates the
+        # numerical values emitted in _assemble_conic.
+        slice_imp = settings.sim.u.slice_impulsive
+        has_impulsive = slice_imp.stop > slice_imp.start
         for i in range(settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop):
             if settings.sim.x.initial_type[i] == "Fix":
                 add(row, L.x_idx(0, i))
+                if has_impulsive:
+                    for j in range(slice_imp.start, slice_imp.stop):
+                        add(row, L.du_idx(0, j))
                 row += 1
             if settings.sim.x.final_type[i] == "Fix":
                 add(row, L.x_idx(N - 1, i))
                 row += 1
+
+        # Impulsive zero-pin equalities: u[node, j] = const, one row per
+        # (node, j) absorbed by lower_convex_constraints.
+        for nodes, ctrl_slice in self._impulsive_pins:
+            for node in nodes:
+                for j in range(ctrl_slice.start, ctrl_slice.stop):
+                    add(row, L.u_idx(node, j))
+                    row += 1
 
         # Uniform time grid: u[k,j] − u[k-1,j] = 0
         if settings.sim._uniform_time_grid:
@@ -725,8 +788,11 @@ class MoreauPTRSolver(PTRSolver):
         inv_S_x = self._inv_S_x_diag
         inv_S_u = self._inv_S_u_diag
         S_x = self._S_x_diag
+        S_u = self._S_u_diag
         c_x = self._c_x
         c_u = self._c_u
+        slice_imp = settings.sim.u.slice_impulsive
+        has_impulsive = slice_imp.stop > slice_imp.start
 
         lam_prox = self._pen["lam_prox"]  # (N, n_x + n_u)
         lam_cost = self._pen["lam_cost"]  # scalar or (n_x,)
@@ -739,6 +805,8 @@ class MoreauPTRSolver(PTRSolver):
         B_d = self._dyn["B_d"]  # (N-1, n_x, n_u)
         C_d = self._dyn["C_d"]  # (N-1, n_x, n_u)
         x_prop = self._dyn["x_prop"]  # (N-1, n_x)
+        E_d_arr = self._dyn["E_d"]  # (N, n_x, n_u) or None
+        x_prop_plus_arr = self._dyn["x_prop_plus"]  # (N, n_x) or None
 
         lam_cost_arr = np.broadcast_to(lam_cost, (settings.sim.n_states,))
 
@@ -801,15 +869,23 @@ class MoreauPTRSolver(PTRSolver):
             for j in range(n_u):
                 emit([1.0, -1.0], inv_S_u[j] * (u_bar[k, j] - c_u[j]))
 
-        # Dynamics (continuous FOH):
-        #   x[k] − A_blk·dx[k-1] − B_blk·du[k-1] − C_blk·du[k] − nu[k-1]
-        #     = inv_S_x·(x_prop[k-1] − c_x)
+        # Dynamics (continuous FOH, with optional impulsive coupling at node k):
+        #   x[k] − A_blk·dx[k-1] − B_blk·du[k-1] − C_blk·du[k]
+        #        − E_blk·du[k][slice_imp] − nu[k-1]
+        #     = inv_S_x·(x_prop_plus[k] − c_x)   if has_impulsive
+        #     = inv_S_x·(x_prop[k-1]    − c_x)   otherwise
+        # Mirrors CVXPyPTRSolver.constraints at cvxpy_ptr_solver.py:506-530.
         for k in range(1, N):
             kp = k - 1
             A_blk = (inv_S_x[:, None] * A_d[kp]) * S_x[None, :]
-            B_blk = (inv_S_x[:, None] * B_d[kp]) * self._S_u_diag[None, :]
-            C_blk = (inv_S_x[:, None] * C_d[kp]) * self._S_u_diag[None, :]
-            rhs_k = inv_S_x * (x_prop[kp] - c_x)
+            B_blk = (inv_S_x[:, None] * B_d[kp]) * S_u[None, :]
+            C_blk = (inv_S_x[:, None] * C_d[kp]) * S_u[None, :]
+            if has_impulsive:
+                E_blk = (inv_S_x[:, None] * E_d_arr[k]) * S_u[None, :]
+                rhs_k = inv_S_x * (x_prop_plus_arr[k] - c_x)
+            else:
+                E_blk = None
+                rhs_k = inv_S_x * (x_prop[kp] - c_x)
             for i in range(n_x):
                 # Coefficients in the same col order as _structural_pass added them,
                 # then sorted by scipy within the row — values line up correctly.
@@ -818,7 +894,10 @@ class MoreauPTRSolver(PTRSolver):
                     coeffs.append(-A_blk[i, j])  # dx[kp, j]
                 for j in range(n_u):
                     coeffs.append(-B_blk[i, j])  # du[kp, j]
-                    coeffs.append(-C_blk[i, j])  # du[k,  j]
+                    c_kj = -C_blk[i, j]
+                    if has_impulsive and slice_imp.start <= j < slice_imp.stop:
+                        c_kj -= E_blk[i, j]
+                    coeffs.append(c_kj)  # du[k, j]
                 coeffs.append(-1.0)  # nu[kp, i]
                 emit(coeffs, rhs_k[i])
 
@@ -839,15 +918,25 @@ class MoreauPTRSolver(PTRSolver):
                 coeffs.append(-1.0)  # nu_vb[c, node]
                 emit(coeffs, -g[node])
 
-        # Fix boundary conditions
+        # Fix boundary conditions.  Under impulsive control the initial Fix
+        # row couples x[0, i] to du[0, slice_imp] via the linearized impulse
+        # Jacobian (CVXPy reference: cvxpy_ptr_solver.py:484-495).  Emit
+        # coefficients in ascending column-index order so they match the
+        # CSR sort applied to the structural pass.
         for i in range(settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop):
             if settings.sim.x.initial_type[i] == "Fix":
-                if self._x_init is None:
-                    raise RuntimeError(
-                        f"Fix initial condition on state {i} requires x_init; "
-                        "call update_boundary_conditions() before solve()."
-                    )
-                emit([S_x[i]], self._x_init[i] - c_x[i])
+                if has_impulsive:
+                    coeffs = [S_x[i]]
+                    for j in range(slice_imp.start, slice_imp.stop):
+                        coeffs.append(-E_d_arr[0, i, j] * S_u[j])
+                    emit(coeffs, x_prop_plus_arr[0, i] - c_x[i])
+                else:
+                    if self._x_init is None:
+                        raise RuntimeError(
+                            f"Fix initial condition on state {i} requires x_init; "
+                            "call update_boundary_conditions() before solve()."
+                        )
+                    emit([S_x[i]], self._x_init[i] - c_x[i])
             if settings.sim.x.final_type[i] == "Fix":
                 if self._x_term is None:
                     raise RuntimeError(
@@ -855,6 +944,13 @@ class MoreauPTRSolver(PTRSolver):
                         "call update_boundary_conditions() before solve()."
                     )
                 emit([S_x[i]], self._x_term[i] - c_x[i])
+
+        # Impulsive zero-pin equalities: u[node, j] = −inv_S_u[j]·c_u[j].
+        # Mirrors CVXPy's lowering of ``u_nonscaled[node][slice_imp] == 0``.
+        for nodes, ctrl_slice in self._impulsive_pins:
+            for node in nodes:
+                for j in range(ctrl_slice.start, ctrl_slice.stop):
+                    emit([1.0], -inv_S_u[j] * c_u[j])
 
         # Uniform time grid: u[k,j] − u[k-1,j] = 0
         if settings.sim._uniform_time_grid:
