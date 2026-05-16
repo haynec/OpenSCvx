@@ -69,9 +69,9 @@ from scipy import sparse as sp
 from .ptr_solver import PTRSolver, PTRSolveResult
 
 try:
+    import jax.numpy as jnp
     import moreau
     from moreau.jax import Solver as _MoreauJaxSolver
-    import jax.numpy as jnp
 
     _MOREAU_AVAILABLE = True
 except ImportError:  # pragma: no cover — exercised by the install-error test
@@ -123,7 +123,7 @@ class _ConicLayout:
     sl_du: slice = field(init=False)
     sl_nu: slice = field(init=False)
     sl_nu_vb: List[slice] = field(init=False)
-    sl_t_vc: slice = field(init=False)      # (N-1)*n_x epigraph vars for |nu|
+    sl_t_vc: slice = field(init=False)  # (N-1)*n_x epigraph vars for |nu|
     sl_t_vb: List[slice] = field(init=False)  # N epigraph vars per nodal constraint
     n_z: int = field(init=False)
 
@@ -249,7 +249,7 @@ class MoreauPTRSolver(PTRSolver):
 
         # Fixed CSR structure stored after initialize().
         self._P_diag_slots: Optional[np.ndarray] = None
-        self._P_n_dx: int = 0   # N*n_x, for indexing into P_data
+        self._P_n_dx: int = 0  # N*n_x, for indexing into P_data
         self._coo_rows: Optional[np.ndarray] = None
         self._coo_cols: Optional[np.ndarray] = None
         self._n_con: int = 0
@@ -367,7 +367,7 @@ class MoreauPTRSolver(PTRSolver):
 
         # Build CSR for P (diagonal on dx/du slots only).
         L = self.layout
-        N, n_x, n_u = L.N, L.n_x, L.n_u
+        N, n_x = L.N, L.n_x
         dx_cols = np.arange(L.sl_dx.start, L.sl_dx.stop, dtype=np.int32)
         du_cols = np.arange(L.sl_du.start, L.sl_du.stop, dtype=np.int32)
         self._P_diag_slots = np.concatenate([dx_cols, du_cols])
@@ -683,16 +683,16 @@ class MoreauPTRSolver(PTRSolver):
         c_x = self._c_x
         c_u = self._c_u
 
-        lam_prox = self._pen["lam_prox"]         # (N, n_x + n_u)
-        lam_cost = self._pen["lam_cost"]          # scalar or (n_x,)
-        lam_vc = self._pen["lam_vc"]             # (N-1, n_x)
-        lam_vb_nodal = self._pen["lam_vb_nodal"] # (N, n_nodal or 1)
+        lam_prox = self._pen["lam_prox"]  # (N, n_x + n_u)
+        lam_cost = self._pen["lam_cost"]  # scalar or (n_x,)
+        lam_vc = self._pen["lam_vc"]  # (N-1, n_x)
+        lam_vb_nodal = self._pen["lam_vb_nodal"]  # (N, n_nodal or 1)
 
-        x_bar = self._dyn["x_bar"]    # (N, n_x)
-        u_bar = self._dyn["u_bar"]    # (N, n_u)
-        A_d = self._dyn["A_d"]        # (N-1, n_x, n_x)
-        B_d = self._dyn["B_d"]        # (N-1, n_x, n_u)
-        C_d = self._dyn["C_d"]        # (N-1, n_x, n_u)
+        x_bar = self._dyn["x_bar"]  # (N, n_x)
+        u_bar = self._dyn["u_bar"]  # (N, n_u)
+        A_d = self._dyn["A_d"]  # (N-1, n_x, n_x)
+        B_d = self._dyn["B_d"]  # (N-1, n_x, n_u)
+        C_d = self._dyn["C_d"]  # (N-1, n_x, n_u)
         x_prop = self._dyn["x_prop"]  # (N-1, n_x)
 
         lam_cost_arr = np.broadcast_to(lam_cost, (settings.sim.n_states,))
@@ -768,13 +768,13 @@ class MoreauPTRSolver(PTRSolver):
             for i in range(n_x):
                 # Coefficients in the same col order as _structural_pass added them,
                 # then sorted by scipy within the row — values line up correctly.
-                coeffs: List[float] = [1.0]            # x[k, i]
+                coeffs: List[float] = [1.0]  # x[k, i]
                 for j in range(n_x):
-                    coeffs.append(-A_blk[i, j])         # dx[kp, j]
+                    coeffs.append(-A_blk[i, j])  # dx[kp, j]
                 for j in range(n_u):
-                    coeffs.append(-B_blk[i, j])         # du[kp, j]
-                    coeffs.append(-C_blk[i, j])         # du[k,  j]
-                coeffs.append(-1.0)                     # nu[kp, i]
+                    coeffs.append(-B_blk[i, j])  # du[kp, j]
+                    coeffs.append(-C_blk[i, j])  # du[k,  j]
+                coeffs.append(-1.0)  # nu[kp, i]
                 emit(coeffs, rhs_k[i])
 
         # Linearized nodal constraints:
@@ -782,16 +782,16 @@ class MoreauPTRSolver(PTRSolver):
         jax_constraints = self._jax_constraints
         for c_idx, constraint in enumerate(jax_constraints.nodal):
             data = self._cons["nodal"][c_idx]
-            g = data["g"]          # (N,)
+            g = data["g"]  # (N,)
             grad_x = data["grad_g_x"]  # (N, n_x)
             grad_u = data["grad_g_u"]  # (N, n_u)
             for node in constraint.nodes:
                 coeffs = []
                 for j in range(n_x):
-                    coeffs.append(grad_x[node, j])   # dx[node, j]
+                    coeffs.append(grad_x[node, j])  # dx[node, j]
                 for j in range(n_u):
-                    coeffs.append(grad_u[node, j])   # du[node, j]
-                coeffs.append(-1.0)                  # nu_vb[c, node]
+                    coeffs.append(grad_u[node, j])  # du[node, j]
+                coeffs.append(-1.0)  # nu_vb[c, node]
                 emit(coeffs, -g[node])
 
         # Fix boundary conditions
@@ -864,9 +864,9 @@ class MoreauPTRSolver(PTRSolver):
                 # x[i-1,idx] < x[i,idx] in column index, so after sort:
                 #   data = [−scale (at x[i-1]), +scale (at x[i])]
                 # → s = x_max − (−scale·x[i-1] + scale·x[i]) = x_max − scale·(x[i]−x[i-1]) ✓
-                emit([scale, -scale], x_max_un)    # col order: x[i], x[i-1]
+                emit([scale, -scale], x_max_un)  # col order: x[i], x[i-1]
                 # Row for −direction: s = x_max − scale·(x[i-1]−x[i]) ≥ 0
-                emit([-scale, scale], x_max_un)    # col order: x[i], x[i-1]
+                emit([-scale, scale], x_max_un)  # col order: x[i], x[i-1]
 
         # Pos epigraph: t_vb[c,k] − nu_vb[c,k] ≥ 0
         # structural col order: nu_vb first, t_vb second (nu_vb < t_vb in layout)
@@ -874,12 +874,12 @@ class MoreauPTRSolver(PTRSolver):
         for c_idx in range(L.n_nodal):
             for k in range(N):
                 # [nu_vb coeff, t_vb coeff] after sorting by col
-                emit([1.0, -1.0], 0.0)   # s = 0 − (nu_vb − t_vb) = t_vb − nu_vb ≥ 0
+                emit([1.0, -1.0], 0.0)  # s = 0 − (nu_vb − t_vb) = t_vb − nu_vb ≥ 0
 
         # Pos epigraph non-negativity: t_vb[c,k] ≥ 0
         for c_idx in range(L.n_nodal):
             for k in range(N):
-                emit([-1.0], 0.0)   # s = 0 − (−t_vb) = t_vb ≥ 0
+                emit([-1.0], 0.0)  # s = 0 − (−t_vb) = t_vb ≥ 0
 
         # ================================================================
         # SOC rows: SOC(2) for |nu[k,j]| ≤ t_vc[k,j]
@@ -889,8 +889,8 @@ class MoreauPTRSolver(PTRSolver):
         # ================================================================
         for k in range(N - 1):
             for j in range(n_x):
-                emit([-1.0], 0.0)   # row for t_vc
-                emit([-1.0], 0.0)   # row for nu
+                emit([-1.0], 0.0)  # row for t_vc
+                emit([-1.0], 0.0)  # row for nu
 
         return (
             P_data,
