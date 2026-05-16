@@ -15,10 +15,9 @@ models (drones, humanoids) are detected and handled automatically::
         ...
     )
 
-The legacy `mjx_byof` helper is retained for users who need to supply their
-own State/Control objects (e.g. to interleave with extra custom states or
-rename them). `mjx_dynamics` is the underlying BYOF callable factory used by
-both, exposed publicly for advanced users.
+For advanced users who need custom State/Control names (or to interleave
+them with extra custom states), `mjx_dynamics` is exposed as the underlying
+BYOF callable factory — assemble your own ``byof["dynamics"]`` dict from it.
 
 All MJX symbols delegate lazily so ``mujoco.mjx`` is only imported when
 actually used. The ``menagerie`` submodule is also loaded lazily.
@@ -44,13 +43,6 @@ from .base import DynamicsAdapter
 from .mjx import MjxDynamics
 
 
-def mjx_byof(*args: Any, **kwargs: Any) -> Any:
-    """Lazy delegate; imports ``mujoco.mjx`` on first call."""
-    from .mjx import mjx_byof as _mjx_byof
-
-    return _mjx_byof(*args, **kwargs)
-
-
 def mjx_dynamics(*args: Any, **kwargs: Any) -> Any:
     """Lazy delegate; imports ``mujoco.mjx`` on first call."""
     from .mjx import mjx_dynamics as _mjx_dynamics
@@ -69,7 +61,6 @@ def __getattr__(name: str) -> Any:
 __all__ = [
     "DynamicsAdapter",
     "MjxDynamics",
-    "mjx_byof",
     "mjx_dynamics",
     "menagerie",
 ]

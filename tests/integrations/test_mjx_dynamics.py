@@ -1,9 +1,8 @@
-"""Unit tests for the :class:`MjxDynamics` adapter and dispatch.
+"""Unit tests for the `MjxDynamics` adapter and `Problem` dispatch.
 
-These tests cover the new first-class adapter path (``dynamics=ox.MjxDynamics(...)``)
-introduced on top of the existing ``mjx_byof`` BYOF helper. The lower-level
-callable contract is already covered by ``test_mjx.py`` — this file focuses on
-the adapter surface, the ``Problem`` dispatch, and the BYOF-merge helper.
+The lower-level callable contract (``mjx_dynamics``, ``_free_joint_qpos_dynamics``)
+is covered by ``test_mjx.py``; this file focuses on the adapter surface, the
+``Problem`` dispatch, and the BYOF-merge helper.
 """
 
 from __future__ import annotations
@@ -369,3 +368,70 @@ def test_mjx_dynamics_callables_run_after_slice_assignment(cartpole_mjx_model):
     out = qvel_fn(x, u, 0, {})
     assert out.shape == (int(cartpole_mjx_model.nv),)
     np.testing.assert_array_equal(np.array(out).shape, (cartpole_mjx_model.nv,))
+
+
+# ===========================================================================
+# Joint-structure validation
+# ===========================================================================
+
+
+_BALL_JOINT_XML = """
+<mujoco>
+  <worldbody>
+    <body>
+      <joint type="ball"/>
+      <geom type="sphere" size="0.1" mass="1"/>
+    </body>
+  </worldbody>
+</mujoco>
+"""
+
+_FREE_AFTER_HINGE_XML = """
+<mujoco>
+  <worldbody>
+    <body name="hinged">
+      <joint type="hinge" axis="0 0 1"/>
+      <geom type="sphere" size="0.1" mass="1"/>
+    </body>
+    <body name="floater">
+      <freejoint/>
+      <geom type="sphere" size="0.1" mass="1"/>
+    </body>
+  </worldbody>
+</mujoco>
+"""
+
+
+def _put_model(xml: str):
+    import mujoco
+    import mujoco.mjx as mjx
+
+    mj_model = mujoco.MjModel.from_xml_string(xml)
+    mj_model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
+    return mjx.put_model(mj_model)
+
+
+@requires_mujoco
+def test_mjx_dynamics_rejects_ball_joint():
+    mjx_model = _put_model(_BALL_JOINT_XML)
+    with pytest.raises(NotImplementedError, match="ball joints"):
+        ox.MjxDynamics(mjx_model)
+
+
+@requires_mujoco
+def test_mjx_dynamics_rejects_free_joint_after_hinge():
+    mjx_model = _put_model(_FREE_AFTER_HINGE_XML)
+    with pytest.raises(NotImplementedError, match="free joints to come before"):
+        ox.MjxDynamics(mjx_model)
+
+
+@requires_mujoco
+def test_mjx_dynamics_accepts_slide_plus_hinge(cartpole_mjx_model):
+    # No exception — the cartpole has slide + hinge joints in that order.
+    ox.MjxDynamics(cartpole_mjx_model)
+
+
+@requires_mujoco
+def test_mjx_dynamics_accepts_pure_free_joint(free_body_mjx_model):
+    # No exception — a single free joint is supported.
+    ox.MjxDynamics(free_body_mjx_model)

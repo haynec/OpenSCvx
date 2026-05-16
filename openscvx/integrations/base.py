@@ -81,8 +81,8 @@ def _merge_byof(user_byof: dict | None, extra_byof: dict) -> dict:
             raise ValueError(
                 "DynamicsAdapter produced byof['dynamics'] entries that "
                 f"collide with user-provided byof['dynamics']: {sorted(collisions)}. "
-                "Drop the duplicate keys from your byof dict, or fall back to "
-                "the lower-level helper (e.g. mjx_byof) for full control."
+                "Drop the duplicate keys from your byof dict, or drop the adapter "
+                "and assemble byof['dynamics'] manually for full control."
             )
         merged["dynamics"] = {**user_dyn, **extra_dyn}
 

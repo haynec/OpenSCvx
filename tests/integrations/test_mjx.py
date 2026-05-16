@@ -7,7 +7,8 @@ Coverage
                        validation, lazy slice resolution, extra_postprocess hook.
 * ``_free_joint_qpos_dynamics`` — callable/output-shape contract and argument
                        handling (without re-testing quaternion math internals).
-* ``mjx_byof`` and ``integrations.__init__`` — high-level public interface.
+
+The high-level `MjxDynamics` adapter is covered in ``test_mjx_dynamics.py``.
 """
 
 from __future__ import annotations
@@ -298,69 +299,3 @@ class TestFreeJointQposDynamics:
         np.testing.assert_allclose(np.array(out1), np.array(out2), atol=1e-9)
 
 
-# ===========================================================================
-# integrations public API  (__init__.py lazy exports)
-# ===========================================================================
-
-
-@requires_mujoco
-class TestMjxByof:
-    """Tests for the high-level ``mjx_byof`` convenience wrapper."""
-
-    def test_no_free_joints_returns_qvel_only(self, cartpole_mjx_model):
-        """nq == nv model: mjx_byof should only include 'qvel'."""
-        from openscvx.integrations.mjx import mjx_byof
-
-        nq, nv, nu = 2, 2, 1
-        result = mjx_byof(
-            cartpole_mjx_model,
-            qpos=slice(0, nq),
-            qvel=slice(nq, nq + nv),
-            ctrl=slice(0, nu),
-        )
-        assert set(result.keys()) == {"qvel"}
-        assert callable(result["qvel"])
-
-    def test_free_joint_model_returns_qpos_and_qvel(self):
-        """nq > nv model: mjx_byof must include both 'qpos' and 'qvel'."""
-        import mujoco
-        import mujoco.mjx as mjx
-
-        from openscvx.integrations.mjx import mjx_byof
-
-        _FREE_XML = """
-        <mujoco><option gravity="0 0 -9.81"/>
-          <worldbody>
-            <body name="b"><freejoint/><geom type="sphere" size="0.1" mass="1"/></body>
-          </worldbody>
-        </mujoco>"""
-        mj_model = mujoco.MjModel.from_xml_string(_FREE_XML)
-        mj_model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
-        mjx_model = mjx.put_model(mj_model)
-        assert mjx_model.nq == 7 and mjx_model.nv == 6
-
-        result = mjx_byof(
-            mjx_model,
-            qpos=slice(0, 7),
-            qvel=slice(7, 13),
-            ctrl=slice(0, 0),
-        )
-        assert set(result.keys()) == {"qpos", "qvel"}
-        assert callable(result["qpos"])
-        assert callable(result["qvel"])
-
-    def test_qvel_callable_output_shape(self, cartpole_mjx_model):
-        """qvel callable must return shape (nv,)."""
-        from openscvx.integrations.mjx import mjx_byof
-
-        nq, nv, nu = 2, 2, 1
-        result = mjx_byof(
-            cartpole_mjx_model,
-            qpos=slice(0, nq),
-            qvel=slice(nq, nq + nv),
-            ctrl=slice(0, nu),
-        )
-        x = jnp.zeros(nq + nv)
-        u = jnp.zeros(nu)
-        out = result["qvel"](x, u, 0, {})
-        assert out.shape == (nv,)
