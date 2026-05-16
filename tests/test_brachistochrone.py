@@ -18,6 +18,53 @@ import pytest
 
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
 
+try:
+    import cvxpygen  # noqa: F401
+    import qocogen  # noqa: F401
+
+    HAS_CVXPYGEN = True
+except ImportError:
+    HAS_CVXPYGEN = False
+
+requires_cvxpygen = pytest.mark.skipif(
+    not HAS_CVXPYGEN,
+    reason="cvxpygen and qocogen not installed (pip install openscvx[cvxpygen])",
+)
+
+_BRACHISTOCHRONE_ALGORITHM = {
+    "autotuner": "ConstantProximalWeight",
+    "lam_prox": 1e0,
+    "lam_cost": 6e-1,
+    "ep_tr": 1e-5,
+    "ep_vb": 1e-5,
+    "ep_vc": 1e-9,
+}
+
+
+def _make_brachistochrone_problem(solver):
+    """Build the example brachistochrone problem with a custom solver configuration."""
+    from examples.abstract.brachistochrone import (
+        constraint_exprs,
+        controls,
+        dynamics,
+        n,
+        states,
+        time,
+    )
+    from openscvx import Problem
+
+    return Problem(
+        dynamics=dynamics,
+        states=states,
+        controls=controls,
+        time=time,
+        constraints=constraint_exprs,
+        N=n,
+        float_dtype="float64",
+        algorithm=_BRACHISTOCHRONE_ALGORITHM,
+        solver=solver,
+    )
+
 
 def _print_comparison_metrics(comparison, test_name="Brachistochrone"):
     """Print comparison metrics for brachistochrone validation."""
@@ -139,6 +186,35 @@ def test_example():
     _assert_brachistochrone_accuracy(comparison, problem, result)
 
     # Clean up JAX caches
+    jax.clear_caches()
+
+
+@requires_cvxpygen
+def test_cvxpygen(tmp_path, monkeypatch):
+    """Brachistochrone with CVXPyGen + qocogen code generation."""
+    monkeypatch.chdir(tmp_path)
+
+    from tests.test_examples import sync_jax_float_config_for_problem
+
+    solver = {
+        "cvx_solver": "qocogen",
+        "cvxpygen": True,
+        "cvxpygen_override": True,
+        "solver_args": {"abstol": 1e-8, "reltol": 1e-10},
+    }
+    problem = _make_brachistochrone_problem(solver)
+    sync_jax_float_config_for_problem(problem)
+
+    if hasattr(problem.settings, "dev"):
+        problem.settings.dev.printing = False
+
+    problem.initialize()
+    problem.solve()
+    result = problem.post_process()
+
+    assert result["converged"], "Brachistochrone (cvxpygen) failed to converge"
+    assert (tmp_path / "solver").is_dir(), "cvxpygen did not create solver/ directory"
+
     jax.clear_caches()
 
 
