@@ -9741,13 +9741,13 @@ of the abstract <code>PTRSolver</code> base. Three backends ship today:</p>
 <td>QPAX</td>
 <td><code>QPAXPTRSolver</code></td>
 <td><code>solver={"backend": "qpax"}</code></td>
-<td>JAX-native QP via <code>qpax.solve_qp</code>. Flat <code>(Q, q, A, b, G, h)</code> assembly. Supports box / dynamics / CTCS / boundary-Fix; <strong>rejects</strong> user <code>.convex()</code>, cross-node, and impulsive at <code>initialize()</code> with a clear "use <code>CVXPyPTRSolver</code>" message. Enables a path toward an end-to-end JAX-differentiable SCP loop in follow-up work.</td>
+<td>JAX-native QP via <code>qpax.solve_qp</code>. Flat <code>(Q, q, A, b, G, h)</code> assembly. Supports box / dynamics (continuous and impulsive) / CTCS / boundary-Fix; <strong>rejects</strong> user <code>.convex()</code> and cross-node at <code>initialize()</code> with a clear "use <code>CVXPyPTRSolver</code>" message. Enables a path toward an end-to-end JAX-differentiable SCP loop in follow-up work.</td>
 </tr>
 <tr>
 <td>Moreau</td>
 <td><code>MoreauPTRSolver</code></td>
 <td><code>solver={"backend": "moreau"}</code></td>
-<td>JAX-native conic solver (<code>moreau.jax.Solver</code>). Sparse CSR assembly; SOC epigraphs for the L1 / pos PTR penalties (fewer variables and rows than QPAX). Warm-starts between SCP iterations. Same supported subset as QPAX. Paves the way for user <code>.convex()</code> SOC support in a follow-up.</td>
+<td>JAX-native conic solver (<code>moreau.jax.Solver</code>). Sparse CSR assembly; SOC epigraphs for the L1 / pos PTR penalties (fewer variables and rows than QPAX). Warm-starts between SCP iterations. Same supported subset as QPAX (continuous and impulsive dynamics). Paves the way for user <code>.convex()</code> SOC support in a follow-up.</td>
 </tr>
 </tbody>
 </table>
