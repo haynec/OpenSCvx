@@ -1,28 +1,33 @@
-"""MuJoCo MJX dynamics adapters for OpenSCvx BYOF.
+"""MuJoCo MJX dynamics adapters for OpenSCvx.
 
-The recommended entry-point is :func:`mjx_byof`, which returns a complete
-``byof["dynamics"]`` dict and automatically handles free-joint quaternion
-kinematics — no separate imports required:
+The recommended entry-point is `MjxDynamics`, a `DynamicsAdapter` that goes
+directly into the ``dynamics=`` slot of `Problem` and exposes the synthesized
+State/Control objects on ``.states`` / ``.controls``::
 
-    byof = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
+    dyn = ox.MjxDynamics(mjx_model)
+    problem = ox.Problem(
+        dynamics=dyn,
+        states=dyn.states,
+        controls=dyn.controls,
+        ...
+    )
 
-For models **without** free joints (cartpoles, manipulators, etc.) the
-returned dict contains only ``"qvel"``, and qpos kinematics must still be
-specified symbolically via ``dynamics={"qpos": qvel}``.  For models **with**
-free joints (drones, humanoids) ``"qpos"`` is included automatically and no
-symbolic dynamics entry is needed.
+Free-joint quaternion kinematics (``nq > nv`` models such as drones or
+humanoids) are detected and handled automatically.
 
-The lower-level :func:`mjx_dynamics` is also public for advanced users who
-need direct access to the BYOF callable for the ``qvel`` derivative.
+For advanced users, the lower-level `mjx_dynamics` callable factory and the
+legacy `mjx_byof` helper remain available.
 
 Note:
     Time dilation is handled automatically by the BYOF lowering pipeline; all
     functions return physical (un-dilated) quantities.
 """
 
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
 
 import jax.numpy as jnp
+
+from openscvx.integrations.base import DynamicsAdapter
 
 if TYPE_CHECKING:
     from openscvx.symbolic.expr.control import Control
@@ -257,9 +262,16 @@ def mjx_byof(
 ) -> dict:
     """Return a complete ``byof["dynamics"]`` dict for a MuJoCo MJX model.
 
-    This is the recommended high-level entry-point.  It inspects the model's
-    ``nq`` and ``nv`` to detect free joints and automatically includes the
-    quaternion kinematics callable for ``qpos`` when needed.
+    Note:
+        `MjxDynamics` is the preferred entry-point — it goes directly in the
+        ``dynamics=`` slot of `Problem` and constructs the matching
+        State/Control objects for you. Use `mjx_byof` only when you need to
+        supply custom State/Control objects (e.g. interleave them with other
+        states) or otherwise want full control over names.
+
+    It inspects the model's ``nq`` and ``nv`` to detect free joints and
+    automatically includes the quaternion kinematics callable for ``qpos``
+    when needed.
 
     Args:
         mjx_model: A model produced by :func:`mujoco.mjx.put_model`.
@@ -321,3 +333,103 @@ def mjx_byof(
         )
 
     return result
+
+
+class MjxDynamics(DynamicsAdapter):
+    """First-class MJX dynamics adapter for `Problem`.
+
+    Wraps a ``mujoco.mjx`` model so it can be passed directly to the
+    ``dynamics=`` argument of `Problem`. The adapter
+    constructs default ``qpos`` / ``qvel`` State objects and a ``ctrl``
+    Control matching the model's ``nq`` / ``nv`` / ``nu``, exposes them via
+    ``.states`` / ``.controls``, and routes the MJX forward dynamics through
+    the BYOF channel internally — without requiring the user to know about
+    BYOF at all.
+
+    Example:
+        Cartpole (``nq == nv``)::
+
+            mj_model = mujoco.MjModel.from_xml_path("cartpole.xml")
+            mj_model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
+            mjx_model = mjx.put_model(mj_model)
+
+            dyn = ox.MjxDynamics(mjx_model)
+            problem = ox.Problem(
+                dynamics=dyn,
+                states=dyn.states,
+                controls=dyn.controls,
+                ...
+            )
+
+        Quadrotor with a free joint (``nq > nv``) — quaternion kinematics
+        are inserted automatically::
+
+            dyn = ox.MjxDynamics(mjx_model)  # nq=7, nv=6
+            problem = ox.Problem(
+                dynamics=dyn, states=dyn.states, controls=dyn.controls, ...
+            )
+
+    Custom State/Control names or shapes are *not* supported here on purpose
+    — the whole point of the adapter is "I don't want to think about names."
+    Drop to the lower-level `mjx_byof` helper if you need that control.
+    """
+
+    def __init__(
+        self,
+        mjx_model: Any,
+        *,
+        return_component: str = "qacc",
+        extra_postprocess: Optional[Callable[[Any], Any]] = None,
+    ) -> None:
+        from openscvx.symbolic.expr.control import Control
+        from openscvx.symbolic.expr.state import State
+
+        self.mjx_model = mjx_model
+        self.return_component = return_component
+        self.extra_postprocess = extra_postprocess
+
+        nq = int(mjx_model.nq)
+        nv = int(mjx_model.nv)
+        nu = int(mjx_model.nu)
+
+        self._qpos = State("qpos", shape=(nq,))
+        self._qvel = State("qvel", shape=(nv,))
+        self._ctrl = Control("ctrl", shape=(nu,))
+
+        self.states: list[State] = [self._qpos, self._qvel]
+        self.controls: list[Control] = [self._ctrl]
+
+    def expand(self) -> Tuple[dict, dict]:
+        """Return ``(dynamics_dict, byof_dict)`` for this MJX model.
+
+        - ``nq == nv``: ``dynamics_dict = {"qpos": qvel}`` (symbolic
+          kinematic identity), ``byof_dict["dynamics"] = {"qvel": ...}``.
+        - ``nq > nv``: ``dynamics_dict = {}``, ``byof_dict["dynamics"]``
+          contains both ``"qpos"`` (quaternion kinematics) and ``"qvel"``.
+        """
+        nq = int(self.mjx_model.nq)
+        nv = int(self.mjx_model.nv)
+
+        byof_dynamics: dict = {
+            "qvel": mjx_dynamics(
+                self.mjx_model,
+                qpos=self._qpos,
+                qvel=self._qvel,
+                ctrl=self._ctrl,
+                return_component=self.return_component,
+                extra_postprocess=self.extra_postprocess,
+            ),
+        }
+
+        n_free = nq - nv
+        if n_free > 0:
+            byof_dynamics["qpos"] = _free_joint_qpos_dynamics(
+                qpos=self._qpos,
+                qvel=self._qvel,
+                n_free_joints=n_free,
+            )
+            dynamics_dict: dict = {}
+        else:
+            dynamics_dict = {"qpos": self._qvel}
+
+        return dynamics_dict, {"dynamics": byof_dynamics}
