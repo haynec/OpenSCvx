@@ -174,12 +174,14 @@ def test_moreau_spec_named_fields_build_correctly():
     with the right solver_args."""
     from openscvx.solvers import resolve_solver_config
 
-    spec = resolve_solver_config({
-        "backend": "moreau",
-        "max_iter": 300,
-        "device": "cpu",
-        "tol_gap_abs": 1e-10,
-    })
+    spec = resolve_solver_config(
+        {
+            "backend": "moreau",
+            "max_iter": 300,
+            "device": "cpu",
+            "tol_gap_abs": 1e-10,
+        }
+    )
     solver = spec.build()
     assert isinstance(solver, MoreauPTRSolver)
     assert solver.solver_args["max_iter"] == 300

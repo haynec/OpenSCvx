@@ -291,7 +291,9 @@ class MoreauPTRSolver(PTRSolver):
             )
         merged = {**_named, **_extra}
 
-        _ipm = {k: v for k, v in [("tol_gap_abs", tol_gap_abs), ("tol_feas", tol_feas)] if v is not None}
+        _ipm = {
+            k: v for k, v in [("tol_gap_abs", tol_gap_abs), ("tol_feas", tol_feas)] if v is not None
+        }
         if _ipm:
             existing_ipm = merged.get("ipm_settings", {})
             if not isinstance(existing_ipm, dict):
