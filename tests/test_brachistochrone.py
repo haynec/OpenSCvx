@@ -16,8 +16,8 @@ import jax
 import numpy as np
 import pytest
 
-from tests.brachistochrone_analytical import compare_trajectory_to_analytical
 from tests._marks import _MOREAU_OK
+from tests.brachistochrone_analytical import compare_trajectory_to_analytical
 
 try:
     import cvxpygen  # noqa: F401
