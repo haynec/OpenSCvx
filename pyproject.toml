@@ -46,6 +46,9 @@ cvxpygen = [
 qpax = [
     "qpax>=0.1.1",
 ]
+moreau = [
+    "moreau>=0.3.3",
+]
 stl = [
     "stljax",
 ]

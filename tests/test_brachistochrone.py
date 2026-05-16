@@ -16,6 +16,7 @@ import jax
 import numpy as np
 import pytest
 
+from tests._marks import _MOREAU_OK
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
 
 try:
@@ -319,18 +320,19 @@ def test_monolithic():
 
 @pytest.mark.parametrize("with_parameters", [False, True], ids=["literal-g", "param-g"])
 @pytest.mark.parametrize("constraint_type", ["ctcs", "nodal"])
-@pytest.mark.parametrize("backend", ["cvxpy", "qpax"])
+@pytest.mark.parametrize("backend", ["cvxpy", "qpax", "moreau"])
 def test_backend(backend, constraint_type, with_parameters):
     """End-to-end brachistochrone with each PTRSolver backend, across
     constraint formulations (CTCS box vs nodal) and parameter usage
     (gravity baked in vs ``ox.Parameter``).
 
-    The matrix exists so QPAX is exercised on the same shapes the drone
-    examples use — nodal constraints and ``ox.Parameter`` — not only the
-    easy CTCS-with-literal-constants case. Compares against the analytical
-    cycloid; the same accuracy thresholds apply regardless of backend (QPAX
-    assembles the same convex subproblem, so SCP convergence should land on
-    the same minimizer to within the backends' inner solver tolerances)."""
+    The matrix exists so the JAX-side backends (QPAX, Moreau) are exercised
+    on the same shapes the drone examples use — nodal constraints and
+    ``ox.Parameter`` — not only the easy CTCS-with-literal-constants case.
+    Compares against the analytical cycloid; the same accuracy thresholds
+    apply regardless of backend (each backend assembles the same convex
+    subproblem, so SCP convergence should land on the same minimizer to
+    within the backends' inner solver tolerances)."""
     import jax.numpy as jnp
 
     import openscvx as ox
@@ -338,6 +340,8 @@ def test_backend(backend, constraint_type, with_parameters):
 
     if backend == "qpax":
         pytest.importorskip("qpax")
+    if backend == "moreau" and not _MOREAU_OK:
+        pytest.skip("moreau not installed or license key not found (pip install openscvx[moreau])")
 
     # Problem parameters — mirrors test_monolithic so we cover the same
     # boundary conditions and analytical reference both ways.
@@ -373,7 +377,8 @@ def test_backend(backend, constraint_type, with_parameters):
 
     # CTCS wraps the box as LICQ-style absolute-value rows; nodal enforces
     # the inequality at each node directly. Both produce the same minimizer
-    # on this problem, but they exercise different QPAX assembly paths.
+    # on this problem, but they exercise different assembly paths on the
+    # JAX-side backends.
     if constraint_type == "ctcs":
         constraint_exprs = [ox.ctcs(x <= x.max), ox.ctcs(x.min <= x)]
     else:  # nodal
@@ -397,11 +402,11 @@ def test_backend(backend, constraint_type, with_parameters):
         licq_max=1e-8,
         algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
         solver={"backend": backend},
-        # QPAX consumes the global JAX dtype, so float32 caps the QP's
-        # condition number aggressively. The CVXPy backend goes through
-        # QOCO's own float64 path and isn't affected — but pinning float64
-        # for both backends keeps the test apples-to-apples. The float32
-        # failure mode is covered by ``test_backend_float32_raises``.
+        # QPAX / Moreau consume the global JAX dtype, so float32 caps the
+        # QP's condition number aggressively. The CVXPy backend goes
+        # through QOCO's own float64 path and isn't affected — but pinning
+        # float64 for all backends keeps the test apples-to-apples. The
+        # float32 failure mode is covered by ``test_backend_float32_raises``.
         float_dtype="float64",
     )
 
@@ -432,12 +437,11 @@ def test_backend(backend, constraint_type, with_parameters):
         f"Brachistochrone ({backend}, {constraint_type}, "
         f"{'param-g' if with_parameters else 'literal-g'})",
     )
-    # QPAX reassembles Q / A / G as JAX arrays each iteration; the
-    # qpax.solve_qp compilation cache lands per-process, and under
-    # parallel test execution the first iteration's JIT cost dominates.
-    # Nodal constraints add a few extra QP slots (nu_vb / s_pos per
-    # nodal group) on top of that; bump the budget accordingly.
-    if backend == "qpax":
+    # QPAX / Moreau reassemble matrices as JAX arrays each iteration; the
+    # per-process JIT compilation cache means the first iteration's compile
+    # cost dominates under parallel test execution. Nodal constraints add a
+    # few extra slots (nu_vb / s_pos per nodal group) on top of that.
+    if backend in ("qpax", "moreau"):
         solve_budget = 4.5 if constraint_type == "nodal" else 3.5
     else:
         solve_budget = 1.2

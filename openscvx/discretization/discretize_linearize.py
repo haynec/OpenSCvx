@@ -188,7 +188,12 @@ class VectorizeDiscretizeLinearize(Discretizer):
                 in_axes=-1,
                 out_axes=-1,
             )
-            jacobians = pushforward(standard_basis)
+            # Cast to match primal's dtype.  standard_basis is built eagerly
+            # from jnp.eye (float32 when x64 is disabled), but jax.export
+            # traces with the literal dtype of the dummy arrays (float64 from
+            # np.ones), so primal may be float64 while the closure-captured
+            # standard_basis is float32.  jax.jvp requires identical dtypes.
+            jacobians = pushforward(standard_basis.astype(primal.dtype))
 
             A_d = jacobians[:, :, :, i0:i1]
             B_d = jacobians[:, :, :, i1:i2]

@@ -125,7 +125,12 @@ def _sparse_jacobian_fn(
             _, jvp_out = jax.jvp(f_of_target, (primals[argnums],), (tangent,))
             return jvp_out
 
-        compressed = jax.vmap(single_jvp)(seeds)  # (n_colors, out_dim)
+        # Cast seeds to match the primal dtype.  seeds is built eagerly as
+        # float32 (x64 disabled), but jax.export traces with the literal
+        # dtype of the dummy arrays (float64 from np.ones), so primals may
+        # be float64.  jax.jvp requires matching dtypes.
+        typed_seeds = seeds.astype(primals[argnums].dtype)
+        compressed = jax.vmap(single_jvp)(typed_seeds)  # (n_colors, out_dim)
 
         values = compressed[scatter_color, scatter_row]
         jac = jnp.zeros((out_dim, in_dim))
