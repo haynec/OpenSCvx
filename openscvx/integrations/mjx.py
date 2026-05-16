@@ -447,8 +447,8 @@ class MjxDynamics(DynamicsAdapter):
         # Auto-populate bounds from the model so the user doesn't have to
         # re-type joint / actuator limits already declared in MJCF. Users
         # can still override any of these after construction.
-        qpos_min, qpos_max, qvel_min, qvel_max, ctrl_min, ctrl_max = (
-            _initial_bounds_from_model(mjx_model, nq, nv, nu)
+        qpos_min, qpos_max, qvel_min, qvel_max, ctrl_min, ctrl_max = _initial_bounds_from_model(
+            mjx_model, nq, nv, nu
         )
         self._qpos.min = qpos_min
         self._qpos.max = qpos_max

@@ -297,5 +297,3 @@ class TestFreeJointQposDynamics:
         out1 = f(x, jnp.zeros(5), 0, {})
         out2 = f(x, jnp.ones(5) * 999, 42, {"key": "val"})
         np.testing.assert_allclose(np.array(out1), np.array(out2), atol=1e-9)
-
-

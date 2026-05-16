@@ -464,7 +464,10 @@ _LIMITED_SLIDER_XML = """
 _UNLIMITED_ACTUATOR_XML = """
 <mujoco>
   <worldbody>
-    <body><joint name="h" type="hinge" axis="0 0 1"/><geom type="sphere" size="0.1" mass="1"/></body>
+    <body>
+      <joint name="h" type="hinge" axis="0 0 1"/>
+      <geom type="sphere" size="0.1" mass="1"/>
+    </body>
   </worldbody>
   <actuator>
     <motor joint="h" gear="1"/>
