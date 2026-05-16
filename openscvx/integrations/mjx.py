@@ -262,6 +262,54 @@ _MJ_JNT_SLIDE = 2
 _MJ_JNT_HINGE = 3
 
 
+def _initial_bounds_from_model(
+    mjx_model: Any, nq: int, nv: int, nu: int
+) -> Tuple[Any, Any, Any, Any, Any, Any]:
+    """Pull qpos / ctrl bounds out of the MJX model.
+
+    Returns ``(qpos_min, qpos_max, qvel_min, qvel_max, ctrl_min, ctrl_max)``.
+
+    - ``qpos`` bounds come from ``mjx_model.jnt_range`` for slide/hinge joints
+      flagged ``jnt_limited=True``. All other qpos slots — free-joint
+      translations and quaternion components, unlimited slide/hinge joints —
+      get ``±inf``.
+    - ``ctrl`` bounds come from ``mjx_model.actuator_ctrlrange`` for actuators
+      flagged ``actuator_ctrllimited=True``. Unlimited actuators get ``±inf``.
+    - ``qvel`` bounds are always ``±inf`` because MuJoCo has no per-joint
+      velocity-limit concept; users override as needed.
+    """
+    import numpy as _np
+
+    qpos_min = _np.full(nq, -_np.inf)
+    qpos_max = _np.full(nq, _np.inf)
+    qvel_min = _np.full(nv, -_np.inf)
+    qvel_max = _np.full(nv, _np.inf)
+    ctrl_min = _np.full(nu, -_np.inf)
+    ctrl_max = _np.full(nu, _np.inf)
+
+    # Per-joint qpos bounds — only slide/hinge can be range-limited; free
+    # joints always have jnt_limited=False so we skip them safely.
+    jnt_type = _np.asarray(mjx_model.jnt_type).astype(int)
+    jnt_qposadr = _np.asarray(mjx_model.jnt_qposadr).astype(int)
+    jnt_limited = _np.asarray(mjx_model.jnt_limited).astype(bool)
+    jnt_range = _np.asarray(mjx_model.jnt_range).astype(float)
+    for i, jtype in enumerate(jnt_type):
+        if jtype in (_MJ_JNT_SLIDE, _MJ_JNT_HINGE) and jnt_limited[i]:
+            adr = int(jnt_qposadr[i])
+            qpos_min[adr] = jnt_range[i, 0]
+            qpos_max[adr] = jnt_range[i, 1]
+
+    if nu > 0:
+        act_limited = _np.asarray(mjx_model.actuator_ctrllimited).astype(bool)
+        act_range = _np.asarray(mjx_model.actuator_ctrlrange).astype(float)
+        for i in range(nu):
+            if act_limited[i]:
+                ctrl_min[i] = act_range[i, 0]
+                ctrl_max[i] = act_range[i, 1]
+
+    return qpos_min, qpos_max, qvel_min, qvel_max, ctrl_min, ctrl_max
+
+
 def _validate_supported_joints(mjx_model: Any) -> None:
     """Refuse models whose joint layout the adapter cannot correctly handle.
 
@@ -357,6 +405,19 @@ class MjxDynamics(DynamicsAdapter):
         Construction raises ``NotImplementedError`` if any of these
         conditions are violated; fall back to `mjx_dynamics` for those
         cases.
+
+    Auto-populated bounds:
+        * ``qpos.min`` / ``qpos.max`` are read from ``mjx_model.jnt_range``
+          for slide / hinge joints flagged ``jnt_limited=True``; free-joint
+          slots and unlimited joints default to ``±inf``.
+        * ``ctrl.min`` / ``ctrl.max`` are read from ``actuator_ctrlrange``
+          for actuators flagged ``actuator_ctrllimited=True``; otherwise
+          ``±inf``.
+        * ``qvel`` bounds default to ``±inf`` (MuJoCo has no per-joint
+          velocity-limit concept).
+
+        Override any of these after construction if you want tighter
+        problem-specific bounds.
     """
 
     def __init__(
@@ -382,6 +443,19 @@ class MjxDynamics(DynamicsAdapter):
         self._qpos = State("qpos", shape=(nq,))
         self._qvel = State("qvel", shape=(nv,))
         self._ctrl = Control("ctrl", shape=(nu,))
+
+        # Auto-populate bounds from the model so the user doesn't have to
+        # re-type joint / actuator limits already declared in MJCF. Users
+        # can still override any of these after construction.
+        qpos_min, qpos_max, qvel_min, qvel_max, ctrl_min, ctrl_max = (
+            _initial_bounds_from_model(mjx_model, nq, nv, nu)
+        )
+        self._qpos.min = qpos_min
+        self._qpos.max = qpos_max
+        self._qvel.min = qvel_min
+        self._qvel.max = qvel_max
+        self._ctrl.min = ctrl_min
+        self._ctrl.max = ctrl_max
 
         self.states: list[State] = [self._qpos, self._qvel]
         self.controls: list[Control] = [self._ctrl]

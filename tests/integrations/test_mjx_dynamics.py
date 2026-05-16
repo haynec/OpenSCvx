@@ -435,3 +435,105 @@ def test_mjx_dynamics_accepts_slide_plus_hinge(cartpole_mjx_model):
 def test_mjx_dynamics_accepts_pure_free_joint(free_body_mjx_model):
     # No exception — a single free joint is supported.
     ox.MjxDynamics(free_body_mjx_model)
+
+
+# ===========================================================================
+# Auto-populated bounds (jnt_range / actuator_ctrlrange)
+# ===========================================================================
+
+
+_LIMITED_SLIDER_XML = """
+<mujoco model="limited_slider">
+  <option gravity="0 0 -9.81"/>
+  <worldbody>
+    <body name="cart">
+      <joint name="slider" type="slide" axis="1 0 0" limited="true" range="-2.5 4.0"/>
+      <geom type="box" size="0.1 0.1 0.1" mass="1"/>
+      <body name="pole">
+        <joint name="hinge" type="hinge" axis="0 1 0"/>
+        <geom type="capsule" fromto="0 0 0 0 0 0.3" size="0.02" mass="0.1"/>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <motor joint="slider" gear="5" ctrlrange="-1.5 2.0" ctrllimited="true"/>
+  </actuator>
+</mujoco>
+"""
+
+_UNLIMITED_ACTUATOR_XML = """
+<mujoco>
+  <worldbody>
+    <body><joint name="h" type="hinge" axis="0 0 1"/><geom type="sphere" size="0.1" mass="1"/></body>
+  </worldbody>
+  <actuator>
+    <motor joint="h" gear="1"/>
+  </actuator>
+</mujoco>
+"""
+
+
+@requires_mujoco
+def test_mjx_dynamics_populates_qpos_bounds_from_jnt_range():
+    """Slide joint with `limited="true" range="-2.5 4.0"` flows into qpos.min/max."""
+    mjx_model = _put_model(_LIMITED_SLIDER_XML)
+    dyn = ox.MjxDynamics(mjx_model)
+    qpos, qvel = dyn.states
+
+    # slider is joint 0 → qpos[0]; hinge has no range → ±inf
+    assert qpos.min[0] == pytest.approx(-2.5)
+    assert qpos.max[0] == pytest.approx(4.0)
+    assert qpos.min[1] == -np.inf
+    assert qpos.max[1] == np.inf
+
+
+@requires_mujoco
+def test_mjx_dynamics_populates_ctrl_bounds_from_actuator_ctrlrange():
+    """Actuator with `ctrlrange="-1.5 2.0" ctrllimited="true"` flows into ctrl.min/max."""
+    mjx_model = _put_model(_LIMITED_SLIDER_XML)
+    dyn = ox.MjxDynamics(mjx_model)
+    (ctrl,) = dyn.controls
+
+    assert ctrl.min[0] == pytest.approx(-1.5)
+    assert ctrl.max[0] == pytest.approx(2.0)
+
+
+@requires_mujoco
+def test_mjx_dynamics_unlimited_actuator_defaults_to_inf():
+    """Actuator without ctrllimited gets ±inf ctrl bounds."""
+    mjx_model = _put_model(_UNLIMITED_ACTUATOR_XML)
+    dyn = ox.MjxDynamics(mjx_model)
+    (ctrl,) = dyn.controls
+    assert ctrl.min[0] == -np.inf
+    assert ctrl.max[0] == np.inf
+
+
+@requires_mujoco
+def test_mjx_dynamics_qvel_defaults_to_inf(cartpole_mjx_model):
+    """qvel always defaults to ±inf since MuJoCo has no per-joint velocity limits."""
+    dyn = ox.MjxDynamics(cartpole_mjx_model)
+    _, qvel = dyn.states
+    assert np.all(np.isneginf(qvel.min))
+    assert np.all(np.isposinf(qvel.max))
+
+
+@requires_mujoco
+def test_mjx_dynamics_free_joint_qpos_bounds_are_inf(free_body_mjx_model):
+    """Free joints have jnt_limited=False, so all 7 qpos slots stay at ±inf."""
+    dyn = ox.MjxDynamics(free_body_mjx_model)
+    qpos, _ = dyn.states
+    assert np.all(np.isneginf(qpos.min))
+    assert np.all(np.isposinf(qpos.max))
+
+
+@requires_mujoco
+def test_mjx_dynamics_user_can_override_auto_bounds():
+    """Users can replace the auto-populated bounds after construction."""
+    mjx_model = _put_model(_LIMITED_SLIDER_XML)
+    dyn = ox.MjxDynamics(mjx_model)
+    qpos, _ = dyn.states
+
+    new_min = np.array([-10.0, -5.0])
+    qpos.min = new_min
+    assert qpos.min[0] == -10.0
+    assert qpos.min[1] == -5.0
