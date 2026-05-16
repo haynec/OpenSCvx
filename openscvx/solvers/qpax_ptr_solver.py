@@ -672,14 +672,6 @@ class QPAXPTRSolver(PTRSolver):
         nu_vb = [np.asarray(z[sl]) for sl in L.sl_nu_vb]
         nu_vb_cross: List[float] = []
 
-        # Compute cost from the actual QP objective at z. We could read it
-        # off qpax (it doesn't return one), so reconstruct: cost = ½ zᵀQz + qᵀz.
-        # This mirrors what the CVXPy backend's `problem.value` would give.
-        Q_diag = (2.0 * self._pen["lam_prox"]).flatten()  # not used; recompute via stored arrays
-        # Recompute from arrays we just had on hand:
-        # (rebuild from _pen and _cons is wasteful; do it from the QP we just
-        # built — but we already discarded it. Cheap alternative: reassemble
-        # cost terms directly.)
         cost = self._reconstruct_cost(z)
 
         status = "optimal" if self._last_converged else "infeasible"
