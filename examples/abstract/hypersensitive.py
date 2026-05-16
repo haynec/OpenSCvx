@@ -15,7 +15,7 @@ sys.path.append(grandparent_dir)
 import openscvx as ox
 from openscvx.plotting import plot_controls, plot_states
 
-n = 20
+n = 40
 time_final = 1000.0
 time_dilation_min = 1e-4
 time_dilation_max = 1e4
@@ -34,7 +34,7 @@ cost.min = [0]
 cost.max = [100]
 cost.scaling_max = [1e0]
 cost.initial = [0]
-cost.final = [ox.Minimize(0)]
+cost.final = [ox.Minimize(0.0)]
 cost.guess = np.linspace(0, 0, n).reshape(-1, 1)
 
 u = ox.Control("u", shape=(1,))
@@ -74,7 +74,7 @@ states = [x, cost]
 controls = [u]
 constraints = []
 for state in states:
-    constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
+    constraints.extend([ox.ctcs(state <= state.max, penalty="huber"), ox.ctcs(state.min <= state, penalty="huber")])
 
 problem = ox.Problem(
     dynamics=dynamics,
@@ -85,13 +85,11 @@ problem = ox.Problem(
     time=time,
     licq_max=1e-8,
     algorithm={
-        "k_max": 1000,
         "lam_prox": 1e0,
-        "lam_cost": {"cost": 1e-1},
-        "lam_vc": 1e0,
-        "autotuner": ox.AugmentedLagrangian(),
+        "lam_cost": {"cost": 3e0},
+        "lam_vc": 4e0,
+        "autotuner": ox.AugmentedLagrangian(ep=1e-1),
     },
-    solver={"cvx_solver": "QOCO", "solver_args": {"enforce_dpp": True}},
     discretizer={
         "dis_type": "ZOH",
         "ode_solver": "Dopri8",
