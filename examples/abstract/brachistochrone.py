@@ -99,7 +99,7 @@ problem = Problem(
             "enforce_dpp": True,
             "abstol": 1e-8,
             "reltol": 1e-10,
-            },
+        },
     },
 )
 

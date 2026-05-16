@@ -11,21 +11,24 @@ Each function is tested for:
 """
 
 import jax
-# Use float64 for more accurate tests
-jax.config.update("jax_enable_x64", True)
-import jax.numpy as jnp
-import pytest
 
-from openscvx.symbolic.lowerers.jax.stl import (
+# Use float64 for more accurate tests; JAX must be configured before jnp.
+jax.config.update("jax_enable_x64", True)
+# isort: off
+import jax.numpy as jnp  # noqa: E402
+import pytest  # noqa: E402
+
+from openscvx.symbolic.lowerers.jax.stl import (  # noqa: E402
     AND,
     OR,
     AND_lite,
     OR_lite,
     _smooth_equality,
     integer_variable,
+    gmsr_IfThen as IfThen,
+    gmsr_IfThen_lite as IfThen_lite,
 )
-from openscvx.symbolic.lowerers.jax.stl import gmsr_IfThen as IfThen
-from openscvx.symbolic.lowerers.jax.stl import gmsr_IfThen_lite as IfThen_lite
+# isort: on
 
 # =============================================================================
 # Helpers
