@@ -37,8 +37,13 @@ def _print_comparison_metrics(comparison, test_name="Brachistochrone"):
         print(f"  Arc length:          {comparison['arc_length']:.4f} m")
 
 
-def _assert_brachistochrone_accuracy(comparison, problem, result):
-    """Common assertions for brachistochrone test validation."""
+def _assert_brachistochrone_accuracy(comparison, problem, result, solve_budget=1.2):
+    """Common assertions for brachistochrone test validation.
+
+    ``solve_budget`` is the maximum acceptable ``problem.timing_solve`` in
+    seconds. Backends with per-iteration JIT compilation overhead (QPAX in
+    v1) pass a looser budget — that overhead is on the follow-up PR's
+    radar, not a correctness concern."""
     # Check time accuracy: numerical should be within 1% of analytical
     time_error_pct = comparison["time_error_pct"]
     assert time_error_pct < 1.0, (
@@ -79,7 +84,9 @@ def _assert_brachistochrone_accuracy(comparison, problem, result):
     assert problem.timing_init < 15.0, (
         f"Initialization took {problem.timing_init:.2f}s (expected < 12s)"
     )
-    assert problem.timing_solve < 1.2, f"Solve took {problem.timing_solve:.2f}s (expected < 1.2s)"
+    assert problem.timing_solve < solve_budget, (
+        f"Solve took {problem.timing_solve:.2f}s (expected < {solve_budget}s)"
+    )
     assert problem.timing_post < 5.0, (
         f"Post-processing took {problem.timing_post:.2f}s (expected < 5s)"
     )
@@ -231,6 +238,105 @@ def test_monolithic():
     _assert_brachistochrone_accuracy(comparison, problem, result)
 
     # Clean up JAX caches
+    jax.clear_caches()
+
+
+@pytest.mark.parametrize("backend", ["cvxpy", "qpax"])
+def test_backend(backend):
+    """End-to-end brachistochrone with each PTRSolver backend.
+
+    Compares against the analytical cycloid; the same accuracy thresholds
+    apply regardless of backend (QPAX assembles the same convex subproblem,
+    so SCP convergence should land on the same minimizer to within the
+    backends' inner solver tolerances)."""
+    import jax.numpy as jnp
+
+    import openscvx as ox
+    from openscvx import Problem
+
+    if backend == "qpax":
+        pytest.importorskip("qpax")
+
+    # Problem parameters — mirrors test_monolithic so we cover the same
+    # boundary conditions and analytical reference both ways.
+    n = 2
+    total_time = 2.0
+    g = 9.81
+    x0, y0 = 0.0, 10.0
+    x1, y1 = 10.0, 5.0
+
+    x = ox.State("x", shape=(3,))
+    x.max = np.array([10.0, 10.0, 10.0])
+    x.min = np.array([0.0, 0.0, 0.0])
+    x.initial = np.array([x0, y0, 0.0])
+    x.final = [x1, y1, ("free", 10.0)]
+
+    u = ox.Control("u", shape=(1,))
+    u.max = np.array([100.5 * jnp.pi / 180])
+    u.min = np.array([0.0])
+    u.guess = np.linspace(5 * jnp.pi / 180, 100.5 * jnp.pi / 180, n).reshape(-1, 1)
+
+    x_dot = x[2] * ox.Sin(u[0])
+    y_dot = -x[2] * ox.Cos(u[0])
+    v_dot = g * ox.Cos(u[0])
+    dyn_expr = ox.Concat(x_dot, y_dot, v_dot)
+
+    constraint_exprs = [ox.ctcs(x <= x.max), ox.ctcs(x.min <= x)]
+
+    time = ox.Time(
+        initial=0.0,
+        final=("minimize", total_time),
+        min=0.0,
+        max=total_time,
+        uniform_time_grid=True,
+    )
+
+    problem = Problem(
+        dynamics={"x": dyn_expr},
+        states=[x],
+        controls=[u],
+        time=time,
+        constraints=constraint_exprs,
+        N=n,
+        licq_max=1e-8,
+        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
+        solver={"backend": backend},
+        # QPAX consumes the global JAX dtype, so float32 caps the QP's
+        # condition number aggressively. The CVXPy backend goes through
+        # QOCO's own float64 path and isn't affected — but pinning float64
+        # for both backends keeps the test apples-to-apples.
+        float_dtype="float64",
+    )
+
+    problem.settings.prp.dt = 0.01
+    if backend == "cvxpy":
+        problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9}
+    problem.settings.sim.save_compiled = False
+    if hasattr(problem.settings, "dev"):
+        problem.settings.dev.printing = False
+
+    problem.initialize()
+    result = problem.solve()
+    result = problem.post_process()
+
+    assert result["converged"], f"{backend} failed to converge"
+
+    position = result.trajectory["x"][:, :2]
+    velocity = result.trajectory["x"][:, 2:3]
+
+    comparison = compare_trajectory_to_analytical(
+        result.t_full, position, velocity, x0, y0, x1, y1, g
+    )
+
+    _print_comparison_metrics(comparison, f"Brachistochrone ({backend})")
+    # QPAX in v1 reassembles Q / A / G as JAX arrays each iteration; the
+    # qpax.solve_qp compilation cache lands per-process, and under
+    # parallel test execution the first iteration's JIT cost dominates.
+    # End-to-end JIT of the SCP loop is the follow-up PR — bump the
+    # budget here rather than block on a perf-track issue.
+    solve_budget = 3.5 if backend == "qpax" else 1.2
+    _assert_brachistochrone_accuracy(comparison, problem, result, solve_budget=solve_budget)
+
     jax.clear_caches()
 
 

@@ -160,9 +160,40 @@ JAX lowering has no dependency on:
 
 This means JAX-lowered dynamics and constraints could be used with alternative solvers.
 
+## Convex Subproblem Backends
+
+The convex subproblem at each SCP iteration is solved by a concrete subclass
+of the abstract `PTRSolver` base. Two backends ship today:
+
+| Backend | Class | Selector | Notes |
+|---------|-------|----------|-------|
+| CVXPy (default) | `CVXPyPTRSolver` | `solver={"backend": "cvxpy"}` (default) | DCP graph via CVXPy, dispatched to QOCO / CLARABEL / etc. Supports user `.convex()` constraints, cross-node constraints, CTCS, and impulsive controls. Optional cvxpygen code generation. |
+| QPAX | `QPAXPTRSolver` | `solver={"backend": "qpax"}` | JAX-native QP via `qpax.solve_qp`. Flat `(Q, q, A, b, G, h)` assembly. Supports box / dynamics / CTCS / boundary-Fix; **rejects** user `.convex()`, cross-node, and impulsive at `initialize()` with a clear "use `CVXPyPTRSolver`" message. Enables a path toward an end-to-end JAX-differentiable SCP loop in follow-up work. |
+
+Picking a backend at construction time:
+
+```python
+import openscvx as ox
+
+# Default — same as today's CVXPyPTRSolver.
+problem = ox.Problem(...)
+
+# Explicit CVXPy with a different inner solver.
+problem = ox.Problem(..., solver={"backend": "cvxpy", "cvx_solver": "CLARABEL"})
+
+# JAX-native QPAX (requires the `qpax` extra: pip install openscvx[qpax]).
+problem = ox.Problem(..., solver={"backend": "qpax"})
+```
+
+QPAX consumes the global JAX dtype — pass `float_dtype="float64"` to `Problem`
+if you need tight inner-solver tolerances; the default `float32` is enough for
+many problems but caps the QP's conditioning.
+
 ## Further Reading
 
 - `openscvx/symbolic/lower.py` — Main lowering implementation
 - `openscvx/lowered/` — Dataclass definitions
 - `openscvx/symbolic/lowerers/jax.py` — JAX visitor implementation
 - `openscvx/symbolic/lowerers/cvxpy.py` — CVXPy visitor implementation
+- `openscvx/solvers/ptr_solver.py` — Abstract `PTRSolver` contract
+- `openscvx/solvers/cvxpy_ptr_solver.py` / `qpax_ptr_solver.py` — Concrete backends
