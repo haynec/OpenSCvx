@@ -18,7 +18,7 @@
         <link rel="prev" href="../init/inverse_kinematics/">
       
       
-        <link rel="next" href="menagerie/">
+        <link rel="next" href="base/">
       
       
         
@@ -4664,6 +4664,8 @@
       
         
       
+        
+      
     
     
     
@@ -4718,6 +4720,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="base/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    base
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -8871,13 +8901,58 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#openscvx.integrations.mjx_byof" class="md-nav__link">
+  <a href="#openscvx.integrations.DynamicsAdapter" class="md-nav__link">
     <span class="md-ellipsis">
       
-        mjx_byof
+        DynamicsAdapter
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="DynamicsAdapter">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#openscvx.integrations.DynamicsAdapter.expand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        expand
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#openscvx.integrations.MjxDynamics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        MjxDynamics
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="MjxDynamics">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#openscvx.integrations.MjxDynamics.expand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        expand
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -8934,33 +9009,37 @@
 <a id="openscvx.integrations"></a>
     <div class="doc doc-contents first">
 
-        <p>Adapters for MuJoCo MJX dynamics in OpenSCvx BYOF.</p>
-<p>The recommended entry-point is :func:<code>mjx_byof</code>, which returns a complete
-<code>byof["dynamics"]</code> dict and automatically handles free-joint quaternion
-kinematics for floating-base models (drones, humanoids, etc.):</p>
-<div class="language-python highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">openscvx.integrations</span><span class="w"> </span><span class="kn">import</span> <span class="n">mjx_byof</span>
+        <p>External-backend dynamics adapters for OpenSCvx.</p>
+<p>The recommended entry-point is <code>MjxDynamics</code>, which goes directly into the
+<code>dynamics=</code> slot of <code>Problem</code> and constructs the matching State/Control
+objects for the user. Free-joint quaternion kinematics for floating-base
+models (drones, humanoids) are detected and handled automatically::</p>
+<div class="language-python highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">openscvx.integrations</span><span class="w"> </span><span class="kn">import</span> <span class="n">MjxDynamics</span>
 
-<span class="n">byof</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;dynamics&quot;</span><span class="p">:</span> <span class="n">mjx_byof</span><span class="p">(</span><span class="n">mjx_model</span><span class="p">,</span> <span class="n">qpos</span><span class="o">=</span><span class="n">qpos</span><span class="p">,</span> <span class="n">qvel</span><span class="o">=</span><span class="n">qvel</span><span class="p">,</span> <span class="n">ctrl</span><span class="o">=</span><span class="n">ctrl</span><span class="p">)}</span>
+<span class="n">dyn</span> <span class="o">=</span> <span class="n">MjxDynamics</span><span class="p">(</span><span class="n">mjx_model</span><span class="p">)</span>
+<span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span>
+    <span class="n">dynamics</span><span class="o">=</span><span class="n">dyn</span><span class="p">,</span>
+    <span class="n">states</span><span class="o">=</span><span class="n">dyn</span><span class="o">.</span><span class="n">states</span><span class="p">,</span>
+    <span class="n">controls</span><span class="o">=</span><span class="n">dyn</span><span class="o">.</span><span class="n">controls</span><span class="p">,</span>
+    <span class="o">...</span>
+<span class="p">)</span>
 </code></pre></div>
-<p>For models without free joints (cartpoles, manipulators) the returned dict
-contains only <code>"qvel"</code> and <code>dynamics={"qpos": qvel}</code> should still be
-provided to :class:<code>~openscvx.Problem</code>.  For models with free joints
-(<code>nq &gt; nv</code>) <code>"qpos"</code> is included automatically — no extra imports needed.</p>
-<p>:func:<code>mjx_dynamics</code> is also available for advanced users who need direct
-access to the BYOF callable for the <code>qvel</code> (acceleration) derivative.</p>
-<p>All symbols delegate lazily so <code>mujoco.mjx</code> is only imported when used.
-The :mod:<code>menagerie</code> submodule is loaded lazily via attribute access.</p>
-<p>Example — cartpole (nq == nv)::</p>
-<div class="language-python highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">openscvx.integrations</span><span class="w"> </span><span class="kn">import</span> <span class="n">mjx_byof</span>
+<p>For advanced users who need custom State/Control names (or to interleave
+them with extra custom states), <code>mjx_dynamics</code> is exposed as the underlying
+BYOF callable factory — assemble your own <code>byof["dynamics"]</code> dict from it.</p>
+<p>All MJX symbols delegate lazily so <code>mujoco.mjx</code> is only imported when
+actually used. The <code>menagerie</code> submodule is also loaded lazily.</p>
+<p>Example — cartpole (<code>nq == nv</code>)::</p>
+<div class="language-python highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">openscvx.integrations</span><span class="w"> </span><span class="kn">import</span> <span class="n">MjxDynamics</span>
 
-<span class="n">byof</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;dynamics&quot;</span><span class="p">:</span> <span class="n">mjx_byof</span><span class="p">(</span><span class="n">mjx_model</span><span class="p">,</span> <span class="n">qpos</span><span class="o">=</span><span class="n">qpos</span><span class="p">,</span> <span class="n">qvel</span><span class="o">=</span><span class="n">qvel</span><span class="p">,</span> <span class="n">ctrl</span><span class="o">=</span><span class="n">ctrl</span><span class="p">)}</span>
-<span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="n">dynamics</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;qpos&quot;</span><span class="p">:</span> <span class="n">qvel</span><span class="p">},</span> <span class="n">byof</span><span class="o">=</span><span class="n">byof</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="n">dyn</span> <span class="o">=</span> <span class="n">MjxDynamics</span><span class="p">(</span><span class="n">mjx_model</span><span class="p">)</span>
+<span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="n">dynamics</span><span class="o">=</span><span class="n">dyn</span><span class="p">,</span> <span class="n">states</span><span class="o">=</span><span class="n">dyn</span><span class="o">.</span><span class="n">states</span><span class="p">,</span> <span class="n">controls</span><span class="o">=</span><span class="n">dyn</span><span class="o">.</span><span class="n">controls</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
 </code></pre></div>
-<p>Example — quadrotor with free joint (nq=7, nv=6)::</p>
-<div class="language-python highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">openscvx.integrations</span><span class="w"> </span><span class="kn">import</span> <span class="n">mjx_byof</span>
+<p>Example — quadrotor with free joint (<code>nq=7</code>, <code>nv=6</code>)::</p>
+<div class="language-python highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">openscvx.integrations</span><span class="w"> </span><span class="kn">import</span> <span class="n">MjxDynamics</span>
 
-<span class="n">byof</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;dynamics&quot;</span><span class="p">:</span> <span class="n">mjx_byof</span><span class="p">(</span><span class="n">mjx_model</span><span class="p">,</span> <span class="n">qpos</span><span class="o">=</span><span class="n">qpos</span><span class="p">,</span> <span class="n">qvel</span><span class="o">=</span><span class="n">qvel</span><span class="p">,</span> <span class="n">ctrl</span><span class="o">=</span><span class="n">ctrl</span><span class="p">)}</span>
-<span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="n">dynamics</span><span class="o">=</span><span class="p">{},</span> <span class="n">byof</span><span class="o">=</span><span class="n">byof</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
+<span class="n">dyn</span> <span class="o">=</span> <span class="n">MjxDynamics</span><span class="p">(</span><span class="n">mjx_model</span><span class="p">)</span>
+<span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span><span class="n">dynamics</span><span class="o">=</span><span class="n">dyn</span><span class="p">,</span> <span class="n">states</span><span class="o">=</span><span class="n">dyn</span><span class="o">.</span><span class="n">states</span><span class="p">,</span> <span class="n">controls</span><span class="o">=</span><span class="n">dyn</span><span class="o">.</span><span class="n">controls</span><span class="p">,</span> <span class="o">...</span><span class="p">)</span>
 </code></pre></div>
 
 
@@ -8982,37 +9061,660 @@ The :mod:<code>menagerie</code> submodule is loaded lazily via attribute access.
 
 
 
+<div class="doc doc-object doc-class">
+
+
+
+<h4 id="openscvx.integrations.DynamicsAdapter" class="doc doc-heading">
+            <code>DynamicsAdapter</code>
+
+
+<a href="#openscvx.integrations.DynamicsAdapter" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="abc.ABC">ABC</span></code></p>
+
+
+
+        <p>Abstract base class for external-backend dynamics adapters.</p>
+<p>Subclasses describe the State/Control objects they synthesize on
+<code>.states</code> / <code>.controls</code> and implement <code>expand</code> to return the
+two-channel <code>(dynamics_dict, byof_dict)</code> representation consumed by
+<code>Problem</code>.</p>
+<p>The split mirrors the existing two-channel API: <code>dynamics_dict</code> carries
+symbolic Expr entries (e.g. <code>{"qpos": qvel}</code>) while <code>byof_dict</code> carries
+raw JAX callables under the <code>"dynamics"</code> key. Either or both may be
+empty, but <code>expand()</code> should never silently produce overlapping keys.</p>
+
+
+
+
+
+
+
+
+              <details class="mkdocstrings-source">
+                <summary>Source code in <code>openscvx/integrations/base.py</code></summary>
+                <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-34">34</a></span>
+<span class="normal"><a href="#__codelineno-0-35">35</a></span>
+<span class="normal"><a href="#__codelineno-0-36">36</a></span>
+<span class="normal"><a href="#__codelineno-0-37">37</a></span>
+<span class="normal"><a href="#__codelineno-0-38">38</a></span>
+<span class="normal"><a href="#__codelineno-0-39">39</a></span>
+<span class="normal"><a href="#__codelineno-0-40">40</a></span>
+<span class="normal"><a href="#__codelineno-0-41">41</a></span>
+<span class="normal"><a href="#__codelineno-0-42">42</a></span>
+<span class="normal"><a href="#__codelineno-0-43">43</a></span>
+<span class="normal"><a href="#__codelineno-0-44">44</a></span>
+<span class="normal"><a href="#__codelineno-0-45">45</a></span>
+<span class="normal"><a href="#__codelineno-0-46">46</a></span>
+<span class="normal"><a href="#__codelineno-0-47">47</a></span>
+<span class="normal"><a href="#__codelineno-0-48">48</a></span>
+<span class="normal"><a href="#__codelineno-0-49">49</a></span>
+<span class="normal"><a href="#__codelineno-0-50">50</a></span>
+<span class="normal"><a href="#__codelineno-0-51">51</a></span>
+<span class="normal"><a href="#__codelineno-0-52">52</a></span>
+<span class="normal"><a href="#__codelineno-0-53">53</a></span>
+<span class="normal"><a href="#__codelineno-0-54">54</a></span>
+<span class="normal"><a href="#__codelineno-0-55">55</a></span>
+<span class="normal"><a href="#__codelineno-0-56">56</a></span>
+<span class="normal"><a href="#__codelineno-0-57">57</a></span>
+<span class="normal"><a href="#__codelineno-0-58">58</a></span>
+<span class="normal"><a href="#__codelineno-0-59">59</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34"></a><span class="k">class</span><span class="w"> </span><span class="nc">DynamicsAdapter</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+</span><span id="__span-0-35"><a id="__codelineno-0-35" name="__codelineno-0-35"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract base class for external-backend dynamics adapters.</span>
+</span><span id="__span-0-36"><a id="__codelineno-0-36" name="__codelineno-0-36"></a>
+</span><span id="__span-0-37"><a id="__codelineno-0-37" name="__codelineno-0-37"></a><span class="sd">    Subclasses describe the State/Control objects they synthesize on</span>
+</span><span id="__span-0-38"><a id="__codelineno-0-38" name="__codelineno-0-38"></a><span class="sd">    ``.states`` / ``.controls`` and implement `expand` to return the</span>
+</span><span id="__span-0-39"><a id="__codelineno-0-39" name="__codelineno-0-39"></a><span class="sd">    two-channel ``(dynamics_dict, byof_dict)`` representation consumed by</span>
+</span><span id="__span-0-40"><a id="__codelineno-0-40" name="__codelineno-0-40"></a><span class="sd">    `Problem`.</span>
+</span><span id="__span-0-41"><a id="__codelineno-0-41" name="__codelineno-0-41"></a>
+</span><span id="__span-0-42"><a id="__codelineno-0-42" name="__codelineno-0-42"></a><span class="sd">    The split mirrors the existing two-channel API: ``dynamics_dict`` carries</span>
+</span><span id="__span-0-43"><a id="__codelineno-0-43" name="__codelineno-0-43"></a><span class="sd">    symbolic Expr entries (e.g. ``{&quot;qpos&quot;: qvel}``) while ``byof_dict`` carries</span>
+</span><span id="__span-0-44"><a id="__codelineno-0-44" name="__codelineno-0-44"></a><span class="sd">    raw JAX callables under the ``&quot;dynamics&quot;`` key. Either or both may be</span>
+</span><span id="__span-0-45"><a id="__codelineno-0-45" name="__codelineno-0-45"></a><span class="sd">    empty, but ``expand()`` should never silently produce overlapping keys.</span>
+</span><span id="__span-0-46"><a id="__codelineno-0-46" name="__codelineno-0-46"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-0-47"><a id="__codelineno-0-47" name="__codelineno-0-47"></a>
+</span><span id="__span-0-48"><a id="__codelineno-0-48" name="__codelineno-0-48"></a>    <span class="n">states</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="s2">&quot;State&quot;</span><span class="p">]</span>
+</span><span id="__span-0-49"><a id="__codelineno-0-49" name="__codelineno-0-49"></a>    <span class="n">controls</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="s2">&quot;Control&quot;</span><span class="p">]</span>
+</span><span id="__span-0-50"><a id="__codelineno-0-50" name="__codelineno-0-50"></a>
+</span><span id="__span-0-51"><a id="__codelineno-0-51" name="__codelineno-0-51"></a>    <span class="nd">@abstractmethod</span>
+</span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-0-53"><a id="__codelineno-0-53" name="__codelineno-0-53"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``(dynamics_dict, byof_dict)`` in OpenSCvx&#39;s internal form.</span>
+</span><span id="__span-0-54"><a id="__codelineno-0-54" name="__codelineno-0-54"></a>
+</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55"></a><span class="sd">        ``dynamics_dict`` maps state names to symbolic ``Expr`` derivatives</span>
+</span><span id="__span-0-56"><a id="__codelineno-0-56" name="__codelineno-0-56"></a><span class="sd">        (the same shape as the ``dynamics=`` argument to ``Problem``).</span>
+</span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57"></a><span class="sd">        ``byof_dict`` has the same shape as the ``byof=`` argument: its</span>
+</span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58"></a><span class="sd">        ``&quot;dynamics&quot;`` key (if present) maps state names to raw JAX callables.</span>
+</span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59"></a><span class="sd">        &quot;&quot;&quot;</span>
+</span></code></pre></div></td></tr></table></div>
+              </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
 
 <div class="doc doc-object doc-function">
 
 
-<h4 id="openscvx.integrations.mjx_byof" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">mjx_byof</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span></code>
+<h5 id="openscvx.integrations.DynamicsAdapter.expand" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">expand</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]</span></code>
 
-<a href="#openscvx.integrations.mjx_byof" class="headerlink" title="Permanent link">&para;</a></h4>
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-abstractmethod"><code>abstractmethod</code></small>
+  </span>
+
+<a href="#openscvx.integrations.DynamicsAdapter.expand" class="headerlink" title="Permanent link">&para;</a></h5>
 
 
     <div class="doc doc-contents ">
 
-        <p>Lazy delegate; imports <code>mujoco.mjx</code> on first call.</p>
+        <p>Return <code>(dynamics_dict, byof_dict)</code> in OpenSCvx's internal form.</p>
+<p><code>dynamics_dict</code> maps state names to symbolic <code>Expr</code> derivatives
+(the same shape as the <code>dynamics=</code> argument to <code>Problem</code>).
+<code>byof_dict</code> has the same shape as the <code>byof=</code> argument: its
+<code>"dynamics"</code> key (if present) maps state names to raw JAX callables.</p>
 
 
             <details class="mkdocstrings-source">
-              <summary>Source code in <code>openscvx/integrations/__init__.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-40">40</a></span>
-<span class="normal"><a href="#__codelineno-0-41">41</a></span>
-<span class="normal"><a href="#__codelineno-0-42">42</a></span>
-<span class="normal"><a href="#__codelineno-0-43">43</a></span>
-<span class="normal"><a href="#__codelineno-0-44">44</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-40"><a id="__codelineno-0-40" name="__codelineno-0-40"></a><span class="k">def</span><span class="w"> </span><span class="nf">mjx_byof</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-</span><span id="__span-0-41"><a id="__codelineno-0-41" name="__codelineno-0-41"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Lazy delegate; imports ``mujoco.mjx`` on first call.&quot;&quot;&quot;</span>
-</span><span id="__span-0-42"><a id="__codelineno-0-42" name="__codelineno-0-42"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">.mjx</span><span class="w"> </span><span class="kn">import</span> <span class="n">mjx_byof</span> <span class="k">as</span> <span class="n">_mjx_byof</span>
-</span><span id="__span-0-43"><a id="__codelineno-0-43" name="__codelineno-0-43"></a>
-</span><span id="__span-0-44"><a id="__codelineno-0-44" name="__codelineno-0-44"></a>    <span class="k">return</span> <span class="n">_mjx_byof</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+              <summary>Source code in <code>openscvx/integrations/base.py</code></summary>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-51">51</a></span>
+<span class="normal"><a href="#__codelineno-0-52">52</a></span>
+<span class="normal"><a href="#__codelineno-0-53">53</a></span>
+<span class="normal"><a href="#__codelineno-0-54">54</a></span>
+<span class="normal"><a href="#__codelineno-0-55">55</a></span>
+<span class="normal"><a href="#__codelineno-0-56">56</a></span>
+<span class="normal"><a href="#__codelineno-0-57">57</a></span>
+<span class="normal"><a href="#__codelineno-0-58">58</a></span>
+<span class="normal"><a href="#__codelineno-0-59">59</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-51"><a id="__codelineno-0-51" name="__codelineno-0-51"></a><span class="nd">@abstractmethod</span>
+</span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52"></a><span class="k">def</span><span class="w"> </span><span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-0-53"><a id="__codelineno-0-53" name="__codelineno-0-53"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return ``(dynamics_dict, byof_dict)`` in OpenSCvx&#39;s internal form.</span>
+</span><span id="__span-0-54"><a id="__codelineno-0-54" name="__codelineno-0-54"></a>
+</span><span id="__span-0-55"><a id="__codelineno-0-55" name="__codelineno-0-55"></a><span class="sd">    ``dynamics_dict`` maps state names to symbolic ``Expr`` derivatives</span>
+</span><span id="__span-0-56"><a id="__codelineno-0-56" name="__codelineno-0-56"></a><span class="sd">    (the same shape as the ``dynamics=`` argument to ``Problem``).</span>
+</span><span id="__span-0-57"><a id="__codelineno-0-57" name="__codelineno-0-57"></a><span class="sd">    ``byof_dict`` has the same shape as the ``byof=`` argument: its</span>
+</span><span id="__span-0-58"><a id="__codelineno-0-58" name="__codelineno-0-58"></a><span class="sd">    ``&quot;dynamics&quot;`` key (if present) maps state names to raw JAX callables.</span>
+</span><span id="__span-0-59"><a id="__codelineno-0-59" name="__codelineno-0-59"></a><span class="sd">    &quot;&quot;&quot;</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
 
 </div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h4 id="openscvx.integrations.MjxDynamics" class="doc doc-heading">
+            <code>MjxDynamics</code>
+
+
+<a href="#openscvx.integrations.MjxDynamics" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><a class="autorefs autorefs-internal" title="&lt;code&gt;DynamicsAdapter&lt;/code&gt; (&lt;code&gt;openscvx.integrations.base.DynamicsAdapter&lt;/code&gt;)" href="base/#openscvx.integrations.base.DynamicsAdapter">DynamicsAdapter</a></code></p>
+
+
+
+        <p>First-class MJX dynamics adapter for <code>Problem</code>.</p>
+<p>Wraps a <code>mujoco.mjx</code> model so it can be passed directly to the
+<code>dynamics=</code> argument of <code>Problem</code>. The adapter
+constructs default <code>qpos</code> / <code>qvel</code> State objects and a <code>ctrl</code>
+Control matching the model's <code>nq</code> / <code>nv</code> / <code>nu</code>, exposes them via
+<code>.states</code> / <code>.controls</code>, and routes the MJX forward dynamics through
+the BYOF channel internally — without requiring the user to know about
+BYOF at all.</p>
+
+
+<details class="example" open>
+  <summary>Example</summary>
+  <p>Cartpole (<code>nq == nv</code>)::</p>
+<div class="language-python highlight"><pre><span></span><code><span class="n">mj_model</span> <span class="o">=</span> <span class="n">mujoco</span><span class="o">.</span><span class="n">MjModel</span><span class="o">.</span><span class="n">from_xml_path</span><span class="p">(</span><span class="s2">&quot;cartpole.xml&quot;</span><span class="p">)</span>
+<span class="n">mj_model</span><span class="o">.</span><span class="n">opt</span><span class="o">.</span><span class="n">disableflags</span> <span class="o">|=</span> <span class="n">mujoco</span><span class="o">.</span><span class="n">mjtDisableBit</span><span class="o">.</span><span class="n">mjDSBL_CONTACT</span>
+<span class="n">mjx_model</span> <span class="o">=</span> <span class="n">mjx</span><span class="o">.</span><span class="n">put_model</span><span class="p">(</span><span class="n">mj_model</span><span class="p">)</span>
+
+<span class="n">dyn</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">MjxDynamics</span><span class="p">(</span><span class="n">mjx_model</span><span class="p">)</span>
+<span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span>
+    <span class="n">dynamics</span><span class="o">=</span><span class="n">dyn</span><span class="p">,</span>
+    <span class="n">states</span><span class="o">=</span><span class="n">dyn</span><span class="o">.</span><span class="n">states</span><span class="p">,</span>
+    <span class="n">controls</span><span class="o">=</span><span class="n">dyn</span><span class="o">.</span><span class="n">controls</span><span class="p">,</span>
+    <span class="o">...</span>
+<span class="p">)</span>
+</code></pre></div>
+<p>Quadrotor with a free joint (<code>nq &gt; nv</code>) — quaternion kinematics
+are inserted automatically::</p>
+<div class="language-python highlight"><pre><span></span><code><span class="n">dyn</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">MjxDynamics</span><span class="p">(</span><span class="n">mjx_model</span><span class="p">)</span>  <span class="c1"># nq=7, nv=6</span>
+<span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span>
+    <span class="n">dynamics</span><span class="o">=</span><span class="n">dyn</span><span class="p">,</span> <span class="n">states</span><span class="o">=</span><span class="n">dyn</span><span class="o">.</span><span class="n">states</span><span class="p">,</span> <span class="n">controls</span><span class="o">=</span><span class="n">dyn</span><span class="o">.</span><span class="n">controls</span><span class="p">,</span> <span class="o">...</span>
+<span class="p">)</span>
+</code></pre></div>
+</details>        <p>Custom State/Control names or shapes are <em>not</em> supported here on purpose
+— the whole point of the adapter is "I don't want to think about names."
+Drop to the lower-level <code>mjx_dynamics</code> helper if you need that control —
+construct your own State/Control objects, pass them in, and assemble the
+BYOF dict yourself.</p>
+
+
+<details class="supported-joint-structure" open>
+  <summary>Supported joint structure</summary>
+  <ul>
+<li>Free (<code>mjJNT_FREE</code>), slide (<code>mjJNT_SLIDE</code>), and hinge
+  (<code>mjJNT_HINGE</code>) joints only.</li>
+<li>If the model contains any free joints, they must all come
+  <em>before</em> any slide/hinge joints in the MuJoCo layout.</li>
+<li>Ball joints (<code>mjJNT_BALL</code>) are explicitly refused — they share
+  <code>nq=4, nv=3</code> with free joints but use different kinematics, and
+  would silently produce wrong dynamics.</li>
+</ul>
+<p>Construction raises <code>NotImplementedError</code> if any of these
+conditions are violated; fall back to <code>mjx_dynamics</code> for those
+cases.</p>
+</details>
+
+<details class="auto-populated-bounds" open>
+  <summary>Auto-populated bounds</summary>
+  <ul>
+<li><code>qpos.min</code> / <code>qpos.max</code> are read from <code>mjx_model.jnt_range</code>
+  for slide / hinge joints flagged <code>jnt_limited=True</code>; free-joint
+  slots and unlimited joints default to <code>±inf</code>.</li>
+<li><code>ctrl.min</code> / <code>ctrl.max</code> are read from <code>actuator_ctrlrange</code>
+  for actuators flagged <code>actuator_ctrllimited=True</code>; otherwise
+  <code>±inf</code>.</li>
+<li><code>qvel</code> bounds default to <code>±inf</code> (MuJoCo has no per-joint
+  velocity-limit concept).</li>
+</ul>
+<p>Override any of these after construction if you want tighter
+problem-specific bounds.</p>
+</details>
+
+
+
+
+
+
+
+              <details class="mkdocstrings-source">
+                <summary>Source code in <code>openscvx/integrations/mjx.py</code></summary>
+                <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-356">356</a></span>
+<span class="normal"><a href="#__codelineno-0-357">357</a></span>
+<span class="normal"><a href="#__codelineno-0-358">358</a></span>
+<span class="normal"><a href="#__codelineno-0-359">359</a></span>
+<span class="normal"><a href="#__codelineno-0-360">360</a></span>
+<span class="normal"><a href="#__codelineno-0-361">361</a></span>
+<span class="normal"><a href="#__codelineno-0-362">362</a></span>
+<span class="normal"><a href="#__codelineno-0-363">363</a></span>
+<span class="normal"><a href="#__codelineno-0-364">364</a></span>
+<span class="normal"><a href="#__codelineno-0-365">365</a></span>
+<span class="normal"><a href="#__codelineno-0-366">366</a></span>
+<span class="normal"><a href="#__codelineno-0-367">367</a></span>
+<span class="normal"><a href="#__codelineno-0-368">368</a></span>
+<span class="normal"><a href="#__codelineno-0-369">369</a></span>
+<span class="normal"><a href="#__codelineno-0-370">370</a></span>
+<span class="normal"><a href="#__codelineno-0-371">371</a></span>
+<span class="normal"><a href="#__codelineno-0-372">372</a></span>
+<span class="normal"><a href="#__codelineno-0-373">373</a></span>
+<span class="normal"><a href="#__codelineno-0-374">374</a></span>
+<span class="normal"><a href="#__codelineno-0-375">375</a></span>
+<span class="normal"><a href="#__codelineno-0-376">376</a></span>
+<span class="normal"><a href="#__codelineno-0-377">377</a></span>
+<span class="normal"><a href="#__codelineno-0-378">378</a></span>
+<span class="normal"><a href="#__codelineno-0-379">379</a></span>
+<span class="normal"><a href="#__codelineno-0-380">380</a></span>
+<span class="normal"><a href="#__codelineno-0-381">381</a></span>
+<span class="normal"><a href="#__codelineno-0-382">382</a></span>
+<span class="normal"><a href="#__codelineno-0-383">383</a></span>
+<span class="normal"><a href="#__codelineno-0-384">384</a></span>
+<span class="normal"><a href="#__codelineno-0-385">385</a></span>
+<span class="normal"><a href="#__codelineno-0-386">386</a></span>
+<span class="normal"><a href="#__codelineno-0-387">387</a></span>
+<span class="normal"><a href="#__codelineno-0-388">388</a></span>
+<span class="normal"><a href="#__codelineno-0-389">389</a></span>
+<span class="normal"><a href="#__codelineno-0-390">390</a></span>
+<span class="normal"><a href="#__codelineno-0-391">391</a></span>
+<span class="normal"><a href="#__codelineno-0-392">392</a></span>
+<span class="normal"><a href="#__codelineno-0-393">393</a></span>
+<span class="normal"><a href="#__codelineno-0-394">394</a></span>
+<span class="normal"><a href="#__codelineno-0-395">395</a></span>
+<span class="normal"><a href="#__codelineno-0-396">396</a></span>
+<span class="normal"><a href="#__codelineno-0-397">397</a></span>
+<span class="normal"><a href="#__codelineno-0-398">398</a></span>
+<span class="normal"><a href="#__codelineno-0-399">399</a></span>
+<span class="normal"><a href="#__codelineno-0-400">400</a></span>
+<span class="normal"><a href="#__codelineno-0-401">401</a></span>
+<span class="normal"><a href="#__codelineno-0-402">402</a></span>
+<span class="normal"><a href="#__codelineno-0-403">403</a></span>
+<span class="normal"><a href="#__codelineno-0-404">404</a></span>
+<span class="normal"><a href="#__codelineno-0-405">405</a></span>
+<span class="normal"><a href="#__codelineno-0-406">406</a></span>
+<span class="normal"><a href="#__codelineno-0-407">407</a></span>
+<span class="normal"><a href="#__codelineno-0-408">408</a></span>
+<span class="normal"><a href="#__codelineno-0-409">409</a></span>
+<span class="normal"><a href="#__codelineno-0-410">410</a></span>
+<span class="normal"><a href="#__codelineno-0-411">411</a></span>
+<span class="normal"><a href="#__codelineno-0-412">412</a></span>
+<span class="normal"><a href="#__codelineno-0-413">413</a></span>
+<span class="normal"><a href="#__codelineno-0-414">414</a></span>
+<span class="normal"><a href="#__codelineno-0-415">415</a></span>
+<span class="normal"><a href="#__codelineno-0-416">416</a></span>
+<span class="normal"><a href="#__codelineno-0-417">417</a></span>
+<span class="normal"><a href="#__codelineno-0-418">418</a></span>
+<span class="normal"><a href="#__codelineno-0-419">419</a></span>
+<span class="normal"><a href="#__codelineno-0-420">420</a></span>
+<span class="normal"><a href="#__codelineno-0-421">421</a></span>
+<span class="normal"><a href="#__codelineno-0-422">422</a></span>
+<span class="normal"><a href="#__codelineno-0-423">423</a></span>
+<span class="normal"><a href="#__codelineno-0-424">424</a></span>
+<span class="normal"><a href="#__codelineno-0-425">425</a></span>
+<span class="normal"><a href="#__codelineno-0-426">426</a></span>
+<span class="normal"><a href="#__codelineno-0-427">427</a></span>
+<span class="normal"><a href="#__codelineno-0-428">428</a></span>
+<span class="normal"><a href="#__codelineno-0-429">429</a></span>
+<span class="normal"><a href="#__codelineno-0-430">430</a></span>
+<span class="normal"><a href="#__codelineno-0-431">431</a></span>
+<span class="normal"><a href="#__codelineno-0-432">432</a></span>
+<span class="normal"><a href="#__codelineno-0-433">433</a></span>
+<span class="normal"><a href="#__codelineno-0-434">434</a></span>
+<span class="normal"><a href="#__codelineno-0-435">435</a></span>
+<span class="normal"><a href="#__codelineno-0-436">436</a></span>
+<span class="normal"><a href="#__codelineno-0-437">437</a></span>
+<span class="normal"><a href="#__codelineno-0-438">438</a></span>
+<span class="normal"><a href="#__codelineno-0-439">439</a></span>
+<span class="normal"><a href="#__codelineno-0-440">440</a></span>
+<span class="normal"><a href="#__codelineno-0-441">441</a></span>
+<span class="normal"><a href="#__codelineno-0-442">442</a></span>
+<span class="normal"><a href="#__codelineno-0-443">443</a></span>
+<span class="normal"><a href="#__codelineno-0-444">444</a></span>
+<span class="normal"><a href="#__codelineno-0-445">445</a></span>
+<span class="normal"><a href="#__codelineno-0-446">446</a></span>
+<span class="normal"><a href="#__codelineno-0-447">447</a></span>
+<span class="normal"><a href="#__codelineno-0-448">448</a></span>
+<span class="normal"><a href="#__codelineno-0-449">449</a></span>
+<span class="normal"><a href="#__codelineno-0-450">450</a></span>
+<span class="normal"><a href="#__codelineno-0-451">451</a></span>
+<span class="normal"><a href="#__codelineno-0-452">452</a></span>
+<span class="normal"><a href="#__codelineno-0-453">453</a></span>
+<span class="normal"><a href="#__codelineno-0-454">454</a></span>
+<span class="normal"><a href="#__codelineno-0-455">455</a></span>
+<span class="normal"><a href="#__codelineno-0-456">456</a></span>
+<span class="normal"><a href="#__codelineno-0-457">457</a></span>
+<span class="normal"><a href="#__codelineno-0-458">458</a></span>
+<span class="normal"><a href="#__codelineno-0-459">459</a></span>
+<span class="normal"><a href="#__codelineno-0-460">460</a></span>
+<span class="normal"><a href="#__codelineno-0-461">461</a></span>
+<span class="normal"><a href="#__codelineno-0-462">462</a></span>
+<span class="normal"><a href="#__codelineno-0-463">463</a></span>
+<span class="normal"><a href="#__codelineno-0-464">464</a></span>
+<span class="normal"><a href="#__codelineno-0-465">465</a></span>
+<span class="normal"><a href="#__codelineno-0-466">466</a></span>
+<span class="normal"><a href="#__codelineno-0-467">467</a></span>
+<span class="normal"><a href="#__codelineno-0-468">468</a></span>
+<span class="normal"><a href="#__codelineno-0-469">469</a></span>
+<span class="normal"><a href="#__codelineno-0-470">470</a></span>
+<span class="normal"><a href="#__codelineno-0-471">471</a></span>
+<span class="normal"><a href="#__codelineno-0-472">472</a></span>
+<span class="normal"><a href="#__codelineno-0-473">473</a></span>
+<span class="normal"><a href="#__codelineno-0-474">474</a></span>
+<span class="normal"><a href="#__codelineno-0-475">475</a></span>
+<span class="normal"><a href="#__codelineno-0-476">476</a></span>
+<span class="normal"><a href="#__codelineno-0-477">477</a></span>
+<span class="normal"><a href="#__codelineno-0-478">478</a></span>
+<span class="normal"><a href="#__codelineno-0-479">479</a></span>
+<span class="normal"><a href="#__codelineno-0-480">480</a></span>
+<span class="normal"><a href="#__codelineno-0-481">481</a></span>
+<span class="normal"><a href="#__codelineno-0-482">482</a></span>
+<span class="normal"><a href="#__codelineno-0-483">483</a></span>
+<span class="normal"><a href="#__codelineno-0-484">484</a></span>
+<span class="normal"><a href="#__codelineno-0-485">485</a></span>
+<span class="normal"><a href="#__codelineno-0-486">486</a></span>
+<span class="normal"><a href="#__codelineno-0-487">487</a></span>
+<span class="normal"><a href="#__codelineno-0-488">488</a></span>
+<span class="normal"><a href="#__codelineno-0-489">489</a></span>
+<span class="normal"><a href="#__codelineno-0-490">490</a></span>
+<span class="normal"><a href="#__codelineno-0-491">491</a></span>
+<span class="normal"><a href="#__codelineno-0-492">492</a></span>
+<span class="normal"><a href="#__codelineno-0-493">493</a></span>
+<span class="normal"><a href="#__codelineno-0-494">494</a></span>
+<span class="normal"><a href="#__codelineno-0-495">495</a></span>
+<span class="normal"><a href="#__codelineno-0-496">496</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-356"><a id="__codelineno-0-356" name="__codelineno-0-356"></a><span class="k">class</span><span class="w"> </span><span class="nc">MjxDynamics</span><span class="p">(</span><span class="n">DynamicsAdapter</span><span class="p">):</span>
+</span><span id="__span-0-357"><a id="__codelineno-0-357" name="__codelineno-0-357"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;First-class MJX dynamics adapter for `Problem`.</span>
+</span><span id="__span-0-358"><a id="__codelineno-0-358" name="__codelineno-0-358"></a>
+</span><span id="__span-0-359"><a id="__codelineno-0-359" name="__codelineno-0-359"></a><span class="sd">    Wraps a ``mujoco.mjx`` model so it can be passed directly to the</span>
+</span><span id="__span-0-360"><a id="__codelineno-0-360" name="__codelineno-0-360"></a><span class="sd">    ``dynamics=`` argument of `Problem`. The adapter</span>
+</span><span id="__span-0-361"><a id="__codelineno-0-361" name="__codelineno-0-361"></a><span class="sd">    constructs default ``qpos`` / ``qvel`` State objects and a ``ctrl``</span>
+</span><span id="__span-0-362"><a id="__codelineno-0-362" name="__codelineno-0-362"></a><span class="sd">    Control matching the model&#39;s ``nq`` / ``nv`` / ``nu``, exposes them via</span>
+</span><span id="__span-0-363"><a id="__codelineno-0-363" name="__codelineno-0-363"></a><span class="sd">    ``.states`` / ``.controls``, and routes the MJX forward dynamics through</span>
+</span><span id="__span-0-364"><a id="__codelineno-0-364" name="__codelineno-0-364"></a><span class="sd">    the BYOF channel internally — without requiring the user to know about</span>
+</span><span id="__span-0-365"><a id="__codelineno-0-365" name="__codelineno-0-365"></a><span class="sd">    BYOF at all.</span>
+</span><span id="__span-0-366"><a id="__codelineno-0-366" name="__codelineno-0-366"></a>
+</span><span id="__span-0-367"><a id="__codelineno-0-367" name="__codelineno-0-367"></a><span class="sd">    Example:</span>
+</span><span id="__span-0-368"><a id="__codelineno-0-368" name="__codelineno-0-368"></a><span class="sd">        Cartpole (``nq == nv``)::</span>
+</span><span id="__span-0-369"><a id="__codelineno-0-369" name="__codelineno-0-369"></a>
+</span><span id="__span-0-370"><a id="__codelineno-0-370" name="__codelineno-0-370"></a><span class="sd">            mj_model = mujoco.MjModel.from_xml_path(&quot;cartpole.xml&quot;)</span>
+</span><span id="__span-0-371"><a id="__codelineno-0-371" name="__codelineno-0-371"></a><span class="sd">            mj_model.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT</span>
+</span><span id="__span-0-372"><a id="__codelineno-0-372" name="__codelineno-0-372"></a><span class="sd">            mjx_model = mjx.put_model(mj_model)</span>
+</span><span id="__span-0-373"><a id="__codelineno-0-373" name="__codelineno-0-373"></a>
+</span><span id="__span-0-374"><a id="__codelineno-0-374" name="__codelineno-0-374"></a><span class="sd">            dyn = ox.MjxDynamics(mjx_model)</span>
+</span><span id="__span-0-375"><a id="__codelineno-0-375" name="__codelineno-0-375"></a><span class="sd">            problem = ox.Problem(</span>
+</span><span id="__span-0-376"><a id="__codelineno-0-376" name="__codelineno-0-376"></a><span class="sd">                dynamics=dyn,</span>
+</span><span id="__span-0-377"><a id="__codelineno-0-377" name="__codelineno-0-377"></a><span class="sd">                states=dyn.states,</span>
+</span><span id="__span-0-378"><a id="__codelineno-0-378" name="__codelineno-0-378"></a><span class="sd">                controls=dyn.controls,</span>
+</span><span id="__span-0-379"><a id="__codelineno-0-379" name="__codelineno-0-379"></a><span class="sd">                ...</span>
+</span><span id="__span-0-380"><a id="__codelineno-0-380" name="__codelineno-0-380"></a><span class="sd">            )</span>
+</span><span id="__span-0-381"><a id="__codelineno-0-381" name="__codelineno-0-381"></a>
+</span><span id="__span-0-382"><a id="__codelineno-0-382" name="__codelineno-0-382"></a><span class="sd">        Quadrotor with a free joint (``nq &gt; nv``) — quaternion kinematics</span>
+</span><span id="__span-0-383"><a id="__codelineno-0-383" name="__codelineno-0-383"></a><span class="sd">        are inserted automatically::</span>
+</span><span id="__span-0-384"><a id="__codelineno-0-384" name="__codelineno-0-384"></a>
+</span><span id="__span-0-385"><a id="__codelineno-0-385" name="__codelineno-0-385"></a><span class="sd">            dyn = ox.MjxDynamics(mjx_model)  # nq=7, nv=6</span>
+</span><span id="__span-0-386"><a id="__codelineno-0-386" name="__codelineno-0-386"></a><span class="sd">            problem = ox.Problem(</span>
+</span><span id="__span-0-387"><a id="__codelineno-0-387" name="__codelineno-0-387"></a><span class="sd">                dynamics=dyn, states=dyn.states, controls=dyn.controls, ...</span>
+</span><span id="__span-0-388"><a id="__codelineno-0-388" name="__codelineno-0-388"></a><span class="sd">            )</span>
+</span><span id="__span-0-389"><a id="__codelineno-0-389" name="__codelineno-0-389"></a>
+</span><span id="__span-0-390"><a id="__codelineno-0-390" name="__codelineno-0-390"></a><span class="sd">    Custom State/Control names or shapes are *not* supported here on purpose</span>
+</span><span id="__span-0-391"><a id="__codelineno-0-391" name="__codelineno-0-391"></a><span class="sd">    — the whole point of the adapter is &quot;I don&#39;t want to think about names.&quot;</span>
+</span><span id="__span-0-392"><a id="__codelineno-0-392" name="__codelineno-0-392"></a><span class="sd">    Drop to the lower-level `mjx_dynamics` helper if you need that control —</span>
+</span><span id="__span-0-393"><a id="__codelineno-0-393" name="__codelineno-0-393"></a><span class="sd">    construct your own State/Control objects, pass them in, and assemble the</span>
+</span><span id="__span-0-394"><a id="__codelineno-0-394" name="__codelineno-0-394"></a><span class="sd">    BYOF dict yourself.</span>
+</span><span id="__span-0-395"><a id="__codelineno-0-395" name="__codelineno-0-395"></a>
+</span><span id="__span-0-396"><a id="__codelineno-0-396" name="__codelineno-0-396"></a><span class="sd">    Supported joint structure:</span>
+</span><span id="__span-0-397"><a id="__codelineno-0-397" name="__codelineno-0-397"></a><span class="sd">        * Free (``mjJNT_FREE``), slide (``mjJNT_SLIDE``), and hinge</span>
+</span><span id="__span-0-398"><a id="__codelineno-0-398" name="__codelineno-0-398"></a><span class="sd">          (``mjJNT_HINGE``) joints only.</span>
+</span><span id="__span-0-399"><a id="__codelineno-0-399" name="__codelineno-0-399"></a><span class="sd">        * If the model contains any free joints, they must all come</span>
+</span><span id="__span-0-400"><a id="__codelineno-0-400" name="__codelineno-0-400"></a><span class="sd">          *before* any slide/hinge joints in the MuJoCo layout.</span>
+</span><span id="__span-0-401"><a id="__codelineno-0-401" name="__codelineno-0-401"></a><span class="sd">        * Ball joints (``mjJNT_BALL``) are explicitly refused — they share</span>
+</span><span id="__span-0-402"><a id="__codelineno-0-402" name="__codelineno-0-402"></a><span class="sd">          ``nq=4, nv=3`` with free joints but use different kinematics, and</span>
+</span><span id="__span-0-403"><a id="__codelineno-0-403" name="__codelineno-0-403"></a><span class="sd">          would silently produce wrong dynamics.</span>
+</span><span id="__span-0-404"><a id="__codelineno-0-404" name="__codelineno-0-404"></a>
+</span><span id="__span-0-405"><a id="__codelineno-0-405" name="__codelineno-0-405"></a><span class="sd">        Construction raises ``NotImplementedError`` if any of these</span>
+</span><span id="__span-0-406"><a id="__codelineno-0-406" name="__codelineno-0-406"></a><span class="sd">        conditions are violated; fall back to `mjx_dynamics` for those</span>
+</span><span id="__span-0-407"><a id="__codelineno-0-407" name="__codelineno-0-407"></a><span class="sd">        cases.</span>
+</span><span id="__span-0-408"><a id="__codelineno-0-408" name="__codelineno-0-408"></a>
+</span><span id="__span-0-409"><a id="__codelineno-0-409" name="__codelineno-0-409"></a><span class="sd">    Auto-populated bounds:</span>
+</span><span id="__span-0-410"><a id="__codelineno-0-410" name="__codelineno-0-410"></a><span class="sd">        * ``qpos.min`` / ``qpos.max`` are read from ``mjx_model.jnt_range``</span>
+</span><span id="__span-0-411"><a id="__codelineno-0-411" name="__codelineno-0-411"></a><span class="sd">          for slide / hinge joints flagged ``jnt_limited=True``; free-joint</span>
+</span><span id="__span-0-412"><a id="__codelineno-0-412" name="__codelineno-0-412"></a><span class="sd">          slots and unlimited joints default to ``±inf``.</span>
+</span><span id="__span-0-413"><a id="__codelineno-0-413" name="__codelineno-0-413"></a><span class="sd">        * ``ctrl.min`` / ``ctrl.max`` are read from ``actuator_ctrlrange``</span>
+</span><span id="__span-0-414"><a id="__codelineno-0-414" name="__codelineno-0-414"></a><span class="sd">          for actuators flagged ``actuator_ctrllimited=True``; otherwise</span>
+</span><span id="__span-0-415"><a id="__codelineno-0-415" name="__codelineno-0-415"></a><span class="sd">          ``±inf``.</span>
+</span><span id="__span-0-416"><a id="__codelineno-0-416" name="__codelineno-0-416"></a><span class="sd">        * ``qvel`` bounds default to ``±inf`` (MuJoCo has no per-joint</span>
+</span><span id="__span-0-417"><a id="__codelineno-0-417" name="__codelineno-0-417"></a><span class="sd">          velocity-limit concept).</span>
+</span><span id="__span-0-418"><a id="__codelineno-0-418" name="__codelineno-0-418"></a>
+</span><span id="__span-0-419"><a id="__codelineno-0-419" name="__codelineno-0-419"></a><span class="sd">        Override any of these after construction if you want tighter</span>
+</span><span id="__span-0-420"><a id="__codelineno-0-420" name="__codelineno-0-420"></a><span class="sd">        problem-specific bounds.</span>
+</span><span id="__span-0-421"><a id="__codelineno-0-421" name="__codelineno-0-421"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-0-422"><a id="__codelineno-0-422" name="__codelineno-0-422"></a>
+</span><span id="__span-0-423"><a id="__codelineno-0-423" name="__codelineno-0-423"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+</span><span id="__span-0-424"><a id="__codelineno-0-424" name="__codelineno-0-424"></a>        <span class="bp">self</span><span class="p">,</span>
+</span><span id="__span-0-425"><a id="__codelineno-0-425" name="__codelineno-0-425"></a>        <span class="n">mjx_model</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+</span><span id="__span-0-426"><a id="__codelineno-0-426" name="__codelineno-0-426"></a>        <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-427"><a id="__codelineno-0-427" name="__codelineno-0-427"></a>        <span class="n">return_component</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;qacc&quot;</span><span class="p">,</span>
+</span><span id="__span-0-428"><a id="__codelineno-0-428" name="__codelineno-0-428"></a>        <span class="n">extra_postprocess</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Callable</span><span class="p">[[</span><span class="n">Any</span><span class="p">],</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-429"><a id="__codelineno-0-429" name="__codelineno-0-429"></a>    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-0-430"><a id="__codelineno-0-430" name="__codelineno-0-430"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">openscvx.symbolic.expr.control</span><span class="w"> </span><span class="kn">import</span> <span class="n">Control</span>
+</span><span id="__span-0-431"><a id="__codelineno-0-431" name="__codelineno-0-431"></a>        <span class="kn">from</span><span class="w"> </span><span class="nn">openscvx.symbolic.expr.state</span><span class="w"> </span><span class="kn">import</span> <span class="n">State</span>
+</span><span id="__span-0-432"><a id="__codelineno-0-432" name="__codelineno-0-432"></a>
+</span><span id="__span-0-433"><a id="__codelineno-0-433" name="__codelineno-0-433"></a>        <span class="n">_validate_supported_joints</span><span class="p">(</span><span class="n">mjx_model</span><span class="p">)</span>
+</span><span id="__span-0-434"><a id="__codelineno-0-434" name="__codelineno-0-434"></a>
+</span><span id="__span-0-435"><a id="__codelineno-0-435" name="__codelineno-0-435"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">mjx_model</span> <span class="o">=</span> <span class="n">mjx_model</span>
+</span><span id="__span-0-436"><a id="__codelineno-0-436" name="__codelineno-0-436"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">return_component</span> <span class="o">=</span> <span class="n">return_component</span>
+</span><span id="__span-0-437"><a id="__codelineno-0-437" name="__codelineno-0-437"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">extra_postprocess</span> <span class="o">=</span> <span class="n">extra_postprocess</span>
+</span><span id="__span-0-438"><a id="__codelineno-0-438" name="__codelineno-0-438"></a>
+</span><span id="__span-0-439"><a id="__codelineno-0-439" name="__codelineno-0-439"></a>        <span class="n">nq</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">mjx_model</span><span class="o">.</span><span class="n">nq</span><span class="p">)</span>
+</span><span id="__span-0-440"><a id="__codelineno-0-440" name="__codelineno-0-440"></a>        <span class="n">nv</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">mjx_model</span><span class="o">.</span><span class="n">nv</span><span class="p">)</span>
+</span><span id="__span-0-441"><a id="__codelineno-0-441" name="__codelineno-0-441"></a>        <span class="n">nu</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">mjx_model</span><span class="o">.</span><span class="n">nu</span><span class="p">)</span>
+</span><span id="__span-0-442"><a id="__codelineno-0-442" name="__codelineno-0-442"></a>
+</span><span id="__span-0-443"><a id="__codelineno-0-443" name="__codelineno-0-443"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_qpos</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s2">&quot;qpos&quot;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">nq</span><span class="p">,))</span>
+</span><span id="__span-0-444"><a id="__codelineno-0-444" name="__codelineno-0-444"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_qvel</span> <span class="o">=</span> <span class="n">State</span><span class="p">(</span><span class="s2">&quot;qvel&quot;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">nv</span><span class="p">,))</span>
+</span><span id="__span-0-445"><a id="__codelineno-0-445" name="__codelineno-0-445"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_ctrl</span> <span class="o">=</span> <span class="n">Control</span><span class="p">(</span><span class="s2">&quot;ctrl&quot;</span><span class="p">,</span> <span class="n">shape</span><span class="o">=</span><span class="p">(</span><span class="n">nu</span><span class="p">,))</span>
+</span><span id="__span-0-446"><a id="__codelineno-0-446" name="__codelineno-0-446"></a>
+</span><span id="__span-0-447"><a id="__codelineno-0-447" name="__codelineno-0-447"></a>        <span class="c1"># Auto-populate bounds from the model so the user doesn&#39;t have to</span>
+</span><span id="__span-0-448"><a id="__codelineno-0-448" name="__codelineno-0-448"></a>        <span class="c1"># re-type joint / actuator limits already declared in MJCF. Users</span>
+</span><span id="__span-0-449"><a id="__codelineno-0-449" name="__codelineno-0-449"></a>        <span class="c1"># can still override any of these after construction.</span>
+</span><span id="__span-0-450"><a id="__codelineno-0-450" name="__codelineno-0-450"></a>        <span class="n">qpos_min</span><span class="p">,</span> <span class="n">qpos_max</span><span class="p">,</span> <span class="n">qvel_min</span><span class="p">,</span> <span class="n">qvel_max</span><span class="p">,</span> <span class="n">ctrl_min</span><span class="p">,</span> <span class="n">ctrl_max</span> <span class="o">=</span> <span class="n">_initial_bounds_from_model</span><span class="p">(</span>
+</span><span id="__span-0-451"><a id="__codelineno-0-451" name="__codelineno-0-451"></a>            <span class="n">mjx_model</span><span class="p">,</span> <span class="n">nq</span><span class="p">,</span> <span class="n">nv</span><span class="p">,</span> <span class="n">nu</span>
+</span><span id="__span-0-452"><a id="__codelineno-0-452" name="__codelineno-0-452"></a>        <span class="p">)</span>
+</span><span id="__span-0-453"><a id="__codelineno-0-453" name="__codelineno-0-453"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_qpos</span><span class="o">.</span><span class="n">min</span> <span class="o">=</span> <span class="n">qpos_min</span>
+</span><span id="__span-0-454"><a id="__codelineno-0-454" name="__codelineno-0-454"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_qpos</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="n">qpos_max</span>
+</span><span id="__span-0-455"><a id="__codelineno-0-455" name="__codelineno-0-455"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_qvel</span><span class="o">.</span><span class="n">min</span> <span class="o">=</span> <span class="n">qvel_min</span>
+</span><span id="__span-0-456"><a id="__codelineno-0-456" name="__codelineno-0-456"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_qvel</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="n">qvel_max</span>
+</span><span id="__span-0-457"><a id="__codelineno-0-457" name="__codelineno-0-457"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_ctrl</span><span class="o">.</span><span class="n">min</span> <span class="o">=</span> <span class="n">ctrl_min</span>
+</span><span id="__span-0-458"><a id="__codelineno-0-458" name="__codelineno-0-458"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_ctrl</span><span class="o">.</span><span class="n">max</span> <span class="o">=</span> <span class="n">ctrl_max</span>
+</span><span id="__span-0-459"><a id="__codelineno-0-459" name="__codelineno-0-459"></a>
+</span><span id="__span-0-460"><a id="__codelineno-0-460" name="__codelineno-0-460"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">State</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_qpos</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_qvel</span><span class="p">]</span>
+</span><span id="__span-0-461"><a id="__codelineno-0-461" name="__codelineno-0-461"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">controls</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Control</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_ctrl</span><span class="p">]</span>
+</span><span id="__span-0-462"><a id="__codelineno-0-462" name="__codelineno-0-462"></a>
+</span><span id="__span-0-463"><a id="__codelineno-0-463" name="__codelineno-0-463"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-0-464"><a id="__codelineno-0-464" name="__codelineno-0-464"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Return ``(dynamics_dict, byof_dict)`` for this MJX model.</span>
+</span><span id="__span-0-465"><a id="__codelineno-0-465" name="__codelineno-0-465"></a>
+</span><span id="__span-0-466"><a id="__codelineno-0-466" name="__codelineno-0-466"></a><span class="sd">        - ``nq == nv``: ``dynamics_dict = {&quot;qpos&quot;: qvel}`` (symbolic</span>
+</span><span id="__span-0-467"><a id="__codelineno-0-467" name="__codelineno-0-467"></a><span class="sd">          kinematic identity), ``byof_dict[&quot;dynamics&quot;] = {&quot;qvel&quot;: ...}``.</span>
+</span><span id="__span-0-468"><a id="__codelineno-0-468" name="__codelineno-0-468"></a><span class="sd">        - ``nq &gt; nv``: ``dynamics_dict = {}``, ``byof_dict[&quot;dynamics&quot;]``</span>
+</span><span id="__span-0-469"><a id="__codelineno-0-469" name="__codelineno-0-469"></a><span class="sd">          contains both ``&quot;qpos&quot;`` (quaternion kinematics) and ``&quot;qvel&quot;``.</span>
+</span><span id="__span-0-470"><a id="__codelineno-0-470" name="__codelineno-0-470"></a><span class="sd">        &quot;&quot;&quot;</span>
+</span><span id="__span-0-471"><a id="__codelineno-0-471" name="__codelineno-0-471"></a>        <span class="n">nq</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mjx_model</span><span class="o">.</span><span class="n">nq</span><span class="p">)</span>
+</span><span id="__span-0-472"><a id="__codelineno-0-472" name="__codelineno-0-472"></a>        <span class="n">nv</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mjx_model</span><span class="o">.</span><span class="n">nv</span><span class="p">)</span>
+</span><span id="__span-0-473"><a id="__codelineno-0-473" name="__codelineno-0-473"></a>
+</span><span id="__span-0-474"><a id="__codelineno-0-474" name="__codelineno-0-474"></a>        <span class="n">byof_dynamics</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-0-475"><a id="__codelineno-0-475" name="__codelineno-0-475"></a>            <span class="s2">&quot;qvel&quot;</span><span class="p">:</span> <span class="n">mjx_dynamics</span><span class="p">(</span>
+</span><span id="__span-0-476"><a id="__codelineno-0-476" name="__codelineno-0-476"></a>                <span class="bp">self</span><span class="o">.</span><span class="n">mjx_model</span><span class="p">,</span>
+</span><span id="__span-0-477"><a id="__codelineno-0-477" name="__codelineno-0-477"></a>                <span class="n">qpos</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_qpos</span><span class="p">,</span>
+</span><span id="__span-0-478"><a id="__codelineno-0-478" name="__codelineno-0-478"></a>                <span class="n">qvel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_qvel</span><span class="p">,</span>
+</span><span id="__span-0-479"><a id="__codelineno-0-479" name="__codelineno-0-479"></a>                <span class="n">ctrl</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_ctrl</span><span class="p">,</span>
+</span><span id="__span-0-480"><a id="__codelineno-0-480" name="__codelineno-0-480"></a>                <span class="n">return_component</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">return_component</span><span class="p">,</span>
+</span><span id="__span-0-481"><a id="__codelineno-0-481" name="__codelineno-0-481"></a>                <span class="n">extra_postprocess</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">extra_postprocess</span><span class="p">,</span>
+</span><span id="__span-0-482"><a id="__codelineno-0-482" name="__codelineno-0-482"></a>            <span class="p">),</span>
+</span><span id="__span-0-483"><a id="__codelineno-0-483" name="__codelineno-0-483"></a>        <span class="p">}</span>
+</span><span id="__span-0-484"><a id="__codelineno-0-484" name="__codelineno-0-484"></a>
+</span><span id="__span-0-485"><a id="__codelineno-0-485" name="__codelineno-0-485"></a>        <span class="n">n_free</span> <span class="o">=</span> <span class="n">nq</span> <span class="o">-</span> <span class="n">nv</span>
+</span><span id="__span-0-486"><a id="__codelineno-0-486" name="__codelineno-0-486"></a>        <span class="k">if</span> <span class="n">n_free</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="__span-0-487"><a id="__codelineno-0-487" name="__codelineno-0-487"></a>            <span class="n">byof_dynamics</span><span class="p">[</span><span class="s2">&quot;qpos&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_free_joint_qpos_dynamics</span><span class="p">(</span>
+</span><span id="__span-0-488"><a id="__codelineno-0-488" name="__codelineno-0-488"></a>                <span class="n">qpos</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_qpos</span><span class="p">,</span>
+</span><span id="__span-0-489"><a id="__codelineno-0-489" name="__codelineno-0-489"></a>                <span class="n">qvel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_qvel</span><span class="p">,</span>
+</span><span id="__span-0-490"><a id="__codelineno-0-490" name="__codelineno-0-490"></a>                <span class="n">n_free_joints</span><span class="o">=</span><span class="n">n_free</span><span class="p">,</span>
+</span><span id="__span-0-491"><a id="__codelineno-0-491" name="__codelineno-0-491"></a>            <span class="p">)</span>
+</span><span id="__span-0-492"><a id="__codelineno-0-492" name="__codelineno-0-492"></a>            <span class="n">dynamics_dict</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span id="__span-0-493"><a id="__codelineno-0-493" name="__codelineno-0-493"></a>        <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-494"><a id="__codelineno-0-494" name="__codelineno-0-494"></a>            <span class="n">dynamics_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;qpos&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_qvel</span><span class="p">}</span>
+</span><span id="__span-0-495"><a id="__codelineno-0-495" name="__codelineno-0-495"></a>
+</span><span id="__span-0-496"><a id="__codelineno-0-496" name="__codelineno-0-496"></a>        <span class="k">return</span> <span class="n">dynamics_dict</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;dynamics&quot;</span><span class="p">:</span> <span class="n">byof_dynamics</span><span class="p">}</span>
+</span></code></pre></div></td></tr></table></div>
+              </details>
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h5 id="openscvx.integrations.MjxDynamics.expand" class="doc doc-heading">
+            <code class="highlight language-python"><span class="n">expand</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]</span></code>
+
+<a href="#openscvx.integrations.MjxDynamics.expand" class="headerlink" title="Permanent link">&para;</a></h5>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return <code>(dynamics_dict, byof_dict)</code> for this MJX model.</p>
+<ul>
+<li><code>nq == nv</code>: <code>dynamics_dict = {"qpos": qvel}</code> (symbolic
+  kinematic identity), <code>byof_dict["dynamics"] = {"qvel": ...}</code>.</li>
+<li><code>nq &gt; nv</code>: <code>dynamics_dict = {}</code>, <code>byof_dict["dynamics"]</code>
+  contains both <code>"qpos"</code> (quaternion kinematics) and <code>"qvel"</code>.</li>
+</ul>
+
+
+            <details class="mkdocstrings-source">
+              <summary>Source code in <code>openscvx/integrations/mjx.py</code></summary>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-463">463</a></span>
+<span class="normal"><a href="#__codelineno-0-464">464</a></span>
+<span class="normal"><a href="#__codelineno-0-465">465</a></span>
+<span class="normal"><a href="#__codelineno-0-466">466</a></span>
+<span class="normal"><a href="#__codelineno-0-467">467</a></span>
+<span class="normal"><a href="#__codelineno-0-468">468</a></span>
+<span class="normal"><a href="#__codelineno-0-469">469</a></span>
+<span class="normal"><a href="#__codelineno-0-470">470</a></span>
+<span class="normal"><a href="#__codelineno-0-471">471</a></span>
+<span class="normal"><a href="#__codelineno-0-472">472</a></span>
+<span class="normal"><a href="#__codelineno-0-473">473</a></span>
+<span class="normal"><a href="#__codelineno-0-474">474</a></span>
+<span class="normal"><a href="#__codelineno-0-475">475</a></span>
+<span class="normal"><a href="#__codelineno-0-476">476</a></span>
+<span class="normal"><a href="#__codelineno-0-477">477</a></span>
+<span class="normal"><a href="#__codelineno-0-478">478</a></span>
+<span class="normal"><a href="#__codelineno-0-479">479</a></span>
+<span class="normal"><a href="#__codelineno-0-480">480</a></span>
+<span class="normal"><a href="#__codelineno-0-481">481</a></span>
+<span class="normal"><a href="#__codelineno-0-482">482</a></span>
+<span class="normal"><a href="#__codelineno-0-483">483</a></span>
+<span class="normal"><a href="#__codelineno-0-484">484</a></span>
+<span class="normal"><a href="#__codelineno-0-485">485</a></span>
+<span class="normal"><a href="#__codelineno-0-486">486</a></span>
+<span class="normal"><a href="#__codelineno-0-487">487</a></span>
+<span class="normal"><a href="#__codelineno-0-488">488</a></span>
+<span class="normal"><a href="#__codelineno-0-489">489</a></span>
+<span class="normal"><a href="#__codelineno-0-490">490</a></span>
+<span class="normal"><a href="#__codelineno-0-491">491</a></span>
+<span class="normal"><a href="#__codelineno-0-492">492</a></span>
+<span class="normal"><a href="#__codelineno-0-493">493</a></span>
+<span class="normal"><a href="#__codelineno-0-494">494</a></span>
+<span class="normal"><a href="#__codelineno-0-495">495</a></span>
+<span class="normal"><a href="#__codelineno-0-496">496</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-463"><a id="__codelineno-0-463" name="__codelineno-0-463"></a><span class="k">def</span><span class="w"> </span><span class="nf">expand</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+</span><span id="__span-0-464"><a id="__codelineno-0-464" name="__codelineno-0-464"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Return ``(dynamics_dict, byof_dict)`` for this MJX model.</span>
+</span><span id="__span-0-465"><a id="__codelineno-0-465" name="__codelineno-0-465"></a>
+</span><span id="__span-0-466"><a id="__codelineno-0-466" name="__codelineno-0-466"></a><span class="sd">    - ``nq == nv``: ``dynamics_dict = {&quot;qpos&quot;: qvel}`` (symbolic</span>
+</span><span id="__span-0-467"><a id="__codelineno-0-467" name="__codelineno-0-467"></a><span class="sd">      kinematic identity), ``byof_dict[&quot;dynamics&quot;] = {&quot;qvel&quot;: ...}``.</span>
+</span><span id="__span-0-468"><a id="__codelineno-0-468" name="__codelineno-0-468"></a><span class="sd">    - ``nq &gt; nv``: ``dynamics_dict = {}``, ``byof_dict[&quot;dynamics&quot;]``</span>
+</span><span id="__span-0-469"><a id="__codelineno-0-469" name="__codelineno-0-469"></a><span class="sd">      contains both ``&quot;qpos&quot;`` (quaternion kinematics) and ``&quot;qvel&quot;``.</span>
+</span><span id="__span-0-470"><a id="__codelineno-0-470" name="__codelineno-0-470"></a><span class="sd">    &quot;&quot;&quot;</span>
+</span><span id="__span-0-471"><a id="__codelineno-0-471" name="__codelineno-0-471"></a>    <span class="n">nq</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mjx_model</span><span class="o">.</span><span class="n">nq</span><span class="p">)</span>
+</span><span id="__span-0-472"><a id="__codelineno-0-472" name="__codelineno-0-472"></a>    <span class="n">nv</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mjx_model</span><span class="o">.</span><span class="n">nv</span><span class="p">)</span>
+</span><span id="__span-0-473"><a id="__codelineno-0-473" name="__codelineno-0-473"></a>
+</span><span id="__span-0-474"><a id="__codelineno-0-474" name="__codelineno-0-474"></a>    <span class="n">byof_dynamics</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-0-475"><a id="__codelineno-0-475" name="__codelineno-0-475"></a>        <span class="s2">&quot;qvel&quot;</span><span class="p">:</span> <span class="n">mjx_dynamics</span><span class="p">(</span>
+</span><span id="__span-0-476"><a id="__codelineno-0-476" name="__codelineno-0-476"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">mjx_model</span><span class="p">,</span>
+</span><span id="__span-0-477"><a id="__codelineno-0-477" name="__codelineno-0-477"></a>            <span class="n">qpos</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_qpos</span><span class="p">,</span>
+</span><span id="__span-0-478"><a id="__codelineno-0-478" name="__codelineno-0-478"></a>            <span class="n">qvel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_qvel</span><span class="p">,</span>
+</span><span id="__span-0-479"><a id="__codelineno-0-479" name="__codelineno-0-479"></a>            <span class="n">ctrl</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_ctrl</span><span class="p">,</span>
+</span><span id="__span-0-480"><a id="__codelineno-0-480" name="__codelineno-0-480"></a>            <span class="n">return_component</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">return_component</span><span class="p">,</span>
+</span><span id="__span-0-481"><a id="__codelineno-0-481" name="__codelineno-0-481"></a>            <span class="n">extra_postprocess</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">extra_postprocess</span><span class="p">,</span>
+</span><span id="__span-0-482"><a id="__codelineno-0-482" name="__codelineno-0-482"></a>        <span class="p">),</span>
+</span><span id="__span-0-483"><a id="__codelineno-0-483" name="__codelineno-0-483"></a>    <span class="p">}</span>
+</span><span id="__span-0-484"><a id="__codelineno-0-484" name="__codelineno-0-484"></a>
+</span><span id="__span-0-485"><a id="__codelineno-0-485" name="__codelineno-0-485"></a>    <span class="n">n_free</span> <span class="o">=</span> <span class="n">nq</span> <span class="o">-</span> <span class="n">nv</span>
+</span><span id="__span-0-486"><a id="__codelineno-0-486" name="__codelineno-0-486"></a>    <span class="k">if</span> <span class="n">n_free</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+</span><span id="__span-0-487"><a id="__codelineno-0-487" name="__codelineno-0-487"></a>        <span class="n">byof_dynamics</span><span class="p">[</span><span class="s2">&quot;qpos&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_free_joint_qpos_dynamics</span><span class="p">(</span>
+</span><span id="__span-0-488"><a id="__codelineno-0-488" name="__codelineno-0-488"></a>            <span class="n">qpos</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_qpos</span><span class="p">,</span>
+</span><span id="__span-0-489"><a id="__codelineno-0-489" name="__codelineno-0-489"></a>            <span class="n">qvel</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_qvel</span><span class="p">,</span>
+</span><span id="__span-0-490"><a id="__codelineno-0-490" name="__codelineno-0-490"></a>            <span class="n">n_free_joints</span><span class="o">=</span><span class="n">n_free</span><span class="p">,</span>
+</span><span id="__span-0-491"><a id="__codelineno-0-491" name="__codelineno-0-491"></a>        <span class="p">)</span>
+</span><span id="__span-0-492"><a id="__codelineno-0-492" name="__codelineno-0-492"></a>        <span class="n">dynamics_dict</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{}</span>
+</span><span id="__span-0-493"><a id="__codelineno-0-493" name="__codelineno-0-493"></a>    <span class="k">else</span><span class="p">:</span>
+</span><span id="__span-0-494"><a id="__codelineno-0-494" name="__codelineno-0-494"></a>        <span class="n">dynamics_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;qpos&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_qvel</span><span class="p">}</span>
+</span><span id="__span-0-495"><a id="__codelineno-0-495" name="__codelineno-0-495"></a>
+</span><span id="__span-0-496"><a id="__codelineno-0-496" name="__codelineno-0-496"></a>    <span class="k">return</span> <span class="n">dynamics_dict</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;dynamics&quot;</span><span class="p">:</span> <span class="n">byof_dynamics</span><span class="p">}</span>
+</span></code></pre></div></td></tr></table></div>
+            </details>
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
 
 <div class="doc doc-object doc-function">
 
@@ -9030,15 +9732,15 @@ The :mod:<code>menagerie</code> submodule is loaded lazily via attribute access.
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>openscvx/integrations/__init__.py</code></summary>
-              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-47">47</a></span>
+              <div class="language-python highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"><a href="#__codelineno-0-46">46</a></span>
+<span class="normal"><a href="#__codelineno-0-47">47</a></span>
 <span class="normal"><a href="#__codelineno-0-48">48</a></span>
 <span class="normal"><a href="#__codelineno-0-49">49</a></span>
-<span class="normal"><a href="#__codelineno-0-50">50</a></span>
-<span class="normal"><a href="#__codelineno-0-51">51</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-47"><a id="__codelineno-0-47" name="__codelineno-0-47"></a><span class="k">def</span><span class="w"> </span><span class="nf">mjx_dynamics</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-</span><span id="__span-0-48"><a id="__codelineno-0-48" name="__codelineno-0-48"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Lazy delegate; imports ``mujoco.mjx`` on first call.&quot;&quot;&quot;</span>
-</span><span id="__span-0-49"><a id="__codelineno-0-49" name="__codelineno-0-49"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">.mjx</span><span class="w"> </span><span class="kn">import</span> <span class="n">mjx_dynamics</span> <span class="k">as</span> <span class="n">_mjx_dynamics</span>
-</span><span id="__span-0-50"><a id="__codelineno-0-50" name="__codelineno-0-50"></a>
-</span><span id="__span-0-51"><a id="__codelineno-0-51" name="__codelineno-0-51"></a>    <span class="k">return</span> <span class="n">_mjx_dynamics</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+<span class="normal"><a href="#__codelineno-0-50">50</a></span></pre></div></td><td class="code"><div><pre><span></span><code><span id="__span-0-46"><a id="__codelineno-0-46" name="__codelineno-0-46"></a><span class="k">def</span><span class="w"> </span><span class="nf">mjx_dynamics</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+</span><span id="__span-0-47"><a id="__codelineno-0-47" name="__codelineno-0-47"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Lazy delegate; imports ``mujoco.mjx`` on first call.&quot;&quot;&quot;</span>
+</span><span id="__span-0-48"><a id="__codelineno-0-48" name="__codelineno-0-48"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">.mjx</span><span class="w"> </span><span class="kn">import</span> <span class="n">mjx_dynamics</span> <span class="k">as</span> <span class="n">_mjx_dynamics</span>
+</span><span id="__span-0-49"><a id="__codelineno-0-49" name="__codelineno-0-49"></a>
+</span><span id="__span-0-50"><a id="__codelineno-0-50" name="__codelineno-0-50"></a>    <span class="k">return</span> <span class="n">_mjx_dynamics</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 </span></code></pre></div></td></tr></table></div>
             </details>
     </div>
@@ -9104,13 +9806,13 @@ The :mod:<code>menagerie</code> submodule is loaded lazily via attribute access.
         
         
           
-          <a href="menagerie/" class="md-footer__link md-footer__link--next" aria-label="Next: menagerie">
+          <a href="base/" class="md-footer__link md-footer__link--next" aria-label="Next: base">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                menagerie
+                base
               </div>
             </div>
             <div class="md-footer__button md-icon">
