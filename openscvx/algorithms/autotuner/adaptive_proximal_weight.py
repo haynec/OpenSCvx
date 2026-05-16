@@ -8,8 +8,8 @@ from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 
-from .augmented_lagrangian import AugmentedLagrangian
 from ..base import AutotuningBase
+from .augmented_lagrangian import AugmentedLagrangian
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
