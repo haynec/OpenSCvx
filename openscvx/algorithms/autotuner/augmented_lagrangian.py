@@ -86,8 +86,12 @@ class AugmentedLagrangian(AutotuningBase):
             eta_2: Threshold above which solution is accepted with lower weight.
                 Defaults to 0.8.
             ep: Threshold for virtual control weight update (nu > ep vs nu <= ep).
-                Defaults to 0.5.
-            eta_lambda: Step size for virtual control weight update. Defaults to 1e0.
+                Must lie in (0, 1). Defaults to 0.99; when tuning, try 1e-1 if needed.
+                Typically tuned together with ``eta_lambda`` (often the first
+                parameters adjusted).
+            eta_lambda: Step size for virtual control weight update. Defaults to 1e1.
+                Typically tuned together with ``ep`` (often the first parameters
+                adjusted).
             lam_vc_max: Maximum virtual control penalty weight. Defaults to 1e5.
             lam_prox_min: Minimum trust region (proximal) weight. Defaults to 1e-3.
             lam_prox_max: Maximum trust region (proximal) weight. Defaults to 2e5.
