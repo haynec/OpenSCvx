@@ -317,15 +317,7 @@
          <lastmod>2026-05-16</lastmod>
     </url>
     <url>
-         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/augmented_lagrangian/</loc>
-         <lastmod>2026-05-16</lastmod>
-    </url>
-    <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/base/</loc>
-         <lastmod>2026-05-16</lastmod>
-    </url>
-    <url>
-         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/constant_proximal_weight/</loc>
          <lastmod>2026-05-16</lastmod>
     </url>
     <url>
@@ -333,15 +325,35 @@
          <lastmod>2026-05-16</lastmod>
     </url>
     <url>
-         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/penalized_trust_region/</loc>
-         <lastmod>2026-05-16</lastmod>
-    </url>
-    <url>
-         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/ramp_proximal_weight/</loc>
-         <lastmod>2026-05-16</lastmod>
-    </url>
-    <url>
          <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/weights/</loc>
+         <lastmod>2026-05-16</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/autotuner/</loc>
+         <lastmod>2026-05-16</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/autotuner/adaptive_proximal_weight/</loc>
+         <lastmod>2026-05-16</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/autotuner/augmented_lagrangian/</loc>
+         <lastmod>2026-05-16</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/autotuner/constant_proximal_weight/</loc>
+         <lastmod>2026-05-16</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/autotuner/ramp_proximal_weight/</loc>
+         <lastmod>2026-05-16</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/scvx/</loc>
+         <lastmod>2026-05-16</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/nightly/Reference/algorithms/scvx/penalized_trust_region/</loc>
          <lastmod>2026-05-16</lastmod>
     </url>
     <url>
