@@ -516,12 +516,12 @@ class Problem:
                 self._lowered.x_prop_unified.final[state._slice] = state.final
                 self._lowered.x_prop_unified.final_type[state._slice] = state.final_type
 
-        # Update CVXPy solver parameters (only if solver is initialized)
-        if self._solver._problem is not None:
-            self._solver.update_boundary_conditions(
-                x_init=self._lowered.x_unified.initial,
-                x_term=self._lowered.x_unified.final,
-            )
+        # Push to the solver — both backends short-circuit on a pre-initialize
+        # call, so this is safe to invoke from any lifecycle point.
+        self._solver.update_boundary_conditions(
+            x_init=self._lowered.x_unified.initial,
+            x_term=self._lowered.x_unified.final,
+        )
 
     def _sync_guesses(self):
         """Sync trajectory guesses from State/Control objects to lowered representation.

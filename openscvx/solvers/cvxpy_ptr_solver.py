@@ -718,6 +718,11 @@ class CVXPyPTRSolver(PTRSolver):
             x_init: Initial state vector, shape (n_states,). Optional.
             x_term: Terminal state vector, shape (n_states,). Optional.
         """
+        # No-op before initialize() — the CVXPy problem (and its param_dict)
+        # isn't built yet. Callers like Problem._sync_boundary_conditions
+        # may invoke this both before and after initialize().
+        if self._problem is None:
+            return
         if x_init is not None and "x_init" in self._problem.param_dict:
             self._set_param("x_init", x_init)
         if x_term is not None and "x_term" in self._problem.param_dict:
