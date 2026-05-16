@@ -44,14 +44,24 @@ u.scaling_max = [1.0]
 u.scaling_min = [-0.5]
 u.guess = np.linspace(0.0, 0.0, n).reshape(-1, 1)
 
+# Cosine time-grid guess: denser nodes near the endpoints.
+s_uniform = np.linspace(0.0, 1.0, n)
+node_grid = 0.5 * (1.0 - np.cos(np.pi * s_uniform))
+time_guess = (time_final * node_grid).reshape(-1, 1)
+
+dtdtau_guess = np.gradient(time_guess[:, 0], s_uniform)
+dtdtau_guess = np.clip(dtdtau_guess, time_dilation_min, time_dilation_max)
+
 time = ox.Time(
     initial=0.0,
     final=time_final,
     min=0.0,
     max=time_final,
+    guess=time_guess,
     time_dilation_min=time_dilation_min,
     time_dilation_max=time_dilation_max,
-    guess_distribution="cosine",
+    time_dilation_guess=dtdtau_guess.reshape(-1, 1),
+    uniform_time_grid=False,
 )
 
 
