@@ -21,8 +21,7 @@ pytest.importorskip("qpax")
 
 import openscvx as ox
 from openscvx import Problem
-from openscvx.solvers import CVXPyPTRSolver, PTRSolveResult, PTRSolver, QPAXPTRSolver
-
+from openscvx.solvers import PTRSolver, PTRSolveResult, QPAXPTRSolver
 
 # ============================================================================
 # Helpers
@@ -52,9 +51,7 @@ def _make_double_integrator_problem(n=6, backend="qpax", k_max=20):
     u.guess = np.zeros((n, 2))
 
     dyn = {"pos": vel, "vel": u}
-    time = ox.Time(
-        initial=0.0, final=("minimize", 2.0), min=0.0, max=10.0, uniform_time_grid=True
-    )
+    time = ox.Time(initial=0.0, final=("minimize", 2.0), min=0.0, max=10.0, uniform_time_grid=True)
 
     return Problem(
         dynamics=dyn,

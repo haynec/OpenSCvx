@@ -49,7 +49,7 @@ from typing import Any
 
 from .base import ConvexSolver, PTRSolverSpec
 from .cvxpy_ptr_solver import CVXPyPTRSolver
-from .ptr_solver import PTRSolveResult, PTRSolver
+from .ptr_solver import PTRSolver, PTRSolveResult
 
 
 def resolve_solver_config(val: Any) -> PTRSolverSpec:

@@ -17,7 +17,7 @@ import numpy as np
 
 from openscvx.config import Config
 
-from .ptr_solver import PTRSolveResult, PTRSolver
+from .ptr_solver import PTRSolver, PTRSolveResult
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredProblem
