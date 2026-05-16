@@ -202,7 +202,7 @@ def test_cvxpygen(tmp_path, monkeypatch):
         problem.settings.dev.printing = False
 
     problem.initialize()
-    result = problem.solve()
+    problem.solve()
     result = problem.post_process()
 
     assert result["converged"], "Brachistochrone (cvxpygen) failed to converge"
