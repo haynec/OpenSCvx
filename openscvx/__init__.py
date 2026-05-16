@@ -12,6 +12,7 @@ import openscvx.symbolic.expr.spatial as spatial
 import openscvx.symbolic.expr.stl as stl
 import openscvx.symbolic.expr.stljax as stljax
 from openscvx.algorithms import (
+    AdaptiveProximalWeight,
     AugmentedLagrangian,
     ConstantProximalWeight,
     PenalizedTrustRegion,
@@ -190,6 +191,7 @@ __all__ = [
     # Algorithm & Autotuning
     "PenalizedTrustRegion",
     "AugmentedLagrangian",
+    "AdaptiveProximalWeight",
     "ConstantProximalWeight",
     "RampProximalWeight",
 ]

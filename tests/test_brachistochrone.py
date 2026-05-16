@@ -367,6 +367,7 @@ def test_constraint_types(constraint_type):
     "autotuner_spec",
     [
         "augmented_lagrangian",
+        "adaptive_proximal",
         "constant_proximal",
         "ramp_proximal",
         "string_augmented_lagrangian",
@@ -445,6 +446,8 @@ def test_autotuning(autotuner_spec):
 
     if autotuner_spec == "augmented_lagrangian":
         autotuner = ox.AugmentedLagrangian()
+    elif autotuner_spec == "adaptive_proximal":
+        autotuner = ox.AdaptiveProximalWeight()
     elif autotuner_spec == "constant_proximal":
         autotuner = ox.ConstantProximalWeight()
     elif autotuner_spec == "ramp_proximal":

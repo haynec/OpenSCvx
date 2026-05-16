@@ -3,16 +3,20 @@
 import numpy as np
 import pytest
 
-from openscvx.algorithms.augmented_lagrangian import AugmentedLagrangian
+from openscvx.algorithms import (
+    AdaptiveProximalWeight,
+    AugmentedLagrangian,
+    ConstantProximalWeight,
+    PenalizedTrustRegion,
+    PenalizedTrustRegionConfig,
+    RampProximalWeight,
+)
 from openscvx.algorithms.base import (
     AlgorithmState,
     AutotuningBase,
     CandidateIterate,
     DiscretizationResult,
 )
-from openscvx.algorithms.constant_proximal_weight import ConstantProximalWeight
-from openscvx.algorithms.penalized_trust_region import PenalizedTrustRegion
-from openscvx.algorithms.ramp_proximal_weight import RampProximalWeight
 from openscvx.algorithms.weights import Weights
 from openscvx.config import (
     Config,
@@ -1432,6 +1436,194 @@ def test_augmented_lagrangian_exported():
     auto_tuner.lam_prox_max = 1e6
     assert auto_tuner.rho_max == 1e7
     assert auto_tuner.lam_prox_max == 1e6
+
+
+# --- Tests for AdaptiveProximalWeight --------------------------------------------
+
+
+def test_adaptive_proximal_weight_initial_iteration(
+    settings, algorithm_state, empty_nodal_constraints, weights
+):
+    """AdaptiveProximalWeight on k=1 copies VC/VB from state and accepts."""
+    autotuner = AdaptiveProximalWeight()
+    algorithm_state.k = 1
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 10.0
+
+    params = {}
+    initial_x_len = len(algorithm_state.X)
+    lam_vc_prev = algorithm_state.lam_vc
+    lam_vb_nodal_prev = algorithm_state.lam_vb_nodal
+
+    adaptive_state = autotuner.update_weights(
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
+    )
+
+    assert adaptive_state == "Initial"
+    assert len(algorithm_state.X) == initial_x_len + 1
+    np.testing.assert_allclose(candidate.lam_vc, lam_vc_prev)
+    np.testing.assert_allclose(candidate.lam_vb_nodal, lam_vb_nodal_prev)
+    assert len(algorithm_state.lam_vc_history) == 2
+    np.testing.assert_allclose(algorithm_state.lam_vc_history[-1], lam_vc_prev)
+
+
+def test_adaptive_proximal_weight_accept_lower_fixed_vc_vb(
+    settings, algorithm_state, nodal_constraints_with_violations, weights
+):
+    """Accept Lower decreases lam_prox but leaves lam_vc / lam_vb unchanged."""
+    autotuner = AdaptiveProximalWeight()
+    algorithm_state.k = 2
+    algorithm_state.lam_prox_history = [np.full((3, 3), 1.0)]
+    algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
+    algorithm_state.lam_vb_nodal_history = [np.full((3, 1), 1.0)]
+    algorithm_state.lam_vb_cross_history = [np.full(0, 1.0)]
+
+    algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
+    algorithm_state.U.append(np.array([[0.0], [0.5], [1.0]]))
+
+    i4 = 2 + 4 + 4
+    flattened_size = (3 - 1) * i4
+    V_dummy = np.zeros((flattened_size, 5))
+    V_final = V_dummy[:, -1].reshape(-1, i4)
+    V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
+    V_dummy[:, -1] = V_final.flatten()
+    algorithm_state.discretizations.append(
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
+    )
+
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    params = {}
+
+    state_x_prop = algorithm_state.x_prop()
+    lam_vc_prev = algorithm_state.lam_vc
+    lam_vb_nodal_prev = algorithm_state.lam_vb_nodal
+    lam_vb_cross_prev = algorithm_state.lam_vb_cross
+    lam_cost_prev = algorithm_state.lam_cost
+
+    prev_cost, prev_penalty, prev_nodal = AutotuningBase.calculate_nonlinear_penalty(
+        state_x_prop,
+        algorithm_state.x,
+        algorithm_state.u,
+        lam_vc_prev,
+        lam_vb_nodal_prev,
+        lam_vb_cross_prev,
+        lam_cost_prev,
+        nodal_constraints_with_violations,
+        params,
+        settings,
+    )
+    J_nonlin_prev = prev_cost + prev_penalty + prev_nodal
+
+    cand_cost, cand_penalty, cand_nodal = AutotuningBase.calculate_nonlinear_penalty(
+        candidate.x_prop,
+        candidate.x,
+        candidate.u,
+        lam_vc_prev,
+        lam_vb_nodal_prev,
+        lam_vb_cross_prev,
+        lam_cost_prev,
+        nodal_constraints_with_violations,
+        params,
+        settings,
+    )
+    J_nonlin_cand = cand_cost + cand_penalty + cand_nodal
+
+    actual_reduction = J_nonlin_prev - J_nonlin_cand
+    rho_target = autotuner.eta_2 + 0.1 * (1.0 - autotuner.eta_2)
+    predicted_reduction = actual_reduction / rho_target
+    candidate.J_lin = J_nonlin_prev - predicted_reduction
+
+    lam_prox_prev = algorithm_state.lam_prox
+
+    adaptive_state = autotuner.update_weights(
+        algorithm_state,
+        candidate,
+        nodal_constraints_with_violations,
+        settings,
+        params,
+        weights,
+    )
+
+    assert adaptive_state == "Accept Lower"
+    expected_prox = np.maximum(autotuner.lam_prox_min, autotuner.gamma_2 * lam_prox_prev)
+    np.testing.assert_allclose(algorithm_state.lam_prox_history[1], expected_prox)
+    np.testing.assert_allclose(candidate.lam_vc, lam_vc_prev)
+    np.testing.assert_allclose(candidate.lam_vb_nodal, lam_vb_nodal_prev)
+    np.testing.assert_allclose(candidate.lam_vb_cross, lam_vb_cross_prev)
+
+
+def test_adaptive_proximal_weight_reject_increase(
+    settings, algorithm_state, empty_nodal_constraints, weights
+):
+    """Reject branch increases lam_prox and does not update lam_vc history."""
+    autotuner = AdaptiveProximalWeight()
+    algorithm_state.k = 2
+    algorithm_state.lam_prox_history = [np.full((3, 3), 1.0)]
+    algorithm_state.lam_vc_history = [np.array([1.0, 1.0])]
+
+    algorithm_state.X.append(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]))
+    algorithm_state.U.append(np.array([[0.0], [0.5], [1.0]]))
+
+    i4 = 2 + 4 + 4
+    flattened_size = (3 - 1) * i4
+    V_dummy = np.zeros((flattened_size, 5))
+    V_final = V_dummy[:, -1].reshape(-1, i4)
+    V_final[:, :2] = np.array([[0.0, 0.0], [1.0, 1.0]])
+    V_dummy[:, -1] = V_final.flatten()
+    algorithm_state.discretizations.append(
+        DiscretizationResult.from_V(
+            V_dummy, n_x=algorithm_state.n_x, n_u=algorithm_state.n_u, N=algorithm_state.N
+        )
+    )
+
+    candidate = CandidateIterate()
+    candidate.x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
+    candidate.x_prop = np.array([[0.0, 0.0], [1.0, 1.0]])
+    candidate.u = np.array([[0.0], [0.5], [1.0]])
+    candidate.J_lin = 10.0
+
+    params = {}
+    lam_prox_prev = algorithm_state.lam_prox
+    lam_vc_prev = algorithm_state.lam_vc
+
+    adaptive_state = autotuner.update_weights(
+        algorithm_state, candidate, empty_nodal_constraints, settings, params, weights
+    )
+
+    assert adaptive_state == "Reject Higher"
+    assert candidate.lam_vc is None
+    np.testing.assert_allclose(
+        algorithm_state.lam_prox_history[1], autotuner.gamma_1 * lam_prox_prev
+    )
+    assert len(algorithm_state.lam_vc_history) == 1
+    assert np.allclose(algorithm_state.lam_vc_history[0], lam_vc_prev)
+
+
+def test_penalized_trust_region_config_adaptive_proximal_weight():
+    """Dict/YAML autotuner config builds AdaptiveProximalWeight."""
+    cfg = PenalizedTrustRegionConfig(
+        autotuner={"type": "AdaptiveProximalWeight", "gamma_1": 3.0},
+    )
+    algorithm = cfg.to_algorithm()
+    assert isinstance(algorithm.autotuner, AdaptiveProximalWeight)
+    assert algorithm.autotuner.gamma_1 == 3.0
+
+
+def test_adaptive_proximal_weight_exported():
+    """AdaptiveProximalWeight is exported from the top-level openscvx namespace."""
+    import openscvx as ox
+
+    autotuner = ox.AdaptiveProximalWeight()
+    assert isinstance(autotuner, AdaptiveProximalWeight)
+    assert autotuner.gamma_1 == 2.0
 
 
 # --- Tests for ConstantProximalWeight ---------------------------------------------

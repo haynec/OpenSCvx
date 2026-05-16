@@ -14,13 +14,13 @@ from openscvx.utils.printing import (
     color_adaptive_state,
 )
 
-from .base import AutotuningBase
+from ..base import AutotuningBase
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
-    from .base import AlgorithmState, CandidateIterate
-    from .weights import Weights
+    from ..base import AlgorithmState, CandidateIterate
+    from ..weights import Weights
 
 
 class AugmentedLagrangian(AutotuningBase):
