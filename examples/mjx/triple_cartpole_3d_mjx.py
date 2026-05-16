@@ -57,8 +57,7 @@ except ImportError:
     sys.exit(1)
 
 import openscvx as ox
-from openscvx import ByofSpec, Problem
-from openscvx.integrations import mjx_byof
+from openscvx import Problem
 
 L1, L2, L3 = 0.5, 0.4, 0.3  # link lengths (m)
 
@@ -122,8 +121,11 @@ IDX_A1, IDX_B1 = 2, 3
 IDX_A2, IDX_B2 = 4, 5
 IDX_A3, IDX_B3 = 6, 7
 
-# ── State / control definitions ───────────────────────────────────────────────
-qpos = ox.State("qpos", shape=(n_q,))
+# ── MJX dynamics adapter ──────────────────────────────────────────────────────
+dyn = ox.MjxDynamics(mjx_model)
+qpos, qvel = dyn.states
+(ctrl,) = dyn.controls
+
 qpos.min = np.array(
     [-8.0, -8.0, -2 * np.pi, -2 * np.pi, -2 * np.pi, -2 * np.pi, -2 * np.pi, -2 * np.pi]
 )
@@ -142,24 +144,14 @@ qpos.final = [
     0.0,  # link 3 upright
 ]
 
-qvel = ox.State("qvel", shape=(n_v,))
 qvel.min = np.full(n_v, -12.0)
 qvel.max = np.full(n_v, 12.0)
 qvel.initial = np.zeros(n_v)
 qvel.final = [0.0] * n_v
 
-ctrl = ox.Control("ctrl", shape=(n_u,))
 ctrl.min = np.array([-2.0, -2.0])
 ctrl.max = np.array([2.0, 2.0])
 ctrl.guess = np.zeros((n, n_u))
-
-states = [qpos, qvel]
-controls = [ctrl]
-
-# ── Dynamics: position kinematics symbolically, velocity via MJX ──────────────
-dynamics: dict = {"qpos": qvel}  # nq == nv
-
-byof: ByofSpec = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
 
 # ── Constraints (CTCS on state / control bounds) ─────────────────────────────
 constraints = []
@@ -179,13 +171,12 @@ time = ox.Time(
 )
 
 problem = Problem(
-    dynamics=dynamics,
-    states=states,
-    controls=controls,
+    dynamics=dyn,
+    states=dyn.states,
+    controls=dyn.controls,
     time=time,
     constraints=constraints,
     N=n,
-    byof=byof,
     algorithm={
         "lam_prox": 1e-1,
         "lam_cost": 0e0,

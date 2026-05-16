@@ -34,7 +34,6 @@ except ImportError:
     sys.exit(1)
 
 import openscvx as ox
-from openscvx.integrations import mjx_byof
 
 CARTPOLE_XML = """
 <mujoco model="cartpole">
@@ -69,36 +68,32 @@ n_u = int(mjx_model.nu)
 n = 60
 total_time = 3.0
 
-qpos = ox.State("qpos", shape=(n_q,))
+# ── MJX dynamics as a first-class adapter ─────────────────────────────────────
+# `MjxDynamics` builds default qpos / qvel / ctrl State and Control objects
+# matching the model's nq / nv / nu and routes the MJX forward dynamics into
+# the BYOF channel internally — no separate `byof=` plumbing required.
+dyn = ox.MjxDynamics(mjx_model)
+qpos, qvel = dyn.states
+(ctrl,) = dyn.controls
+
 qpos.min = np.array([-3.0, -2.0 * np.pi])
 qpos.max = np.array([3.0, 2.0 * np.pi])
 qpos.initial = np.array([0.0, np.pi])
 qpos.final = np.array([0.0, 0.0])
 
-qvel = ox.State("qvel", shape=(n_v,))
 qvel.min = np.array([-10.0, -15.0])
 qvel.max = np.array([10.0, 15.0])
 qvel.initial = np.array([0.0, 0.0])
 qvel.final = np.array([0.0, 0.0])
 
-ctrl = ox.Control("ctrl", shape=(n_u,))
 ctrl.min = np.array([-1.0])
 ctrl.max = np.array([1.0])
 ctrl.guess = np.zeros((n, n_u))
 
-states = [qpos, qvel]
-controls = [ctrl]
-
-dynamics = {
-    "qpos": qvel,
-}
-
-byof: ox.ByofSpec = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
-
 constraints = []
-for state in states:
+for state in dyn.states:
     constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
-for control in controls:
+for control in dyn.controls:
     constraints.extend([ox.ctcs(control <= control.max), ox.ctcs(control.min <= control)])
 
 theta_guess = np.linspace(np.pi, 0.0, n)
@@ -115,13 +110,12 @@ time = ox.Time(
 )
 
 problem = ox.Problem(
-    dynamics=dynamics,
-    states=states,
-    controls=controls,
+    dynamics=dyn,
+    states=dyn.states,
+    controls=dyn.controls,
     time=time,
     constraints=constraints,
     N=n,
-    byof=byof,
     algorithm={
         "lam_prox": 1e-1,
         "lam_cost": 1e-2,

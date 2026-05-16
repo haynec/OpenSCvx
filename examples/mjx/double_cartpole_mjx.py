@@ -34,8 +34,6 @@ except ImportError:
     sys.exit(1)
 
 import openscvx as ox
-from openscvx import ByofSpec
-from openscvx.integrations import mjx_byof
 
 L1, L2 = 0.5, 0.4  # link lengths (m)
 
@@ -81,31 +79,25 @@ n_u = int(mjx_model.nu)  # 1: cart force
 n = 400
 total_time = 2.5
 
-# ── State / control definitions ───────────────────────────────────────────────
-qpos = ox.State("qpos", shape=(n_q,))
+# ── MJX dynamics adapter ──────────────────────────────────────────────────────
+dyn = ox.MjxDynamics(mjx_model)
+qpos, qvel = dyn.states
+(ctrl,) = dyn.controls
+ctrl.parameterization = "ZOH"
+
 qpos.min = np.array([-8.0, -2 * np.pi, -2 * np.pi])
 qpos.max = np.array([8.0, 2 * np.pi, 2 * np.pi])
 qpos.initial = np.array([0.0, np.pi, 0.0])  # cart at origin, link1 hanging down
 qpos.final = [ox.Free(0.0), 0.0, 0.0]  # cart free, both links upright
 
-qvel = ox.State("qvel", shape=(n_v,))
 qvel.min = np.array([-12.0, -12.0, -12.0])
 qvel.max = np.array([12.0, 12.0, 12.0])
 qvel.initial = np.zeros(n_v)
 qvel.final = [0.0, 0.0, 0.0]
 
-ctrl = ox.Control("ctrl", shape=(n_u,), parameterization="ZOH")
 ctrl.min = np.array([-2.0])
 ctrl.max = np.array([2.0])
 ctrl.guess = np.zeros((n, n_u))
-
-states = [qpos, qvel]
-controls = [ctrl]
-
-# ── Dynamics: position kinematics symbolically, velocity via MJX ──────────────
-dynamics: dict = {"qpos": qvel}  # nq == nv, valid for all-revolute/prismatic joints
-
-byof: ByofSpec = {"dynamics": mjx_byof(mjx_model, qpos=qpos, qvel=qvel, ctrl=ctrl)}
 
 # ── Constraints (CTCS on state / control bounds) ───────────────────────────────
 constraints = []
@@ -123,13 +115,12 @@ time = ox.Time(
 )
 
 problem = ox.Problem(
-    dynamics=dynamics,
-    states=states,
-    controls=controls,
+    dynamics=dyn,
+    states=dyn.states,
+    controls=dyn.controls,
     time=time,
     constraints=constraints,
     N=n,
-    byof=byof,
     algorithm={
         "lam_prox": 1e-1,
         "lam_cost": 0e0,
