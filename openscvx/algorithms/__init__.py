@@ -82,12 +82,19 @@ from typing import Annotated, Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from .augmented_lagrangian import AugmentedLagrangian, AugmentedLagrangianSpec
+from .autotuner import (
+    AdaptiveProximalWeight,
+    AdaptiveProximalWeightSpec,
+    AugmentedLagrangian,
+    AugmentedLagrangianSpec,
+    ConstantProximalWeight,
+    ConstantProximalWeightSpec,
+    RampProximalWeight,
+    RampProximalWeightSpec,
+)
 from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult
-from .constant_proximal_weight import ConstantProximalWeight, ConstantProximalWeightSpec
 from .optimization_results import OptimizationResults
-from .penalized_trust_region import PenalizedTrustRegion
-from .ramp_proximal_weight import RampProximalWeight, RampProximalWeightSpec
+from .scvx import PenalizedTrustRegion
 from .weights import Weights
 
 # ---------------------------------------------------------------------------
@@ -97,6 +104,7 @@ from .weights import Weights
 AutotunerConfig = Annotated[
     Union[
         AugmentedLagrangianSpec,
+        AdaptiveProximalWeightSpec,
         RampProximalWeightSpec,
         ConstantProximalWeightSpec,
     ],
@@ -173,6 +181,7 @@ __all__ = [
     "PenalizedTrustRegion",
     "AutotuningBase",
     "AugmentedLagrangian",
+    "AdaptiveProximalWeight",
     "ConstantProximalWeight",
     "RampProximalWeight",
     # Config models

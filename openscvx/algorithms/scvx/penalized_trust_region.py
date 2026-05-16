@@ -22,11 +22,11 @@ from openscvx.utils.printing import (
     color_prob_stat,
 )
 
-from .augmented_lagrangian import AugmentedLagrangian
-from .base import Algorithm, AlgorithmState, CandidateIterate
-from .constant_proximal_weight import ConstantProximalWeight
-from .ramp_proximal_weight import RampProximalWeight
-from .weights import Weights
+from ..autotuner.augmented_lagrangian import AugmentedLagrangian
+from ..autotuner.constant_proximal_weight import ConstantProximalWeight
+from ..autotuner.ramp_proximal_weight import RampProximalWeight
+from ..base import Algorithm, AlgorithmState, CandidateIterate
+from ..weights import Weights
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from openscvx.symbolic.expr.control import Control
     from openscvx.symbolic.expr.state import State
 
-    from .base import AutotuningBase
+    from ..base import AutotuningBase
 
 warnings.filterwarnings("ignore")
 
