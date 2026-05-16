@@ -73,9 +73,6 @@ class PTRSolver(ConvexSolver):
 
     Subclasses must additionally implement :meth:`create_variables` and
     :meth:`initialize` from :class:`ConvexSolver`.
-
-    Implementations: :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`
-    and :class:`openscvx.solvers.qpax_ptr_solver.QPAXPTRSolver`.
     """
 
     @abstractmethod

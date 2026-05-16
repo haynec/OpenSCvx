@@ -92,6 +92,14 @@ if TYPE_CHECKING:
 _P_DIAG_EPS = 1e-10
 
 
+def _moreau_solve_ok(status: "moreau.SolverStatus") -> bool:
+    """Return True when moreau reports a primal solution worth warm-starting from."""
+    return status in (
+        moreau.SolverStatus.Solved,
+        moreau.SolverStatus.AlmostSolved,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Decision-vector layout
 # ---------------------------------------------------------------------------
@@ -264,8 +272,8 @@ class MoreauPTRSolver(PTRSolver):
         # Warm-start carry; reset to None when problem structure changes.
         self._warm_start = None
 
-        # Last solve status (moreau.SolverStatus int).
-        self._last_status: int = 0
+        # Last solve status from moreau (populated by solve()).
+        self._last_status: moreau.SolverStatus = moreau.SolverStatus.Unsolved
 
     # ------------------------------------------------------------------
     # Setup
@@ -929,8 +937,9 @@ class MoreauPTRSolver(PTRSolver):
 
         solution = self._moreau.solve(P_j, A_j, q_j, b_j, warm_start=self._warm_start)
 
-        self._last_status = int(self._moreau.info.status)
-        self._warm_start = solution.to_warm_start()
+        self._last_status = moreau.SolverStatus(int(np.asarray(self._moreau.info.status)))
+        if _moreau_solve_ok(self._last_status):
+            self._warm_start = solution.to_warm_start()
 
         z = np.asarray(solution.x)
         return self._unpack(z)
@@ -949,8 +958,7 @@ class MoreauPTRSolver(PTRSolver):
         nu_vb = [np.asarray(z[sl]) for sl in L.sl_nu_vb]
         nu_vb_cross: List[float] = []
 
-        # Solved = 1, AlmostSolved = 4.
-        is_ok = self._last_status in (1, 4)
+        is_ok = _moreau_solve_ok(self._last_status)
         status = "optimal" if is_ok else "infeasible"
 
         cost = self._reconstruct_cost(z)
