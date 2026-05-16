@@ -2,62 +2,52 @@
 
 Assembles each SCP subproblem as a sparse conic program (SOCP-capable) and
 dispatches it to ``moreau.jax.Solver``, a JAX-native interior-point conic
-solver.  This backend sits alongside
+solver. This backend sits alongside
 :class:`openscvx.solvers.qpax_ptr_solver.QPAXPTRSolver` (QP-only) and
 :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver` (DCP via CVXPy).
 
-Strategic motivation
----------------------
-QPAX must slack-reformulate the PTR penalties — ``|nu|`` (L1 virtual control)
-and ``pos(nu_vb)`` (positive-part virtual buffer) — by introducing extra slack
-variables and doubled inequality rows.  Moreau accepts Second-Order Cone (SOC)
-constraints natively, so ``|nu_i| <= t_i`` is expressed as a 2-D SOC on
-``[t_i, nu_i]`` with linear cost ``lam_vc * t_i``: one epigraph variable
-instead of one slack plus two inequality rows.  ``pos(nu_vb)`` uses a
-nonnegative epigraph instead of two inequality rows.  The net result is a
-smaller problem for the same PTR math.
+Compared to QPAX, Moreau accepts second-order cone (SOC) constraints natively.
+QPAX slack-reformulates the PTR penalties — ``|nu|`` (L1 virtual control) and
+``pos(nu_vb)`` (positive-part virtual buffer) — with extra slack variables and
+doubled inequality rows. Here ``|nu_i| <= t_i`` is a 2-D SOC on
+``[t_i, nu_i]`` with linear cost ``lam_vc * t_i``, and ``pos(nu_vb)`` uses a
+nonnegative epigraph instead of two inequality rows, yielding a smaller
+problem for the same PTR math.
 
-Moreau's JAX path is differentiable via implicit differentiation on the KKT
-conditions.  When the surrounding SCP pipeline is made ``jax.jit``-friendly
-(future work), ``jax.grad`` / ``jax.vmap`` can reach through a full SCvx solve.
+``moreau.jax.Solver`` differentiates through the solve via implicit
+differentiation on the KKT conditions. Once the surrounding SCP pipeline stays
+in ``jit``, ``jax.grad`` / ``jax.vmap`` can reach through a full SCvx solve
+(future work).
 
-Scope
-------
-* No user ``.convex()`` constraints.  The inherited default
-  :meth:`ConvexSolver.lower_convex_constraints` refuses them upstream (at
-  ``Problem(...)`` construction time) and points the user at
-  :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`.
-* No cross-node or impulsive controls.  Each raises
-  :class:`NotImplementedError` at :meth:`initialize` with a pointer to
-  ``CVXPyPTRSolver``.
-* CTCS constraints are supported — their LICQ-style absolute-value
-  inequalities are affine and fit neatly in the nonneg cone.
+Scope:
+    * No user ``.convex()`` constraints — rejected upstream by
+      :meth:`ConvexSolver.lower_convex_constraints`.
+    * No cross-node or impulsive controls — each raises
+      :class:`NotImplementedError` at :meth:`MoreauPTRSolver.initialize`.
+    * CTCS constraints are supported; LICQ-style absolute-value inequalities
+      are affine and fit in the nonneg cone.
 
-Warm-start
------------
-Unlike QPAX (which cold-starts each iteration), ``MoreauPTRSolver`` carries
-the previous solution as a :class:`moreau._types.WarmStart` and passes it to
-each ``solver.solve()`` call.  Successive SCP subproblems differ only in the
-linearization point and penalty weights, so warm-starting cuts iteration counts
-substantially.
+Warm-start:
+    Unlike QPAX, ``MoreauPTRSolver`` passes a
+    :class:`moreau._types.WarmStart` from the previous successful solve into
+    each ``solver.solve()`` call when the status is
+    :attr:`moreau.SolverStatus.Solved` or
+    :attr:`moreau.SolverStatus.AlmostSolved`.
 
-Moreau / Conic problem formulation
-------------------------------------
-Moreau solves::
+Conic formulation:
+    Moreau solves::
 
-    min  0.5 zᵀ P z + qᵀ z
-    s.t. A z + s = b,  s ∈ K
+        min  0.5 zᵀ P z + qᵀ z
+        s.t. A z + s = b,  s ∈ K
 
-where K is a product of zero, nonneg, and SOC cones ordered first-to-last.
-For a zero-cone row: ``s = 0`` → ``Az = b`` (equality).
-For a nonneg-cone row: ``s ≥ 0`` → ``b − Az ≥ 0`` (``Az ≤ b``).
-For a SOC(d) block: ``s ∈ 𝒦_soc^d`` → ``‖(b − Az)[1:]‖ ≤ (b − Az)[0]``.
+    where ``K`` is a product of zero, nonneg, and SOC cones (first to last).
+    Zero cone: ``s = 0`` → ``Az = b``. Nonneg cone: ``s ≥ 0`` → ``Az ≤ b``.
+    SOC(d): ``‖(b − Az)[1:]‖ ≤ (b − Az)[0]``.
 
-float64
---------
-Moreau performs internal arithmetic in float64.  Pass ``float_dtype="float64"``
-to :class:`openscvx.problem.Problem` for tight inner-solver tolerances; the
-default float32 caps the QP's conditioning.
+Note:
+    Moreau performs internal arithmetic in float64. Pass
+    ``float_dtype="float64"`` to :class:`openscvx.problem.Problem` for tight
+    inner-solver tolerances; the default ``float32`` caps conditioning.
 """
 
 from dataclasses import dataclass, field
@@ -93,7 +83,15 @@ _P_DIAG_EPS = 1e-10
 
 
 def _moreau_solve_ok(status: "moreau.SolverStatus") -> bool:
-    """Return True when moreau reports a primal solution worth warm-starting from."""
+    """Check whether a Moreau solve status indicates a usable primal.
+
+    Args:
+        status: Status returned by ``moreau.jax.Solver`` after a solve.
+
+    Returns:
+        True when ``status`` is :attr:`moreau.SolverStatus.Solved` or
+        :attr:`moreau.SolverStatus.AlmostSolved`.
+    """
     return status in (
         moreau.SolverStatus.Solved,
         moreau.SolverStatus.AlmostSolved,
@@ -107,17 +105,24 @@ def _moreau_solve_ok(status: "moreau.SolverStatus") -> bool:
 
 @dataclass
 class _ConicLayout:
-    """Static index layout for the flat decision vector z.
+    """Static index layout for the flat decision vector ``z``.
 
     Moreau's conic formulation drops the slack blocks used by QPAX
     (``s_abs``, ``s_pos``) and replaces them with epigraph variables
-    ``t_vc`` / ``t_vb``, one per penalty term:
+    ``t_vc`` / ``t_vb``:
 
-    * ``|nu[k,j]| ≤ t_vc[k,j]`` expressed as a SOC(2).
+    * ``|nu[k,j]| ≤ t_vc[k,j]`` as a SOC(2).
     * ``nu_vb[c,k] ≤ t_vb[c,k]`` and ``t_vb[c,k] ≥ 0`` as two nonneg rows.
 
     Slices are computed once at :meth:`MoreauPTRSolver.create_variables` and
     reused on every solve.
+
+    Attributes:
+        N: Number of discretization nodes.
+        n_x: State dimension per node.
+        n_u: Control dimension per node.
+        n_nodal: Number of nodal nonconvex constraints.
+        n_z: Total decision-vector length.
     """
 
     N: int
@@ -170,14 +175,24 @@ class _ConicLayout:
         return self.sl_du.start + k * self.n_u + j
 
     def nu_idx(self, k: int, j: int) -> int:
-        """``k`` ∈ [0, N-2]."""
+        """Flat index for virtual control ``nu[k, j]``.
+
+        Args:
+            k: Segment index in ``[0, N-2]``.
+            j: State component index.
+        """
         return self.sl_nu.start + k * self.n_x + j
 
     def nu_vb_idx(self, c: int, k: int) -> int:
         return self.sl_nu_vb[c].start + k
 
     def t_vc_idx(self, k: int, j: int) -> int:
-        """``k`` ∈ [0, N-2]."""
+        """Flat index for the ``|nu|`` epigraph variable ``t_vc[k, j]``.
+
+        Args:
+            k: Segment index in ``[0, N-2]``.
+            j: State component index.
+        """
         return self.sl_t_vc.start + k * self.n_x + j
 
     def t_vb_idx(self, c: int, k: int) -> int:
@@ -193,43 +208,40 @@ class MoreauPTRSolver(PTRSolver):
     """JAX-native conic backend for the PTR convex subproblem.
 
     Assembles each SCP subproblem as a sparse conic program and dispatches to
-    ``moreau.jax.Solver``.  See the module docstring for the penalty encoding,
-    warm-start, and float64 advice.
+    ``moreau.jax.Solver``. See the module docstring for the SOC epigraph
+    encoding, warm-start policy, and float64 advice.
 
-    Compared to :class:`QPAXPTRSolver`:
+    Compared to :class:`QPAXPTRSolver`, this backend uses fewer decision
+    variables and constraint rows for the same PTR physics (SOC epigraphs for
+    ``|nu|`` instead of two nonneg slack rows each), warm-starts between SCP
+    iterations on successful solves, and opens a path to user ``.convex()``
+    SOCP support in a follow-up.
 
-    * Fewer decision variables and constraint rows for the same PTR physics
-      (SOC epigraphs for ``|nu|`` instead of two nonneg slack rows each).
-    * Warm-starts automatically between SCP iterations (QPAX cold-starts).
-    * Opens the path to user ``.convex()`` SOCP support in a follow-up.
-
-    Differentiability hook for future work:
-        ``moreau.jax.Solver`` differentiates through the solve via implicit
-        differentiation on the KKT conditions.  Once the surrounding SCP
-        pipeline stays in ``jit``, ``jax.grad`` / ``jax.vmap`` can reach
-        through a full SCvx solve.
-
-    Note:
+    Scope:
         Supported — state/control box, dynamics linearization, boundary Fix,
         uniform time grid, linearized nodal nonconvex, CTCS LICQ rows.
 
-        Not supported — user ``.convex()`` constraints (rejected at
-        ``Problem(...)`` construction time by the inherited
-        :meth:`ConvexSolver.lower_convex_constraints`), cross-node
-        constraints, and impulsive controls.  Each raises
-        :class:`NotImplementedError` with a "use :class:`CVXPyPTRSolver`"
-        pointer.
+        Not supported — user ``.convex()`` constraints, cross-node
+        constraints, and impulsive controls. Each raises
+        :class:`NotImplementedError` with a "use
+        :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`" pointer.
+
+    Differentiability hook for future work:
+        ``moreau.jax.Solver`` differentiates through the solve via implicit
+        differentiation on the KKT conditions. Once the surrounding SCP
+        pipeline stays in ``jit``, ``jax.grad`` / ``jax.vmap`` can reach
+        through a full SCvx solve.
 
     Args:
         solver_args: Keyword arguments forwarded to :class:`moreau.Settings`.
-            Useful keys: ``max_iter`` (default 200), ``verbose`` (default
-            False), ``device`` (``'auto'``, ``'cpu'``, or ``'cuda'``), and a
-            nested ``ipm_settings`` dict for fine-grained IPM tolerances (e.g.
-            ``{"tol_gap_abs": 1e-8, "tol_feas": 1e-8}``).
+            Useful keys include ``max_iter`` (default 200), ``verbose``
+            (default False), ``device`` (``'auto'``, ``'cpu'``, or
+            ``'cuda'``), and a nested ``ipm_settings`` dict for IPM tolerances
+            (e.g. ``{"tol_gap_abs": 1e-8, "tol_feas": 1e-8}``).
 
     Attributes:
-        layout: :class:`_ConicLayout` describing the flat decision-vector slot
-            ranges.  Populated by :meth:`create_variables`.
+        layout: :class:`_ConicLayout` describing flat decision-vector slot
+            ranges. Populated by :meth:`create_variables`.
     """
 
     def __init__(self, solver_args: Optional[Dict] = None):
@@ -291,7 +303,19 @@ class MoreauPTRSolver(PTRSolver):
         """Compute scaling matrices and the static conic decision-vector layout.
 
         Sparsity hints are accepted for interface symmetry with
-        :class:`CVXPyPTRSolver` but ignored — Moreau uses dense A/P data.
+        :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver` but ignored;
+        numeric values are filled into a fixed CSR structure at solve time.
+
+        Args:
+            N: Number of discretization nodes.
+            x_unified: Unified state bounds and scaling metadata.
+            u_unified: Unified control bounds and scaling metadata.
+            jax_constraints: Lowered JAX constraints (nodal structure only).
+            dynamics_sparsity: Ignored.
+            constraint_sparsity: Ignored.
+
+        Raises:
+            NotImplementedError: If impulsive controls are present.
         """
         del dynamics_sparsity, constraint_sparsity
 
@@ -322,13 +346,20 @@ class MoreauPTRSolver(PTRSolver):
         self._jax_constraints = jax_constraints
 
     def initialize(self, lowered: "LoweredProblem", settings: "Config") -> None:
-        """Build the static conic structure and construct the ``moreau.jax.Solver``.
+        """Build the static conic structure and construct ``moreau.jax.Solver``.
 
         Validates the supported constraint subset, enumerates all A-matrix
-        nonzero positions (the fixed CSR structure), builds a
-        :class:`moreau.Cones` spec, and constructs the
-        :class:`moreau.jax.Solver`.  Numeric values in A/b/P/q are filled at
-        each :meth:`solve` call.
+        nonzero positions (fixed CSR structure), builds a :class:`moreau.Cones`
+        spec, and constructs :class:`moreau.jax.Solver`. Numeric values in
+        ``A``, ``b``, ``P``, and ``q`` are filled at each :meth:`solve` call.
+
+        Args:
+            lowered: Lowered problem with constraint structure.
+            settings: Problem configuration.
+
+        Raises:
+            RuntimeError: If :meth:`create_variables` was not called first.
+            NotImplementedError: If cross-node or impulsive controls are present.
         """
         if self.layout is None:
             raise RuntimeError(
@@ -498,16 +529,14 @@ class MoreauPTRSolver(PTRSolver):
         nonzero.  Only the positions (not the values) matter here; values come
         from per-iteration data at solve time.
 
-        Returns:
-            Tuple of (coo_rows, coo_cols, n_eq, n_nn, soc_dims):
+        Args:
+            settings: Problem configuration (bounds, CTCS groups, time grid).
 
-                coo_rows: Row indices of every A-matrix nonzero, in
-                    traversal order.
-                coo_cols: Corresponding column indices.
-                n_eq: Number of zero-cone (equality) rows.
-                n_nn: Number of nonneg-cone rows.
-                soc_dims: SOC cone dimensions; one entry per ``|nu[k,j]|``
-                    term, all equal to 2.
+        Returns:
+            tuple: ``(coo_rows, coo_cols, n_eq, n_nn, soc_dims)`` where
+            ``coo_rows`` / ``coo_cols`` list every A-matrix nonzero in
+            traversal order, ``n_eq`` / ``n_nn`` count zero- and nonneg-cone
+            rows, and ``soc_dims`` lists SOC dimensions (2 per ``|nu[k,j]|``).
         """
         L = self.layout
         N, n_x, n_u = L.N, L.n_x, L.n_u
@@ -672,13 +701,16 @@ class MoreauPTRSolver(PTRSolver):
         """Fill ``P_data``, COO A-values, ``q``, and ``b`` from per-iteration data.
 
         Iterates through every row in the same order as :meth:`_structural_pass`
-        so that the emitted value list corresponds to the stored
-        ``self._coo_rows`` / ``self._coo_cols`` arrays.  scipy builds the same
-        sorted CSR from the COO at every call, so ``A_csr.data`` aligns with
-        the fixed ``A_indices`` built at :meth:`initialize`.
+        so the emitted value list matches ``self._coo_rows`` /
+        ``self._coo_cols``. scipy builds the same sorted CSR each call, so
+        ``A_csr.data`` aligns with the fixed ``A_indices`` from
+        :meth:`initialize`.
 
         Returns:
-            tuple: (P_data, coo_vals, q, b), each a 1-D NumPy float array.
+            tuple: ``(P_data, coo_vals, q, b)`` as 1-D NumPy float arrays.
+
+        Raises:
+            RuntimeError: If per-iteration update hooks were not called.
         """
         if not (self._dyn and self._cons and self._pen):
             raise RuntimeError(
@@ -751,7 +783,7 @@ class MoreauPTRSolver(PTRSolver):
         b_list: List[float] = []
 
         def emit(a_coeffs: List[float], rhs: float) -> None:
-            """Append one row's A-coefficients (in col order) and its b entry."""
+            """Append one constraint row's A coefficients and RHS."""
             coo_vals.extend(a_coeffs)
             b_list.append(rhs)
 
@@ -917,7 +949,16 @@ class MoreauPTRSolver(PTRSolver):
     # ------------------------------------------------------------------
 
     def solve(self) -> PTRSolveResult:
-        """Assemble the conic subproblem and dispatch to ``moreau.jax.Solver``."""
+        """Assemble the conic subproblem and dispatch to ``moreau.jax.Solver``.
+
+        Updates the warm-start carry only when the solve status is
+        :attr:`moreau.SolverStatus.Solved` or
+        :attr:`moreau.SolverStatus.AlmostSolved`.
+
+        Returns:
+            PTRSolveResult: Unscaled trajectories and solver status for this
+            SCP iteration.
+        """
         P_data, coo_vals, q, b = self._assemble_conic()
 
         # Rebuild CSR from the same COO col/row arrays (with real values).
@@ -945,7 +986,15 @@ class MoreauPTRSolver(PTRSolver):
         return self._unpack(z)
 
     def _unpack(self, z: np.ndarray) -> PTRSolveResult:
-        """Reverse the layout into the structured :class:`PTRSolveResult`."""
+        """Map the flat solution vector into a :class:`PTRSolveResult`.
+
+        Args:
+            z: Primal solution from Moreau, length ``layout.n_z``.
+
+        Returns:
+            PTRSolveResult: Unscaled ``x`` / ``u`` trajectories, slacks, cost,
+            and ``"optimal"`` or ``"infeasible"`` status.
+        """
         L = self.layout
         N, n_x, n_u = L.N, L.n_x, L.n_u
 
@@ -974,11 +1023,17 @@ class MoreauPTRSolver(PTRSolver):
         )
 
     def _reconstruct_cost(self, z: np.ndarray) -> float:
-        """Recompute the PTR objective at ``z`` from the stored penalty weights.
+        """Recompute the PTR objective at ``z`` from stored penalty weights.
 
-        Uses the epigraph variables ``t_vc`` / ``t_vb`` (which equal
-        ``|nu|`` / ``max(nu_vb, 0)`` at optimality) rather than recomputing
-        absolute values or positive parts.
+        Uses epigraph variables ``t_vc`` / ``t_vb`` (equal to ``|nu|`` /
+        ``max(nu_vb, 0)`` at optimality) instead of absolute values or
+        positive parts.
+
+        Args:
+            z: Primal solution vector.
+
+        Returns:
+            Scalar PTR cost at ``z``.
         """
         L = self.layout
         settings = self._settings
@@ -1016,7 +1071,12 @@ class MoreauPTRSolver(PTRSolver):
     # ------------------------------------------------------------------
 
     def get_stats(self) -> dict:
-        """Conic problem dimensions for the diagnostics summary box."""
+        """Return conic problem dimensions for the diagnostics summary box.
+
+        Returns:
+            dict: Keys ``n_variables``, ``n_parameters`` (always 0), and
+            ``n_constraints``.
+        """
         if self.layout is None:
             return {"n_variables": 0, "n_parameters": 0, "n_constraints": 0}
         return {
@@ -1026,7 +1086,11 @@ class MoreauPTRSolver(PTRSolver):
         }
 
     def citation(self) -> List[str]:
-        """BibTeX entry for Moreau."""
+        """Return BibTeX citation entries for Moreau.
+
+        Returns:
+            list[str]: BibTeX strings for inclusion in a bibliography.
+        """
         return [
             r"""@software{moreau2024,
   title={Moreau: GPU-Accelerated Conic Optimization Solver},
@@ -1043,7 +1107,15 @@ class MoreauPTRSolver(PTRSolver):
 
 
 def _build_moreau_settings(solver_args: dict):
-    """Convert a ``solver_args`` dict to a :class:`moreau.Settings` object."""
+    """Convert a ``solver_args`` dict to a :class:`moreau.Settings` instance.
+
+    Args:
+        solver_args: User-provided solver options; ``ipm_settings`` may be a
+            dict that is expanded into :class:`moreau.IPMSettings`.
+
+    Returns:
+        moreau.Settings: Configured settings for :class:`moreau.jax.Solver`.
+    """
     args = dict(solver_args)
     raw_ipm = args.pop("ipm_settings", None)
     if isinstance(raw_ipm, dict):
