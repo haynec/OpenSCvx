@@ -659,11 +659,11 @@ class CVXPyPTRSolver(PTRSolver):
         if "x_prop" in self._problem.param_dict:
             self._set_param("x_prop", x_prop)
         elif self._ocp_vars.x_prop is not None:
-            self._ocp_vars.x_prop.value = np.asarray(x_prop)
+            self._ocp_vars.x_prop.value = np.asarray(x_prop, dtype=np.float64)
         if x_prop_plus is not None and self._ocp_vars.x_prop_plus is not None:
-            self._ocp_vars.x_prop_plus.value = np.asarray(x_prop_plus)
+            self._ocp_vars.x_prop_plus.value = np.asarray(x_prop_plus, dtype=np.float64)
         if E_d is not None and self._ocp_vars.E_d is not None:
-            self._ocp_vars.E_d.value = np.asarray(E_d)
+            self._ocp_vars.E_d.value = np.asarray(E_d, dtype=np.float64)
 
     def update_constraint_linearizations(
         self,
@@ -780,7 +780,8 @@ class CVXPyPTRSolver(PTRSolver):
         """
         try:
             param = self._problem.param_dict[name]
-            value_arr = np.asarray(value)
+            # Conic backends require f64; JAX inputs may arrive as f32.
+            value_arr = np.asarray(value, dtype=np.float64)
 
             # Ensure the value shape matches the parameter shape exactly
             # This is critical for Python 3.11+ where NumPy/CVXPy are stricter about shapes
