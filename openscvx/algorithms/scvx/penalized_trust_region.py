@@ -465,9 +465,15 @@ class PenalizedTrustRegion(Algorithm):
         # already committed) so the JIT cache key is stable across iterations.
         dev = state.x.sharding
         state = state.replace(
-            J_tr=jax.device_put(jnp.asarray(float(np.sum(np.array(J_tr_vec))), dtype=state.J_tr.dtype), dev),
-            J_vb=jax.device_put(jnp.asarray(float(np.sum(np.array(J_vb_vec))), dtype=state.J_vb.dtype), dev),
-            J_vc=jax.device_put(jnp.asarray(float(np.sum(np.array(J_vc_vec))), dtype=state.J_vc.dtype), dev),
+            J_tr=jax.device_put(
+                jnp.asarray(float(np.sum(np.array(J_tr_vec))), dtype=state.J_tr.dtype), dev
+            ),
+            J_vb=jax.device_put(
+                jnp.asarray(float(np.sum(np.array(J_vb_vec))), dtype=state.J_vb.dtype), dev
+            ),
+            J_vc=jax.device_put(
+                jnp.asarray(float(np.sum(np.array(J_vc_vec))), dtype=state.J_vc.dtype), dev
+            ),
         )
 
         # Autotuner: pure functional update on the pytree. We dispatch through

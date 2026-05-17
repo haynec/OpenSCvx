@@ -446,7 +446,9 @@ class AlgorithmState:
         f = jnp.float64 if jax.config.read("jax_enable_x64") else jnp.float32
         i = jnp.int32
         device = jax.devices()[0]
-        put = lambda arr: jax.device_put(arr, device)
+
+        def put(arr):
+            return jax.device_put(arr, device)
 
         lam_vc_array = np.ones((n - 1, n_states)) * weights.lam_vc
         lam_prox_array = np.ones((n, n_total)) * weights.lam_prox
