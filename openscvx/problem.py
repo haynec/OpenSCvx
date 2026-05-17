@@ -1010,16 +1010,18 @@ class Problem:
         )
 
         # Pull k and the J scalars from the algorithm's host-side mirror set
-        # by ``record_iteration``; avoids a per-step device sync.
+        # by ``record_iteration``; avoids a per-step device sync. ``dict.get``
+        # with a fallback would evaluate the default eagerly (a host-device
+        # round-trip on every iteration), so branch on presence explicitly.
         scalars = getattr(self._algorithm, "_last_scalars", None) or {}
         return {
             "converged": converged,
             # ``_iter_index`` was bumped to ``k + 1`` at the end of ``step()``,
             # matching the post-increment value of ``state.k``.
             "scp_k": self._algorithm._iter_index,
-            "scp_J_tr": scalars.get("J_tr", float(self._state.J_tr)),
-            "scp_J_vb": scalars.get("J_vb", float(self._state.J_vb)),
-            "scp_J_vc": scalars.get("J_vc", float(self._state.J_vc)),
+            "scp_J_tr": scalars["J_tr"] if "J_tr" in scalars else float(self._state.J_tr),
+            "scp_J_vb": scalars["J_vb"] if "J_vb" in scalars else float(self._state.J_vb),
+            "scp_J_vc": scalars["J_vc"] if "J_vc" in scalars else float(self._state.J_vc),
         }
 
     def solve(

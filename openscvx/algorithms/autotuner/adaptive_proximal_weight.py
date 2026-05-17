@@ -86,15 +86,10 @@ class AdaptiveProximalWeight(AutotuningBase):
         )
         J_nonlin = nonlin_cost + nonlin_pen + nodal_pen
 
-        lam_cost_init = (
-            jnp.asarray(weights.lam_cost)
-            if not isinstance(weights.lam_cost, (int, float))
-            else jnp.full_like(state.lam_cost, weights.lam_cost)
-        )
         lam_cost_next = jnp.where(
             state.k > self.lam_cost_drop,
             state.lam_cost * self.lam_cost_relax,
-            lam_cost_init,
+            state.lam_cost_init,
         )
 
         def first_iter(state):

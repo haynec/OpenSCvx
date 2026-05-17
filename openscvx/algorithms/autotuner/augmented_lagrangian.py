@@ -247,17 +247,13 @@ class AugmentedLagrangian(AutotuningBase):
         J_nonlin = nonlin_cost + nonlin_pen + nodal_pen
 
         # Cost relaxation: when state.k > lam_cost_drop, scale state.lam_cost;
-        # otherwise reset to the algorithm's initial weight. Scalar lam_cost_relax
-        # preserves the user-specified per-state weight ratios.
-        lam_cost_init = (
-            jnp.asarray(weights.lam_cost)
-            if not isinstance(weights.lam_cost, (int, float))
-            else jnp.full_like(state.lam_cost, weights.lam_cost)
-        )
+        # otherwise reset to the algorithm's initial weight (carried on the
+        # pytree as state.lam_cost_init, broadcast at from_settings()). Scalar
+        # lam_cost_relax preserves the user-specified per-state weight ratios.
         lam_cost_next = jnp.where(
             state.k > self.lam_cost_drop,
             state.lam_cost * self.lam_cost_relax,
-            lam_cost_init,
+            state.lam_cost_init,
         )
 
         def first_iter(state):

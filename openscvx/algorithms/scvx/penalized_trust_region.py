@@ -167,7 +167,6 @@ class PenalizedTrustRegion(Algorithm):
         self,
         jax_constraints: "LoweredJaxConstraints",
         settings: Config,
-        weights: Weights,
     ) -> Callable:
         """Compile a JIT'd autotuner step bound to the current solve context.
 
@@ -176,10 +175,14 @@ class PenalizedTrustRegion(Algorithm):
         the dispatcher. Folding them into a single compiled function gives an
         order-of-magnitude wall-clock improvement per SCP iteration.
 
-        Closure captures ``jax_constraints`` / ``settings`` / ``weights``
-        because they are fixed for the duration of a solve and contain
-        non-pytree leaves (dataclasses of compiled closures, pydantic config,
-        etc.) that JAX cannot route through positional arguments.
+        Closure captures ``jax_constraints`` / ``settings`` only: they're fixed
+        for the duration of a solve and contain non-pytree leaves (dataclasses
+        of compiled closures, pydantic config) that JAX cannot route through
+        positional arguments. ``weights`` is *not* captured — the autotuners
+        read their reset value from ``state.lam_cost_init`` instead, so weight
+        mutations between solves propagate without rebuilding the closure and
+        the per-dispatch literal-canonicalization cost of walking a numpy-heavy
+        ``Weights`` object disappears.
         """
         autotuner = self.autotuner
 
@@ -190,7 +193,7 @@ class PenalizedTrustRegion(Algorithm):
             cand.x_prop = candidate_dict["x_prop"]
             cand.x_prop_plus = candidate_dict["x_prop_plus"]
             cand.J_lin = candidate_dict["J_lin"]
-            return autotuner.update_weights(state, cand, jax_constraints, settings, params, weights)
+            return autotuner.update_weights(state, cand, jax_constraints, settings, params, None)
 
         return jax.jit(fn)
 
@@ -264,9 +267,7 @@ class PenalizedTrustRegion(Algorithm):
         self._discretization_solver_impulsive = discretization_solver_impulsive
         self._jax_constraints = jax_constraints
         self._emitter = emitter
-        self._jit_update_weights = self._build_jit_update_weights(
-            jax_constraints, settings, self.weights
-        )
+        self._jit_update_weights = self._build_jit_update_weights(jax_constraints, settings)
         self._iter_index = 1
 
         self._solver.update_boundary_conditions(
@@ -337,13 +338,19 @@ class PenalizedTrustRegion(Algorithm):
             "J_lin": jnp.asarray(0.0),
         }
         # Trace under both k=1 (INITIAL branch) and k>1 (acceptance-ratio
-        # branch) so neither path recompiles inside the SCP loop.
+        # branch) so neither path recompiles inside the SCP loop. The first
+        # warm-up traces against an uncommitted state (matching the iter-1
+        # input from ``AlgorithmState.from_settings``); the second traces
+        # against the *returned* state (committed, matching iter ≥ 2 where the
+        # state comes back from the JIT). Without this two-phase warm-up, JAX
+        # caches by argument committedness and the iter-2 dispatch misses.
         warm_state = init_state.replace(
             x_prop=jnp.asarray(x_prop_c),
             x_prop_plus=jnp.asarray(x_prop_plus_c),
         )
-        jax.block_until_ready(self._jit_update_weights(warm_state, warm_candidate, params))
-        warm_state_k2 = warm_state.replace(k=jnp.asarray(2, dtype=jnp.int32))
+        warm_out = self._jit_update_weights(warm_state, warm_candidate, params)
+        jax.block_until_ready(warm_out)
+        warm_state_k2 = warm_out.replace(k=jnp.asarray(2, dtype=jnp.int32))
         jax.block_until_ready(self._jit_update_weights(warm_state_k2, warm_candidate, params))
 
     def step(
@@ -392,10 +399,12 @@ class PenalizedTrustRegion(Algorithm):
             history.add_impulsive_discretization(W_multi_shoot.__array__())
 
             # Mirror the discretization onto the state pytree so the autotuner
-            # can read it as the "previous iterate" propagation on iter 2.
+            # can read it as the "previous iterate" propagation on iter 2. Keep
+            # the JAX arrays as-is (committed sharding) so the JIT cache hit
+            # established by the ``initialize()`` warm-up survives.
             state = state.replace(
-                x_prop=jnp.asarray(np.asarray(x_prop_init)),
-                x_prop_plus=jnp.asarray(np.asarray(x_prop_plus_init)),
+                x_prop=x_prop_init,
+                x_prop_plus=x_prop_plus_init,
             )
             iter1_dis_time = time.time() - t0
         else:
@@ -434,10 +443,16 @@ class PenalizedTrustRegion(Algorithm):
         )
         dis_time = iter1_dis_time + (time.time() - t0)
 
+        # V, W, D_d, E_d are consumed host-side by ``history.record_iteration``
+        # only — pull them off the device once here so the recorder doesn't have
+        # to. x_prop / x_prop_plus stay as JAX arrays: they flow straight back
+        # into the JIT'd autotuner closure, and round-tripping them through a
+        # numpy array would lose their committed sharding and miss the JIT cache
+        # established by the ``initialize()`` warm-up.
         candidate.V = V_multi_shoot.__array__()
         candidate.W = W_multi_shoot.__array__()
-        candidate.x_prop = x_prop.__array__()
-        candidate.x_prop_plus = x_prop_plus.__array__()
+        candidate.x_prop = x_prop
+        candidate.x_prop_plus = x_prop_plus
         candidate.D_d = D_d.__array__()
         candidate.E_d = E_d.__array__()
         candidate.VC = vc_mat
@@ -445,11 +460,14 @@ class PenalizedTrustRegion(Algorithm):
 
         # Roll J_* scalars onto the pytree before the autotuner runs; the
         # autotuner returns the next-iterate state, which we then thread back
-        # to history and the emitter.
+        # to history and the emitter. Strong-typed and committed (matching the
+        # rest of the pytree, which comes back from the JIT'd ``update_weights``
+        # already committed) so the JIT cache key is stable across iterations.
+        dev = state.x.sharding
         state = state.replace(
-            J_tr=jnp.asarray(float(np.sum(np.array(J_tr_vec)))),
-            J_vb=jnp.asarray(float(np.sum(np.array(J_vb_vec)))),
-            J_vc=jnp.asarray(float(np.sum(np.array(J_vc_vec)))),
+            J_tr=jax.device_put(jnp.asarray(float(np.sum(np.array(J_tr_vec))), dtype=state.J_tr.dtype), dev),
+            J_vb=jax.device_put(jnp.asarray(float(np.sum(np.array(J_vb_vec))), dtype=state.J_vb.dtype), dev),
+            J_vc=jax.device_put(jnp.asarray(float(np.sum(np.array(J_vc_vec))), dtype=state.J_vc.dtype), dev),
         )
 
         # Autotuner: pure functional update on the pytree. We dispatch through
@@ -457,12 +475,18 @@ class PenalizedTrustRegion(Algorithm):
         # ops inside `update_weights` fuse into a single compiled call. The
         # candidate is bounced through a dict because `CandidateIterate` is a
         # mutable dataclass not registered as a JAX pytree.
+        # Match the JIT-closure trace signature established in initialize()'s
+        # warm-up: pre-converted JAX f32 arrays for the array leaves and a
+        # weak-typed jnp scalar for J_lin. CVXPy returns x/u as f64 numpy and
+        # J_lin as a Python float; passing them raw would miss the warm-up's
+        # cache key (f32/strong vs f64/weak). x_prop / x_prop_plus already come
+        # off the JAX discretizer with committed sharding — keep them as-is.
         candidate_dict = {
-            "x": candidate.x,
-            "u": candidate.u,
+            "x": jnp.asarray(candidate.x),
+            "u": jnp.asarray(candidate.u),
             "x_prop": candidate.x_prop,
             "x_prop_plus": candidate.x_prop_plus,
-            "J_lin": candidate.J_lin,
+            "J_lin": jnp.asarray(float(candidate.J_lin)),
         }
         state = self._jit_update_weights(state, candidate_dict, params)
 
@@ -511,7 +535,10 @@ class PenalizedTrustRegion(Algorithm):
 
         # Advance the Python iteration mirror and bump ``state.k`` so external
         # readers (``problem.py``'s loop, ``OptimizationResults.scp_k``) stay
-        # in sync. The ``state.k + 1`` is a no-sync jnp add.
+        # in sync. ``state.k + 1`` dispatches a JIT'd add — compiled once at
+        # iter 1 (~10 ms one-time) and then a cheap kernel; doing this on the
+        # device keeps the result committed and matches the rest of the pytree
+        # so the autotuner's cache key is stable.
         self._iter_index = iter_index + 1
         state = state.replace(k=state.k + 1)
 

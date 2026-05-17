@@ -344,6 +344,11 @@ class AlgorithmState:
         lam_prox: Trust-region weight, shape ``(N, n_states + n_controls)``.
         lam_vc: Virtual-control penalty weight, shape ``(N-1, n_states)``.
         lam_cost: Cost weight, shape ``(n_states,)``.
+        lam_cost_init: Initial cost weight (``weights.lam_cost`` broadcast to
+            ``(n_states,)``). Used by autotuners as the "reset" value during
+            early iterations and on the ``state.k <= lam_cost_drop`` branch.
+            Lives on the pytree (not closure-captured) so weight mutations
+            between solves propagate through the JIT'd update_weights.
         lam_vb_nodal: Nodal virtual-buffer weights, shape ``(N, n_nodal)``.
         lam_vb_cross: Cross-node virtual-buffer weights, shape ``(n_cross,)``.
         k: Iteration counter (starts at 1).
@@ -364,6 +369,7 @@ class AlgorithmState:
     lam_prox: jnp.ndarray
     lam_vc: jnp.ndarray
     lam_cost: jnp.ndarray
+    lam_cost_init: jnp.ndarray
     lam_vb_nodal: jnp.ndarray
     lam_vb_cross: jnp.ndarray
     k: jnp.ndarray
@@ -386,6 +392,7 @@ class AlgorithmState:
         "lam_prox",
         "lam_vc",
         "lam_cost",
+        "lam_cost_init",
         "lam_vb_nodal",
         "lam_vb_cross",
         "k",
@@ -429,6 +436,18 @@ class AlgorithmState:
         n_controls = settings.sim.n_controls
         n_total = n_states + n_controls
 
+        # Strong-typed dtypes so the initial state matches the autotuner's
+        # outputs. JAX caches `jit` traces by argument weak/strong dtype AND
+        # committed sharding; a mismatch between the seed state and the
+        # post-iter-1 state would trigger an extra recompile inside the SCP
+        # loop. We route every leaf through ``jax.device_put(..., device)`` to
+        # produce *committed* arrays so the cache key matches what comes back
+        # from the JIT'd ``update_weights``.
+        f = jnp.float64 if jax.config.read("jax_enable_x64") else jnp.float32
+        i = jnp.int32
+        device = jax.devices()[0]
+        put = lambda arr: jax.device_put(arr, device)
+
         lam_vc_array = np.ones((n - 1, n_states)) * weights.lam_vc
         lam_prox_array = np.ones((n, n_total)) * weights.lam_prox
 
@@ -438,24 +457,25 @@ class AlgorithmState:
             lam_cost_init = np.full(n_states, weights.lam_cost)
 
         return cls(
-            x=jnp.asarray(settings.sim.x.guess),
-            u=jnp.asarray(settings.sim.u.guess),
-            x_prop=jnp.zeros((n - 1, n_states)),
-            x_prop_plus=jnp.zeros((n, n_states)),
-            lam_prox=jnp.asarray(lam_prox_array),
-            lam_vc=jnp.asarray(lam_vc_array),
-            lam_cost=jnp.asarray(lam_cost_init),
-            lam_vb_nodal=jnp.asarray(weights.lam_vb_nodal),
-            lam_vb_cross=jnp.asarray(weights.lam_vb_cross),
-            k=jnp.asarray(1, dtype=jnp.int32),
-            J_tr=jnp.asarray(1e2),
-            J_vb=jnp.asarray(1e2),
-            J_vc=jnp.asarray(1e2),
-            J_nonlin=jnp.asarray(0.0),
-            predicted_reduction=jnp.asarray(0.0),
-            actual_reduction=jnp.asarray(0.0),
-            acceptance_ratio=jnp.asarray(0.0),
-            adaptive_state_code=jnp.asarray(int(AdaptiveStateCode.INITIAL), dtype=jnp.int32),
+            x=put(jnp.asarray(settings.sim.x.guess, dtype=f)),
+            u=put(jnp.asarray(settings.sim.u.guess, dtype=f)),
+            x_prop=put(jnp.zeros((n - 1, n_states), dtype=f)),
+            x_prop_plus=put(jnp.zeros((n, n_states), dtype=f)),
+            lam_prox=put(jnp.asarray(lam_prox_array, dtype=f)),
+            lam_vc=put(jnp.asarray(lam_vc_array, dtype=f)),
+            lam_cost=put(jnp.asarray(lam_cost_init, dtype=f)),
+            lam_cost_init=put(jnp.asarray(lam_cost_init, dtype=f)),
+            lam_vb_nodal=put(jnp.asarray(weights.lam_vb_nodal, dtype=f)),
+            lam_vb_cross=put(jnp.asarray(weights.lam_vb_cross, dtype=f)),
+            k=put(jnp.asarray(1, dtype=i)),
+            J_tr=put(jnp.asarray(1e2, dtype=f)),
+            J_vb=put(jnp.asarray(1e2, dtype=f)),
+            J_vc=put(jnp.asarray(1e2, dtype=f)),
+            J_nonlin=put(jnp.asarray(0.0, dtype=f)),
+            predicted_reduction=put(jnp.asarray(0.0, dtype=f)),
+            actual_reduction=put(jnp.asarray(0.0, dtype=f)),
+            acceptance_ratio=put(jnp.asarray(0.0, dtype=f)),
+            adaptive_state_code=put(jnp.asarray(int(AdaptiveStateCode.INITIAL), dtype=i)),
         )
 
 
