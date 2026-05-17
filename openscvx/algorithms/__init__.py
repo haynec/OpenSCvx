@@ -92,7 +92,15 @@ from .autotuner import (
     RampProximalWeight,
     RampProximalWeightSpec,
 )
-from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult
+from .base import (
+    AdaptiveStateCode,
+    Algorithm,
+    AlgorithmHistory,
+    AlgorithmState,
+    AutotuningBase,
+    DiscretizationResult,
+    adaptive_state_code_to_str,
+)
 from .optimization_results import OptimizationResults
 from .scvx import PenalizedTrustRegion
 from .weights import Weights
@@ -172,7 +180,10 @@ class PenalizedTrustRegionConfig(BaseModel):
 __all__ = [
     # Base class
     "Algorithm",
+    "AlgorithmHistory",
     "AlgorithmState",
+    "AdaptiveStateCode",
+    "adaptive_state_code_to_str",
     "DiscretizationResult",
     "Weights",
     # Core results
