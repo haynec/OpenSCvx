@@ -377,7 +377,7 @@ class AlgorithmState:
 
     # Field order is the source of truth for tree_flatten / tree_unflatten;
     # keep _FIELDS in sync with the dataclass field declarations above.
-    _FIELDS: Tuple[str, ...] = (
+    _FIELDS = (
         "x",
         "u",
         "x_prop",
