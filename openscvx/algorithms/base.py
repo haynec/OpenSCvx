@@ -190,9 +190,21 @@ class AutotuningBase(ABC):
     Class Attributes:
         COLUMNS: List of Column specs for autotuner-specific metrics to display.
             Subclasses override this to add their own columns.
+        JIT_UPDATE_WEIGHTS: Whether the SCP loop should wrap
+            :py:meth:`update_weights` in :func:`jax.jit`. True by default
+            (worthwhile for autotuners like :class:`AugmentedLagrangian` whose
+            body issues hundreds of small ``jnp`` ops). Subclasses with trivial
+            bodies (a handful of XLA ops) override to ``False`` so the SCP loop
+            calls ``update_weights`` directly — JAX's eager dispatch is cheaper
+            than the JIT'd closure's pytree-flatten overhead for those cases.
     """
 
     COLUMNS: List[Column] = []
+    # Governs only the Python-loop ``Problem.solve()`` path. Once the SCP body
+    # lives inside ``lax.while_loop`` (see ``plans/batchable-problem.md``),
+    # ``update_weights`` is one node in the outer compiled graph and the inner
+    # JIT boundary disappears — the flag becomes a silent no-op on that path.
+    JIT_UPDATE_WEIGHTS: bool = True
 
     @staticmethod
     def calculate_cost_from_state(

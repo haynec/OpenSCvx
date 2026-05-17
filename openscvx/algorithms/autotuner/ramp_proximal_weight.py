@@ -26,6 +26,11 @@ class RampProximalWeight(AutotuningBase):
     :class:`AlgorithmState` pytree; see the base-class contract.
     """
 
+    # The body is a handful of jnp ops — JAX's eager dispatch is cheaper than
+    # the pytree-flatten overhead of a JIT'd closure. Opt out of the SCP loop's
+    # JIT wrapping.
+    JIT_UPDATE_WEIGHTS: bool = False
+
     def __init__(
         self,
         ramp_factor: float = 1.0,

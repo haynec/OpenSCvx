@@ -279,7 +279,14 @@ class PenalizedTrustRegion(Algorithm):
         self._discretization_solver_impulsive = discretization_solver_impulsive
         self._jax_constraints = jax_constraints
         self._emitter = emitter
-        self._jit_update_weights = self._build_jit_update_weights(jax_constraints, settings)
+        # Cheap autotuners (ConstantProximalWeight / RampProximalWeight) opt out
+        # of the JIT wrapper via ``JIT_UPDATE_WEIGHTS=False`` on the class: their
+        # bodies are a handful of ``jnp`` ops, and JAX's eager dispatch is cheaper
+        # than the pytree-flatten / dict-pack overhead the JIT'd closure adds.
+        if self.autotuner.JIT_UPDATE_WEIGHTS:
+            self._jit_update_weights = self._build_jit_update_weights(jax_constraints, settings)
+        else:
+            self._jit_update_weights = None
         self._iter_index = 1
 
         self._solver.update_boundary_conditions(
@@ -337,36 +344,39 @@ class PenalizedTrustRegion(Algorithm):
         # Warm up the JIT'd autotuner step so the first real iteration pays
         # only the cached-dispatch cost. We construct a dummy candidate from
         # the warm-up subproblem result so the trace sees the actual array
-        # shapes.
-        if self._discretization_solver_impulsive is not None:
-            x_prop_plus_c = imp_out[0]
-        else:
-            x_prop_plus_c = jnp.zeros((settings.sim.n, settings.sim.n_states))
-        warm_candidate = {
-            "x": jnp.asarray(x_sol),
-            "u": jnp.asarray(u_sol),
-            "x_prop": jnp.asarray(x_prop_c),
-            "x_prop_plus": jnp.asarray(x_prop_plus_c),
-            "J_lin": jnp.asarray(0.0),
-        }
-        # Trace under both k=1 (INITIAL branch) and k>1 (acceptance-ratio
-        # branch) so neither path recompiles inside the SCP loop. The first
-        # warm-up traces against an uncommitted state (matching the iter-1
-        # input from ``AlgorithmState.from_settings``); the second traces
-        # against the *returned* state (committed, matching iter ≥ 2 where the
-        # state comes back from the JIT). Without this two-phase warm-up, JAX
-        # caches by argument committedness and the iter-2 dispatch misses.
-        #
-        # Removable once the SCP loop body is a single JAX trace — the entire
-        # warm-up block below becomes unnecessary.
-        warm_state = init_state.replace(
-            x_prop=jnp.asarray(x_prop_c),
-            x_prop_plus=jnp.asarray(x_prop_plus_c),
-        )
-        warm_out = self._jit_update_weights(warm_state, warm_candidate, params)
-        jax.block_until_ready(warm_out)
-        warm_state_k2 = warm_out.replace(k=jnp.asarray(2, dtype=jnp.int32))
-        jax.block_until_ready(self._jit_update_weights(warm_state_k2, warm_candidate, params))
+        # shapes. Eager-dispatch autotuners (``JIT_UPDATE_WEIGHTS=False``) skip
+        # this — there is no JIT cache to prime.
+        if self._jit_update_weights is not None:
+            if self._discretization_solver_impulsive is not None:
+                x_prop_plus_c = imp_out[0]
+            else:
+                x_prop_plus_c = jnp.zeros((settings.sim.n, settings.sim.n_states))
+            warm_candidate = {
+                "x": jnp.asarray(x_sol),
+                "u": jnp.asarray(u_sol),
+                "x_prop": jnp.asarray(x_prop_c),
+                "x_prop_plus": jnp.asarray(x_prop_plus_c),
+                "J_lin": jnp.asarray(0.0),
+            }
+            # Trace under both k=1 (INITIAL branch) and k>1 (acceptance-ratio
+            # branch) so neither path recompiles inside the SCP loop. The first
+            # warm-up traces against an uncommitted state (matching the iter-1
+            # input from ``AlgorithmState.from_settings``); the second traces
+            # against the *returned* state (committed, matching iter ≥ 2 where
+            # the state comes back from the JIT). Without this two-phase warm-
+            # up, JAX caches by argument committedness and the iter-2 dispatch
+            # misses.
+            #
+            # Removable once the SCP loop body is a single JAX trace — the
+            # entire warm-up block below becomes unnecessary.
+            warm_state = init_state.replace(
+                x_prop=jnp.asarray(x_prop_c),
+                x_prop_plus=jnp.asarray(x_prop_plus_c),
+            )
+            warm_out = self._jit_update_weights(warm_state, warm_candidate, params)
+            jax.block_until_ready(warm_out)
+            warm_state_k2 = warm_out.replace(k=jnp.asarray(2, dtype=jnp.int32))
+            jax.block_until_ready(self._jit_update_weights(warm_state_k2, warm_candidate, params))
 
     def step(
         self,
@@ -475,49 +485,69 @@ class PenalizedTrustRegion(Algorithm):
 
         # Roll J_* scalars onto the pytree before the autotuner runs; the
         # autotuner returns the next-iterate state, which we then thread back
-        # to history and the emitter. Strong-typed and committed (matching the
-        # rest of the pytree, which comes back from the JIT'd ``update_weights``
-        # already committed) so the JIT cache key is stable across iterations.
+        # to history and the emitter. On the JIT path the values are strong-
+        # typed and committed (matching the rest of the pytree, which comes
+        # back from the JIT'd ``update_weights`` already committed) so the JIT
+        # cache key is stable across iterations.
         #
         # The numpy → float → jnp → device_put round-trip is removable once the
         # SCP loop body is a single JAX trace; the J_* sums can then live on
         # the pytree directly with no cache-key gymnastics.
-        dev = state.x.sharding
-        state = state.replace(
-            J_tr=jax.device_put(
-                jnp.asarray(float(np.sum(np.array(J_tr_vec))), dtype=state.J_tr.dtype), dev
-            ),
-            J_vb=jax.device_put(
-                jnp.asarray(float(np.sum(np.array(J_vb_vec))), dtype=state.J_vb.dtype), dev
-            ),
-            J_vc=jax.device_put(
-                jnp.asarray(float(np.sum(np.array(J_vc_vec))), dtype=state.J_vc.dtype), dev
-            ),
-        )
+        if self._jit_update_weights is not None:
+            dev = state.x.sharding
+            state = state.replace(
+                J_tr=jax.device_put(
+                    jnp.asarray(float(np.sum(np.array(J_tr_vec))), dtype=state.J_tr.dtype), dev
+                ),
+                J_vb=jax.device_put(
+                    jnp.asarray(float(np.sum(np.array(J_vb_vec))), dtype=state.J_vb.dtype), dev
+                ),
+                J_vc=jax.device_put(
+                    jnp.asarray(float(np.sum(np.array(J_vc_vec))), dtype=state.J_vc.dtype), dev
+                ),
+            )
 
-        # Autotuner: pure functional update on the pytree. We dispatch through
-        # the JIT'd closure built in initialize() so the hundreds of small jnp
-        # ops inside `update_weights` fuse into a single compiled call. The
-        # candidate is bounced through a dict because `CandidateIterate` is a
-        # mutable dataclass not registered as a JAX pytree.
-        # Match the JIT-closure trace signature established in initialize()'s
-        # warm-up: pre-converted JAX f32 arrays for the array leaves and a
-        # weak-typed jnp scalar for J_lin. CVXPy returns x/u as f64 numpy and
-        # J_lin as a Python float; passing them raw would miss the warm-up's
-        # cache key (f32/strong vs f64/weak). x_prop / x_prop_plus already come
-        # off the JAX discretizer with committed sharding — keep them as-is.
-        #
-        # Removable once the SCP loop body is a single JAX trace: ``candidate``
-        # flows in as a registered pytree and the dict adapter (duplicated in
-        # ``_build_jit_update_weights``) disappears along with the wrapping JIT.
-        candidate_dict = {
-            "x": jnp.asarray(candidate.x),
-            "u": jnp.asarray(candidate.u),
-            "x_prop": candidate.x_prop,
-            "x_prop_plus": candidate.x_prop_plus,
-            "J_lin": jnp.asarray(float(candidate.J_lin)),
-        }
-        state = self._jit_update_weights(state, candidate_dict, params)
+            # Autotuner: pure functional update on the pytree. We dispatch
+            # through the JIT'd closure built in initialize() so the hundreds
+            # of small jnp ops inside `update_weights` fuse into a single
+            # compiled call. The candidate is bounced through a dict because
+            # `CandidateIterate` is a mutable dataclass not registered as a JAX
+            # pytree. Match the JIT-closure trace signature established in
+            # initialize()'s warm-up: pre-converted JAX f32 arrays for the
+            # array leaves and a weak-typed jnp scalar for J_lin. CVXPy
+            # returns x/u as f64 numpy and J_lin as a Python float; passing
+            # them raw would miss the warm-up's cache key (f32/strong vs
+            # f64/weak). x_prop / x_prop_plus already come off the JAX
+            # discretizer with committed sharding — keep them as-is.
+            #
+            # Removable once the SCP loop body is a single JAX trace:
+            # ``candidate`` flows in as a registered pytree and the dict
+            # adapter (duplicated in ``_build_jit_update_weights``)
+            # disappears along with the wrapping JIT.
+            candidate_dict = {
+                "x": jnp.asarray(candidate.x),
+                "u": jnp.asarray(candidate.u),
+                "x_prop": candidate.x_prop,
+                "x_prop_plus": candidate.x_prop_plus,
+                "J_lin": jnp.asarray(float(candidate.J_lin)),
+            }
+            state = self._jit_update_weights(state, candidate_dict, params)
+        else:
+            # Eager-dispatch path for cheap autotuners (a few jnp ops; the
+            # JIT'd closure's pytree-flatten overhead would dominate). Skip
+            # the JIT-cache-stability gymnastics: the J_* fields are written
+            # as plain jnp scalars (``record_iteration`` pulls them off the
+            # device in a single coalesced ``jax.device_get`` either way), the
+            # candidate stays a ``CandidateIterate`` (no dict pack), and
+            # ``update_weights`` is called directly.
+            state = state.replace(
+                J_tr=jnp.asarray(np.sum(np.asarray(J_tr_vec)), dtype=state.J_tr.dtype),
+                J_vb=jnp.asarray(np.sum(np.asarray(J_vb_vec)), dtype=state.J_vb.dtype),
+                J_vc=jnp.asarray(np.sum(np.asarray(J_vc_vec)), dtype=state.J_vc.dtype),
+            )
+            state = self.autotuner.update_weights(
+                state, candidate, self._jax_constraints, settings, params
+            )
 
         # History bookkeeping (Python-side, never traced). The recorder
         # transfers everything it needs (diagnostic scalars, weight arrays,
