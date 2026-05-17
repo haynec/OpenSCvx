@@ -113,6 +113,11 @@ class PenalizedTrustRegion(Algorithm):
         self._discretization_solver_impulsive: callable = None
         self._jax_constraints: "LoweredJaxConstraints" = None
         self._emitter: callable = None
+        # JIT'd autotuner step (built lazily in initialize() to fuse the
+        # hundreds of small jnp ops in `update_weights` into a single dispatch
+        # per iteration). Captures `nodal_constraints`, `settings`, `weights`
+        # as closure constants — they don't change within a solve.
+        self._jit_update_weights: Callable | None = None
 
         # Autotuner
         self.autotuner: "AutotuningBase" = (
@@ -146,6 +151,39 @@ class PenalizedTrustRegion(Algorithm):
         if hasattr(solver, "call"):
             return solver.call(*args)
         return solver(*args)
+
+    def _build_jit_update_weights(
+        self,
+        jax_constraints: "LoweredJaxConstraints",
+        settings: Config,
+        weights: Weights,
+    ) -> Callable:
+        """Compile a JIT'd autotuner step bound to the current solve context.
+
+        ``update_weights`` issues hundreds of small ``jnp`` ops on per-iterate
+        scalars and arrays; outside ``jax.jit`` each one round-trips through
+        the dispatcher. Folding them into a single compiled function gives an
+        order-of-magnitude wall-clock improvement per SCP iteration.
+
+        Closure captures ``jax_constraints`` / ``settings`` / ``weights``
+        because they are fixed for the duration of a solve and contain
+        non-pytree leaves (dataclasses of compiled closures, pydantic config,
+        etc.) that JAX cannot route through positional arguments.
+        """
+        autotuner = self.autotuner
+
+        def fn(state, candidate_dict, params):
+            cand = CandidateIterate()
+            cand.x = candidate_dict["x"]
+            cand.u = candidate_dict["u"]
+            cand.x_prop = candidate_dict["x_prop"]
+            cand.x_prop_plus = candidate_dict["x_prop_plus"]
+            cand.J_lin = candidate_dict["J_lin"]
+            return autotuner.update_weights(
+                state, cand, jax_constraints, settings, params, weights
+            )
+
+        return jax.jit(fn)
 
     @staticmethod
     def _block_until_ready_outputs(outputs: Tuple[object, ...]) -> None:
@@ -217,6 +255,9 @@ class PenalizedTrustRegion(Algorithm):
         self._discretization_solver_impulsive = discretization_solver_impulsive
         self._jax_constraints = jax_constraints
         self._emitter = emitter
+        self._jit_update_weights = self._build_jit_update_weights(
+            jax_constraints, settings, self.weights
+        )
 
         self._solver.update_boundary_conditions(
             x_init=settings.sim.x.initial,
@@ -269,6 +310,31 @@ class PenalizedTrustRegion(Algorithm):
             self._block_until_ready_outputs(cont_out + imp_out)
         else:
             self._block_until_ready_outputs(cont_out)
+
+        # Warm up the JIT'd autotuner step so the first real iteration pays
+        # only the cached-dispatch cost. We construct a dummy candidate from
+        # the warm-up subproblem result so the trace sees the actual array
+        # shapes.
+        if self._discretization_solver_impulsive is not None:
+            x_prop_plus_c = imp_out[0]
+        else:
+            x_prop_plus_c = jnp.zeros((settings.sim.n, settings.sim.n_states))
+        warm_candidate = {
+            "x": jnp.asarray(x_sol),
+            "u": jnp.asarray(u_sol),
+            "x_prop": jnp.asarray(x_prop_c),
+            "x_prop_plus": jnp.asarray(x_prop_plus_c),
+            "J_lin": jnp.asarray(0.0),
+        }
+        # Trace under both k=1 (INITIAL branch) and k>1 (acceptance-ratio
+        # branch) so neither path recompiles inside the SCP loop.
+        warm_state = init_state.replace(
+            x_prop=jnp.asarray(x_prop_c),
+            x_prop_plus=jnp.asarray(x_prop_plus_c),
+        )
+        jax.block_until_ready(self._jit_update_weights(warm_state, warm_candidate, params))
+        warm_state_k2 = warm_state.replace(k=jnp.asarray(2, dtype=jnp.int32))
+        jax.block_until_ready(self._jit_update_weights(warm_state_k2, warm_candidate, params))
 
     def step(
         self,
@@ -370,10 +436,19 @@ class PenalizedTrustRegion(Algorithm):
             J_vc=jnp.asarray(float(np.sum(np.array(J_vc_vec)))),
         )
 
-        # Autotuner: pure functional update on the pytree.
-        state = self.autotuner.update_weights(
-            state, candidate, self._jax_constraints, settings, params, self.weights
-        )
+        # Autotuner: pure functional update on the pytree. We dispatch through
+        # the JIT'd closure built in initialize() so the hundreds of small jnp
+        # ops inside `update_weights` fuse into a single compiled call. The
+        # candidate is bounced through a dict because `CandidateIterate` is a
+        # mutable dataclass not registered as a JAX pytree.
+        candidate_dict = {
+            "x": candidate.x,
+            "u": candidate.u,
+            "x_prop": candidate.x_prop,
+            "x_prop_plus": candidate.x_prop_plus,
+            "J_lin": candidate.J_lin,
+        }
+        state = self._jit_update_weights(state, candidate_dict, params)
 
         # History bookkeeping (Python-side, never traced).
         use_full_metrics = not isinstance(
