@@ -923,15 +923,24 @@ def test_cross_nodal(test_case):
         problem.settings.dev.printing = False
 
     # Run optimization
-    # For infeasible convex problems, the solver will raise an error during initialization
-    # For infeasible non-convex problems, SCP will fail to converge
+    # For infeasible convex problems, the convex subproblem must not reach
+    # `optimal` — either CVXPy raises SolverError (QOCO 0.3.0; QOCO 0.3.1 on
+    # Linux, where the IPM still triggers QOCO_NUMERICAL_ERROR) or QOCO 0.3.1
+    # on macOS hits QOCO_MAX_ITER and CVXPy returns status='user_limit'.
+    # For infeasible non-convex problems, SCP will fail to converge.
     if is_convex and not should_converge:
-        # Convex infeasible case: expect SolverError from CVXPy during initialization
         import cvxpy as cp
 
-        with pytest.raises(cp.error.SolverError):
-            problem.initialize()
+        problem.initialize()
+        try:
             result = problem.solve()
+        except cp.error.SolverError:
+            pass
+        else:
+            status = problem.solver._problem.status
+            assert status not in ("optimal", "optimal_inaccurate"), (
+                f"Infeasible convex problem unexpectedly solved cleanly: status={status!r}"
+            )
     else:
         # Solvable or non-convex infeasible case
         problem.initialize()
