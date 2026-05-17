@@ -600,6 +600,8 @@
       
         
       
+        
+      
     
     
     
@@ -865,6 +867,34 @@
     
   
     08 Receding Horizon Drone Racing: Model Predictive Contouring Control
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../UsersGuide/09_mjx_dynamics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    09 MuJoCo MJX Dynamics
   
 
     
@@ -9133,67 +9163,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#example-categories" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Example Categories
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Example Categories">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#abstract-problems" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Abstract Problems
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#drone-applications" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Drone Applications
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#ground-vehicle-applications" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Ground Vehicle Applications
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#real-time-applications" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Real-time Applications
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#creating-your-own-problems" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -9209,17 +9178,6 @@
     <span class="md-ellipsis">
       
         Example Structure
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#performance-tips" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Performance Tips
       
     </span>
   </a>
@@ -9262,34 +9220,11 @@
 <h1 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h1>
 <p>OpenSCvx comes with a comprehensive set of examples demonstrating various trajectory optimization problems. These examples are located in the <code>examples/</code> folder and cover different applications and complexity levels.</p>
 <h2 id="running-examples">Running Examples<a class="headerlink" href="#running-examples" title="Permanent link">&para;</a></h2>
-<p>See <code>examples/params/</code> folder for several example trajectory optimization problems.
+<p>See <code>examples/</code> folder for several example trajectory optimization problems.
 To run a problem simply run any of the examples directly, for example:</p>
-<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python3<span class="w"> </span>examples/params/brachistochrone.py
+<div class="language-sh highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>python3<span class="w"> </span>examples/brachistochrone.py
 </span></code></pre></div>
-<p>and adjust the plotting as needed.</p>
-<h2 id="example-categories">Example Categories<a class="headerlink" href="#example-categories" title="Permanent link">&para;</a></h2>
-<h3 id="abstract-problems">Abstract Problems<a class="headerlink" href="#abstract-problems" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Brachistochrone</strong>: Classic minimum-time problem with gravity</li>
-<li><strong>3DoF Rocket Landing</strong>: Rocket landing with fuel optimization</li>
-</ul>
-<h3 id="drone-applications">Drone Applications<a class="headerlink" href="#drone-applications" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Obstacle Avoidance</strong>: 6DoF drone navigating around obstacles</li>
-<li><strong>Line-of-Sight Guidance</strong>: Drone maintaining line-of-sight to keypoints while passing through gates</li>
-<li><strong>Cinema View Planning</strong>: Camera drone planning for cinematic shots</li>
-<li><strong>Drone Racing</strong>: High-speed racing through gates</li>
-</ul>
-<h3 id="ground-vehicle-applications">Ground Vehicle Applications<a class="headerlink" href="#ground-vehicle-applications" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Dubins Car</strong>: Simple 2D vehicle with turning constraints</li>
-<li><strong>Dubins Car with Waypoints</strong>: Navigation through multiple waypoints</li>
-</ul>
-<h3 id="real-time-applications">Real-time Applications<a class="headerlink" href="#real-time-applications" title="Permanent link">&para;</a></h3>
-<ul>
-<li><strong>Real-time Drone Racing</strong>: Live optimization during flight</li>
-<li><strong>Real-time Obstacle Avoidance</strong>: Dynamic obstacle avoidance</li>
-</ul>
+<p>and adjust the plotting as needed (see <a href="../UsersGuide/05_visualization/">Tutorial 05: Visualization</a>).</p>
 <h2 id="creating-your-own-problems">Creating Your Own Problems<a class="headerlink" href="#creating-your-own-problems" title="Permanent link">&para;</a></h2>
 <p>Check out the problem definitions inside <code>examples/params</code> to see how to define your own problems. Each example demonstrates:</p>
 <ul>
@@ -9310,13 +9245,6 @@ To run a problem simply run any of the examples directly, for example:</p>
 <li><strong>Solving</strong>: Run the optimization</li>
 <li><strong>Visualization</strong>: Plot and analyze results</li>
 </ol>
-<h2 id="performance-tips">Performance Tips<a class="headerlink" href="#performance-tips" title="Permanent link">&para;</a></h2>
-<ul>
-<li>Start with simpler examples to understand the workflow</li>
-<li>Use the provided initial guesses as starting points</li>
-<li>Adjust SCP weights based on your specific problem</li>
-<li>Consider using CVXPYGen for faster performance on smaller problems </li>
-</ul>
 
 
 
