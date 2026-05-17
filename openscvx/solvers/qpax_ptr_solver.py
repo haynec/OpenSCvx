@@ -177,25 +177,44 @@ class QPAXPTRSolver(PTRSolver):
         what lets ``jax.grad`` / ``jax.vmap`` reach through a full SCvx solve.
 
     Args:
-        solver_args: Keyword arguments forwarded to ``qpax.solve_qp``. Useful
-            keys include ``solver_tol`` (default ``1e-5``), ``max_iter``
-            (default ``30``), ``linear_solver``, and ``backend`` (``"i"`` for
-            implicit retraction-manifold PDIP — qpax's default — or ``"e"``
-            for the explicit predictor-corrector path).
+        solver_tol: Convergence tolerance forwarded to ``qpax.solve_qp``
+            as ``solver_tol``. Defaults to ``1e-5``.
+        max_iter: Maximum number of PDIP iterations forwarded to
+            ``qpax.solve_qp`` as ``max_iter``. Defaults to ``30``.
+        solver_args: Additional keyword arguments forwarded verbatim to
+            ``qpax.solve_qp``. Use for settings not covered by the named
+            params above — e.g. ``backend="e"`` for the explicit
+            predictor-corrector path, or ``linear_solver``. Raises
+            ``ValueError`` at construction time if any key overlaps with a
+            named param.
 
     Attributes:
         layout: ``_QPLayout`` describing the flat decision-vector slot ranges.
             Populated by :meth:`create_variables`.
     """
 
-    def __init__(self, solver_args: Optional[dict] = None):
+    def __init__(
+        self,
+        *,
+        solver_tol: float = 1e-5,
+        max_iter: int = 30,
+        solver_args: Optional[dict] = None,
+    ):
         if not _QPAX_AVAILABLE:
             raise ImportError(
                 "QPAXPTRSolver requires the `qpax` package. "
                 "Install it with: pip install openscvx[qpax]"
             )
 
-        self.solver_args = dict(solver_args) if solver_args else {}
+        _named = {"solver_tol": solver_tol, "max_iter": max_iter}
+        _extra = dict(solver_args) if solver_args else {}
+        _overlap = _named.keys() & _extra.keys()
+        if _overlap:
+            raise ValueError(
+                f"QPAX settings {sorted(_overlap)} appear as both named arguments "
+                "and inside solver_args; use one or the other."
+            )
+        self.solver_args = {**_named, **_extra}
 
         # Populated by create_variables / initialize.
         self.layout: Optional[_QPLayout] = None

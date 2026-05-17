@@ -241,24 +241,75 @@ class MoreauPTRSolver(PTRSolver):
         through a full SCvx solve.
 
     Args:
-        solver_args: Keyword arguments forwarded to :class:`moreau.Settings`.
-            Useful keys include ``max_iter`` (default 200), ``verbose``
-            (default False), ``device`` (``'auto'``, ``'cpu'``, or
-            ``'cuda'``), and a nested ``ipm_settings`` dict for IPM tolerances
-            (e.g. ``{"tol_gap_abs": 1e-8, "tol_feas": 1e-8}``).
+        max_iter: Maximum number of IPM iterations forwarded to
+            :class:`moreau.Settings`. Defaults to ``200``.
+        verbose: Whether Moreau prints per-iteration diagnostics.
+            Forwarded to :class:`moreau.Settings`. Defaults to ``False``.
+        device: Compute device for Moreau's JAX kernels. One of
+            ``"auto"``, ``"cpu"``, or ``"cuda"``. Forwarded to
+            :class:`moreau.Settings`. Defaults to ``"auto"``.
+        tol_gap_abs: Absolute duality-gap tolerance forwarded to
+            :class:`moreau.IPMSettings`. ``None`` uses Moreau's default.
+        tol_feas: Primal/dual feasibility tolerance forwarded to
+            :class:`moreau.IPMSettings`. ``None`` uses Moreau's default.
+        solver_args: Additional keyword arguments forwarded verbatim to
+            :class:`moreau.Settings`. Use for settings not covered by the
+            named params above. ``solver_args["ipm_settings"]`` may be a
+            dict or a :class:`moreau.IPMSettings` object; if it is a dict,
+            ``tol_gap_abs`` / ``tol_feas`` are merged into it. Raises
+            ``ValueError`` at construction time if any top-level key or
+            IPM tolerance overlaps with a named param.
 
     Attributes:
         layout: :class:`_ConicLayout` describing flat decision-vector slot
             ranges. Populated by :meth:`create_variables`.
     """
 
-    def __init__(self, solver_args: Optional[Dict] = None):
+    def __init__(
+        self,
+        *,
+        max_iter: int = 200,
+        verbose: bool = False,
+        device: str = "auto",
+        tol_gap_abs: Optional[float] = None,
+        tol_feas: Optional[float] = None,
+        solver_args: Optional[Dict] = None,
+    ):
         if not _MOREAU_AVAILABLE:
             raise ImportError(
                 "MoreauPTRSolver requires the `moreau` package. "
                 "Install it with: pip install openscvx[moreau]"
             )
-        self.solver_args = dict(solver_args) if solver_args else {}
+
+        _named = {"max_iter": max_iter, "verbose": verbose, "device": device}
+        _extra = dict(solver_args) if solver_args else {}
+        _overlap = _named.keys() & _extra.keys()
+        if _overlap:
+            raise ValueError(
+                f"Moreau settings {sorted(_overlap)} appear as both named arguments "
+                "and inside solver_args; use one or the other."
+            )
+        merged = {**_named, **_extra}
+
+        _ipm = {
+            k: v for k, v in [("tol_gap_abs", tol_gap_abs), ("tol_feas", tol_feas)] if v is not None
+        }
+        if _ipm:
+            existing_ipm = merged.get("ipm_settings", {})
+            if not isinstance(existing_ipm, dict):
+                raise ValueError(
+                    "Cannot combine tol_gap_abs / tol_feas named arguments with an "
+                    "ipm_settings object in solver_args; use one form or the other."
+                )
+            ipm_overlap = _ipm.keys() & existing_ipm.keys()
+            if ipm_overlap:
+                raise ValueError(
+                    f"Moreau IPM settings {sorted(ipm_overlap)} appear as both named "
+                    "arguments and inside solver_args['ipm_settings']; use one or the other."
+                )
+            merged["ipm_settings"] = {**_ipm, **existing_ipm}
+
+        self.solver_args = merged
 
         self.layout: Optional[_ConicLayout] = None
         self._S_x: Optional[np.ndarray] = None
