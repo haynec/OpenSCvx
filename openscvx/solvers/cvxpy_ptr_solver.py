@@ -879,6 +879,19 @@ class CVXPyPTRSolver(PTRSolver):
             status=self._problem.status,
         )
 
+    def iteration_callback(self):
+        """JAX-pure SCP iteration entry point (not yet wired for CVXPy).
+
+        Implemented in a follow-up slice of ``plans/solver-iteration-callbacks.md``
+        — Phase 4 wraps the existing NumPy ``solve()`` in ``jax.pure_callback``.
+        Callers on the JAX-pure path should select QPAX or Moreau in the
+        meantime.
+        """
+        raise NotImplementedError(
+            "CVXPyPTRSolver.iteration_callback() not yet implemented; "
+            "use QPAXPTRSolver or MoreauPTRSolver for the JAX-pure path."
+        )
+
     def citation(self) -> List[str]:
         """Return BibTeX citations for CVXPy.
 

@@ -828,6 +828,18 @@ class QPAXPTRSolver(PTRSolver):
 
         return self._unpack(z)
 
+    def iteration_callback(self):
+        """JAX-pure SCP iteration entry point (not yet wired for QPAX).
+
+        Implemented in a follow-up slice of ``plans/solver-iteration-callbacks.md``
+        — Phase 2 ports ``_assemble_qp`` to JAX and dispatches via
+        ``qpax.solve_qp_primal``.
+        """
+        raise NotImplementedError(
+            "QPAXPTRSolver.iteration_callback() not yet implemented; "
+            "use the NumPy solve() path until Phase 2 lands."
+        )
+
     def _unpack(self, z: np.ndarray) -> PTRSolveResult:
         """Reverse the layout into the structured :class:`PTRSolveResult`."""
         L = self.layout

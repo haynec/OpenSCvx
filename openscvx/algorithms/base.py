@@ -373,6 +373,14 @@ class AlgorithmState:
         actual_reduction: Actual reduction in ``J_nonlin`` for this iter.
         acceptance_ratio: ``actual_reduction / predicted_reduction``.
         adaptive_state_code: :class:`AdaptiveStateCode` value as ``int32``.
+        moreau_carry: ``(x, z, s)`` warm-start carry for the Moreau conic
+            backend. Populated by :meth:`MoreauPTRSolver.iteration_callback`;
+            non-Moreau backends carry zero arrays of the same shape so the
+            pytree shape stays uniform across backends. Until Phase 3 of
+            ``plans/solver-iteration-callbacks.md`` lands the leaves are
+            zero-length placeholders — the Moreau backend will replace them
+            with the cone-shaped warm-start when ``iteration_callback`` is
+            wired up.
     """
 
     x: jnp.ndarray
@@ -394,6 +402,7 @@ class AlgorithmState:
     actual_reduction: jnp.ndarray
     acceptance_ratio: jnp.ndarray
     adaptive_state_code: jnp.ndarray
+    moreau_carry: Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]
 
     # Field order is the source of truth for tree_flatten / tree_unflatten;
     # keep _FIELDS in sync with the dataclass field declarations above.
@@ -417,6 +426,7 @@ class AlgorithmState:
         "actual_reduction",
         "acceptance_ratio",
         "adaptive_state_code",
+        "moreau_carry",
     )
 
     def replace(self, **changes) -> "AlgorithmState":
@@ -475,6 +485,14 @@ class AlgorithmState:
         else:
             lam_cost_init = np.full(n_states, weights.lam_cost)
 
+        # ``moreau_carry`` is sized by the Moreau backend's conic decomposition,
+        # which is not known at this layer — Phase 3 of
+        # ``plans/solver-iteration-callbacks.md`` will plumb the real ``(n_z,)``
+        # / ``(n_cone,)`` shapes through from the solver. For now every backend
+        # carries zero-length placeholders so the pytree is well-formed.
+        carry_zero = put(jnp.zeros((0,), dtype=f))
+        moreau_carry = (carry_zero, carry_zero, carry_zero)
+
         return cls(
             x=put(jnp.asarray(settings.sim.x.guess, dtype=f)),
             u=put(jnp.asarray(settings.sim.u.guess, dtype=f)),
@@ -495,6 +513,7 @@ class AlgorithmState:
             actual_reduction=put(jnp.asarray(0.0, dtype=f)),
             acceptance_ratio=put(jnp.asarray(0.0, dtype=f)),
             adaptive_state_code=put(jnp.asarray(int(AdaptiveStateCode.INITIAL), dtype=i)),
+            moreau_carry=moreau_carry,
         )
 
 

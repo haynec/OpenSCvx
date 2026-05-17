@@ -1132,6 +1132,19 @@ class MoreauPTRSolver(PTRSolver):
         z = np.asarray(solution.x)
         return self._unpack(z)
 
+    def iteration_callback(self):
+        """JAX-pure SCP iteration entry point (not yet wired for Moreau).
+
+        Implemented in a follow-up slice of ``plans/solver-iteration-callbacks.md``
+        — Phase 3 ports ``_assemble_conic`` to JAX and threads the warm-start
+        carry through ``AlgorithmState.moreau_carry`` instead of
+        ``self._warm_start``.
+        """
+        raise NotImplementedError(
+            "MoreauPTRSolver.iteration_callback() not yet implemented; "
+            "use the NumPy solve() path until Phase 3 lands."
+        )
+
     def _unpack(self, z: np.ndarray) -> PTRSolveResult:
         """Map the flat solution vector into a :class:`PTRSolveResult`.
 
