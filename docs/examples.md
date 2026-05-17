@@ -4,34 +4,14 @@ OpenSCvx comes with a comprehensive set of examples demonstrating various trajec
 
 ## Running Examples
 
-See `examples/params/` folder for several example trajectory optimization problems.
+See `examples/` folder for several example trajectory optimization problems.
 To run a problem simply run any of the examples directly, for example:
 
 ```sh
-python3 examples/params/brachistochrone.py
+python3 examples/brachistochrone.py
 ```
 
-and adjust the plotting as needed.
-
-## Example Categories
-
-### Abstract Problems
-- **Brachistochrone**: Classic minimum-time problem with gravity
-- **3DoF Rocket Landing**: Rocket landing with fuel optimization
-
-### Drone Applications
-- **Obstacle Avoidance**: 6DoF drone navigating around obstacles
-- **Line-of-Sight Guidance**: Drone maintaining line-of-sight to keypoints while passing through gates
-- **Cinema View Planning**: Camera drone planning for cinematic shots
-- **Drone Racing**: High-speed racing through gates
-
-### Ground Vehicle Applications
-- **Dubins Car**: Simple 2D vehicle with turning constraints
-- **Dubins Car with Waypoints**: Navigation through multiple waypoints
-
-### Real-time Applications
-- **Real-time Drone Racing**: Live optimization during flight
-- **Real-time Obstacle Avoidance**: Dynamic obstacle avoidance
+and adjust the plotting as needed (see [Tutorial 05: Visualization](UsersGuide/05_visualization.md)).
 
 ## Creating Your Own Problems
 
@@ -54,10 +34,3 @@ Most examples follow this structure:
 5. **Problem Instantiation**: Create and configure the Problem
 6. **Solving**: Run the optimization
 7. **Visualization**: Plot and analyze results
-
-## Performance Tips
-
-- Start with simpler examples to understand the workflow
-- Use the provided initial guesses as starting points
-- Adjust SCP weights based on your specific problem
-- Consider using CVXPYGen for faster performance on smaller problems 

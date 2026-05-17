@@ -13,12 +13,16 @@ from "another solver" into "differentiable SCvx", and would also enable
 Scope
 -----
 * No user ``.convex()`` constraints (would need SOCP).
-* No cross-node or impulsive controls. Each raises
-  :class:`NotImplementedError` at :meth:`initialize` time and points the user
-  at :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver` as the
-  alternative. Either may gain support here in the future; both add
-  non-trivial QP structure (block-coupled equality rows for impulsive,
-  full-trajectory gradient stacking for cross-node).
+* No cross-node constraints. Each raises :class:`NotImplementedError` at
+  :meth:`initialize` time and points the user at
+  :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver` as the
+  alternative. Cross-node support is gated on full-trajectory gradient
+  stacking that hasn't been built yet.
+* Impulsive controls (``parameterization="impulsive"``) **are** supported.
+  ``D_d`` is absorbed numerically into ``A_d / B_d / C_d`` at update time
+  (matching ``CVXPyPTRSolver``) and ``E_d`` enters the dynamics row as an
+  additional control coefficient on the impulsive slice; the initial Fix
+  boundary condition picks up the linearized impulse at node 0.
 * CTCS constraints **are** supported — their LICQ-style absolute-value
   inequalities reduce to two affine rows per node, which is plain QP form.
   The library also auto-adds ``CTCS(time ≤ time.max)`` /
@@ -66,6 +70,7 @@ if TYPE_CHECKING:
     from openscvx.lowered import LoweredProblem
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
     from openscvx.lowered.unified import UnifiedControl, UnifiedState
+    from openscvx.symbolic.constraint_set import ConstraintSet
 
 
 # Tiny diagonal regularization added to Q on rows whose cost is purely
@@ -155,17 +160,16 @@ class QPAXPTRSolver(PTRSolver):
     positive-part slack reformulation and the rationale behind the design.
 
     Scope:
-        Supported — state/control box, dynamics linearization, boundary
-        ``Fix``, uniform time grid, linearized nodal nonconvex, CTCS
-        LICQ-style rows.
+        Supported — state/control box, dynamics linearization (continuous
+        and impulsive), boundary ``Fix``, uniform time grid, linearized
+        nodal nonconvex, CTCS LICQ-style rows.
 
-        Not supported — user ``.convex()`` constraints, cross-node
-        constraints, and impulsive controls. Each raises
-        :class:`NotImplementedError` with a "use
+        Not supported — user ``.convex()`` constraints and cross-node
+        constraints. Each raises :class:`NotImplementedError` with a "use
         :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`" pointer.
-        Cross-node and impulsive support may be added in the future;
-        ``.convex()`` would need a second-order-cone solver and is unlikely
-        to land here directly.
+        Cross-node support may be added in the future; ``.convex()`` would
+        need a second-order-cone solver and is unlikely to land here
+        directly.
 
     Differentiability hook for future work:
         ``qpax.solve_qp_primal`` is differentiable via ``jax.custom_vjp``.
@@ -173,25 +177,44 @@ class QPAXPTRSolver(PTRSolver):
         what lets ``jax.grad`` / ``jax.vmap`` reach through a full SCvx solve.
 
     Args:
-        solver_args: Keyword arguments forwarded to ``qpax.solve_qp``. Useful
-            keys include ``solver_tol`` (default ``1e-5``), ``max_iter``
-            (default ``30``), ``linear_solver``, and ``backend`` (``"i"`` for
-            implicit retraction-manifold PDIP — qpax's default — or ``"e"``
-            for the explicit predictor-corrector path).
+        solver_tol: Convergence tolerance forwarded to ``qpax.solve_qp``
+            as ``solver_tol``. Defaults to ``1e-5``.
+        max_iter: Maximum number of PDIP iterations forwarded to
+            ``qpax.solve_qp`` as ``max_iter``. Defaults to ``30``.
+        solver_args: Additional keyword arguments forwarded verbatim to
+            ``qpax.solve_qp``. Use for settings not covered by the named
+            params above — e.g. ``backend="e"`` for the explicit
+            predictor-corrector path, or ``linear_solver``. Raises
+            ``ValueError`` at construction time if any key overlaps with a
+            named param.
 
     Attributes:
         layout: ``_QPLayout`` describing the flat decision-vector slot ranges.
             Populated by :meth:`create_variables`.
     """
 
-    def __init__(self, solver_args: Optional[dict] = None):
+    def __init__(
+        self,
+        *,
+        solver_tol: float = 1e-5,
+        max_iter: int = 30,
+        solver_args: Optional[dict] = None,
+    ):
         if not _QPAX_AVAILABLE:
             raise ImportError(
                 "QPAXPTRSolver requires the `qpax` package. "
                 "Install it with: pip install openscvx[qpax]"
             )
 
-        self.solver_args = dict(solver_args) if solver_args else {}
+        _named = {"solver_tol": solver_tol, "max_iter": max_iter}
+        _extra = dict(solver_args) if solver_args else {}
+        _overlap = _named.keys() & _extra.keys()
+        if _overlap:
+            raise ValueError(
+                f"QPAX settings {sorted(_overlap)} appear as both named arguments "
+                "and inside solver_args; use one or the other."
+            )
+        self.solver_args = {**_named, **_extra}
 
         # Populated by create_variables / initialize.
         self.layout: Optional[_QPLayout] = None
@@ -205,6 +228,14 @@ class QPAXPTRSolver(PTRSolver):
         self._S_u_diag: Optional[np.ndarray] = None
         self._settings: Optional[Config] = None
         self._jax_constraints: Optional["LoweredJaxConstraints"] = None
+        # Static QP row count, computed in initialize() once the constraint
+        # set, impulsive pins, and settings are all available.
+        self._n_constraints: int = 0
+
+        # Populated by lower_convex_constraints. Auto-augmented impulsive
+        # zero-pin constraints land here; any genuine user .convex() trips
+        # the default refusal.
+        self._impulsive_pins: List[Tuple[List[int], slice]] = []
 
         # Per-iteration data, set by update_* methods.
         self._dyn: dict = {}
@@ -241,16 +272,6 @@ class QPAXPTRSolver(PTRSolver):
         n_x = len(x_unified.max)
         n_u = len(u_unified.max)
 
-        # Reject impulsive at create_variables — the layout assumes no impulsive
-        # coupling. The plan punts impulsive support to a follow-up PR.
-        slice_imp = u_unified.slice_impulsive
-        if slice_imp.stop > slice_imp.start:
-            raise NotImplementedError(
-                "QPAXPTRSolver does not support impulsive controls "
-                f"(u.slice_impulsive = {slice_imp!r}). "
-                "Use CVXPyPTRSolver for problems with impulsive dynamics."
-            )
-
         S_x, c_x = self._scaling(x_unified)
         S_u, c_u = self._scaling(u_unified)
 
@@ -268,14 +289,36 @@ class QPAXPTRSolver(PTRSolver):
         self.layout = _QPLayout(N=N, n_x=n_x, n_u=n_u, n_nodal=len(jax_constraints.nodal))
         self._jax_constraints = jax_constraints
 
+    def lower_convex_constraints(
+        self,
+        constraints: "ConstraintSet",
+        parameters: Optional[dict] = None,
+    ) -> Tuple[List, dict]:
+        """Absorb auto-generated impulsive zero-pin constraints; refuse the rest.
+
+        :func:`openscvx.symbolic.lower._augment_impulsive_constraints` injects
+        ``Control == 0`` equalities at non-impulse nodes for every impulsive
+        control. Those constraints live in ``constraints.nodal_convex`` even
+        though no user ``.convex()`` was written; we recognize their fixed
+        shape and stash a pin list for :meth:`_assemble_qp` to emit as
+        plain equality rows. Anything that doesn't match the auto-augmentation
+        shape (e.g. a genuine user ``.convex()`` constraint) falls through to
+        the default refusal in :class:`ConvexSolver`.
+        """
+        pins = self._extract_impulsive_pins(constraints)
+        if pins is None:
+            return super().lower_convex_constraints(constraints, parameters)
+        self._impulsive_pins = pins
+        return [], {}
+
     def initialize(self, lowered: "LoweredProblem", settings: "Config") -> None:
         """Validate the constraint subset QPAX supports and stash settings.
 
-        Cross-node constraints and impulsive controls each raise
-        :class:`NotImplementedError` with a pointer to
-        :class:`CVXPyPTRSolver`; either may gain QP-side support here in the
-        future. User ``.convex()`` constraints are already rejected upstream
-        by the default :meth:`ConvexSolver.lower_convex_constraints`.
+        Cross-node constraints raise :class:`NotImplementedError` with a
+        pointer to :class:`CVXPyPTRSolver` and may gain QP-side support
+        here in the future. User ``.convex()`` constraints are filtered
+        upstream by :meth:`lower_convex_constraints`, which absorbs the
+        auto-generated impulsive zero-pins and refuses anything else.
         """
         if self.layout is None:
             raise RuntimeError(
@@ -283,21 +326,55 @@ class QPAXPTRSolver(PTRSolver):
                 "Call create_variables() first."
             )
 
-        # User .convex() constraints are rejected upstream — the default
-        # ConvexSolver.lower_convex_constraints raises before we get here.
         if lowered.jax_constraints.cross_node:
             raise NotImplementedError(
                 "QPAXPTRSolver does not yet support cross-node constraints "
                 f"({len(lowered.jax_constraints.cross_node)} defined). "
                 "Use CVXPyPTRSolver."
             )
-        slice_imp = settings.sim.u.slice_impulsive
-        if slice_imp.stop > slice_imp.start:
-            raise NotImplementedError(
-                "QPAXPTRSolver does not support impulsive controls. Use CVXPyPTRSolver."
-            )
 
         self._settings = settings
+        self._n_constraints = self._count_rows(lowered.jax_constraints, settings)
+
+    def _count_rows(
+        self,
+        jax_constraints: "LoweredJaxConstraints",
+        settings: "Config",
+    ) -> int:
+        """Static row count for ``A z = b`` and ``G z ≤ h`` combined.
+
+        Mirrors the row enumeration in :meth:`_assemble_qp`. Used only for the
+        diagnostics box — the assembly code itself doesn't consult this.
+        """
+        L = self.layout
+        N, n_x, n_u = L.N, L.n_x, L.n_u
+        sim = settings.sim
+
+        n_eq = 0
+        n_eq += sum(len(c.nodes) for c in jax_constraints.nodal)
+        for i in range(sim.true_state_slice.start, sim.true_state_slice.stop):
+            if sim.x.initial_type[i] == "Fix":
+                n_eq += 1
+            if sim.x.final_type[i] == "Fix":
+                n_eq += 1
+        for nodes, ctrl_slice in self._impulsive_pins:
+            n_eq += len(nodes) * (ctrl_slice.stop - ctrl_slice.start)
+        if sim._uniform_time_grid:
+            td = sim.time_dilation_slice
+            n_eq += (N - 1) * (td.stop - td.start)
+        n_eq += N * n_x  # state error definitions
+        n_eq += N * n_u  # control error definitions
+        n_eq += (N - 1) * n_x  # dynamics
+        n_eq += sim.ctcs_slice.stop - sim.ctcs_slice.start  # CTCS x[0] = 0
+
+        n_ineq = 2 * N * (n_x + n_u)  # box constraints
+        for nodes in sim.ctcs_node_intervals:
+            start_i = 1 if nodes[0] == 0 else nodes[0]
+            n_ineq += 2 * (nodes[1] - start_i)
+        n_ineq += 2 * (N - 1) * n_x  # |nu| L1 slack
+        n_ineq += 2 * N * L.n_nodal  # pos(nu_vb) slack
+
+        return n_eq + n_ineq
 
     # ------------------------------------------------------------------
     # Per-iteration update hooks
@@ -315,19 +392,42 @@ class QPAXPTRSolver(PTRSolver):
         D_d: np.ndarray | None = None,
         E_d: np.ndarray | None = None,
     ) -> None:
-        # Impulsive controls are rejected at initialize(); D_d / E_d /
-        # x_prop_plus only ever arrive here because the algorithm passes
-        # them unconditionally. Drop them silently. Future impulsive
-        # support would consume these to add block-coupled equality rows
-        # at the impulsive nodes.
-        del x_prop_plus, D_d, E_d
+        A_eff = np.asarray(A_d, dtype=float)
+        B_eff = np.asarray(B_d, dtype=float)
+        C_eff = np.asarray(C_d, dtype=float)
+
+        # Absorb the impulsive state Jacobian into the continuous step
+        # matrices so the assembly row keeps a single A_d·dx + B_d·du term,
+        # matching the recipe in CVXPyPTRSolver.update_dynamics_linearization
+        # at openscvx/solvers/cvxpy_ptr_solver.py:636-654.
+        if D_d is not None:
+            D_arr = np.asarray(D_d, dtype=float)
+            if D_arr.ndim == 3 and D_arr.shape[0] == A_eff.shape[0] + 1:
+                D_steps = D_arr[1:]
+            elif D_arr.ndim == 3 and D_arr.shape[0] == A_eff.shape[0]:
+                D_steps = D_arr
+            else:
+                raise ValueError(
+                    "Unexpected D_d shape for dynamics update: "
+                    f"{D_arr.shape}, expected "
+                    f"{(A_eff.shape[0] + 1, A_eff.shape[1], A_eff.shape[2])} "
+                    f"or {(A_eff.shape[0], A_eff.shape[1], A_eff.shape[2])}."
+                )
+            A_eff = np.einsum("kij,kjl->kil", D_steps, A_eff)
+            B_eff = np.einsum("kij,kjl->kil", D_steps, B_eff)
+            C_eff = np.einsum("kij,kjl->kil", D_steps, C_eff)
+
         self._dyn = {
             "x_bar": np.asarray(x_bar, dtype=float),
             "u_bar": np.asarray(u_bar, dtype=float),
-            "A_d": np.asarray(A_d, dtype=float),
-            "B_d": np.asarray(B_d, dtype=float),
-            "C_d": np.asarray(C_d, dtype=float),
+            "A_d": A_eff,
+            "B_d": B_eff,
+            "C_d": C_eff,
             "x_prop": np.asarray(x_prop, dtype=float),
+            "x_prop_plus": (
+                np.asarray(x_prop_plus, dtype=float) if x_prop_plus is not None else None
+            ),
+            "E_d": np.asarray(E_d, dtype=float) if E_d is not None else None,
         }
 
     def update_constraint_linearizations(
@@ -405,8 +505,11 @@ class QPAXPTRSolver(PTRSolver):
         inv_S_x = self._inv_S_x_diag  # diagonals
         inv_S_u = self._inv_S_u_diag
         S_x = self._S_x_diag
+        S_u = self._S_u_diag
         c_x = self._c_x
         c_u = self._c_u
+        slice_imp = settings.sim.u.slice_impulsive
+        has_impulsive = slice_imp.stop > slice_imp.start
 
         lam_prox = self._pen["lam_prox"]  # (N, n_x + n_u)
         lam_cost = self._pen["lam_cost"]  # scalar or (n_x,)
@@ -472,18 +575,31 @@ class QPAXPTRSolver(PTRSolver):
                 A_rows.append(row)
                 b_rows.append(-g[node])
 
-        # Boundary conditions (Fix branch only; impulsive Fix raised earlier).
+        # Boundary conditions (Fix). The initial branch couples the
+        # post-impulse state at node 0 to the linearized impulse,
+        # matching CVXPyPTRSolver.constraints at cvxpy_ptr_solver.py:484-495.
+        E_d_arr = self._dyn["E_d"]
+        x_prop_plus_arr = self._dyn["x_prop_plus"]
         for i in range(settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop):
             if settings.sim.x.initial_type[i] == "Fix":
-                if self._x_init is None:
-                    raise RuntimeError(
-                        f"Fix initial condition on state {i} requires x_init; "
-                        "call update_boundary_conditions() before solve()."
-                    )
                 row = np.zeros(L.n_z, dtype=float)
                 row[L.x_idx(0, i)] = S_x[i]
+                if has_impulsive:
+                    # x_nonscaled[0, i] - E_d[0, i, slice_imp] @ du_nonscaled[0, slice_imp]
+                    #     = x_prop_plus[0, i]
+                    # With du_nonscaled[0, j] = S_u[j] * du[0, j].
+                    for j in range(slice_imp.start, slice_imp.stop):
+                        row[L.du_idx(0, j)] = -E_d_arr[0, i, j] * S_u[j]
+                    rhs = x_prop_plus_arr[0, i] - c_x[i]
+                else:
+                    if self._x_init is None:
+                        raise RuntimeError(
+                            f"Fix initial condition on state {i} requires x_init; "
+                            "call update_boundary_conditions() before solve()."
+                        )
+                    rhs = self._x_init[i] - c_x[i]
                 A_rows.append(row)
-                b_rows.append(self._x_init[i] - c_x[i])
+                b_rows.append(rhs)
             if settings.sim.x.final_type[i] == "Fix":
                 if self._x_term is None:
                     raise RuntimeError(
@@ -494,6 +610,18 @@ class QPAXPTRSolver(PTRSolver):
                 row[L.x_idx(N - 1, i)] = S_x[i]
                 A_rows.append(row)
                 b_rows.append(self._x_term[i] - c_x[i])
+
+        # Impulsive zero-pin equalities. The auto-augmentation forces every
+        # impulsive control DOF to zero at every non-impulse node, mirroring
+        # the CVXPy lowering of ``u_nonscaled[node][slice_imp] == 0``. In
+        # scaled coords that reduces to ``u[node, j] = -inv_S_u[j] · c_u[j]``.
+        for nodes, ctrl_slice in self._impulsive_pins:
+            for node in nodes:
+                for j in range(ctrl_slice.start, ctrl_slice.stop):
+                    row = np.zeros(L.n_z, dtype=float)
+                    row[L.u_idx(node, j)] = 1.0
+                    A_rows.append(row)
+                    b_rows.append(-inv_S_u[j] * c_u[j])
 
         # Uniform time-grid: scaled u along the time-dilation slice is equal
         # at consecutive nodes. The CVXPy formulation premultiplies by
@@ -526,9 +654,13 @@ class QPAXPTRSolver(PTRSolver):
                 A_rows.append(row)
                 b_rows.append(inv_S_u[j] * (u_bar[k, j] - c_u[j]))
 
-        # Dynamics (continuous PTR branch, FOH-style coupling):
+        # Dynamics (continuous PTR branch, FOH-style coupling, with optional
+        # impulsive coupling at node k):
         #   x[k] - inv_S_x A_d S_x dx[k-1] - inv_S_x B_d S_u du[k-1]
-        #        - inv_S_x C_d S_u du[k] - nu[k-1] = inv_S_x (x_prop[k-1] - c_x)
+        #        - inv_S_x C_d S_u du[k] - inv_S_x E_d S_u du[k][slice_imp]
+        #        - nu[k-1] = inv_S_x (x_prop_plus[k] - c_x)   if has_impulsive
+        #        - nu[k-1] = inv_S_x (x_prop[k-1]  - c_x)     otherwise
+        # Mirrors CVXPyPTRSolver.constraints at cvxpy_ptr_solver.py:506-530.
         A_d = self._dyn["A_d"]  # (N-1, n_x, n_x)
         B_d = self._dyn["B_d"]  # (N-1, n_x, n_u)
         C_d = self._dyn["C_d"]  # (N-1, n_x, n_u)
@@ -537,9 +669,14 @@ class QPAXPTRSolver(PTRSolver):
             kp = k - 1  # previous-segment index
             # Pre-scaled blocks: inv_S_x[i, i] · A_d[kp, i, :] · S_x[:, j] · dx[kp, j]
             A_block = (inv_S_x[:, None] * A_d[kp]) * S_x[None, :]
-            B_block = (inv_S_x[:, None] * B_d[kp]) * self._S_u_diag[None, :]
-            C_block = (inv_S_x[:, None] * C_d[kp]) * self._S_u_diag[None, :]
-            rhs = inv_S_x * (x_prop[kp] - c_x)
+            B_block = (inv_S_x[:, None] * B_d[kp]) * S_u[None, :]
+            C_block = (inv_S_x[:, None] * C_d[kp]) * S_u[None, :]
+            if has_impulsive:
+                E_block = (inv_S_x[:, None] * E_d_arr[k]) * S_u[None, :]
+                rhs = inv_S_x * (x_prop_plus_arr[k] - c_x)
+            else:
+                E_block = None
+                rhs = inv_S_x * (x_prop[kp] - c_x)
             for i in range(n_x):
                 row = np.zeros(L.n_z, dtype=float)
                 row[L.x_idx(k, i)] = 1.0
@@ -548,6 +685,9 @@ class QPAXPTRSolver(PTRSolver):
                 for j in range(n_u):
                     row[L.du_idx(kp, j)] = -B_block[i, j]
                     row[L.du_idx(k, j)] = -C_block[i, j]
+                if has_impulsive:
+                    for j in range(slice_imp.start, slice_imp.stop):
+                        row[L.du_idx(k, j)] -= E_block[i, j]
                 row[L.nu_idx(kp, i)] = -1.0
                 A_rows.append(row)
                 b_rows.append(rhs[i])
@@ -765,18 +905,15 @@ class QPAXPTRSolver(PTRSolver):
 
         ``n_parameters`` is reported as zero — QPAX consumes raw arrays
         rebuilt every solve, so there's no analogue to CVXPy's parameter
-        cache.
+        cache. ``n_constraints`` is the total number of ``A z = b`` plus
+        ``G z ≤ h`` rows, cached in :meth:`initialize`.
         """
         if self.layout is None:
             return {"n_variables": 0, "n_parameters": 0, "n_constraints": 0}
         return {
             "n_variables": self.layout.n_z,
             "n_parameters": 0,
-            # We don't precompute row counts; approximate by accumulating the
-            # always-on rows. The exact number depends on per-iteration
-            # constraint linearizations and Fix indices and isn't needed for
-            # diagnostics.
-            "n_constraints": -1,
+            "n_constraints": self._n_constraints,
         }
 
     def citation(self) -> List[str]:

@@ -16,6 +16,7 @@ The tutorials are designed to be read in order. Each builds on concepts from the
 | [06 Dubin's Car](06_logic.md) | Conditional path planning | Conditional statements, signal temporal logic (STL) |
 | [07 Multi-Link Arms](07_lie.md) | Articulated robot control | Lie algebra, propagated states |
 | [08 Model Predictive Control](08_mpcc.md) | Closed-loop drone racing | Receding horizon control, warm starting, cubic spline interpolation |
+| [09 MuJoCo MJX Dynamics](09_mjx_dynamics.md) | Cartpole swing-up, quadrotor racing | `MjxDynamics`, MuJoCo MJCF, free-joint quaternions, `examples/mjx/` |
 
 ## Quick Start
 

@@ -281,9 +281,24 @@ class PTRSolverSpec(BaseModel):
     or ``"moreau"``
     (:class:`openscvx.solvers.moreau_ptr_solver.MoreauPTRSolver`).
 
-    ``cvx_solver``, ``cvxpygen``, and ``cvxpygen_override`` are CVXPy-only;
-    setting them under ``backend="qpax"`` or ``backend="moreau"`` is a
-    configuration error.
+    Backend-specific fields mirror the constructor parameters of each class.
+    Fields that don't belong to the active backend are a configuration error
+    and raise ``ValidationError``.
+
+    CVXPy-only:
+        ``cvx_solver``, ``cvxpygen``, ``cvxpygen_override``.
+
+    QPAX-only:
+        ``solver_tol``.
+
+    Moreau-only:
+        ``verbose``, ``device``, ``tol_gap_abs``, ``tol_feas``.
+
+    Shared between QPAX and Moreau:
+        ``max_iter``.
+
+    All backends:
+        ``solver_args`` (escape hatch for settings not covered by named fields).
 
     !!! warning
         Enabling ``cvxpygen`` currently disables sparse parameter declarations.
@@ -294,10 +309,26 @@ class PTRSolverSpec(BaseModel):
 
     type: Literal["PTRSolver"] = "PTRSolver"
     backend: Literal["cvxpy", "qpax", "moreau"] = "cvxpy"
+
+    # CVXPy-only
     cvx_solver: Optional[str] = None
-    solver_args: Optional[Dict[str, Any]] = None
     cvxpygen: bool = False
     cvxpygen_override: bool = False
+
+    # QPAX-specific
+    solver_tol: Optional[float] = None
+
+    # Shared between QPAX and Moreau
+    max_iter: Optional[int] = None
+
+    # Moreau-specific
+    verbose: Optional[bool] = None
+    device: Optional[str] = None
+    tol_gap_abs: Optional[float] = None
+    tol_feas: Optional[float] = None
+
+    # Escape hatch for all backends
+    solver_args: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -318,6 +349,45 @@ class PTRSolverSpec(BaseModel):
                     f"{offenders} only valid for backend='cvxpy'; "
                     "remove these fields or set backend='cvxpy'."
                 )
+        if self.backend == "cvxpy":
+            offenders = [
+                name
+                for name, value in (
+                    ("solver_tol", self.solver_tol),
+                    ("max_iter", self.max_iter),
+                    ("verbose", self.verbose),
+                    ("device", self.device),
+                    ("tol_gap_abs", self.tol_gap_abs),
+                    ("tol_feas", self.tol_feas),
+                )
+                if value is not None
+            ]
+            if offenders:
+                raise ValueError(
+                    f"{offenders} not valid for backend='cvxpy'; pass these "
+                    "via solver_args or switch to the qpax / moreau backend."
+                )
+        if self.backend == "qpax":
+            offenders = [
+                name
+                for name, value in (
+                    ("verbose", self.verbose),
+                    ("device", self.device),
+                    ("tol_gap_abs", self.tol_gap_abs),
+                    ("tol_feas", self.tol_feas),
+                )
+                if value is not None
+            ]
+            if offenders:
+                raise ValueError(
+                    f"{offenders} only valid for backend='moreau'; "
+                    "remove these fields or set backend='moreau'."
+                )
+        if self.backend == "moreau" and self.solver_tol is not None:
+            raise ValueError(
+                "solver_tol is only valid for backend='qpax'; "
+                "remove this field or set backend='qpax'."
+            )
         return self
 
     def build(self) -> ConvexSolver:
@@ -335,10 +405,31 @@ class PTRSolverSpec(BaseModel):
         if self.backend == "moreau":
             from .moreau_ptr_solver import MoreauPTRSolver
 
-            return MoreauPTRSolver(solver_args=self.solver_args)
+            kwargs: Dict[str, Any] = {}
+            if self.max_iter is not None:
+                kwargs["max_iter"] = self.max_iter
+            if self.verbose is not None:
+                kwargs["verbose"] = self.verbose
+            if self.device is not None:
+                kwargs["device"] = self.device
+            if self.tol_gap_abs is not None:
+                kwargs["tol_gap_abs"] = self.tol_gap_abs
+            if self.tol_feas is not None:
+                kwargs["tol_feas"] = self.tol_feas
+            if self.solver_args is not None:
+                kwargs["solver_args"] = self.solver_args
+            return MoreauPTRSolver(**kwargs)
+
         from .qpax_ptr_solver import QPAXPTRSolver
 
-        return QPAXPTRSolver(solver_args=self.solver_args)
+        kwargs = {}
+        if self.solver_tol is not None:
+            kwargs["solver_tol"] = self.solver_tol
+        if self.max_iter is not None:
+            kwargs["max_iter"] = self.max_iter
+        if self.solver_args is not None:
+            kwargs["solver_args"] = self.solver_args
+        return QPAXPTRSolver(**kwargs)
 
 
 def __getattr__(name: str):

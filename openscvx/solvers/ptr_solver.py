@@ -22,7 +22,7 @@ Backends:
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Tuple, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -30,6 +30,7 @@ from .base import ConvexSolver
 
 if TYPE_CHECKING:
     from openscvx.lowered.unified import UnifiedControl, UnifiedState
+    from openscvx.symbolic.constraint_set import ConstraintSet
 
 
 @dataclass
@@ -173,6 +174,51 @@ class PTRSolver(ConvexSolver):
         point, constraint gradients, penalties, and boundary conditions.
         """
         raise NotImplementedError
+
+    @staticmethod
+    def _extract_impulsive_pins(
+        constraints: "ConstraintSet",
+    ) -> Optional[List[Tuple[List[int], slice]]]:
+        """Recognize auto-generated impulsive zero-pin constraints.
+
+        :func:`openscvx.symbolic.lower._augment_impulsive_constraints` injects
+        a ``Control == 0`` equality at every non-impulse node for each
+        impulsive control. CVXPy lowers these alongside user ``.convex()``
+        constraints, but JAX backends that otherwise refuse user
+        ``.convex()`` constraints still need to honor them.
+
+        This helper detects that exact shape — a ``NodalConstraint`` wrapping
+        ``Equality(Control, Constant(0))`` over a list of nodes — and
+        returns the implied ``(nodes, slice)`` pin list. If any
+        ``nodal_convex`` entry doesn't match the auto-augmentation shape,
+        returns ``None`` so the caller can fall back to the default
+        refusal.
+
+        Cross-node convex constraints are never produced by the
+        auto-augmentation, so any presence aborts recognition.
+        """
+        from openscvx.symbolic.expr.constraint import Equality, NodalConstraint
+        from openscvx.symbolic.expr.control import Control
+        from openscvx.symbolic.expr.expr import Constant
+
+        if constraints.cross_node_convex:
+            return None
+
+        pins: List[Tuple[List[int], slice]] = []
+        for entry in constraints.nodal_convex:
+            if not isinstance(entry, NodalConstraint):
+                return None
+            inner = entry.constraint
+            if not isinstance(inner, Equality):
+                return None
+            rhs = inner.rhs
+            if not isinstance(rhs, Constant) or not np.all(np.asarray(rhs.value) == 0):
+                return None
+            lhs = inner.lhs
+            if not isinstance(lhs, Control) or lhs._slice is None:
+                return None
+            pins.append(([int(k) for k in entry.nodes], lhs._slice))
+        return pins
 
     @staticmethod
     def _scaling(unified: Union["UnifiedState", "UnifiedControl"]) -> Tuple[np.ndarray, np.ndarray]:

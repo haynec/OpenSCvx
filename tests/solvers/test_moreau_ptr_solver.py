@@ -4,7 +4,7 @@ Covers:
   * Instantiation guard when ``moreau`` isn't installed.
   * ``PTRSolverSpec`` rejects CVXPy-only fields under ``backend='moreau'``.
   * ``initialize()`` raises for unsupported feature combinations
-    (.convex(), cross-node, impulsive).
+    (.convex(), cross-node).
   * Assembly produces arrays with shapes consistent with ``_ConicLayout`` and
     the fixed CSR structure built at ``initialize()``.
   * End-to-end ``solve()`` returns a :class:`PTRSolveResult`.
@@ -120,6 +120,81 @@ def test_moreau_spec_build_returns_moreau_solver():
     spec = resolve_solver_config({"backend": "moreau"})
     solver = spec.build()
     assert isinstance(solver, MoreauPTRSolver)
+
+
+def test_moreau_named_params_populate_solver_args():
+    """Named constructor params should be merged into solver_args so
+    _build_moreau_settings picks them up unchanged."""
+    solver = MoreauPTRSolver(max_iter=500, verbose=True, device="cpu")
+    assert solver.solver_args["max_iter"] == 500
+    assert solver.solver_args["verbose"] is True
+    assert solver.solver_args["device"] == "cpu"
+
+
+def test_moreau_ipm_tolerances_nest_into_ipm_settings():
+    """tol_gap_abs and tol_feas should be folded into solver_args['ipm_settings']
+    so _build_moreau_settings receives them in the expected nested location."""
+    solver = MoreauPTRSolver(tol_gap_abs=1e-10, tol_feas=1e-10)
+    assert solver.solver_args["ipm_settings"] == {"tol_gap_abs": 1e-10, "tol_feas": 1e-10}
+
+
+def test_moreau_ipm_tolerances_merge_with_solver_args_ipm_settings():
+    """Named IPM tolerance params should merge with a dict inside solver_args
+    rather than silently overwriting it."""
+    solver = MoreauPTRSolver(
+        tol_gap_abs=1e-10,
+        solver_args={"ipm_settings": {"tol_feas": 1e-9}},
+    )
+    assert solver.solver_args["ipm_settings"]["tol_gap_abs"] == 1e-10
+    assert solver.solver_args["ipm_settings"]["tol_feas"] == 1e-9
+
+
+def test_moreau_named_param_overlap_with_solver_args_raises():
+    """Passing the same top-level key as a named arg and inside solver_args
+    should raise immediately."""
+    with pytest.raises(ValueError, match="max_iter"):
+        MoreauPTRSolver(max_iter=200, solver_args={"max_iter": 100})
+
+    with pytest.raises(ValueError, match="device"):
+        MoreauPTRSolver(device="cpu", solver_args={"device": "cuda"})
+
+
+def test_moreau_ipm_overlap_with_solver_args_ipm_settings_raises():
+    """A named IPM tolerance and the same key inside solver_args['ipm_settings']
+    is a user error and should raise."""
+    with pytest.raises(ValueError, match="tol_gap_abs"):
+        MoreauPTRSolver(
+            tol_gap_abs=1e-10,
+            solver_args={"ipm_settings": {"tol_gap_abs": 1e-8}},
+        )
+
+
+def test_moreau_spec_named_fields_build_correctly():
+    """PTRSolverSpec with Moreau named fields should build a MoreauPTRSolver
+    with the right solver_args."""
+    from openscvx.solvers import resolve_solver_config
+
+    spec = resolve_solver_config(
+        {
+            "backend": "moreau",
+            "max_iter": 300,
+            "device": "cpu",
+            "tol_gap_abs": 1e-10,
+        }
+    )
+    solver = spec.build()
+    assert isinstance(solver, MoreauPTRSolver)
+    assert solver.solver_args["max_iter"] == 300
+    assert solver.solver_args["device"] == "cpu"
+    assert solver.solver_args["ipm_settings"]["tol_gap_abs"] == 1e-10
+
+
+def test_moreau_spec_rejects_qpax_only_fields():
+    """solver_tol (QPAX-only) must not be accepted under backend='moreau'."""
+    from openscvx.solvers import resolve_solver_config
+
+    with pytest.raises(ValueError, match="solver_tol"):
+        resolve_solver_config({"backend": "moreau", "solver_tol": 1e-8})
 
 
 # ============================================================================

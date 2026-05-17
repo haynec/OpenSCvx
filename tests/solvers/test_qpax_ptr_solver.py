@@ -3,7 +3,7 @@
 Covers:
   * Instantiation guard when ``qpax`` isn't installed.
   * ``initialize()`` raises for unsupported feature combinations
-    (.convex(), cross-node, impulsive).
+    (.convex(), cross-node).
   * End-to-end SCP loop converges on a small CTCS-free LQR-style problem.
   * Round-trip parity vs ``CVXPyPTRSolver`` on the same problem: same final
     trajectory and same final cost to within a loose tolerance.
@@ -107,6 +107,77 @@ def test_qpax_spec_rejects_cvxpy_only_fields():
 
     with pytest.raises(ValueError, match="only valid for backend='cvxpy'"):
         resolve_solver_config({"backend": "qpax", "cvx_solver": "CLARABEL"})
+
+
+def test_qpax_named_params_populate_solver_args():
+    """Named constructor params should be merged into solver_args so the
+    existing qpax.solve_qp(**self.solver_args) dispatch picks them up."""
+    solver = QPAXPTRSolver(solver_tol=1e-8, max_iter=50)
+    assert solver.solver_args["solver_tol"] == 1e-8
+    assert solver.solver_args["max_iter"] == 50
+
+
+def test_qpax_named_param_overlap_with_solver_args_raises():
+    """Passing the same key as a named arg and inside solver_args is a user
+    error — the constructor should raise immediately rather than silently
+    discarding one value."""
+    with pytest.raises(ValueError, match="solver_tol"):
+        QPAXPTRSolver(solver_tol=1e-8, solver_args={"solver_tol": 1e-7})
+
+    with pytest.raises(ValueError, match="max_iter"):
+        QPAXPTRSolver(max_iter=50, solver_args={"max_iter": 100})
+
+
+def test_qpax_solver_args_escape_hatch():
+    """Keys not covered by named params (e.g. backend='e') should pass
+    through the solver_args escape hatch unchanged."""
+    solver = QPAXPTRSolver(solver_tol=1e-6, solver_args={"backend": "e"})
+    assert solver.solver_args["backend"] == "e"
+    assert solver.solver_args["solver_tol"] == 1e-6
+
+
+def test_qpax_spec_named_fields_build_correctly():
+    """PTRSolverSpec with QPAX named fields should build a QPAXPTRSolver
+    with the right solver_args."""
+    from openscvx.solvers import QPAXPTRSolver, resolve_solver_config
+
+    spec = resolve_solver_config({"backend": "qpax", "solver_tol": 1e-8, "max_iter": 75})
+    solver = spec.build()
+    assert isinstance(solver, QPAXPTRSolver)
+    assert solver.solver_args["solver_tol"] == 1e-8
+    assert solver.solver_args["max_iter"] == 75
+
+
+def test_qpax_spec_rejects_moreau_only_fields():
+    """Moreau-specific fields (verbose, device, tol_gap_abs, tol_feas) must
+    not be accepted under backend='qpax'."""
+    from openscvx.solvers import resolve_solver_config
+
+    with pytest.raises(ValueError, match="only valid for backend='moreau'"):
+        resolve_solver_config({"backend": "qpax", "verbose": True})
+
+    with pytest.raises(ValueError, match="only valid for backend='moreau'"):
+        resolve_solver_config({"backend": "qpax", "tol_gap_abs": 1e-10})
+
+
+def test_qpax_spec_rejects_solver_tol_under_moreau():
+    """solver_tol must not be accepted under backend='moreau'."""
+    from openscvx.solvers import resolve_solver_config
+
+    with pytest.raises(ValueError, match="solver_tol"):
+        resolve_solver_config({"backend": "moreau", "solver_tol": 1e-8})
+
+
+def test_cvxpy_spec_rejects_jax_backend_fields():
+    """QPAX/Moreau named fields (solver_tol, max_iter, verbose, device, …)
+    must not be accepted under backend='cvxpy'."""
+    from openscvx.solvers import resolve_solver_config
+
+    with pytest.raises(ValueError, match="not valid for backend='cvxpy'"):
+        resolve_solver_config({"backend": "cvxpy", "solver_tol": 1e-8})
+
+    with pytest.raises(ValueError, match="not valid for backend='cvxpy'"):
+        resolve_solver_config({"backend": "cvxpy", "max_iter": 100})
 
 
 # ============================================================================
