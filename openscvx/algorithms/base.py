@@ -517,8 +517,6 @@ class AlgorithmHistory:
     actual_reduction: List[float] = field(default_factory=list)
     acceptance_ratio: List[float] = field(default_factory=list)
     adaptive_state: List[str] = field(default_factory=list)
-    x_full: List[np.ndarray] = field(default_factory=list)
-    x_prop_full: List[np.ndarray] = field(default_factory=list)
 
     @classmethod
     def from_settings(cls, settings: "Config") -> "AlgorithmHistory":
