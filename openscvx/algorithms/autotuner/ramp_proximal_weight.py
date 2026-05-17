@@ -1,27 +1,35 @@
-"""Autotuning functions for SCP (Successive Convex Programming) parameters."""
+"""Ramp proximal-weight autotuner.
+
+Ramps ``lam_prox`` up by a constant factor each iteration until it hits the
+configured maximum, then holds it constant.
+"""
 
 from typing import TYPE_CHECKING, Literal
 
-import numpy as np
+import jax.numpy as jnp
 from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 
-from ..base import AutotuningBase
+from ..base import AdaptiveStateCode, AutotuningBase
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
     from ..base import AlgorithmState, CandidateIterate
-    from ..weights import Weights
 
 
 class RampProximalWeight(AutotuningBase):
-    """Ramp Proximal Weight method.
+    """Ramp ``lam_prox`` toward ``lam_prox_max`` then hold.
 
-    This method ramps the proximal weight up linearly over the first few iterations,
-    then keeps it constant.
+    ``update_weights`` is a pure functional update on the
+    :class:`AlgorithmState` pytree; see the base-class contract.
     """
+
+    # The body is a handful of jnp ops — JAX's eager dispatch is cheaper than
+    # the pytree-flatten overhead of a JIT'd closure. Opt out of the SCP loop's
+    # JIT wrapping.
+    JIT_UPDATE_WEIGHTS: bool = False
 
     def __init__(
         self,
@@ -42,42 +50,35 @@ class RampProximalWeight(AutotuningBase):
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
-        weights: "Weights",
-    ) -> str:
-        """Update SCP weights keeping trust region constant.
+    ) -> "AlgorithmState":
+        """Return the next-iterate state.
 
-        Args:
-            state: Solver state containing current weight values (mutated in place)
-            nodal_constraints: Lowered JAX constraints
-            settings: Configuration object containing adaptation parameters
-            params: Dictionary of problem parameters
-            weights: Initial weights from the algorithm
-
-        Returns:
-            str: Adaptive state string (e.g., "Accept", "Reject")
+        Pure functional update — see class docstring.
         """
-        # Update cost relaxation parameter after cost_drop iterations.
-        # When lam_cost is a per-state array, scalar lam_cost_relax scales
-        # uniformly, preserving the user-specified per-state weight ratios.
-        if state.k > self.lam_cost_drop:
-            candidate.lam_cost = state.lam_cost * self.lam_cost_relax
-        else:
-            candidate.lam_cost = weights.lam_cost
+        lam_cost_next = jnp.where(
+            state.k > self.lam_cost_drop,
+            state.lam_cost * self.lam_cost_relax,
+            state.lam_cost_init,
+        )
 
-        # Check if we're already at max before updating
-        was_at_max = np.all(state.lam_prox >= self.lam_prox_max)
+        was_at_max = jnp.all(state.lam_prox >= self.lam_prox_max)
+        new_lam_prox = jnp.minimum(state.lam_prox * self.ramp_factor, self.lam_prox_max)
 
-        # Calculate and append new value
-        new_lam_prox = np.minimum(state.lam_prox * self.ramp_factor, self.lam_prox_max)
-        candidate.lam_prox = new_lam_prox
+        code = jnp.where(
+            was_at_max,
+            jnp.int32(AdaptiveStateCode.ACCEPT_CONSTANT),
+            jnp.int32(AdaptiveStateCode.ACCEPT_HIGHER),
+        )
 
-        # If we were already at max, or if we just reached it and it's staying constant
-        if was_at_max:
-            state.accept_solution(candidate)
-            return "Accept Constant"
-        else:
-            state.accept_solution(candidate)
-            return "Accept Higher"
+        return state.replace(
+            x=candidate.x,
+            u=candidate.u,
+            x_prop=candidate.x_prop,
+            x_prop_plus=candidate.x_prop_plus,
+            lam_prox=new_lam_prox,
+            lam_cost=lam_cost_next,
+            adaptive_state_code=code,
+        )
 
 
 # =============================================================================

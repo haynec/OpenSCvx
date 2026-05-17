@@ -373,7 +373,7 @@ while running:
     step_result = problem.step()
 
     # Extract control to apply
-    control = problem.state.V_history[-1]  # Access current solution
+    control = problem.history.V_history[-1]  # Access current solution
 ```
 
 Parameter updates take effect immediately on the next `step()` call without any recompilation.

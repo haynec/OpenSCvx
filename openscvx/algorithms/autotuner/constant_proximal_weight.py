@@ -1,27 +1,37 @@
-"""Autotuning functions for SCP (Successive Convex Programming) parameters."""
+"""Constant proximal-weight autotuner.
+
+Keeps ``lam_prox`` fixed across iterations while still relaxing ``lam_cost``
+after the configured ``lam_cost_drop`` iteration.
+"""
 
 from typing import TYPE_CHECKING, Literal
 
+import jax.numpy as jnp
 from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 
-from ..base import AutotuningBase
+from ..base import AdaptiveStateCode, AutotuningBase
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
     from ..base import AlgorithmState, CandidateIterate
-    from ..weights import Weights
 
 
 class ConstantProximalWeight(AutotuningBase):
-    """Constant Proximal Weight method.
+    """Hold ``lam_prox`` constant; relax ``lam_cost`` after ``lam_cost_drop``.
 
-    This method keeps the trust region weight constant throughout the optimization,
-    while still updating virtual control weights and handling cost relaxation.
-    Useful when you want a fixed trust region size without adaptation.
+    Useful when you want a fixed trust-region size without adaptation.
+
+    ``update_weights`` is a pure functional update on the
+    :class:`AlgorithmState` pytree; see the base-class contract.
     """
+
+    # The body is three jnp ops — JAX's eager dispatch is cheaper than the
+    # pytree-flatten overhead of a JIT'd closure. Opt out of the SCP loop's
+    # JIT wrapping.
+    JIT_UPDATE_WEIGHTS: bool = False
 
     def __init__(
         self,
@@ -38,31 +48,27 @@ class ConstantProximalWeight(AutotuningBase):
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
-        weights: "Weights",
-    ) -> str:
-        """Update SCP weights keeping trust region constant.
+    ) -> "AlgorithmState":
+        """Return the next-iterate state.
 
-        Args:
-            state: Solver state containing current weight values (mutated in place)
-            nodal_constraints: Lowered JAX constraints
-            settings: Configuration object containing adaptation parameters
-            params: Dictionary of problem parameters
-            weights: Initial weights from the algorithm
-
-        Returns:
-            str: Adaptive state string (e.g., "Accept", "Reject")
+        Pure functional update — see class docstring.
         """
-        # Update cost relaxation parameter after cost_drop iterations.
-        # When lam_cost is a per-state array, scalar lam_cost_relax scales
-        # uniformly, preserving the user-specified per-state weight ratios.
-        if state.k > self.lam_cost_drop:
-            candidate.lam_cost = state.lam_cost * self.lam_cost_relax
-        else:
-            candidate.lam_cost = weights.lam_cost
+        lam_cost_next = jnp.where(
+            state.k > self.lam_cost_drop,
+            state.lam_cost * self.lam_cost_relax,
+            state.lam_cost_init,
+        )
 
-        candidate.lam_prox = state.lam_prox
-        state.accept_solution(candidate)
-        return "Accept Constant"
+        return state.replace(
+            x=candidate.x,
+            u=candidate.u,
+            x_prop=candidate.x_prop,
+            x_prop_plus=candidate.x_prop_plus,
+            lam_cost=lam_cost_next,
+            adaptive_state_code=jnp.asarray(
+                int(AdaptiveStateCode.ACCEPT_CONSTANT), dtype=jnp.int32
+            ),
+        )
 
 
 # =============================================================================

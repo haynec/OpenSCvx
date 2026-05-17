@@ -1,9 +1,14 @@
-"""Autotuning functions for SCP (Successive Convex Programming) parameters."""
+"""Augmented Lagrangian autotuner for SCP weights.
 
-from copy import deepcopy
+The autotuner is a **pure functional update** on the :class:`AlgorithmState`
+pytree — no mutation, no Python ``if`` on tracer values, no list appends. The
+SCP loop records history outside this module.
+"""
+
 from typing import TYPE_CHECKING, List, Literal
 
-import numpy as np
+import jax
+import jax.numpy as jnp
 from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
@@ -14,23 +19,28 @@ from openscvx.utils.printing import (
     color_adaptive_state,
 )
 
-from ..base import AutotuningBase
+from ..base import AdaptiveStateCode, AutotuningBase
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
     from ..base import AlgorithmState, CandidateIterate
-    from ..weights import Weights
 
 
 class AugmentedLagrangian(AutotuningBase):
-    """Augmented Lagrangian method for autotuning SCP weights.
+    """Augmented Lagrangian autotuner.
 
-    This method uses Lagrange multipliers and penalty parameters to handle
-    constraints. The method:
-    - Updates Lagrange multipliers based on constraint violations
-    - Increases penalty parameters when constraints are violated
-    - Decreases penalty parameters when constraints are satisfied
+    Uses an acceptance-ratio :math:`\\rho` between predicted and actual
+    reduction in the nonlinear objective to drive a four-bucket update of
+    the trust-region weight ``lam_prox`` and to update the virtual-control /
+    virtual-buffer weights from constraint violations.
+
+    The four buckets — ``REJECT`` / ``ACCEPT_HIGHER`` / ``ACCEPT_CONSTANT`` /
+    ``ACCEPT_LOWER`` — are selected via a ``jnp.where`` cascade so the whole
+    update traces under ``jax.jit``.
+
+    ``update_weights`` is a pure functional update on the
+    :class:`AlgorithmState` pytree; see the base-class contract.
     """
 
     COLUMNS: List[Column] = [
@@ -74,7 +84,7 @@ class AugmentedLagrangian(AutotuningBase):
 
         Args:
             rho_init: Initial penalty parameter for constraints. Defaults to 1.0.
-            rho_max: Maximum penalty parameter. Defaults to 1e6.
+            rho_max: Maximum penalty parameter. Defaults to 1e2.
             gamma_1: Factor to increase trust region weight when ratio is low.
                 Defaults to 2.0.
             gamma_2: Factor to decrease trust region weight when ratio is high.
@@ -86,15 +96,11 @@ class AugmentedLagrangian(AutotuningBase):
             eta_2: Threshold above which solution is accepted with lower weight.
                 Defaults to 0.8.
             ep: Threshold for virtual control weight update (nu > ep vs nu <= ep).
-                Must lie in (0, 1). Defaults to 0.99; when tuning, try 1e-1 if needed.
-                Typically tuned together with ``eta_lambda`` (often the first
-                parameters adjusted).
+                Must lie in (0, 1). Defaults to 0.99.
             eta_lambda: Step size for virtual control weight update. Defaults to 1e1.
-                Typically tuned together with ``ep`` (often the first parameters
-                adjusted).
             lam_vc_max: Maximum virtual control penalty weight. Defaults to 1e5.
             lam_prox_min: Minimum trust region (proximal) weight. Defaults to 1e-3.
-            lam_prox_max: Maximum trust region (proximal) weight. Defaults to 2e5.
+            lam_prox_max: Maximum trust region (proximal) weight. Defaults to 1e4.
             lam_cost_drop: Iteration after which cost relaxation applies (-1 = never).
                 Defaults to -1.
             lam_cost_relax: Factor applied to lam_cost after lam_cost_drop.
@@ -115,104 +121,101 @@ class AugmentedLagrangian(AutotuningBase):
         self.lam_cost_drop = lam_cost_drop
         self.lam_cost_relax = lam_cost_relax
 
+    # -----------------------------------------------------------------------
+    # Weight updates from constraint violation
+    # -----------------------------------------------------------------------
+
     def _update_virtual_control_weights(
         self,
         candidate: "CandidateIterate",
-        candidate_x_prop: np.ndarray,
+        candidate_x_prop: jnp.ndarray,
         settings: Config,
-        lam_vc: np.ndarray,
-        lam_prox: np.ndarray,
-    ) -> np.ndarray:
+        lam_vc: jnp.ndarray,
+        lam_prox: jnp.ndarray,
+    ) -> jnp.ndarray:
         """Update virtual control penalty weights from state violation.
 
-        Computes scaled violation nu = inv_S_x @ |x[1:] - x_prop|, then applies
-        two update rules: when nu > ep (linear in nu), else quadratic in nu.
-        Result is clipped to lam_vc_max.
+        Computes scaled violation ``nu = inv_S_x @ |x[1:] - x_prop|`` and
+        applies a piecewise update: linear in ``nu`` when ``nu > ep``,
+        quadratic otherwise. Result is clipped to ``lam_vc_max``.
         """
-        nu = (settings.sim.inv_S_x @ abs(candidate.x[1:] - candidate_x_prop).T).T
-        mask = nu > self.ep
+        nu = (settings.sim.inv_S_x @ jnp.abs(candidate.x[1:] - candidate_x_prop).T).T
         # TODO: (haynec) use per-variable lam_prox to scale VC updates proportionally
-        lam_prox_scalar = float(np.max(lam_prox))
-        scale = self.eta_lambda * (1 / (2 * lam_prox_scalar))
+        lam_prox_scalar = jnp.max(lam_prox)
+        scale = self.eta_lambda * (1.0 / (2.0 * lam_prox_scalar))
         case1 = lam_vc + nu * scale
         case2 = lam_vc + (nu**2) / self.ep * scale
-        vc_new = np.where(mask, case1, case2)
-        return np.minimum(self.lam_vc_max, vc_new)
+        vc_new = jnp.where(nu > self.ep, case1, case2)
+        return jnp.minimum(self.lam_vc_max, vc_new)
 
     def _update_virtual_buffer_nodal_weights(
         self,
         candidate: "CandidateIterate",
         nodal_constraints: "LoweredJaxConstraints",
         params: dict,
-        lam_vb_nodal: np.ndarray,
-        lam_prox: np.ndarray,
-    ) -> np.ndarray:
-        """
-        Update virtual buffer penalty weights for nodal constraints.
+        lam_vb_nodal: jnp.ndarray,
+        lam_prox: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Update virtual-buffer weights for nodal constraints.
 
-        Evaluates each nodal constraint to obtain violation
-        nu = max(0, g(x, u)), then applies the same two-case update rule
-        used for virtual control weights: linear when nu > ep, quadratic
-        otherwise. Result is clipped to lam_vc_max.
+        Evaluates each nodal constraint, computes the same piecewise update
+        as for virtual control, and writes the result back into the
+        ``(N, n_nodal)`` weight array via ``.at[...].set(...)``.
         """
-        lam_vb_new = lam_vb_nodal.copy()
-        lam_prox_scalar = float(np.max(lam_prox))
-        scale = self.eta_lambda * (1 / (2 * lam_prox_scalar))
+        lam_vb_new = lam_vb_nodal
+        lam_prox_scalar = jnp.max(lam_prox)
+        scale = self.eta_lambda * (1.0 / (2.0 * lam_prox_scalar))
 
         for idx, constraint in enumerate(nodal_constraints.nodal):
             g = constraint.func(candidate.x, candidate.u, 0, params)
-            nu = np.maximum(0, g)
+            nu = jnp.maximum(0.0, g)
 
             if constraint.nodes is not None:
-                nodes_array = np.array(constraint.nodes)
+                nodes_array = jnp.asarray(constraint.nodes)
                 nu_slice = nu[nodes_array]
                 current = lam_vb_nodal[nodes_array, idx]
             else:
                 nu_slice = nu
                 current = lam_vb_nodal[:, idx]
 
-            mask = nu_slice > self.ep
             case1 = current + nu_slice * scale
             case2 = current + (nu_slice**2) / self.ep * scale
-            updated = np.where(mask, case1, case2)
+            updated = jnp.where(nu_slice > self.ep, case1, case2)
 
             if constraint.nodes is not None:
-                lam_vb_new[nodes_array, idx] = updated
+                lam_vb_new = lam_vb_new.at[nodes_array, idx].set(updated)
             else:
-                lam_vb_new[:, idx] = updated
+                lam_vb_new = lam_vb_new.at[:, idx].set(updated)
 
-        return np.minimum(self.lam_vc_max, lam_vb_new)
+        return jnp.minimum(self.lam_vc_max, lam_vb_new)
 
     def _update_virtual_buffer_cross_weights(
         self,
         candidate: "CandidateIterate",
         nodal_constraints: "LoweredJaxConstraints",
         params: dict,
-        lam_vb_cross: np.ndarray,
-        lam_prox: np.ndarray,
-    ) -> np.ndarray:
-        """
-        Update virtual buffer penalty weights for cross-node constraints.
-
-        Evaluates each cross-node constraint to obtain total violation
-        nu = sum(max(0, g(X, U))), then applies the same two-case update
-        rule used for virtual control weights. Result is clipped to lam_vc_max.
-        """
-        lam_vb_new = lam_vb_cross.copy()
-        lam_prox_scalar = float(np.max(lam_prox))
-        scale = self.eta_lambda * (1 / (2 * lam_prox_scalar))
+        lam_vb_cross: jnp.ndarray,
+        lam_prox: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Update virtual-buffer weights for cross-node constraints."""
+        lam_vb_new = lam_vb_cross
+        lam_prox_scalar = jnp.max(lam_prox)
+        scale = self.eta_lambda * (1.0 / (2.0 * lam_prox_scalar))
 
         for idx, constraint in enumerate(nodal_constraints.cross_node):
             g = constraint.func(candidate.x, candidate.u, params)
-            nu = np.sum(np.maximum(0, g))
-
+            nu = jnp.sum(jnp.maximum(0.0, g))
             current = lam_vb_cross[idx]
-            if nu > self.ep:
-                lam_vb_new[idx] = current + nu * scale
-            else:
-                lam_vb_new[idx] = current + ((nu**2) / self.ep) * scale
+            case1 = current + nu * scale
+            case2 = current + (nu**2) / self.ep * scale
+            updated = jnp.where(nu > self.ep, case1, case2)
+            lam_vb_new = lam_vb_new.at[idx].set(updated)
 
-        return np.minimum(self.lam_vc_max, lam_vb_new)
+        return jnp.minimum(self.lam_vc_max, lam_vb_new)
+
+    # -----------------------------------------------------------------------
+    # Main update
+    # -----------------------------------------------------------------------
 
     def update_weights(
         self,
@@ -221,27 +224,13 @@ class AugmentedLagrangian(AutotuningBase):
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
-        weights: "Weights",
-    ) -> str:
-        """Update SCP weights and cost parameters based on iteration number.
+    ) -> "AlgorithmState":
+        """Return the next-iterate state per the Augmented Lagrangian rules.
 
-        Args:
-            state: Solver state containing current weight values (mutated in place)
-            candidate: Candidate iterate from the current subproblem solve
-            nodal_constraints: Lowered JAX constraints
-            settings: Configuration object containing adaptation parameters
-            params: Dictionary of problem parameters
-            weights: Initial weights from the algorithm
+        Pure functional update — see class docstring.
         """
-        # Calculate nonlinear penalty for current candidate
-        candidate_x_prop = (
-            candidate.x_prop_plus[1:] if candidate.x_prop_plus is not None else candidate.x_prop
-        )
-        (
-            nonlinear_cost,
-            nonlinear_penalty,
-            nodal_penalty,
-        ) = self.calculate_nonlinear_penalty(
+        candidate_x_prop = candidate.x_prop_plus[1:]
+        nonlin_cost, nonlin_pen, nodal_pen = self.calculate_nonlinear_penalty(
             candidate_x_prop,
             candidate.x,
             candidate.u,
@@ -253,30 +242,37 @@ class AugmentedLagrangian(AutotuningBase):
             params,
             settings,
         )
+        J_nonlin = nonlin_cost + nonlin_pen + nodal_pen
 
-        candidate.J_nonlin = nonlinear_cost + nonlinear_penalty + nodal_penalty
+        # Cost relaxation: when state.k > lam_cost_drop, scale state.lam_cost;
+        # otherwise reset to the algorithm's initial weight (carried on the
+        # pytree as state.lam_cost_init, broadcast at from_settings()). Scalar
+        # lam_cost_relax preserves the user-specified per-state weight ratios.
+        lam_cost_next = jnp.where(
+            state.k > self.lam_cost_drop,
+            state.lam_cost * self.lam_cost_relax,
+            state.lam_cost_init,
+        )
 
-        # Update cost relaxation parameter after cost_drop iterations.
-        # When lam_cost is a per-state array, scalar lam_cost_relax scales
-        # uniformly, preserving the user-specified per-state weight ratios.
-        if state.k > self.lam_cost_drop:
-            candidate.lam_cost = state.lam_cost * self.lam_cost_relax
-        else:
-            candidate.lam_cost = weights.lam_cost
-
-        lam_prox_k = deepcopy(state.lam_prox)
-
-        if state.k > 1:
-            state_x_prop_plus = state.x_prop_plus()
-            state_x_prop = (
-                state_x_prop_plus[1:] if state_x_prop_plus is not None else state.x_prop()
+        def first_iter(state):
+            # Iter 1: accept unconditionally, leave weights at their init values,
+            # only refresh trajectory + propagation fields.
+            return state.replace(
+                x=candidate.x,
+                u=candidate.u,
+                x_prop=candidate.x_prop,
+                x_prop_plus=candidate.x_prop_plus,
+                lam_cost=lam_cost_next,
+                J_nonlin=J_nonlin,
+                adaptive_state_code=jnp.asarray(int(AdaptiveStateCode.INITIAL), dtype=jnp.int32),
             )
-            (
-                prev_nonlinear_cost,
-                prev_nonlinear_penalty,
-                prev_nodal_penalty,
-            ) = self.calculate_nonlinear_penalty(
-                state_x_prop,
+
+        def later_iter(state):
+            # Recompute the previous iterate's J_nonlin from the pytree fields
+            # (state.x/state.u were the *previous* accepted iterate).
+            prev_x_prop = state.x_prop_plus[1:]
+            prev_cost, prev_pen, prev_nodal_pen = self.calculate_nonlinear_penalty(
+                prev_x_prop,
                 state.x,
                 state.u,
                 state.lam_vc,
@@ -287,88 +283,76 @@ class AugmentedLagrangian(AutotuningBase):
                 params,
                 settings,
             )
+            prev_J_nonlin = prev_cost + prev_pen + prev_nodal_pen
 
-            J_nonlin_prev = prev_nonlinear_cost + prev_nonlinear_penalty + prev_nodal_penalty
+            actual = prev_J_nonlin - J_nonlin
+            predicted = prev_J_nonlin - candidate.J_lin
+            # If predicted reduction is exactly zero, force the reject bucket
+            # (rho = -inf) deterministically instead of raising.
+            safe_pred = jnp.where(predicted == 0.0, 1.0, predicted)
+            rho = jnp.where(predicted == 0.0, -jnp.inf, actual / safe_pred)
 
-            actual_reduction = J_nonlin_prev - candidate.J_nonlin
-            predicted_reduction = J_nonlin_prev - candidate.J_lin
+            is_reject = rho < self.eta_0
+            is_accept_higher = (rho >= self.eta_0) & (rho < self.eta_1)
+            is_accept_constant = (rho >= self.eta_1) & (rho < self.eta_2)
+            # is_accept_lower implicit (else)
+            accepted = ~is_reject
 
-            if predicted_reduction == 0:
-                raise ValueError("Predicted reduction is 0.")
+            # Compute both lam_prox candidates and gate.
+            lp_higher = jnp.minimum(self.lam_prox_max, self.gamma_1 * state.lam_prox)
+            lp_lower = jnp.maximum(self.lam_prox_min, self.gamma_2 * state.lam_prox)
+            new_lam_prox = jnp.where(
+                is_reject | is_accept_higher,
+                lp_higher,
+                jnp.where(is_accept_constant, state.lam_prox, lp_lower),
+            )
 
-            rho = actual_reduction / predicted_reduction
+            # Virtual-control and virtual-buffer updates: compute against the
+            # *candidate* trajectory and gate by `accepted`. Reject keeps the
+            # previous values (so the next subproblem doesn't see a bumped
+            # penalty that wasn't earned).
+            lam_vc_upd = self._update_virtual_control_weights(
+                candidate, candidate_x_prop, settings, state.lam_vc, new_lam_prox
+            )
+            lam_vb_nodal_upd = self._update_virtual_buffer_nodal_weights(
+                candidate, nodal_constraints, params, state.lam_vb_nodal, new_lam_prox
+            )
+            lam_vb_cross_upd = self._update_virtual_buffer_cross_weights(
+                candidate, nodal_constraints, params, state.lam_vb_cross, new_lam_prox
+            )
 
-            state.pred_reduction_history.append(predicted_reduction)
-            state.actual_reduction_history.append(actual_reduction)
-            state.acceptance_ratio_history.append(rho)
+            code = jnp.where(
+                is_reject,
+                jnp.int32(AdaptiveStateCode.REJECT),
+                jnp.where(
+                    is_accept_higher,
+                    jnp.int32(AdaptiveStateCode.ACCEPT_HIGHER),
+                    jnp.where(
+                        is_accept_constant,
+                        jnp.int32(AdaptiveStateCode.ACCEPT_CONSTANT),
+                        jnp.int32(AdaptiveStateCode.ACCEPT_LOWER),
+                    ),
+                ),
+            )
 
-            if rho < self.eta_0:
-                # Reject Solution and higher weight
-                lam_prox_k1 = np.minimum(self.lam_prox_max, self.gamma_1 * lam_prox_k)
-                candidate.lam_prox = lam_prox_k1
-                state.reject_solution(candidate)
-                adaptive_state = "Reject Higher"
-            elif rho >= self.eta_0 and rho < self.eta_1:
-                # Accept Solution with heigher weight
-                lam_prox_k1 = np.minimum(self.lam_prox_max, self.gamma_1 * lam_prox_k)
-                candidate.lam_prox = lam_prox_k1
-                # Update virtual control weight matrix
-                candidate.lam_vc = self._update_virtual_control_weights(
-                    candidate, candidate_x_prop, settings, state.lam_vc, candidate.lam_prox
-                )
-                candidate.lam_vb_nodal = self._update_virtual_buffer_nodal_weights(
-                    candidate, nodal_constraints, params, state.lam_vb_nodal, candidate.lam_prox
-                )
-                candidate.lam_vb_cross = self._update_virtual_buffer_cross_weights(
-                    candidate, nodal_constraints, params, state.lam_vb_cross, candidate.lam_prox
-                )
+            return state.replace(
+                x=jnp.where(accepted, candidate.x, state.x),
+                u=jnp.where(accepted, candidate.u, state.u),
+                x_prop=jnp.where(accepted, candidate.x_prop, state.x_prop),
+                x_prop_plus=jnp.where(accepted, candidate.x_prop_plus, state.x_prop_plus),
+                lam_prox=new_lam_prox,
+                lam_vc=jnp.where(accepted, lam_vc_upd, state.lam_vc),
+                lam_vb_nodal=jnp.where(accepted, lam_vb_nodal_upd, state.lam_vb_nodal),
+                lam_vb_cross=jnp.where(accepted, lam_vb_cross_upd, state.lam_vb_cross),
+                lam_cost=lam_cost_next,
+                J_nonlin=jnp.where(accepted, J_nonlin, state.J_nonlin),
+                predicted_reduction=predicted,
+                actual_reduction=actual,
+                acceptance_ratio=rho,
+                adaptive_state_code=code,
+            )
 
-                state.accept_solution(candidate)
-                adaptive_state = "Accept Higher"
-            elif rho >= self.eta_1 and rho < self.eta_2:
-                # Accept Solution with constant weight
-                lam_prox_k1 = lam_prox_k
-                candidate.lam_prox = lam_prox_k1
-                # Update virtual control weight matrix
-                candidate.lam_vc = self._update_virtual_control_weights(
-                    candidate, candidate_x_prop, settings, state.lam_vc, candidate.lam_prox
-                )
-                candidate.lam_vb_nodal = self._update_virtual_buffer_nodal_weights(
-                    candidate, nodal_constraints, params, state.lam_vb_nodal, candidate.lam_prox
-                )
-                candidate.lam_vb_cross = self._update_virtual_buffer_cross_weights(
-                    candidate, nodal_constraints, params, state.lam_vb_cross, candidate.lam_prox
-                )
-
-                state.accept_solution(candidate)
-                adaptive_state = "Accept Constant"
-            else:
-                # Accept Solution with lower weight
-                lam_prox_k1 = np.maximum(self.lam_prox_min, self.gamma_2 * lam_prox_k)
-                candidate.lam_prox = lam_prox_k1
-                # Update virtual control weight matrix
-                candidate.lam_vc = self._update_virtual_control_weights(
-                    candidate, candidate_x_prop, settings, state.lam_vc, candidate.lam_prox
-                )
-                candidate.lam_vb_nodal = self._update_virtual_buffer_nodal_weights(
-                    candidate, nodal_constraints, params, state.lam_vb_nodal, candidate.lam_prox
-                )
-                candidate.lam_vb_cross = self._update_virtual_buffer_cross_weights(
-                    candidate, nodal_constraints, params, state.lam_vb_cross, candidate.lam_prox
-                )
-
-                state.accept_solution(candidate)
-                adaptive_state = "Accept Lower"
-
-        else:
-            candidate.lam_prox = lam_prox_k
-            candidate.lam_vc = state.lam_vc
-            candidate.lam_vb_nodal = state.lam_vb_nodal
-            candidate.lam_vb_cross = state.lam_vb_cross
-            state.accept_solution(candidate)
-            adaptive_state = "Initial"
-
-        return adaptive_state
+        return jax.lax.cond(state.k == 1, first_iter, later_iter, state)
 
 
 # =============================================================================

@@ -5,73 +5,27 @@ for solving non-convex trajectory optimization problems through iterative convex
 approximation.
 
 All algorithms inherit from :class:`Algorithm`, enabling pluggable algorithm
-implementations and custom SCvx variants:
+implementations and custom SCvx variants. Immutable components (solver,
+discretization_solver, jax_constraints, etc.) are stored during ``initialize()``;
+mutable configuration (params, settings) is passed per-step.
 
-```python
-class Algorithm(ABC):
-    @abstractmethod
-    def initialize(self, solver, discretization_solver, jax_constraints,
-                   emitter, params, settings) -> None:
-        '''Store compiled infrastructure and warm-start solvers.'''
-        ...
+The iterate carry is split into two objects:
 
-    @abstractmethod
-    def step(self, state, params, settings) -> bool:
-        '''Execute one iteration using stored infrastructure.'''
-        ...
-```
+* :class:`AlgorithmState` — a frozen, JAX-registered pytree holding only the
+  current iterate (``x``, ``u``, weights, propagated states, diagnostic scalars).
+  Every leaf is a ``jnp.ndarray`` so the state composes with ``jax.vmap`` /
+  ``jax.jit`` / ``jax.grad``.
 
-Immutable components (solver, discretization_solver, jax_constraints, etc.) are stored
-during ``initialize()``. Mutable configuration (params, settings) is passed per-step
-to support runtime parameter updates and tolerance tuning.
+* :class:`AlgorithmHistory` — a CPU-side mutable record of every iteration's
+  trajectories, discretizations, weights, and diagnostics. Grown by the SCP loop
+  via ``record_iteration``; never crosses the JAX boundary.
 
-:class:`AlgorithmState` holds mutable state during SCP iterations. Algorithms
-that require additional state can subclass it:
-
-```python
-@dataclass
-class MyAlgorithmState(AlgorithmState):
-    my_custom_field: float = 0.0
-```
-
-Note:
-    ``AlgorithmState`` currently combines iteration metrics (costs, weights),
-    trajectory history, and discretization data. A future refactor may separate
-    these concerns into distinct classes for clearer data flow:
-
-    ```python
-    @dataclass
-    class AlgorithmState:
-        # Mutable iteration state
-        k: int
-        J_tr: float
-        J_vb: float
-        J_vc: float
-        lam_prox: float
-        lam_cost: float
-        lam_vc: ...
-        lam_vb_nodal: np.ndarray  # (N, n_nodal)
-        lam_vb_cross: np.ndarray  # (n_cross,)
-
-    @dataclass
-    class TrajectoryHistory:
-        # Accumulated trajectory solutions
-        X: List[np.ndarray]
-        U: List[np.ndarray]
-
-        @property
-        def x(self): return self.X[-1]
-
-        @property
-        def u(self): return self.U[-1]
-
-    @dataclass
-    class DebugHistory:
-        # Optional diagnostic data (discretization matrices, etc.)
-        V_history: List[np.ndarray]
-        VC_history: List[np.ndarray]
-        TR_history: List[np.ndarray]
-    ```
+Autotuners follow the same contract: :class:`AutotuningBase` declares
+``update_weights`` as a pure functional update on the :class:`AlgorithmState`
+pytree (no mutation, no string returns, no list appends, no Python-level
+branching on iterate values). The next-iterate adaptive state is reported via
+the :class:`AdaptiveStateCode` IntEnum and converted to a human-readable string
+on the printing path with :func:`adaptive_state_code_to_str`.
 
 Current Implementations:
 
@@ -92,7 +46,15 @@ from .autotuner import (
     RampProximalWeight,
     RampProximalWeightSpec,
 )
-from .base import Algorithm, AlgorithmState, AutotuningBase, DiscretizationResult
+from .base import (
+    AdaptiveStateCode,
+    Algorithm,
+    AlgorithmHistory,
+    AlgorithmState,
+    AutotuningBase,
+    DiscretizationResult,
+    adaptive_state_code_to_str,
+)
 from .optimization_results import OptimizationResults
 from .scvx import PenalizedTrustRegion
 from .weights import Weights
@@ -172,7 +134,10 @@ class PenalizedTrustRegionConfig(BaseModel):
 __all__ = [
     # Base class
     "Algorithm",
+    "AlgorithmHistory",
     "AlgorithmState",
+    "AdaptiveStateCode",
+    "adaptive_state_code_to_str",
     "DiscretizationResult",
     "Weights",
     # Core results
