@@ -35,8 +35,8 @@ jobs:
 
     - name: Install dependencies
       run: |
-        # Install package with optional GUI and test packages
-        uv pip install --system -e ".[gui,test]"
+        # Install package with optional cvxpygen and test packages
+        uv pip install --system -e ".[cvxpygen, test]"
 
     - name: Run integration tests
       run: |
