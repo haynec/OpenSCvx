@@ -69,6 +69,26 @@ def status_code_to_str(code: Union[int, jnp.ndarray, np.ndarray]) -> str:
     return _STATUS_NAMES[StatusCode(int(code))]
 
 
+_STATUS_STR_TO_CODE = {
+    "optimal": StatusCode.OPTIMAL,
+    "infeasible": StatusCode.INFEASIBLE,
+    "unbounded": StatusCode.UNBOUNDED,
+}
+
+
+def status_str_to_code(status: str) -> StatusCode:
+    """Map a backend-emitted status string to a :class:`StatusCode`.
+
+    Used by :class:`CVXPyPTRSolver.iteration_callback` to coerce CVXPy's
+    ``problem.status`` into the int32 form the JAX-pure result pytree
+    requires. Only the three definite outcomes (``"optimal"``,
+    ``"infeasible"``, ``"unbounded"``) are recognized — every other label
+    CVXPy emits (``"optimal_inaccurate"``, ``"solver_error"``, ...) collapses
+    to :attr:`StatusCode.UNKNOWN`.
+    """
+    return _STATUS_STR_TO_CODE.get(status, StatusCode.UNKNOWN)
+
+
 # ---------------------------------------------------------------------------
 # Per-iteration JAX-pure I/O pytrees
 # ---------------------------------------------------------------------------

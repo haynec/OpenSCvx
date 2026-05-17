@@ -1,0 +1,303 @@
+"""Tests for ``CVXPyPTRSolver.iteration_callback``.
+
+The CVXPy callback wraps the existing NumPy ``solve()`` in
+:func:`jax.pure_callback`; the assertion is that running the callback
+end-to-end on a fixed brachistochrone iterate produces the same primal
+trajectory as a direct :meth:`solve` call (the spike in
+``test_cvxpy_callback_jit_spike.py`` already confirms the
+``pure_callback`` + ``jit`` plumbing works at the toy level — this test
+exercises the real PTR pipeline).
+"""
+
+import numpy as np
+import pytest
+
+import jax
+import jax.numpy as jnp
+
+from openscvx import Problem
+from openscvx.solvers.ptr_solver import (
+    StatusCode,
+    SubproblemData,
+    SubproblemSolution,
+)
+
+
+# ============================================================================
+# Fixtures
+# ============================================================================
+
+
+def _build_brachistochrone(n: int = 4, k_max: int = 1):
+    """Build the brachistochrone problem at small ``N`` for callback tests.
+
+    Mirrors ``examples/abstract/brachistochrone.py`` but selects the CVXPy
+    backend explicitly and disables printing so the test output stays clean.
+    """
+    import openscvx as ox
+
+    g = 9.81
+
+    position = ox.State("position", shape=(2,))
+    position.max = np.array([10.0, 10.0])
+    position.min = np.array([0.0, 0.0])
+    position.initial = np.array([0.0, 10.0])
+    position.final = [10.0, 5.0]
+
+    velocity = ox.State("velocity", shape=(1,))
+    velocity.max = np.array([10.0])
+    velocity.min = np.array([0.0])
+    velocity.initial = np.array([0.0])
+    velocity.final = [("free", 10.0)]
+
+    theta = ox.Control("theta", shape=(1,))
+    theta.max = np.array([100.5 * jnp.pi / 180])
+    theta.min = np.array([0.0])
+    theta.guess = np.linspace(5 * jnp.pi / 180, 100.5 * jnp.pi / 180, n).reshape(-1, 1)
+
+    states = [position, velocity]
+    controls = [theta]
+
+    dynamics = {
+        "position": ox.Concat(
+            velocity[0] * ox.Sin(theta[0]),
+            -velocity[0] * ox.Cos(theta[0]),
+        ),
+        "velocity": g * ox.Cos(theta[0]),
+    }
+
+    constraint_exprs = []
+    for state in states:
+        constraint_exprs.extend(
+            [ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)]
+        )
+
+    time = ox.Time(
+        initial=0.0,
+        final=("minimize", 2.0),
+        min=0.0,
+        max=2.0,
+        uniform_time_grid=True,
+    )
+
+    prob = Problem(
+        dynamics=dynamics,
+        states=states,
+        controls=controls,
+        time=time,
+        constraints=constraint_exprs,
+        N=n,
+        float_dtype="float64",
+        algorithm={
+            "autotuner": "ConstantProximalWeight",
+            "lam_prox": 1e0,
+            "lam_cost": 6e-1,
+            "k_max": k_max,
+        },
+        solver={"backend": "cvxpy"},
+    )
+    prob.settings.dev.printing = False
+    return prob
+
+
+def _subproblem_data_from_solver(prob) -> SubproblemData:
+    """Build a :class:`SubproblemData` from the CVXPy params after one solve.
+
+    Reads back the exact linearization the last ``update_*`` cycle wrote into
+    the CVXPy parameters. This means ``solver.solve()`` and
+    ``iteration_callback()(None, data)`` are guaranteed to see the same
+    inputs (the post-SCP-iter ``state.x`` is *not* the same as the
+    last-iteration ``x_bar``, so reading from the params is the only way to
+    get matched inputs without re-running an iteration).
+    """
+    settings = prob.settings
+    lowered = prob._lowered
+    solver = prob.solver
+    ocp = solver._ocp_vars
+
+    N = settings.sim.n
+    n_x = settings.sim.n_states
+    n_u = settings.sim.n_controls
+
+    x_bar = np.asarray(ocp.x_bar.value)
+    u_bar = np.asarray(ocp.u_bar.value)
+    A_d = np.asarray(ocp.A_d.value)
+    B_d = np.asarray(ocp.B_d.value)
+    C_d = np.asarray(ocp.C_d.value)
+    x_prop = (
+        np.asarray(ocp.x_prop.value)
+        if ocp.x_prop is not None
+        else np.zeros((N - 1, n_x))
+    )
+    x_prop_plus = (
+        np.asarray(ocp.x_prop_plus.value)
+        if ocp.x_prop_plus is not None and ocp.x_prop_plus.value is not None
+        else np.zeros((N, n_x))
+    )
+    E_d = (
+        np.asarray(ocp.E_d.value)
+        if ocp.E_d is not None and ocp.E_d.value is not None
+        else np.zeros((N, n_x, n_u))
+    )
+    # D_d is absorbed into A/B/C at update time on the CVXPy path; passing
+    # zeros tells the callback "no further absorption" — it just calls
+    # update_dynamics_linearization with the already-absorbed A/B/C.
+    D_d = np.zeros((N, n_x, n_x))
+
+    jax_constraints = lowered.jax_constraints
+    n_nodal = len(jax_constraints.nodal)
+    n_cross = len(jax_constraints.cross_node)
+    nodal_g = np.zeros((N, max(n_nodal, 1)))
+    nodal_grad_x = np.zeros((N, max(n_nodal, 1), n_x))
+    nodal_grad_u = np.zeros((N, max(n_nodal, 1), n_u))
+    for c_idx, constraint in enumerate(jax_constraints.nodal):
+        g_full = np.asarray(ocp.g[c_idx].value)
+        grad_x_full = np.asarray(ocp.grad_g_x[c_idx].value)
+        grad_u_full = np.asarray(ocp.grad_g_u[c_idx].value)
+        for node in constraint.nodes:
+            nodal_g[node, c_idx] = g_full[node]
+            nodal_grad_x[node, c_idx] = grad_x_full[node]
+            nodal_grad_u[node, c_idx] = grad_u_full[node]
+    if n_nodal == 0:
+        nodal_g = np.zeros((N, 0))
+        nodal_grad_x = np.zeros((N, 0, n_x))
+        nodal_grad_u = np.zeros((N, 0, n_u))
+
+    cross_g = np.zeros((n_cross,))
+    cross_grad_X = np.zeros((n_cross, N, n_x))
+    cross_grad_U = np.zeros((n_cross, N, n_u))
+    for c_idx in range(n_cross):
+        cross_g[c_idx] = float(np.asarray(ocp.g_cross[c_idx].value))
+        cross_grad_X[c_idx] = np.asarray(ocp.grad_g_X_cross[c_idx].value)
+        cross_grad_U[c_idx] = np.asarray(ocp.grad_g_U_cross[c_idx].value)
+
+    lam_prox = np.asarray(ocp.lam_prox.value)
+    lam_cost = np.asarray(ocp.lam_cost.value)
+    lam_vc = np.asarray(ocp.lam_vc.value)
+    lam_vb_nodal = np.asarray(ocp.lam_vb_nodal.value)
+    lam_vb_cross = np.asarray(ocp.lam_vb_cross.value)
+
+    x_init = (
+        np.asarray(lowered.x_unified.initial, dtype=float)
+        if lowered.x_unified.initial is not None
+        else np.full(n_x, np.nan)
+    )
+    x_term = (
+        np.asarray(lowered.x_unified.final, dtype=float)
+        if lowered.x_unified.final is not None
+        else np.full(n_x, np.nan)
+    )
+
+    return SubproblemData(
+        x_bar=jnp.asarray(x_bar),
+        u_bar=jnp.asarray(u_bar),
+        A_d=jnp.asarray(A_d),
+        B_d=jnp.asarray(B_d),
+        C_d=jnp.asarray(C_d),
+        x_prop=jnp.asarray(x_prop),
+        x_prop_plus=jnp.asarray(x_prop_plus),
+        D_d=jnp.asarray(D_d),
+        E_d=jnp.asarray(E_d),
+        nodal_g=jnp.asarray(nodal_g),
+        nodal_grad_x=jnp.asarray(nodal_grad_x),
+        nodal_grad_u=jnp.asarray(nodal_grad_u),
+        cross_g=jnp.asarray(cross_g),
+        cross_grad_X=jnp.asarray(cross_grad_X),
+        cross_grad_U=jnp.asarray(cross_grad_U),
+        lam_prox=jnp.asarray(lam_prox),
+        lam_cost=jnp.asarray(lam_cost),
+        lam_vc=jnp.asarray(lam_vc),
+        lam_vb_nodal=jnp.asarray(lam_vb_nodal),
+        lam_vb_cross=jnp.asarray(lam_vb_cross),
+        x_init=jnp.asarray(x_init),
+        x_term=jnp.asarray(x_term),
+    )
+
+
+# ============================================================================
+# Solution parity
+# ============================================================================
+
+
+def test_iteration_callback_matches_solve_on_brachistochrone():
+    """``iteration_callback()(state, data)`` must produce the same primal
+    trajectory as ``solver.solve()`` on the same iterate. The callback wraps
+    the same NumPy ``solve()`` we compare against, so parity should be
+    exact modulo CLARABEL re-solve noise.
+    """
+    prob = _build_brachistochrone(n=4, k_max=1)
+    prob.initialize()
+    prob.solve()
+    solver = prob.solver
+
+    reference = solver.solve()
+
+    data = _subproblem_data_from_solver(prob)
+    callback = solver.iteration_callback()
+    solution = callback(None, data)
+
+    assert isinstance(solution, SubproblemSolution)
+    np.testing.assert_allclose(np.asarray(solution.x), reference.x, atol=1e-6, rtol=1e-6)
+    np.testing.assert_allclose(np.asarray(solution.u), reference.u, atol=1e-6, rtol=1e-6)
+    np.testing.assert_allclose(np.asarray(solution.nu), reference.nu, atol=1e-6, rtol=1e-6)
+    # nu_vb is stacked (N, n_nodal) in the callback output, list-of-arrays on NumPy.
+    assert solution.nu_vb.shape == (prob.settings.sim.n, len(prob._lowered.jax_constraints.nodal))
+    np.testing.assert_allclose(float(solution.cost), reference.cost, atol=1e-6, rtol=1e-6)
+    # CVXPy + CLARABEL on a feasible iterate reports "optimal".
+    assert int(solution.status_code) == int(StatusCode.OPTIMAL)
+
+
+def test_iteration_callback_composes_with_jit():
+    """``jax.jit(cb)(state, data)`` matches the bare call.
+
+    The spike test already covers ``pure_callback`` + ``jit`` at the toy
+    level; this asserts the real CVXPy solver also composes under ``jit``
+    without per-call retracing.
+    """
+    prob = _build_brachistochrone(n=4, k_max=1)
+    prob.initialize()
+    prob.solve()
+    solver = prob.solver
+
+    data = _subproblem_data_from_solver(prob)
+    callback = solver.iteration_callback()
+    jitted = jax.jit(callback)
+
+    bare = callback(None, data)
+    jitt = jitted(None, data)
+
+    np.testing.assert_allclose(np.asarray(jitt.x), np.asarray(bare.x), atol=1e-8)
+    np.testing.assert_allclose(np.asarray(jitt.u), np.asarray(bare.u), atol=1e-8)
+    np.testing.assert_allclose(
+        np.asarray(jitt.nu_vb), np.asarray(bare.nu_vb), atol=1e-8
+    )
+
+
+def test_iteration_callback_composes_with_vmap_sequential():
+    """``jax.vmap(cb)`` fires the callback once per batch element.
+
+    CVXPy can't ingest a batched parameter set, so the callback declares
+    ``vmap_method="sequential"`` — under vmap the host is invoked B times in
+    sequence. Stacking the same ``SubproblemData`` four times should yield
+    four identical ``SubproblemSolution`` slices that each match the bare
+    call.
+    """
+    prob = _build_brachistochrone(n=4, k_max=1)
+    prob.initialize()
+    prob.solve()
+    solver = prob.solver
+
+    data = _subproblem_data_from_solver(prob)
+    callback = solver.iteration_callback()
+    bare = callback(None, data)
+
+    batch = jax.tree_util.tree_map(lambda x: jnp.broadcast_to(x, (3,) + x.shape), data)
+    batched = jax.vmap(callback, in_axes=(None, 0))(None, batch)
+
+    for i in range(3):
+        np.testing.assert_allclose(
+            np.asarray(batched.x[i]), np.asarray(bare.x), atol=1e-8
+        )
+        np.testing.assert_allclose(
+            np.asarray(batched.u[i]), np.asarray(bare.u), atol=1e-8
+        )
