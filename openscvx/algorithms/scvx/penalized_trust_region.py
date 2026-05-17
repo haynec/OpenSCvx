@@ -178,11 +178,9 @@ class PenalizedTrustRegion(Algorithm):
         Closure captures ``jax_constraints`` / ``settings`` only: they're fixed
         for the duration of a solve and contain non-pytree leaves (dataclasses
         of compiled closures, pydantic config) that JAX cannot route through
-        positional arguments. ``weights`` is *not* captured — the autotuners
-        read their reset value from ``state.lam_cost_init`` instead, so weight
-        mutations between solves propagate without rebuilding the closure and
-        the per-dispatch literal-canonicalization cost of walking a numpy-heavy
-        ``Weights`` object disappears.
+        positional arguments. The autotuners' reset weights live on
+        ``state.lam_cost_init``, so weight mutations between solves propagate
+        through the pytree without rebuilding the closure.
         """
         autotuner = self.autotuner
 
@@ -193,7 +191,7 @@ class PenalizedTrustRegion(Algorithm):
             cand.x_prop = candidate_dict["x_prop"]
             cand.x_prop_plus = candidate_dict["x_prop_plus"]
             cand.J_lin = candidate_dict["J_lin"]
-            return autotuner.update_weights(state, cand, jax_constraints, settings, params, None)
+            return autotuner.update_weights(state, cand, jax_constraints, settings, params)
 
         return jax.jit(fn)
 

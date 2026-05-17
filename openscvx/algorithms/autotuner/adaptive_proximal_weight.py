@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
     from ..base import AlgorithmState, CandidateIterate
-    from ..weights import Weights
 
 
 class AdaptiveProximalWeight(AutotuningBase):
@@ -65,7 +64,6 @@ class AdaptiveProximalWeight(AutotuningBase):
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
-        weights: "Weights",
     ) -> "AlgorithmState":
         """Return the next-iterate state.
 

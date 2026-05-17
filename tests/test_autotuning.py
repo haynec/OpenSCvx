@@ -545,7 +545,7 @@ def test_update_scp_weights_initial_iteration(
     candidate.J_lin = 10.0
 
     new_state = autotuner.update_weights(
-        algorithm_state, candidate, empty_nodal_constraints, settings, {}, weights
+        algorithm_state, candidate, empty_nodal_constraints, settings, {}
     )
 
     assert int(new_state.adaptive_state_code) == int(AdaptiveStateCode.INITIAL)
@@ -573,9 +573,7 @@ def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_con
     candidate.x_prop_plus = _candidate_x_prop_plus()
     candidate.J_lin = 0.5
 
-    new_state = autotuner.update_weights(
-        state, candidate, empty_nodal_constraints, settings, {}, weights
-    )
+    new_state = autotuner.update_weights(state, candidate, empty_nodal_constraints, settings, {})
 
     np.testing.assert_allclose(np.asarray(new_state.lam_cost), lam_cost_prev * 0.8, rtol=1e-6)
 
@@ -597,9 +595,7 @@ def test_update_scp_weights_weight_bounds(
     candidate.x_prop_plus = _candidate_x_prop_plus()
     candidate.J_lin = 1e6  # makes predicted reduction strongly negative → reject
 
-    new_state = autotuner.update_weights(
-        state, candidate, empty_nodal_constraints, settings, {}, weights
-    )
+    new_state = autotuner.update_weights(state, candidate, empty_nodal_constraints, settings, {})
 
     final = np.asarray(new_state.lam_prox)
     assert np.all(final >= autotuner.lam_prox_min)
@@ -675,7 +671,6 @@ def test_augmented_lagrangian_accept_decrease(
         nodal_constraints_with_violations,
         settings,
         {},
-        weights,
     )
 
     assert int(new_state.adaptive_state_code) == int(AdaptiveStateCode.ACCEPT_LOWER)
@@ -718,9 +713,7 @@ def test_augmented_lagrangian_reject_increase(
     lam_prox_prev = np.asarray(state.lam_prox)
     lam_vc_prev = np.asarray(state.lam_vc)
 
-    new_state = autotuner.update_weights(
-        state, candidate, empty_nodal_constraints, settings, {}, weights
-    )
+    new_state = autotuner.update_weights(state, candidate, empty_nodal_constraints, settings, {})
 
     assert int(new_state.adaptive_state_code) == int(AdaptiveStateCode.REJECT)
     np.testing.assert_allclose(
@@ -790,9 +783,7 @@ def test_augmented_lagrangian_accept_higher(
 
     lam_prox_prev = np.asarray(state.lam_prox)
 
-    new_state = autotuner.update_weights(
-        state, candidate, empty_nodal_constraints, settings, {}, weights
-    )
+    new_state = autotuner.update_weights(state, candidate, empty_nodal_constraints, settings, {})
 
     assert int(new_state.adaptive_state_code) == int(AdaptiveStateCode.ACCEPT_HIGHER)
     expected = np.minimum(autotuner.lam_prox_max, autotuner.gamma_1 * lam_prox_prev)
@@ -813,9 +804,7 @@ def test_augmented_lagrangian_accept_constant(
 
     lam_prox_prev = np.asarray(state.lam_prox)
 
-    new_state = autotuner.update_weights(
-        state, candidate, empty_nodal_constraints, settings, {}, weights
-    )
+    new_state = autotuner.update_weights(state, candidate, empty_nodal_constraints, settings, {})
 
     assert int(new_state.adaptive_state_code) == int(AdaptiveStateCode.ACCEPT_CONSTANT)
     np.testing.assert_allclose(np.asarray(new_state.lam_prox), lam_prox_prev)
@@ -905,7 +894,7 @@ def test_adaptive_proximal_weight_initial_iteration(
     candidate.J_lin = 10.0
 
     new_state = autotuner.update_weights(
-        algorithm_state, candidate, empty_nodal_constraints, settings, {}, weights
+        algorithm_state, candidate, empty_nodal_constraints, settings, {}
     )
 
     assert int(new_state.adaptive_state_code) == int(AdaptiveStateCode.INITIAL)
@@ -939,7 +928,6 @@ def test_adaptive_proximal_weight_accept_lower_fixed_vc_vb(
         nodal_constraints_with_violations,
         settings,
         {},
-        weights,
     )
 
     assert int(new_state.adaptive_state_code) == int(AdaptiveStateCode.ACCEPT_LOWER)
@@ -968,9 +956,7 @@ def test_adaptive_proximal_weight_reject_increase(
     lam_prox_prev = np.asarray(state.lam_prox)
     lam_vc_prev = np.asarray(state.lam_vc)
 
-    new_state = autotuner.update_weights(
-        state, candidate, empty_nodal_constraints, settings, {}, weights
-    )
+    new_state = autotuner.update_weights(state, candidate, empty_nodal_constraints, settings, {})
 
     assert int(new_state.adaptive_state_code) == int(AdaptiveStateCode.REJECT)
     np.testing.assert_allclose(
@@ -1016,7 +1002,7 @@ def test_constant_proximal_weight_keeps_lam_prox_and_accepts(
     candidate.x_prop_plus = _candidate_x_prop_plus()
 
     new_state = autotuner.update_weights(
-        algorithm_state, candidate, empty_nodal_constraints, settings, {}, weights
+        algorithm_state, candidate, empty_nodal_constraints, settings, {}
     )
 
     assert int(new_state.adaptive_state_code) == int(AdaptiveStateCode.ACCEPT_CONSTANT)
@@ -1044,9 +1030,7 @@ def test_constant_proximal_weight_uses_relaxed_cost_after_cost_drop(
     candidate.x_prop = np.asarray(state.x_prop)
     candidate.x_prop_plus = _candidate_x_prop_plus()
 
-    new_state = autotuner.update_weights(
-        state, candidate, empty_nodal_constraints, settings, {}, weights
-    )
+    new_state = autotuner.update_weights(state, candidate, empty_nodal_constraints, settings, {})
 
     assert int(new_state.adaptive_state_code) == int(AdaptiveStateCode.ACCEPT_CONSTANT)
     np.testing.assert_allclose(
@@ -1075,21 +1059,21 @@ def test_ramp_proximal_weight_increases_until_max(
 
     # 1.0 -> 2.0, still below max
     state = autotuner.update_weights(
-        state, make_candidate(state), empty_nodal_constraints, settings, {}, weights
+        state, make_candidate(state), empty_nodal_constraints, settings, {}
     )
     assert int(state.adaptive_state_code) == int(AdaptiveStateCode.ACCEPT_HIGHER)
     np.testing.assert_allclose(np.asarray(state.lam_prox), 2.0)
 
     # 2.0 -> 4.0 == max, still reported as higher (was_at_max is read pre-update)
     state = autotuner.update_weights(
-        state, make_candidate(state), empty_nodal_constraints, settings, {}, weights
+        state, make_candidate(state), empty_nodal_constraints, settings, {}
     )
     assert int(state.adaptive_state_code) == int(AdaptiveStateCode.ACCEPT_HIGHER)
     np.testing.assert_allclose(np.asarray(state.lam_prox), 4.0)
 
     # At max -> saturates and reports constant.
     state = autotuner.update_weights(
-        state, make_candidate(state), empty_nodal_constraints, settings, {}, weights
+        state, make_candidate(state), empty_nodal_constraints, settings, {}
     )
     assert int(state.adaptive_state_code) == int(AdaptiveStateCode.ACCEPT_CONSTANT)
     np.testing.assert_allclose(np.asarray(state.lam_prox), 4.0)

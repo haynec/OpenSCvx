@@ -294,19 +294,20 @@ class AutotuningBase(ABC):
         nodal_constraints: "LoweredJaxConstraints",
         settings: "Config",
         params: dict,
-        weights: "Weights",
     ) -> "AlgorithmState":
         """Return the next-iterate :class:`AlgorithmState`.
 
         Must be JAX-traceable. See the class docstring for the contract.
 
         Args:
-            state: Current-iterate pytree.
+            state: Current-iterate pytree. Initial weights live on
+                ``state.lam_cost_init``; autotuners read from there rather than
+                from the algorithm's ``Weights`` object so the JIT'd closure
+                stays cache-stable across weight mutations.
             candidate: Subproblem result (read-only here).
             nodal_constraints: Lowered JAX constraints.
             settings: Configuration object.
             params: Problem parameter dictionary.
-            weights: Initial weights from the algorithm.
 
         Returns:
             The next-iterate :class:`AlgorithmState`. Its

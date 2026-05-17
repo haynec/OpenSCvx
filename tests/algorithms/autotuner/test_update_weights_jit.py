@@ -137,12 +137,12 @@ def _dict_to_candidate(d: dict) -> CandidateIterate:
     return c
 
 
-def _make_jit_target(autotuner, constraints, settings, weights):
+def _make_jit_target(autotuner, constraints, settings):
     """Wrap update_weights so jit only sees pytree-friendly arguments."""
 
     def fn(state, candidate_dict):
         cand = _dict_to_candidate(candidate_dict)
-        return autotuner.update_weights(state, cand, constraints, settings, {}, weights)
+        return autotuner.update_weights(state, cand, constraints, settings, {})
 
     return jax.jit(fn)
 
@@ -159,14 +159,12 @@ def _make_jit_target(autotuner, constraints, settings, weights):
         ),
     ],
 )
-def test_jit_matches_bare_iter1(
-    make_autotuner, state, candidate, empty_constraints, settings, weights
-):
+def test_jit_matches_bare_iter1(make_autotuner, state, candidate, empty_constraints, settings):
     """Iteration 1 (INITIAL branch) traces and matches the bare call."""
     autotuner = make_autotuner()
-    bare = autotuner.update_weights(state, candidate, empty_constraints, settings, {}, weights)
+    bare = autotuner.update_weights(state, candidate, empty_constraints, settings, {})
 
-    jit_target = _make_jit_target(autotuner, empty_constraints, settings, weights)
+    jit_target = _make_jit_target(autotuner, empty_constraints, settings)
     jitted = jit_target(state, _candidate_to_dict(candidate))
 
     _states_match(bare, jitted)
@@ -179,9 +177,7 @@ def test_jit_matches_bare_iter1(
         pytest.param(lambda: AdaptiveProximalWeight(), id="adaptive_proximal"),
     ],
 )
-def test_jit_matches_bare_iter2(
-    make_autotuner, state, candidate, empty_constraints, settings, weights
-):
+def test_jit_matches_bare_iter2(make_autotuner, state, candidate, empty_constraints, settings):
     """Iteration k>1 (acceptance-ratio branch) traces and matches the bare call.
 
     Constant / Ramp autotuners are excluded because they take the same branch
@@ -190,9 +186,9 @@ def test_jit_matches_bare_iter2(
     autotuner = make_autotuner()
     state_k2 = state.replace(k=jnp.asarray(2, dtype=jnp.int32))
 
-    bare = autotuner.update_weights(state_k2, candidate, empty_constraints, settings, {}, weights)
+    bare = autotuner.update_weights(state_k2, candidate, empty_constraints, settings, {})
 
-    jit_target = _make_jit_target(autotuner, empty_constraints, settings, weights)
+    jit_target = _make_jit_target(autotuner, empty_constraints, settings)
     jitted = jit_target(state_k2, _candidate_to_dict(candidate))
 
     _states_match(bare, jitted)

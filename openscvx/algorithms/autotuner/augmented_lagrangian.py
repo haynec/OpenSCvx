@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
     from ..base import AlgorithmState, CandidateIterate
-    from ..weights import Weights
 
 
 class AugmentedLagrangian(AutotuningBase):
@@ -225,7 +224,6 @@ class AugmentedLagrangian(AutotuningBase):
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
-        weights: "Weights",
     ) -> "AlgorithmState":
         """Return the next-iterate state per the Augmented Lagrangian rules.
 
