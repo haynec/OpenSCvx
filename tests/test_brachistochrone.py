@@ -827,7 +827,7 @@ def test_cross_nodal(test_case):
 
     # Parse test case
     is_feasible = test_case.startswith("feasible")
-    is_convex = test_case.endswith("convex")
+    is_convex = test_case.endswith("-convex")
     should_converge = is_feasible
 
     # Set max_step based on feasibility
