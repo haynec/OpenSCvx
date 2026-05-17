@@ -355,8 +355,8 @@ def create_realtime_server(
                 update_gates()
 
                 # Update trajectory from V_history
-                if optimization_problem.state.V_history:
-                    V_multi_shoot = np.array(optimization_problem.state.V_history[-1])
+                if optimization_problem.history.V_history:
+                    V_multi_shoot = np.array(optimization_problem.history.V_history[-1])
                     update_trajectory(V_multi_shoot)
 
                 iteration += 1

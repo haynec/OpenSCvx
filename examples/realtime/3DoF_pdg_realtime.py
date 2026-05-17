@@ -455,8 +455,8 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
                 results.update(get_print_queue_data(optimization_problem))
                 metrics_text.content = format_metrics_markdown(results)
 
-                if optimization_problem.state.V_history:
-                    V_multi_shoot = np.asarray(optimization_problem.state.V_history[-1])
+                if optimization_problem.history.V_history:
+                    V_multi_shoot = np.asarray(optimization_problem.history.V_history[-1])
                     update_trajectory(V_multi_shoot)
 
                 time.sleep(0.05)

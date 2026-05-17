@@ -434,8 +434,8 @@ def create_realtime_server(
                 update_metrics(results)
 
                 # Update trajectory from V_history
-                if optimization_problem.state.V_history:
-                    V_multi_shoot = np.array(optimization_problem.state.V_history[-1])
+                if optimization_problem.history.V_history:
+                    V_multi_shoot = np.array(optimization_problem.history.V_history[-1])
                     x_traj = np.array(optimization_problem.state.x)
                     update_trajectory_and_drone(V_multi_shoot, x_traj)
 
