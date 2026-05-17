@@ -190,9 +190,7 @@ class PenalizedTrustRegion(Algorithm):
             cand.x_prop = candidate_dict["x_prop"]
             cand.x_prop_plus = candidate_dict["x_prop_plus"]
             cand.J_lin = candidate_dict["J_lin"]
-            return autotuner.update_weights(
-                state, cand, jax_constraints, settings, params, weights
-            )
+            return autotuner.update_weights(state, cand, jax_constraints, settings, params, weights)
 
         return jax.jit(fn)
 

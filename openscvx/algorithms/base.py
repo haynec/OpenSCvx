@@ -15,7 +15,8 @@ follow, along with two state containers used during the SCP iteration:
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace as dc_replace
+from dataclasses import dataclass, field
+from dataclasses import replace as dc_replace
 from enum import IntEnum
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
 

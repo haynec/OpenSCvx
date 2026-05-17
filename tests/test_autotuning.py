@@ -786,9 +786,7 @@ def test_augmented_lagrangian_accept_higher(
     state = _seeded_state_for_k2(algorithm_state)
 
     rho_target = 0.5 * (autotuner.eta_0 + autotuner.eta_1)
-    candidate = _build_rho_targeted_candidate(
-        state, settings, empty_nodal_constraints, rho_target
-    )
+    candidate = _build_rho_targeted_candidate(state, settings, empty_nodal_constraints, rho_target)
 
     lam_prox_prev = np.asarray(state.lam_prox)
 
@@ -811,9 +809,7 @@ def test_augmented_lagrangian_accept_constant(
     state = _seeded_state_for_k2(algorithm_state)
 
     rho_target = 0.5 * (autotuner.eta_1 + autotuner.eta_2)
-    candidate = _build_rho_targeted_candidate(
-        state, settings, empty_nodal_constraints, rho_target
-    )
+    candidate = _build_rho_targeted_candidate(state, settings, empty_nodal_constraints, rho_target)
 
     lam_prox_prev = np.asarray(state.lam_prox)
 
@@ -1027,7 +1023,8 @@ def test_constant_proximal_weight_keeps_lam_prox_and_accepts(
     np.testing.assert_allclose(np.asarray(new_state.lam_prox), initial_lam_prox)
     # Before cost_drop, lam_cost is reset to the configured scalar.
     np.testing.assert_allclose(
-        np.asarray(new_state.lam_cost), np.full_like(np.asarray(algorithm_state.lam_cost), weights.lam_cost)
+        np.asarray(new_state.lam_cost),
+        np.full_like(np.asarray(algorithm_state.lam_cost), weights.lam_cost),
     )
 
 

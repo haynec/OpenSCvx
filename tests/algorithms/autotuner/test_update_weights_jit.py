@@ -7,8 +7,6 @@ or silently take a wrong branch. We check structural equality of every
 pytree leaf produced by jit'd vs. bare calls.
 """
 
-from copy import deepcopy
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -25,7 +23,6 @@ from openscvx.algorithms.base import CandidateIterate
 from openscvx.algorithms.weights import Weights
 from openscvx.config import Config, DevConfig, PropagationConfig, SimConfig
 from openscvx.lowered.jax_constraints import LoweredJaxConstraints
-
 
 # -- Tiny problem fixture ---------------------------------------------------
 
@@ -167,9 +164,7 @@ def test_jit_matches_bare_iter1(
 ):
     """Iteration 1 (INITIAL branch) traces and matches the bare call."""
     autotuner = make_autotuner()
-    bare = autotuner.update_weights(
-        state, candidate, empty_constraints, settings, {}, weights
-    )
+    bare = autotuner.update_weights(state, candidate, empty_constraints, settings, {}, weights)
 
     jit_target = _make_jit_target(autotuner, empty_constraints, settings, weights)
     jitted = jit_target(state, _candidate_to_dict(candidate))
@@ -195,9 +190,7 @@ def test_jit_matches_bare_iter2(
     autotuner = make_autotuner()
     state_k2 = state.replace(k=jnp.asarray(2, dtype=jnp.int32))
 
-    bare = autotuner.update_weights(
-        state_k2, candidate, empty_constraints, settings, {}, weights
-    )
+    bare = autotuner.update_weights(state_k2, candidate, empty_constraints, settings, {}, weights)
 
     jit_target = _make_jit_target(autotuner, empty_constraints, settings, weights)
     jitted = jit_target(state_k2, _candidate_to_dict(candidate))

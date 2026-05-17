@@ -52,9 +52,11 @@ class RampProximalWeight(AutotuningBase):
 
         Pure functional update — see class docstring.
         """
-        lam_cost_init = jnp.asarray(weights.lam_cost) if not isinstance(
-            weights.lam_cost, (int, float)
-        ) else jnp.full_like(state.lam_cost, weights.lam_cost)
+        lam_cost_init = (
+            jnp.asarray(weights.lam_cost)
+            if not isinstance(weights.lam_cost, (int, float))
+            else jnp.full_like(state.lam_cost, weights.lam_cost)
+        )
         lam_cost_next = jnp.where(
             state.k > self.lam_cost_drop,
             state.lam_cost * self.lam_cost_relax,
