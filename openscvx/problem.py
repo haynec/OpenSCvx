@@ -965,7 +965,10 @@ class Problem:
         self._history = AlgorithmHistory.from_settings(self.settings)
 
         # Re-seed the algorithm's host-side iteration mirror so it matches
-        # ``state.k == 1`` for the next solve.
+        # ``state.k == 1`` for the next solve. The hasattr-guarded probe is
+        # itself scaffolding — ``Problem`` reaching into private fields of
+        # ``PenalizedTrustRegion`` to dodge per-iteration device syncs.
+        # Removable once the SCP loop body is a single JAX trace.
         if hasattr(self._algorithm, "_iter_index"):
             self._algorithm._iter_index = 1
         if hasattr(self._algorithm, "_last_scalars"):
@@ -1013,6 +1016,8 @@ class Problem:
         # by ``record_iteration``; avoids a per-step device sync. ``dict.get``
         # with a fallback would evaluate the default eagerly (a host-device
         # round-trip on every iteration), so branch on presence explicitly.
+        # Removable once the SCP loop body is a single JAX trace — the mirror
+        # and the per-step sync it avoids go away together.
         scalars = getattr(self._algorithm, "_last_scalars", None) or {}
         return {
             "converged": converged,
@@ -1071,6 +1076,8 @@ class Problem:
         # Use the algorithm's Python-side iter mirror (kept in sync with
         # ``state.k``) so the loop predicate doesn't force a device sync on
         # every iteration.
+        # Removable once the SCP loop body is a single JAX trace — this whole
+        # Python while-loop is then replaced by a single ``lax.while_loop``.
         while self._algorithm._iter_index <= k_max:
             result = self.step()
             if result["converged"] and not continuous:

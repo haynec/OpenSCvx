@@ -113,6 +113,12 @@ class PenalizedTrustRegion(Algorithm):
         self._discretization_solver_impulsive: callable = None
         self._jax_constraints: "LoweredJaxConstraints" = None
         self._emitter: callable = None
+        # The three private fields below — ``_jit_update_weights``,
+        # ``_iter_index``, ``_last_scalars`` — are scaffolding for the
+        # Python-driven SCP loop: they keep the inner JIT cache stable and
+        # dodge per-iteration host/device syncs. Removable once the SCP loop
+        # body is a single JAX trace.
+        #
         # JIT'd autotuner step (built lazily in initialize() to fuse the
         # hundreds of small jnp ops in `update_weights` into a single dispatch
         # per iteration). Captures `nodal_constraints`, `settings`, `weights`
@@ -181,6 +187,10 @@ class PenalizedTrustRegion(Algorithm):
         positional arguments. The autotuners' reset weights live on
         ``state.lam_cost_init``, so weight mutations between solves propagate
         through the pytree without rebuilding the closure.
+
+        Removable once the SCP loop body is a single JAX trace — the loop-level
+        JIT subsumes this inner one and the dict ↔ ``CandidateIterate`` adapter
+        below can be deleted along with the duplicate adapter in ``step()``.
         """
         autotuner = self.autotuner
 
@@ -197,7 +207,11 @@ class PenalizedTrustRegion(Algorithm):
 
     @staticmethod
     def _block_until_ready_outputs(outputs: Tuple[object, ...]) -> None:
-        """Finish any pending XLA work from discretization exports (warm-up helper)."""
+        """Finish any pending XLA work from discretization exports (warm-up helper).
+
+        Removable once the SCP loop body is a single JAX trace — the warm-up
+        path goes away with it.
+        """
         jax.block_until_ready(outputs)
 
     def _recover_prior_node_from_initial(
@@ -342,6 +356,9 @@ class PenalizedTrustRegion(Algorithm):
         # against the *returned* state (committed, matching iter ≥ 2 where the
         # state comes back from the JIT). Without this two-phase warm-up, JAX
         # caches by argument committedness and the iter-2 dispatch misses.
+        #
+        # Removable once the SCP loop body is a single JAX trace — the entire
+        # warm-up block below becomes unnecessary.
         warm_state = init_state.replace(
             x_prop=jnp.asarray(x_prop_c),
             x_prop_plus=jnp.asarray(x_prop_plus_c),
@@ -461,6 +478,10 @@ class PenalizedTrustRegion(Algorithm):
         # to history and the emitter. Strong-typed and committed (matching the
         # rest of the pytree, which comes back from the JIT'd ``update_weights``
         # already committed) so the JIT cache key is stable across iterations.
+        #
+        # The numpy → float → jnp → device_put round-trip is removable once the
+        # SCP loop body is a single JAX trace; the J_* sums can then live on
+        # the pytree directly with no cache-key gymnastics.
         dev = state.x.sharding
         state = state.replace(
             J_tr=jax.device_put(
@@ -485,6 +506,10 @@ class PenalizedTrustRegion(Algorithm):
         # J_lin as a Python float; passing them raw would miss the warm-up's
         # cache key (f32/strong vs f64/weak). x_prop / x_prop_plus already come
         # off the JAX discretizer with committed sharding — keep them as-is.
+        #
+        # Removable once the SCP loop body is a single JAX trace: ``candidate``
+        # flows in as a registered pytree and the dict adapter (duplicated in
+        # ``_build_jit_update_weights``) disappears along with the wrapping JIT.
         candidate_dict = {
             "x": jnp.asarray(candidate.x),
             "u": jnp.asarray(candidate.u),

@@ -444,6 +444,10 @@ class AlgorithmState:
         # loop. We route every leaf through ``jax.device_put(..., device)`` to
         # produce *committed* arrays so the cache key matches what comes back
         # from the JIT'd ``update_weights``.
+        #
+        # Removable once the SCP loop body is a single JAX trace — at that
+        # point the cache-key match is irrelevant and the strong-dtype /
+        # committed-sharding routing below can collapse to plain ``jnp.asarray``.
         f = jnp.float64 if jax.config.read("jax_enable_x64") else jnp.float32
         i = jnp.int32
         device = jax.devices()[0]
