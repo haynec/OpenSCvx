@@ -583,7 +583,7 @@ class AlgorithmHistory:
         state: AlgorithmState,
         candidate: CandidateIterate,
         record_diagnostics: bool = True,
-    ) -> None:
+    ) -> Tuple[dict, np.ndarray]:
         """Append per-iteration data based on ``state.adaptive_state_code``.
 
         Reproduces the old ``accept_solution`` / ``reject_solution`` behavior:
@@ -597,22 +597,90 @@ class AlgorithmHistory:
           ``record_diagnostics`` is set (the SCP loop turns this off for
           autotuners that don't compute them — :class:`ConstantProximalWeight`,
           :class:`RampProximalWeight`).
-        """
-        code = AdaptiveStateCode(int(state.adaptive_state_code))
 
-        self.lam_prox.append(np.asarray(state.lam_prox))
+        Every device-resident leaf this method needs is pulled with one
+        ``jax.device_get`` call (a single CPU<->device round trip) and the
+        host-side numpy arrays are then partitioned onto the history lists.
+        The SCP loop also reads the same scalars for printing + convergence,
+        so the bundle is returned alongside the lam_prox array to avoid a
+        second sync.
+
+        Returns:
+            ``(scalars, lam_prox_np)`` — a dict of host-side scalar floats
+            (``J_tr``, ``J_vb``, ``J_vc``, ``J_nonlin``,
+            ``predicted_reduction``, ``actual_reduction``,
+            ``acceptance_ratio``) plus the int ``adaptive_state_code``, and
+            the numpy copy of ``state.lam_prox``. The SCP emitter consumes
+            these directly without re-syncing.
+        """
+        # Coalesce every device read into one transfer. ``jax.device_get`` on
+        # a tuple lets XLA dispatch the whole bundle as a single host copy,
+        # which is the entire point on tiny problems where dozens of independent
+        # ``float(state.scalar)`` calls would each issue a sync.
+        leaves = jax.device_get(
+            (
+                state.adaptive_state_code,
+                state.lam_prox,
+                state.J_tr,
+                state.J_vb,
+                state.J_vc,
+                state.J_nonlin,
+                state.predicted_reduction,
+                state.actual_reduction,
+                state.acceptance_ratio,
+                state.x,
+                state.u,
+                state.lam_vc,
+                state.lam_cost,
+                state.lam_vb_nodal,
+                state.lam_vb_cross,
+            )
+        )
+        (
+            asc_np,
+            lam_prox_np,
+            J_tr_np,
+            J_vb_np,
+            J_vc_np,
+            J_nonlin_np,
+            pred_np,
+            actual_np,
+            ratio_np,
+            x_np,
+            u_np,
+            lam_vc_np,
+            lam_cost_np,
+            lam_vb_nodal_np,
+            lam_vb_cross_np,
+        ) = leaves
+
+        adaptive_code = int(asc_np)
+        code = AdaptiveStateCode(adaptive_code)
+
+        scalars = {
+            "J_tr": float(J_tr_np),
+            "J_vb": float(J_vb_np),
+            "J_vc": float(J_vc_np),
+            "J_nonlin": float(J_nonlin_np),
+            "predicted_reduction": float(pred_np),
+            "actual_reduction": float(actual_np),
+            "acceptance_ratio": float(ratio_np),
+            "adaptive_state_code": adaptive_code,
+        }
+
+        self.lam_prox.append(np.asarray(lam_prox_np))
         self.adaptive_state.append(adaptive_state_code_to_str(code))
 
         if code is AdaptiveStateCode.REJECT:
             if record_diagnostics:
-                self.pred_reduction.append(float(state.predicted_reduction))
-                self.actual_reduction.append(float(state.actual_reduction))
-                self.acceptance_ratio.append(float(state.acceptance_ratio))
-            return
+                self.pred_reduction.append(scalars["predicted_reduction"])
+                self.actual_reduction.append(scalars["actual_reduction"])
+                self.acceptance_ratio.append(scalars["acceptance_ratio"])
+            return scalars, lam_prox_np
 
         # INITIAL and any ACCEPT_*: full record of the accepted iterate.
-        self.X.append(np.asarray(state.x))
-        self.U.append(np.asarray(state.u))
+        self.X.append(np.asarray(x_np))
+        self.U.append(np.asarray(u_np))
 
         if candidate.V is not None:
             if candidate.W is not None:
@@ -639,20 +707,22 @@ class AlgorithmHistory:
         if candidate.TR is not None:
             self.TR.append(np.asarray(candidate.TR))
 
-        self.lam_vc.append(np.asarray(state.lam_vc))
-        self.lam_cost.append(np.asarray(state.lam_cost))
-        self.lam_vb_nodal.append(np.asarray(state.lam_vb_nodal))
-        self.lam_vb_cross.append(np.asarray(state.lam_vb_cross))
+        self.lam_vc.append(np.asarray(lam_vc_np))
+        self.lam_cost.append(np.asarray(lam_cost_np))
+        self.lam_vb_nodal.append(np.asarray(lam_vb_nodal_np))
+        self.lam_vb_cross.append(np.asarray(lam_vb_cross_np))
 
-        self.J_nonlin.append(float(state.J_nonlin))
+        self.J_nonlin.append(scalars["J_nonlin"])
         if candidate.J_lin is not None:
             self.J_lin.append(float(candidate.J_lin))
 
         # Diagnostics: only meaningful for iterations after the initial one.
         if record_diagnostics and code is not AdaptiveStateCode.INITIAL:
-            self.pred_reduction.append(float(state.predicted_reduction))
-            self.actual_reduction.append(float(state.actual_reduction))
-            self.acceptance_ratio.append(float(state.acceptance_ratio))
+            self.pred_reduction.append(scalars["predicted_reduction"])
+            self.actual_reduction.append(scalars["actual_reduction"])
+            self.acceptance_ratio.append(scalars["acceptance_ratio"])
+
+        return scalars, lam_prox_np
 
 
 # ---------------------------------------------------------------------------

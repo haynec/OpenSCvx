@@ -964,6 +964,13 @@ class Problem:
         self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
         self._history = AlgorithmHistory.from_settings(self.settings)
 
+        # Re-seed the algorithm's host-side iteration mirror so it matches
+        # ``state.k == 1`` for the next solve.
+        if hasattr(self._algorithm, "_iter_index"):
+            self._algorithm._iter_index = 1
+        if hasattr(self._algorithm, "_last_scalars"):
+            self._algorithm._last_scalars = {}
+
         # Reset solution
         self._solution = None
         self._solution_history = None
@@ -1002,13 +1009,17 @@ class Problem:
             self.settings,  # May change between steps
         )
 
-        # Return dict matching original API
+        # Pull k and the J scalars from the algorithm's host-side mirror set
+        # by ``record_iteration``; avoids a per-step device sync.
+        scalars = getattr(self._algorithm, "_last_scalars", None) or {}
         return {
             "converged": converged,
-            "scp_k": int(self._state.k),
-            "scp_J_tr": float(self._state.J_tr),
-            "scp_J_vb": float(self._state.J_vb),
-            "scp_J_vc": float(self._state.J_vc),
+            # ``_iter_index`` was bumped to ``k + 1`` at the end of ``step()``,
+            # matching the post-increment value of ``state.k``.
+            "scp_k": self._algorithm._iter_index,
+            "scp_J_tr": scalars.get("J_tr", float(self._state.J_tr)),
+            "scp_J_vb": scalars.get("J_vb", float(self._state.J_vb)),
+            "scp_J_vc": scalars.get("J_vc", float(self._state.J_vc)),
         }
 
     def solve(
@@ -1055,7 +1066,10 @@ class Problem:
         k_max = max_iters if max_iters is not None else self._algorithm.k_max
         t_max = time_limit if time_limit is not None else self._algorithm.t_max
 
-        while int(self._state.k) <= k_max:
+        # Use the algorithm's Python-side iter mirror (kept in sync with
+        # ``state.k``) so the loop predicate doesn't force a device sync on
+        # every iteration.
+        while self._algorithm._iter_index <= k_max:
             result = self.step()
             if result["converged"] and not continuous:
                 break
@@ -1084,7 +1098,7 @@ class Problem:
         return self._format_result(
             self._state,
             self._history,
-            int(self._state.k) <= k_max and not timed_out,
+            self._algorithm._iter_index <= k_max and not timed_out,
         )
 
     def post_process(self) -> OptimizationResults:

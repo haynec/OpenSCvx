@@ -119,6 +119,17 @@ class PenalizedTrustRegion(Algorithm):
         # as closure constants — they don't change within a solve.
         self._jit_update_weights: Callable | None = None
 
+        # Python-side mirror of ``state.k``. Kept in lockstep with the pytree
+        # field so the Python loop can read the iteration index without a
+        # ``int(state.k)`` device sync each step.
+        self._iter_index: int = 1
+
+        # Host-side cache of the diagnostic scalars produced by the last
+        # ``step()`` call. ``record_iteration`` pulls these in one coalesced
+        # ``jax.device_get`` and stashes them here so external readers
+        # (``problem.step()``'s return dict) don't re-sync per iteration.
+        self._last_scalars: dict = {}
+
         # Autotuner
         self.autotuner: "AutotuningBase" = (
             autotuner if autotuner is not None else AugmentedLagrangian()
@@ -258,6 +269,7 @@ class PenalizedTrustRegion(Algorithm):
         self._jit_update_weights = self._build_jit_update_weights(
             jax_constraints, settings, self.weights
         )
+        self._iter_index = 1
 
         self._solver.update_boundary_conditions(
             x_init=settings.sim.x.initial,
@@ -359,10 +371,16 @@ class PenalizedTrustRegion(Algorithm):
         x_state = np.asarray(state.x)
         u_state = np.asarray(state.u, dtype=float)
 
+        # Parallel Python iteration counter. ``state.k`` is a jnp scalar; on
+        # tiny problems the ``int(state.k)`` cast dominates each step because
+        # it forces a CPU<->device sync. We track the same value as a Python
+        # int and only re-sync into ``state.k`` once per step.
+        iter_index = self._iter_index
+
         # Iter 1: discretize the initial guess so the subproblem and the
         # autotuner have something to linearize about. Subsequent iters
         # reuse the candidate discretization from the previous iter.
-        if int(state.k) == 1:
+        if iter_index == 1:
             t0 = time.time()
             _, _, _, x_prop_init, V_multi_shoot = self._invoke_solver(
                 self._discretization_solver, x_state, u_state, params
@@ -450,24 +468,31 @@ class PenalizedTrustRegion(Algorithm):
         }
         state = self._jit_update_weights(state, candidate_dict, params)
 
-        # History bookkeeping (Python-side, never traced).
+        # History bookkeeping (Python-side, never traced). The recorder
+        # transfers everything it needs (diagnostic scalars, weight arrays,
+        # adaptive-state code) off the device in one coalesced
+        # ``jax.device_get`` so we only pay one CPU<->device synchronization
+        # per iteration, no matter how many fields it reads.
         use_full_metrics = not isinstance(
             self.autotuner, (ConstantProximalWeight, RampProximalWeight)
         )
-        history.record_iteration(state, candidate, record_diagnostics=use_full_metrics)
+        scalars, lam_prox_np = history.record_iteration(
+            state, candidate, record_diagnostics=use_full_metrics
+        )
+        self._last_scalars = scalars
 
         emission_data = {
-            "iter": int(state.k),
+            "iter": iter_index,
             "dis_time": dis_time * 1000.0,
             "subprop_time": subprop_time * 1000.0,
-            "J_tr": float(state.J_tr),
-            "J_vb": float(state.J_vb),
-            "J_vc": float(state.J_vc),
+            "J_tr": scalars["J_tr"],
+            "J_vb": scalars["J_vb"],
+            "J_vc": scalars["J_vc"],
             "cost": cost[-1],
             # TODO: (haynec) log per-variable lam_prox detail (e.g. min/max range)
-            "lam_prox": float(jnp.max(state.lam_prox)),
+            "lam_prox": float(np.max(lam_prox_np)),
             "prob_stat": prob_stat,
-            "adaptive_state": adaptive_state_code_to_str(state.adaptive_state_code),
+            "adaptive_state": adaptive_state_code_to_str(scalars["adaptive_state_code"]),
             "ep_tr": self.ep_tr,
             "ep_vb": self.ep_vb,
             "ep_vc": self.ep_vc,
@@ -476,23 +501,26 @@ class PenalizedTrustRegion(Algorithm):
         if use_full_metrics:
             emission_data.update(
                 {
-                    "J_nonlin": float(state.J_nonlin),
+                    "J_nonlin": scalars["J_nonlin"],
                     "J_lin": float(candidate.J_lin),
-                    "pred_reduction": float(state.predicted_reduction),
-                    "actual_reduction": float(state.actual_reduction),
-                    "acceptance_ratio": float(state.acceptance_ratio),
+                    "pred_reduction": scalars["predicted_reduction"],
+                    "actual_reduction": scalars["actual_reduction"],
+                    "acceptance_ratio": scalars["acceptance_ratio"],
                 }
             )
 
         self._emitter(emission_data)
 
-        # Increment iteration counter.
+        # Advance the Python iteration mirror and bump ``state.k`` so external
+        # readers (``problem.py``'s loop, ``OptimizationResults.scp_k``) stay
+        # in sync. The ``state.k + 1`` is a no-sync jnp add.
+        self._iter_index = iter_index + 1
         state = state.replace(k=state.k + 1)
 
         converged = (
-            (float(state.J_tr) < self.ep_tr)
-            and (float(state.J_vb) < self.ep_vb)
-            and (float(state.J_vc) < self.ep_vc)
+            (scalars["J_tr"] < self.ep_tr)
+            and (scalars["J_vb"] < self.ep_vb)
+            and (scalars["J_vc"] < self.ep_vc)
         )
         return state, converged
 
