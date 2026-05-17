@@ -21,11 +21,13 @@ import time
 from typing import Dict, List, Optional, Union
 
 import jax
+import numpy as np
 
 os.environ["EQX_ON_ERROR"] = "nan"
 
 from openscvx.algorithms import (
     Algorithm,
+    AlgorithmHistory,
     AlgorithmState,
     OptimizationResults,
     PenalizedTrustRegionConfig,
@@ -393,9 +395,11 @@ class Problem:
 
         # Solver state (created fresh for each solve)
         self._state: Optional[AlgorithmState] = None
+        self._history: Optional[AlgorithmHistory] = None
 
         # Final solution state (saved after successful solve)
         self._solution: Optional[AlgorithmState] = None
+        self._solution_history: Optional[AlgorithmHistory] = None
 
         # SCP algorithm (resolved from `algorithm` parameter above)
 
@@ -607,6 +611,16 @@ class Problem:
         return self._state
 
     @property
+    def history(self) -> Optional[AlgorithmHistory]:
+        """Access the CPU-side iteration history (trajectories, weights, costs).
+
+        Companion to :py:attr:`state` — :class:`AlgorithmState` carries the
+        current-iterate pytree, while :class:`AlgorithmHistory` carries the
+        append-only per-iteration log.
+        """
+        return self._history
+
+    @property
     def lowered(self) -> LoweredProblem:
         """Access the lowered problem containing JAX/CVXPy objects.
 
@@ -659,18 +673,18 @@ class Problem:
         slices.update({control.name: control.slice for control in self.symbolic.controls})
         return slices
 
-    def _format_result(self, state: AlgorithmState, converged: bool) -> OptimizationResults:
-        """Format solver state as an OptimizationResults object.
-
-        Converts the internal solver state into a user-facing results object,
-        mapping state/control arrays to named fields based on symbolic metadata.
+    def _format_result(
+        self,
+        state: AlgorithmState,
+        history: AlgorithmHistory,
+        converged: bool,
+    ) -> OptimizationResults:
+        """Format the current iterate + history as :class:`OptimizationResults`.
 
         Args:
-            state: The AlgorithmState to extract results from.
+            state: The final-iterate pytree.
+            history: The CPU-side per-iteration log.
             converged: Whether the optimization converged.
-
-        Returns:
-            OptimizationResults containing the solution data.
         """
         # Build nodes dictionary with all states and controls
         nodes_dict = {}
@@ -678,36 +692,39 @@ class Problem:
             control.parameterization == "impulsive" for control in self.symbolic.controls
         )
 
+        x_arr = np.asarray(state.x)
+        u_arr = np.asarray(state.u)
+
         # Add all states (user-defined and augmented)
         for sym_state in self.symbolic.states:
-            state_nodes = state.x[:, sym_state._slice].copy()
+            state_nodes = x_arr[:, sym_state._slice].copy()
             if has_impulsive_controls:
                 state_nodes[0] = self.settings.sim.x.initial[sym_state._slice]
             nodes_dict[sym_state.name] = state_nodes
 
         # Add all controls (user-defined and augmented)
         for control in self.symbolic.controls:
-            nodes_dict[control.name] = state.u[:, control._slice]
+            nodes_dict[control.name] = u_arr[:, control._slice]
 
         return OptimizationResults(
             converged=converged,
-            t_final=state.x[:, self.settings.sim.time_slice][-1],
+            t_final=x_arr[:, self.settings.sim.time_slice][-1],
             nodes=nodes_dict,
             trajectory={},  # Populated by post_process
             _states=self.symbolic.states_prop,  # Use propagation states for trajectory dict
             _controls=self.symbolic.controls,
-            X=state.X,  # Single source of truth - x and u are properties
-            U=state.U,
-            discretization_history=state.V_history,
-            J_tr_history=state.J_tr,
-            J_vb_history=state.J_vb,
-            J_vc_history=state.J_vc,
-            TR_history=state.TR_history,
-            VC_history=state.VC_history,
-            lam_prox_history=state.lam_prox_history.copy(),
-            actual_reduction_history=state.actual_reduction_history.copy(),
-            pred_reduction_history=state.pred_reduction_history.copy(),
-            acceptance_ratio_history=state.acceptance_ratio_history.copy(),
+            X=history.X,
+            U=history.U,
+            discretization_history=history.V_history,
+            J_tr_history=float(state.J_tr),
+            J_vb_history=float(state.J_vb),
+            J_vc_history=float(state.J_vc),
+            TR_history=history.TR,
+            VC_history=history.VC,
+            lam_prox_history=history.lam_prox.copy(),
+            actual_reduction_history=history.actual_reduction.copy(),
+            pred_reduction_history=history.pred_reduction.copy(),
+            acceptance_ratio_history=history.acceptance_ratio.copy(),
         )
 
     def initialize(self):
@@ -887,8 +904,9 @@ class Problem:
             # Printing was disabled after __init__, disable emitter to avoid queue buildup
             self.emitter_function = lambda data: None
 
-        # Create fresh solver state
+        # Create fresh solver state + history pair.
         self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
+        self._history = AlgorithmHistory.from_settings(self.settings)
 
         t_f_while = time.time()
         self.timing_init = t_f_while - t_0_while
@@ -942,11 +960,13 @@ class Problem:
         # Sync boundary conditions from State objects
         self._sync_boundary_conditions()
 
-        # Create fresh solver state from settings
+        # Create fresh solver state + history from settings
         self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
+        self._history = AlgorithmHistory.from_settings(self.settings)
 
         # Reset solution
         self._solution = None
+        self._solution_history = None
 
         # Reset timing
         self.timing_solve = None
@@ -975,8 +995,9 @@ class Problem:
         if self._state is None:
             raise ValueError("Problem has not been initialized. Call initialize() first")
 
-        converged = self._algorithm.step(
+        self._state, converged = self._algorithm.step(
             self._state,
+            self._history,
             self._parameters,  # May change between steps
             self.settings,  # May change between steps
         )
@@ -984,10 +1005,10 @@ class Problem:
         # Return dict matching original API
         return {
             "converged": converged,
-            "scp_k": self._state.k,
-            "scp_J_tr": self._state.J_tr,
-            "scp_J_vb": self._state.J_vb,
-            "scp_J_vc": self._state.J_vc,
+            "scp_k": int(self._state.k),
+            "scp_J_tr": float(self._state.J_tr),
+            "scp_J_vb": float(self._state.J_vb),
+            "scp_J_vc": float(self._state.J_vc),
         }
 
     def solve(
@@ -1034,7 +1055,7 @@ class Problem:
         k_max = max_iters if max_iters is not None else self._algorithm.k_max
         t_max = time_limit if time_limit is not None else self._algorithm.t_max
 
-        while self._state.k <= k_max:
+        while int(self._state.k) <= k_max:
             result = self.step()
             if result["converged"] and not continuous:
                 break
@@ -1055,11 +1076,16 @@ class Problem:
 
         profiling.profiling_end(pr, "solve")
 
-        # Store solution state
-        self._solution = copy.deepcopy(self._state)
+        # Snapshot state + history for post_process() / plotting reuse.
+        self._solution = self._state
+        self._solution_history = copy.deepcopy(self._history)
 
         timed_out = t_max is not None and self.timing_solve >= t_max
-        return self._format_result(self._state, self._state.k <= k_max and not timed_out)
+        return self._format_result(
+            self._state,
+            self._history,
+            int(self._state.k) <= k_max and not timed_out,
+        )
 
     def post_process(self) -> OptimizationResults:
         """Propagate solution through full nonlinear dynamics for high-fidelity trajectory.
@@ -1080,7 +1106,11 @@ class Problem:
         pr = profiling.profiling_start(self.settings.dev.profiling, self._profiling_session)
 
         # Create result from stored solution state
-        result = self._format_result(self._solution, self._solution.k <= self._algorithm.k_max)
+        result = self._format_result(
+            self._solution,
+            self._solution_history,
+            int(self._solution.k) <= self._algorithm.k_max,
+        )
 
         t_0_post = time.time()
         result = propagate_trajectory_results(
@@ -1095,10 +1125,6 @@ class Problem:
         t_f_post = time.time()
 
         self.timing_post = t_f_post - t_0_post
-
-        # Store the propagated result back into _solution for plotting
-        # Store as a cached attribute on the _solution object
-        self._solution._propagated_result = result
 
         # Print results summary
         printing.print_results_summary(
