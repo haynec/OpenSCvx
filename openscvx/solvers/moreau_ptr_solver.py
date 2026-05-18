@@ -1429,7 +1429,7 @@ class MoreauPTRSolver(PTRSolver):
 
         # Impulsive zero-pin equalities.
         for nodes, ctrl_slice in self._impulsive_pins:
-            for node in nodes:
+            for _node in nodes:
                 for j in range(ctrl_slice.start, ctrl_slice.stop):
                     coo_blocks.append(jnp.asarray([1.0], dtype=f))
                     b_blocks.append((-inv_S_u[j] * c_u[j])[None])
