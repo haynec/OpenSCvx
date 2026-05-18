@@ -63,17 +63,27 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 import numpy as np
 from scipy import sparse as sp
 
-from .ptr_solver import PTRSolver, PTRSolveResult
+from .ptr_solver import (
+    PTRSolver,
+    PTRSolveResult,
+    StatusCode,
+    SubproblemData,
+    SubproblemSolution,
+)
 
 try:
+    import jax
     import jax.numpy as jnp
     import moreau
     from moreau.jax import Solver as _MoreauJaxSolver
+    from moreau.jax import solver as _moreau_jax_solver_fn  # functional factory
 
     _MOREAU_AVAILABLE = True
 except ImportError:  # pragma: no cover — exercised by the install-error test
     moreau = None  # type: ignore[assignment]
     _MoreauJaxSolver = None  # type: ignore[assignment,misc]
+    _moreau_jax_solver_fn = None  # type: ignore[assignment]
+    jax = None  # type: ignore[assignment]
     jnp = None  # type: ignore[assignment]
     _MOREAU_AVAILABLE = False
 
@@ -104,6 +114,40 @@ def _moreau_solve_ok(status: "moreau.SolverStatus") -> bool:
         moreau.SolverStatus.Solved,
         moreau.SolverStatus.AlmostSolved,
     )
+
+
+def _moreau_status_to_code(status: "jnp.ndarray") -> "jnp.ndarray":
+    """Map ``moreau`` solver status (as JAX scalar) to a :class:`StatusCode`.
+
+    Moreau's functional ``JaxSolveInfo.status`` is encoded as a float so it
+    stays JAX-traceable. We cast to ``int32`` and walk the known enum values:
+    :attr:`moreau.SolverStatus.Solved` and ``AlmostSolved`` map to
+    :attr:`StatusCode.OPTIMAL`; any infeasibility/unbounded enum that the
+    installed Moreau happens to expose maps to its natural code; everything
+    else falls through to :attr:`StatusCode.UNKNOWN`.
+
+    Built Python-side as a chain of ``jnp.where`` calls so the mapping table
+    is resolved at trace time and JIT compiles into a single switch.
+    """
+    s = jnp.int32(status)
+    code = jnp.full_like(s, int(StatusCode.UNKNOWN), dtype=jnp.int32)
+    # Successful solve states.
+    for attr in ("Solved", "AlmostSolved"):
+        if hasattr(moreau.SolverStatus, attr):
+            v = int(getattr(moreau.SolverStatus, attr))
+            code = jnp.where(s == v, jnp.int32(int(StatusCode.OPTIMAL)), code)
+    # Infeasibility / unboundedness — different Moreau releases name these
+    # differently. Map every known spelling so the test suite stays robust.
+    for attr, mapped in (
+        ("PrimalInfeasible", StatusCode.INFEASIBLE),
+        ("Infeasible", StatusCode.INFEASIBLE),
+        ("DualInfeasible", StatusCode.UNBOUNDED),
+        ("Unbounded", StatusCode.UNBOUNDED),
+    ):
+        if hasattr(moreau.SolverStatus, attr):
+            v = int(getattr(moreau.SolverStatus, attr))
+            code = jnp.where(s == v, jnp.int32(int(mapped)), code)
+    return code
 
 
 # ---------------------------------------------------------------------------
@@ -224,6 +268,14 @@ class MoreauPTRSolver(PTRSolver):
     ``|nu|`` instead of two nonneg slack rows each), warm-starts between SCP
     iterations on successful solves, and opens a path to user ``.convex()``
     SOCP support in a follow-up.
+
+    The JAX-pure entry point :meth:`iteration_callback` builds Moreau's
+    functional factory ``moreau.jax.solver(...)`` once at
+    :meth:`initialize` and calls it as
+    ``(P_data, A_data, q, b) -> (JaxSolution, JaxSolveInfo)`` so the backend
+    composes with ``jax.jit`` and ``jax.vmap``. The functional API does not
+    expose a warm-start hook, so the JAX-pure path is cold-start every
+    iteration; the NumPy :meth:`solve` path keeps the OO warm-start.
 
     Scope:
         Supported — state/control box, dynamics linearization (continuous
@@ -395,6 +447,19 @@ class MoreauPTRSolver(PTRSolver):
         self._inv_S_x_diag = 1.0 / self._S_x_diag
         self._inv_S_u_diag = 1.0 / self._S_u_diag
 
+        # JAX-side scaling diagonals for ``iteration_callback``. The dtype
+        # tracks the global ``jax_enable_x64`` setting so the assembled
+        # ``(P_data, A_data, q, b)`` lands in the dtype Moreau's functional
+        # solver expects.
+        f = jnp.float64 if jax.config.read("jax_enable_x64") else jnp.float32
+        self._S_x_diag_j = jnp.asarray(self._S_x_diag, dtype=f)
+        self._S_u_diag_j = jnp.asarray(self._S_u_diag, dtype=f)
+        self._inv_S_x_diag_j = jnp.asarray(self._inv_S_x_diag, dtype=f)
+        self._inv_S_u_diag_j = jnp.asarray(self._inv_S_u_diag, dtype=f)
+        self._c_x_j = jnp.asarray(self._c_x, dtype=f)
+        self._c_u_j = jnp.asarray(self._c_u, dtype=f)
+        self._jax_dtype = f
+
         self.layout = _ConicLayout(N=N, n_x=n_x, n_u=n_u, n_nodal=len(jax_constraints.nodal))
         self._jax_constraints = jax_constraints
 
@@ -461,9 +526,10 @@ class MoreauPTRSolver(PTRSolver):
         self._coo_cols = np.asarray(coo_cols, dtype=np.int32)
 
         # Build CSR for A from the structural COO.
-        if len(coo_rows) > 0:
+        n_coo = len(coo_rows)
+        if n_coo > 0:
             A_struct = sp.csr_matrix(
-                (np.ones(len(coo_rows)), (coo_rows, coo_cols)),
+                (np.ones(n_coo), (coo_rows, coo_cols)),
                 shape=(self._n_con, self.layout.n_z),
             )
             A_struct.sort_indices()
@@ -473,6 +539,22 @@ class MoreauPTRSolver(PTRSolver):
         A_indices = np.asarray(A_struct.indices, dtype=np.int32)
         self._A_indptr = A_indptr
         self._A_indices = A_indices
+
+        # Precompute the COO→CSR permutation so the JAX assembly can emit
+        # ``coo_vals`` in COO traversal order (matching ``_structural_pass``)
+        # and then ``A_data = coo_vals[csr_to_coo_perm]`` matches what
+        # ``solve_qp_primal``/Moreau's ``solve_fn`` expects under the fixed
+        # ``A_col_indices``. NumPy ``solve()`` keeps using scipy's sort path;
+        # this permutation is consumed only by ``_assemble_conic_jax``.
+        if n_coo > 0:
+            A_pos = sp.csr_matrix(
+                (np.arange(n_coo, dtype=np.int32), (coo_rows, coo_cols)),
+                shape=(self._n_con, self.layout.n_z),
+            )
+            A_pos.sort_indices()
+            self._csr_to_coo_perm = np.asarray(A_pos.data, dtype=np.int32)
+        else:
+            self._csr_to_coo_perm = np.zeros((0,), dtype=np.int32)
 
         # Build CSR for P (diagonal on dx/du slots only).
         L = self.layout
@@ -500,6 +582,22 @@ class MoreauPTRSolver(PTRSolver):
         moreau_settings = _build_moreau_settings(self.solver_args)
 
         self._moreau = _MoreauJaxSolver(
+            n=L.n_z,
+            m=self._n_con,
+            P_row_offsets=jnp.array(P_indptr),
+            P_col_indices=jnp.array(P_indices),
+            A_row_offsets=jnp.array(A_indptr),
+            A_col_indices=jnp.array(A_indices),
+            cones=cones,
+            settings=moreau_settings,
+        )
+
+        # Functional-API solve function for ``iteration_callback``. Returns
+        # ``(JaxSolution, JaxSolveInfo)`` as registered pytrees and does NOT
+        # accept warm-start — see the 2026-05-17 Decision Log entry in
+        # ``plans/solver-iteration-callbacks.md``. The OO ``self._moreau``
+        # path stays in use for the NumPy ``solve()`` route (which warm-starts).
+        self._moreau_solve_fn = _moreau_jax_solver_fn(
             n=L.n_z,
             m=self._n_con,
             P_row_offsets=jnp.array(P_indptr),
@@ -1131,6 +1229,361 @@ class MoreauPTRSolver(PTRSolver):
 
         z = np.asarray(solution.x)
         return self._unpack(z)
+
+    def iteration_callback(self):
+        """JAX-pure ``(state, SubproblemData) -> SubproblemSolution``.
+
+        Composes :meth:`_assemble_conic_jax` + Moreau's functional
+        ``solve_fn`` + :meth:`_build_solution_jax` into a single
+        ``@jax.jit``-decorated closure built once at :meth:`initialize`.
+
+        Moreau's functional API (``moreau.jax.solver()``) is the JIT/vmap-friendly
+        path but does **not** accept a warm-start (see the 2026-05-17 Decision
+        Log entry in ``plans/solver-iteration-callbacks.md``). Every call is a
+        cold start; ``state`` is accepted only for cross-backend signature
+        uniformity.
+
+        The returned callable takes ``(state, data)``: ``state`` is the
+        :class:`AlgorithmState` pytree, accepted for cross-backend signature
+        uniformity but unused (Moreau's functional API takes no warm-start);
+        ``data`` is the :class:`SubproblemData` pytree carrying the
+        per-iteration linearization arrays, penalty weights, and boundary
+        conditions.
+        """
+        if self.layout is None or self._settings is None:
+            raise RuntimeError(
+                "MoreauPTRSolver.iteration_callback() requires initialize() to "
+                "have been called first."
+            )
+
+        solve_fn = self._moreau_solve_fn
+        csr_to_coo_perm = jnp.asarray(self._csr_to_coo_perm)
+
+        def step(state, data: SubproblemData) -> SubproblemSolution:
+            del state  # Moreau's functional API takes no warm-start.
+            P_data, coo_vals, q, b = self._assemble_conic_jax(data)
+            A_data = coo_vals[csr_to_coo_perm]
+            sol, info = solve_fn(P_data, A_data, q, b)
+            return self._build_solution_jax(sol, info, data)
+
+        return jax.jit(step)
+
+    # ------------------------------------------------------------------
+    # JAX-pure assembly / unpack (used by iteration_callback)
+    # ------------------------------------------------------------------
+
+    def _assemble_conic_jax(
+        self,
+        data: SubproblemData,
+    ) -> Tuple["jnp.ndarray", "jnp.ndarray", "jnp.ndarray", "jnp.ndarray"]:
+        """JAX-pure counterpart of :meth:`_assemble_conic`.
+
+        Returns ``(P_data, coo_vals, q, b)`` where ``coo_vals`` is emitted in
+        the same COO traversal order as :meth:`_structural_pass` — the
+        caller applies the precomputed ``csr_to_coo_perm`` to obtain the
+        ``A_data`` array Moreau's fixed CSR layout expects.
+
+        Mirrors ``_assemble_conic`` row-block by row-block; structural
+        metadata (layout, BC types, impulsive pins, CTCS intervals) is
+        Python-side and closes over the function.
+        """
+        L = self.layout
+        sim = self._settings.sim
+        N, n_x, n_u = L.N, L.n_x, L.n_u
+        inv_S_x = self._inv_S_x_diag_j
+        inv_S_u = self._inv_S_u_diag_j
+        S_x = self._S_x_diag_j
+        S_u = self._S_u_diag_j
+        c_x = self._c_x_j
+        c_u = self._c_u_j
+        f = self._jax_dtype
+        slice_imp = sim.u.slice_impulsive
+        has_impulsive = slice_imp.stop > slice_imp.start
+        eps = jnp.asarray(_P_DIAG_EPS, dtype=f)
+
+        lam_prox = data.lam_prox
+        lam_cost = data.lam_cost
+        lam_vc = data.lam_vc
+        lam_vb_nodal = data.lam_vb_nodal
+
+        # ---------- P_data (diagonal on dx/du slots, in that order) ----------
+        P_dx = (2.0 * lam_prox[:, :n_x] + eps).reshape(-1)
+        P_du = (2.0 * lam_prox[:, n_x:] + eps).reshape(-1)
+        P_data = jnp.concatenate([P_dx, P_du])
+
+        # ---------- q (linear cost) ----------
+        init_signs_np = np.zeros(sim.n_states, dtype=float)
+        final_signs_np = np.zeros(sim.n_states, dtype=float)
+        for i in range(sim.true_state_slice.start, sim.true_state_slice.stop):
+            init_t = sim.x.initial_type[i]
+            final_t = sim.x.final_type[i]
+            if init_t == "Minimize":
+                init_signs_np[i] = 1.0
+            elif init_t == "Maximize":
+                init_signs_np[i] = -1.0
+            if final_t == "Minimize":
+                final_signs_np[i] = 1.0
+            elif final_t == "Maximize":
+                final_signs_np[i] = -1.0
+        init_signs = jnp.asarray(init_signs_np, dtype=f)
+        final_signs = jnp.asarray(final_signs_np, dtype=f)
+        lam_cost_arr = jnp.broadcast_to(jnp.asarray(lam_cost, dtype=f), (sim.n_states,))
+
+        q = jnp.zeros((L.n_z,), dtype=f)
+        x0_start = L.sl_x.start
+        xN_start = L.sl_x.start + (N - 1) * n_x
+        q = q.at[x0_start : x0_start + n_x].add(init_signs * lam_cost_arr)
+        q = q.at[xN_start : xN_start + n_x].add(final_signs * lam_cost_arr)
+        # L1 penalty on t_vc (epigraph of |nu|).
+        q = q.at[L.sl_t_vc].add(lam_vc.reshape(-1))
+        # Pos epigraph t_vb.
+        for c_idx in range(L.n_nodal):
+            q = q.at[L.sl_t_vb[c_idx]].add(lam_vb_nodal[:, c_idx])
+
+        # ---------- coo_vals & b in COO traversal order ----------
+        coo_blocks: List[jnp.ndarray] = []
+        b_blocks: List[jnp.ndarray] = []
+
+        # State error defs (N*n_x rows, 2 coeffs per row).
+        state_err_coeffs = jnp.tile(jnp.asarray([1.0, -1.0], dtype=f), N * n_x)
+        coo_blocks.append(state_err_coeffs)
+        b_blocks.append((inv_S_x * (data.x_bar - c_x[None, :])).reshape(-1))
+
+        # Control error defs (N*n_u rows, 2 coeffs per row).
+        ctrl_err_coeffs = jnp.tile(jnp.asarray([1.0, -1.0], dtype=f), N * n_u)
+        coo_blocks.append(ctrl_err_coeffs)
+        b_blocks.append((inv_S_u * (data.u_bar - c_u[None, :])).reshape(-1))
+
+        # Dynamics rows ((N-1) * n_x), n_per_row = 2 + n_x + 2*n_u.
+        # Match _assemble_conic's emission order:
+        #   [1.0 (x term)] + [-A_blk[i, :n_x]] +
+        #   interleaved [-B_blk[i, j], -C_blk_with_E[i, j] for j in 0..n_u-1] +
+        #   [-1.0 (nu term)]
+        if has_impulsive:
+            D_steps = data.D_d[1:]
+            A_eff = jnp.einsum("kij,kjl->kil", D_steps, data.A_d)
+            B_eff = jnp.einsum("kij,kjl->kil", D_steps, data.B_d)
+            C_eff = jnp.einsum("kij,kjl->kil", D_steps, data.C_d)
+        else:
+            A_eff = data.A_d
+            B_eff = data.B_d
+            C_eff = data.C_d
+        A_blk = (inv_S_x[None, :, None] * A_eff) * S_x[None, None, :]
+        B_blk = (inv_S_x[None, :, None] * B_eff) * S_u[None, None, :]
+        C_blk = (inv_S_x[None, :, None] * C_eff) * S_u[None, None, :]
+        C_with_E = C_blk
+        if has_impulsive:
+            E_blk = (inv_S_x[None, :, None] * data.E_d[1:]) * S_u[None, None, :]
+            imp_slice = slice(slice_imp.start, slice_imp.stop)
+            C_with_E = C_with_E.at[:, :, imp_slice].add(E_blk[:, :, imp_slice])
+
+        n_per_row = 2 + n_x + 2 * n_u
+        dyn_vals = jnp.zeros((N - 1, n_x, n_per_row), dtype=f)
+        dyn_vals = dyn_vals.at[:, :, 0].set(1.0)  # x[k, i]
+        dyn_vals = dyn_vals.at[:, :, 1 : 1 + n_x].set(-A_blk)  # dx[kp, :]
+        for j in range(n_u):
+            base = 1 + n_x + 2 * j
+            dyn_vals = dyn_vals.at[:, :, base].set(-B_blk[:, :, j])  # du[kp, j]
+            dyn_vals = dyn_vals.at[:, :, base + 1].set(-C_with_E[:, :, j])  # du[k, j]
+        dyn_vals = dyn_vals.at[:, :, -1].set(-1.0)  # nu[kp, i]
+        coo_blocks.append(dyn_vals.reshape(-1))
+        if has_impulsive:
+            rhs_dyn = inv_S_x[None, :] * (data.x_prop_plus[1:] - c_x[None, :])
+        else:
+            rhs_dyn = inv_S_x[None, :] * (data.x_prop - c_x[None, :])
+        b_blocks.append(rhs_dyn.reshape(-1))
+
+        # Linearized nodal constraints (variable rows per constraint).
+        for c_idx, constraint in enumerate(self._jax_constraints.nodal):
+            nodes_tuple = tuple(constraint.nodes)
+            if not nodes_tuple:
+                continue
+            nodes_arr = jnp.asarray(nodes_tuple)
+            n_nodes = len(nodes_tuple)
+            grad_x_vals = data.nodal_grad_x[nodes_arr, c_idx]  # (n_nodes, n_x)
+            grad_u_vals = data.nodal_grad_u[nodes_arr, c_idx]  # (n_nodes, n_u)
+            neg_one = jnp.full((n_nodes, 1), -1.0, dtype=f)
+            nodal_vals = jnp.concatenate([grad_x_vals, grad_u_vals, neg_one], axis=1)
+            coo_blocks.append(nodal_vals.reshape(-1))
+            b_blocks.append(-data.nodal_g[nodes_arr, c_idx])
+
+        # Boundary Fix rows — emit per-state, init then final, matching
+        # _assemble_conic. Under impulsive control the initial Fix row also
+        # carries du[0, slice_imp] coefficients.
+        imp_j_list = list(range(slice_imp.start, slice_imp.stop)) if has_impulsive else []
+        for i in range(sim.true_state_slice.start, sim.true_state_slice.stop):
+            init_t = sim.x.initial_type[i]
+            final_t = sim.x.final_type[i]
+            if init_t == "Fix":
+                if has_impulsive:
+                    coeffs = [S_x[i]] + [-data.E_d[0, i, j] * S_u[j] for j in imp_j_list]
+                    rhs_val = data.x_prop_plus[0, i] - c_x[i]
+                else:
+                    coeffs = [S_x[i]]
+                    rhs_val = data.x_init[i] - c_x[i]
+                coo_blocks.append(jnp.stack(coeffs))
+                b_blocks.append(rhs_val[None])
+            if final_t == "Fix":
+                coo_blocks.append(jnp.stack([S_x[i]]))
+                b_blocks.append((data.x_term[i] - c_x[i])[None])
+
+        # Impulsive zero-pin equalities.
+        for nodes, ctrl_slice in self._impulsive_pins:
+            for _node in nodes:
+                for j in range(ctrl_slice.start, ctrl_slice.stop):
+                    coo_blocks.append(jnp.asarray([1.0], dtype=f))
+                    b_blocks.append((-inv_S_u[j] * c_u[j])[None])
+
+        # Uniform time grid: u[k, j] - u[k-1, j] = 0.
+        if sim._uniform_time_grid:
+            td = sim.time_dilation_slice
+            n_tg_rows = (N - 1) * (td.stop - td.start)
+            tg_coeffs = jnp.tile(jnp.asarray([1.0, -1.0], dtype=f), n_tg_rows)
+            coo_blocks.append(tg_coeffs)
+            b_blocks.append(jnp.zeros((n_tg_rows,), dtype=f))
+
+        # CTCS initial: S_x[idx] * x[0, idx] = -c_x[idx].
+        ctcs_start = sim.ctcs_slice.start
+        ctcs_stop = sim.ctcs_slice.stop
+        if ctcs_stop > ctcs_start:
+            ctcs_idx_arr = jnp.arange(ctcs_start, ctcs_stop)
+            coo_blocks.append(S_x[ctcs_idx_arr])
+            b_blocks.append(-c_x[ctcs_idx_arr])
+
+        # State / control box (nonneg cone). All-constant coefficients.
+        x_max_sc = inv_S_x * (jnp.asarray(sim.x.max, dtype=f) - c_x)
+        x_min_sc = inv_S_x * (jnp.asarray(sim.x.min, dtype=f) - c_x)
+        u_max_sc = inv_S_u * (jnp.asarray(sim.u.max, dtype=f) - c_u)
+        u_min_sc = inv_S_u * (jnp.asarray(sim.u.min, dtype=f) - c_u)
+        # State box upper: N*n_x rows of coeff +1, RHS x_max_sc tiled.
+        coo_blocks.append(jnp.ones((N * n_x,), dtype=f))
+        b_blocks.append(jnp.tile(x_max_sc, N))
+        # State box lower: N*n_x rows of coeff -1, RHS -x_min_sc tiled.
+        coo_blocks.append(jnp.full((N * n_x,), -1.0, dtype=f))
+        b_blocks.append(jnp.tile(-x_min_sc, N))
+        # Control box upper
+        coo_blocks.append(jnp.ones((N * n_u,), dtype=f))
+        b_blocks.append(jnp.tile(u_max_sc, N))
+        # Control box lower
+        coo_blocks.append(jnp.full((N * n_u,), -1.0, dtype=f))
+        b_blocks.append(jnp.tile(-u_min_sc, N))
+
+        # CTCS difference rows.
+        for idx, nodes in zip(
+            range(ctcs_start, ctcs_stop),
+            sim.ctcs_node_intervals,
+        ):
+            start_i = 1 if nodes[0] == 0 else nodes[0]
+            scale = S_x[idx]
+            x_max_un = float(sim.x.max[idx])
+            for _ in range(start_i, nodes[1]):
+                # +direction: emission order [x[i], x[i-1]] = [scale, -scale]
+                coo_blocks.append(jnp.stack([scale, -scale]))
+                b_blocks.append(jnp.asarray([x_max_un], dtype=f))
+                # -direction: [-scale, scale]
+                coo_blocks.append(jnp.stack([-scale, scale]))
+                b_blocks.append(jnp.asarray([x_max_un], dtype=f))
+
+        # Pos epigraph: t_vb[c, k] >= nu_vb[c, k].
+        # Emission order matches _assemble_conic: [+1 (nu_vb), -1 (t_vb)].
+        for _c_idx in range(L.n_nodal):
+            coeffs_block = jnp.tile(jnp.asarray([1.0, -1.0], dtype=f), N)
+            coo_blocks.append(coeffs_block)
+            b_blocks.append(jnp.zeros((N,), dtype=f))
+
+        # Pos epigraph non-negativity: t_vb[c, k] >= 0.
+        for _c_idx in range(L.n_nodal):
+            coo_blocks.append(jnp.full((N,), -1.0, dtype=f))
+            b_blocks.append(jnp.zeros((N,), dtype=f))
+
+        # SOC: 2 rows per |nu| pair, coeffs [-1] each (t_vc row, then nu row).
+        n_soc = 2 * (N - 1) * n_x
+        soc_coeffs = jnp.full((n_soc,), -1.0, dtype=f)
+        coo_blocks.append(soc_coeffs)
+        b_blocks.append(jnp.zeros((n_soc,), dtype=f))
+
+        coo_vals = jnp.concatenate(coo_blocks) if coo_blocks else jnp.zeros((0,), dtype=f)
+        b_vec = jnp.concatenate(b_blocks) if b_blocks else jnp.zeros((0,), dtype=f)
+        return P_data, coo_vals, q, b_vec
+
+    def _build_solution_jax(
+        self,
+        sol,
+        info,
+        data: SubproblemData,
+    ) -> SubproblemSolution:
+        """Unpack ``(JaxSolution, JaxSolveInfo)`` into a :class:`SubproblemSolution`.
+
+        Mirrors :meth:`_unpack`: scaled-to-physical trajectories, virtual
+        controls in their natural orientation, ``nu_vb`` stacked to
+        ``(N, n_nodal)``. ``status_code`` is derived from ``info.status`` via
+        :func:`_moreau_status_to_code`.
+        """
+        L = self.layout
+        N, n_x, n_u = L.N, L.n_x, L.n_u
+        f = self._jax_dtype
+        z = sol.x
+
+        x_scaled = z[L.sl_x].reshape(N, n_x)
+        u_scaled = z[L.sl_u].reshape(N, n_u)
+        x = x_scaled * self._S_x_diag_j[None, :] + self._c_x_j[None, :]
+        u = u_scaled * self._S_u_diag_j[None, :] + self._c_u_j[None, :]
+        nu = z[L.sl_nu].reshape(N - 1, n_x)
+        if L.n_nodal:
+            nu_vb = jnp.stack([z[sl] for sl in L.sl_nu_vb], axis=-1)
+        else:
+            nu_vb = jnp.zeros((N, 0), dtype=f)
+
+        cost = self._reconstruct_cost_jax(z, data)
+        status_code = _moreau_status_to_code(info.status)
+
+        return SubproblemSolution(
+            x=x,
+            u=u,
+            nu=nu,
+            nu_vb=nu_vb,
+            nu_vb_cross=jnp.zeros((0,), dtype=f),
+            cost=cost,
+            status_code=status_code,
+        )
+
+    def _reconstruct_cost_jax(
+        self,
+        z: "jnp.ndarray",
+        data: SubproblemData,
+    ) -> "jnp.ndarray":
+        """JAX-pure mirror of :meth:`_reconstruct_cost`."""
+        L = self.layout
+        sim = self._settings.sim
+        N, n_x = L.N, L.n_x
+        f = self._jax_dtype
+        lam_prox = data.lam_prox
+        lam_cost_arr = jnp.broadcast_to(jnp.asarray(data.lam_cost, dtype=f), (sim.n_states,))
+        lam_vc = data.lam_vc
+        lam_vb_nodal = data.lam_vb_nodal
+
+        dx = z[L.sl_dx].reshape(N, n_x)
+        du = z[L.sl_du].reshape(N, L.n_u)
+        x_scaled = z[L.sl_x].reshape(N, n_x)
+        t_vc = z[L.sl_t_vc].reshape(N - 1, n_x)
+
+        cost = jnp.sum(lam_prox[:, :n_x] * dx**2) + jnp.sum(lam_prox[:, n_x:] * du**2)
+        for i in range(sim.true_state_slice.start, sim.true_state_slice.stop):
+            init_t = sim.x.initial_type[i]
+            final_t = sim.x.final_type[i]
+            if init_t == "Minimize":
+                cost = cost + lam_cost_arr[i] * x_scaled[0, i]
+            elif init_t == "Maximize":
+                cost = cost - lam_cost_arr[i] * x_scaled[0, i]
+            if final_t == "Minimize":
+                cost = cost + lam_cost_arr[i] * x_scaled[-1, i]
+            elif final_t == "Maximize":
+                cost = cost - lam_cost_arr[i] * x_scaled[-1, i]
+        cost = cost + jnp.sum(lam_vc * t_vc)
+        for c_idx in range(L.n_nodal):
+            t_vb = z[L.sl_t_vb[c_idx]]
+            cost = cost + jnp.dot(lam_vb_nodal[:, c_idx], t_vb)
+        return cost.astype(f)
 
     def _unpack(self, z: np.ndarray) -> PTRSolveResult:
         """Map the flat solution vector into a :class:`PTRSolveResult`.

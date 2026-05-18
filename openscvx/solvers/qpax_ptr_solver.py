@@ -53,15 +53,23 @@ import numpy as np
 
 from openscvx.config import Config
 
-from .ptr_solver import PTRSolver, PTRSolveResult
+from .ptr_solver import (
+    PTRSolver,
+    PTRSolveResult,
+    StatusCode,
+    SubproblemData,
+    SubproblemSolution,
+)
 
 try:
+    import jax
     import jax.numpy as jnp
     import qpax
 
     _QPAX_AVAILABLE = True
 except ImportError:  # pragma: no cover — exercised by the install-error test
     qpax = None
+    jax = None
     jnp = None
     _QPAX_AVAILABLE = False
 
@@ -158,6 +166,12 @@ class QPAXPTRSolver(PTRSolver):
     Assembles each SCP subproblem as a flat ``(Q, q, A, b, G, h)`` and
     dispatches to ``qpax.solve_qp``. See the module docstring for the L1 /
     positive-part slack reformulation and the rationale behind the design.
+
+    The JAX-pure entry point :meth:`iteration_callback` performs the same
+    ``assemble → solve → unpack`` cycle entirely on the JAX boundary using
+    ``qpax.solve_qp_primal`` — the ``jax.custom_vjp``-differentiable variant
+    — so the backend composes with ``jax.jit``, ``jax.vmap``, and
+    (downstream) ``jax.grad``.
 
     Scope:
         Supported — state/control box, dynamics linearization (continuous
@@ -285,6 +299,19 @@ class QPAXPTRSolver(PTRSolver):
         self._S_u_diag = np.diag(S_u)
         self._inv_S_x_diag = 1.0 / self._S_x_diag
         self._inv_S_u_diag = 1.0 / self._S_u_diag
+
+        # JAX-side scaling diagonals for ``iteration_callback``. The dtype
+        # tracks the global ``jax_enable_x64`` setting so the assembled
+        # ``(Q, q, A, b, G, h)`` lands in the dtype ``qpax.solve_qp_primal``
+        # expects.
+        f = jnp.float64 if jax.config.read("jax_enable_x64") else jnp.float32
+        self._S_x_diag_j = jnp.asarray(self._S_x_diag, dtype=f)
+        self._S_u_diag_j = jnp.asarray(self._S_u_diag, dtype=f)
+        self._inv_S_x_diag_j = jnp.asarray(self._inv_S_x_diag, dtype=f)
+        self._inv_S_u_diag_j = jnp.asarray(self._inv_S_u_diag, dtype=f)
+        self._c_x_j = jnp.asarray(self._c_x, dtype=f)
+        self._c_u_j = jnp.asarray(self._c_u, dtype=f)
+        self._jax_dtype = f
 
         self.layout = _QPLayout(N=N, n_x=n_x, n_u=n_u, n_nodal=len(jax_constraints.nodal))
         self._jax_constraints = jax_constraints
@@ -828,6 +855,43 @@ class QPAXPTRSolver(PTRSolver):
 
         return self._unpack(z)
 
+    def iteration_callback(self):
+        """JAX-pure ``(state, SubproblemData) -> SubproblemSolution``.
+
+        Composes :meth:`_assemble_qp_jax` + ``qpax.solve_qp_primal`` +
+        :meth:`_unpack_jax` into a single ``@jax.jit``-decorated closure built
+        once at :meth:`initialize` time. The closure is reusable across SCP
+        iterations — only the ``SubproblemData`` pytree changes between calls.
+
+        ``qpax.solve_qp_primal`` is the differentiable primal-only variant of
+        ``qpax.solve_qp``. It returns only the primal ``z`` (no convergence
+        diagnostics), so the returned :class:`SubproblemSolution` reports
+        ``status_code = StatusCode.UNKNOWN`` unconditionally — the SCP
+        trust-region check catches divergence at the algorithm layer instead.
+
+        The returned callable takes ``(state, data)``: ``state`` is the
+        :class:`AlgorithmState` pytree, accepted for cross-backend signature
+        uniformity but unused (every input the QP needs already lives in
+        ``data``); ``data`` is the :class:`SubproblemData` pytree carrying the
+        per-iteration linearization arrays, penalty weights, and boundary
+        conditions.
+        """
+        if self.layout is None or self._settings is None:
+            raise RuntimeError(
+                "QPAXPTRSolver.iteration_callback() requires initialize() to "
+                "have been called first."
+            )
+
+        solver_args = self.solver_args
+
+        def step(state, data: SubproblemData) -> SubproblemSolution:
+            del state  # every input the QP needs already lives on ``data``.
+            Q, q, A, b, G, h = self._assemble_qp_jax(data)
+            z = qpax.solve_qp_primal(Q, q, A, b, G, h, **solver_args)
+            return self._build_solution_jax(z, data)
+
+        return jax.jit(step)
+
     def _unpack(self, z: np.ndarray) -> PTRSolveResult:
         """Reverse the layout into the structured :class:`PTRSolveResult`."""
         L = self.layout
@@ -895,6 +959,429 @@ class QPAXPTRSolver(PTRSolver):
             s_pos = z[L.sl_s_pos[c_idx]]
             cost += float(np.dot(lam_vb_nodal[:, c_idx], s_pos))
         return cost
+
+    # ------------------------------------------------------------------
+    # JAX-pure assembly / unpack (used by iteration_callback)
+    # ------------------------------------------------------------------
+
+    def _assemble_qp_jax(
+        self,
+        data: SubproblemData,
+    ) -> Tuple[
+        "jnp.ndarray", "jnp.ndarray", "jnp.ndarray", "jnp.ndarray", "jnp.ndarray", "jnp.ndarray"
+    ]:
+        """Build ``(Q, q, A, b, G, h)`` from a :class:`SubproblemData` pytree.
+
+        JAX-pure counterpart of :meth:`_assemble_qp`. The decision-vector
+        layout, the per-row recipes, and the variable scaling are identical
+        to the NumPy path — only the array library differs. Structural
+        metadata (layout slices, boundary-condition types, impulsive pin
+        schedule, CTCS node intervals) is closed over Python-side; numerical
+        inputs flow through ``data``.
+        """
+        L = self.layout
+        sim = self._settings.sim
+        N, n_x, n_u = L.N, L.n_x, L.n_u
+        inv_S_x = self._inv_S_x_diag_j
+        inv_S_u = self._inv_S_u_diag_j
+        S_x = self._S_x_diag_j
+        S_u = self._S_u_diag_j
+        c_x = self._c_x_j
+        c_u = self._c_u_j
+        f = self._jax_dtype
+        slice_imp = sim.u.slice_impulsive
+        has_impulsive = slice_imp.stop > slice_imp.start
+        eps = jnp.asarray(_Q_DIAG_EPS, dtype=f)
+
+        lam_prox = data.lam_prox
+        lam_cost = data.lam_cost
+        lam_vc = data.lam_vc
+        lam_vb_nodal = data.lam_vb_nodal
+
+        # ---------- cost: diagonal Q + linear q ----------
+        q_diag = jnp.full((L.n_z,), eps, dtype=f)
+        # Trust-region quadratic: 2·lam_prox on dx / du slots (+ eps).
+        q_diag = q_diag.at[L.sl_dx].set((2.0 * lam_prox[:, :n_x] + eps).reshape(-1))
+        q_diag = q_diag.at[L.sl_du].set((2.0 * lam_prox[:, n_x:] + eps).reshape(-1))
+        Q = jnp.diag(q_diag)
+
+        # Boundary-cost signs computed Python-side from initial / final type.
+        init_signs_np = np.zeros(sim.n_states, dtype=float)
+        final_signs_np = np.zeros(sim.n_states, dtype=float)
+        for i in range(sim.true_state_slice.start, sim.true_state_slice.stop):
+            init_t = sim.x.initial_type[i]
+            final_t = sim.x.final_type[i]
+            if init_t == "Minimize":
+                init_signs_np[i] = 1.0
+            elif init_t == "Maximize":
+                init_signs_np[i] = -1.0
+            if final_t == "Minimize":
+                final_signs_np[i] = 1.0
+            elif final_t == "Maximize":
+                final_signs_np[i] = -1.0
+        init_signs = jnp.asarray(init_signs_np, dtype=f)
+        final_signs = jnp.asarray(final_signs_np, dtype=f)
+        lam_cost_arr = jnp.broadcast_to(jnp.asarray(lam_cost, dtype=f), (sim.n_states,))
+
+        q_vec = jnp.zeros((L.n_z,), dtype=f)
+        x0_start = L.sl_x.start
+        xN_start = L.sl_x.start + (N - 1) * n_x
+        q_vec = q_vec.at[x0_start : x0_start + n_x].add(init_signs * lam_cost_arr)
+        q_vec = q_vec.at[xN_start : xN_start + n_x].add(final_signs * lam_cost_arr)
+        # L1 penalty on |nu| → linear cost on s_abs
+        q_vec = q_vec.at[L.sl_s_abs].add(lam_vc.reshape(-1))
+        # Positive-part penalty on nu_vb → linear cost on s_pos (one block per constraint)
+        for c_idx in range(L.n_nodal):
+            q_vec = q_vec.at[L.sl_s_pos[c_idx]].add(lam_vb_nodal[:, c_idx])
+
+        # ---------- equality rows (A z = b) ----------
+        A_blocks: List[jnp.ndarray] = []
+        b_blocks: List[jnp.ndarray] = []
+
+        # Linearized nodal constraints. SubproblemData stacks nodal_g /
+        # nodal_grad_x / nodal_grad_u across all constraints to (N, n_nodal*),
+        # with zero-fill for nodes not in a given constraint's static
+        # ``nodes`` tuple — we index those rows out here.
+        for c_idx, constraint in enumerate(self._jax_constraints.nodal):
+            nodes_tuple = tuple(constraint.nodes)
+            if not nodes_tuple:
+                continue
+            n_nodes = len(nodes_tuple)
+            nodes_arr = jnp.asarray(nodes_tuple)
+            dx_cols = jnp.asarray(
+                np.asarray([[L.dx_idx(node, j) for j in range(n_x)] for node in nodes_tuple])
+            )  # (n_nodes, n_x)
+            du_cols = jnp.asarray(
+                np.asarray([[L.du_idx(node, j) for j in range(n_u)] for node in nodes_tuple])
+            )  # (n_nodes, n_u)
+            nuvb_cols = jnp.asarray(np.asarray([L.nu_vb_idx(c_idx, node) for node in nodes_tuple]))
+            row_idx = jnp.arange(n_nodes)
+            block = jnp.zeros((n_nodes, L.n_z), dtype=f)
+            block = block.at[row_idx[:, None], dx_cols].set(data.nodal_grad_x[nodes_arr, c_idx])
+            block = block.at[row_idx[:, None], du_cols].set(data.nodal_grad_u[nodes_arr, c_idx])
+            block = block.at[row_idx, nuvb_cols].set(-1.0)
+            A_blocks.append(block)
+            b_blocks.append(-data.nodal_g[nodes_arr, c_idx])
+
+        # Boundary Fix rows — emitted in the same interleaved per-state order
+        # as the NumPy loop (init row, then final row, for each true-state
+        # index). When impulsive is active, the initial-Fix row also couples
+        # du at node 0 through the linearized impulse Jacobian E_d.
+        imp_j_list = list(range(slice_imp.start, slice_imp.stop)) if has_impulsive else []
+        for i in range(sim.true_state_slice.start, sim.true_state_slice.stop):
+            init_t = sim.x.initial_type[i]
+            final_t = sim.x.final_type[i]
+            if init_t == "Fix":
+                row = jnp.zeros((L.n_z,), dtype=f).at[L.x_idx(0, i)].set(S_x[i])
+                if has_impulsive:
+                    for j in imp_j_list:
+                        row = row.at[L.du_idx(0, j)].set(-data.E_d[0, i, j] * S_u[j])
+                    rhs = data.x_prop_plus[0, i] - c_x[i]
+                else:
+                    rhs = data.x_init[i] - c_x[i]
+                A_blocks.append(row[None, :])
+                b_blocks.append(rhs[None])
+            if final_t == "Fix":
+                row = jnp.zeros((L.n_z,), dtype=f).at[L.x_idx(N - 1, i)].set(S_x[i])
+                A_blocks.append(row[None, :])
+                b_blocks.append((data.x_term[i] - c_x[i])[None])
+
+        # Impulsive zero-pins — every impulsive control DOF forced to zero
+        # at each non-impulse node (in scaled coords).
+        for nodes, ctrl_slice in self._impulsive_pins:
+            for node in nodes:
+                for j in range(ctrl_slice.start, ctrl_slice.stop):
+                    row = jnp.zeros((L.n_z,), dtype=f)
+                    row = row.at[L.u_idx(node, j)].set(1.0)
+                    A_blocks.append(row[None, :])
+                    b_blocks.append((-inv_S_u[j] * c_u[j])[None])
+
+        # Uniform time-grid: scaled u along the time-dilation slice is
+        # constant across nodes — encoded as u[k] - u[k-1] = 0.
+        if sim._uniform_time_grid:
+            td = sim.time_dilation_slice
+            for k in range(1, N):
+                for j in range(td.start, td.stop):
+                    row = jnp.zeros((L.n_z,), dtype=f)
+                    row = row.at[L.u_idx(k, j)].set(1.0)
+                    row = row.at[L.u_idx(k - 1, j)].set(-1.0)
+                    A_blocks.append(row[None, :])
+                    b_blocks.append(jnp.zeros((1,), dtype=f))
+
+        # State / control error definitions, interleaved per-node to match
+        # the NumPy loop ordering (for each k: all x errors then all u errors).
+        # Vectorize per k: build the (n_x + n_u, n_z) "node block" once with
+        # static columns, replicate over k, then patch in the rhs values.
+        x_cols_per_k = np.asarray([L.x_idx(0, j) for j in range(n_x)])  # offsets at k=0
+        dx_cols_per_k = np.asarray([L.dx_idx(0, j) for j in range(n_x)])
+        u_cols_per_k = np.asarray([L.u_idx(0, j) for j in range(n_u)])
+        du_cols_per_k = np.asarray([L.du_idx(0, j) for j in range(n_u)])
+        # Per-node column strides (state offsets advance by n_x per k, control
+        # offsets by n_u).
+        node_block_rows = n_x + n_u
+        n_rows = N * node_block_rows
+        block = jnp.zeros((n_rows, L.n_z), dtype=f)
+        x_err_rhs = inv_S_x * (data.x_bar - c_x[None, :])  # (N, n_x)
+        u_err_rhs = inv_S_u * (data.u_bar - c_u[None, :])  # (N, n_u)
+        b_err = jnp.concatenate([x_err_rhs, u_err_rhs], axis=1).reshape(-1)  # (N*(n_x+n_u),)
+        for k in range(N):
+            row_base = k * node_block_rows
+            x_rows = row_base + jnp.arange(n_x)
+            u_rows = row_base + n_x + jnp.arange(n_u)
+            block = block.at[x_rows, jnp.asarray(x_cols_per_k + k * n_x)].set(1.0)
+            block = block.at[x_rows, jnp.asarray(dx_cols_per_k + k * n_x)].set(-1.0)
+            block = block.at[u_rows, jnp.asarray(u_cols_per_k + k * n_u)].set(1.0)
+            block = block.at[u_rows, jnp.asarray(du_cols_per_k + k * n_u)].set(-1.0)
+        A_blocks.append(block)
+        b_blocks.append(b_err)
+
+        # Dynamics (continuous FOH branch, plus optional impulsive coupling).
+        # SubproblemData carries the raw A_d / B_d / C_d / D_d / E_d; the
+        # NumPy path's D-absorption (cvxpy_ptr_solver.py:636-654 recipe) is
+        # done inline here when impulsive.
+        if has_impulsive:
+            D_steps = data.D_d[1:]
+            A_eff = jnp.einsum("kij,kjl->kil", D_steps, data.A_d)
+            B_eff = jnp.einsum("kij,kjl->kil", D_steps, data.B_d)
+            C_eff = jnp.einsum("kij,kjl->kil", D_steps, data.C_d)
+        else:
+            A_eff = data.A_d
+            B_eff = data.B_d
+            C_eff = data.C_d
+        # Pre-scaled blocks: shape (N-1, n_x, n_x | n_u).
+        A_blk = (inv_S_x[None, :, None] * A_eff) * S_x[None, None, :]
+        B_blk = (inv_S_x[None, :, None] * B_eff) * S_u[None, None, :]
+        C_blk = (inv_S_x[None, :, None] * C_eff) * S_u[None, None, :]
+
+        # dyn_block: (N-1, n_x, n_z). For each (k_prime, i):
+        #   row[x_idx(k_prime+1, i)] = 1
+        #   row[dx_idx(k_prime, j)]  = -A_blk[k_prime, i, j]
+        #   row[du_idx(k_prime, j)]  = -B_blk[k_prime, i, j]
+        #   row[du_idx(k_prime+1, j)] = -C_blk[k_prime, i, j] (- E_blk[i, j] for j in slice_imp)
+        #   row[nu_idx(k_prime, i)]  = -1
+        n_dyn = (N - 1) * n_x
+        kp_idx = np.repeat(np.arange(N - 1), n_x)
+        i_idx = np.tile(np.arange(n_x), N - 1)
+        # Flat row indices (kp * n_x + i) ↔ index into the (N-1, n_x) row grid.
+        flat_row = jnp.arange(n_dyn)
+        # Column indices for the four sets of writes, computed Python-side.
+        x_term_cols = jnp.asarray(np.asarray([L.x_idx(kp + 1, i) for kp, i in zip(kp_idx, i_idx)]))
+        nu_cols = jnp.asarray(np.asarray([L.nu_idx(kp, i) for kp, i in zip(kp_idx, i_idx)]))
+        dx_cols_2d = jnp.asarray(
+            np.asarray([[L.dx_idx(kp, j) for j in range(n_x)] for kp in kp_idx])
+        )  # (n_dyn, n_x)
+        du_prev_cols_2d = jnp.asarray(
+            np.asarray([[L.du_idx(kp, j) for j in range(n_u)] for kp in kp_idx])
+        )  # (n_dyn, n_u)
+        du_curr_cols_2d = jnp.asarray(
+            np.asarray([[L.du_idx(kp + 1, j) for j in range(n_u)] for kp in kp_idx])
+        )  # (n_dyn, n_u)
+
+        block = jnp.zeros((n_dyn, L.n_z), dtype=f)
+        block = block.at[flat_row, x_term_cols].set(1.0)
+        block = block.at[flat_row, nu_cols].set(-1.0)
+        # A: -A_blk[kp_idx, i_idx, :] over the (kp_idx, i_idx, j) grid
+        A_vals = -A_blk.reshape(n_dyn, n_x)  # rows already in (kp, i) → (kp*n_x + i) order
+        B_vals = -B_blk.reshape(n_dyn, n_u)
+        C_vals = -C_blk.reshape(n_dyn, n_u)
+        block = block.at[flat_row[:, None], dx_cols_2d].set(A_vals)
+        block = block.at[flat_row[:, None], du_prev_cols_2d].set(B_vals)
+        block = block.at[flat_row[:, None], du_curr_cols_2d].set(C_vals)
+        if has_impulsive:
+            # E_blk: (N-1, n_x, n_u). E_d_arr[k] for k in 1..N-1 contributes.
+            E_blk = (inv_S_x[None, :, None] * data.E_d[1:]) * S_u[None, None, :]
+            imp_j = np.arange(slice_imp.start, slice_imp.stop)
+            imp_du_cols_2d = jnp.asarray(
+                np.asarray([[L.du_idx(kp + 1, j) for j in imp_j] for kp in kp_idx])
+            )  # (n_dyn, n_imp)
+            E_vals = -E_blk[:, :, imp_j].reshape(n_dyn, len(imp_j))
+            block = block.at[flat_row[:, None], imp_du_cols_2d].add(E_vals)
+        # RHS
+        if has_impulsive:
+            rhs = inv_S_x[None, :] * (data.x_prop_plus[1:] - c_x[None, :])
+        else:
+            rhs = inv_S_x[None, :] * (data.x_prop - c_x[None, :])
+        A_blocks.append(block)
+        b_blocks.append(rhs.reshape(-1))
+
+        # CTCS x[0] = 0 (in unscaled coords) → S_x[idx] · x[0, idx] = -c_x[idx]
+        ctcs_start = sim.ctcs_slice.start
+        ctcs_stop = sim.ctcs_slice.stop
+        if ctcs_stop > ctcs_start:
+            ctcs_idx_list = list(range(ctcs_start, ctcs_stop))
+            ctcs_idx_arr = jnp.asarray(ctcs_idx_list)
+            ctcs_cols = jnp.asarray([L.x_idx(0, idx) for idx in ctcs_idx_list])
+            row_idx = jnp.arange(len(ctcs_idx_list))
+            block = jnp.zeros((len(ctcs_idx_list), L.n_z), dtype=f)
+            block = block.at[row_idx, ctcs_cols].set(S_x[ctcs_idx_arr])
+            A_blocks.append(block)
+            b_blocks.append(-c_x[ctcs_idx_arr])
+
+        A_mat = jnp.concatenate(A_blocks, axis=0) if A_blocks else jnp.zeros((0, L.n_z), dtype=f)
+        b_vec = jnp.concatenate(b_blocks, axis=0) if b_blocks else jnp.zeros((0,), dtype=f)
+
+        # ---------- inequality rows (G z ≤ h) ----------
+        G_blocks: List[jnp.ndarray] = []
+        h_blocks: List[jnp.ndarray] = []
+
+        # State / control box constraints in scaled coords. Ordering matches
+        # the NumPy loop: per node, all u DOFs (max then -min row), then all
+        # x DOFs (max then -min row).
+        box_rows: List[jnp.ndarray] = []
+        box_h: List[float] = []
+        for k in range(N):
+            for j in range(n_u):
+                box_rows.append(jnp.zeros((L.n_z,), dtype=f).at[L.u_idx(k, j)].set(1.0))
+                box_h.append(float(self._inv_S_u_diag[j] * (sim.u.max[j] - self._c_u[j])))
+                box_rows.append(jnp.zeros((L.n_z,), dtype=f).at[L.u_idx(k, j)].set(-1.0))
+                box_h.append(-float(self._inv_S_u_diag[j] * (sim.u.min[j] - self._c_u[j])))
+            for j in range(n_x):
+                box_rows.append(jnp.zeros((L.n_z,), dtype=f).at[L.x_idx(k, j)].set(1.0))
+                box_h.append(float(self._inv_S_x_diag[j] * (sim.x.max[j] - self._c_x[j])))
+                box_rows.append(jnp.zeros((L.n_z,), dtype=f).at[L.x_idx(k, j)].set(-1.0))
+                box_h.append(-float(self._inv_S_x_diag[j] * (sim.x.min[j] - self._c_x[j])))
+        G_blocks.append(jnp.stack(box_rows))
+        h_blocks.append(jnp.asarray(box_h, dtype=f))
+
+        # CTCS LICQ-style |x[i][idx] - x[i-1][idx]| ≤ x.max[idx] over each
+        # group's node interval, in scaled coords.
+        for idx, nodes in zip(
+            range(sim.ctcs_slice.start, sim.ctcs_slice.stop),
+            sim.ctcs_node_intervals,
+        ):
+            start_i = 1 if nodes[0] == 0 else nodes[0]
+            scale = float(self._S_x_diag[idx])
+            x_max_unscaled = float(sim.x.max[idx])
+            for i in range(start_i, nodes[1]):
+                row_pos = (
+                    jnp.zeros((L.n_z,), dtype=f)
+                    .at[L.x_idx(i, idx)]
+                    .set(scale)
+                    .at[L.x_idx(i - 1, idx)]
+                    .set(-scale)
+                )
+                row_neg = (
+                    jnp.zeros((L.n_z,), dtype=f)
+                    .at[L.x_idx(i, idx)]
+                    .set(-scale)
+                    .at[L.x_idx(i - 1, idx)]
+                    .set(scale)
+                )
+                G_blocks.append(jnp.stack([row_pos, row_neg]))
+                h_blocks.append(jnp.asarray([x_max_unscaled, x_max_unscaled], dtype=f))
+
+        # L1 reformulation of |nu|: nu - s_abs ≤ 0, -nu - s_abs ≤ 0.
+        n_nu_rows = 2 * (N - 1) * n_x
+        block = jnp.zeros((n_nu_rows, L.n_z), dtype=f)
+        # Build columns and values vectorized:
+        # For each (k, j) ∈ [0..N-2] × [0..n_x-1], two rows.
+        pair_idx = np.arange((N - 1) * n_x)
+        nu_cols_flat = np.asarray([L.nu_idx(k, j) for k in range(N - 1) for j in range(n_x)])
+        sabs_cols_flat = np.asarray([L.s_abs_idx(k, j) for k in range(N - 1) for j in range(n_x)])
+        row_pos = jnp.asarray(2 * pair_idx)
+        row_neg = jnp.asarray(2 * pair_idx + 1)
+        block = block.at[row_pos, jnp.asarray(nu_cols_flat)].set(1.0)
+        block = block.at[row_pos, jnp.asarray(sabs_cols_flat)].set(-1.0)
+        block = block.at[row_neg, jnp.asarray(nu_cols_flat)].set(-1.0)
+        block = block.at[row_neg, jnp.asarray(sabs_cols_flat)].set(-1.0)
+        G_blocks.append(block)
+        h_blocks.append(jnp.zeros((n_nu_rows,), dtype=f))
+
+        # Positive-part reformulation: pos(nu_vb) needs s ≥ nu_vb AND s ≥ 0.
+        for c_idx in range(L.n_nodal):
+            nuvb_cols = jnp.asarray([L.nu_vb_idx(c_idx, k) for k in range(N)])
+            spos_cols = jnp.asarray([L.s_pos_idx(c_idx, k) for k in range(N)])
+            row_idx = jnp.arange(N)
+            block = jnp.zeros((2 * N, L.n_z), dtype=f)
+            # Row 2k: nu_vb - s_pos ≤ 0
+            block = block.at[2 * row_idx, nuvb_cols].set(1.0)
+            block = block.at[2 * row_idx, spos_cols].set(-1.0)
+            # Row 2k+1: -s_pos ≤ 0
+            block = block.at[2 * row_idx + 1, spos_cols].set(-1.0)
+            G_blocks.append(block)
+            h_blocks.append(jnp.zeros((2 * N,), dtype=f))
+
+        G_mat = jnp.concatenate(G_blocks, axis=0) if G_blocks else jnp.zeros((0, L.n_z), dtype=f)
+        h_vec = jnp.concatenate(h_blocks, axis=0) if h_blocks else jnp.zeros((0,), dtype=f)
+
+        return Q, q_vec, A_mat, b_vec, G_mat, h_vec
+
+    def _build_solution_jax(
+        self,
+        z: "jnp.ndarray",
+        data: SubproblemData,
+    ) -> SubproblemSolution:
+        """Unpack a primal ``z`` into a :class:`SubproblemSolution` pytree.
+
+        Mirrors :meth:`_unpack` but stays JAX-pure: returns scaled-to-physical
+        trajectories, the collapsed ``(N, n_nodal)`` ``nu_vb`` layout, and a
+        ``status_code = UNKNOWN`` (``solve_qp_primal`` exposes no convergence
+        diagnostic — the SCP trust-region check is the gate).
+        """
+        L = self.layout
+        N, n_x, n_u = L.N, L.n_x, L.n_u
+        f = self._jax_dtype
+
+        x_scaled = z[L.sl_x].reshape(N, n_x)
+        u_scaled = z[L.sl_u].reshape(N, n_u)
+        x = x_scaled * self._S_x_diag_j[None, :] + self._c_x_j[None, :]
+        u = u_scaled * self._S_u_diag_j[None, :] + self._c_u_j[None, :]
+        nu = z[L.sl_nu].reshape(N - 1, n_x)
+        if L.n_nodal:
+            nu_vb = jnp.stack([z[sl] for sl in L.sl_nu_vb], axis=-1)
+        else:
+            nu_vb = jnp.zeros((N, 0), dtype=f)
+
+        cost = self._reconstruct_cost_jax(z, data)
+
+        return SubproblemSolution(
+            x=x,
+            u=u,
+            nu=nu,
+            nu_vb=nu_vb,
+            nu_vb_cross=jnp.zeros((0,), dtype=f),
+            cost=cost,
+            status_code=jnp.asarray(int(StatusCode.UNKNOWN), dtype=jnp.int32),
+        )
+
+    def _reconstruct_cost_jax(
+        self,
+        z: "jnp.ndarray",
+        data: SubproblemData,
+    ) -> "jnp.ndarray":
+        """JAX-pure mirror of :meth:`_reconstruct_cost`."""
+        L = self.layout
+        sim = self._settings.sim
+        N, n_x, n_u = L.N, L.n_x, L.n_u
+        f = self._jax_dtype
+        lam_prox = data.lam_prox
+        lam_cost_arr = jnp.broadcast_to(jnp.asarray(data.lam_cost, dtype=f), (sim.n_states,))
+        lam_vc = data.lam_vc
+        lam_vb_nodal = data.lam_vb_nodal
+
+        dx = z[L.sl_dx].reshape(N, n_x)
+        du = z[L.sl_du].reshape(N, n_u)
+        x_scaled = z[L.sl_x].reshape(N, n_x)
+        s_abs = z[L.sl_s_abs].reshape(N - 1, n_x)
+
+        cost = jnp.sum(lam_prox[:, :n_x] * dx**2) + jnp.sum(lam_prox[:, n_x:] * du**2)
+        # Boundary cost: same signed sum as _reconstruct_cost.
+        for i in range(sim.true_state_slice.start, sim.true_state_slice.stop):
+            init_t = sim.x.initial_type[i]
+            final_t = sim.x.final_type[i]
+            if init_t == "Minimize":
+                cost = cost + lam_cost_arr[i] * x_scaled[0, i]
+            elif init_t == "Maximize":
+                cost = cost - lam_cost_arr[i] * x_scaled[0, i]
+            if final_t == "Minimize":
+                cost = cost + lam_cost_arr[i] * x_scaled[-1, i]
+            elif final_t == "Maximize":
+                cost = cost - lam_cost_arr[i] * x_scaled[-1, i]
+        cost = cost + jnp.sum(lam_vc * s_abs)
+        for c_idx in range(L.n_nodal):
+            s_pos = z[L.sl_s_pos[c_idx]]
+            cost = cost + jnp.dot(lam_vb_nodal[:, c_idx], s_pos)
+        return cost.astype(f)
 
     # ------------------------------------------------------------------
     # Misc API

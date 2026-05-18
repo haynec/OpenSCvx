@@ -2,28 +2,47 @@
 
 The PTR formulation — its variables, slack structure, cost terms, and
 linearization contract — is shared across backends. This module defines that
-contract; concrete backends (CVXPy, QPAX) live in sibling modules and
+contract; concrete backends (CVXPy, QPAX, Moreau) live in sibling modules and
 implement the assembly/dispatch that each backend's modeling layer requires.
+
+Two per-iteration entry points coexist:
+
+* The historical NumPy contract — four :meth:`PTRSolver.update_*` stages
+  followed by :meth:`PTRSolver.solve`, returning a :class:`PTRSolveResult`.
+  Used by today's Python-side SCP loop and by direct interactive use of
+  :class:`~openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`.
+* The JAX-pure contract — :meth:`PTRSolver.iteration_callback`, which returns
+  a ``(state, SubproblemData) -> SubproblemSolution`` callable built once at
+  :meth:`~openscvx.solvers.base.ConvexSolver.initialize`. All backends emit
+  the same input/output pytree shape so the callable composes with
+  ``jax.jit`` / ``jax.vmap`` and, downstream, ``lax.while_loop``-driven SCP
+  iteration.
 
 Backends:
     :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`
         DCP graph assembled via CVXPy, dispatched to a conic solver
-        (QOCO, CLARABEL, ...).
+        (QOCO, CLARABEL, ...). The JAX-pure callback wraps the host solve
+        in :func:`jax.pure_callback` (``vmap_method="sequential"``).
     :class:`openscvx.solvers.qpax_ptr_solver.QPAXPTRSolver`
         Flat ``(Q, q, A, b, G, h)`` assembled as JAX arrays and solved with
-        ``qpax.solve_qp``. Enables an end-to-end JAX-differentiable SCP loop
-        in follow-up work.
+        ``qpax.solve_qp`` (NumPy path) or the differentiable
+        ``qpax.solve_qp_primal`` (JAX-pure path). Enables an end-to-end
+        JAX-differentiable SCP loop in follow-up work.
     :class:`openscvx.solvers.moreau_ptr_solver.MoreauPTRSolver`
         Sparse conic program assembled as CSR JAX arrays and solved with
-        ``moreau.jax.Solver``.  Uses SOC epigraphs for the L1 / pos PTR
-        penalties instead of QPAX-style slack expansion; warm-starts between
-        SCP iterations.
+        ``moreau.jax.Solver`` (NumPy path, warm-started between SCP
+        iterations) or the functional ``moreau.jax.solver(...)`` factory
+        (JAX-pure path, no warm-start). Uses SOC epigraphs for the L1 / pos
+        PTR penalties instead of QPAX-style slack expansion.
 """
 
 from abc import abstractmethod
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Tuple, Union
+from dataclasses import dataclass, fields
+from enum import IntEnum
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from .base import ConvexSolver
@@ -31,6 +50,173 @@ from .base import ConvexSolver
 if TYPE_CHECKING:
     from openscvx.lowered.unified import UnifiedControl, UnifiedState
     from openscvx.symbolic.constraint_set import ConstraintSet
+
+
+# ---------------------------------------------------------------------------
+# Status codes
+# ---------------------------------------------------------------------------
+
+
+class StatusCode(IntEnum):
+    """Subproblem solve outcome, encoded as ``int32`` for JAX traceability.
+
+    ``iteration_callback`` returns a numeric status on the JAX side rather than
+    a Python string so the result pytree stays valid under ``jax.jit`` /
+    ``jax.vmap``. The SCP loop maps the code back to a label via
+    :func:`status_code_to_str` only on the Python-loop printing path.
+    """
+
+    OPTIMAL = 0
+    INFEASIBLE = 1
+    UNBOUNDED = 2
+    UNKNOWN = 3
+
+
+_STATUS_NAMES = {
+    StatusCode.OPTIMAL: "optimal",
+    StatusCode.INFEASIBLE: "infeasible",
+    StatusCode.UNBOUNDED: "unbounded",
+    StatusCode.UNKNOWN: "unknown",
+}
+
+
+def status_code_to_str(code: Union[int, jnp.ndarray, np.ndarray]) -> str:
+    """Map a :class:`StatusCode` value (int or 0-d array) to its label."""
+    return _STATUS_NAMES[StatusCode(int(code))]
+
+
+_STATUS_STR_TO_CODE = {
+    "optimal": StatusCode.OPTIMAL,
+    "infeasible": StatusCode.INFEASIBLE,
+    "unbounded": StatusCode.UNBOUNDED,
+}
+
+
+def status_str_to_code(status: str) -> StatusCode:
+    """Map a backend-emitted status string to a :class:`StatusCode`.
+
+    Used by :class:`CVXPyPTRSolver.iteration_callback` to coerce CVXPy's
+    ``problem.status`` into the int32 form the JAX-pure result pytree
+    requires. Only the three definite outcomes (``"optimal"``,
+    ``"infeasible"``, ``"unbounded"``) are recognized — every other label
+    CVXPy emits (``"optimal_inaccurate"``, ``"solver_error"``, ...) collapses
+    to :attr:`StatusCode.UNKNOWN`.
+    """
+    return _STATUS_STR_TO_CODE.get(status, StatusCode.UNKNOWN)
+
+
+# ---------------------------------------------------------------------------
+# Per-iteration JAX-pure I/O pytrees
+# ---------------------------------------------------------------------------
+
+
+@jax.tree_util.register_pytree_node_class
+@dataclass(frozen=True)
+class SubproblemData:
+    """JAX-pure inputs to :meth:`PTRSolver.iteration_callback`.
+
+    Packs the per-iteration linearization, penalty weights, and boundary
+    conditions into a single registered pytree so a single SCP iteration —
+    assemble → solve → unpack — happens on the JAX boundary instead of
+    bouncing through NumPy each step.
+
+    Attributes:
+        x_bar: Previous nodal state, shape ``(N, n_x)``.
+        u_bar: Previous nodal control, shape ``(N, n_u)``.
+        A_d, B_d, C_d: Continuous-step discretized Jacobians,
+            shapes ``(N-1, n_x, n_x)`` / ``(N-1, n_x, n_u)`` / ``(N-1, n_x, n_u)``.
+        x_prop: Propagated state, shape ``(N-1, n_x)``.
+        x_prop_plus: Impulsive propagated state, shape ``(N, n_x)``. Zeros when
+            no impulsive component is present.
+        D_d, E_d: Impulsive Jacobians, shapes ``(N, n_x, n_x)`` /
+            ``(N, n_x, n_u)``. Zeros when no impulsive component is present.
+        nodal_g: Nodal constraint values stacked to fixed shape
+            ``(N, n_nodal)``. Rows for nodes not in a constraint's ``nodes`` set
+            are filled with zeros (mask-by-zero — backend assembly closes over
+            each constraint's static ``nodes`` tuple to skip them).
+        nodal_grad_x: Nodal constraint state gradients, shape
+            ``(N, n_nodal, n_x)``.
+        nodal_grad_u: Nodal constraint control gradients, shape
+            ``(N, n_nodal, n_u)``.
+        cross_g: Cross-node constraint values, shape ``(n_cross,)``.
+        cross_grad_X: Cross-node state gradients, shape ``(n_cross, N, n_x)``.
+        cross_grad_U: Cross-node control gradients, shape ``(n_cross, N, n_u)``.
+        lam_prox: Trust-region weights, shape ``(N, n_x + n_u)``.
+        lam_cost: Cost weight, scalar or shape ``(n_x,)``.
+        lam_vc: Virtual-control penalty weights, shape ``(N-1, n_x)``.
+        lam_vb_nodal: Nodal virtual-buffer weights, shape ``(N, n_nodal)``.
+        lam_vb_cross: Cross-node virtual-buffer weights, shape ``(n_cross,)``.
+        x_init: Initial state, shape ``(n_x,)``. ``jnp.nan`` sentinel where free.
+        x_term: Terminal state, shape ``(n_x,)``. ``jnp.nan`` sentinel where free.
+    """
+
+    x_bar: jnp.ndarray
+    u_bar: jnp.ndarray
+    A_d: jnp.ndarray
+    B_d: jnp.ndarray
+    C_d: jnp.ndarray
+    x_prop: jnp.ndarray
+    x_prop_plus: jnp.ndarray
+    D_d: jnp.ndarray
+    E_d: jnp.ndarray
+    nodal_g: jnp.ndarray
+    nodal_grad_x: jnp.ndarray
+    nodal_grad_u: jnp.ndarray
+    cross_g: jnp.ndarray
+    cross_grad_X: jnp.ndarray
+    cross_grad_U: jnp.ndarray
+    lam_prox: jnp.ndarray
+    lam_cost: jnp.ndarray
+    lam_vc: jnp.ndarray
+    lam_vb_nodal: jnp.ndarray
+    lam_vb_cross: jnp.ndarray
+    x_init: jnp.ndarray
+    x_term: jnp.ndarray
+
+    def tree_flatten(self):
+        children = tuple(getattr(self, f.name) for f in fields(self))
+        return children, None
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        return cls(*children)
+
+
+@jax.tree_util.register_pytree_node_class
+@dataclass(frozen=True)
+class SubproblemSolution:
+    """JAX-pure output of :meth:`PTRSolver.iteration_callback`.
+
+    All backends produce structurally-identical pytrees so the result composes
+    with ``lax.while_loop`` in the downstream batchable-problem work.
+
+    Attributes:
+        x: Nodal state, shape ``(N, n_x)``. Unscaled.
+        u: Nodal control, shape ``(N, n_u)``. Unscaled.
+        nu: Virtual-control slack, shape ``(N-1, n_x)``.
+        nu_vb: Nodal virtual-buffer slacks stacked to ``(N, n_nodal)`` (the
+            CVXPy / QPAX list-of-arrays layout is collapsed at the
+            ``iteration_callback`` output boundary).
+        nu_vb_cross: Cross-node virtual-buffer slacks, shape ``(n_cross,)``.
+        cost: Optimal objective value (scalar).
+        status_code: :class:`StatusCode` value as ``int32``.
+    """
+
+    x: jnp.ndarray
+    u: jnp.ndarray
+    nu: jnp.ndarray
+    nu_vb: jnp.ndarray
+    nu_vb_cross: jnp.ndarray
+    cost: jnp.ndarray
+    status_code: jnp.ndarray
+
+    def tree_flatten(self):
+        children = tuple(getattr(self, f.name) for f in fields(self))
+        return children, None
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        return cls(*children)
 
 
 @dataclass
@@ -172,6 +358,22 @@ class PTRSolver(ConvexSolver):
 
         Call the four ``update_*`` methods first to set the linearization
         point, constraint gradients, penalties, and boundary conditions.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def iteration_callback(self) -> Callable[..., SubproblemSolution]:
+        """Return a JAX-friendly ``(state, SubproblemData) -> SubproblemSolution``.
+
+        Built once at :meth:`initialize`; called once per SCP iteration. The
+        callable consumes the algorithm-state pytree plus an assembled
+        :class:`SubproblemData`, performs one ``assemble → solve → unpack``
+        cycle on the JAX boundary, and returns a :class:`SubproblemSolution`.
+
+        Replaces the four ``update_*`` methods + :meth:`solve` for the
+        JAX-pure SCP path. All backends share the same input/output pytree
+        shape so the SCP loop downstream can wrap the callback in
+        ``lax.while_loop`` and compose with ``jax.jit`` / ``jax.vmap``.
         """
         raise NotImplementedError
 

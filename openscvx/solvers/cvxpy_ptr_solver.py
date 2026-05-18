@@ -10,14 +10,22 @@ which targets pure-JAX execution.
 """
 
 import os
-from typing import TYPE_CHECKING, List, Optional, Union
+from typing import TYPE_CHECKING, Callable, List, Optional, Union
 
 import cvxpy as cp
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from openscvx.config import Config
 
-from .ptr_solver import PTRSolver, PTRSolveResult
+from .ptr_solver import (
+    PTRSolver,
+    PTRSolveResult,
+    SubproblemData,
+    SubproblemSolution,
+    status_str_to_code,
+)
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredProblem
@@ -38,6 +46,78 @@ except ImportError:
 ## TODO: (fabio) add support for impulsive controls
 
 
+def _unstack_nodal(
+    data: SubproblemData,
+    jax_constraints: "LoweredJaxConstraints",
+) -> List[dict]:
+    """Unstack ``SubproblemData``'s ``nodal_*`` arrays into per-constraint dicts.
+
+    The JAX-pure side stacks every nodal constraint's linearization into
+    ``(N, n_nodal, ...)`` arrays with zero-fill at nodes outside each
+    constraint's static ``nodes`` tuple. :meth:`update_constraint_linearizations`
+    expects the list-of-dicts layout the SCP loop has historically built —
+    this helper inverts the stack. The full-N arrays are returned (the zero
+    rows are harmless: CVXPy's constraint set only references the
+    constraint's own ``nodes``).
+    """
+    if not jax_constraints.nodal:
+        return []
+    nodal_g = np.asarray(data.nodal_g)
+    nodal_grad_x = np.asarray(data.nodal_grad_x)
+    nodal_grad_u = np.asarray(data.nodal_grad_u)
+    out: List[dict] = []
+    for c_idx, _constraint in enumerate(jax_constraints.nodal):
+        out.append(
+            {
+                "g": nodal_g[:, c_idx],
+                "grad_g_x": nodal_grad_x[:, c_idx, :],
+                "grad_g_u": nodal_grad_u[:, c_idx, :],
+            }
+        )
+    return out
+
+
+def _unstack_cross(
+    data: SubproblemData,
+    jax_constraints: "LoweredJaxConstraints",
+) -> List[dict]:
+    """Unstack ``SubproblemData``'s cross-node arrays into per-constraint dicts.
+
+    Cross-node constraints stack ``g`` to ``(n_cross,)`` and the gradients to
+    ``(n_cross, N, n_x | n_u)``. :meth:`update_constraint_linearizations`
+    expects per-constraint dicts with the natural orientation.
+    """
+    if not jax_constraints.cross_node:
+        return []
+    cross_g = np.asarray(data.cross_g)
+    cross_grad_X = np.asarray(data.cross_grad_X)
+    cross_grad_U = np.asarray(data.cross_grad_U)
+    out: List[dict] = []
+    for c_idx, _constraint in enumerate(jax_constraints.cross_node):
+        out.append(
+            {
+                "g": cross_g[c_idx],
+                "grad_g_X": cross_grad_X[c_idx],
+                "grad_g_U": cross_grad_U[c_idx],
+            }
+        )
+    return out
+
+
+def _unmask_bc(bc: "jnp.ndarray") -> np.ndarray:
+    """Replace NaN-sentinel free entries with zeros for CVXPy parameter assignment.
+
+    ``SubproblemData.x_init`` / ``x_term`` carry ``jnp.nan`` at indices where
+    the boundary condition is free; CVXPy's ``Parameter.value`` setter rejects
+    non-real arrays via :meth:`CVXPyPTRSolver._set_param`. The CVXPy
+    constraint set only references the indices flagged ``"Fix"`` in
+    ``initial_type`` / ``final_type``, so zeroing the free entries is safe —
+    they're written but never read.
+    """
+    arr = np.asarray(bc, dtype=float)
+    return np.nan_to_num(arr, nan=0.0)
+
+
 class CVXPyPTRSolver(PTRSolver):
     """CVXPy-backed implementation of the PTR convex subproblem.
 
@@ -48,7 +128,11 @@ class CVXPyPTRSolver(PTRSolver):
 
     The solver builds the problem structure once during ``initialize()``, using
     CVXPy Parameters for values that change each iteration. The ``solve()``
-    method then solves and returns a structured ``PTRSolveResult``.
+    method then solves and returns a structured ``PTRSolveResult``. The
+    JAX-pure entry point :meth:`iteration_callback` wraps that same solve in
+    :func:`jax.pure_callback` (``vmap_method="sequential"`` — CVXPy cannot
+    batch) so the backend composes with ``jax.jit`` / ``jax.vmap`` alongside
+    the JAX-native QPAX and Moreau backends.
 
     The cost and constraint formulations are defined in the ``cost()`` and
     ``constraints()`` methods, which can be overridden in subclasses to
@@ -116,6 +200,11 @@ class CVXPyPTRSolver(PTRSolver):
         self._ocp_vars: "CVXPyVariables" = None
         self._problem: cp.Problem = None
         self._solve_fn: callable = None
+        # Stashed at create_variables / initialize so iteration_callback can
+        # close over them without retracing them off the ``lowered`` /
+        # ``settings`` arguments each iteration.
+        self._jax_constraints: Optional["LoweredJaxConstraints"] = None
+        self._settings: Optional[Config] = None
 
     @property
     def ocp_vars(self) -> "CVXPyVariables":
@@ -202,6 +291,11 @@ class CVXPyPTRSolver(PTRSolver):
             C_d_sparsity=C_d_sp,
             constraint_sparsity=constraint_sparsity,
         )
+
+        # Stash the constraint catalog so iteration_callback can unstack the
+        # JAX-pure ``SubproblemData`` back into the per-constraint dict layout
+        # ``update_constraint_linearizations`` expects.
+        self._jax_constraints = jax_constraints
 
     def lower_convex_constraints(self, constraints, parameters=None):
         """Lower user ``.convex()`` constraints into CVXPy constraint objects.
@@ -291,6 +385,7 @@ class CVXPyPTRSolver(PTRSolver):
                         )
 
         self._problem = prob
+        self._settings = settings
         self._setup_solve_function()
 
     def cost(
@@ -878,6 +973,137 @@ class CVXPyPTRSolver(PTRSolver):
             cost=self._problem.value,
             status=self._problem.status,
         )
+
+    def iteration_callback(self) -> Callable[..., SubproblemSolution]:
+        """JAX-pure ``(state, SubproblemData) -> SubproblemSolution``.
+
+        Wraps the existing NumPy ``solve()`` path in :func:`jax.pure_callback`
+        with ``vmap_method="sequential"``. CVXPy can't trace — it builds a DCP
+        graph and reaches into a backend solver through Python attribute
+        mutation — so the only JAX-friendly surface it can present is a host
+        callback. Under :func:`jax.jit` the callback fires once per call; under
+        :func:`jax.vmap` it fires ``B`` times serially (CVXPy can't ingest a
+        batched parameter set).
+
+        The closure unstacks :class:`SubproblemData` back to the per-constraint
+        dict layout :meth:`update_constraint_linearizations` expects, runs the
+        four ``update_*`` methods + :meth:`solve`, and packs the result into a
+        :class:`SubproblemSolution` whose ``nu_vb`` is collapsed to a stacked
+        ``(N, n_nodal)`` array (the list-of-arrays form on
+        :attr:`PTRSolveResult.nu_vb` is preserved for the NumPy path).
+
+        ``status_code`` is mapped via :func:`status_str_to_code`; CVXPy's
+        ``"optimal_inaccurate"`` / ``"solver_error"`` / ... labels collapse to
+        :attr:`StatusCode.UNKNOWN` — the SCP trust-region check is the
+        authoritative convergence gate.
+
+        The returned callable takes ``(state, data)``: ``state`` is the
+        :class:`AlgorithmState` pytree, accepted for cross-backend signature
+        uniformity but unused (CVXPy exposes no warm-start through
+        ``update_*``); ``data`` is the :class:`SubproblemData` pytree carrying
+        the per-iteration linearization arrays, penalty weights, and boundary
+        conditions.
+        """
+        if self._problem is None or self._settings is None or self._jax_constraints is None:
+            raise RuntimeError(
+                "CVXPyPTRSolver.iteration_callback() requires initialize() to "
+                "have been called first."
+            )
+
+        settings = self._settings
+        jax_constraints = self._jax_constraints
+        n_x = settings.sim.n_states
+        n_u = settings.sim.n_controls
+        N = settings.sim.n
+        n_nodal = len(jax_constraints.nodal)
+        n_cross = len(jax_constraints.cross_node)
+        slice_imp = settings.sim.u.slice_impulsive
+        has_impulsive = bool(slice_imp.stop > slice_imp.start)
+        f = jnp.float64 if jax.config.read("jax_enable_x64") else jnp.float32
+
+        result_struct = SubproblemSolution(
+            x=jax.ShapeDtypeStruct((N, n_x), f),
+            u=jax.ShapeDtypeStruct((N, n_u), f),
+            nu=jax.ShapeDtypeStruct((N - 1, n_x), f),
+            nu_vb=jax.ShapeDtypeStruct((N, n_nodal), f),
+            nu_vb_cross=jax.ShapeDtypeStruct((n_cross,), f),
+            cost=jax.ShapeDtypeStruct((), f),
+            status_code=jax.ShapeDtypeStruct((), jnp.int32),
+        )
+
+        def host_solve(data: SubproblemData) -> SubproblemSolution:
+            # SubproblemData always carries (N, n_x, n_x) D_d / (N, n_x, n_u) E_d
+            # / (N, n_x) x_prop_plus arrays — zero-filled when the problem has
+            # no impulsive component. ``update_dynamics_linearization`` treats
+            # a non-None D_d as "absorb into A/B/C", which would zero them out
+            # on the no-impulsive path; pass None in that case to keep A/B/C
+            # intact. Same logic for x_prop_plus / E_d.
+            x_prop_plus = np.asarray(data.x_prop_plus) if has_impulsive else None
+            D_d = np.asarray(data.D_d) if has_impulsive else None
+            E_d = np.asarray(data.E_d) if has_impulsive else None
+            self.update_dynamics_linearization(
+                x_bar=np.asarray(data.x_bar),
+                u_bar=np.asarray(data.u_bar),
+                A_d=np.asarray(data.A_d),
+                B_d=np.asarray(data.B_d),
+                C_d=np.asarray(data.C_d),
+                x_prop=np.asarray(data.x_prop),
+                x_prop_plus=x_prop_plus,
+                D_d=D_d,
+                E_d=E_d,
+            )
+            nodal = _unstack_nodal(data, jax_constraints)
+            cross_node = _unstack_cross(data, jax_constraints)
+            self.update_constraint_linearizations(
+                nodal=nodal or None,
+                cross_node=cross_node or None,
+            )
+            self.update_penalties(
+                lam_prox=np.asarray(data.lam_prox),
+                lam_cost=np.asarray(data.lam_cost),
+                lam_vc=np.asarray(data.lam_vc),
+                lam_vb_nodal=np.asarray(data.lam_vb_nodal),
+                lam_vb_cross=np.asarray(data.lam_vb_cross),
+            )
+            self.update_boundary_conditions(
+                x_init=_unmask_bc(data.x_init),
+                x_term=_unmask_bc(data.x_term),
+            )
+
+            result = self.solve()
+            return SubproblemSolution(
+                x=jnp.asarray(result.x, dtype=f),
+                u=jnp.asarray(result.u, dtype=f),
+                nu=jnp.asarray(result.nu, dtype=f),
+                # nu_vb collapses from PTRSolveResult's list-of-(N,) layout to
+                # the (N, n_nodal) stacked array SubproblemSolution declares
+                # for pure_callback's ShapeDtypeStruct contract.
+                nu_vb=(
+                    jnp.zeros((N, 0), dtype=f)
+                    if n_nodal == 0
+                    else jnp.asarray(
+                        np.stack([np.asarray(a) for a in result.nu_vb], axis=-1),
+                        dtype=f,
+                    )
+                ),
+                nu_vb_cross=jnp.asarray(
+                    np.asarray(result.nu_vb_cross, dtype=float).reshape(n_cross),
+                    dtype=f,
+                ),
+                cost=jnp.asarray(result.cost, dtype=f),
+                status_code=jnp.asarray(int(status_str_to_code(result.status)), dtype=jnp.int32),
+            )
+
+        def step(state, data: SubproblemData) -> SubproblemSolution:
+            del state  # CVXPy exposes no warm-start through ``update_*``.
+            return jax.pure_callback(
+                host_solve,
+                result_struct,
+                data,
+                vmap_method="sequential",
+            )
+
+        return step
 
     def citation(self) -> List[str]:
         """Return BibTeX citations for CVXPy.
