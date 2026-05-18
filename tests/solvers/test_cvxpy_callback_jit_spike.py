@@ -24,9 +24,16 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-# Declared output dtype follows JAX's current x64 setting so the spike runs
-# regardless of how the rest of the suite has configured precision.
-_JAX_FLOAT = jnp.float64 if jax.config.read("jax_enable_x64") else jnp.float32
+
+def _jax_float():
+    """Resolve the active JAX float dtype from the live x64 config.
+
+    Read on every call rather than latched at module import: under
+    ``pytest-xdist``, other tests and example modules flip ``jax_enable_x64``
+    in-process, and a stale capture leads to ``pure_callback`` validation
+    errors when the declared dtype no longer matches the global config.
+    """
+    return jnp.float64 if jax.config.read("jax_enable_x64") else jnp.float32
 
 
 # ============================================================================
@@ -51,14 +58,14 @@ def _make_toy_cvxpy_solve():
     def host_solve(p_value: np.ndarray) -> np.ndarray:
         p.value = np.asarray(p_value, dtype=float)
         prob.solve(solver="CLARABEL")
-        return np.asarray(x.value, dtype=_JAX_FLOAT)
+        return np.asarray(x.value, dtype=_jax_float())
 
     return host_solve, n
 
 
 def _build_callback(host_solve, n: int):
     """Wrap ``host_solve`` in ``jax.pure_callback`` with a declared shape."""
-    result_struct = jax.ShapeDtypeStruct((n,), _JAX_FLOAT)
+    result_struct = jax.ShapeDtypeStruct((n,), _jax_float())
 
     def callback(p_value):
         return jax.pure_callback(
