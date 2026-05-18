@@ -20,14 +20,13 @@ without a license while still exercising on CI / dev hosts that have one.
 import numpy as np
 import pytest
 
-from tests._marks import requires_moreau, _MOREAU_OK
+from tests._marks import _MOREAU_OK, requires_moreau
 
 pytestmark = requires_moreau
 
 # Imports below are only reached when _MOREAU_OK is True.
 if _MOREAU_OK:
     from openscvx.solvers.ptr_solver import StatusCode, SubproblemSolution
-
     from tests.solvers._iteration_callback_helpers import (
         build_brachistochrone,
         subproblem_data_from_numpy_stash,
@@ -113,19 +112,11 @@ def test_iteration_callback_matches_solve_on_brachistochrone():
     solution = callback(None, data)
 
     assert isinstance(solution, SubproblemSolution)
-    np.testing.assert_allclose(
-        np.asarray(solution.x), reference.x, atol=1e-7, rtol=1e-7
-    )
-    np.testing.assert_allclose(
-        np.asarray(solution.u), reference.u, atol=1e-7, rtol=1e-7
-    )
-    np.testing.assert_allclose(
-        np.asarray(solution.nu), reference.nu, atol=1e-7, rtol=1e-7
-    )
+    np.testing.assert_allclose(np.asarray(solution.x), reference.x, atol=1e-7, rtol=1e-7)
+    np.testing.assert_allclose(np.asarray(solution.u), reference.u, atol=1e-7, rtol=1e-7)
+    np.testing.assert_allclose(np.asarray(solution.nu), reference.nu, atol=1e-7, rtol=1e-7)
     assert solution.nu_vb.shape == (solver.layout.N, solver.layout.n_nodal)
-    np.testing.assert_allclose(
-        float(solution.cost), reference.cost, atol=1e-7, rtol=1e-7
-    )
+    np.testing.assert_allclose(float(solution.cost), reference.cost, atol=1e-7, rtol=1e-7)
     # Optimal solves should map to StatusCode.OPTIMAL.
     assert int(solution.status_code) == int(StatusCode.OPTIMAL)
 

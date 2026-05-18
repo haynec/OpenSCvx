@@ -22,7 +22,6 @@ from openscvx.config import Config
 from .ptr_solver import (
     PTRSolver,
     PTRSolveResult,
-    StatusCode,
     SubproblemData,
     SubproblemSolution,
     status_str_to_code,

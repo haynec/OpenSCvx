@@ -16,14 +16,12 @@ the pattern there is structurally different from QPAX / Moreau and stays in
 its own module.
 """
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
-import jax
-import jax.numpy as jnp
-
 from openscvx.solvers.ptr_solver import SubproblemData, SubproblemSolution
-
 from tests._marks import requires_moreau
 from tests.solvers._iteration_callback_helpers import (
     build_brachistochrone,
@@ -50,9 +48,7 @@ def _make_batch(data: SubproblemData, scales) -> SubproblemData:
     def stack_other(leaf):
         return jnp.broadcast_to(leaf, (B,) + leaf.shape)
 
-    leaves = {
-        f.name: getattr(data, f.name) for f in data.__dataclass_fields__.values()
-    }
+    leaves = {f.name: getattr(data, f.name) for f in data.__dataclass_fields__.values()}
     leaves["lam_prox"] = stack_lam_prox(leaves["lam_prox"])
     for name in list(leaves):
         if name == "lam_prox":
@@ -107,9 +103,7 @@ def test_qpax_iteration_callback_composes_with_vmap():
         np.testing.assert_allclose(
             np.asarray(batched.u[i]), np.asarray(bare.u), atol=1e-8, rtol=1e-8
         )
-        np.testing.assert_allclose(
-            float(batched.cost[i]), float(bare.cost), atol=1e-8, rtol=1e-8
-        )
+        np.testing.assert_allclose(float(batched.cost[i]), float(bare.cost), atol=1e-8, rtol=1e-8)
 
 
 # ============================================================================
@@ -156,6 +150,4 @@ def test_moreau_iteration_callback_composes_with_vmap():
         np.testing.assert_allclose(
             np.asarray(batched.u[i]), np.asarray(bare.u), atol=1e-7, rtol=1e-7
         )
-        np.testing.assert_allclose(
-            float(batched.cost[i]), float(bare.cost), atol=1e-7, rtol=1e-7
-        )
+        np.testing.assert_allclose(float(batched.cost[i]), float(bare.cost), atol=1e-7, rtol=1e-7)

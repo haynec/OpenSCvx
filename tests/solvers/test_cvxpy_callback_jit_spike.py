@@ -19,12 +19,10 @@ The toy problem is ``min ||x - p||^2 s.t. x >= 0``, whose closed-form solution
 is ``max(p, 0)`` — easy to assert against without re-running the solver.
 """
 
-import numpy as np
-import pytest
-
 import cvxpy as cp
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 # Declared output dtype follows JAX's current x64 setting so the spike runs
 # regardless of how the rest of the suite has configured precision.

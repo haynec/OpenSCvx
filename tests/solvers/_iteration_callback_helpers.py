@@ -80,9 +80,7 @@ def build_brachistochrone(
     constraint_exprs = []
     if constraint_style == "ctcs":
         for state in states:
-            constraint_exprs.extend(
-                [ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)]
-            )
+            constraint_exprs.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
     elif constraint_style == "nodal":
         for state in states:
             constraint_exprs.extend([state <= state.max, state.min <= state])
@@ -158,9 +156,7 @@ def subproblem_data_from_numpy_stash(solver) -> SubproblemData:
         nodal_grad_x = np.zeros((N, 0, n_x))
         nodal_grad_u = np.zeros((N, 0, n_u))
 
-    x_prop_plus = (
-        dyn["x_prop_plus"] if dyn["x_prop_plus"] is not None else np.zeros((N, n_x))
-    )
+    x_prop_plus = dyn["x_prop_plus"] if dyn["x_prop_plus"] is not None else np.zeros((N, n_x))
     E_d = dyn["E_d"] if dyn["E_d"] is not None else np.zeros((N, n_x, n_u))
     D_d = np.zeros((N, n_x, n_x))
 

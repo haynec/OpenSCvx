@@ -9,20 +9,16 @@ trajectory as a direct :meth:`solve` call (the spike in
 exercises the real PTR pipeline).
 """
 
-import numpy as np
-import pytest
-
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from openscvx.solvers.ptr_solver import (
     StatusCode,
     SubproblemData,
     SubproblemSolution,
 )
-
 from tests.solvers._iteration_callback_helpers import build_brachistochrone
-
 
 # ============================================================================
 # Fixtures
@@ -53,11 +49,7 @@ def _subproblem_data_from_solver(prob) -> SubproblemData:
     A_d = np.asarray(ocp.A_d.value)
     B_d = np.asarray(ocp.B_d.value)
     C_d = np.asarray(ocp.C_d.value)
-    x_prop = (
-        np.asarray(ocp.x_prop.value)
-        if ocp.x_prop is not None
-        else np.zeros((N - 1, n_x))
-    )
+    x_prop = np.asarray(ocp.x_prop.value) if ocp.x_prop is not None else np.zeros((N - 1, n_x))
     x_prop_plus = (
         np.asarray(ocp.x_prop_plus.value)
         if ocp.x_prop_plus is not None and ocp.x_prop_plus.value is not None
@@ -197,9 +189,7 @@ def test_iteration_callback_composes_with_jit():
 
     np.testing.assert_allclose(np.asarray(jitt.x), np.asarray(bare.x), atol=1e-8)
     np.testing.assert_allclose(np.asarray(jitt.u), np.asarray(bare.u), atol=1e-8)
-    np.testing.assert_allclose(
-        np.asarray(jitt.nu_vb), np.asarray(bare.nu_vb), atol=1e-8
-    )
+    np.testing.assert_allclose(np.asarray(jitt.nu_vb), np.asarray(bare.nu_vb), atol=1e-8)
 
 
 def test_iteration_callback_composes_with_vmap_sequential():
@@ -224,9 +214,5 @@ def test_iteration_callback_composes_with_vmap_sequential():
     batched = jax.vmap(callback, in_axes=(None, 0))(None, batch)
 
     for i in range(3):
-        np.testing.assert_allclose(
-            np.asarray(batched.x[i]), np.asarray(bare.x), atol=1e-8
-        )
-        np.testing.assert_allclose(
-            np.asarray(batched.u[i]), np.asarray(bare.u), atol=1e-8
-        )
+        np.testing.assert_allclose(np.asarray(batched.x[i]), np.asarray(bare.x), atol=1e-8)
+        np.testing.assert_allclose(np.asarray(batched.u[i]), np.asarray(bare.u), atol=1e-8)

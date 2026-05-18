@@ -967,7 +967,9 @@ class QPAXPTRSolver(PTRSolver):
     def _assemble_qp_jax(
         self,
         data: SubproblemData,
-    ) -> Tuple["jnp.ndarray", "jnp.ndarray", "jnp.ndarray", "jnp.ndarray", "jnp.ndarray", "jnp.ndarray"]:
+    ) -> Tuple[
+        "jnp.ndarray", "jnp.ndarray", "jnp.ndarray", "jnp.ndarray", "jnp.ndarray", "jnp.ndarray"
+    ]:
         """Build ``(Q, q, A, b, G, h)`` from a :class:`SubproblemData` pytree.
 
         JAX-pure counterpart of :meth:`_assemble_qp`. The decision-vector
@@ -1047,26 +1049,16 @@ class QPAXPTRSolver(PTRSolver):
             n_nodes = len(nodes_tuple)
             nodes_arr = jnp.asarray(nodes_tuple)
             dx_cols = jnp.asarray(
-                np.asarray(
-                    [[L.dx_idx(node, j) for j in range(n_x)] for node in nodes_tuple]
-                )
+                np.asarray([[L.dx_idx(node, j) for j in range(n_x)] for node in nodes_tuple])
             )  # (n_nodes, n_x)
             du_cols = jnp.asarray(
-                np.asarray(
-                    [[L.du_idx(node, j) for j in range(n_u)] for node in nodes_tuple]
-                )
+                np.asarray([[L.du_idx(node, j) for j in range(n_u)] for node in nodes_tuple])
             )  # (n_nodes, n_u)
-            nuvb_cols = jnp.asarray(
-                np.asarray([L.nu_vb_idx(c_idx, node) for node in nodes_tuple])
-            )
+            nuvb_cols = jnp.asarray(np.asarray([L.nu_vb_idx(c_idx, node) for node in nodes_tuple]))
             row_idx = jnp.arange(n_nodes)
             block = jnp.zeros((n_nodes, L.n_z), dtype=f)
-            block = block.at[row_idx[:, None], dx_cols].set(
-                data.nodal_grad_x[nodes_arr, c_idx]
-            )
-            block = block.at[row_idx[:, None], du_cols].set(
-                data.nodal_grad_u[nodes_arr, c_idx]
-            )
+            block = block.at[row_idx[:, None], dx_cols].set(data.nodal_grad_x[nodes_arr, c_idx])
+            block = block.at[row_idx[:, None], du_cols].set(data.nodal_grad_u[nodes_arr, c_idx])
             block = block.at[row_idx, nuvb_cols].set(-1.0)
             A_blocks.append(block)
             b_blocks.append(-data.nodal_g[nodes_arr, c_idx])
@@ -1129,8 +1121,8 @@ class QPAXPTRSolver(PTRSolver):
         node_block_rows = n_x + n_u
         n_rows = N * node_block_rows
         block = jnp.zeros((n_rows, L.n_z), dtype=f)
-        x_err_rhs = (inv_S_x * (data.x_bar - c_x[None, :]))  # (N, n_x)
-        u_err_rhs = (inv_S_u * (data.u_bar - c_u[None, :]))  # (N, n_u)
+        x_err_rhs = inv_S_x * (data.x_bar - c_x[None, :])  # (N, n_x)
+        u_err_rhs = inv_S_u * (data.u_bar - c_u[None, :])  # (N, n_u)
         b_err = jnp.concatenate([x_err_rhs, u_err_rhs], axis=1).reshape(-1)  # (N*(n_x+n_u),)
         for k in range(N):
             row_base = k * node_block_rows
@@ -1176,19 +1168,13 @@ class QPAXPTRSolver(PTRSolver):
         x_term_cols = jnp.asarray(np.asarray([L.x_idx(kp + 1, i) for kp, i in zip(kp_idx, i_idx)]))
         nu_cols = jnp.asarray(np.asarray([L.nu_idx(kp, i) for kp, i in zip(kp_idx, i_idx)]))
         dx_cols_2d = jnp.asarray(
-            np.asarray(
-                [[L.dx_idx(kp, j) for j in range(n_x)] for kp in kp_idx]
-            )
+            np.asarray([[L.dx_idx(kp, j) for j in range(n_x)] for kp in kp_idx])
         )  # (n_dyn, n_x)
         du_prev_cols_2d = jnp.asarray(
-            np.asarray(
-                [[L.du_idx(kp, j) for j in range(n_u)] for kp in kp_idx]
-            )
+            np.asarray([[L.du_idx(kp, j) for j in range(n_u)] for kp in kp_idx])
         )  # (n_dyn, n_u)
         du_curr_cols_2d = jnp.asarray(
-            np.asarray(
-                [[L.du_idx(kp + 1, j) for j in range(n_u)] for kp in kp_idx]
-            )
+            np.asarray([[L.du_idx(kp + 1, j) for j in range(n_u)] for kp in kp_idx])
         )  # (n_dyn, n_u)
 
         block = jnp.zeros((n_dyn, L.n_z), dtype=f)
@@ -1206,9 +1192,7 @@ class QPAXPTRSolver(PTRSolver):
             E_blk = (inv_S_x[None, :, None] * data.E_d[1:]) * S_u[None, None, :]
             imp_j = np.arange(slice_imp.start, slice_imp.stop)
             imp_du_cols_2d = jnp.asarray(
-                np.asarray(
-                    [[L.du_idx(kp + 1, j) for j in imp_j] for kp in kp_idx]
-                )
+                np.asarray([[L.du_idx(kp + 1, j) for j in imp_j] for kp in kp_idx])
             )  # (n_dyn, n_imp)
             E_vals = -E_blk[:, :, imp_j].reshape(n_dyn, len(imp_j))
             block = block.at[flat_row[:, None], imp_du_cols_2d].add(E_vals)

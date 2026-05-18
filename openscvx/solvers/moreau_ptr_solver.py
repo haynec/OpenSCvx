@@ -1381,13 +1381,13 @@ class MoreauPTRSolver(PTRSolver):
 
         n_per_row = 2 + n_x + 2 * n_u
         dyn_vals = jnp.zeros((N - 1, n_x, n_per_row), dtype=f)
-        dyn_vals = dyn_vals.at[:, :, 0].set(1.0)                       # x[k, i]
-        dyn_vals = dyn_vals.at[:, :, 1 : 1 + n_x].set(-A_blk)          # dx[kp, :]
+        dyn_vals = dyn_vals.at[:, :, 0].set(1.0)  # x[k, i]
+        dyn_vals = dyn_vals.at[:, :, 1 : 1 + n_x].set(-A_blk)  # dx[kp, :]
         for j in range(n_u):
             base = 1 + n_x + 2 * j
-            dyn_vals = dyn_vals.at[:, :, base].set(-B_blk[:, :, j])    # du[kp, j]
+            dyn_vals = dyn_vals.at[:, :, base].set(-B_blk[:, :, j])  # du[kp, j]
             dyn_vals = dyn_vals.at[:, :, base + 1].set(-C_with_E[:, :, j])  # du[k, j]
-        dyn_vals = dyn_vals.at[:, :, -1].set(-1.0)                     # nu[kp, i]
+        dyn_vals = dyn_vals.at[:, :, -1].set(-1.0)  # nu[kp, i]
         coo_blocks.append(dyn_vals.reshape(-1))
         if has_impulsive:
             rhs_dyn = inv_S_x[None, :] * (data.x_prop_plus[1:] - c_x[None, :])
@@ -1402,8 +1402,8 @@ class MoreauPTRSolver(PTRSolver):
                 continue
             nodes_arr = jnp.asarray(nodes_tuple)
             n_nodes = len(nodes_tuple)
-            grad_x_vals = data.nodal_grad_x[nodes_arr, c_idx]          # (n_nodes, n_x)
-            grad_u_vals = data.nodal_grad_u[nodes_arr, c_idx]          # (n_nodes, n_u)
+            grad_x_vals = data.nodal_grad_x[nodes_arr, c_idx]  # (n_nodes, n_x)
+            grad_u_vals = data.nodal_grad_u[nodes_arr, c_idx]  # (n_nodes, n_u)
             neg_one = jnp.full((n_nodes, 1), -1.0, dtype=f)
             nodal_vals = jnp.concatenate([grad_x_vals, grad_u_vals, neg_one], axis=1)
             coo_blocks.append(nodal_vals.reshape(-1))
@@ -1412,9 +1412,7 @@ class MoreauPTRSolver(PTRSolver):
         # Boundary Fix rows — emit per-state, init then final, matching
         # _assemble_conic. Under impulsive control the initial Fix row also
         # carries du[0, slice_imp] coefficients.
-        imp_j_list = (
-            list(range(slice_imp.start, slice_imp.stop)) if has_impulsive else []
-        )
+        imp_j_list = list(range(slice_imp.start, slice_imp.stop)) if has_impulsive else []
         for i in range(sim.true_state_slice.start, sim.true_state_slice.stop):
             init_t = sim.x.initial_type[i]
             final_t = sim.x.final_type[i]
@@ -1506,14 +1504,8 @@ class MoreauPTRSolver(PTRSolver):
         coo_blocks.append(soc_coeffs)
         b_blocks.append(jnp.zeros((n_soc,), dtype=f))
 
-        coo_vals = (
-            jnp.concatenate(coo_blocks)
-            if coo_blocks
-            else jnp.zeros((0,), dtype=f)
-        )
-        b_vec = (
-            jnp.concatenate(b_blocks) if b_blocks else jnp.zeros((0,), dtype=f)
-        )
+        coo_vals = jnp.concatenate(coo_blocks) if coo_blocks else jnp.zeros((0,), dtype=f)
+        b_vec = jnp.concatenate(b_blocks) if b_blocks else jnp.zeros((0,), dtype=f)
         return P_data, coo_vals, q, b_vec
 
     def _build_solution_jax(
@@ -1568,9 +1560,7 @@ class MoreauPTRSolver(PTRSolver):
         N, n_x = L.N, L.n_x
         f = self._jax_dtype
         lam_prox = data.lam_prox
-        lam_cost_arr = jnp.broadcast_to(
-            jnp.asarray(data.lam_cost, dtype=f), (sim.n_states,)
-        )
+        lam_cost_arr = jnp.broadcast_to(jnp.asarray(data.lam_cost, dtype=f), (sim.n_states,))
         lam_vc = data.lam_vc
         lam_vb_nodal = data.lam_vb_nodal
 

@@ -22,12 +22,10 @@ import pytest
 pytest.importorskip("qpax")
 
 from openscvx.solvers.ptr_solver import StatusCode, SubproblemSolution
-
 from tests.solvers._iteration_callback_helpers import (
     build_brachistochrone,
     subproblem_data_from_numpy_stash,
 )
-
 
 # ============================================================================
 # Assembly parity (Phase 2)
@@ -94,15 +92,9 @@ def test_iteration_callback_matches_solve_on_brachistochrone():
     solution = callback(state, data)
 
     assert isinstance(solution, SubproblemSolution)
-    np.testing.assert_allclose(
-        np.asarray(solution.x), reference.x, atol=1e-8, rtol=1e-8
-    )
-    np.testing.assert_allclose(
-        np.asarray(solution.u), reference.u, atol=1e-8, rtol=1e-8
-    )
-    np.testing.assert_allclose(
-        np.asarray(solution.nu), reference.nu, atol=1e-8, rtol=1e-8
-    )
+    np.testing.assert_allclose(np.asarray(solution.x), reference.x, atol=1e-8, rtol=1e-8)
+    np.testing.assert_allclose(np.asarray(solution.u), reference.u, atol=1e-8, rtol=1e-8)
+    np.testing.assert_allclose(np.asarray(solution.nu), reference.nu, atol=1e-8, rtol=1e-8)
     # nu_vb is stacked (N, n_nodal) in the JAX path, list-of-arrays on NumPy.
     assert solution.nu_vb.shape == (solver.layout.N, solver.layout.n_nodal)
     # Cost reconstruction is independent of the QP solve — should match the
