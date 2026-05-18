@@ -15,89 +15,18 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-from openscvx import Problem
 from openscvx.solvers.ptr_solver import (
     StatusCode,
     SubproblemData,
     SubproblemSolution,
 )
 
+from tests.solvers._iteration_callback_helpers import build_brachistochrone
+
 
 # ============================================================================
 # Fixtures
 # ============================================================================
-
-
-def _build_brachistochrone(n: int = 4, k_max: int = 1):
-    """Build the brachistochrone problem at small ``N`` for callback tests.
-
-    Mirrors ``examples/abstract/brachistochrone.py`` but selects the CVXPy
-    backend explicitly and disables printing so the test output stays clean.
-    """
-    import openscvx as ox
-
-    g = 9.81
-
-    position = ox.State("position", shape=(2,))
-    position.max = np.array([10.0, 10.0])
-    position.min = np.array([0.0, 0.0])
-    position.initial = np.array([0.0, 10.0])
-    position.final = [10.0, 5.0]
-
-    velocity = ox.State("velocity", shape=(1,))
-    velocity.max = np.array([10.0])
-    velocity.min = np.array([0.0])
-    velocity.initial = np.array([0.0])
-    velocity.final = [("free", 10.0)]
-
-    theta = ox.Control("theta", shape=(1,))
-    theta.max = np.array([100.5 * jnp.pi / 180])
-    theta.min = np.array([0.0])
-    theta.guess = np.linspace(5 * jnp.pi / 180, 100.5 * jnp.pi / 180, n).reshape(-1, 1)
-
-    states = [position, velocity]
-    controls = [theta]
-
-    dynamics = {
-        "position": ox.Concat(
-            velocity[0] * ox.Sin(theta[0]),
-            -velocity[0] * ox.Cos(theta[0]),
-        ),
-        "velocity": g * ox.Cos(theta[0]),
-    }
-
-    constraint_exprs = []
-    for state in states:
-        constraint_exprs.extend(
-            [ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)]
-        )
-
-    time = ox.Time(
-        initial=0.0,
-        final=("minimize", 2.0),
-        min=0.0,
-        max=2.0,
-        uniform_time_grid=True,
-    )
-
-    prob = Problem(
-        dynamics=dynamics,
-        states=states,
-        controls=controls,
-        time=time,
-        constraints=constraint_exprs,
-        N=n,
-        float_dtype="float64",
-        algorithm={
-            "autotuner": "ConstantProximalWeight",
-            "lam_prox": 1e0,
-            "lam_cost": 6e-1,
-            "k_max": k_max,
-        },
-        solver={"backend": "cvxpy"},
-    )
-    prob.settings.dev.printing = False
-    return prob
 
 
 def _subproblem_data_from_solver(prob) -> SubproblemData:
@@ -225,7 +154,7 @@ def test_iteration_callback_matches_solve_on_brachistochrone():
     the same NumPy ``solve()`` we compare against, so parity should be
     exact modulo CLARABEL re-solve noise.
     """
-    prob = _build_brachistochrone(n=4, k_max=1)
+    prob = build_brachistochrone("cvxpy", n=4, k_max=1)
     prob.initialize()
     prob.solve()
     solver = prob.solver
@@ -254,7 +183,7 @@ def test_iteration_callback_composes_with_jit():
     level; this asserts the real CVXPy solver also composes under ``jit``
     without per-call retracing.
     """
-    prob = _build_brachistochrone(n=4, k_max=1)
+    prob = build_brachistochrone("cvxpy", n=4, k_max=1)
     prob.initialize()
     prob.solve()
     solver = prob.solver
@@ -282,7 +211,7 @@ def test_iteration_callback_composes_with_vmap_sequential():
     four identical ``SubproblemSolution`` slices that each match the bare
     call.
     """
-    prob = _build_brachistochrone(n=4, k_max=1)
+    prob = build_brachistochrone("cvxpy", n=4, k_max=1)
     prob.initialize()
     prob.solve()
     solver = prob.solver

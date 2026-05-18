@@ -26,170 +26,11 @@ pytestmark = requires_moreau
 
 # Imports below are only reached when _MOREAU_OK is True.
 if _MOREAU_OK:
-    import jax
-    import jax.numpy as jnp
+    from openscvx.solvers.ptr_solver import StatusCode, SubproblemSolution
 
-    from openscvx import Problem
-    from openscvx.solvers.ptr_solver import (
-        StatusCode,
-        SubproblemData,
-        SubproblemSolution,
-    )
-
-
-# ============================================================================
-# Fixtures
-# ============================================================================
-
-
-def _build_brachistochrone(n: int = 4, k_max: int = 1, constraint_style: str = "ctcs"):
-    """Build the brachistochrone problem with the Moreau backend.
-
-    Mirrors the QPAX iteration-callback test fixture so the two backends are
-    exercised on the same problem shape — the only delta is ``backend="moreau"``
-    and the constraint-row encoding choice (Moreau uses SOC epigraphs for
-    ``|nu|`` where QPAX uses paired nonneg slacks).
-    """
-    import openscvx as ox
-
-    g = 9.81
-
-    position = ox.State("position", shape=(2,))
-    position.max = np.array([10.0, 10.0])
-    position.min = np.array([0.0, 0.0])
-    position.initial = np.array([0.0, 10.0])
-    position.final = [10.0, 5.0]
-
-    velocity = ox.State("velocity", shape=(1,))
-    velocity.max = np.array([10.0])
-    velocity.min = np.array([0.0])
-    velocity.initial = np.array([0.0])
-    velocity.final = [("free", 10.0)]
-
-    theta = ox.Control("theta", shape=(1,))
-    theta.max = np.array([100.5 * jnp.pi / 180])
-    theta.min = np.array([0.0])
-    theta.guess = np.linspace(5 * jnp.pi / 180, 100.5 * jnp.pi / 180, n).reshape(-1, 1)
-
-    states = [position, velocity]
-    controls = [theta]
-
-    dynamics = {
-        "position": ox.Concat(
-            velocity[0] * ox.Sin(theta[0]),
-            -velocity[0] * ox.Cos(theta[0]),
-        ),
-        "velocity": g * ox.Cos(theta[0]),
-    }
-
-    constraint_exprs = []
-    if constraint_style == "ctcs":
-        for state in states:
-            constraint_exprs.extend(
-                [ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)]
-            )
-    elif constraint_style == "nodal":
-        for state in states:
-            constraint_exprs.extend([state <= state.max, state.min <= state])
-    else:
-        raise ValueError(f"unknown constraint_style {constraint_style!r}")
-
-    time = ox.Time(
-        initial=0.0,
-        final=("minimize", 2.0),
-        min=0.0,
-        max=2.0,
-        uniform_time_grid=True,
-    )
-
-    prob = Problem(
-        dynamics=dynamics,
-        states=states,
-        controls=controls,
-        time=time,
-        constraints=constraint_exprs,
-        N=n,
-        float_dtype="float64",
-        algorithm={
-            "autotuner": "ConstantProximalWeight",
-            "lam_prox": 1e0,
-            "lam_cost": 6e-1,
-            "k_max": k_max,
-        },
-        solver={"backend": "moreau"},
-    )
-    prob.settings.dev.printing = False
-    return prob
-
-
-def _subproblem_data_from_solver(solver) -> "SubproblemData":
-    """Reconstruct the JAX-pure :class:`SubproblemData` from the NumPy stash.
-
-    Mirrors the QPAX-side helper: after one ``update_*`` cycle the solver
-    has every per-iteration array on hand, and the stacked-array layout
-    required by the callback is built here so both assembly paths see the
-    identical iterate.
-    """
-    L = solver.layout
-    N, n_x, n_u = L.N, L.n_x, L.n_u
-    sim = solver._settings.sim
-    has_impulsive = sim.u.slice_impulsive.stop > sim.u.slice_impulsive.start
-
-    dyn = solver._dyn
-    cons = solver._cons
-    pen = solver._pen
-    n_nodal = L.n_nodal
-
-    nodal_g = np.zeros((N, max(n_nodal, 1)), dtype=float)
-    nodal_grad_x = np.zeros((N, max(n_nodal, 1), n_x), dtype=float)
-    nodal_grad_u = np.zeros((N, max(n_nodal, 1), n_u), dtype=float)
-    for c_idx, (constraint, entry) in enumerate(
-        zip(solver._jax_constraints.nodal, cons.get("nodal", []))
-    ):
-        for node in constraint.nodes:
-            nodal_g[node, c_idx] = entry["g"][node]
-            nodal_grad_x[node, c_idx] = entry["grad_g_x"][node]
-            nodal_grad_u[node, c_idx] = entry["grad_g_u"][node]
-    if n_nodal == 0:
-        nodal_g = np.zeros((N, 0))
-        nodal_grad_x = np.zeros((N, 0, n_x))
-        nodal_grad_u = np.zeros((N, 0, n_u))
-
-    x_prop_plus = (
-        dyn["x_prop_plus"] if dyn["x_prop_plus"] is not None else np.zeros((N, n_x))
-    )
-    E_d = dyn["E_d"] if dyn["E_d"] is not None else np.zeros((N, n_x, n_u))
-    # NumPy path already absorbed D_d into A_d/B_d/C_d; pass zero D_d so the
-    # JAX path's einsum (gated on has_impulsive) is skipped via the matching
-    # static-Python branch — has_impulsive is False for this problem.
-    D_d = np.zeros((N, n_x, n_x))
-
-    x_init = solver._x_init if solver._x_init is not None else np.full(n_x, np.nan)
-    x_term = solver._x_term if solver._x_term is not None else np.full(n_x, np.nan)
-
-    return SubproblemData(
-        x_bar=jnp.asarray(dyn["x_bar"]),
-        u_bar=jnp.asarray(dyn["u_bar"]),
-        A_d=jnp.asarray(dyn["A_d"]),
-        B_d=jnp.asarray(dyn["B_d"]),
-        C_d=jnp.asarray(dyn["C_d"]),
-        x_prop=jnp.asarray(dyn["x_prop"]),
-        x_prop_plus=jnp.asarray(x_prop_plus),
-        D_d=jnp.asarray(D_d),
-        E_d=jnp.asarray(E_d),
-        nodal_g=jnp.asarray(nodal_g),
-        nodal_grad_x=jnp.asarray(nodal_grad_x),
-        nodal_grad_u=jnp.asarray(nodal_grad_u),
-        cross_g=jnp.zeros((0,)),
-        cross_grad_X=jnp.zeros((0, N, n_x)),
-        cross_grad_U=jnp.zeros((0, N, n_u)),
-        lam_prox=jnp.asarray(pen["lam_prox"]),
-        lam_cost=jnp.asarray(pen["lam_cost"]),
-        lam_vc=jnp.asarray(pen["lam_vc"]),
-        lam_vb_nodal=jnp.asarray(pen["lam_vb_nodal"]),
-        lam_vb_cross=jnp.zeros((0,)),
-        x_init=jnp.asarray(x_init),
-        x_term=jnp.asarray(x_term),
+    from tests.solvers._iteration_callback_helpers import (
+        build_brachistochrone,
+        subproblem_data_from_numpy_stash,
     )
 
 
@@ -208,14 +49,14 @@ def test_assemble_conic_jax_matches_numpy_on_brachistochrone(constraint_style):
     precomputed ``csr_to_coo_perm`` — both compose to the same A_data passed
     to Moreau's solver.
     """
-    prob = _build_brachistochrone(n=4, k_max=1, constraint_style=constraint_style)
+    prob = build_brachistochrone("moreau", n=4, k_max=1, constraint_style=constraint_style)
     prob.initialize()
     prob.solve()
     solver = prob.solver
 
     P_np, coo_np, q_np, b_np = solver._assemble_conic()
 
-    data = _subproblem_data_from_solver(solver)
+    data = subproblem_data_from_numpy_stash(solver)
     P_j, coo_j, q_j, b_j = solver._assemble_conic_jax(data)
 
     np.testing.assert_allclose(np.asarray(P_j), P_np, atol=1e-10, rtol=1e-10)
@@ -230,7 +71,7 @@ def test_csr_to_coo_perm_reconstructs_numpy_A_data():
     path would silently send a permuted system to Moreau."""
     import scipy.sparse as sp
 
-    prob = _build_brachistochrone(n=4, k_max=1)
+    prob = build_brachistochrone("moreau", n=4, k_max=1)
     prob.initialize()
     prob.solve()
     solver = prob.solver
@@ -260,14 +101,14 @@ def test_iteration_callback_matches_solve_on_brachistochrone():
     state), so the OO path and the functional path solve identical conic
     programs and must agree to PDIP tolerance.
     """
-    prob = _build_brachistochrone(n=4, k_max=1)
+    prob = build_brachistochrone("moreau", n=4, k_max=1)
     prob.initialize()
     prob.solve()
     solver = prob.solver
 
     reference = solver.solve()
 
-    data = _subproblem_data_from_solver(solver)
+    data = subproblem_data_from_numpy_stash(solver)
     callback = solver.iteration_callback()
     solution = callback(None, data)
 
@@ -293,12 +134,12 @@ def test_iteration_callback_traces_under_jit():
     """The callback is constructed under ``jax.jit`` already; this confirms
     it's callable end-to-end and that repeated calls share the compiled
     trace (no per-call retrace surprises)."""
-    prob = _build_brachistochrone(n=4, k_max=1)
+    prob = build_brachistochrone("moreau", n=4, k_max=1)
     prob.initialize()
     prob.solve()
     solver = prob.solver
 
-    data = _subproblem_data_from_solver(solver)
+    data = subproblem_data_from_numpy_stash(solver)
     callback = solver.iteration_callback()
 
     sol1 = callback(None, data)

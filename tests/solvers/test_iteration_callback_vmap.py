@@ -22,150 +22,13 @@ import pytest
 import jax
 import jax.numpy as jnp
 
-from openscvx import Problem
 from openscvx.solvers.ptr_solver import SubproblemData, SubproblemSolution
 
 from tests._marks import requires_moreau
-
-
-# ============================================================================
-# Fixtures (mirror tests/solvers/test_iteration_callback_{qpax,moreau}.py)
-# ============================================================================
-
-
-def _build_brachistochrone(backend: str, n: int = 4, k_max: int = 1):
-    """Build the brachistochrone problem with the named backend.
-
-    Kept in-test rather than imported from the per-backend test modules so
-    each file remains independently runnable.
-    """
-    import openscvx as ox
-
-    g = 9.81
-
-    position = ox.State("position", shape=(2,))
-    position.max = np.array([10.0, 10.0])
-    position.min = np.array([0.0, 0.0])
-    position.initial = np.array([0.0, 10.0])
-    position.final = [10.0, 5.0]
-
-    velocity = ox.State("velocity", shape=(1,))
-    velocity.max = np.array([10.0])
-    velocity.min = np.array([0.0])
-    velocity.initial = np.array([0.0])
-    velocity.final = [("free", 10.0)]
-
-    theta = ox.Control("theta", shape=(1,))
-    theta.max = np.array([100.5 * jnp.pi / 180])
-    theta.min = np.array([0.0])
-    theta.guess = np.linspace(5 * jnp.pi / 180, 100.5 * jnp.pi / 180, n).reshape(-1, 1)
-
-    states = [position, velocity]
-    controls = [theta]
-
-    dynamics = {
-        "position": ox.Concat(
-            velocity[0] * ox.Sin(theta[0]),
-            -velocity[0] * ox.Cos(theta[0]),
-        ),
-        "velocity": g * ox.Cos(theta[0]),
-    }
-
-    constraint_exprs = []
-    for state in states:
-        constraint_exprs.extend(
-            [ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)]
-        )
-
-    time = ox.Time(
-        initial=0.0,
-        final=("minimize", 2.0),
-        min=0.0,
-        max=2.0,
-        uniform_time_grid=True,
-    )
-
-    prob = Problem(
-        dynamics=dynamics,
-        states=states,
-        controls=controls,
-        time=time,
-        constraints=constraint_exprs,
-        N=n,
-        float_dtype="float64",
-        algorithm={
-            "autotuner": "ConstantProximalWeight",
-            "lam_prox": 1e0,
-            "lam_cost": 6e-1,
-            "k_max": k_max,
-        },
-        solver={"backend": backend},
-    )
-    prob.settings.dev.printing = False
-    return prob
-
-
-def _subproblem_data_from_solver(solver) -> SubproblemData:
-    """Reconstruct the JAX-pure ``SubproblemData`` from the NumPy stash.
-
-    Identical to the helper in ``test_iteration_callback_{qpax,moreau}.py``;
-    duplicated here to keep this module independently runnable.
-    """
-    L = solver.layout
-    N, n_x, n_u = L.N, L.n_x, L.n_u
-    dyn = solver._dyn
-    cons = solver._cons
-    pen = solver._pen
-    n_nodal = L.n_nodal
-
-    nodal_g = np.zeros((N, max(n_nodal, 1)), dtype=float)
-    nodal_grad_x = np.zeros((N, max(n_nodal, 1), n_x), dtype=float)
-    nodal_grad_u = np.zeros((N, max(n_nodal, 1), n_u), dtype=float)
-    for c_idx, (constraint, entry) in enumerate(
-        zip(solver._jax_constraints.nodal, cons.get("nodal", []))
-    ):
-        for node in constraint.nodes:
-            nodal_g[node, c_idx] = entry["g"][node]
-            nodal_grad_x[node, c_idx] = entry["grad_g_x"][node]
-            nodal_grad_u[node, c_idx] = entry["grad_g_u"][node]
-    if n_nodal == 0:
-        nodal_g = np.zeros((N, 0))
-        nodal_grad_x = np.zeros((N, 0, n_x))
-        nodal_grad_u = np.zeros((N, 0, n_u))
-
-    x_prop_plus = (
-        dyn["x_prop_plus"] if dyn["x_prop_plus"] is not None else np.zeros((N, n_x))
-    )
-    E_d = dyn["E_d"] if dyn["E_d"] is not None else np.zeros((N, n_x, n_u))
-    D_d = np.zeros((N, n_x, n_x))
-
-    x_init = solver._x_init if solver._x_init is not None else np.full(n_x, np.nan)
-    x_term = solver._x_term if solver._x_term is not None else np.full(n_x, np.nan)
-
-    return SubproblemData(
-        x_bar=jnp.asarray(dyn["x_bar"]),
-        u_bar=jnp.asarray(dyn["u_bar"]),
-        A_d=jnp.asarray(dyn["A_d"]),
-        B_d=jnp.asarray(dyn["B_d"]),
-        C_d=jnp.asarray(dyn["C_d"]),
-        x_prop=jnp.asarray(dyn["x_prop"]),
-        x_prop_plus=jnp.asarray(x_prop_plus),
-        D_d=jnp.asarray(D_d),
-        E_d=jnp.asarray(E_d),
-        nodal_g=jnp.asarray(nodal_g),
-        nodal_grad_x=jnp.asarray(nodal_grad_x),
-        nodal_grad_u=jnp.asarray(nodal_grad_u),
-        cross_g=jnp.zeros((0,)),
-        cross_grad_X=jnp.zeros((0, N, n_x)),
-        cross_grad_U=jnp.zeros((0, N, n_u)),
-        lam_prox=jnp.asarray(pen["lam_prox"]),
-        lam_cost=jnp.asarray(pen["lam_cost"]),
-        lam_vc=jnp.asarray(pen["lam_vc"]),
-        lam_vb_nodal=jnp.asarray(pen["lam_vb_nodal"]),
-        lam_vb_cross=jnp.zeros((0,)),
-        x_init=jnp.asarray(x_init),
-        x_term=jnp.asarray(x_term),
-    )
+from tests.solvers._iteration_callback_helpers import (
+    build_brachistochrone,
+    subproblem_data_from_numpy_stash,
+)
 
 
 def _make_batch(data: SubproblemData, scales) -> SubproblemData:
@@ -215,12 +78,12 @@ def test_qpax_iteration_callback_composes_with_vmap():
     must match a bare call on the corresponding unbatched data within PDIP
     tolerance.
     """
-    prob = _build_brachistochrone("qpax", n=4, k_max=1)
+    prob = build_brachistochrone("qpax", n=4, k_max=1)
     prob.initialize()
     prob.solve()
     solver = prob.solver
 
-    base = _subproblem_data_from_solver(solver)
+    base = subproblem_data_from_numpy_stash(solver)
     scales = jnp.array([0.5, 1.0, 1.5, 2.0])
     batch = _make_batch(base, scales)
 
@@ -264,12 +127,12 @@ def test_moreau_iteration_callback_composes_with_vmap():
     sequentially fanned out. Each batch element solves an independent conic
     program; per-element results must match unbatched calls.
     """
-    prob = _build_brachistochrone("moreau", n=4, k_max=1)
+    prob = build_brachistochrone("moreau", n=4, k_max=1)
     prob.initialize()
     prob.solve()
     solver = prob.solver
 
-    base = _subproblem_data_from_solver(solver)
+    base = subproblem_data_from_numpy_stash(solver)
     scales = jnp.array([0.5, 1.0, 1.5, 2.0])
     batch = _make_batch(base, scales)
 

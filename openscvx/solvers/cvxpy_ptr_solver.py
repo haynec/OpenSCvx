@@ -119,25 +119,6 @@ def _unmask_bc(bc: "jnp.ndarray") -> np.ndarray:
     return np.nan_to_num(arr, nan=0.0)
 
 
-def _collapse_nu_vb(
-    nu_vb: List[np.ndarray],
-    N: int,
-    n_nodal: int,
-    dtype,
-) -> "jnp.ndarray":
-    """Collapse ``PTRSolveResult.nu_vb`` from list-of-``(N,)`` to ``(N, n_nodal)``.
-
-    :class:`PTRSolveResult` keeps the list-of-arrays layout the historic
-    NumPy SCP loop expects; the JAX-pure :class:`SubproblemSolution` declares
-    a single stacked array for ``pure_callback``'s ``ShapeDtypeStruct``
-    contract. The two paths diverge only at the iteration-callback output
-    boundary.
-    """
-    if n_nodal == 0:
-        return jnp.zeros((N, 0), dtype=dtype)
-    return jnp.asarray(np.stack([np.asarray(arr) for arr in nu_vb], axis=-1), dtype=dtype)
-
-
 class CVXPyPTRSolver(PTRSolver):
     """CVXPy-backed implementation of the PTR convex subproblem.
 
@@ -1091,7 +1072,17 @@ class CVXPyPTRSolver(PTRSolver):
                 x=jnp.asarray(result.x, dtype=f),
                 u=jnp.asarray(result.u, dtype=f),
                 nu=jnp.asarray(result.nu, dtype=f),
-                nu_vb=_collapse_nu_vb(result.nu_vb, N, n_nodal, f),
+                # nu_vb collapses from PTRSolveResult's list-of-(N,) layout to
+                # the (N, n_nodal) stacked array SubproblemSolution declares
+                # for pure_callback's ShapeDtypeStruct contract.
+                nu_vb=(
+                    jnp.zeros((N, 0), dtype=f)
+                    if n_nodal == 0
+                    else jnp.asarray(
+                        np.stack([np.asarray(a) for a in result.nu_vb], axis=-1),
+                        dtype=f,
+                    )
+                ),
                 nu_vb_cross=jnp.asarray(
                     np.asarray(result.nu_vb_cross, dtype=float).reshape(n_cross),
                     dtype=f,
