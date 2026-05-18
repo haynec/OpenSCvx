@@ -167,6 +167,12 @@ class QPAXPTRSolver(PTRSolver):
     dispatches to ``qpax.solve_qp``. See the module docstring for the L1 /
     positive-part slack reformulation and the rationale behind the design.
 
+    The JAX-pure entry point :meth:`iteration_callback` performs the same
+    ``assemble → solve → unpack`` cycle entirely on the JAX boundary using
+    ``qpax.solve_qp_primal`` — the ``jax.custom_vjp``-differentiable variant
+    — so the backend composes with ``jax.jit``, ``jax.vmap``, and
+    (downstream) ``jax.grad``.
+
     Scope:
         Supported — state/control box, dynamics linearization (continuous
         and impulsive), boundary ``Fix``, uniform time grid, linearized

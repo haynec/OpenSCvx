@@ -2,22 +2,38 @@
 
 The PTR formulation — its variables, slack structure, cost terms, and
 linearization contract — is shared across backends. This module defines that
-contract; concrete backends (CVXPy, QPAX) live in sibling modules and
+contract; concrete backends (CVXPy, QPAX, Moreau) live in sibling modules and
 implement the assembly/dispatch that each backend's modeling layer requires.
+
+Two per-iteration entry points coexist:
+
+* The historical NumPy contract — four :meth:`PTRSolver.update_*` stages
+  followed by :meth:`PTRSolver.solve`, returning a :class:`PTRSolveResult`.
+  Used by today's Python-side SCP loop and by direct interactive use of
+  :class:`~openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`.
+* The JAX-pure contract — :meth:`PTRSolver.iteration_callback`, which returns
+  a ``(state, SubproblemData) -> SubproblemSolution`` callable built once at
+  :meth:`~openscvx.solvers.base.ConvexSolver.initialize`. All backends emit
+  the same input/output pytree shape so the callable composes with
+  ``jax.jit`` / ``jax.vmap`` and, downstream, ``lax.while_loop``-driven SCP
+  iteration.
 
 Backends:
     :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`
         DCP graph assembled via CVXPy, dispatched to a conic solver
-        (QOCO, CLARABEL, ...).
+        (QOCO, CLARABEL, ...). The JAX-pure callback wraps the host solve
+        in :func:`jax.pure_callback` (``vmap_method="sequential"``).
     :class:`openscvx.solvers.qpax_ptr_solver.QPAXPTRSolver`
         Flat ``(Q, q, A, b, G, h)`` assembled as JAX arrays and solved with
-        ``qpax.solve_qp``. Enables an end-to-end JAX-differentiable SCP loop
-        in follow-up work.
+        ``qpax.solve_qp`` (NumPy path) or the differentiable
+        ``qpax.solve_qp_primal`` (JAX-pure path). Enables an end-to-end
+        JAX-differentiable SCP loop in follow-up work.
     :class:`openscvx.solvers.moreau_ptr_solver.MoreauPTRSolver`
         Sparse conic program assembled as CSR JAX arrays and solved with
-        ``moreau.jax.Solver``.  Uses SOC epigraphs for the L1 / pos PTR
-        penalties instead of QPAX-style slack expansion; warm-starts between
-        SCP iterations.
+        ``moreau.jax.Solver`` (NumPy path, warm-started between SCP
+        iterations) or the functional ``moreau.jax.solver(...)`` factory
+        (JAX-pure path, no warm-start). Uses SOC epigraphs for the L1 / pos
+        PTR penalties instead of QPAX-style slack expansion.
 """
 
 from abc import abstractmethod

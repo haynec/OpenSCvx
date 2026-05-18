@@ -129,7 +129,11 @@ class CVXPyPTRSolver(PTRSolver):
 
     The solver builds the problem structure once during ``initialize()``, using
     CVXPy Parameters for values that change each iteration. The ``solve()``
-    method then solves and returns a structured ``PTRSolveResult``.
+    method then solves and returns a structured ``PTRSolveResult``. The
+    JAX-pure entry point :meth:`iteration_callback` wraps that same solve in
+    :func:`jax.pure_callback` (``vmap_method="sequential"`` — CVXPy cannot
+    batch) so the backend composes with ``jax.jit`` / ``jax.vmap`` alongside
+    the JAX-native QPAX and Moreau backends.
 
     The cost and constraint formulations are defined in the ``cost()`` and
     ``constraints()`` methods, which can be overridden in subclasses to

@@ -269,6 +269,14 @@ class MoreauPTRSolver(PTRSolver):
     iterations on successful solves, and opens a path to user ``.convex()``
     SOCP support in a follow-up.
 
+    The JAX-pure entry point :meth:`iteration_callback` builds Moreau's
+    functional factory ``moreau.jax.solver(...)`` once at
+    :meth:`initialize` and calls it as
+    ``(P_data, A_data, q, b) -> (JaxSolution, JaxSolveInfo)`` so the backend
+    composes with ``jax.jit`` and ``jax.vmap``. The functional API does not
+    expose a warm-start hook, so the JAX-pure path is cold-start every
+    iteration; the NumPy :meth:`solve` path keeps the OO warm-start.
+
     Scope:
         Supported — state/control box, dynamics linearization (continuous
         and impulsive), boundary Fix, uniform time grid, linearized nodal
