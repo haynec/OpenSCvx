@@ -869,12 +869,12 @@ class QPAXPTRSolver(PTRSolver):
         ``status_code = StatusCode.UNKNOWN`` unconditionally — the SCP
         trust-region check catches divergence at the algorithm layer instead.
 
-        Args:
-            state: :class:`AlgorithmState` pytree. Accepted for cross-backend
-                signature uniformity but unused — every input the QP needs
-                already lives in ``data``.
-            data: :class:`SubproblemData` pytree carrying the per-iteration
-                linearization arrays, penalty weights, and boundary conditions.
+        The returned callable takes ``(state, data)``: ``state`` is the
+        :class:`AlgorithmState` pytree, accepted for cross-backend signature
+        uniformity but unused (every input the QP needs already lives in
+        ``data``); ``data`` is the :class:`SubproblemData` pytree carrying the
+        per-iteration linearization arrays, penalty weights, and boundary
+        conditions.
         """
         if self.layout is None or self._settings is None:
             raise RuntimeError(

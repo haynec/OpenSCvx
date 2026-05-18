@@ -1243,14 +1243,12 @@ class MoreauPTRSolver(PTRSolver):
         cold start; ``state`` is accepted only for cross-backend signature
         uniformity.
 
-        Args:
-            state: :class:`AlgorithmState` pytree. Accepted for cross-backend
-                signature uniformity but unused — Moreau's functional API
-                takes no warm-start (see the 2026-05-17 Decision Log entry
-                in ``plans/solver-iteration-callbacks.md``).
-            data: :class:`SubproblemData` pytree carrying the per-iteration
-                linearization arrays, penalty weights, and boundary
-                conditions.
+        The returned callable takes ``(state, data)``: ``state`` is the
+        :class:`AlgorithmState` pytree, accepted for cross-backend signature
+        uniformity but unused (Moreau's functional API takes no warm-start);
+        ``data`` is the :class:`SubproblemData` pytree carrying the
+        per-iteration linearization arrays, penalty weights, and boundary
+        conditions.
         """
         if self.layout is None or self._settings is None:
             raise RuntimeError(
