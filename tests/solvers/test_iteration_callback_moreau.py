@@ -287,9 +287,6 @@ def test_iteration_callback_matches_solve_on_brachistochrone():
     )
     # Optimal solves should map to StatusCode.OPTIMAL.
     assert int(solution.status_code) == int(StatusCode.OPTIMAL)
-    # moreau_carry is a zero-length triple — placeholder, not consumed.
-    for leaf in solution.moreau_carry:
-        assert leaf.shape == (0,)
 
 
 def test_iteration_callback_traces_under_jit():

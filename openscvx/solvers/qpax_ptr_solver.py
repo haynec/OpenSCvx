@@ -1326,9 +1326,7 @@ class QPAXPTRSolver(PTRSolver):
         Mirrors :meth:`_unpack` but stays JAX-pure: returns scaled-to-physical
         trajectories, the collapsed ``(N, n_nodal)`` ``nu_vb`` layout, and a
         ``status_code = UNKNOWN`` (``solve_qp_primal`` exposes no convergence
-        diagnostic — the SCP trust-region check is the gate). ``moreau_carry``
-        is left as zero arrays of the AlgorithmState shape so every backend's
-        :class:`SubproblemSolution` pytree is structurally identical.
+        diagnostic — the SCP trust-region check is the gate).
         """
         L = self.layout
         N, n_x, n_u = L.N, L.n_x, L.n_u
@@ -1346,12 +1344,6 @@ class QPAXPTRSolver(PTRSolver):
 
         cost = self._reconstruct_cost_jax(z, data)
 
-        # Same-shape zero carry so the SubproblemSolution pytree is uniform
-        # across backends — Moreau will populate this with its real (x, z, s)
-        # warm-start once Phase 3 lands.
-        zero = jnp.zeros((0,), dtype=f)
-        moreau_carry = (zero, zero, zero)
-
         return SubproblemSolution(
             x=x,
             u=u,
@@ -1360,7 +1352,6 @@ class QPAXPTRSolver(PTRSolver):
             nu_vb_cross=jnp.zeros((0,), dtype=f),
             cost=cost,
             status_code=jnp.asarray(int(StatusCode.UNKNOWN), dtype=jnp.int32),
-            moreau_carry=moreau_carry,
         )
 
     def _reconstruct_cost_jax(

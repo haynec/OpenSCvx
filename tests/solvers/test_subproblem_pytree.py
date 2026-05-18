@@ -57,7 +57,7 @@ def _dummy_subproblem_data(N=4, n_x=3, n_u=2, n_nodal=2, n_cross=1):
     )
 
 
-def _dummy_subproblem_solution(N=4, n_x=3, n_u=2, n_nodal=2, n_cross=1, n_z=10, n_cone=8):
+def _dummy_subproblem_solution(N=4, n_x=3, n_u=2, n_nodal=2, n_cross=1):
     return SubproblemSolution(
         x=jnp.ones((N, n_x)),
         u=jnp.ones((N, n_u)),
@@ -66,7 +66,6 @@ def _dummy_subproblem_solution(N=4, n_x=3, n_u=2, n_nodal=2, n_cross=1, n_z=10, 
         nu_vb_cross=jnp.zeros((n_cross,)),
         cost=jnp.asarray(1.23),
         status_code=jnp.asarray(int(StatusCode.OPTIMAL), dtype=jnp.int32),
-        moreau_carry=(jnp.zeros((n_z,)), jnp.zeros((n_cone,)), jnp.zeros((n_cone,))),
     )
 
 
@@ -111,25 +110,9 @@ def test_subproblem_solution_roundtrip():
 
     assert isinstance(rebuilt, SubproblemSolution)
     assert jnp.array_equal(rebuilt.x, sol.x)
+    assert jnp.array_equal(rebuilt.u, sol.u)
+    assert jnp.array_equal(rebuilt.nu_vb, sol.nu_vb)
     assert int(rebuilt.status_code) == int(StatusCode.OPTIMAL)
-    # ``moreau_carry`` is a nested tuple of arrays — must round-trip as one.
-    assert isinstance(rebuilt.moreau_carry, tuple)
-    assert len(rebuilt.moreau_carry) == 3
-    for a, b in zip(rebuilt.moreau_carry, sol.moreau_carry):
-        assert jnp.array_equal(a, b)
-
-
-def test_subproblem_solution_zeros_like():
-    sol = _dummy_subproblem_solution()
-    zeros = jax.tree.map(jnp.zeros_like, sol)
-
-    assert isinstance(zeros, SubproblemSolution)
-    assert zeros.cost.shape == sol.cost.shape
-    assert int(zeros.status_code) == 0  # int32 zero
-    assert isinstance(zeros.moreau_carry, tuple)
-    for leaf, original in zip(zeros.moreau_carry, sol.moreau_carry):
-        assert leaf.shape == original.shape
-        assert jnp.all(leaf == 0)
 
 
 # ============================================================================

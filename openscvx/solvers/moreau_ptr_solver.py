@@ -1233,9 +1233,7 @@ class MoreauPTRSolver(PTRSolver):
         path but does **not** accept a warm-start (see the 2026-05-17 Decision
         Log entry in ``plans/solver-iteration-callbacks.md``). Every call is a
         cold start; ``state`` is accepted only for cross-backend signature
-        uniformity. ``SubproblemSolution.moreau_carry`` carries a zero-length
-        placeholder triple so the pytree shape is uniform with the other
-        backends.
+        uniformity.
 
         Args:
             state: :class:`AlgorithmState` pytree. Unused on the QPAX/Moreau
@@ -1519,9 +1517,7 @@ class MoreauPTRSolver(PTRSolver):
         Mirrors :meth:`_unpack`: scaled-to-physical trajectories, virtual
         controls in their natural orientation, ``nu_vb`` stacked to
         ``(N, n_nodal)``. ``status_code`` is derived from ``info.status`` via
-        :func:`_moreau_status_to_code`. ``moreau_carry`` is a zero-length
-        placeholder triple — the functional API has no warm-start, so the
-        carry is structural-only.
+        :func:`_moreau_status_to_code`.
         """
         L = self.layout
         N, n_x, n_u = L.N, L.n_x, L.n_u
@@ -1541,7 +1537,6 @@ class MoreauPTRSolver(PTRSolver):
         cost = self._reconstruct_cost_jax(z, data)
         status_code = _moreau_status_to_code(info.status)
 
-        zero = jnp.zeros((0,), dtype=f)
         return SubproblemSolution(
             x=x,
             u=u,
@@ -1550,7 +1545,6 @@ class MoreauPTRSolver(PTRSolver):
             nu_vb_cross=jnp.zeros((0,), dtype=f),
             cost=cost,
             status_code=status_code,
-            moreau_carry=(zero, zero, zero),
         )
 
     def _reconstruct_cost_jax(

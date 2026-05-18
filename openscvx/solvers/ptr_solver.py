@@ -172,10 +172,7 @@ class SubproblemSolution:
     """JAX-pure output of :meth:`PTRSolver.iteration_callback`.
 
     All backends produce structurally-identical pytrees so the result composes
-    with ``lax.while_loop`` in the downstream batchable-problem work. The
-    Moreau warm-start carry (``moreau_carry``) is populated by
-    :class:`MoreauPTRSolver`; QPAX and CVXPy emit same-shape zeros so the
-    pytree shape is uniform across backends.
+    with ``lax.while_loop`` in the downstream batchable-problem work.
 
     Attributes:
         x: Nodal state, shape ``(N, n_x)``. Unscaled.
@@ -187,8 +184,6 @@ class SubproblemSolution:
         nu_vb_cross: Cross-node virtual-buffer slacks, shape ``(n_cross,)``.
         cost: Optimal objective value (scalar).
         status_code: :class:`StatusCode` value as ``int32``.
-        moreau_carry: ``(x, z, s)`` warm-start carry for the Moreau backend.
-            Non-Moreau backends emit zero arrays of the same shape.
     """
 
     x: jnp.ndarray
@@ -198,7 +193,6 @@ class SubproblemSolution:
     nu_vb_cross: jnp.ndarray
     cost: jnp.ndarray
     status_code: jnp.ndarray
-    moreau_carry: Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]
 
     def tree_flatten(self):
         children = tuple(getattr(self, f.name) for f in fields(self))

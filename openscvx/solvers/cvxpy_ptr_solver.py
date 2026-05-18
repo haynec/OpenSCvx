@@ -1013,9 +1013,6 @@ class CVXPyPTRSolver(PTRSolver):
         :attr:`StatusCode.UNKNOWN` — the SCP trust-region check is the
         authoritative convergence gate.
 
-        ``moreau_carry`` is emitted as a zero-length placeholder triple so the
-        pytree shape stays uniform with the QPAX and Moreau backends.
-
         Args:
             state: :class:`AlgorithmState` pytree. Accepted for cross-backend
                 signature uniformity but unused — CVXPy has no warm-start hook
@@ -1040,7 +1037,6 @@ class CVXPyPTRSolver(PTRSolver):
         has_impulsive = bool(slice_imp.stop > slice_imp.start)
         f = jnp.float64 if jax.config.read("jax_enable_x64") else jnp.float32
 
-        zero = jax.ShapeDtypeStruct((0,), f)
         result_struct = SubproblemSolution(
             x=jax.ShapeDtypeStruct((N, n_x), f),
             u=jax.ShapeDtypeStruct((N, n_u), f),
@@ -1049,7 +1045,6 @@ class CVXPyPTRSolver(PTRSolver):
             nu_vb_cross=jax.ShapeDtypeStruct((n_cross,), f),
             cost=jax.ShapeDtypeStruct((), f),
             status_code=jax.ShapeDtypeStruct((), jnp.int32),
-            moreau_carry=(zero, zero, zero),
         )
 
         def host_solve(data: SubproblemData) -> SubproblemSolution:
@@ -1103,11 +1098,6 @@ class CVXPyPTRSolver(PTRSolver):
                 ),
                 cost=jnp.asarray(result.cost, dtype=f),
                 status_code=jnp.asarray(int(status_str_to_code(result.status)), dtype=jnp.int32),
-                moreau_carry=(
-                    jnp.zeros((0,), dtype=f),
-                    jnp.zeros((0,), dtype=f),
-                    jnp.zeros((0,), dtype=f),
-                ),
             )
 
         def callback(state, data: SubproblemData) -> SubproblemSolution:
