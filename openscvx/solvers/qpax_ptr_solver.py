@@ -865,8 +865,8 @@ class QPAXPTRSolver(PTRSolver):
 
         Args:
             state: :class:`AlgorithmState` pytree. Accepted for cross-backend
-                signature uniformity but unused by QPAX (every input the QP
-                needs already lives in ``data``).
+                signature uniformity but unused — every input the QP needs
+                already lives in ``data``.
             data: :class:`SubproblemData` pytree carrying the per-iteration
                 linearization arrays, penalty weights, and boundary conditions.
         """
@@ -879,7 +879,7 @@ class QPAXPTRSolver(PTRSolver):
         solver_args = self.solver_args
 
         def step(state, data: SubproblemData) -> SubproblemSolution:
-            del state  # QPAX's QP inputs all live on ``data``.
+            del state  # every input the QP needs already lives on ``data``.
             Q, q, A, b, G, h = self._assemble_qp_jax(data)
             z = qpax.solve_qp_primal(Q, q, A, b, G, h, **solver_args)
             return self._build_solution_jax(z, data)

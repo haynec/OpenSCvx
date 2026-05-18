@@ -1236,8 +1236,10 @@ class MoreauPTRSolver(PTRSolver):
         uniformity.
 
         Args:
-            state: :class:`AlgorithmState` pytree. Unused on the QPAX/Moreau
-                read paths; preserved for cross-backend signature parity.
+            state: :class:`AlgorithmState` pytree. Accepted for cross-backend
+                signature uniformity but unused — Moreau's functional API
+                takes no warm-start (see the 2026-05-17 Decision Log entry
+                in ``plans/solver-iteration-callbacks.md``).
             data: :class:`SubproblemData` pytree carrying the per-iteration
                 linearization arrays, penalty weights, and boundary
                 conditions.

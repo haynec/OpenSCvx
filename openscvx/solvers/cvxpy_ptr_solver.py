@@ -1015,8 +1015,8 @@ class CVXPyPTRSolver(PTRSolver):
 
         Args:
             state: :class:`AlgorithmState` pytree. Accepted for cross-backend
-                signature uniformity but unused — CVXPy has no warm-start hook
-                exposed on this path.
+                signature uniformity but unused — CVXPy exposes no warm-start
+                through ``update_*``.
             data: :class:`SubproblemData` pytree carrying the per-iteration
                 linearization arrays, penalty weights, and boundary conditions.
         """
@@ -1100,8 +1100,8 @@ class CVXPyPTRSolver(PTRSolver):
                 status_code=jnp.asarray(int(status_str_to_code(result.status)), dtype=jnp.int32),
             )
 
-        def callback(state, data: SubproblemData) -> SubproblemSolution:
-            del state  # CVXPy has no warm-start hook exposed through update_*.
+        def step(state, data: SubproblemData) -> SubproblemSolution:
+            del state  # CVXPy exposes no warm-start through ``update_*``.
             return jax.pure_callback(
                 host_solve,
                 result_struct,
@@ -1109,7 +1109,7 @@ class CVXPyPTRSolver(PTRSolver):
                 vmap_method="sequential",
             )
 
-        return callback
+        return step
 
     def citation(self) -> List[str]:
         """Return BibTeX citations for CVXPy.
