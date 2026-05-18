@@ -9781,6 +9781,15 @@ of the abstract <code>PTRSolver</code> base. Three backends ship today:</p>
 </tr>
 </tbody>
 </table>
+<p>Each backend exposes two per-iteration entry points: the historical NumPy
+<code>update_*</code> + <code>solve()</code> stages used by today's Python-side SCP loop, and a
+JAX-pure <code>iteration_callback()</code> built once at <code>initialize()</code>. The callback
+returns a <code>(state, SubproblemData) -&gt; SubproblemSolution</code> callable; all
+three backends emit the same input/output pytree shape so the callable
+composes with <code>jax.jit</code> and <code>jax.vmap</code> (CVXPy via <code>jax.pure_callback</code> with
+<code>vmap_method="sequential"</code> — its batched solves are serial). The downstream
+batchable-<code>Problem.solve()</code> work wraps this callback in <code>lax.while_loop</code> to
+keep the entire SCP iteration on the JAX boundary.</p>
 <p>Picking a backend at construction time:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">openscvx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ox</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
