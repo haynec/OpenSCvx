@@ -163,19 +163,6 @@ constraints.extend(
     ]
 )
 
-# constraints.extend(
-#     [
-#         ox.ctcs(
-#             position[0] + ox.Sqrt( (phi[1] * eps_impulse_disturbance) ** 2 ) <= p_bound,
-#             penalty=ctcs_penalty,
-#         ),
-#         ox.ctcs(
-#             -position[0] + ox.Sqrt( (phi[1] * eps_impulse_disturbance) ** 2 ) <= p_bound,
-#             penalty=ctcs_penalty,
-#         ),
-#     ]
-# )
-
 problem = Problem(
     dynamics=dynamics,
     dynamics_discrete=dynamics_discrete,
