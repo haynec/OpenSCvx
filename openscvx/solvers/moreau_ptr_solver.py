@@ -320,9 +320,9 @@ class MoreauPTRSolver(PTRSolver):
     def __init__(
         self,
         *,
-        max_iter: int = 200,
-        verbose: bool = False,
-        device: str = "auto",
+        max_iter: Optional[int] = None,
+        verbose: Optional[bool] = None,
+        device: Optional[str] = None,
         tol_gap_abs: Optional[float] = None,
         tol_feas: Optional[float] = None,
         solver_args: Optional[Dict] = None,
@@ -333,7 +333,18 @@ class MoreauPTRSolver(PTRSolver):
                 "Install it with: pip install openscvx[moreau]"
             )
 
-        _named = {"max_iter": max_iter, "verbose": verbose, "device": device}
+        # None sentinels at the signature surface let us distinguish
+        # "user explicitly passed this" from "default applied" — only the
+        # former should collide with the same key inside solver_args.
+        _named = {
+            k: v
+            for k, v in (
+                ("max_iter", max_iter),
+                ("verbose", verbose),
+                ("device", device),
+            )
+            if v is not None
+        }
         _extra = dict(solver_args) if solver_args else {}
         _overlap = _named.keys() & _extra.keys()
         if _overlap:
@@ -342,6 +353,9 @@ class MoreauPTRSolver(PTRSolver):
                 "and inside solver_args; use one or the other."
             )
         merged = {**_named, **_extra}
+        merged.setdefault("max_iter", 200)
+        merged.setdefault("verbose", False)
+        merged.setdefault("device", "auto")
 
         _ipm = {
             k: v for k, v in [("tol_gap_abs", tol_gap_abs), ("tol_feas", tol_feas)] if v is not None
