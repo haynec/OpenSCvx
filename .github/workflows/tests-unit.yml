@@ -38,7 +38,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        uv pip install --system -e ".[gui,qpax,test]"
+        uv pip install --system -e ".[gui,test]"
 
     - name: Run unit tests
       run: |
