@@ -129,7 +129,7 @@ def solve_ivp_diffrax_prop(
     dt0 = user_kwargs.pop("dt0", (tau_final - tau_0) / 1)
     solve_kwargs = {
         "stepsize_controller": dfx.PIDController(rtol=rtol, atol=atol),
-        "saveat": dfx.SaveAt(dense=True),
+        "saveat": dfx.SaveAt(dense=True, t1=True),
     }
     solve_kwargs.update(user_kwargs)
     if isinstance(solve_kwargs["stepsize_controller"], dfx.StepTo):
@@ -147,5 +147,8 @@ def solve_ivp_diffrax_prop(
     )
 
     all_evals = jax.vmap(solution.evaluate)(save_time)
+    terminal_state = jnp.asarray(solution.ys)[-1]
+    at_terminal = jnp.isclose(save_time, tau_final)
+    all_evals = jnp.where(at_terminal[:, None], terminal_state, all_evals)
     masked_array = jnp.where(mask[:, None], all_evals, jnp.zeros_like(all_evals))
     return masked_array
