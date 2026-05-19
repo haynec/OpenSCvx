@@ -22,9 +22,7 @@ from openscvx.symbolic.lower import lower_to_jax
 jax.config.update("jax_enable_x64", True)
 
 kernel_dir = Path(current_dir) / "ker"
-kernel_filenames = (
-    "gm_de440.tpc",
-)
+kernel_filenames = ("gm_de440.tpc",)
 
 
 def _load_spice_mu_from_local_kernels(kernel_dir: Path) -> tuple[float, float]:

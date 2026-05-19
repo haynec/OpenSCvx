@@ -29,6 +29,7 @@ sys.path.append(grandparent_dir)
 import openscvx as ox
 from openscvx import Problem
 from openscvx.integrators import solve_ivp_diffrax
+
 try:
     from openscvx.plotting import plot_projections_2d, plot_states
 except Exception:
@@ -150,7 +151,9 @@ def _cr3bp_accel_expr(x_e, y_e, z_e, vx_e, vy_e, vz_e, mu: float):
     return ax, ay, az
 
 
-def _build_target_reference(mu: float, x0_t: np.ndarray, t_horizon: float) -> tuple[np.ndarray, np.ndarray]:
+def _build_target_reference(
+    mu: float, x0_t: np.ndarray, t_horizon: float
+) -> tuple[np.ndarray, np.ndarray]:
     """Integrate target absolute trajectory over [0, t_horizon]."""
     traj = np.asarray(
         solve_ivp_diffrax(
