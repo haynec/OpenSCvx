@@ -216,18 +216,8 @@ material/*
 !material/overrides/**
 src/
 
-# SPICE kernels in local ker directories
-**/ker/*.bsp
-**/ker/*.bpc
-**/ker/*.bc
-**/ker/*.bds
-**/ker/*.dsk
-**/ker/*.tf
-**/ker/*.ti
-**/ker/*.tls
-**/ker/*.tm
-**/ker/*.tpc
-**/ker/*.tsc
+# Database for astrodynamics application
+**/ker/**
 
 # Solver_data folder
 solver_data/
