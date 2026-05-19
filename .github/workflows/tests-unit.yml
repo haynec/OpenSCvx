@@ -38,8 +38,11 @@ jobs:
 
     - name: Install dependencies
       run: |
-        # Install package with optional GUI and test packages
-        uv pip install --system -e ".[gui,test]"
+        # Install package with optional GUI, qpax backend, and test packages.
+        # qpax is included so qpax-backed tests don't silently skip via
+        # pytest.importorskip — that's the only thing keeping CI honest
+        # about the qpax solver path.
+        uv pip install --system -e ".[gui,qpax,test]"
 
     - name: Run unit tests
       run: |
