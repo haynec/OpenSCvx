@@ -224,9 +224,7 @@ class QPAXPTRSolver(PTRSolver):
         # "user explicitly passed this" from "default applied" — only the
         # former should collide with the same key inside solver_args.
         _named = {
-            k: v
-            for k, v in (("solver_tol", solver_tol), ("max_iter", max_iter))
-            if v is not None
+            k: v for k, v in (("solver_tol", solver_tol), ("max_iter", max_iter)) if v is not None
         }
         _extra = dict(solver_args) if solver_args else {}
         _overlap = _named.keys() & _extra.keys()
