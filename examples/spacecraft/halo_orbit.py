@@ -1,4 +1,11 @@
-"""Compute a halo-orbit initial condition x0_t."""
+"""Southern L2 Halo orbit initial conditions definition
+
+- Earth-Moon CR3BP rotating-frame dynamics
+- Symmetry structure at initial node: y0 = vx0 = vz0 = 0
+- Free design variables at initial node: x0, z0, vy0
+- Terminal objective to drive (y, vx, vz) toward zero after n revolutions
+
+"""
 
 import os
 import sys

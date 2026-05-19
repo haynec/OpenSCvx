@@ -1,6 +1,5 @@
 """Relative loitering in Earth-Moon CR3BP with CTCS box-violation regularization.
 
-Port of `p_06_BRO_CTCS` to OpenSCvx with the following design:
 - Relative dynamics around a target halo-like trajectory in CR3BP rotating frame
 - Three impulsive burns at nodes [0, 1, 2]
 - Free final time with maximization objective
