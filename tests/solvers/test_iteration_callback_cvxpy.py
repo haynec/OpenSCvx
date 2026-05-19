@@ -63,12 +63,7 @@ def _subproblem_data_from_solver(prob) -> SubproblemData:
         dyn_bias = np.asarray(ocp.dyn_bias.value)
         x_prop = np.zeros((N - 1, n_x))
         for k in range(N - 1):
-            x_prop[k] = (
-                dyn_bias[k]
-                + A_d[k] @ x_bar[k]
-                + B_d[k] @ u_bar[k]
-                + C_d[k] @ u_bar[k + 1]
-            )
+            x_prop[k] = dyn_bias[k] + A_d[k] @ x_bar[k] + B_d[k] @ u_bar[k] + C_d[k] @ u_bar[k + 1]
 
     x_prop_plus = (
         np.asarray(getattr(ocp, "x_prop_plus").value)
