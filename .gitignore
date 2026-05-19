@@ -216,8 +216,8 @@ material/*
 !material/overrides/**
 src/
 
-# SPICE kernels for spacecrafts examples
-examples/spacecraft/ker/
+# Database for astrodynamics application
+**/ker/**
 
 # Solver_data folder
 solver_data/
