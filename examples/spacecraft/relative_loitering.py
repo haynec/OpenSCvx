@@ -11,7 +11,9 @@ Port of `p_06_BRO_CTCS` to OpenSCvx with the following design:
 """
 
 import os
+import shutil
 import sys
+import urllib.request
 from pathlib import Path
 
 import jax
@@ -25,19 +27,26 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 import openscvx as ox
-from examples.spacecraft.halo_orbit import get_halo_initial_condition
 from openscvx import Problem
 from openscvx.integrators import solve_ivp_diffrax
-from openscvx.plotting import plot_projections_2d, plot_states
+try:
+    from openscvx.plotting import plot_projections_2d, plot_states
+except Exception:
+    plot_projections_2d = None
+    plot_states = None
 
 # Use float64 in JAX for high-accuracy propagation.
 jax.config.update("jax_enable_x64", True)
 
 reference_date = "2024-08-28T00:00:00"
 kernel_dir = Path(current_dir) / "ker"
-kernel_filenames = (
-    "gm_de440.tpc",
-)
+kernel_urls = {
+    "naif0012.tls": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls",
+    "de440.bsp": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440.bsp",
+    "pck00011.tpc": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00011.tpc",
+    "gm_de440.tpc": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/gm_de440.tpc",
+}
+kernel_filenames = tuple(kernel_urls.keys())
 halo_x0_file = kernel_dir / "halo_orbit_x0_t.npz"
 
 # Problem constants (normalized CR3BP units)
@@ -55,6 +64,39 @@ integration_tol = 1e-14
 target_num_substeps = 4000
 
 
+def _download_kernel(url: str, destination: Path) -> None:
+    """Download a single SPICE kernel to destination atomically."""
+    temp_destination = destination.with_suffix(destination.suffix + ".part")
+    with (
+        urllib.request.urlopen(url, timeout=120) as response,
+        temp_destination.open("wb") as out_file,
+    ):
+        shutil.copyfileobj(response, out_file)
+    temp_destination.replace(destination)
+
+
+def _ensure_spice_kernels(kernel_dir: Path) -> None:
+    """Ensure all required kernels exist in kernel_dir, downloading missing files."""
+    kernel_dir.mkdir(parents=True, exist_ok=True)
+    missing = [name for name in kernel_filenames if not (kernel_dir / name).is_file()]
+    if not missing:
+        return
+
+    download_errors = []
+    for kernel_name in missing:
+        destination = kernel_dir / kernel_name
+        try:
+            _download_kernel(kernel_urls[kernel_name], destination)
+        except Exception as exc:
+            part_file = destination.with_suffix(destination.suffix + ".part")
+            if part_file.exists():
+                part_file.unlink()
+            download_errors.append(f"{kernel_name}: {exc}")
+
+    if download_errors:
+        raise RuntimeError("Failed to download SPICE kernels: " + "; ".join(download_errors))
+
+
 def _load_spice_mu_from_local_kernels(kernel_dir: Path) -> tuple[float, float]:
     """Load Earth/Moon GM constants from local SPICE kernels only."""
     try:
@@ -65,12 +107,7 @@ def _load_spice_mu_from_local_kernels(kernel_dir: Path) -> tuple[float, float]:
             "Install it with: pip install spiceypy"
         ) from exc
 
-    missing = [name for name in kernel_filenames if not (kernel_dir / name).is_file()]
-    if missing:
-        missing_str = ", ".join(missing)
-        raise FileNotFoundError(
-            f"Missing required SPICE kernel files in '{kernel_dir}': {missing_str}"
-        )
+    _ensure_spice_kernels(kernel_dir)
 
     spice.kclear()
     try:
@@ -159,6 +196,8 @@ def _get_target_x0_t(
         except Exception as exc:
             if verbose:
                 print(f"Failed to read {halo_x0_file} ({exc}). Recomputing x0_t.")
+
+    from examples.spacecraft.halo_orbit import get_halo_initial_condition
 
     x0_t = get_halo_initial_condition(force_recompute=force_recompute_halo, verbose=verbose)
     halo_x0_file.parent.mkdir(parents=True, exist_ok=True)
@@ -288,22 +327,22 @@ def build_relative_loitering_problem(
         time=time,
         constraints=constraints,
         N=n_nodes,
-        licq_min={0: 0.0, 1: 0.0, 2: 0.0, 3: 0.0},
-        licq_max={0: 1e-8, 1: 1e-8, 2: 1e-8, 3: 1e-8},
+        licq_min=0.0,
+        licq_max=1e-8,
         discretizer={
             "ode_solver": "Dopri8",
             "diffrax_kwargs": {"atol": integration_tol, "rtol": integration_tol},
         },
         algorithm={
             "k_max": 150,
-            "lam_prox": 2e-1,
+            "lam_prox": 4e-1,
             "lam_vc": 1e2,
             "lam_cost": 1e0,
             "ep_vc": 1e-8,
             "ep_tr": 1e-8,
             "autotuner": ox.AugmentedLagrangian(),
         },
-        solver={"cvx_solver": "MOSEK", "solver_args": {}},
+        solver={"cvx_solver": "CLARABEL", "solver_args": {}},
         float_dtype="float64",
     )
 
@@ -499,12 +538,17 @@ if __name__ == "__main__":
 
     _print_solution_summary(results, context)
 
-    fig_proj = plot_projections_2d(results, velocity_var_name="velocity")
-    fig_proj.update_layout(title="Relative Loitering Solution - XY, XZ, YZ Projections")
-    fig_proj.show()
+    if (plot_projections_2d is None) or (plot_states is None):
+        print(
+            "Skipping plotting because plotting dependencies failed to import. "
+            "Check NumPy/Matplotlib compatibility in your environment."
+        )
+    else:
+        fig_proj = plot_projections_2d(results, velocity_var_name="velocity")
+        fig_proj.update_layout(title="Relative Loitering Solution - XY, XZ, YZ Projections")
+        fig_proj.show()
 
-    fig_states = plot_states(results, ["position", "velocity", "time"], cols=3)
-    _apply_kiz_limits_to_state_plot(fig_states, kiz_box_width_dyn)
-    fig_states.update_layout(title_text="Relative Loitering - State Evolution")
-    fig_states.show()
-
+        fig_states = plot_states(results, ["position", "velocity", "time"], cols=3)
+        _apply_kiz_limits_to_state_plot(fig_states, kiz_box_width_dyn)
+        fig_states.update_layout(title_text="Relative Loitering - State Evolution")
+        fig_states.show()
