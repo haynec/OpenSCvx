@@ -36,8 +36,9 @@ except Exception:
     plot_projections_2d = None
     plot_states = None
 
-# Use float64 in JAX for high-accuracy propagation.
-jax.config.update("jax_enable_x64", True)
+def _enable_jax_x64() -> None:
+    """Enable float64 in JAX for high-accuracy propagation."""
+    jax.config.update("jax_enable_x64", True)
 
 reference_date = "2024-08-28T00:00:00"
 kernel_dir = Path(current_dir) / "ker"
@@ -430,109 +431,8 @@ def _apply_kiz_limits_to_state_plot(fig, kiz_half_width: float) -> None:
             col=col,
         )
 
-
-def _build_kiz_box_edges(kiz_half_width: float) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
-    """Return 12 edge segments for a cube centered at the origin."""
-    p = kiz_half_width
-    corners = np.array(
-        [
-            [-p, -p, -p],
-            [p, -p, -p],
-            [p, p, -p],
-            [-p, p, -p],
-            [-p, -p, p],
-            [p, -p, p],
-            [p, p, p],
-            [-p, p, p],
-        ],
-        dtype=float,
-    )
-    edge_idx = [
-        (0, 1),
-        (1, 2),
-        (2, 3),
-        (3, 0),
-        (4, 5),
-        (5, 6),
-        (6, 7),
-        (7, 4),
-        (0, 4),
-        (1, 5),
-        (2, 6),
-        (3, 7),
-    ]
-    return [
-        (
-            np.array([corners[i, 0], corners[j, 0]], dtype=float),
-            np.array([corners[i, 1], corners[j, 1]], dtype=float),
-            np.array([corners[i, 2], corners[j, 2]], dtype=float),
-        )
-        for i, j in edge_idx
-    ]
-
-
-def _plot_position_3d_with_kiz_box(results, kiz_half_width: float):
-    """Plot relative position trajectory with a KIZ wireframe box."""
-    pos = np.asarray(results.trajectory["position"], dtype=float)
-    fig = go.Figure()
-    fig.add_trace(
-        go.Scatter3d(
-            x=pos[:, 0],
-            y=pos[:, 1],
-            z=pos[:, 2],
-            mode="lines",
-            name="relative position",
-            line={"color": "#1f77b4", "width": 5},
-        )
-    )
-    fig.add_trace(
-        go.Scatter3d(
-            x=[pos[0, 0]],
-            y=[pos[0, 1]],
-            z=[pos[0, 2]],
-            mode="markers",
-            name="start",
-            marker={"size": 5, "color": "#2ca02c"},
-        )
-    )
-    fig.add_trace(
-        go.Scatter3d(
-            x=[pos[-1, 0]],
-            y=[pos[-1, 1]],
-            z=[pos[-1, 2]],
-            mode="markers",
-            name="end",
-            marker={"size": 5, "color": "#d62728"},
-        )
-    )
-
-    for idx, (x_e, y_e, z_e) in enumerate(_build_kiz_box_edges(kiz_half_width)):
-        fig.add_trace(
-            go.Scatter3d(
-                x=x_e,
-                y=y_e,
-                z=z_e,
-                mode="lines",
-                name="KIZ box" if idx == 0 else None,
-                showlegend=idx == 0,
-                line={"color": "rgba(120,120,120,0.9)", "width": 3, "dash": "dash"},
-            )
-        )
-
-    lim = 1.1 * kiz_half_width
-    fig.update_layout(
-        title="Relative Position 3D with KIZ Box",
-        scene={
-            "xaxis": {"title": "x", "range": [-lim, lim]},
-            "yaxis": {"title": "y", "range": [-lim, lim]},
-            "zaxis": {"title": "z", "range": [-lim, lim]},
-            "aspectmode": "cube",
-        },
-    )
-    return fig
-
-
 if __name__ == "__main__":
+    _enable_jax_x64()
     problem, context = build_relative_loitering_problem(force_recompute_halo=False, verbose=True)
 
     problem.initialize()
