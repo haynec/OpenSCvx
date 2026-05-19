@@ -9,11 +9,6 @@ trajectory as a direct :meth:`solve` call (the spike in
 exercises the real PTR pipeline).
 """
 
-import os
-import sys
-import tempfile
-import types
-
 import jax
 import jax.numpy as jnp
 import numpy as np
