@@ -24,7 +24,7 @@ try:
     import qocogen  # noqa: F401
 
     HAS_CVXPYGEN = True
-except ImportError:
+except Exception:
     HAS_CVXPYGEN = False
 
 requires_cvxpygen = pytest.mark.skipif(
@@ -931,8 +931,8 @@ def test_cross_nodal(test_case):
     if is_convex and not should_converge:
         import cvxpy as cp
 
-        problem.initialize()
         try:
+            problem.initialize()
             result = problem.solve()
         except cp.error.SolverError:
             pass
