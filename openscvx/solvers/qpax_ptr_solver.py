@@ -210,8 +210,8 @@ class QPAXPTRSolver(PTRSolver):
     def __init__(
         self,
         *,
-        solver_tol: float = 1e-5,
-        max_iter: int = 30,
+        solver_tol: Optional[float] = None,
+        max_iter: Optional[int] = None,
         solver_args: Optional[dict] = None,
     ):
         if not _QPAX_AVAILABLE:
@@ -220,7 +220,12 @@ class QPAXPTRSolver(PTRSolver):
                 "Install it with: pip install openscvx[qpax]"
             )
 
-        _named = {"solver_tol": solver_tol, "max_iter": max_iter}
+        # None sentinels at the signature surface let us distinguish
+        # "user explicitly passed this" from "default applied" — only the
+        # former should collide with the same key inside solver_args.
+        _named = {
+            k: v for k, v in (("solver_tol", solver_tol), ("max_iter", max_iter)) if v is not None
+        }
         _extra = dict(solver_args) if solver_args else {}
         _overlap = _named.keys() & _extra.keys()
         if _overlap:
@@ -228,7 +233,10 @@ class QPAXPTRSolver(PTRSolver):
                 f"QPAX settings {sorted(_overlap)} appear as both named arguments "
                 "and inside solver_args; use one or the other."
             )
-        self.solver_args = {**_named, **_extra}
+        merged = {**_named, **_extra}
+        merged.setdefault("solver_tol", 1e-5)
+        merged.setdefault("max_iter", 30)
+        self.solver_args = merged
 
         # Populated by create_variables / initialize.
         self.layout: Optional[_QPLayout] = None

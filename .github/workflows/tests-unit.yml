@@ -38,7 +38,6 @@ jobs:
 
     - name: Install dependencies
       run: |
-        # Install package with optional GUI and test packages
         uv pip install --system -e ".[gui,test]"
 
     - name: Run unit tests
