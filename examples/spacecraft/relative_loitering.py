@@ -19,7 +19,6 @@ from pathlib import Path
 import jax
 import jax.numpy as jnp
 import numpy as np
-import plotly.graph_objects as go
 
 # Add grandparent directory to path to import openscvx without installation.
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -36,9 +35,11 @@ except Exception:
     plot_projections_2d = None
     plot_states = None
 
+
 def _enable_jax_x64() -> None:
     """Enable float64 in JAX for high-accuracy propagation."""
     jax.config.update("jax_enable_x64", True)
+
 
 reference_date = "2024-08-28T00:00:00"
 kernel_dir = Path(current_dir) / "ker"
@@ -430,6 +431,7 @@ def _apply_kiz_limits_to_state_plot(fig, kiz_half_width: float) -> None:
             row=1,
             col=col,
         )
+
 
 if __name__ == "__main__":
     _enable_jax_x64()
