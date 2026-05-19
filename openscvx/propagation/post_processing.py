@@ -109,6 +109,12 @@ def propagate_trajectory_results(
         # Always restore original x_prop, even if propagation fails
         settings.sim.x_prop = original_x_prop
 
+    # Use optimizer nodal values at available timesteps.
+    for node_idx, node_time in enumerate(np.asarray(t).reshape(-1)):
+        matching_rows = np.isclose(t_full, node_time)
+        if np.any(matching_rows):
+            x_full[matching_rows, :n_opt_states] = x[node_idx, :]
+
     # Calculate cost using utility function and metadata from settings
     # dynamics_discrete operates on optimization states only; when propagation has
     # extra states, pass only the opt-state portion and then reattach the prop-only tail
