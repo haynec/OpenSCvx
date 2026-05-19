@@ -851,11 +851,7 @@ class CVXPyPTRSolver(PTRSolver):
                 grad_X_arr = np.asarray(constraint_data["grad_g_X"])
                 grad_U_arr = np.asarray(constraint_data["grad_g_U"])
 
-                g_tilde = (
-                    g_val
-                    - np.sum(grad_X_arr * x_bar_arr)
-                    - np.sum(grad_U_arr * u_bar_arr)
-                )
+                g_tilde = g_val - np.sum(grad_X_arr * x_bar_arr) - np.sum(grad_U_arr * u_bar_arr)
 
                 self._set_param(f"g_cross_{g_id}", g_tilde)
                 self._set_param(f"grad_g_X_cross_{g_id}", grad_X_arr)
