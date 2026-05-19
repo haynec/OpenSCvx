@@ -9,6 +9,11 @@ trajectory as a direct :meth:`solve` call (the spike in
 exercises the real PTR pipeline).
 """
 
+import os
+import sys
+import tempfile
+import types
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -49,10 +54,27 @@ def _subproblem_data_from_solver(prob) -> SubproblemData:
     A_d = np.asarray(ocp.A_d.value)
     B_d = np.asarray(ocp.B_d.value)
     C_d = np.asarray(ocp.C_d.value)
-    x_prop = np.asarray(ocp.x_prop.value) if ocp.x_prop is not None else np.zeros((N - 1, n_x))
+    # New nomenclature: x_prop/x_prop_plus are not stored directly on CVXPyVariables.
+    # Reconstruct continuous x_prop from affine dynamics bias:
+    # dyn_bias[k] = x_prop[k] - A[k]x_bar[k] - B[k]u_bar[k] - C[k]u_bar[k+1]
+    if hasattr(ocp, "x_prop") and ocp.x_prop is not None and ocp.x_prop.value is not None:
+        x_prop = np.asarray(ocp.x_prop.value)
+    else:
+        dyn_bias = np.asarray(ocp.dyn_bias.value)
+        x_prop = np.zeros((N - 1, n_x))
+        for k in range(N - 1):
+            x_prop[k] = (
+                dyn_bias[k]
+                + A_d[k] @ x_bar[k]
+                + B_d[k] @ u_bar[k]
+                + C_d[k] @ u_bar[k + 1]
+            )
+
     x_prop_plus = (
-        np.asarray(ocp.x_prop_plus.value)
-        if ocp.x_prop_plus is not None and ocp.x_prop_plus.value is not None
+        np.asarray(getattr(ocp, "x_prop_plus").value)
+        if hasattr(ocp, "x_prop_plus")
+        and getattr(ocp, "x_prop_plus") is not None
+        and getattr(ocp, "x_prop_plus").value is not None
         else np.zeros((N, n_x))
     )
     E_d = (
