@@ -217,6 +217,17 @@ class ConvexSolver(ABC):
         """
         raise NotImplementedError
 
+    def update_proximal_terms(self) -> None:
+        """Update optional proximal-expansion parameters.
+
+        Called after ``update_penalties()`` and before ``solve()``. Solvers
+        that formulate trust-region penalties via expanded quadratic forms can
+        override this hook to refresh any derived coefficients.
+
+        Default implementation is a no-op.
+        """
+        return None
+
     @abstractmethod
     def update_boundary_conditions(self, **kwargs) -> None:
         """Update boundary condition parameters.

@@ -34,23 +34,23 @@ class CVXPyVariables:
         lam_vb_nodal: Virtual buffer penalty weights for nodal constraints (N x n_nodal, nonneg)
         lam_vb_cross: Virtual buffer penalty weights for cross-node constraints (n_cross, nonneg)
 
+        prox_c: Linear proximal coefficient parameter (N x (n_states+n_controls))
+        prox_cc: Constant proximal offset parameter (N,)
+        dyn_bias: Dynamics affine bias parameter (N-1 x n_states)
+        x0_imp_bias: Initial impulsive affine bias parameter (n_states,)
+
         x: State variable (N x n_states)
-        dx: State error variable (N x n_states)
         x_bar: Previous SCP state parameter (N x n_states)
         x_init: Initial state parameter (n_states,)
         x_term: Terminal state parameter (n_states,)
 
         u: Control variable (N x n_controls)
-        du: Control error variable (N x n_controls)
         u_bar: Previous SCP control parameter (N x n_controls)
 
         A_d: Discretized state Jacobian parameter (N-1 x n_states*n_states)
         B_d: Discretized control Jacobian parameter (N-1 x n_states*n_controls)
         C_d: Discretized control Jacobian (next node) parameter
-        x_prop_plus: Discrete dynamics propagated state parameter
-        D_d: Jacobian of impulsive/discrete dynamics w.r.t. state
         E_d: Jacobian of impulsive/discrete dynamics w.r.t. control
-        x_prop: Propagated state parameter (N-1 x n_states)
         nu: Virtual control variable (N-1 x n_states)
 
         g: List of constraint value parameters (one per nodal constraint)
@@ -72,8 +72,6 @@ class CVXPyVariables:
 
         x_nonscaled: List of scaled state expressions at each node
         u_nonscaled: List of scaled control expressions at each node
-        dx_nonscaled: List of scaled state error expressions at each node
-        du_nonscaled: List of scaled control error expressions at each node
     """
 
     # SCP weight parameters
@@ -82,28 +80,26 @@ class CVXPyVariables:
     lam_vc: "cp.Parameter"
     lam_vb_nodal: "cp.Parameter"
     lam_vb_cross: "cp.Parameter"
-
+    prox_c: "cp.Parameter"
+    prox_cc: "cp.Parameter"
     # State variables and parameters
     x: "cp.Variable"
-    dx: "cp.Variable"
     x_bar: "cp.Parameter"
     x_init: "cp.Parameter"
     x_term: "cp.Parameter"
 
     # Control variables and parameters
     u: "cp.Variable"
-    du: "cp.Variable"
     u_bar: "cp.Parameter"
 
     # Dynamics discretization parameters
     A_d: "cp.Parameter"
     B_d: "cp.Parameter"
     C_d: "cp.Parameter"
-    x_prop_plus: "cp.Parameter | None"
-    D_d: "cp.Parameter | None"
     E_d: "cp.Parameter | None"
-    x_prop: "cp.Parameter"
     nu: "cp.Variable"
+    dyn_bias: "cp.Parameter"
+    x0_imp_bias: "cp.Parameter"
 
     # Nodal constraint linearization (lists, one per constraint)
     g: List["cp.Parameter"] = field(default_factory=list)
@@ -128,5 +124,3 @@ class CVXPyVariables:
     # Scaled CVXPy expressions at each node (lists of length N)
     x_nonscaled: List = field(default_factory=list)
     u_nonscaled: List = field(default_factory=list)
-    dx_nonscaled: List = field(default_factory=list)
-    du_nonscaled: List = field(default_factory=list)

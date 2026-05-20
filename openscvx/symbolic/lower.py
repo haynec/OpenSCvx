@@ -279,6 +279,8 @@ def create_cvxpy_variables(
 
     # Parameters
     lam_prox = cp.Parameter((N, n_states + n_controls), nonneg=True, name="lam_prox")
+    prox_c = cp.Parameter((N, n_states + n_controls), name="prox_c")
+    prox_cc = cp.Parameter(N, name="prox_cc")
     lam_cost = cp.Parameter(n_states, nonneg=True, name="lam_cost")
     lam_vc = cp.Parameter((N - 1, n_states), nonneg=True, name="lam_vc")
     lam_vb_nodal = cp.Parameter((N, max(n_nodal_constraints, 1)), nonneg=True, name="lam_vb_nodal")
@@ -286,24 +288,21 @@ def create_cvxpy_variables(
 
     # State
     x = cp.Variable((N, n_states), name="x")  # Current State
-    dx = cp.Variable((N, n_states), name="dx")  # State Error
     x_bar = cp.Parameter((N, n_states), name="x_bar")  # Previous SCP State
     x_init = cp.Parameter(n_states, name="x_init")  # Initial State
     x_term = cp.Parameter(n_states, name="x_term")  # Final State
 
     # Control
     u = cp.Variable((N, n_controls), name="u")  # Current Control
-    du = cp.Variable((N, n_controls), name="du")  # Control Error
     u_bar = cp.Parameter((N, n_controls), name="u_bar")  # Previous SCP Control
 
     # Discretized Augmented Dynamics Constraints
     A_d = cp.Parameter((N - 1, n_states, n_states), name="A_d", sparsity=A_d_sparsity)
     B_d = cp.Parameter((N - 1, n_states, n_controls), name="B_d", sparsity=B_d_sparsity)
     C_d = cp.Parameter((N - 1, n_states, n_controls), name="C_d", sparsity=C_d_sparsity)
-    x_prop_plus = cp.Parameter((N, n_states), name="x_prop_plus")
-    D_d = cp.Parameter((N, n_states, n_states), name="D_d")
     E_d = cp.Parameter((N, n_states, n_controls), name="E_d")
-    x_prop = cp.Parameter((N - 1, n_states), name="x_prop")
+    dyn_bias = cp.Parameter((N - 1, n_states), name="dyn_bias")
+    x0_imp_bias = cp.Parameter(n_states, name="x0_imp_bias")
     nu = cp.Variable((N - 1, n_states), name="nu")  # Virtual Control
 
     # Linearized Nonconvex Nodal Constraints
@@ -346,13 +345,9 @@ def create_cvxpy_variables(
     # Applying the affine scaling to state and control
     x_nonscaled = []
     u_nonscaled = []
-    dx_nonscaled = []
-    du_nonscaled = []
     for k in range(N):
         x_nonscaled.append(S_x @ x[k] + c_x)
         u_nonscaled.append(S_u @ u[k] + c_u)
-        dx_nonscaled.append(S_x @ dx[k])
-        du_nonscaled.append(S_u @ du[k])
 
     return CVXPyVariables(
         lam_prox=lam_prox,
@@ -360,21 +355,20 @@ def create_cvxpy_variables(
         lam_vc=lam_vc,
         lam_vb_nodal=lam_vb_nodal,
         lam_vb_cross=lam_vb_cross,
+        prox_c=prox_c,
+        prox_cc=prox_cc,
         x=x,
-        dx=dx,
         x_bar=x_bar,
         x_init=x_init,
         x_term=x_term,
         u=u,
-        du=du,
         u_bar=u_bar,
         A_d=A_d,
         B_d=B_d,
         C_d=C_d,
-        x_prop_plus=x_prop_plus,
-        D_d=D_d,
         E_d=E_d,
-        x_prop=x_prop,
+        dyn_bias=dyn_bias,
+        x0_imp_bias=x0_imp_bias,
         nu=nu,
         g=g,
         grad_g_x=grad_g_x,
@@ -392,8 +386,6 @@ def create_cvxpy_variables(
         c_u=c_u,
         x_nonscaled=x_nonscaled,
         u_nonscaled=u_nonscaled,
-        dx_nonscaled=dx_nonscaled,
-        du_nonscaled=du_nonscaled,
     )
 
 
