@@ -1,10 +1,9 @@
 import os
 import sys
 
+import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-
-import numpy as np
 
 try:
     from .helpers import orbital_elements_2_cartesian_rv
@@ -82,8 +81,8 @@ def cartesian_rv_to_orbital_elements_symbolic(r_vect, v_vect, gravitational_para
     e_vect = (ox.spatial.SSM(v_vect) @ h_vect) / mu - r_vect / r_norm
     eccentricity = ox.linalg.Norm(e_vect)
 
-    a_denom = (2.0 / r_norm ) - (v_norm**2) / mu
-    semimajor = 1.0 / a_denom 
+    a_denom = (2.0 / r_norm) - (v_norm**2) / mu
+    semimajor = 1.0 / a_denom
 
     k_vect = np.array([0.0, 0.0, 1.0])
     n_vect = ox.spatial.SSM(k_vect) @ h_vect
@@ -95,7 +94,7 @@ def cartesian_rv_to_orbital_elements_symbolic(r_vect, v_vect, gravitational_para
     dot_ne = ox.Sum(n_vect * e_vect)
     cross_ne = ox.spatial.SSM(n_vect) @ e_vect
     sin_argp = ox.Sum(h_vect * cross_ne) / (h_norm * n_norm * eccentricity)
-    cos_argp = dot_ne / (n_norm * eccentricity )
+    cos_argp = dot_ne / (n_norm * eccentricity)
     arg_periapsis = ox.Atan2(sin_argp, cos_argp)
 
     return semimajor, eccentricity, inclination, right_ascension, arg_periapsis
@@ -237,7 +236,8 @@ if tog_scaling:
 omega = angular_rate_earth * scales["time"]
 auxiliary_data = {
     "angular_rate_earth": omega,
-    "angular_rate_earth_matrix": omega * np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 0.0]]),
+    "angular_rate_earth_matrix": omega
+    * np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 0.0]]),
     "gravitational_parameter": gravitational_parameter / scales["gravitational_parameter"],
     "sealevel_density": sealevel_density / scales["density"],
     "density_scale_height": density_scale_height / scales["length"],
@@ -307,11 +307,11 @@ v_min = -10000.0 / scales["speed"]
 v_max = -v_min
 
 # Discretization and phase transition nodes
-n_1 = 5
-n_2 = 10
-n_3 = 15
-n_4 = 20
-n   = n_4
+n_1 = 10
+n_2 = 20
+n_3 = 30
+n_4 = 40
+n = n_4
 k_1 = n_1 - 1
 k_2 = n_2 - 1
 k_3 = n_3 - 1
@@ -349,9 +349,7 @@ elif guess_mode == "linear":
     r_guess = np.linspace(r_0, r_f, n)
     v_guess = np.linspace(v_0, v_f, n)
 else:
-    raise ValueError(
-        f"Unsupported guess_mode='{guess_mode}'. Use 'true_anomaly' or 'linear'."
-    )
+    raise ValueError(f"Unsupported guess_mode='{guess_mode}'. Use 'true_anomaly' or 'linear'.")
 r_guess[0, :] = r_0
 r_guess[-1, :] = r_f
 v_guess[0, :] = v_0
@@ -385,7 +383,7 @@ time = ox.Time(
     min=0.0,
     max=t4,
     guess=np.linspace(0.0, t4, n).reshape(-1, 1),
-    time_dilation_min=1e-2
+    time_dilation_min=1e-2,
 )
 
 # Controls: continuous thrust direction + impulsive stage-drop mass
@@ -419,8 +417,12 @@ mass_scalar = m[0]
 v_rel = v - r @ auxiliary_data["angular_rate_earth_matrix"].T
 speed_rel = ox.linalg.Norm(v_rel)
 altitude = r_norm - auxiliary_data["earth_radius"]
-rho = auxiliary_data["sealevel_density"] * ox.Exp(-altitude / auxiliary_data["density_scale_height"])
-drag_force = -0.5 * auxiliary_data["cd"] * auxiliary_data["reference_area"] * rho * speed_rel * v_rel
+rho = auxiliary_data["sealevel_density"] * ox.Exp(
+    -altitude / auxiliary_data["density_scale_height"]
+)
+drag_force = (
+    -0.5 * auxiliary_data["cd"] * auxiliary_data["reference_area"] * rho * speed_rel * v_rel
+)
 
 thrust_piecewise = piecewise_by_node(thrust_profile, phase_ranges)
 m_dot_piecewise = piecewise_by_node(m_dot_profile, phase_ranges)
@@ -442,7 +444,7 @@ dynamics_discrete = {
 constraints = []
 
 constraints.append((ox.linalg.Norm(u) <= 1.0).convex())
-constraints.append(ox.ctcs(altitude >= 0))
+# constraints.append(ox.ctcs(altitude >= 0))
 
 # Impose phase boundary times at specific nodes.
 constraints.append((time.at(k_1) == t1).convex())
@@ -487,20 +489,19 @@ problem = ox.Problem(
     constraints=constraints,
     N=n,
     float_dtype="float64",
-    discretizer=ox.LinearizeDiscretizeSparse(),
-    algorithm={'autotuner': ox.AugmentedLagrangian(eta_lambda=1E-1, ep=0.99)}
+    algorithm={"autotuner": ox.AugmentedLagrangian()},
 )
 
 # Tighten integration tolerance and use a denser propagation time grid for plotting.
-problem.settings.prp.rtol   = 1e-9
-problem.settings.prp.atol   = 1e-9
+problem.settings.prp.rtol = 1e-9
+problem.settings.prp.atol = 1e-9
 
-problem.algorithm.lam_cost  = 1e-2
-problem.algorithm.lam_prox  = 2e-1  
-problem.algorithm.lam_vc    = 1e0
-problem.algorithm.lam_vb    = 1e-2
+problem.algorithm.lam_cost = 1e0
+problem.algorithm.lam_prox = 1e0
+problem.algorithm.lam_vc = 1e1
+problem.algorithm.lam_vb = 1e-1
 
-problem.algorithm.k_max = 40
+problem.algorithm.k_max = 300
 
 if __name__ == "__main__":
     problem.initialize()
