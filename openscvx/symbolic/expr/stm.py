@@ -45,9 +45,7 @@ _STM_MODES = ("approx", "exact")
 
 def _validate_stm_mode(name: str, mode: str) -> str:
     if mode not in _STM_MODES:
-        raise ValueError(
-            f"STM '{name}': mode must be one of {_STM_MODES}, got {mode!r}"
-        )
+        raise ValueError(f"STM '{name}': mode must be one of {_STM_MODES}, got {mode!r}")
     return mode
 
 
@@ -64,23 +62,46 @@ class STMPhysical(State):
       SCP treats Φ as a frozen input — CTCS rows see only ``∂/∂x_phys``.
     - ``"exact"``: SCP sees CTCS sensitivity through Φ; requires second-order
       sensitivity Ψ to close the chain (not yet implemented — raises).
+
+    The optional ``anchor_node`` selects when Φ is identity-injected:
+
+    - ``None`` (default): identity reset at the start of *every* segment;
+      within segment k, ``Φ(τ) = ∂x(τ)/∂x(t_k^+)``.
+    - ``j`` (int): zero-initialized globally, identity injected only at node
+      ``j``, no reset at intermediate nodes — Φ then represents
+      ``∂x(τ)/∂x(t_j^+)`` continuously for τ ≥ t_j. Use this to robustify
+      against an impulsive disturbance applied at node ``j`` without
+      introducing per-impulse STM states.
     """
 
     _is_stm = True
     _stm_kind = "physical"
     _is_integration_only = True
 
-    def __init__(self, name: str, n_phys: int, mode: str = "approx"):
+    def __init__(
+        self,
+        name: str,
+        n_phys: int,
+        mode: str = "approx",
+        anchor_node: Optional[int] = None,
+    ):
         if n_phys <= 0:
+            raise ValueError(f"STMPhysical '{name}': n_phys must be positive, got {n_phys}")
+        if anchor_node is not None and (not isinstance(anchor_node, int) or anchor_node < 0):
             raise ValueError(
-                f"STMPhysical '{name}': n_phys must be positive, got {n_phys}"
+                f"STMPhysical '{name}': anchor_node must be None or a "
+                f"non-negative int, got {anchor_node!r}"
             )
         super().__init__(name, shape=(n_phys * n_phys,))
         self.n_phys = int(n_phys)
         self.mode = _validate_stm_mode(name, mode)
+        self.anchor_node = None if anchor_node is None else int(anchor_node)
 
     def __repr__(self) -> str:
-        return f"STMPhysical('{self.name}', n_phys={self.n_phys}, mode={self.mode!r})"
+        return (
+            f"STMPhysical('{self.name}', n_phys={self.n_phys}, "
+            f"mode={self.mode!r}, anchor_node={self.anchor_node})"
+        )
 
 
 class STMImpulse(State):
@@ -106,9 +127,7 @@ class STMImpulse(State):
         mode: str = "approx",
     ):
         if n_phys <= 0:
-            raise ValueError(
-                f"STMImpulse '{name}': n_phys must be positive, got {n_phys}"
-            )
+            raise ValueError(f"STMImpulse '{name}': n_phys must be positive, got {n_phys}")
         super().__init__(name, shape=(n_phys,))
         self.n_phys = int(n_phys)
         self.control = control

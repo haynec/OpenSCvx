@@ -375,13 +375,27 @@ def _calculate_discretization(
     # Initial augmented state
     V0 = jnp.zeros((N - 1, i5))
     V0 = V0.at[:, :n_x].set(x[:-1].astype(float))
-    # Reset STM slots at each segment start (identity for physical, zero for impulse).
+    # Reset STM slots at each segment start.
+    #   - physical (anchor_node=None): identity reset on every segment row.
+    #   - physical (anchor_node=j): identity injected only on row j; on every
+    #     other row keep V0[k, slot.slice] = x[k, slot.slice] (the reference
+    #     trajectory's chained Φ value that the SCP iterates toward).
+    #   - impulse: zero-reset every segment.
     if not stm_meta.is_empty:
         n_phys = stm_meta.n_phys
         eye_flat = jnp.eye(n_phys).reshape(-1)
         for slot in stm_meta.slots:
             if slot.kind == "physical":
-                V0 = V0.at[:, slot.slice].set(jnp.broadcast_to(eye_flat, (N - 1, n_phys * n_phys)))
+                if slot.anchor_node is None:
+                    V0 = V0.at[:, slot.slice].set(
+                        jnp.broadcast_to(eye_flat, (N - 1, n_phys * n_phys))
+                    )
+                else:
+                    j = slot.anchor_node
+                    if 0 <= j < N - 1:
+                        V0 = V0.at[j, slot.slice].set(eye_flat)
+                    # rows k != j already carry x[k, slot.slice] from the
+                    # initial copy of x[:-1] above — leave them as-is.
             else:
                 V0 = V0.at[:, slot.slice].set(0.0)
     V0 = V0.at[:, n_x : n_x + n_x * n_x].set(jnp.eye(n_x).reshape(1, -1).repeat(N - 1, axis=0))

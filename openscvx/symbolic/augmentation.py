@@ -492,7 +492,15 @@ def _configure_stm_leaf(leaf: State, N: int) -> None:
     Final boundary is free; bounds are wide finite placeholders."""
     n = leaf.shape[0]
     if isinstance(leaf, STMPhysical):
-        init = np.eye(leaf.n_phys, dtype=float).reshape(-1)
+        # Anchored Φ (anchor_node set) is zero-initialized globally and
+        # identity-injected only at its anchor node. Non-anchored Φ resets
+        # to identity at every segment start (initial value at node 0 is
+        # therefore identity as well).
+        anchor = getattr(leaf, "anchor_node", None)
+        if anchor is None or anchor == 0:
+            init = np.eye(leaf.n_phys, dtype=float).reshape(-1)
+        else:
+            init = np.zeros(leaf.n_phys * leaf.n_phys, dtype=float)
     elif isinstance(leaf, STMImpulse):
         init = np.zeros(leaf.n_phys, dtype=float)
     else:

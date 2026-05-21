@@ -32,6 +32,11 @@ class StmSlot:
     control_name: Optional[str] = None
     mode: str = "approx"  # SCP Jacobian treatment: "approx" | "exact"
     psi_slice: Optional[slice] = None
+    # When set on a "physical" slot, Φ is identity-injected ONLY at this node
+    # (zero-initialized globally) and propagates continuously through every
+    # subsequent segment without per-segment reset. ``None`` keeps the default
+    # behavior of resetting to identity at every segment start.
+    anchor_node: Optional[int] = None
 
     def __hash__(self) -> int:
         # Python's ``slice`` is not hashable; key on (start, stop, step) tuples.
@@ -45,6 +50,7 @@ class StmSlot:
                 self.control_name,
                 self.mode,
                 _slice_key(self.psi_slice),
+                self.anchor_node,
             )
         )
 

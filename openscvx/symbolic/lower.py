@@ -805,7 +805,7 @@ def lower_symbolic_problem(
         # (Φ_imp resets to 0 and stays 0 until the discrete impulsive jump).
         psi_slice = None
         if mode == "exact" and state._stm_kind == "physical":
-            psi_size = state.n_phys ** 3
+            psi_size = state.n_phys**3
             psi_slice = slice(psi_offset, psi_offset + psi_size)
             psi_offset += psi_size
         stm_slots.append(
@@ -818,6 +818,7 @@ def lower_symbolic_problem(
                 control_name=ctrl_name,
                 mode=mode,
                 psi_slice=psi_slice,
+                anchor_node=getattr(state, "anchor_node", None),
             )
         )
         n_phys_stm = state.n_phys

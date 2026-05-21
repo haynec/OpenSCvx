@@ -309,14 +309,23 @@ def simulate_nonlinear_time(
         else:
             x_post = np.asarray(x_0).copy()
 
-        # Reset STM slots at each segment start (identity for physical, zero for impulse).
+        # Reset STM slots at each segment start.
+        #   - physical (anchor_node=None): identity reset every segment.
+        #   - physical (anchor_node=j): identity injected only when k == j;
+        #     otherwise carry the post-discrete-map value forward unchanged so
+        #     Φ propagates continuously across the boundary.
+        #   - impulse: zero-reset every segment.
         if stm_meta is not None and not stm_meta.is_empty:
             n_phys = stm_meta.n_phys
             eye_flat = np.eye(n_phys).reshape(-1)
             x_post = np.asarray(x_post).copy()
             for slot in stm_meta.slots:
                 if slot.kind == "physical":
-                    x_post[slot.slice] = eye_flat
+                    if slot.anchor_node is None:
+                        x_post[slot.slice] = eye_flat
+                    elif slot.anchor_node == k:
+                        x_post[slot.slice] = eye_flat
+                    # else: leave x_post[slot.slice] unchanged (continuous Φ).
                 else:
                     x_post[slot.slice] = 0.0
 
