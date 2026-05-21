@@ -68,9 +68,14 @@ class Variable(Leaf):
         """
         hasher.update(self.__class__.__name__.encode())
         hasher.update(str(self._shape).encode())
-        # Hash the slice (canonical position) - this is name-invariant
+        # Hash the slice (canonical position) - this is name-invariant.
+        # STM leaves are propagated parameters, not decision variables, and
+        # therefore do not carry a slice into the unified state vector; hash
+        # by name to keep them identifiable in cache keys.
         if self._slice is not None:
             hasher.update(f"slice:{self._slice.start}:{self._slice.stop}".encode())
+        elif getattr(self, "_is_stm", False):
+            hasher.update(f"stm:{self.name}".encode())
         else:
             raise RuntimeError(
                 f"Cannot hash Variable '{self.name}' without _slice attribute. "

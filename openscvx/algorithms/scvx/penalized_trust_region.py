@@ -46,6 +46,37 @@ if TYPE_CHECKING:
 warnings.filterwarnings("ignore")
 
 
+def _unpack_disc(out):
+    """Normalize discretizer output to a 6-tuple ``(A, B, C, x_prop, V, stm_phi)``.
+
+    Discretizers without STM support (sparse / discretize-linearize variants)
+    return a 5-tuple; the STM-aware ``LinearizeDiscretize`` returns a 6-tuple
+    whose final entry is the per-name Φ-chain dict.
+    """
+    if len(out) >= 6:
+        return out[0], out[1], out[2], out[3], out[4], out[5]
+    return out[0], out[1], out[2], out[3], out[4], None
+
+
+def _update_stm_phi_params(params: dict, stm_phi: object) -> None:
+    """Refresh ``params["__stm_phi__"]`` with the latest discretizer Φ output.
+
+    The discretizer returns ``stm_phi`` as a per-name dict of jnp arrays. The
+    CTCS RHS reads from ``params["__stm_phi__"][name]`` on every subsequent
+    discretization / autotuner / constraint evaluation, so this mutation keeps
+    Φ_bar threaded between SCP iterations. Empty / ``None`` outputs (problems
+    without STM augmented states) are no-ops.
+    """
+    if not stm_phi:
+        return
+    existing = params.get("__stm_phi__")
+    if existing is None:
+        params["__stm_phi__"] = dict(stm_phi)
+        return
+    for name, value in stm_phi.items():
+        existing[name] = value
+
+
 class PenalizedTrustRegion(Algorithm):
     """Penalized Trust Region (PTR) successive convexification algorithm.
 
@@ -298,12 +329,21 @@ class PenalizedTrustRegion(Algorithm):
         init_state = AlgorithmState.from_settings(settings, self.weights)
         init_history = AlgorithmHistory.from_settings(settings)
 
-        # Warm up the dynamics discretization on the initial guess.
+        # Warm up the dynamics discretization on the initial guess. STM-as-
+        # parameter discretizers chain Φ across iterations via params; for an
+        # N-node trajectory with an anchored slot, the chain takes up to N-1
+        # discretizations to fully populate. Iterate to a fixed point on the
+        # initial guess so the first real QP solve sees a self-consistent Φ.
         x_init = np.asarray(init_state.x)
         u_init = np.asarray(init_state.u, dtype=float)
-        _, _, _, x_prop, V_multi_shoot = self._invoke_solver(
-            self._discretization_solver, x_init, u_init, params
-        )
+        n_chain_warmup = max(1, settings.sim.n)
+        x_prop = None
+        V_multi_shoot = None
+        for _ in range(n_chain_warmup):
+            _, _, _, x_prop, V_multi_shoot, stm_phi = _unpack_disc(
+                self._invoke_solver(self._discretization_solver, x_init, u_init, params)
+            )
+            _update_stm_phi_params(params, stm_phi)
         init_history.add_discretization(V_multi_shoot.__array__())
         slice_imp = settings.sim.u.slice_impulsive
         has_impulsive = bool(slice_imp.stop > slice_imp.start)
@@ -327,6 +367,7 @@ class PenalizedTrustRegion(Algorithm):
             self._discretization_solver, x_sol, u_sol.astype(float), params
         )
         x_prop_c = cont_out[3]
+        _update_stm_phi_params(params, cont_out[5] if len(cont_out) > 5 else None)
         u_candidate = u_sol.astype(float)
         x0_prior_c = self._recover_prior_node_from_initial(settings, x_sol[0])
         x_nodes_prior_c = np.vstack((x0_prior_c, np.asarray(x_prop_c)))
@@ -412,9 +453,12 @@ class PenalizedTrustRegion(Algorithm):
         # reuse the candidate discretization from the previous iter.
         if iter_index == 1:
             t0 = time.time()
-            _, _, _, x_prop_init, V_multi_shoot = self._invoke_solver(
-                self._discretization_solver, x_state, u_state, params
+            _, _, _, x_prop_init, V_multi_shoot, stm_phi_init = _unpack_disc(
+                self._invoke_solver(
+                    self._discretization_solver, x_state, u_state, params
+                )
             )
+            _update_stm_phi_params(params, stm_phi_init)
             x0_prior = self._recover_prior_node_from_initial(settings, x_state[0])
             x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop_init)))
             x_prop_plus_init, _, _, W_multi_shoot = self._invoke_solver(
@@ -457,9 +501,12 @@ class PenalizedTrustRegion(Algorithm):
 
         # Discretize candidate.
         t0 = time.time()
-        _, _, _, x_prop, V_multi_shoot = self._invoke_solver(
-            self._discretization_solver, candidate.x, candidate.u.astype(float), params
+        _, _, _, x_prop, V_multi_shoot, stm_phi = _unpack_disc(
+            self._invoke_solver(
+                self._discretization_solver, candidate.x, candidate.u.astype(float), params
+            )
         )
+        _update_stm_phi_params(params, stm_phi)
         u_candidate = candidate.u.astype(float)
         x0_prior = self._recover_prior_node_from_initial(settings, candidate.x[0])
         x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))

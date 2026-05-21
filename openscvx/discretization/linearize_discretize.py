@@ -166,6 +166,13 @@ class LinearizeDiscretize(Discretizer):
         ]
 
 
+def _stm_carry_size(stm_meta: StmMeta) -> int:
+    """Total size of the Φ_stm carry block (sum of every slot's width)."""
+    if stm_meta.is_empty:
+        return 0
+    return max(slot.slice.stop for slot in stm_meta.slots)
+
+
 def _dVdt(
     tau: float,
     V: jnp.ndarray,
@@ -239,10 +246,14 @@ def _dVdt(
     # Define the nodes
     nodes = jnp.arange(0, N - 1)
 
-    # Define indices for slicing the augmented state vector
+    # Define indices for slicing the augmented state vector. Φ_stm lives in its
+    # own carry block between x and Φ_aux; slot.slice offsets are relative to
+    # the start of that block.
+    stm_size = _stm_carry_size(stm_meta)
     i0 = 0
     i1 = n_x
-    i2 = i1 + n_x * n_x
+    i_stm = i1 + stm_size
+    i2 = i_stm + n_x * n_x
     i3 = i2 + n_x * n_u
     i4 = i3 + n_x * n_u
     # Ψ region (exact-mode only). Lives past the B_d/C_d blocks.
@@ -262,31 +273,55 @@ def _dVdt(
     x = V[:, :n_x]
     u = u[: x.shape[0]]
 
+    # Inject the LIVE Φ_stm carry into params so the CTCS RHS reads the value
+    # being integrated (time-varying within each segment) rather than the
+    # frozen segment-start value from the prior iteration. The visitor reads
+    # ``params["__stm_phi__"][name][node_idx]`` with ``node_idx`` in [0, N-2]
+    # during _dVdt, so we shape the transient block as ``(N-1, n_phys, ...)``
+    # and pad to ``N`` to match the JIT trace signature from the QP/post-
+    # processing contexts.
+    if not stm_meta.is_empty:
+        n_phys = stm_meta.n_phys
+        transient_phi = dict(params.get("__stm_phi__", {}))
+        for slot in stm_meta.slots:
+            abs_slice = slice(i1 + slot.slice.start, i1 + slot.slice.stop)
+            block = V[:, abs_slice]
+            if slot.kind == "physical":
+                seg = block.reshape(N - 1, n_phys, n_phys)
+                transient_phi[slot.name] = jnp.concatenate((seg, seg[-1:]), axis=0)
+            else:
+                transient_phi[slot.name] = jnp.concatenate((block, block[-1:]), axis=0)
+        local_params = {**params, "__stm_phi__": transient_phi}
+    else:
+        local_params = params
+
     # Compute the time-dilated dynamics (s * f already included symbolically)
-    F = state_dot(x, u, nodes, params)
+    F = state_dot(x, u, nodes, local_params)
 
     # Evaluate the Jacobians (already include time-dilation derivatives via autodiff)
-    dfdx = A(x, u, nodes, params)
-    dfdu = B(x, u, nodes, params)
+    dfdx = A(x, u, nodes, local_params)
+    dfdu = B(x, u, nodes, local_params)
 
     # Stack up the results into the augmented state vector
     # fmt: off
     dVdt = jnp.zeros_like(V)
     dVdt = dVdt.at[:, i0:i1].set(F)
-    # Inject STM variational RHS (physical-state block of A only; one-way invariant).
+    # Inject STM variational RHS into the Φ_stm carry block (which lives at
+    # [i1, i_stm) — slot.slice offsets are relative to i1).
     if not stm_meta.is_empty:
         n_phys = stm_meta.n_phys
         A_phys = dfdx[:, :n_phys, :n_phys]
         for slot in stm_meta.slots:
-            block = V[:, slot.slice]
+            abs_slice = slice(i1 + slot.slice.start, i1 + slot.slice.stop)
+            block = V[:, abs_slice]
             if slot.kind == "physical":
                 phi = block.reshape(-1, n_phys, n_phys)
                 dphi = jnp.matmul(A_phys, phi).reshape(-1, n_phys * n_phys)
             else:  # "impulse"
                 dphi = jnp.einsum("nij,nj->ni", A_phys, block)
-            dVdt = dVdt.at[:, slot.slice].set(dphi)
-    dVdt = dVdt.at[:, i1:i2].set(
-        jnp.matmul(dfdx, V[:, i1:i2].reshape(-1, n_x, n_x)).reshape(-1, n_x * n_x)
+            dVdt = dVdt.at[:, abs_slice].set(dphi)
+    dVdt = dVdt.at[:, i_stm:i2].set(
+        jnp.matmul(dfdx, V[:, i_stm:i2].reshape(-1, n_x, n_x)).reshape(-1, n_x * n_x)
     )
     dVdt = dVdt.at[:, i2:i3].set(
         (jnp.matmul(dfdx, V[:, i2:i3].reshape(-1, n_x, n_u)) + dfdu * alpha).reshape(-1, n_x * n_u)
@@ -305,7 +340,8 @@ def _dVdt(
             if slot.psi_slice is None or slot.kind != "physical":
                 continue
             psi_abs = slice(i4 + slot.psi_slice.start, i4 + slot.psi_slice.stop)
-            phi = V[:, slot.slice].reshape(-1, n_phys, n_phys)
+            phi_abs = slice(i1 + slot.slice.start, i1 + slot.slice.stop)
+            phi = V[:, phi_abs].reshape(-1, n_phys, n_phys)
             psi = V[:, psi_abs].reshape(-1, n_phys, n_phys, n_phys)
             dpsi = jnp.einsum("bil,bljk->bijk", A_phys, psi) + jnp.einsum(
                 "bilm,bmk,blj->bijk", H_phys, phi, phi
@@ -364,41 +400,55 @@ def _calculate_discretization(
 
     N = settings.sim.n
 
-    # Define indices for slicing the augmented state vector
+    # Define indices for slicing the augmented state vector. Φ_stm carry block
+    # lives between x and Φ_aux. slot.slice offsets are relative to i1.
+    stm_size = _stm_carry_size(stm_meta)
     i0 = 0
     i1 = n_x
-    i2 = i1 + n_x * n_x
+    i_stm = i1 + stm_size
+    i2 = i_stm + n_x * n_x
     i3 = i2 + n_x * n_u
     i4 = i3 + n_x * n_u
     i5 = i4 + stm_meta.psi_size  # Ψ region (exact-mode only; 0 otherwise)
 
-    # Initial augmented state
+    # Initial augmented state.
+    # Φ_stm carry seeded from the prior iterate's chained Φ at each segment
+    # start (``params["__stm_phi__"][name][k]``), with identity injection on
+    # anchor rows. This matches the OLD Φ-as-state semantics: the in-segment
+    # CTCS RHS sees ``Φ_seg(τ) · prev_chain[k]`` (= chain at time τ within
+    # segment k for the prior iterate), and ``V_end[k]`` is the next iterate's
+    # chained Φ at node k+1.
     V0 = jnp.zeros((N - 1, i5))
     V0 = V0.at[:, :n_x].set(x[:-1].astype(float))
-    # Reset STM slots at each segment start.
-    #   - physical (anchor_node=None): identity reset on every segment row.
-    #   - physical (anchor_node=j): identity injected only on row j; on every
-    #     other row keep V0[k, slot.slice] = x[k, slot.slice] (the reference
-    #     trajectory's chained Φ value that the SCP iterates toward).
-    #   - impulse: zero-reset every segment.
     if not stm_meta.is_empty:
         n_phys = stm_meta.n_phys
         eye_flat = jnp.eye(n_phys).reshape(-1)
+        stm_phi_prev = params.get("__stm_phi__", {})
         for slot in stm_meta.slots:
+            abs_start = i1 + slot.slice.start
+            abs_stop = i1 + slot.slice.stop
             if slot.kind == "physical":
-                if slot.anchor_node is None:
-                    V0 = V0.at[:, slot.slice].set(
+                anchor = slot.anchor_node
+                prev = stm_phi_prev.get(slot.name)
+                if anchor is None:
+                    # Per-segment reset: identity at every segment row.
+                    V0 = V0.at[:, abs_start:abs_stop].set(
                         jnp.broadcast_to(eye_flat, (N - 1, n_phys * n_phys))
                     )
                 else:
-                    j = slot.anchor_node
-                    if 0 <= j < N - 1:
-                        V0 = V0.at[j, slot.slice].set(eye_flat)
-                    # rows k != j already carry x[k, slot.slice] from the
-                    # initial copy of x[:-1] above — leave them as-is.
+                    # Seed every segment row with the prior iterate's chained Φ
+                    # value at that node; override row j=anchor with identity.
+                    if prev is not None:
+                        V0 = V0.at[:, abs_start:abs_stop].set(
+                            jnp.asarray(prev[: N - 1]).reshape(N - 1, n_phys * n_phys)
+                        )
+                    if 0 <= anchor < N - 1:
+                        V0 = V0.at[anchor, abs_start:abs_stop].set(eye_flat)
             else:
-                V0 = V0.at[:, slot.slice].set(0.0)
-    V0 = V0.at[:, n_x : n_x + n_x * n_x].set(jnp.eye(n_x).reshape(1, -1).repeat(N - 1, axis=0))
+                V0 = V0.at[:, abs_start:abs_stop].set(0.0)
+    V0 = V0.at[:, i_stm : i_stm + n_x * n_x].set(
+        jnp.eye(n_x).reshape(1, -1).repeat(N - 1, axis=0)
+    )
     V0 = V0.reshape(-1)
 
     # TODO Implement scaling of V vector
@@ -456,32 +506,60 @@ def _calculate_discretization(
     x_prop = Vend[:, i0:i1]
 
     # Return as 3D arrays: (N-1, n_x, n_x) for A_bar, (N-1, n_x, n_u) for B_bar/C_bar
-    A_bar = Vend[:, i1:i2].reshape(N - 1, n_x, n_x)
+    A_bar = Vend[:, i_stm:i2].reshape(N - 1, n_x, n_x)
     B_bar = Vend[:, i2:i3].reshape(N - 1, n_x, n_u)
     C_bar = Vend[:, i3:i4].reshape(N - 1, n_x, n_u)
 
-    # Exact-mode STM rows of A_bar come from Ψ. Φ resets to I at each segment
-    # start, so ∂Φ(τ_{k+1})/∂Φ(τ_k) = 0 (zero whole row first) and
-    # ∂Φ(τ_{k+1})/∂x_phys(τ_k) = Ψ (flatten (i,j) → row index within slot).
-    if stm_meta.psi_size > 0:
+    # Extract per-slot Φ trajectories from the Φ_stm carry block (final timestep).
+    # ``V_end[k]`` is the propagated value Φ_seg(k) · V0[k]; with V0 seeded by
+    # the prior iterate's chained Φ, this gives the next iterate's chained Φ
+    # at node ``k+1`` directly (a fixed-point iteration that matches OLD-code
+    # Φ-as-state at convergence).
+    stm_phi_out: dict = {}
+    if not stm_meta.is_empty:
         n_phys = stm_meta.n_phys
+        eye = jnp.eye(n_phys)
+        stm_phi_prev = params.get("__stm_phi__", {})
         for slot in stm_meta.slots:
-            if slot.psi_slice is None or slot.kind != "physical":
-                continue
-            psi_abs = slice(i4 + slot.psi_slice.start, i4 + slot.psi_slice.stop)
-            psi_end = Vend[:, psi_abs].reshape(N - 1, n_phys * n_phys, n_phys)
-            A_bar = A_bar.at[:, slot.slice, :].set(0.0)
-            A_bar = A_bar.at[:, slot.slice, :n_phys].set(psi_end)
+            abs_start = i1 + slot.slice.start
+            abs_stop = i1 + slot.slice.stop
+            seg_end = Vend[:, abs_start:abs_stop]  # (N-1, slot_size)
+            if slot.kind == "physical":
+                seg_end = seg_end.reshape(N - 1, n_phys, n_phys)
+                phi_traj = jnp.zeros((N, n_phys, n_phys))
+                anchor = slot.anchor_node
+                if anchor is None:
+                    # Non-anchored: row 0 = I, row k≥1 = Φ_seg(k-1).
+                    phi_traj = phi_traj.at[0].set(eye)
+                    for k in range(1, N):
+                        phi_traj = phi_traj.at[k].set(seg_end[k - 1])
+                else:
+                    # Anchored: zeros before anchor, identity at anchor, propagated
+                    # values at k > anchor (V_end[k-1] = chain at node k).
+                    if 0 <= anchor < N:
+                        phi_traj = phi_traj.at[anchor].set(eye)
+                    for k in range(anchor + 1, N):
+                        if 0 <= k - 1 < N - 1:
+                            phi_traj = phi_traj.at[k].set(seg_end[k - 1])
+                stm_phi_out[slot.name] = phi_traj
+            else:
+                # Impulse: zero in continuous segments; nonzero values come from
+                # the impulsive discretizer at impulse nodes (handled separately).
+                prev = stm_phi_prev.get(slot.name)
+                if prev is not None:
+                    stm_phi_out[slot.name] = jnp.asarray(prev)
+                else:
+                    stm_phi_out[slot.name] = jnp.zeros((N, n_phys))
 
-    # Strip Ψ from V before returning; downstream consumers expect i4 per segment.
-    # Patch the final column's Φ block with the Ψ-corrected A_bar rows so that
-    # ``DiscretizationResult.from_V`` yields the exact-mode linearization.
-    sol_mat = sol.reshape(sol.shape[0], N - 1, i5)[:, :, :i4]
-    if stm_meta.psi_size > 0:
-        sol_mat = sol_mat.at[-1, :, i1:i2].set(A_bar.reshape(N - 1, n_x * n_x))
-    Vmulti = sol_mat.reshape(sol.shape[0], (N - 1) * i4).T
+    # Strip Ψ from V before returning; downstream consumers (DiscretizationResult.
+    # from_V) expect a layout of [x | Φ_aux | B_d | C_d] per segment.
+    sol_mat = sol.reshape(sol.shape[0], N - 1, i5)
+    sol_x = sol_mat[:, :, i0:i1]
+    sol_aux = sol_mat[:, :, i_stm:i4]
+    sol_compact = jnp.concatenate((sol_x, sol_aux), axis=2)
+    Vmulti = sol_compact.reshape(sol.shape[0], (N - 1) * (i1 + (i4 - i_stm))).T
 
-    return A_bar, B_bar, C_bar, x_prop, Vmulti
+    return A_bar, B_bar, C_bar, x_prop, Vmulti, stm_phi_out
 
 
 def calculate_impulsive_discretization(

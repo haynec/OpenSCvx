@@ -161,6 +161,7 @@ def load_or_compile_propagation_solver(
     max_tau_len: int,
     save_compiled: bool = False,
     debug: bool = False,
+    stm_carry_size: int = 0,
 ) -> callable:
     """Load propagation solver from cache or compile and cache it.
 
@@ -192,9 +193,10 @@ def load_or_compile_propagation_solver(
     else:
         print("Compiling propagation solver (not saving/loading from disk)...")
 
-    # Pass parameters as a single dictionary
+    # Pass parameters as a single dictionary; carry includes Φ_stm block.
+    n_carry = n_states_prop + stm_carry_size
     compiled_solver = export.export(jax.jit(propagation_solver))(
-        np.ones(n_states_prop),  # x_0
+        np.ones(n_carry),  # x_0 (augmented carry)
         (0.0, 0.0),  # time span
         np.ones((1, n_controls)),  # controls_current
         np.ones((1, n_controls)),  # controls_next
@@ -214,7 +216,10 @@ def load_or_compile_propagation_solver(
 
 
 def prime_propagation_solver(
-    propagation_solver: callable, params: Dict[str, Any], settings: Any
+    propagation_solver: callable,
+    params: Dict[str, Any],
+    settings: Any,
+    stm_carry_size: int = 0,
 ) -> None:
     """Prime the propagation solver with a test call to ensure it works.
 
@@ -224,7 +229,10 @@ def prime_propagation_solver(
         settings: Settings configuration object
     """
     try:
-        x_0 = np.ones(settings.sim.x_prop.initial.shape, dtype=settings.sim.x_prop.initial.dtype)
+        n_prop = settings.sim.x_prop.initial.shape[0]
+        x_0 = np.ones(
+            (n_prop + stm_carry_size,), dtype=settings.sim.x_prop.initial.dtype
+        )
         tau_grid = (0.0, 1.0)
         controls_current = np.ones((1, settings.sim.u.shape[0]), dtype=settings.sim.u.guess.dtype)
         controls_next = np.ones((1, settings.sim.u.shape[0]), dtype=settings.sim.u.guess.dtype)
@@ -235,10 +243,14 @@ def prime_propagation_solver(
         save_time = np.ones((settings.prp.max_tau_len,), dtype=np.float64)
         mask_padded = np.ones((settings.prp.max_tau_len,), dtype=bool)
         # Create dummy params dict with same structure
-        dummy_params = {
-            name: np.ones_like(value) if hasattr(value, "shape") else float(value)
-            for name, value in params.items()
-        }
+        def _ones_like_recursive(value):
+            if isinstance(value, dict):
+                return {k: _ones_like_recursive(v) for k, v in value.items()}
+            if hasattr(value, "shape"):
+                return np.ones_like(value)
+            return float(value)
+
+        dummy_params = {name: _ones_like_recursive(value) for name, value in params.items()}
         if hasattr(propagation_solver, "call"):
             propagation_solver.call(
                 x_0,

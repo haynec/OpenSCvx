@@ -108,6 +108,12 @@ class SymbolicProblem:
     # Maps output names to symbolic expressions
     algebraic_prop: Optional[Dict[str, "Expr"]] = None
 
+    # STM leaves (Φ / Ψ) referenced by CTCS constraints. NOT decision
+    # variables: the discretizer propagates them along the current iterate
+    # and exposes the result to the lowered CTCS RHS via
+    # ``params["__stm_phi__"]`` / ``params["__stm_psi__"]``.
+    stm_params: List["State"] = field(default_factory=list)
+
     @property
     def is_preprocessed(self) -> bool:
         """True if the problem has been preprocessed and is ready for lowering.

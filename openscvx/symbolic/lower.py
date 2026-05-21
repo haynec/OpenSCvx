@@ -789,17 +789,28 @@ def lower_symbolic_problem(
             problem.N,
         )
 
-    # Build STM metadata up-front so sparsity augmentation below can see it.
+    # Build STM metadata from the dedicated stm_params registry. STM leaves
+    # are propagated parameters (not decision variables); ``slot.slice`` is
+    # an offset into the discretizer's per-segment Φ_stm carry block, NOT
+    # into the unified state vector.
     stm_slots: list[StmSlot] = []
     n_phys_stm = 0
     psi_offset = 0
-    for state in problem.states:
+    stm_carry_offset = 0
+    for state in getattr(problem, "stm_params", []) or []:
         if getattr(state, "_is_stm", False) is not True:
             continue
         mode = getattr(state, "mode", "approx")
         control = getattr(state, "control", None)
         ctrl_slice = control._slice if control is not None else None
         ctrl_name = control.name if control is not None else None
+        # Block size in the Φ_stm carry: n_phys² for physical Φ, n_phys for impulse.
+        if state._stm_kind == "physical":
+            block_size = state.n_phys * state.n_phys
+        else:
+            block_size = state.n_phys
+        slot_slice = slice(stm_carry_offset, stm_carry_offset + block_size)
+        stm_carry_offset += block_size
         # Ψ (second-order sensitivity) is only integrated for exact-mode
         # *physical* slots. Impulse Ψ is trivially zero in continuous segments
         # (Φ_imp resets to 0 and stays 0 until the discrete impulsive jump).
@@ -812,7 +823,7 @@ def lower_symbolic_problem(
             StmSlot(
                 name=state.name,
                 kind=state._stm_kind,
-                slice=state._slice,
+                slice=slot_slice,
                 n_phys=state.n_phys,
                 control_slice=ctrl_slice,
                 control_name=ctrl_name,
@@ -836,17 +847,6 @@ def lower_symbolic_problem(
         A_c, B_c = problem.dynamics.sparsity(n_x, n_u)
 
         dynamics_sparsity = discrete_sparsity(A_c, B_c, dis_type="FOH")
-
-        # Augment A_d sparsity for exact-mode STM slots: their rows get
-        # populated by Ψ (∂Φ/∂x_phys(0)) in columns [0, n_phys).
-        if stm_meta.psi_size > 0:
-            A_d, B_d, C_d = dynamics_sparsity
-            A_d = A_d.copy()
-            for slot in stm_meta.slots:
-                if slot.psi_slice is None or slot.kind != "physical":
-                    continue
-                A_d[slot.slice, : stm_meta.n_phys] = True
-            dynamics_sparsity = (A_d, B_d, C_d)
 
         # Attach continuous-time sparsity to the Dynamics object so the
         # discretizer can exploit it for sparse Jacobian computation.

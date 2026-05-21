@@ -2,7 +2,7 @@ from typing import Callable, Optional
 
 import jax
 import jax.numpy as jnp
-import numpy as np
+import numpy as np  # noqa: F401
 
 from openscvx.config import Config
 from openscvx.discretization import Discretizer
@@ -27,6 +27,12 @@ def _time_dilation_index(settings: Config, n_controls: int) -> int:
     return int(td_slice.start)
 
 
+def _stm_carry_size(stm_meta: Optional[StmMeta]) -> int:
+    if stm_meta is None or stm_meta.is_empty:
+        return 0
+    return max(slot.slice.stop for slot in stm_meta.slots)
+
+
 def prop_aug_dy(
     tau: float,
     x: np.ndarray,
@@ -40,6 +46,7 @@ def prop_aug_dy(
     params: dict,
     stm_meta: Optional[StmMeta] = None,
     A: Optional[callable] = None,
+    n_states: Optional[int] = None,
 ) -> np.ndarray:
     """Compute the augmented dynamics for propagation.
 
@@ -64,23 +71,62 @@ def prop_aug_dy(
     Returns:
         np.ndarray: Time-dilated state derivatives.
     """
-    x = x[None, :]
+    stm_size = _stm_carry_size(stm_meta)
+    if stm_size == 0:
+        x_state = x[None, :]
+        beta = (tau - tau_init) * N * foh_mask
+        u = u_current + beta * (u_next - u_current)
+        dx = state_dot(x_state, u, node, params)
+        return dx.squeeze()
+
+    # Augmented carry: x = [x_state, Φ_stm_block].
+    if n_states is None:
+        n_states = x.shape[0] - stm_size
+    x_state = x[:n_states][None, :]
+    phi_block = x[n_states:]
+    n_phys = stm_meta.n_phys
 
     beta = (tau - tau_init) * N * foh_mask
     u = u_current + beta * (u_next - u_current)
 
-    dx = state_dot(x, u, node, params)
-    if stm_meta is not None and not stm_meta.is_empty and A is not None:
-        n_phys = stm_meta.n_phys
-        A_phys = A(x, u, node, params)[0, :n_phys, :n_phys]
+    # Inject live Φ into params so the CTCS RHS sees the value being
+    # integrated, not the constant per-node value from the prior pass.
+    transient_phi = dict(params.get("__stm_phi__", {}))
+    for slot in stm_meta.slots:
+        block = phi_block[slot.slice]
+        if slot.kind == "physical":
+            phi_val = block.reshape(n_phys, n_phys)
+        else:
+            phi_val = block
+        # Pad to (N, ...) to match the JIT trace signature used by the QP
+        # context. ``node`` is shape (1, 1) so node_idx becomes a scalar; the
+        # visitor's ``arr[node_idx]`` picks one row, so we replicate.
+        if slot.kind == "physical":
+            transient_phi[slot.name] = jnp.broadcast_to(
+                phi_val[None, ...], (N, n_phys, n_phys)
+            )
+        else:
+            transient_phi[slot.name] = jnp.broadcast_to(phi_val[None, ...], (N, n_phys))
+    local_params = {**params, "__stm_phi__": transient_phi}
+
+    dx_state = state_dot(x_state, u, node, local_params)
+
+    # Φ variational RHS: dΦ/dτ = A_phys · Φ. A is vmapped; index batch=0.
+    if A is None:
+        dphi_block = jnp.zeros_like(phi_block)
+    else:
+        A_phys = A(x_state, u, node, local_params)[0, :n_phys, :n_phys]
+        dphi_block = jnp.zeros_like(phi_block)
         for slot in stm_meta.slots:
-            block = x[0, slot.slice]
+            block = phi_block[slot.slice]
             if slot.kind == "physical":
-                dphi = (A_phys @ block.reshape(n_phys, n_phys)).reshape(-1)
+                phi_val = block.reshape(n_phys, n_phys)
+                dphi = (A_phys @ phi_val).reshape(-1)
             else:
                 dphi = A_phys @ block
-            dx = dx.at[0, slot.slice].set(dphi)
-    return dx.squeeze()
+            dphi_block = dphi_block.at[slot.slice].set(dphi)
+
+    return jnp.concatenate([dx_state.squeeze(), dphi_block])
 
 
 def get_propagation_solver(
@@ -111,12 +157,14 @@ def get_propagation_solver(
     if stm_meta is not None and not stm_meta.is_empty and f_scalar is not None:
         A_vmapped = jax.vmap(jax.jacfwd(f_scalar, argnums=0), in_axes=(0, 0, 0, None))
 
+    n_states_prop = settings.sim.n_states_prop
+
     def propagation_solver(V0, tau_grid, u_cur, u_next, tau_init, node, save_time, mask, params):
         param_map_update = params
         return solve_ivp_diffrax_prop(
             f=prop_aug_dy,
             tau_final=tau_grid[1],  # scalar
-            y_0=V0,  # shape (n_states,)
+            y_0=V0,  # shape (n_states + stm_size,)
             args=(
                 u_cur,  # shape (1, n_controls)
                 u_next,  # shape (1, n_controls)
@@ -128,7 +176,7 @@ def get_propagation_solver(
                 param_map_update,
                 stm_meta,
                 A_vmapped,
-                # additional named parameters as **kwargs
+                n_states_prop,
             ),
             tau_0=tau_grid[0],  # scalar
             solver_name=settings.prp.solver,
@@ -262,6 +310,8 @@ def simulate_nonlinear_time(
     states = np.empty((n_states, n_tau))
     tau = np.linspace(0, 1, settings.sim.n)
 
+    stm_size = _stm_carry_size(stm_meta)
+
     # Precompute control interpolation
     u_interp = np.stack([np.interp(t, t, u[:, i]) for i in range(u.shape[1])], axis=-1)
     _time_dilation_index(settings, u.shape[1])
@@ -309,30 +359,34 @@ def simulate_nonlinear_time(
         else:
             x_post = np.asarray(x_0).copy()
 
-        # Reset STM slots at each segment start.
-        #   - physical (anchor_node=None): identity reset every segment.
-        #   - physical (anchor_node=j): identity injected only when k == j;
-        #     otherwise carry the post-discrete-map value forward unchanged so
-        #     Φ propagates continuously across the boundary.
-        #   - impulse: zero-reset every segment.
-        if stm_meta is not None and not stm_meta.is_empty:
+        # STMs are propagated parameters: extend x with a Φ_stm carry block so
+        # the propagator integrates Φ alongside x. The block is seeded with
+        # the per-segment Φ (identity for non-anchored / for anchor row at k;
+        # otherwise the prior-iterate chained value from params).
+        if stm_size > 0 and stm_meta is not None:
             n_phys = stm_meta.n_phys
-            eye_flat = np.eye(n_phys).reshape(-1)
-            x_post = np.asarray(x_post).copy()
+            stm_phi_prev = params.get("__stm_phi__", {})
+            phi_carry = np.zeros(stm_size, dtype=float)
             for slot in stm_meta.slots:
                 if slot.kind == "physical":
                     if slot.anchor_node is None:
-                        x_post[slot.slice] = eye_flat
+                        phi_carry[slot.slice] = np.eye(n_phys).reshape(-1)
                     elif slot.anchor_node == k:
-                        x_post[slot.slice] = eye_flat
-                    # else: leave x_post[slot.slice] unchanged (continuous Φ).
+                        phi_carry[slot.slice] = np.eye(n_phys).reshape(-1)
+                    else:
+                        prev = stm_phi_prev.get(slot.name)
+                        if prev is not None and k < len(prev):
+                            phi_carry[slot.slice] = np.asarray(prev[k]).reshape(-1)
                 else:
-                    x_post[slot.slice] = 0.0
+                    phi_carry[slot.slice] = 0.0
+            x_post_carry = np.concatenate([np.asarray(x_post), phi_carry])
+        else:
+            x_post_carry = x_post
 
         # Call the continuous propagation solver with padded tau_cur and mask
         sol = _invoke_solver(
             propagation_solver,
-            x_post,
+            x_post_carry,
             (tau[k], tau[k + 1]),
             controls_current,
             controls_next,
@@ -343,12 +397,14 @@ def simulate_nonlinear_time(
             params,
         )
 
-        # Store requested samples; exclude endpoint only when it was appended
-        # solely for continuity propagation to the next segment.
+        # Store requested samples (state portion only); exclude endpoint only
+        # when it was appended solely for continuity propagation to the next
+        # segment.
         n_store = count - 1 if append_endpoint else count
-        states[:, out_idx : out_idx + n_store] = sol[:n_store].T
+        sol_state = sol[:, :n_states]
+        states[:, out_idx : out_idx + n_store] = sol_state[:n_store].T
         out_idx += n_store
-        x_0 = sol[count - 1]  # Last value used as next x_0
+        x_0 = sol_state[count - 1]  # Last x value used as next x_0
 
         prev_count += n_store
 

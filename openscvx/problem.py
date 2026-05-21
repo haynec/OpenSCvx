@@ -70,6 +70,37 @@ from openscvx.utils.caching import (
 )
 
 
+def _build_initial_stm_phi(stm_params: List[State], N: int) -> Dict[str, np.ndarray]:
+    """Anchor-aware initial Φ_bar dict for ``params["__stm_phi__"]``.
+
+    The discretizer overwrites these on every call before the CTCS RHS reads
+    them; this seed only needs to expose correct shapes and a plausible value
+    at row 0 (before any propagation has run).
+
+    - Physical, anchored at row q: zeros for rows < q, identity for rows >= q.
+    - Physical, no anchor: identity at every row (per-segment-reset semantics).
+    - Impulse: zeros (impulse Φ is populated by the impulsive discretizer).
+    """
+    out: Dict[str, np.ndarray] = {}
+    for stm in stm_params or []:
+        if not getattr(stm, "_is_stm", False):
+            continue
+        n_phys = stm.n_phys
+        anchor = getattr(stm, "anchor_node", None)
+        if stm._stm_kind == "physical":
+            arr = np.zeros((N, n_phys, n_phys), dtype=float)
+            if anchor is None:
+                arr[:] = np.eye(n_phys)
+            else:
+                for k in range(N):
+                    if k >= anchor:
+                        arr[k] = np.eye(n_phys)
+            out[stm.name] = arr
+        else:
+            out[stm.name] = np.zeros((N, n_phys), dtype=float)
+    return out
+
+
 class Problem:
     def __init__(
         self,
@@ -343,6 +374,14 @@ class Problem:
         self._parameters = self.symbolic.parameters  # Plain dict for JAX functions
         # Wrapper dict for user access that auto-syncs
         self._parameter_wrapper = ParameterDict(self, self._parameters, self.symbolic.parameters)
+
+        # Seed the STM-as-parameter dict so JIT tracing sees the right keys /
+        # shapes. The discretizer overwrites these values on every call before
+        # the CTCS RHS evaluates the next iterate; the seed only needs to match
+        # shape and have sensible anchor-aware initial Φ.
+        self._parameters["__stm_phi__"] = _build_initial_stm_phi(
+            self.symbolic.stm_params, N
+        )
 
         # Setup SCP Configuration
         self.settings = Config(
@@ -706,6 +745,21 @@ class Problem:
         for control in self.symbolic.controls:
             nodes_dict[control.name] = u_arr[:, control._slice]
 
+        # STM-as-parameter trajectories: read the latest Φ_bar dict from
+        # ``params["__stm_phi__"]`` (the discretizer overwrites it on every
+        # call, so the final entry reflects the converged iterate). Reshape to
+        # ``(N, n_phys * n_phys)`` for physical / ``(N, n_phys)`` for impulse
+        # so downstream plotting matches the legacy state-vector layout.
+        stm_phi_dict = self._parameters.get("__stm_phi__", {})
+        for stm in self.symbolic.stm_params:
+            if stm.name not in stm_phi_dict:
+                continue
+            arr = np.asarray(stm_phi_dict[stm.name])
+            if stm._stm_kind == "physical":
+                nodes_dict[stm.name] = arr.reshape(arr.shape[0], stm.n_phys * stm.n_phys)
+            else:
+                nodes_dict[stm.name] = arr.reshape(arr.shape[0], stm.n_phys)
+
         return OptimizationResults(
             converged=converged,
             t_final=x_arr[:, self.settings.sim.time_slice][-1],
@@ -857,7 +911,13 @@ class Problem:
         dt_max = self.settings.sim.u.max[self.settings.sim.time_dilation_slice][0] * dtau
         self.settings.prp.max_tau_len = int(dt_max / self.settings.prp.dt) + 2
 
-        # Compile the propagation solver
+        # Compile the propagation solver. Carry includes Φ_stm block when STMs
+        # are present so the propagator integrates Φ alongside x (matches the
+        # OLD Φ-as-state propagation behavior in the variational integration).
+        stm_meta = self._lowered.stm_meta
+        stm_carry_size = 0
+        if stm_meta is not None and not stm_meta.is_empty:
+            stm_carry_size = max(slot.slice.stop for slot in stm_meta.slots)
         self._propagation_solver = load_or_compile_propagation_solver(
             self._propagation_solver,
             prop_solver_file,
@@ -867,7 +927,9 @@ class Problem:
             self.settings.prp.max_tau_len,
             save_compiled=self.settings.sim.save_compiled,
             debug=self.settings.dev.debug,
+            stm_carry_size=stm_carry_size,
         )
+        self._stm_carry_size = stm_carry_size
 
         # Build per-constraint lam_vb arrays from symbolic constraints.
         # Deferred to initialize() so that user-set lam_vb values
@@ -917,7 +979,12 @@ class Problem:
         print("Total Initialization Time: ", self.timing_init)
 
         # Prime the propagation solver
-        prime_propagation_solver(self._propagation_solver, self._parameters, self.settings)
+        prime_propagation_solver(
+            self._propagation_solver,
+            self._parameters,
+            self.settings,
+            stm_carry_size=self._stm_carry_size,
+        )
 
         profiling.profiling_end(pr, "initialize")
 

@@ -39,6 +39,7 @@ from openscvx.symbolic.augmentation import (
     separate_constraints,
     sort_ctcs_constraints,
 )
+from openscvx.symbolic.expr.stm import collect_stm_leaves_from_ctcs
 from openscvx.symbolic.constraint_set import ConstraintSet
 from openscvx.symbolic.expr import Constant, Parameter, traverse
 from openscvx.symbolic.expr.control import Control
@@ -354,6 +355,13 @@ def preprocess_symbolic_problem(
         licq_max=licq_max,
     )
 
+    # Collect STM leaves referenced by CTCS constraints. These become
+    # propagated parameters, NOT decision-variable states. The discretizer
+    # integrates them along the current iterate; the JAX-lowered CTCS RHS
+    # reads them via params["__stm_phi__"][name].
+    stm_leaves_dict = collect_stm_leaves_from_ctcs(constraints.ctcs or [])
+    stm_params = list(stm_leaves_dict.values())
+
     # Assign slices to augmented states and controls in canonical order
     collect_and_assign_slices(states_aug, controls_aug)
 
@@ -433,6 +441,7 @@ def preprocess_symbolic_problem(
         states_prop=states_prop,
         controls_prop=controls_prop,
         algebraic_prop=algebraic_prop_processed,
+        stm_params=stm_params,
     )
 
 

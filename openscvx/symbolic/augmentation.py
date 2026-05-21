@@ -596,20 +596,13 @@ def augment_dynamics_with_ctcs(
     states_augmented = list(states)
     controls_augmented = list(controls)
 
-    # Emit STM augmented-state slots BEFORE CTCS aug states so the assigned
-    # _slice ordering agrees with ``unify_states`` (which sorts true states
-    # ahead of underscore-prefixed augmented states). Their name does not start
-    # with ``_``, so STM leaves are "true" states and must precede ``_ctcs_aug_*``
-    # in the unified layout; otherwise c_x / bounds end up misaligned with
-    # the slice each state carries.
-    stm_leaves = collect_stm_leaves_from_ctcs(constraints_ctcs or [])
-    stm_cont_rhs: List[Expr] = []
-    stm_disc_rhs: List[Expr] = []
-    for leaf in stm_leaves.values():
-        _configure_stm_leaf(leaf, N)
-        states_augmented.append(leaf)
-        stm_cont_rhs.append(Constant(np.zeros(leaf.shape[0])))
-        stm_disc_rhs.append(leaf)
+    # STM leaves (Φ / Ψ) are NOT decision variables. They are propagated
+    # parameters: the discretizer integrates them along the current iterate
+    # and exposes the result to the CTCS RHS via ``params["__stm_phi__"]``.
+    # The caller (``preprocess_symbolic_problem``) is responsible for
+    # collecting STM leaves from the CTCS constraints and registering them
+    # on the ``SymbolicProblem.stm_params`` list. Here we only enforce the
+    # one-way invariant on physical RHS (above) and otherwise ignore STMs.
 
     if constraints_ctcs:
         constraints_ctcs, _, _ = sort_ctcs_constraints(list(constraints_ctcs))
@@ -675,24 +668,16 @@ def augment_dynamics_with_ctcs(
             states_augmented.append(aug_var)
             augmented_state_exprs_discrete.append(aug_var)
 
-        # Concatenate with original dynamics. STM blocks (if any) were emitted
-        # BEFORE the CTCS block in ``states_augmented``; the RHS concat order
-        # must mirror that: xdot, *stm_cont, *ctcs_aug_penalties.
-        xdot_aug = Concat(xdot, *stm_cont_rhs, *augmented_state_exprs)
+        # Concatenate with original dynamics. STM leaves are no longer states,
+        # so the RHS concat is simply ``xdot, *ctcs_aug_penalties``.
+        xdot_aug = Concat(xdot, *augmented_state_exprs)
         if discrete_dynamics_set:
-            xdelta_aug = Concat(xdelta, *stm_disc_rhs, *augmented_state_exprs_discrete)
+            xdelta_aug = Concat(xdelta, *augmented_state_exprs_discrete)
         else:
             xdelta_aug = None
     else:
-        if stm_cont_rhs:
-            xdot_aug = Concat(xdot, *stm_cont_rhs)
-            if discrete_dynamics_set:
-                xdelta_aug = Concat(xdelta, *stm_disc_rhs)
-            else:
-                xdelta_aug = None
-        else:
-            xdot_aug = xdot
-            xdelta_aug = xdelta if discrete_dynamics_set else None
+        xdot_aug = xdot
+        xdelta_aug = xdelta if discrete_dynamics_set else None
 
     time_dilation = Control("_time_dilation", shape=(1,), parameterization="ZOH")
 
