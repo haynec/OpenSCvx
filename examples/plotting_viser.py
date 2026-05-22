@@ -42,6 +42,7 @@ from openscvx.plotting.viser import (
     create_server,
     extract_propagation_positions,
 )
+from openscvx.plotting.viser.animated import place_body_frame, place_viewcone
 
 # =============================================================================
 # Manual-stepping handle (for offline rendering)
@@ -820,6 +821,206 @@ def create_animated_plotting_server(
         )
     else:
         raise ValueError(f"controls must be 'gui' or 'manual', got {controls!r}")
+
+
+def _snapshot_frame_indices(n_snapshots: int, n_frames: int) -> np.ndarray:
+    """Evenly spaced trajectory indices for ``n_snapshots`` poses (inclusive endpoints)."""
+    n_snapshots = int(np.clip(n_snapshots, 1, n_frames))
+    if n_snapshots == 1:
+        return np.array([0], dtype=int)
+    return np.linspace(0, n_frames - 1, n_snapshots, dtype=int)
+
+
+def _set_scene_background(
+    server: viser.ViserServer,
+    background_color: tuple[int, int, int],
+) -> None:
+    """Set the 3D canvas clear color (independent of GUI light/dark theme)."""
+    bg_rgb = np.asarray(background_color, dtype=np.uint8).reshape(1, 1, 3)
+    bg_image = np.broadcast_to(bg_rgb, (2, 2, 3)).copy()
+    server.scene.set_background_image(bg_image, format="png")
+
+
+def create_snapshot_plotting_server(
+    results: OptimizationResults,
+    position_key: str = "position",
+    velocity_key: str = "velocity",
+    attitude_key: str = "attitude",
+    attitudes: np.ndarray | None = None,
+    attitude_axes_length: float = 2.0,
+    show_body_frame: bool = True,
+    show_viewcone: bool = True,
+    viewcone_scale: float = 10.0,
+    target_radius: float = 1.0,
+    target_positions: np.ndarray | list[np.ndarray] | None = None,
+    scene_scale: float = 1.0,
+    initial_n_snapshots: int = 5,
+    max_n_snapshots: int | None = None,
+    background_color: tuple[int, int, int] = (255, 255, 255),
+    show_grid: bool = False,
+    folder_name: str = "Snapshots",
+    snapshot_builder: Callable[[viser.ViserServer, int, int], list] | None = None,
+) -> viser.ViserServer:
+    """Create a static multi-pose visualization with GUI-controlled snapshot count.
+
+    Shows the full trajectory as a faint ghost path, plus body frames and camera
+    viewcones at evenly spaced nodes along the trajectory. The number of snapshots
+    is controlled from the viser GUI (no time animation).
+
+    Args:
+        results: Post-processed optimization results (same keys as
+            :func:`create_animated_plotting_server`).
+        position_key: Trajectory key for position.
+        velocity_key: Trajectory key for velocity coloring of the ghost path.
+        attitude_key: Trajectory key for attitude quaternions (ignored if ``attitudes`` set).
+        attitudes: Optional ``(N, 4)`` wxyz quaternions; overrides ``attitude_key``.
+        attitude_axes_length: Body-frame axis length at each snapshot.
+        show_body_frame: Draw a body/EE coordinate frame at each snapshot.
+        show_viewcone: Draw viewcones when ``R_sb`` is present in ``results``.
+        target_positions: Viewplanning targets (also uses ``init_poses`` from ``results``).
+        snapshot_builder: Optional ``(server, snapshot_i, frame_idx) -> [handles]`` for
+            extra geometry at each snapshot (e.g. manipulator links).
+        viewcone_scale: Depth of each viewcone mesh.
+        target_radius: Radius of viewplanning target markers.
+        scene_scale: Scale divisor for positions and lengths.
+        initial_n_snapshots: Initial number of evenly spaced poses to display.
+        max_n_snapshots: Upper bound for the GUI slider (defaults to ``N`` nodes).
+        background_color: RGB canvas background (default white).
+        show_grid: Whether to draw the ground grid.
+        folder_name: viser GUI folder name for the snapshot slider.
+
+    Returns:
+        ViserServer instance.
+    """
+    pos = results.trajectory.get(position_key)
+    if pos is None:
+        raise KeyError(f"results.trajectory is missing '{position_key}'")
+    pos = np.asarray(pos, dtype=np.float64) / scene_scale
+    vel = results.trajectory.get(velocity_key)
+    if attitudes is not None:
+        attitude = np.asarray(attitudes, dtype=np.float64)
+    else:
+        attitude = results.trajectory.get(attitude_key)
+        if attitude is None:
+            raise KeyError(
+                f"results.trajectory is missing '{attitude_key}' "
+                "(or pass attitudes= explicitly)"
+            )
+        attitude = np.asarray(attitude, dtype=np.float64)
+
+    n_frames = pos.shape[0]
+    max_snapshots = n_frames if max_n_snapshots is None else min(max_n_snapshots, n_frames)
+    initial_n = int(np.clip(initial_n_snapshots, 1, max_snapshots))
+
+    R_sb = results.get("R_sb")
+    alpha_x = results.get("alpha_x")
+    alpha_y = results.get("alpha_y")
+    norm_type = results.get("norm_type", 2)
+    if alpha_x is not None:
+        half_angle_x = np.pi / alpha_x
+        half_angle_y = np.pi / alpha_y if alpha_y is not None else half_angle_x
+    else:
+        half_angle_x = np.radians(30.0)
+        half_angle_y = half_angle_x
+
+    init_poses = results.get("init_poses")
+    if target_positions is not None:
+        init_poses = np.asarray(target_positions)
+    colors = compute_velocity_colors(vel)
+
+    server = create_server(pos, dark_mode=False, show_grid=show_grid)
+    _set_scene_background(server, background_color)
+
+    if "vertices" in results:
+        add_gates(
+            server,
+            [np.asarray(v) / scene_scale for v in results["vertices"]],
+        )
+
+    if "obstacles_centers" in results:
+        add_ellipsoid_obstacles(
+            server,
+            centers=[np.asarray(c) / scene_scale for c in results["obstacles_centers"]],
+            radii=[
+                np.asarray(r) / scene_scale
+                for r in results.get(
+                    "obstacles_radii",
+                    [np.ones(3)] * len(results["obstacles_centers"]),
+                )
+            ],
+            axes=results.get("obstacles_axes"),
+        )
+
+    add_ghost_trajectory(server, pos, colors, opacity=0.35, point_size=0.08)
+
+    if init_poses is not None:
+        scaled_init_poses = [np.asarray(p) / scene_scale for p in init_poses]
+        add_target_markers(
+            server, scaled_init_poses, radius=target_radius / scene_scale
+        )
+
+    snapshot_state: dict[str, list] = {"handles": []}
+
+    def _snapshot_color(i: int, n: int) -> tuple[int, int, int]:
+        cmap = plt.get_cmap("tab10")
+        rgb = cmap((i % 10) / 10.0)[:3]
+        return tuple(int(c * 255) for c in rgb)
+
+    def rebuild_snapshots(n_snapshots: int) -> None:
+        for handle in snapshot_state["handles"]:
+            handle.remove()
+        snapshot_state["handles"] = []
+
+        indices = _snapshot_frame_indices(n_snapshots, n_frames)
+        for i, frame_idx in enumerate(indices):
+            color = _snapshot_color(i, len(indices))
+            if show_body_frame:
+                frame_handle = place_body_frame(
+                    server,
+                    f"/snapshots/frame_{i}",
+                    pos[frame_idx],
+                    attitude[frame_idx],
+                    axes_length=attitude_axes_length,
+                )
+                snapshot_state["handles"].append(frame_handle)
+
+            if show_viewcone and R_sb is not None:
+                cone_handle = place_viewcone(
+                    server,
+                    f"/snapshots/viewcone_{i}",
+                    pos[frame_idx],
+                    attitude[frame_idx],
+                    half_angle_x=half_angle_x,
+                    half_angle_y=half_angle_y,
+                    scale=viewcone_scale,
+                    norm_type=norm_type,
+                    R_sb=R_sb,
+                    color=color,
+                    opacity=0.45,
+                )
+                snapshot_state["handles"].append(cone_handle)
+
+            if snapshot_builder is not None:
+                snapshot_state["handles"].extend(
+                    snapshot_builder(server, i, int(frame_idx))
+                )
+
+    rebuild_snapshots(initial_n)
+
+    with server.gui.add_folder(folder_name):
+        count_slider = server.gui.add_slider(
+            "Number of snapshots",
+            min=1,
+            max=max_snapshots,
+            step=1,
+            initial_value=float(initial_n),
+        )
+
+    @count_slider.on_update
+    def _(_) -> None:
+        rebuild_snapshots(int(round(count_slider.value)))
+
+    return server
 
 
 def create_scp_animated_plotting_server(
