@@ -307,10 +307,10 @@ v_min = -10000.0 / scales["speed"]
 v_max = -v_min
 
 # Discretization and phase transition nodes
-n_1 = 10
-n_2 = 20
-n_3 = 30
-n_4 = 40
+n_1 = 5
+n_2 = 10
+n_3 = 15
+n_4 = 20
 n = n_4
 k_1 = n_1 - 1
 k_2 = n_2 - 1
@@ -444,7 +444,7 @@ dynamics_discrete = {
 constraints = []
 
 constraints.append((ox.linalg.Norm(u) <= 1.0).convex())
-# constraints.append(ox.ctcs(altitude >= 0))
+constraints.append(ox.ctcs(altitude >= 0))
 
 # Impose phase boundary times at specific nodes.
 constraints.append((time.at(k_1) == t1).convex())
@@ -489,17 +489,26 @@ problem = ox.Problem(
     constraints=constraints,
     N=n,
     float_dtype="float64",
-    algorithm={"autotuner": ox.AugmentedLagrangian()},
+    discretizer=ox.LinearizeDiscretizeSparse(),
+    algorithm={"autotuner": ox.AugmentedLagrangian(eta_lambda=1E0)},
+    solver={
+    "cvx_solver": "qocogen",
+    "cvxpygen": True,
+    "solver_args": {"abstol":1e-6, "reltol":1e-9},
+}
 )
+
+problem.settings.dev.printing = False
 
 # Tighten integration tolerance and use a denser propagation time grid for plotting.
 problem.settings.prp.rtol = 1e-9
 problem.settings.prp.atol = 1e-9
 
-problem.algorithm.lam_cost = 1e0
-problem.algorithm.lam_prox = 1e0
-problem.algorithm.lam_vc = 1e1
-problem.algorithm.lam_vb = 1e-1
+problem.algorithm.lam_cost = 1e-2
+problem.algorithm.lam_prox = 2e-1
+problem.algorithm.lam_vc = 1e0
+problem.algorithm.lam_vb = 1e-2
+
 
 problem.algorithm.k_max = 300
 
