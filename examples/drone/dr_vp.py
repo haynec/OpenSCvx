@@ -28,7 +28,6 @@ from examples.plotting_viser import (
     create_scp_animated_plotting_server,
     create_snapshot_plotting_server,
 )
-from examples.plotting import plot_camera_view
 from openscvx import Problem
 from openscvx.utils import gen_vertices, rot
 
@@ -263,8 +262,6 @@ if __name__ == "__main__":
         viewcone_scale=10.0,
         initial_n_snapshots=5,
     )
-
-    plot_camera_view(results, plotting_dict).show()
 
     # Keep all servers running
     traj_server.sleep_forever()
