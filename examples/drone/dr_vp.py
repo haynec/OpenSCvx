@@ -26,7 +26,9 @@ import openscvx as ox
 from examples.plotting_viser import (
     create_animated_plotting_server,
     create_scp_animated_plotting_server,
+    create_snapshot_plotting_server,
 )
+from examples.plotting import plot_camera_view
 from openscvx import Problem
 from openscvx.utils import gen_vertices, rot
 
@@ -224,7 +226,6 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"ep_tr": 1e-3},
 )
 
 plotting_dict = {
@@ -257,6 +258,13 @@ if __name__ == "__main__":
         attitude_stride=3,
         frame_duration_ms=200,
     )
+    snapshot_server = create_snapshot_plotting_server(
+        results,
+        viewcone_scale=10.0,
+        initial_n_snapshots=5,
+    )
 
-    # Keep both servers running
+    plot_camera_view(results, plotting_dict).show()
+
+    # Keep all servers running
     traj_server.sleep_forever()

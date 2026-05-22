@@ -23,6 +23,7 @@ from typing import Callable
 
 import numpy as np
 import viser
+import viser.transforms as vtf
 
 # Type alias for update callbacks: fn(frame_idx: int) -> None
 UpdateCallback = Callable[[int], None]
@@ -303,14 +304,14 @@ def add_attitude_frame(
     # Viser uses wxyz quaternion format
     handle = server.scene.add_frame(
         "/body_frame",
-        wxyz=attitude[0],
+        wxyz=tuple(float(x) for x in _normalize_wxyz(attitude[0])),
         position=pos[0],
         axes_length=axes_length,
         axes_radius=axes_radius,
     )
 
     def update(frame_idx: int) -> None:
-        handle.wxyz = attitude[frame_idx]
+        handle.wxyz = tuple(float(x) for x in _normalize_wxyz(attitude[frame_idx]))
         handle.position = pos[frame_idx]
 
     return handle, update
@@ -394,6 +395,15 @@ def _generate_viewcone_faces(n_base_vertices: int) -> np.ndarray:
     return np.array(faces, dtype=np.int32)
 
 
+def _normalize_wxyz(q: np.ndarray) -> np.ndarray:
+    """Return a unit quaternion in ``[w, x, y, z]`` order."""
+    q = np.asarray(q, dtype=np.float64)
+    n = float(np.linalg.norm(q))
+    if n < 1e-12:
+        return np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float64)
+    return q / n
+
+
 def _quaternion_to_rotation_matrix(q: np.ndarray) -> np.ndarray:
     """Convert quaternion (wxyz) to rotation matrix.
 
@@ -403,7 +413,7 @@ def _quaternion_to_rotation_matrix(q: np.ndarray) -> np.ndarray:
     Returns:
         3x3 rotation matrix
     """
-    w, x, y, z = q
+    w, x, y, z = _normalize_wxyz(q)
     return np.array(
         [
             [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
@@ -411,6 +421,31 @@ def _quaternion_to_rotation_matrix(q: np.ndarray) -> np.ndarray:
             [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
         ]
     )
+
+
+def _sensor_pose_in_world(
+    position: np.ndarray,
+    attitude_wxyz: np.ndarray,
+    R_sb: np.ndarray | None,
+) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
+    """Sensor-frame origin and orientation in world coordinates."""
+    position = np.asarray(position, dtype=np.float64)
+    R_body_to_world = _quaternion_to_rotation_matrix(attitude_wxyz)
+    R_sensor_to_body = R_sb.T if R_sb is not None else np.eye(3)
+    R_sensor_to_world = R_body_to_world @ R_sensor_to_body
+    wxyz = vtf.SO3.from_matrix(R_sensor_to_world).wxyz
+    return (
+        tuple(float(x) for x in position),
+        tuple(float(x) for x in wxyz),
+    )
+
+
+def _viewcone_ring_segments_sensor(base_vertices: np.ndarray) -> np.ndarray:
+    """Closed base ring as line segments in the sensor frame (apex excluded)."""
+    ring = base_vertices[1:]
+    starts = ring
+    ends = np.roll(ring, -1, axis=0)
+    return np.stack([starts, ends], axis=1)
 
 
 def add_viewcone(
@@ -428,7 +463,7 @@ def add_viewcone(
     ring_only: bool = False,
     line_width: float = 4.0,
     n_segments: int = 32,
-) -> tuple[viser.MeshHandle | None, UpdateCallback | None]:
+) -> tuple[viser.FrameHandle | None, UpdateCallback | None]:
     """Add an animated viewcone mesh that matches p-norm constraints.
 
     The sensor is assumed to look along +Z in its own frame (boresight = [0,0,1]).
@@ -471,64 +506,120 @@ def add_viewcone(
     if R_sb is not None:
         R_sb = np.asarray(R_sb, dtype=np.float64)
 
-    # Generate base geometry in sensor frame
+    # Rigid sensor-frame geometry; only the parent frame pose is updated each step.
     base_vertices = _generate_viewcone_vertices(
         half_angle_x, half_angle_y, scale, norm_type, n_segments
     )
     n_base_verts = len(base_vertices) - 1  # Exclude apex
 
-    # Sensor-to-body rotation (transpose of body-to-sensor)
-    R_sensor_to_body = R_sb.T if R_sb is not None else np.eye(3)
-
-    def transform_vertices(frame_idx: int) -> np.ndarray:
-        """Transform cone vertices from sensor frame to world frame."""
-        # Get body-to-world rotation from attitude quaternion
-        q_body = attitude[frame_idx]
-        R_body_to_world = _quaternion_to_rotation_matrix(q_body)
-
-        # Full transform: sensor -> body -> world
-        R_sensor_to_world = R_body_to_world @ R_sensor_to_body
-
-        # Transform vertices and translate to position
-        world_vertices = (R_sensor_to_world @ base_vertices.T).T + pos[frame_idx]
-        return world_vertices.astype(np.float32)
-
-    initial_vertices = transform_vertices(0)
+    init_position, init_wxyz = _sensor_pose_in_world(pos[0], attitude[0], R_sb)
+    # Transform-only frame: no visible axes (pose is shown via viewcone mesh, not triads).
+    frame = server.scene.add_frame(
+        "/viewcone_sensor",
+        wxyz=init_wxyz,
+        position=init_position,
+        axes_length=0.0,
+        axes_radius=0.0,
+    )
 
     if ring_only:
-        # Render only the base ring as a closed line loop. Base vertices are
-        # indices 1..n_base_verts (index 0 is the apex). Build pairs of
-        # consecutive points, wrapping the last back to the first.
-        def _ring_segments(verts: np.ndarray) -> np.ndarray:
-            ring = verts[1:]  # skip apex
-            starts = ring
-            ends = np.roll(ring, -1, axis=0)
-            return np.stack([starts, ends], axis=1)  # (n_base_verts, 2, 3)
-
-        handle = server.scene.add_line_segments(
-            "/viewcone_ring",
-            points=_ring_segments(initial_vertices),
+        server.scene.add_line_segments(
+            "/viewcone_sensor/ring",
+            points=_viewcone_ring_segments_sensor(base_vertices),
             colors=color,
             line_width=line_width,
         )
-
-        def update(frame_idx: int) -> None:
-            handle.points = _ring_segments(transform_vertices(frame_idx))
     else:
         faces = _generate_viewcone_faces(n_base_verts)
-        handle = server.scene.add_mesh_simple(
-            "/viewcone_mesh",
-            vertices=initial_vertices,
+        server.scene.add_mesh_simple(
+            "/viewcone_sensor/mesh",
+            vertices=base_vertices,
             faces=faces,
             color=color,
             wireframe=wireframe,
             opacity=opacity if not wireframe else 1.0,
         )
 
-        def update(frame_idx: int) -> None:
-            handle.vertices = transform_vertices(frame_idx)
+    def update(frame_idx: int) -> None:
+        position, wxyz = _sensor_pose_in_world(pos[frame_idx], attitude[frame_idx], R_sb)
+        frame.position = position
+        frame.wxyz = wxyz
 
-    return handle, update
+    return frame, update
+
+
+def place_body_frame(
+    server: viser.ViserServer,
+    path: str,
+    position: np.ndarray,
+    wxyz: np.ndarray,
+    axes_length: float = 2.0,
+    axes_radius: float = 0.05,
+) -> viser.FrameHandle:
+    """Place a static body coordinate frame at a single pose."""
+    return server.scene.add_frame(
+        path,
+        wxyz=tuple(float(x) for x in _normalize_wxyz(wxyz)),
+        position=tuple(float(x) for x in position),
+        axes_length=axes_length,
+        axes_radius=axes_radius,
+    )
+
+
+def place_viewcone(
+    server: viser.ViserServer,
+    path: str,
+    position: np.ndarray,
+    attitude_wxyz: np.ndarray,
+    half_angle_x: float,
+    half_angle_y: float | None = None,
+    scale: float = 10.0,
+    norm_type: float | str = 2,
+    R_sb: np.ndarray | None = None,
+    color: tuple[int, int, int] = (35, 138, 141),
+    opacity: float = 0.4,
+    wireframe: bool = False,
+    ring_only: bool = False,
+    line_width: float = 4.0,
+    n_segments: int = 32,
+) -> viser.FrameHandle:
+    """Place a static viewcone rigidly attached to the sensor frame at one pose."""
+    if R_sb is not None:
+        R_sb = np.asarray(R_sb, dtype=np.float64)
+
+    base_vertices = _generate_viewcone_vertices(
+        half_angle_x, half_angle_y, scale, norm_type, n_segments
+    )
+    n_base_verts = len(base_vertices) - 1
+
+    frame_position, frame_wxyz = _sensor_pose_in_world(position, attitude_wxyz, R_sb)
+    frame = server.scene.add_frame(
+        path,
+        wxyz=frame_wxyz,
+        position=frame_position,
+        axes_length=0.0,
+        axes_radius=0.0,
+    )
+
+    if ring_only:
+        server.scene.add_line_segments(
+            f"{path}/ring",
+            points=_viewcone_ring_segments_sensor(base_vertices),
+            colors=color,
+            line_width=line_width,
+        )
+    else:
+        faces = _generate_viewcone_faces(n_base_verts)
+        server.scene.add_mesh_simple(
+            f"{path}/mesh",
+            vertices=base_vertices,
+            faces=faces,
+            color=color,
+            wireframe=wireframe,
+            opacity=opacity if not wireframe else 1.0,
+        )
+
+    return frame
 
 
 # =============================================================================
