@@ -3,8 +3,9 @@
 The ``lax.while_loop`` wrapper over ``iteration_fn`` should reproduce what the
 Python ``while`` loop in ``Problem.solve()`` produces. ``k_max`` is kept below
 the convergence point (``J_tr`` stays well above ``ep_tr`` throughout), so both
-loops run the identical iteration count and the only divergence is QPAX's
-``solve_qp_primal`` (JAX path) vs ``solve_qp`` (NumPy path).
+loops run the identical iteration count and the only divergence is the
+floating-point reordering between the ``lax.while_loop``-compiled body and the
+per-iteration ``jax.jit``'d body the Python loop drives.
 """
 
 import numpy as np
