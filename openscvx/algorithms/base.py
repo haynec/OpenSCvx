@@ -373,6 +373,16 @@ class AlgorithmState:
         actual_reduction: Actual reduction in ``J_nonlin`` for this iter.
         acceptance_ratio: ``actual_reduction / predicted_reduction``.
         adaptive_state_code: :class:`AdaptiveStateCode` value as ``int32``.
+        x_init_pin: Initial-state boundary condition, shape ``(n_states,)``.
+            ``jnp.nan`` where the state is not pinned at t0 (``initial_type``
+            is not ``"Fix"``). Carried on the pytree — rather than read from
+            ``settings`` — so the fused SCP iteration body assembles the
+            subproblem's initial boundary rows as a pure function of state,
+            and a future ``jax.vmap`` over problems can batch boundary
+            conditions per element.
+        x_term_pin: Terminal-state boundary condition, shape ``(n_states,)``.
+            ``jnp.nan`` where the state is not pinned at tf (``final_type`` is
+            not ``"Fix"``).
     """
 
     x: jnp.ndarray
@@ -394,6 +404,8 @@ class AlgorithmState:
     actual_reduction: jnp.ndarray
     acceptance_ratio: jnp.ndarray
     adaptive_state_code: jnp.ndarray
+    x_init_pin: jnp.ndarray
+    x_term_pin: jnp.ndarray
 
     # Field order is the source of truth for tree_flatten / tree_unflatten;
     # keep _FIELDS in sync with the dataclass field declarations above.
@@ -417,6 +429,8 @@ class AlgorithmState:
         "actual_reduction",
         "acceptance_ratio",
         "adaptive_state_code",
+        "x_init_pin",
+        "x_term_pin",
     )
 
     def replace(self, **changes) -> "AlgorithmState":
@@ -475,6 +489,17 @@ class AlgorithmState:
         else:
             lam_cost_init = np.full(n_states, weights.lam_cost)
 
+        # Boundary-condition pins: the physical value where the state is fixed
+        # at t0 / tf, ``nan`` elsewhere. The subproblem only reads these at
+        # ``"Fix"`` entries, so the sentinel marks "unpinned" without poisoning
+        # any value the solver consumes.
+        x_initial = np.asarray(settings.sim.x.initial, dtype=float).reshape(-1)
+        x_final = np.asarray(settings.sim.x.final, dtype=float).reshape(-1)
+        init_fixed = np.asarray(settings.sim.x.initial_type) == "Fix"
+        final_fixed = np.asarray(settings.sim.x.final_type) == "Fix"
+        x_init_pin = np.where(init_fixed, x_initial, np.nan)
+        x_term_pin = np.where(final_fixed, x_final, np.nan)
+
         return cls(
             x=put(jnp.asarray(settings.sim.x.guess, dtype=f)),
             u=put(jnp.asarray(settings.sim.u.guess, dtype=f)),
@@ -495,6 +520,8 @@ class AlgorithmState:
             actual_reduction=put(jnp.asarray(0.0, dtype=f)),
             acceptance_ratio=put(jnp.asarray(0.0, dtype=f)),
             adaptive_state_code=put(jnp.asarray(int(AdaptiveStateCode.INITIAL), dtype=i)),
+            x_init_pin=put(jnp.asarray(x_init_pin, dtype=f)),
+            x_term_pin=put(jnp.asarray(x_term_pin, dtype=f)),
         )
 
 

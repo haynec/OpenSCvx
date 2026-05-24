@@ -29,6 +29,7 @@ from openscvx.lowered.jax_constraints import LoweredJaxConstraints
 
 class _DummyState:
     initial = np.array([0.0, 0.0])
+    final = np.array([0.0, 0.0])
     guess = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
     min = np.array([-10.0, -10.0])
     max = np.array([10.0, 10.0])
