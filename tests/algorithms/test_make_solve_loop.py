@@ -12,7 +12,8 @@ import pytest
 
 pytest.importorskip("qpax")
 
-from openscvx.algorithms.scvx.iteration import make_scp_iteration, make_solve_loop
+from openscvx.algorithms.scvx.iteration import make_solve_loop
+from tests.algorithms._iteration_helpers import build_iteration_fn
 from tests.solvers._iteration_callback_helpers import build_brachistochrone
 
 
@@ -29,15 +30,7 @@ def test_make_solve_loop_matches_python_solve():
     # lax.while_loop over the fused body, from the same fresh initial iterate.
     prob.reset()
     state0 = prob.state
-    iteration_fn = make_scp_iteration(
-        dynamics=prob.lowered.dynamics,
-        dynamics_discrete=prob.lowered.dynamics_discrete,
-        jax_constraints=prob._compiled_constraints,
-        discretizer=prob.discretizer,
-        solver_callback=prob.solver.iteration_callback(),
-        autotuner=prob.algorithm.autotuner,
-        settings=prob.settings,
-    )
+    iteration_fn = build_iteration_fn(prob)
     algo = prob.algorithm
     solve_loop = make_solve_loop(iteration_fn, algo.ep_tr, algo.ep_vb, algo.ep_vc, algo.k_max)
     loop_state = solve_loop(state0, prob._parameters)

@@ -526,12 +526,10 @@ def test_backend_float32_raises():
     if hasattr(problem.settings, "dev"):
         problem.settings.dev.printing = False
 
-    # ``initialize()`` itself triggers a first subproblem solve via
-    # ``PenalizedTrustRegion.initialize`` (penalized_trust_region.py:343),
-    # so the guard fires there before ``solve()`` is even reached. Wrap
-    # both calls in the same context — whichever raises first is the one
-    # we care about.
-    with pytest.raises(RuntimeError, match=r"qpax\.solve_qp failed"):
+    # qpax.solve_qp reports converged=False on this diverged float32 solve;
+    # the QPAX iteration_callback maps that to a non-OPTIMAL status_code, and
+    # ``step()`` raises before the bad iterate becomes a linearization point.
+    with pytest.raises(RuntimeError, match=r"did not solve to optimality"):
         problem.initialize()
         problem.solve()
 
@@ -923,24 +921,15 @@ def test_cross_nodal(test_case):
         problem.settings.dev.printing = False
 
     # Run optimization
-    # For infeasible convex problems, the convex subproblem must not reach
-    # `optimal` — either CVXPy raises SolverError (QOCO 0.3.0; QOCO 0.3.1 on
-    # Linux, where the IPM still triggers QOCO_NUMERICAL_ERROR) or QOCO 0.3.1
-    # on macOS hits QOCO_MAX_ITER and CVXPy returns status='user_limit'.
+    # For an infeasible convex problem the subproblem can't reach `optimal`
+    # (CVXPy raises SolverError, or QOCO returns a user_limit/inaccurate
+    # status). The iteration_callback maps that to a non-OPTIMAL status_code,
+    # and ``step()``'s status gate turns it into a clean RuntimeError.
     # For infeasible non-convex problems, SCP will fail to converge.
     if is_convex and not should_converge:
-        import cvxpy as cp
-
-        try:
+        with pytest.raises(RuntimeError):
             problem.initialize()
-            result = problem.solve()
-        except cp.error.SolverError:
-            pass
-        else:
-            status = problem.solver._problem.status
-            assert status not in ("optimal", "optimal_inaccurate"), (
-                f"Infeasible convex problem unexpectedly solved cleanly: status={status!r}"
-            )
+            problem.solve()
     else:
         # Solvable or non-convex infeasible case
         problem.initialize()

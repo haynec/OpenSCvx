@@ -2,8 +2,10 @@
 
 One call to the fused JAX iteration body must reproduce one
 :meth:`PenalizedTrustRegion.step` — same next-iterate trajectory, same SCP
-convergence metrics — on a fixed brachistochrone. This is the acceptance gate
-for the body before it replaces the Python-side ``_subproblem`` stitching.
+convergence metrics, and the same per-iteration diagnostics (raw
+discretization matrix, trust-region / virtual-control matrices) the legacy
+path recorded into history. This is the acceptance gate for the body before it
+replaces the Python-side ``_subproblem`` stitching.
 
 QPAX exercises the fully JAX-native solve (``solve_qp_primal`` vs the NumPy
 ``solve_qp``, hence the looser primal tolerance); CVXPy exercises the
@@ -14,21 +16,8 @@ path and so matches tightly.
 import numpy as np
 import pytest
 
-from openscvx.algorithms.scvx.iteration import make_scp_iteration
+from tests.algorithms._iteration_helpers import build_iteration_fn
 from tests.solvers._iteration_callback_helpers import build_brachistochrone
-
-
-def _build_iteration_fn(prob):
-    """Assemble the iteration body from an initialized problem's components."""
-    return make_scp_iteration(
-        dynamics=prob.lowered.dynamics,
-        dynamics_discrete=prob.lowered.dynamics_discrete,
-        jax_constraints=prob._compiled_constraints,
-        discretizer=prob.discretizer,
-        solver_callback=prob.solver.iteration_callback(),
-        autotuner=prob.algorithm.autotuner,
-        settings=prob.settings,
-    )
 
 
 @pytest.mark.parametrize("backend, primal_atol", [("qpax", 1e-6), ("cvxpy", 1e-8)])
@@ -42,13 +31,12 @@ def test_iteration_fn_matches_subproblem(backend, primal_atol):
     # mutate the (frozen) state it is handed, so we can reuse it.
     state0 = prob.state
 
-    iteration_fn = _build_iteration_fn(prob)
-    it_next = iteration_fn(state0, prob._parameters)
+    iteration_fn = build_iteration_fn(prob)
+    it_next, it_diag = iteration_fn(state0, prob._parameters)
 
-    legacy_next, _ = prob.algorithm.step(
-        state0, prob.history, prob._parameters, prob.settings
-    )
+    legacy_next, _ = prob.algorithm.step(state0, prob.history, prob._parameters, prob.settings)
 
+    # Next-iterate trajectory + metrics.
     np.testing.assert_allclose(
         np.asarray(it_next.x), np.asarray(legacy_next.x), atol=primal_atol, rtol=primal_atol
     )
@@ -63,3 +51,11 @@ def test_iteration_fn_matches_subproblem(backend, primal_atol):
             float(getattr(it_next, metric)), float(getattr(legacy_next, metric)), atol=1e-4
         )
     assert int(it_next.k) == int(legacy_next.k)
+
+    # Diagnostics must match what the legacy step recorded into history
+    # (ConstantProximalWeight always accepts, so TR / VC / V are appended).
+    np.testing.assert_allclose(np.asarray(it_diag.TR), prob.history.TR[-1], atol=1e-5, rtol=1e-5)
+    np.testing.assert_allclose(np.asarray(it_diag.VC), prob.history.VC[-1], atol=1e-5, rtol=1e-5)
+    np.testing.assert_allclose(
+        np.asarray(it_diag.V), prob.history.V_history[-1], atol=1e-6, rtol=1e-6
+    )

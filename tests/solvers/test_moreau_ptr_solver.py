@@ -23,6 +23,7 @@ import openscvx as ox
 from openscvx import Problem
 from openscvx.solvers import MoreauPTRSolver, PTRSolver, PTRSolveResult
 from tests._marks import requires_moreau
+from tests.solvers._iteration_callback_helpers import populate_numpy_stash
 
 # Skip the whole module when moreau is absent or unlicensed.
 pytestmark = requires_moreau
@@ -252,7 +253,7 @@ def test_moreau_assembly_shapes_consistent():
     prob = _make_double_integrator_problem(n=6, backend="moreau", k_max=1)
     prob.settings.dev.printing = False
     prob.initialize()
-    prob.solve()
+    populate_numpy_stash(prob)
 
     solver = prob.solver
     assert isinstance(solver, MoreauPTRSolver)
@@ -292,6 +293,7 @@ def test_moreau_solve_returns_PTRSolveResult():
     prob = _make_double_integrator_problem(n=5, backend="moreau", k_max=1)
     prob.settings.dev.printing = False
     prob.initialize()
+    populate_numpy_stash(prob)
     res = prob.solver.solve()
     assert isinstance(res, PTRSolveResult)
     assert res.x.shape[0] == 5

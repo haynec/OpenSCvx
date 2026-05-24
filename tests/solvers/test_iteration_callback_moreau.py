@@ -29,6 +29,7 @@ if _MOREAU_OK:
     from openscvx.solvers.ptr_solver import StatusCode, SubproblemSolution
     from tests.solvers._iteration_callback_helpers import (
         build_brachistochrone,
+        populate_numpy_stash,
         subproblem_data_from_numpy_stash,
     )
 
@@ -50,7 +51,7 @@ def test_assemble_conic_jax_matches_numpy_on_brachistochrone(constraint_style):
     """
     prob = build_brachistochrone("moreau", n=4, k_max=1, constraint_style=constraint_style)
     prob.initialize()
-    prob.solve()
+    populate_numpy_stash(prob)
     solver = prob.solver
 
     P_np, coo_np, q_np, b_np = solver._assemble_conic()
@@ -72,7 +73,7 @@ def test_csr_to_coo_perm_reconstructs_numpy_A_data():
 
     prob = build_brachistochrone("moreau", n=4, k_max=1)
     prob.initialize()
-    prob.solve()
+    populate_numpy_stash(prob)
     solver = prob.solver
 
     _, coo_np, _, _ = solver._assemble_conic()
@@ -102,7 +103,7 @@ def test_iteration_callback_matches_solve_on_brachistochrone():
     """
     prob = build_brachistochrone("moreau", n=4, k_max=1)
     prob.initialize()
-    prob.solve()
+    populate_numpy_stash(prob)
     solver = prob.solver
 
     reference = solver.solve()
@@ -127,7 +128,7 @@ def test_iteration_callback_traces_under_jit():
     trace (no per-call retrace surprises)."""
     prob = build_brachistochrone("moreau", n=4, k_max=1)
     prob.initialize()
-    prob.solve()
+    populate_numpy_stash(prob)
     solver = prob.solver
 
     data = subproblem_data_from_numpy_stash(solver)

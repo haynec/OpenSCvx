@@ -29,7 +29,6 @@ from openscvx.utils.printing import Column
 if TYPE_CHECKING:
     from openscvx.config import Config
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
-    from openscvx.solvers import ConvexSolver
 
     from .weights import Weights
 
@@ -825,15 +824,21 @@ class Algorithm(ABC):
     @abstractmethod
     def initialize(
         self,
-        solver: "ConvexSolver",
-        discretization_solver: callable,
-        jax_constraints: "LoweredJaxConstraints",
+        iteration_fn: Callable,
         emitter: callable,
-        params: dict,
+        jax_constraints: "LoweredJaxConstraints",
         settings: "Config",
-        discretization_solver_impulsive: Optional[Callable] = None,
     ) -> None:
-        """Initialize the algorithm and store compiled infrastructure."""
+        """Store the fused SCP iteration body and per-iteration infrastructure.
+
+        Args:
+            iteration_fn: The JAX-pure ``(state, params) -> (next_state,
+                diagnostics)`` body built by
+                :func:`~openscvx.algorithms.scvx.iteration.make_scp_iteration`.
+            emitter: Per-iteration diagnostics sink (printing queue / no-op).
+            jax_constraints: Lowered JAX constraints the body operates over.
+            settings: Problem configuration.
+        """
         raise NotImplementedError
 
     @abstractmethod

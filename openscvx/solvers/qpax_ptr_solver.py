@@ -871,11 +871,13 @@ class QPAXPTRSolver(PTRSolver):
         once at :meth:`initialize` time. The closure is reusable across SCP
         iterations — only the ``SubproblemData`` pytree changes between calls.
 
-        ``qpax.solve_qp_primal`` is the differentiable primal-only variant of
-        ``qpax.solve_qp``. It returns only the primal ``z`` (no convergence
-        diagnostics), so the returned :class:`SubproblemSolution` reports
-        ``status_code = StatusCode.UNKNOWN`` unconditionally — the SCP
-        trust-region check catches divergence at the algorithm layer instead.
+        Uses ``qpax.solve_qp``, whose ``converged`` flag is mapped onto the
+        returned :class:`SubproblemSolution`'s ``status_code`` so the SCP loop
+        can fail loudly on a diverged solve. (``qpax.solve_qp_primal`` is the
+        reverse-mode-differentiable variant but exposes no convergence flag —
+        qpax cannot provide both at once, and reliable non-convergence
+        detection was chosen over differentiability here; see
+        ``plans/iteration-fn-primitive.md``.)
 
         The returned callable takes ``(state, data)``: ``state`` is the
         :class:`AlgorithmState` pytree, accepted for cross-backend signature
@@ -895,8 +897,10 @@ class QPAXPTRSolver(PTRSolver):
         def step(state, data: SubproblemData) -> SubproblemSolution:
             del state  # every input the QP needs already lives on ``data``.
             Q, q, A, b, G, h = self._assemble_qp_jax(data)
-            z = qpax.solve_qp_primal(Q, q, A, b, G, h, **solver_args)
-            return self._build_solution_jax(z, data)
+            z, _s, _z_dual, _y_dual, converged, _iters = qpax.solve_qp(
+                Q, q, A, b, G, h, **solver_args
+            )
+            return self._build_solution_jax(z, data, converged)
 
         return jax.jit(step)
 
@@ -1318,13 +1322,15 @@ class QPAXPTRSolver(PTRSolver):
         self,
         z: "jnp.ndarray",
         data: SubproblemData,
+        converged: "jnp.ndarray",
     ) -> SubproblemSolution:
         """Unpack a primal ``z`` into a :class:`SubproblemSolution` pytree.
 
         Mirrors :meth:`_unpack` but stays JAX-pure: returns scaled-to-physical
         trajectories, the collapsed ``(N, n_nodal)`` ``nu_vb`` layout, and a
-        ``status_code = UNKNOWN`` (``solve_qp_primal`` exposes no convergence
-        diagnostic — the SCP trust-region check is the gate).
+        ``status_code`` of ``OPTIMAL`` when ``qpax.solve_qp`` reported
+        convergence and the primal is finite, else ``UNKNOWN`` (which the SCP
+        loop turns into a hard failure).
         """
         L = self.layout
         N, n_x, n_u = L.N, L.n_x, L.n_u
@@ -1342,6 +1348,11 @@ class QPAXPTRSolver(PTRSolver):
 
         cost = self._reconstruct_cost_jax(z, data)
 
+        ok = jnp.logical_and(jnp.asarray(converged, dtype=bool), jnp.all(jnp.isfinite(z)))
+        status_code = jnp.where(
+            ok, jnp.int32(StatusCode.OPTIMAL), jnp.int32(StatusCode.UNKNOWN)
+        )
+
         return SubproblemSolution(
             x=x,
             u=u,
@@ -1349,7 +1360,7 @@ class QPAXPTRSolver(PTRSolver):
             nu_vb=nu_vb,
             nu_vb_cross=jnp.zeros((0,), dtype=f),
             cost=cost,
-            status_code=jnp.asarray(int(StatusCode.UNKNOWN), dtype=jnp.int32),
+            status_code=status_code,
         )
 
     def _reconstruct_cost_jax(
