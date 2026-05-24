@@ -347,7 +347,9 @@ def make_solve_loop(
 
     Args:
         iteration_fn: A body built by :func:`make_scp_iteration`.
-        ep_tr, ep_vb, ep_vc: Convergence thresholds on ``J_tr / J_vb / J_vc``.
+        ep_tr: Convergence threshold on ``J_tr`` (trust-region step).
+        ep_vb: Convergence threshold on ``J_vb`` (virtual buffer).
+        ep_vc: Convergence threshold on ``J_vc`` (virtual control).
         k_max: Maximum number of SCP iterations.
 
     Returns:
