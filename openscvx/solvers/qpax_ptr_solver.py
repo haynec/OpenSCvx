@@ -1351,9 +1351,7 @@ class QPAXPTRSolver(PTRSolver):
         cost = self._reconstruct_cost_jax(z, data)
 
         ok = jnp.logical_and(jnp.asarray(converged, dtype=bool), jnp.all(jnp.isfinite(z)))
-        status_code = jnp.where(
-            ok, jnp.int32(StatusCode.OPTIMAL), jnp.int32(StatusCode.UNKNOWN)
-        )
+        status_code = jnp.where(ok, jnp.int32(StatusCode.OPTIMAL), jnp.int32(StatusCode.UNKNOWN))
 
         return SubproblemSolution(
             x=x,

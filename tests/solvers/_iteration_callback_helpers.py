@@ -149,9 +149,7 @@ def populate_numpy_stash(prob) -> None:
     slice_imp = settings.sim.u.slice_impulsive
     has_impulsive = bool(slice_imp.stop > slice_imp.start)
 
-    solver.update_boundary_conditions(
-        x_init=settings.sim.x.initial, x_term=settings.sim.x.final
-    )
+    solver.update_boundary_conditions(x_init=settings.sim.x.initial, x_term=settings.sim.x.final)
     solver.update_dynamics_linearization(
         x_bar=x_bar,
         u_bar=u_bar,

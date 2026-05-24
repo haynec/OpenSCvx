@@ -790,9 +790,7 @@ class Problem:
         # Generate discretization solvers via the discretizer (handles Jacobians
         # + vmapping). These are locals: they're captured by the fused
         # ``iteration_fn`` closure below, not stored on the problem.
-        discretization_solver = self._discretizer.get_solver(
-            self._lowered.dynamics, self.settings
-        )
+        discretization_solver = self._discretizer.get_solver(self._lowered.dynamics, self.settings)
         discretization_solver_impulsive = get_impulsive_discretization_solver(
             self._lowered.dynamics_discrete
         )
