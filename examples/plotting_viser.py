@@ -42,6 +42,7 @@ from openscvx.plotting.viser import (
     create_server,
     extract_propagation_positions,
 )
+from examples.plotting import _results_has_moving_subject, _subject_world_trajectories
 from openscvx.plotting.viser.animated import place_body_frame, place_viewcone
 
 # =============================================================================
@@ -841,52 +842,182 @@ def _set_scene_background(
     server.scene.set_background_image(bg_image, format="png")
 
 
+def compute_poe_joint_keypoints(
+    results: OptimizationResults,
+    joint_zero_pos: np.ndarray,
+    n_joints: int,
+    *,
+    t_home: np.ndarray | None = None,
+    transform_prefix: str = "T_j",
+) -> np.ndarray:
+    """World-frame joint + EE positions from PoE transforms stored in ``results.trajectory``.
+
+    Returns:
+        Array of shape ``(n_frames, n_joints + 1, 3)``.
+    """
+    joint_zero_pos = np.asarray(joint_zero_pos, dtype=np.float64)
+    n_frames = len(results.trajectory["time"])
+    keypoints = np.zeros((n_frames, n_joints + 1, 3), dtype=np.float64)
+    t_home = np.eye(4) if t_home is None else np.asarray(t_home, dtype=np.float64)
+
+    for t_idx in range(n_frames):
+        for k in range(n_joints):
+            t_key = f"{transform_prefix}{k + 1}"
+            if t_key not in results.trajectory:
+                raise KeyError(
+                    f"results.trajectory is missing '{t_key}' "
+                    "(required for manipulator snapshot keypoints)."
+                )
+            t_k = np.asarray(results.trajectory[t_key][t_idx], dtype=np.float64)
+            q0 = np.append(joint_zero_pos[k], 1.0)
+            keypoints[t_idx, k] = (t_k @ q0)[:3]
+        t_n = np.asarray(results.trajectory[f"{transform_prefix}{n_joints}"][t_idx], dtype=np.float64)
+        keypoints[t_idx, n_joints] = (t_n @ t_home)[:3, 3]
+
+    return keypoints
+
+
+def build_arm_line_snapshot_builder(
+    keypoints: np.ndarray,
+    *,
+    line_color: tuple[int, int, int] = (200, 200, 200),
+    line_width: float = 5.0,
+    origin_at_world_zero: bool = True,
+) -> Callable[[viser.ViserServer, int, int], list]:
+    """Build line-segment snapshots for a serial manipulator (origin → J1 → … → EE)."""
+    keypoints = np.asarray(keypoints, dtype=np.float64)
+    n_joints = keypoints.shape[1] - 1
+    n_segs = n_joints + (1 if origin_at_world_zero else 0)
+    seg_col = np.full((n_segs, 2, 3), line_color, dtype=np.uint8)
+
+    def _segment_points(frame_idx: int) -> np.ndarray:
+        pts = np.zeros((n_segs, 2, 3), dtype=np.float32)
+        seg = 0
+        if origin_at_world_zero:
+            pts[0] = [np.zeros(3, dtype=np.float32), keypoints[frame_idx, 0]]
+            seg = 1
+        for k in range(n_joints - 1):
+            pts[seg + k] = [keypoints[frame_idx, k], keypoints[frame_idx, k + 1]]
+        pts[-1] = [keypoints[frame_idx, n_joints - 1], keypoints[frame_idx, n_joints]]
+        return pts
+
+    def builder(server: viser.ViserServer, snapshot_i: int, frame_idx: int) -> list:
+        handle = server.scene.add_line_segments(
+            f"/snapshots/arm_{snapshot_i}",
+            points=_segment_points(frame_idx),
+            colors=seg_col,
+            line_width=line_width,
+        )
+        return [handle]
+
+    return builder
+
+
+def build_cad_link_snapshot_builder(
+    link_meshes: dict[str, tuple[np.ndarray, np.ndarray]],
+    link_world_T: dict[str, np.ndarray],
+    *,
+    link_colors: dict[str, tuple[int, int, int]] | None = None,
+    default_color: tuple[int, int, int] = (210, 210, 215),
+) -> Callable[[viser.ViserServer, int, int], list]:
+    """Place posed CAD link meshes at each snapshot frame (MuJoCo FK transforms)."""
+    from scipy.spatial.transform import Rotation
+
+    link_colors = link_colors or {}
+
+    def _pose_from_T(T: np.ndarray) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
+        R = np.asarray(T, dtype=np.float64)[:3, :3]
+        t = T[:3, 3]
+        q_xyzw = Rotation.from_matrix(R).as_quat()
+        wxyz = (float(q_xyzw[3]), float(q_xyzw[0]), float(q_xyzw[1]), float(q_xyzw[2]))
+        pos = (float(t[0]), float(t[1]), float(t[2]))
+        return pos, wxyz
+
+    def builder(server: viser.ViserServer, snapshot_i: int, frame_idx: int) -> list:
+        handles = []
+        for link_name, (verts_local, faces) in link_meshes.items():
+            pos, wxyz = _pose_from_T(link_world_T[link_name][frame_idx])
+            handle = server.scene.add_mesh_simple(
+                f"/snapshots/robot_{snapshot_i}/{link_name}",
+                vertices=np.asarray(verts_local, dtype=np.float32, order="C"),
+                faces=faces,
+                color=link_colors.get(link_name, default_color),
+                opacity=1.0,
+                position=pos,
+                wxyz=wxyz,
+            )
+            handles.append(handle)
+        return handles
+
+    return builder
+
+
 def create_snapshot_plotting_server(
     results: OptimizationResults,
     position_key: str = "position",
-    velocity_key: str = "velocity",
-    attitude_key: str = "attitude",
+    velocity_key: str | None = "velocity",
+    attitude_key: str | None = "attitude",
     attitudes: np.ndarray | None = None,
     attitude_axes_length: float = 2.0,
-    show_body_frame: bool = True,
-    show_viewcone: bool = True,
+    show_body_frame: bool | None = None,
+    show_viewcone: bool | None = None,
     viewcone_scale: float = 10.0,
     target_radius: float = 1.0,
     target_positions: np.ndarray | list[np.ndarray] | None = None,
+    waypoint_positions: list[np.ndarray] | None = None,
+    waypoint_colors: list[tuple[int, int, int]] | None = None,
+    obstacle_center: np.ndarray | None = None,
+    obstacle_radius: float | None = None,
+    arm_keypoints: np.ndarray | None = None,
     scene_scale: float = 1.0,
     initial_n_snapshots: int = 5,
     max_n_snapshots: int | None = None,
     background_color: tuple[int, int, int] = (255, 255, 255),
     show_grid: bool = False,
+    ghost_point_size: float = 0.08,
     folder_name: str = "Snapshots",
     snapshot_builder: Callable[[viser.ViserServer, int, int], list] | None = None,
 ) -> viser.ViserServer:
     """Create a static multi-pose visualization with GUI-controlled snapshot count.
 
-    Shows the full trajectory as a faint ghost path, plus body frames and camera
-    viewcones at evenly spaced nodes along the trajectory. The number of snapshots
-    is controlled from the viser GUI (no time animation).
+    Shows the full trajectory as a faint ghost path, plus optional body frames,
+    viewcones, manipulator geometry, and targets at evenly spaced poses. The number
+    of snapshots is controlled from the viser GUI (no time animation).
+
+    Supports aerial viewplanning (``position`` + ``attitude``), manipulators
+    (``ee_position`` + ``arm_keypoints`` / ``snapshot_builder``), waypoints, and
+    spherical obstacles via ``obstacle_center`` / ``obstacle_radius``.
 
     Args:
-        results: Post-processed optimization results (same keys as
-            :func:`create_animated_plotting_server`).
-        position_key: Trajectory key for position.
-        velocity_key: Trajectory key for velocity coloring of the ghost path.
-        attitude_key: Trajectory key for attitude quaternions (ignored if ``attitudes`` set).
+        results: Post-processed optimization results.
+        position_key: Trajectory key for the ghost path (e.g. ``"position"`` or
+            ``"ee_position"``).
+        velocity_key: Trajectory key for path coloring; ``None`` uses a flat color.
+        attitude_key: Trajectory key for attitude quaternions; ``None`` if absent.
         attitudes: Optional ``(N, 4)`` wxyz quaternions; overrides ``attitude_key``.
         attitude_axes_length: Body-frame axis length at each snapshot.
-        show_body_frame: Draw a body/EE coordinate frame at each snapshot.
-        show_viewcone: Draw viewcones when ``R_sb`` is present in ``results``.
-        target_positions: Viewplanning targets (also uses ``init_poses`` from ``results``).
-        snapshot_builder: Optional ``(server, snapshot_i, frame_idx) -> [handles]`` for
-            extra geometry at each snapshot (e.g. manipulator links).
+        show_body_frame: Draw a coordinate frame at each snapshot when attitude data
+            exists. Defaults to ``True`` only when attitude data is available.
+        show_viewcone: Draw viewcones when ``R_sb`` and attitude exist. Defaults
+            accordingly.
+        target_positions: Viewplanning targets (falls back to ``init_poses``).
+        waypoint_positions: Static task waypoints (e.g. pick-and-place poses).
+        waypoint_colors: Per-waypoint RGB colors.
+        obstacle_center: Single spherical obstacle center (metres).
+        obstacle_radius: Radius for ``obstacle_center`` (metres).
+        arm_keypoints: ``(n_frames, n_joints+1, 3)`` link positions; used for line-segment
+            snapshots when ``snapshot_builder`` is not provided.
+        snapshot_builder: ``(server, snapshot_i, frame_idx) -> [handles]`` for extra
+            geometry (e.g. CAD link meshes via :func:`build_cad_link_snapshot_builder`).
         viewcone_scale: Depth of each viewcone mesh.
-        target_radius: Radius of viewplanning target markers.
+        target_radius: Radius of target / waypoint marker spheres.
         scene_scale: Scale divisor for positions and lengths.
-        initial_n_snapshots: Initial number of evenly spaced poses to display.
-        max_n_snapshots: Upper bound for the GUI slider (defaults to ``N`` nodes).
+        initial_n_snapshots: Initial snapshot count (overridden by
+            ``results["initial_n_snapshots"]`` when set).
+        max_n_snapshots: Upper bound for the GUI slider (defaults to frame count).
         background_color: RGB canvas background (default white).
         show_grid: Whether to draw the ground grid.
+        ghost_point_size: Point size for the ghost trajectory.
         folder_name: viser GUI folder name for the snapshot slider.
 
     Returns:
@@ -896,21 +1027,35 @@ def create_snapshot_plotting_server(
     if pos is None:
         raise KeyError(f"results.trajectory is missing '{position_key}'")
     pos = np.asarray(pos, dtype=np.float64) / scene_scale
-    vel = results.trajectory.get(velocity_key)
+
+    vel = None
+    if velocity_key is not None:
+        vel = results.trajectory.get(velocity_key)
+
+    attitude = None
     if attitudes is not None:
         attitude = np.asarray(attitudes, dtype=np.float64)
-    else:
-        attitude = results.trajectory.get(attitude_key)
-        if attitude is None:
-            raise KeyError(
-                f"results.trajectory is missing '{attitude_key}' "
-                "(or pass attitudes= explicitly)"
-            )
-        attitude = np.asarray(attitude, dtype=np.float64)
+    elif attitude_key is not None:
+        raw_att = results.trajectory.get(attitude_key)
+        if raw_att is not None:
+            attitude = np.asarray(raw_att, dtype=np.float64)
+
+    has_attitude = attitude is not None
+    if show_body_frame is None:
+        show_body_frame = has_attitude
+    if show_viewcone is None:
+        show_viewcone = has_attitude and results.get("R_sb") is not None
+    if show_body_frame and not has_attitude:
+        show_body_frame = False
+    if show_viewcone and not has_attitude:
+        show_viewcone = False
 
     n_frames = pos.shape[0]
     max_snapshots = n_frames if max_n_snapshots is None else min(max_n_snapshots, n_frames)
-    initial_n = int(np.clip(initial_n_snapshots, 1, max_snapshots))
+    stored_n = results.get("initial_n_snapshots")
+    initial_n = int(
+        np.clip(stored_n if stored_n is not None else initial_n_snapshots, 1, max_snapshots)
+    )
 
     R_sb = results.get("R_sb")
     alpha_x = results.get("alpha_x")
@@ -925,8 +1070,21 @@ def create_snapshot_plotting_server(
 
     init_poses = results.get("init_poses")
     if target_positions is not None:
-        init_poses = np.asarray(target_positions)
-    colors = compute_velocity_colors(vel)
+        init_poses = target_positions
+
+    waypoints = waypoint_positions if waypoint_positions is not None else results.get("waypoint_positions")
+    waypoint_colors = waypoint_colors if waypoint_colors is not None else results.get("waypoint_colors")
+
+    obs_center = obstacle_center if obstacle_center is not None else results.get("obstacle_center")
+    obs_radius = obstacle_radius if obstacle_radius is not None else results.get("obstacle_radius")
+
+    arm_kp = arm_keypoints if arm_keypoints is not None else results.get("arm_keypoints")
+    if snapshot_builder is None and arm_kp is not None:
+        snapshot_builder = build_arm_line_snapshot_builder(
+            np.asarray(arm_kp, dtype=np.float64) / scene_scale
+        )
+
+    colors = compute_velocity_colors(vel, fallback_length=n_frames)
 
     server = create_server(pos, dark_mode=False, show_grid=show_grid)
     _set_scene_background(server, background_color)
@@ -950,16 +1108,58 @@ def create_snapshot_plotting_server(
             ],
             axes=results.get("obstacles_axes"),
         )
+    elif obs_center is not None and obs_radius is not None:
+        add_ellipsoid_obstacles(
+            server,
+            centers=[np.asarray(obs_center, dtype=np.float64) / scene_scale],
+            radii=[np.full(3, 1.0 / float(obs_radius) / scene_scale)],
+        )
 
-    add_ghost_trajectory(server, pos, colors, opacity=0.35, point_size=0.08)
+    add_ghost_trajectory(
+        server, pos, colors, opacity=0.35, point_size=ghost_point_size
+    )
 
-    if init_poses is not None:
+    if waypoints is not None:
+        scaled_waypoints = [np.asarray(p, dtype=np.float64) / scene_scale for p in waypoints]
+        wp_colors = list(waypoint_colors) if waypoint_colors is not None else None
+        add_target_markers(
+            server,
+            scaled_waypoints,
+            radius=target_radius / scene_scale,
+            colors=wp_colors,
+            show_trails=False,
+        )
+
+    traj_time = np.asarray(results.trajectory["time"]).flatten()
+    dynamic_subjects = _results_has_moving_subject(results)
+    subject_trajs_scaled: list[np.ndarray] | None = None
+    if init_poses is not None and dynamic_subjects:
+        subject_trajs_scaled = [
+            np.asarray(traj, dtype=np.float64) / scene_scale
+            for traj in _subject_world_trajectories(results, traj_time)
+        ]
+        add_target_markers(
+            server,
+            subject_trajs_scaled,
+            radius=target_radius / scene_scale,
+            show_trails=True,
+        )
+    elif init_poses is not None:
         scaled_init_poses = [np.asarray(p) / scene_scale for p in init_poses]
         add_target_markers(
             server, scaled_init_poses, radius=target_radius / scene_scale
         )
 
     snapshot_state: dict[str, list] = {"handles": []}
+
+    _target_colors = [
+        (255, 50, 50),
+        (50, 255, 50),
+        (50, 50, 255),
+        (255, 255, 50),
+        (255, 50, 255),
+        (50, 255, 255),
+    ]
 
     def _snapshot_color(i: int, n: int) -> tuple[int, int, int]:
         cmap = plt.get_cmap("tab10")
@@ -1004,6 +1204,16 @@ def create_snapshot_plotting_server(
                 snapshot_state["handles"].extend(
                     snapshot_builder(server, i, int(frame_idx))
                 )
+
+            if subject_trajs_scaled is not None:
+                for sub_idx, traj in enumerate(subject_trajs_scaled):
+                    kp_handle = server.scene.add_icosphere(
+                        f"/snapshots/target_{i}/sub_{sub_idx}",
+                        radius=target_radius / scene_scale,
+                        color=_target_colors[sub_idx % len(_target_colors)],
+                        position=np.asarray(traj[frame_idx], dtype=np.float32),
+                    )
+                    snapshot_state["handles"].append(kp_handle)
 
     rebuild_snapshots(initial_n)
 
