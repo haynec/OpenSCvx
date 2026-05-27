@@ -4098,6 +4098,8 @@
       
         
       
+        
+      
     
     
     
@@ -4151,6 +4153,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Reference/algorithms/scvx/iteration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    iteration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -9801,7 +9831,7 @@ of the abstract <code>PTRSolver</code> base. Three backends ship today:</p>
 <td>QPAX</td>
 <td><code>QPAXPTRSolver</code></td>
 <td><code>solver={"backend": "qpax"}</code></td>
-<td>JAX-native QP via <code>qpax.solve_qp</code>. Flat <code>(Q, q, A, b, G, h)</code> assembly. Supports box / dynamics (continuous and impulsive) / CTCS / boundary-Fix; <strong>rejects</strong> user <code>.convex()</code> and cross-node at <code>initialize()</code> with a clear "use <code>CVXPyPTRSolver</code>" message. Enables a path toward an end-to-end JAX-differentiable SCP loop in follow-up work.</td>
+<td>JAX-native QP via <code>qpax.solve_qp</code>. Flat <code>(Q, q, A, b, G, h)</code> assembly. Supports box / dynamics (continuous and impulsive) / CTCS / boundary-Fix; <strong>rejects</strong> user <code>.convex()</code> and cross-node at <code>initialize()</code> with a clear "use <code>CVXPyPTRSolver</code>" message. The <code>iteration_callback</code> uses <code>qpax.solve_qp</code>, whose convergence flag maps to a <code>status_code</code> so a diverged solve fails loudly (chosen over the differentiable <code>solve_qp_primal</code>, which exposes no such flag).</td>
 </tr>
 <tr>
 <td>Moreau</td>
@@ -9812,14 +9842,23 @@ of the abstract <code>PTRSolver</code> base. Three backends ship today:</p>
 </tbody>
 </table>
 <p>Each backend exposes two per-iteration entry points: the historical NumPy
-<code>update_*</code> + <code>solve()</code> stages used by today's Python-side SCP loop, and a
+<code>update_*</code> + <code>solve()</code> stages (kept for direct / interactive solver use), and a
 JAX-pure <code>iteration_callback()</code> built once at <code>initialize()</code>. The callback
-returns a <code>(state, SubproblemData) -&gt; SubproblemSolution</code> callable; all
-three backends emit the same input/output pytree shape so the callable
-composes with <code>jax.jit</code> and <code>jax.vmap</code> (CVXPy via <code>jax.pure_callback</code> with
-<code>vmap_method="sequential"</code> — its batched solves are serial). The downstream
-batchable-<code>Problem.solve()</code> work wraps this callback in <code>lax.while_loop</code> to
-keep the entire SCP iteration on the JAX boundary.</p>
+returns a <code>(state, SubproblemData) -&gt; SubproblemSolution</code> callable; all three
+backends emit the same input/output pytree shape (CVXPy host-calls via
+<code>jax.pure_callback</code>).</p>
+<p><code>Problem.initialize()</code> fuses that callback with discretization, constraint
+linearization, the SCP metrics, and the autotuner into one JAX function —
+<code>iteration_fn</code>, built by <code>make_scp_iteration</code>
+(<code>openscvx/algorithms/scvx/iteration.py</code>). A single JIT'd <code>iteration_fn</code> call
+per iteration replaces the former per-step NumPy↔JAX stitching, and the Python
+SCP loop now drives that one fused body. Forward propagation stays a separate
+JAX export, used only by <code>post_process()</code> — so a compiled problem holds <strong>one
+<code>iteration_fn</code> plus one propagation export</strong>, not three discretization /
+propagation exports stitched together in Python. Because <code>iteration_fn</code> is a
+registered pytree in and out, it also composes with <code>jax.jit</code>; <code>make_solve_loop</code>
+wraps it in <code>lax.while_loop</code> as the primitive for a future fully-JAX-driven
+solve.</p>
 <p>Picking a backend at construction time:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">openscvx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ox</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
