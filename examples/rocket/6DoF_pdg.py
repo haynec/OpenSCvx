@@ -19,8 +19,140 @@ import openscvx as ox
 from examples.plotting_viser import (
     create_animated_plotting_server,
     create_scp_animated_plotting_server,
+    create_snapshot_plotting_server
 )
 from openscvx import Problem
+from openscvx.plotting.viser.coordinates import model_vec_to_viser_xyz
+
+# Position components live at indices 1:4 in the state vector (mass is index 0).
+_POSITION_STATE_SLICE = slice(1, 4)
+
+_ROCKET_STEP_PATH = os.path.join(current_dir, "Rocket.STEP")
+_ROCKET_MESH_CACHE_PATH = os.path.join(current_dir, "Rocket_viser_mesh_upright.npz")
+# SolidWorks STEP: rocket length is +Y; align with body +Z so it lands upright in Viser (Z-up).
+_CAD_TO_BODY = np.array(
+    [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]],
+    dtype=np.float64,
+)
+_ROCKET_MESH_TARGET_LENGTH = 2.0
+_ROCKET_VOXEL_PITCH = 0.05
+
+
+def model_attitude_xyzw_to_viser_wxyz(attitude: np.ndarray) -> np.ndarray:
+    """PDG stores ``[q1, q2, q3, q4]`` (xyzw); Viser expects ``[w, x, y, z]``."""
+    q = np.asarray(attitude, dtype=np.float64)
+    if q.ndim == 1:
+        return np.array([q[3], q[0], q[1], q[2]], dtype=np.float64)
+    return np.stack([q[..., 3], q[..., 0], q[..., 1], q[..., 2]], axis=-1)
+
+
+def load_rocket_vehicle_mesh() -> tuple[np.ndarray, np.ndarray] | None:
+    """Load ``Rocket.STEP`` as a decimated mesh for Viser, or ``None`` to fall back to axes."""
+    if os.path.isfile(_ROCKET_MESH_CACHE_PATH) and os.path.isfile(_ROCKET_STEP_PATH):
+        if os.path.getmtime(_ROCKET_MESH_CACHE_PATH) >= os.path.getmtime(_ROCKET_STEP_PATH):
+            cached = np.load(_ROCKET_MESH_CACHE_PATH)
+            return cached["vertices"], cached["faces"]
+
+    try:
+        import trimesh
+    except ImportError:
+        print(
+            "[viser] Install trimesh and cascadio to show Rocket.STEP "
+            "(pip install trimesh cascadio); using attitude axes."
+        )
+        return None
+
+    try:
+        mesh = trimesh.load(_ROCKET_STEP_PATH, force="mesh")
+    except Exception as exc:
+        print(f"[viser] Failed to load Rocket.STEP: {exc}; using attitude axes.")
+        return None
+
+    mesh.vertices = np.asarray(mesh.vertices, dtype=np.float64)
+    mesh.vertices -= mesh.centroid
+    mesh.vertices = mesh.vertices @ _CAD_TO_BODY.T
+    length = float(np.max(mesh.extents))
+    if length > 1e-9:
+        mesh.vertices *= _ROCKET_MESH_TARGET_LENGTH / length
+
+    try:
+        voxel_grid = mesh.voxelized(pitch=_ROCKET_VOXEL_PITCH)
+        simplified = voxel_grid.marching_cubes
+        simplified.apply_transform(voxel_grid.transform)
+    except Exception:
+        simplified = mesh
+
+    vertices = np.asarray(simplified.vertices, dtype=np.float32)
+    faces = np.asarray(simplified.faces, dtype=np.uint32)
+    np.savez(_ROCKET_MESH_CACHE_PATH, vertices=vertices, faces=faces)
+    return vertices, faces
+
+
+def remap_attitude_for_viser(result) -> None:
+    """Convert propagated attitude quaternions to Viser wxyz for mesh / thrust display."""
+    attitude = result.trajectory.get("attitude")
+    if attitude is not None:
+        result.trajectory["attitude"] = model_attitude_xyzw_to_viser_wxyz(np.asarray(attitude))
+
+
+def remap_optimization_results_for_viser_xyz(
+    results,
+    position_slice: slice = _POSITION_STATE_SLICE,
+) -> None:
+    """After ``post_process()``, remap stored trajectories and SCP history for Viser axes."""
+    traj = results.trajectory
+    if traj.get("position") is not None:
+        traj["position"] = model_vec_to_viser_xyz(np.asarray(traj["position"]))
+    if traj.get("velocity") is not None:
+        traj["velocity"] = model_vec_to_viser_xyz(np.asarray(traj["velocity"]))
+
+    idx_list = list(range(position_slice.start, position_slice.stop, position_slice.step or 1))
+    if len(idx_list) != 3:
+        idx_list = None
+
+    def _remap_state_rows(X: np.ndarray) -> np.ndarray:
+        X = np.asarray(X, dtype=np.float64, copy=True)
+        sl = position_slice
+        X[:, sl] = model_vec_to_viser_xyz(X[:, sl])
+        return X
+
+    for i in range(len(results.X)):
+        results.X[i] = _remap_state_rows(results.X[i])
+
+    if getattr(results, "x_full", None) is not None:
+        results.x_full = _remap_state_rows(results.x_full)
+
+    if idx_list is None or not results.discretization_history:
+        return
+
+    n_x = int(results.X[-1].shape[1]) if results.X else 0
+    n_u = int(results.U[-1].shape[1]) if results.U else 0
+    if n_x <= 0:
+        return
+
+    i4 = n_x + n_x * n_x + 2 * n_x * n_u
+    i0, i1, i2 = idx_list[0], idx_list[1], idx_list[2]
+
+    for k in range(len(results.discretization_history)):
+        V = np.asarray(results.discretization_history[k], dtype=np.float64, copy=True)
+        n_timesteps = V.shape[1]
+        n_segments = V.shape[0] // i4
+        for seg in range(n_segments):
+            b = seg * i4
+            for t in range(n_timesteps):
+                old = np.array([V[b + i0, t], V[b + i1, t], V[b + i2, t]], dtype=np.float64)
+                new = model_vec_to_viser_xyz(old)
+                V[b + i0, t] = new[0]
+                V[b + i1, t] = new[1]
+                V[b + i2, t] = new[2]
+        results.discretization_history[k] = V
+
+
+def prepare_rocket_results_for_viser(results) -> None:
+    """Remap PDG model-frame trajectories and attitudes for Viser visualization."""
+    remap_optimization_results_for_viser_xyz(results)
+    remap_attitude_for_viser(results)
+
 
 n = 5
 
@@ -226,17 +358,40 @@ if __name__ == "__main__":
     problem.initialize()
     result = problem.solve()
     result = problem.post_process()
+    prepare_rocket_results_for_viser(result)
+
+    vehicle_mesh = load_rocket_vehicle_mesh()
+    if vehicle_mesh is not None:
+        print("[viser] vehicle_mesh: Rocket.STEP (decimated)")
+    else:
+        print("[viser] vehicle_mesh: None — using attitude axes")
 
     # Create PDG trajectory visualization
     traj_server = create_animated_plotting_server(
         result,
         thrust_key="thrust",
+        thrust_style="plume",
+        thrust_scale=0.4,
+        thrust_plume_half_angle_deg=14.0,
+        thrust_plume_color=(255, 130, 50),
+        thrust_plume_opacity=0.5,
+        thrust_remap_world_to_viser=True,
+        vehicle_mesh=vehicle_mesh,
+        vehicle_mesh_color=(185, 190, 200),
     )
 
     # Create SCP iteration visualization
     scp_server = create_scp_animated_plotting_server(
         result,
         frame_duration_ms=50.0,
+    )
+
+    snapshot_server = create_snapshot_plotting_server(
+        result,
+        initial_n_snapshots=5,
+        show_grid=True,
+        vehicle_mesh=vehicle_mesh,
+        vehicle_mesh_color=(185, 190, 200),
     )
 
     # Keep both servers running

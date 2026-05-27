@@ -23,6 +23,9 @@ from typing import Callable
 
 import numpy as np
 import viser
+
+from openscvx.plotting.viser.coordinates import model_vec_to_viser_xyz
+from openscvx.plotting.viser.primitives import _generate_cone_mesh
 import viser.transforms as vtf
 
 # Type alias for update callbacks: fn(frame_idx: int) -> None
@@ -230,6 +233,7 @@ def add_thrust_vector(
     scale: float = 0.3,
     color: tuple[int, int, int] = (255, 100, 100),
     line_width: float = 4.0,
+    remap_world_to_viser: bool = False,
 ) -> tuple[viser.LineSegmentsHandle | None, UpdateCallback | None]:
     """Add an animated thrust/force vector visualization.
 
@@ -243,6 +247,8 @@ def add_thrust_vector(
         scale: Scale factor for thrust vector length
         color: RGB color tuple
         line_width: Line width
+        remap_world_to_viser: If True, apply the PDG model (z, y, x) → Viser (x, y, z)
+            permutation to the world-frame thrust vector (after body rotation).
 
     Returns:
         Tuple of (handle, update_callback), or (None, None) if thrust is None
@@ -259,8 +265,12 @@ def add_thrust_vector(
         """Get thrust vector in world frame."""
         thrust_body = thrust_3d[frame_idx]
         if attitude is not None:
-            return _rotate_vector_by_quaternion(thrust_body, attitude[frame_idx])
-        return thrust_body
+            thrust_world = _rotate_vector_by_quaternion(thrust_body, attitude[frame_idx])
+        else:
+            thrust_world = thrust_body
+        if remap_world_to_viser:
+            thrust_world = model_vec_to_viser_xyz(thrust_world)
+        return thrust_world
 
     thrust_world = get_thrust_world(0)
     thrust_end = pos[0] + thrust_world * scale
@@ -275,6 +285,86 @@ def add_thrust_vector(
         thrust_world = get_thrust_world(frame_idx)
         thrust_end = pos[frame_idx] + thrust_world * scale
         handle.points = np.array([[pos[frame_idx], thrust_end]])
+
+    return handle, update
+
+
+def add_thrust_plume(
+    server: viser.ViserServer,
+    pos: np.ndarray,
+    thrust: np.ndarray | None,
+    attitude: np.ndarray | None = None,
+    scale: float = 0.3,
+    min_length: float = 0.05,
+    max_length: float = 2.5,
+    half_angle_deg: float = 12.0,
+    color: tuple[int, int, int] = (255, 120, 40),
+    opacity: float = 0.45,
+    n_segments: int = 24,
+    remap_world_to_viser: bool = False,
+) -> tuple[viser.MeshHandle | None, UpdateCallback | None]:
+    """Animated exhaust plume (cone) pointing opposite to the thrust vector.
+
+    Thrust controls are assumed to be in the body frame when ``attitude`` is set.
+    The plume opens along ``-thrust`` in the world frame (exhaust direction).
+    """
+    if thrust is None:
+        return None, None
+
+    thrust_3d = np.asarray(thrust, dtype=np.float64)
+    if thrust_3d.ndim >= 2 and thrust_3d.shape[-1] > 3:
+        thrust_3d = thrust_3d[:, :3]
+
+    def get_thrust_world(frame_idx: int) -> np.ndarray:
+        thrust_body = thrust_3d[frame_idx]
+        if attitude is not None:
+            thrust_world = _rotate_vector_by_quaternion(thrust_body, attitude[frame_idx])
+        else:
+            thrust_world = thrust_body
+        if remap_world_to_viser:
+            thrust_world = model_vec_to_viser_xyz(thrust_world)
+        return thrust_world
+
+    def plume_geometry(frame_idx: int) -> tuple[np.ndarray, np.ndarray, float]:
+        thrust_world = get_thrust_world(frame_idx)
+        mag = float(np.linalg.norm(thrust_world))
+        if mag < 1e-9:
+            exhaust_axis = np.array([0.0, 0.0, -1.0], dtype=np.float32)
+            length = 0.0
+        else:
+            exhaust_axis = (-thrust_world / mag).astype(np.float32)
+            length = float(np.clip(mag * scale, min_length, max_length))
+        apex = np.asarray(pos[frame_idx], dtype=np.float32)
+        return apex, exhaust_axis, length
+
+    apex0, axis0, length0 = plume_geometry(0)
+    init_length = length0 if length0 > 0.0 else min_length * 0.01
+    vertices, faces = _generate_cone_mesh(
+        apex0,
+        init_length,
+        half_angle_deg,
+        n_segments=n_segments,
+        axis=axis0,
+    )
+    handle = server.scene.add_mesh_simple(
+        "/thrust_plume",
+        vertices=vertices,
+        faces=faces,
+        color=color,
+        opacity=opacity,
+    )
+
+    def update(frame_idx: int) -> None:
+        apex, axis, length = plume_geometry(frame_idx)
+        plume_len = length if length > 0.0 else min_length * 0.01
+        new_vertices, _ = _generate_cone_mesh(
+            apex,
+            plume_len,
+            half_angle_deg,
+            n_segments=n_segments,
+            axis=axis,
+        )
+        handle.vertices = new_vertices
 
     return handle, update
 

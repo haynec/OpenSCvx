@@ -28,7 +28,7 @@ from examples.plotting import plot_dubins_car, plot_velocity_vs_waypoint
 from openscvx import Problem
 from openscvx.plotting import plot_controls, plot_states
 
-n = 20
+n = 30
 total_time = 3.0  # Total simulation time
 
 # Define state components
@@ -95,7 +95,7 @@ constraints.append(
 
 constraints.append(
     ox.ctcs(waypoint_region).over(
-        (8, 12),
+        (12, 20),
     )
 )
 
@@ -138,13 +138,6 @@ problem = Problem(
     },
     float_dtype="float64",
     licq_max=1e-10,
-    solver={
-        "cvx_solver": "CLARABEL",
-        "solver_args": {
-            "canon_backend": "COO",
-            "enforce_dpp": True,
-        },
-    },
 )
 
 plotting_dict = {

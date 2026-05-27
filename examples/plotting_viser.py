@@ -36,6 +36,7 @@ from openscvx.plotting.viser import (
     add_scp_iteration_nodes,
     add_scp_propagation_lines,
     add_target_markers,
+    add_thrust_plume,
     add_thrust_vector,
     add_viewcone,
     compute_velocity_colors,
@@ -43,7 +44,7 @@ from openscvx.plotting.viser import (
     extract_propagation_positions,
 )
 from examples.plotting import _results_has_moving_subject, _subject_world_trajectories
-from openscvx.plotting.viser.animated import place_body_frame, place_viewcone
+from openscvx.plotting.viser.animated import _normalize_wxyz, place_body_frame, place_viewcone
 
 # =============================================================================
 # Manual-stepping handle (for offline rendering)
@@ -90,6 +91,11 @@ def create_animated_plotting_server(
     velocity_key: str = "velocity",
     thrust_key: str = "force",
     thrust_scale: float = 0.3,
+    thrust_style: str = "line",
+    thrust_plume_half_angle_deg: float = 12.0,
+    thrust_plume_color: tuple[int, int, int] = (255, 120, 40),
+    thrust_plume_opacity: float = 0.45,
+    thrust_remap_world_to_viser: bool = False,
     attitude_key: str = "attitude",
     attitude_axes_length: float = 2.0,
     vehicle_mesh: tuple[np.ndarray, np.ndarray] | None = None,
@@ -138,7 +144,13 @@ def create_animated_plotting_server(
         position_key: Key for position data in trajectory dict (default: "position")
         velocity_key: Key for velocity data in trajectory dict (default: "velocity")
         thrust_key: Key for thrust/force data in trajectory dict (default: "force")
-        thrust_scale: Scale factor for thrust vector visualization
+        thrust_scale: Scale factor for thrust / plume length
+        thrust_style: ``"line"`` for a thrust arrow, ``"plume"`` for an exhaust cone
+            (points opposite to the thrust vector).
+        thrust_plume_half_angle_deg: Half-angle of the exhaust cone when ``thrust_style="plume"``.
+        thrust_plume_color: RGB color for the plume mesh.
+        thrust_plume_opacity: Opacity for the plume mesh (0–1).
+        thrust_remap_world_to_viser: Apply PDG (z, y, x) → Viser (x, y, z) to world-frame thrust.
         attitude_key: Key for attitude quaternion data (default: "attitude")
         attitude_axes_length: Length of body frame axes (ignored when ``vehicle_mesh`` is set)
         vehicle_mesh: Optional ``(vertices, faces)`` for a body-fixed mesh (e.g. drone geometry).
@@ -538,9 +550,27 @@ def create_animated_plotting_server(
             _, update_marker = add_position_marker(server, pos)
             update_callbacks.append(update_marker)
 
-        _, update_thrust = add_thrust_vector(
-            server, pos, thrust, attitude=attitude, scale=thrust_scale
-        )
+        if thrust_style == "plume":
+            _, update_thrust = add_thrust_plume(
+                server,
+                pos,
+                thrust,
+                attitude=attitude,
+                scale=thrust_scale,
+                half_angle_deg=thrust_plume_half_angle_deg,
+                color=thrust_plume_color,
+                opacity=thrust_plume_opacity,
+                remap_world_to_viser=thrust_remap_world_to_viser,
+            )
+        else:
+            _, update_thrust = add_thrust_vector(
+                server,
+                pos,
+                thrust,
+                attitude=attitude,
+                scale=thrust_scale,
+                remap_world_to_viser=thrust_remap_world_to_viser,
+            )
         update_callbacks.append(update_thrust)  # Will be filtered out if None
 
         # Add viewcone mesh if R_sb is available and enabled
@@ -977,6 +1007,8 @@ def create_snapshot_plotting_server(
     ghost_point_size: float = 0.08,
     folder_name: str = "Snapshots",
     snapshot_builder: Callable[[viser.ViserServer, int, int], list] | None = None,
+    vehicle_mesh: tuple[np.ndarray, np.ndarray] | None = None,
+    vehicle_mesh_color: tuple[int, int, int] = (200, 200, 210),
 ) -> viser.ViserServer:
     """Create a static multi-pose visualization with GUI-controlled snapshot count.
 
@@ -1009,6 +1041,9 @@ def create_snapshot_plotting_server(
             snapshots when ``snapshot_builder`` is not provided.
         snapshot_builder: ``(server, snapshot_i, frame_idx) -> [handles]`` for extra
             geometry (e.g. CAD link meshes via :func:`build_cad_link_snapshot_builder`).
+        vehicle_mesh: Optional ``(vertices, faces)`` posed at each snapshot instead of
+            body-frame axes when attitude data is available.
+        vehicle_mesh_color: RGB color for ``vehicle_mesh``.
         viewcone_scale: Depth of each viewcone mesh.
         target_radius: Radius of target / waypoint marker spheres.
         scene_scale: Scale divisor for positions and lengths.
@@ -1042,13 +1077,19 @@ def create_snapshot_plotting_server(
 
     has_attitude = attitude is not None
     if show_body_frame is None:
-        show_body_frame = has_attitude
+        show_body_frame = has_attitude and vehicle_mesh is None
     if show_viewcone is None:
         show_viewcone = has_attitude and results.get("R_sb") is not None
     if show_body_frame and not has_attitude:
         show_body_frame = False
     if show_viewcone and not has_attitude:
         show_viewcone = False
+
+    mesh_verts = mesh_faces = None
+    if vehicle_mesh is not None:
+        mesh_verts, mesh_faces = vehicle_mesh
+        mesh_verts = np.asarray(mesh_verts, dtype=np.float32)
+        mesh_faces = np.asarray(mesh_faces, dtype=np.uint32)
 
     n_frames = pos.shape[0]
     max_snapshots = n_frames if max_n_snapshots is None else min(max_n_snapshots, n_frames)
@@ -1183,6 +1224,16 @@ def create_snapshot_plotting_server(
                     axes_length=attitude_axes_length,
                 )
                 snapshot_state["handles"].append(frame_handle)
+            elif mesh_verts is not None and has_attitude:
+                mesh_handle = server.scene.add_mesh_simple(
+                    f"/snapshots/vehicle_{i}",
+                    vertices=mesh_verts,
+                    faces=mesh_faces,
+                    color=vehicle_mesh_color,
+                    position=tuple(float(x) for x in pos[frame_idx]),
+                    wxyz=tuple(float(x) for x in _normalize_wxyz(attitude[frame_idx])),
+                )
+                snapshot_state["handles"].append(mesh_handle)
 
             if show_viewcone and R_sb is not None:
                 cone_handle = place_viewcone(
