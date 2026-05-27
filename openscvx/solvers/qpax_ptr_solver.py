@@ -1,14 +1,15 @@
 """JAX-native QP backend for the PTR convex subproblem.
 
 Assembles each SCP subproblem as a flat ``(Q, q, A, b, G, h)`` quadratic
-program and dispatches it to ``qpax.solve_qp``. This backend is the wedge
-toward an end-to-end JAX-differentiable SCP loop: ``qpax.solve_qp_primal``
-exposes a ``jax.custom_vjp`` rule that lets gradients flow through the QP via
-the implicit function theorem on the relaxed KKT system. The surrounding
-pipeline (discretizer, algorithm, parameter sync) still breaks out of JIT
-today; making it ``jit``-friendly is future work that turns this backend
-from "another solver" into "differentiable SCvx", and would also enable
-``jax.vmap`` batching across scenarios.
+program and dispatches it to ``qpax.solve_qp``. The JAX-pure
+:meth:`iteration_callback` path composes with ``jax.jit`` and ``jax.vmap``,
+which makes it the wedge toward batched, end-to-end-JAX SCvx. It uses
+``qpax.solve_qp`` for its reliable convergence flag rather than the
+``jax.custom_vjp``-differentiable ``qpax.solve_qp_primal``: qpax exposes one
+or the other, not both, and the SCP loop needs to fail loudly on a diverged
+solve (see :meth:`iteration_callback`). ``solve_qp_primal`` remains the seam
+toward a ``jax.grad``-differentiable loop — future work, see
+``plans/jax-pure-solve.md``.
 
 Scope
 -----
@@ -169,9 +170,10 @@ class QPAXPTRSolver(PTRSolver):
 
     The JAX-pure entry point :meth:`iteration_callback` performs the same
     ``assemble → solve → unpack`` cycle entirely on the JAX boundary using
-    ``qpax.solve_qp_primal`` — the ``jax.custom_vjp``-differentiable variant
-    — so the backend composes with ``jax.jit``, ``jax.vmap``, and
-    (downstream) ``jax.grad``.
+    ``qpax.solve_qp``, so the backend composes with ``jax.jit`` and
+    ``jax.vmap``. It is not reverse-mode differentiable: ``solve_qp`` carries
+    the convergence flag the SCP loop needs but no ``custom_vjp`` rule (see
+    :meth:`iteration_callback`).
 
     Scope:
         Supported — state/control box, dynamics linearization (continuous
@@ -310,7 +312,7 @@ class QPAXPTRSolver(PTRSolver):
 
         # JAX-side scaling diagonals for ``iteration_callback``. The dtype
         # tracks the global ``jax_enable_x64`` setting so the assembled
-        # ``(Q, q, A, b, G, h)`` lands in the dtype ``qpax.solve_qp_primal``
+        # ``(Q, q, A, b, G, h)`` lands in the dtype ``qpax.solve_qp``
         # expects.
         f = jnp.float64 if jax.config.read("jax_enable_x64") else jnp.float32
         self._S_x_diag_j = jnp.asarray(self._S_x_diag, dtype=f)
@@ -866,16 +868,18 @@ class QPAXPTRSolver(PTRSolver):
     def iteration_callback(self):
         """JAX-pure ``(state, SubproblemData) -> SubproblemSolution``.
 
-        Composes :meth:`_assemble_qp_jax` + ``qpax.solve_qp_primal`` +
-        :meth:`_unpack_jax` into a single ``@jax.jit``-decorated closure built
-        once at :meth:`initialize` time. The closure is reusable across SCP
-        iterations — only the ``SubproblemData`` pytree changes between calls.
+        Composes :meth:`_assemble_qp_jax` + ``qpax.solve_qp`` +
+        :meth:`_build_solution_jax` into a single ``@jax.jit``-decorated closure
+        built once at :meth:`initialize` time. The closure is reusable across
+        SCP iterations — only the ``SubproblemData`` pytree changes between calls.
 
-        ``qpax.solve_qp_primal`` is the differentiable primal-only variant of
-        ``qpax.solve_qp``. It returns only the primal ``z`` (no convergence
-        diagnostics), so the returned :class:`SubproblemSolution` reports
-        ``status_code = StatusCode.UNKNOWN`` unconditionally — the SCP
-        trust-region check catches divergence at the algorithm layer instead.
+        Uses ``qpax.solve_qp``, whose ``converged`` flag is mapped onto the
+        returned :class:`SubproblemSolution`'s ``status_code`` so the SCP loop
+        can fail loudly on a diverged solve. (``qpax.solve_qp_primal`` is the
+        reverse-mode-differentiable variant but exposes no convergence flag —
+        qpax cannot provide both at once, and reliable non-convergence
+        detection was chosen over differentiability here; see
+        ``plans/iteration-fn-primitive.md``.)
 
         The returned callable takes ``(state, data)``: ``state`` is the
         :class:`AlgorithmState` pytree, accepted for cross-backend signature
@@ -895,8 +899,10 @@ class QPAXPTRSolver(PTRSolver):
         def step(state, data: SubproblemData) -> SubproblemSolution:
             del state  # every input the QP needs already lives on ``data``.
             Q, q, A, b, G, h = self._assemble_qp_jax(data)
-            z = qpax.solve_qp_primal(Q, q, A, b, G, h, **solver_args)
-            return self._build_solution_jax(z, data)
+            z, _s, _z_dual, _y_dual, converged, _iters = qpax.solve_qp(
+                Q, q, A, b, G, h, **solver_args
+            )
+            return self._build_solution_jax(z, data, converged)
 
         return jax.jit(step)
 
@@ -1318,13 +1324,15 @@ class QPAXPTRSolver(PTRSolver):
         self,
         z: "jnp.ndarray",
         data: SubproblemData,
+        converged: "jnp.ndarray",
     ) -> SubproblemSolution:
         """Unpack a primal ``z`` into a :class:`SubproblemSolution` pytree.
 
         Mirrors :meth:`_unpack` but stays JAX-pure: returns scaled-to-physical
         trajectories, the collapsed ``(N, n_nodal)`` ``nu_vb`` layout, and a
-        ``status_code = UNKNOWN`` (``solve_qp_primal`` exposes no convergence
-        diagnostic — the SCP trust-region check is the gate).
+        ``status_code`` of ``OPTIMAL`` when ``qpax.solve_qp`` reported
+        convergence and the primal is finite, else ``UNKNOWN`` (which the SCP
+        loop turns into a hard failure).
         """
         L = self.layout
         N, n_x, n_u = L.N, L.n_x, L.n_u
@@ -1342,6 +1350,9 @@ class QPAXPTRSolver(PTRSolver):
 
         cost = self._reconstruct_cost_jax(z, data)
 
+        ok = jnp.logical_and(jnp.asarray(converged, dtype=bool), jnp.all(jnp.isfinite(z)))
+        status_code = jnp.where(ok, jnp.int32(StatusCode.OPTIMAL), jnp.int32(StatusCode.UNKNOWN))
+
         return SubproblemSolution(
             x=x,
             u=u,
@@ -1349,7 +1360,7 @@ class QPAXPTRSolver(PTRSolver):
             nu_vb=nu_vb,
             nu_vb_cross=jnp.zeros((0,), dtype=f),
             cost=cost,
-            status_code=jnp.asarray(int(StatusCode.UNKNOWN), dtype=jnp.int32),
+            status_code=status_code,
         )
 
     def _reconstruct_cost_jax(

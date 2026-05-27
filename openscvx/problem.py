@@ -32,6 +32,7 @@ from openscvx.algorithms import (
     OptimizationResults,
     PenalizedTrustRegionConfig,
 )
+from openscvx.algorithms.scvx.iteration import make_scp_iteration
 from openscvx.config import (
     Config,
     DevConfig,
@@ -365,8 +366,8 @@ class Problem:
         if isinstance(time, Time):
             self.settings.sim._uniform_time_grid = time.uniform_time_grid
 
-        self._discretization_solver: callable = None
-        self._discretization_solver_impulsive: callable = None
+        # Fused JAX-pure SCP iteration body (built in initialize()).
+        self._iteration_fn: callable = None
 
         # Set up emitter & queue (thread started in initialize() after columns are known)
         if self.settings.dev.printing:
@@ -786,11 +787,11 @@ class Problem:
             ctcs=self._lowered.jax_constraints.ctcs,  # CTCS aren't JIT-compiled here
         )
 
-        # Generate discretization solver via the discretizer (handles Jacobians + vmapping)
-        self._discretization_solver = self._discretizer.get_solver(
-            self._lowered.dynamics, self.settings
-        )
-        self._discretization_solver_impulsive = get_impulsive_discretization_solver(
+        # Generate discretization solvers via the discretizer (handles Jacobians
+        # + vmapping). These are locals: they're captured by the fused
+        # ``iteration_fn`` closure below, not stored on the problem.
+        discretization_solver = self._discretizer.get_solver(self._lowered.dynamics, self.settings)
+        discretization_solver_impulsive = get_impulsive_discretization_solver(
             self._lowered.dynamics_discrete
         )
         self._propagation_solver = get_propagation_solver(
@@ -818,9 +819,10 @@ class Problem:
             byof=self._byof,
         )
 
-        # Compile the discretization solver
-        self._discretization_solver = load_or_compile_discretization_solver(
-            self._discretization_solver,
+        # Compile the discretization solver (``jax.jit`` for the no-disk path,
+        # ``jax.export`` when ``save_compiled``). Local — captured by iteration_fn.
+        discretization_solver = load_or_compile_discretization_solver(
+            discretization_solver,
             dis_solver_file,
             self._parameters,  # Plain dict for JAX
             self.settings.sim.n,
@@ -832,12 +834,11 @@ class Problem:
 
         # Compile the impulsive/discrete discretization solver with the same pipeline.
         # This solver is evaluated on node-wise inputs (x_nodes, u_nodes), shape (N, ...).
-        # if has_impulsive and self._discretization_solver_impulsive is not None:
         dis_imp_solver_file = dis_solver_file.with_name(
             f"{dis_solver_file.stem}_impulsive{dis_solver_file.suffix}"
         )
-        self._discretization_solver_impulsive = load_or_compile_discretization_solver(
-            self._discretization_solver_impulsive,
+        discretization_solver_impulsive = load_or_compile_discretization_solver(
+            discretization_solver_impulsive,
             dis_imp_solver_file,
             self._parameters,  # Plain dict for JAX
             self.settings.sim.n,
@@ -878,17 +879,34 @@ class Problem:
             n_byof_cross=n_byof_cross,
         )
 
-        # Initialize the SCP algorithm
+        # Build the fused JAX-pure SCP iteration body: it discretizes, linearizes
+        # the constraints, solves the convex subproblem (via the backend's
+        # iteration_callback), and folds the result through the autotuner — one
+        # JIT'd call per SCP step in place of the old NumPy↔JAX stitching.
         print("Initializing the SCvx Subproblem Solver...")
-        self._algorithm.initialize(
-            self._solver,
-            self._discretization_solver,
-            self._compiled_constraints,
-            self.emitter_function,
-            self._parameters,  # For warm-start only
-            self.settings,  # For warm-start only
-            discretization_solver_impulsive=self._discretization_solver_impulsive,
+        self._iteration_fn = jax.jit(
+            make_scp_iteration(
+                dis_continuous=discretization_solver,
+                dis_impulsive=discretization_solver_impulsive,
+                jax_constraints=self._compiled_constraints,
+                solver_callback=self._solver.iteration_callback(),
+                autotuner=self._algorithm.autotuner,
+                settings=self.settings,
+            )
         )
+        self._algorithm.initialize(
+            self._iteration_fn,
+            self.emitter_function,
+            self._compiled_constraints,
+            self.settings,
+        )
+
+        # Warm the JIT cache so the first ``.solve()`` doesn't pay the compile
+        # cost. A single concrete call populates ``jax.jit``'s shape-keyed cache;
+        # subsequent bare calls hit it (and a future vmap retraces to batched
+        # shapes the first time, same as if no warmup had happened).
+        warmup_state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
+        jax.block_until_ready(self._iteration_fn(warmup_state, self._parameters))
         print("✓ SCvx Subproblem Solver initialized")
 
         # Get columns from algorithm (now that autotuner is set) and start print thread
@@ -964,16 +982,6 @@ class Problem:
         self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
         self._history = AlgorithmHistory.from_settings(self.settings)
 
-        # Re-seed the algorithm's host-side iteration mirror so it matches
-        # ``state.k == 1`` for the next solve. The hasattr-guarded probe is
-        # itself scaffolding — ``Problem`` reaching into private fields of
-        # ``PenalizedTrustRegion`` to dodge per-iteration device syncs.
-        # Removable once the SCP loop body is a single JAX trace.
-        if hasattr(self._algorithm, "_iter_index"):
-            self._algorithm._iter_index = 1
-        if hasattr(self._algorithm, "_last_scalars"):
-            self._algorithm._last_scalars = {}
-
         # Reset solution
         self._solution = None
         self._solution_history = None
@@ -1012,21 +1020,14 @@ class Problem:
             self.settings,  # May change between steps
         )
 
-        # Pull k and the J scalars from the algorithm's host-side mirror set
-        # by ``record_iteration``; avoids a per-step device sync. ``dict.get``
-        # with a fallback would evaluate the default eagerly (a host-device
-        # round-trip on every iteration), so branch on presence explicitly.
-        # Removable once the SCP loop body is a single JAX trace — the mirror
-        # and the per-step sync it avoids go away together.
-        scalars = getattr(self._algorithm, "_last_scalars", None) or {}
+        # ``state.k`` is bumped to ``k + 1`` inside ``step()``; the J scalars on
+        # the returned state are the metrics for the iteration just completed.
         return {
             "converged": converged,
-            # ``_iter_index`` was bumped to ``k + 1`` at the end of ``step()``,
-            # matching the post-increment value of ``state.k``.
-            "scp_k": self._algorithm._iter_index,
-            "scp_J_tr": scalars["J_tr"] if "J_tr" in scalars else float(self._state.J_tr),
-            "scp_J_vb": scalars["J_vb"] if "J_vb" in scalars else float(self._state.J_vb),
-            "scp_J_vc": scalars["J_vc"] if "J_vc" in scalars else float(self._state.J_vc),
+            "scp_k": int(self._state.k),
+            "scp_J_tr": float(self._state.J_tr),
+            "scp_J_vb": float(self._state.J_vb),
+            "scp_J_vc": float(self._state.J_vc),
         }
 
     def solve(
@@ -1056,7 +1057,7 @@ class Problem:
             self._compiled_dynamics_prop,
             self._compiled_constraints,
             self._solver,
-            self._discretization_solver,
+            self._iteration_fn,
             self._state,
         ]
         if any(r is None for r in required):
@@ -1073,12 +1074,11 @@ class Problem:
         k_max = max_iters if max_iters is not None else self._algorithm.k_max
         t_max = time_limit if time_limit is not None else self._algorithm.t_max
 
-        # Use the algorithm's Python-side iter mirror (kept in sync with
-        # ``state.k``) so the loop predicate doesn't force a device sync on
-        # every iteration.
-        # Removable once the SCP loop body is a single JAX trace — this whole
-        # Python while-loop is then replaced by a single ``lax.while_loop``.
-        while self._algorithm._iter_index <= k_max:
+        # ``state.k`` is the iteration counter (bumped inside each ``step()``).
+        # Plan 2 replaces this Python ``while`` with a single ``lax.while_loop``
+        # over ``make_solve_loop``; here it still drives ``iteration_fn`` step by
+        # step so the interactive / printing path is unchanged.
+        while int(self._state.k) <= k_max:
             result = self.step()
             if result["converged"] and not continuous:
                 break
@@ -1107,7 +1107,7 @@ class Problem:
         return self._format_result(
             self._state,
             self._history,
-            self._algorithm._iter_index <= k_max and not timed_out,
+            int(self._state.k) <= k_max and not timed_out,
         )
 
     def post_process(self) -> OptimizationResults:

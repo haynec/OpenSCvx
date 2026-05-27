@@ -108,6 +108,13 @@ def load_or_compile_discretization_solver(
 ) -> callable:
     """Load discretization solver from cache or compile and cache it.
 
+    The no-disk path (``save_compiled=False``, the default) returns a plain
+    ``jax.jit`` callable, which has a ``vmap`` batching rule and so composes
+    with ``jax.vmap(problem.solve)`` in the JAX-pure solve work. The disk-cached
+    path (``save_compiled=True``) returns a ``jax.export`` wrapper that
+    serializes to disk but, because ``call_exported`` has no ``vmap`` rule,
+    **cannot** be combined with ``jax.vmap(problem.solve)``.
+
     Args:
         discretization_solver: The solver function to compile
         cache_file: Path to cache file
@@ -115,27 +122,29 @@ def load_or_compile_discretization_solver(
         n_discretization_nodes: Number of discretization nodes
         n_states: Number of state variables
         n_controls: Number of control variables
-        save_compiled: Whether to save/load compiled solvers
+        save_compiled: Whether to save/load compiled solvers to/from disk
+            (``jax.export``); incompatible with ``jax.vmap(problem.solve)``.
         debug: Whether in debug mode (skip compilation)
 
     Returns:
-        Compiled discretization solver
+        Compiled discretization solver — a ``jax.jit`` callable (no-disk) or a
+        ``jax.export`` wrapper (disk-cached).
     """
     if debug:
         return discretization_solver
 
-    if save_compiled:
-        try:
-            with open(cache_file, "rb") as f:
-                serial_dis = f.read()
-            compiled_solver = export.deserialize(serial_dis)
-            print(f"✓ Loaded existing {name} discretization solver")
-            return compiled_solver
-        except FileNotFoundError:
-            print(f"Compiling {name} discretization solver...")
-
-    else:
+    if not save_compiled:
         print(f"Compiling {name} discretization solver (not saving/loading from disk)...")
+        return jax.jit(discretization_solver)
+
+    try:
+        with open(cache_file, "rb") as f:
+            serial_dis = f.read()
+        compiled_solver = export.deserialize(serial_dis)
+        print(f"✓ Loaded existing {name} discretization solver")
+        return compiled_solver
+    except FileNotFoundError:
+        print(f"Compiling {name} discretization solver...")
 
     # Pass parameters as a single dictionary
     compiled_solver = export.export(jax.jit(discretization_solver))(
@@ -144,10 +153,9 @@ def load_or_compile_discretization_solver(
         params,
     )
 
-    if save_compiled:
-        with open(cache_file, "wb") as f:
-            f.write(compiled_solver.serialize())
-        print(f"✓ {name} discretization solver compiled and saved")
+    with open(cache_file, "wb") as f:
+        f.write(compiled_solver.serialize())
+    print(f"✓ {name} discretization solver compiled and saved")
 
     return compiled_solver
 

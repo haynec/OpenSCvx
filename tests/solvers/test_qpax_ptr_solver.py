@@ -22,6 +22,7 @@ pytest.importorskip("qpax")
 import openscvx as ox
 from openscvx import Problem
 from openscvx.solvers import PTRSolver, PTRSolveResult, QPAXPTRSolver
+from tests.solvers._iteration_callback_helpers import populate_numpy_stash
 
 # ============================================================================
 # Helpers
@@ -279,8 +280,9 @@ def test_qpax_assembly_produces_consistent_shapes():
     prob = _make_double_integrator_problem(n=6, backend="qpax", k_max=1)
     prob.settings.dev.printing = False
     prob.initialize()
-    # Run one iteration to populate _dyn / _cons / _pen / _x_init / _x_term
-    prob.solve()
+    # Populate _dyn / _cons / _pen / _x_init / _x_term for the NumPy assembly
+    # (the SCP loop no longer drives the update_* path).
+    populate_numpy_stash(prob)
 
     solver = prob.solver
     Q, q, A, b, G, h = solver._assemble_qp()
@@ -301,7 +303,8 @@ def test_qpax_solve_returns_PTRSolveResult():
     prob = _make_double_integrator_problem(n=5, backend="qpax", k_max=1)
     prob.settings.dev.printing = False
     prob.initialize()
-    # One direct solver.solve() call after the SCP loop is set up.
+    # One direct solver.solve() call after the NumPy stash is populated.
+    populate_numpy_stash(prob)
     res = prob.solver.solve()
     assert isinstance(res, PTRSolveResult)
     assert res.x.shape[0] == 5
@@ -329,6 +332,9 @@ def test_qpax_solve_raises_on_nonconvergence(monkeypatch):
     prob = _make_double_integrator_problem(n=5, backend="qpax", k_max=1)
     prob.settings.dev.printing = False
     prob.initialize()
+    # Populate the stash so solver.solve() reaches the qpax.solve_qp guard
+    # (rather than the "update_* not called" precondition error).
+    populate_numpy_stash(prob)
 
     n_z = prob.solver.layout.n_z
     nan_z = jnp.full((n_z,), jnp.nan)

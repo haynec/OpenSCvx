@@ -25,6 +25,7 @@ from openscvx.solvers.ptr_solver import SubproblemData, SubproblemSolution
 from tests._marks import requires_moreau
 from tests.solvers._iteration_callback_helpers import (
     build_brachistochrone,
+    populate_numpy_stash,
     subproblem_data_from_numpy_stash,
 )
 
@@ -76,7 +77,7 @@ def test_qpax_iteration_callback_composes_with_vmap():
     """
     prob = build_brachistochrone("qpax", n=4, k_max=1)
     prob.initialize()
-    prob.solve()
+    populate_numpy_stash(prob)
     solver = prob.solver
 
     base = subproblem_data_from_numpy_stash(solver)
@@ -123,7 +124,7 @@ def test_moreau_iteration_callback_composes_with_vmap():
     """
     prob = build_brachistochrone("moreau", n=4, k_max=1)
     prob.initialize()
-    prob.solve()
+    populate_numpy_stash(prob)
     solver = prob.solver
 
     base = subproblem_data_from_numpy_stash(solver)

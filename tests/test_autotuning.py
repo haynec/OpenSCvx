@@ -57,6 +57,7 @@ def mock_unified_state():
     """Create a mock UnifiedState object."""
     state = DummyState()
     state.initial = np.array([0.0, 0.0])
+    state.final = np.array([0.0, 0.0])
     state.guess = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
     state.min = np.array([-10.0, -10.0])
     state.max = np.array([10.0, 10.0])

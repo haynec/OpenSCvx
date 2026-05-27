@@ -168,18 +168,28 @@ of the abstract `PTRSolver` base. Three backends ship today:
 | Backend | Class | Selector | Notes |
 |---------|-------|----------|-------|
 | CVXPy (default) | `CVXPyPTRSolver` | `solver={"backend": "cvxpy"}` (default) | DCP graph via CVXPy, dispatched to QOCO / CLARABEL / etc. Supports user `.convex()` constraints, cross-node constraints, CTCS, and impulsive controls. Optional cvxpygen code generation. |
-| QPAX | `QPAXPTRSolver` | `solver={"backend": "qpax"}` | JAX-native QP via `qpax.solve_qp`. Flat `(Q, q, A, b, G, h)` assembly. Supports box / dynamics (continuous and impulsive) / CTCS / boundary-Fix; **rejects** user `.convex()` and cross-node at `initialize()` with a clear "use `CVXPyPTRSolver`" message. Enables a path toward an end-to-end JAX-differentiable SCP loop in follow-up work. |
+| QPAX | `QPAXPTRSolver` | `solver={"backend": "qpax"}` | JAX-native QP via `qpax.solve_qp`. Flat `(Q, q, A, b, G, h)` assembly. Supports box / dynamics (continuous and impulsive) / CTCS / boundary-Fix; **rejects** user `.convex()` and cross-node at `initialize()` with a clear "use `CVXPyPTRSolver`" message. The `iteration_callback` uses `qpax.solve_qp`, whose convergence flag maps to a `status_code` so a diverged solve fails loudly (chosen over the differentiable `solve_qp_primal`, which exposes no such flag). |
 | Moreau | `MoreauPTRSolver` | `solver={"backend": "moreau"}` | JAX-native conic solver (`moreau.jax.Solver`). Sparse CSR assembly; SOC epigraphs for the L1 / pos PTR penalties (fewer variables and rows than QPAX). Warm-starts between SCP iterations. Same supported subset as QPAX (continuous and impulsive dynamics). Paves the way for user `.convex()` SOC support in a follow-up. |
 
 Each backend exposes two per-iteration entry points: the historical NumPy
-`update_*` + `solve()` stages used by today's Python-side SCP loop, and a
+`update_*` + `solve()` stages (kept for direct / interactive solver use), and a
 JAX-pure `iteration_callback()` built once at `initialize()`. The callback
-returns a `(state, SubproblemData) -> SubproblemSolution` callable; all
-three backends emit the same input/output pytree shape so the callable
-composes with `jax.jit` and `jax.vmap` (CVXPy via `jax.pure_callback` with
-`vmap_method="sequential"` — its batched solves are serial). The downstream
-batchable-`Problem.solve()` work wraps this callback in `lax.while_loop` to
-keep the entire SCP iteration on the JAX boundary.
+returns a `(state, SubproblemData) -> SubproblemSolution` callable; all three
+backends emit the same input/output pytree shape (CVXPy host-calls via
+`jax.pure_callback`).
+
+`Problem.initialize()` fuses that callback with discretization, constraint
+linearization, the SCP metrics, and the autotuner into one JAX function —
+`iteration_fn`, built by `make_scp_iteration`
+(`openscvx/algorithms/scvx/iteration.py`). A single JIT'd `iteration_fn` call
+per iteration replaces the former per-step NumPy↔JAX stitching, and the Python
+SCP loop now drives that one fused body. Forward propagation stays a separate
+JAX export, used only by `post_process()` — so a compiled problem holds **one
+`iteration_fn` plus one propagation export**, not three discretization /
+propagation exports stitched together in Python. Because `iteration_fn` is a
+registered pytree in and out, it also composes with `jax.jit`; `make_solve_loop`
+wraps it in `lax.while_loop` as the primitive for a future fully-JAX-driven
+solve.
 
 Picking a backend at construction time:
 

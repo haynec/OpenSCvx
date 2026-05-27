@@ -24,6 +24,7 @@ pytest.importorskip("qpax")
 from openscvx.solvers.ptr_solver import StatusCode, SubproblemSolution
 from tests.solvers._iteration_callback_helpers import (
     build_brachistochrone,
+    populate_numpy_stash,
     subproblem_data_from_numpy_stash,
 )
 
@@ -45,9 +46,10 @@ def test_assemble_qp_jax_matches_numpy_on_brachistochrone(constraint_style):
     """
     prob = build_brachistochrone("qpax", n=4, k_max=1, constraint_style=constraint_style)
     prob.initialize()
-    # One SCP iteration populates _dyn / _cons / _pen / _x_init / _x_term on
-    # the solver — both assembly paths read from the same iterate after this.
-    prob.solve()
+    # Populate _dyn / _cons / _pen / _x_init / _x_term on the solver so both
+    # assembly paths read from the same iterate. (The SCP loop no longer drives
+    # the NumPy update_* path, so we set up the stash explicitly.)
+    populate_numpy_stash(prob)
 
     solver = prob.solver
     Q_np, q_np, A_np, b_np, G_np, h_np = solver._assemble_qp()
@@ -70,13 +72,12 @@ def test_assemble_qp_jax_matches_numpy_on_brachistochrone(constraint_style):
 
 def test_iteration_callback_matches_solve_on_brachistochrone():
     """``iteration_callback()(state, data)`` must produce the same primal
-    trajectory as ``solver.solve()`` on the same iterate. ``solve_qp_primal``
-    and ``solve_qp`` differ only in what they return (primal-only vs
-    full primal-dual), so on a convergent QP they must produce the same
-    primal up to PDIP tolerance."""
+    trajectory as ``solver.solve()`` on the same iterate. Both now call
+    ``qpax.solve_qp``, so on a convergent QP they produce the same primal up to
+    PDIP tolerance."""
     prob = build_brachistochrone("qpax", n=4, k_max=1)
     prob.initialize()
-    prob.solve()
+    populate_numpy_stash(prob)
     solver = prob.solver
 
     # NumPy reference: re-call _assemble_qp + qpax.solve_qp on the stash.
@@ -100,8 +101,8 @@ def test_iteration_callback_matches_solve_on_brachistochrone():
     # Cost reconstruction is independent of the QP solve — should match the
     # NumPy path's _reconstruct_cost output directly.
     np.testing.assert_allclose(float(solution.cost), reference.cost, atol=1e-8, rtol=1e-8)
-    # solve_qp_primal exposes no convergence diagnostic.
-    assert int(solution.status_code) == int(StatusCode.UNKNOWN)
+    # solve_qp reports convergence on this well-posed QP.
+    assert int(solution.status_code) == int(StatusCode.OPTIMAL)
 
 
 def test_iteration_callback_traces_under_jit():
@@ -110,7 +111,7 @@ def test_iteration_callback_traces_under_jit():
     amortizes across repeated calls (no per-call re-tracing surprises)."""
     prob = build_brachistochrone("qpax", n=4, k_max=1)
     prob.initialize()
-    prob.solve()
+    populate_numpy_stash(prob)
     solver = prob.solver
 
     data = subproblem_data_from_numpy_stash(solver)

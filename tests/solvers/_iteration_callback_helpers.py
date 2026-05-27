@@ -16,10 +16,12 @@ canonical definitions. Per-backend test files import from here.
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
 from openscvx import Problem
+from openscvx.discretization import get_impulsive_discretization_solver
 from openscvx.solvers.ptr_solver import SubproblemData
 
 
@@ -113,6 +115,90 @@ def build_brachistochrone(
     )
     prob.settings.dev.printing = False
     return prob
+
+
+def populate_numpy_stash(prob) -> None:
+    """Run one discretize → linearize → ``update_*`` cycle on the initial iterate.
+
+    The SCP loop no longer drives the solver's NumPy ``update_*`` path (it uses
+    the JAX-pure ``iteration_callback``), so ``prob.solve()`` no longer leaves
+    ``solver._dyn`` / ``_cons`` / ``_pen`` populated. Tests that read that stash
+    (or call the legacy ``solver.solve()`` / ``_assemble_qp``) call this after
+    ``initialize()`` to set it up, mirroring what the former
+    ``PenalizedTrustRegion._subproblem`` did for the first iterate.
+    """
+    solver = prob.solver
+    settings = prob.settings
+    params = prob._parameters
+    state = prob.state
+    jc = prob._compiled_constraints
+
+    dis = jax.jit(prob.discretizer.get_solver(prob.lowered.dynamics, settings))
+    dis_imp = jax.jit(get_impulsive_discretization_solver(prob.lowered.dynamics_discrete))
+
+    x_bar = np.asarray(state.x)
+    u_bar = np.asarray(state.u, dtype=float)
+    A_d, B_d, C_d, x_prop, _ = dis(x_bar, u_bar, params)
+
+    init_fixed = np.asarray(settings.sim.x.initial_type) == "Fix"
+    x0_init = np.asarray(settings.sim.x.initial, dtype=float)
+    x0_prior = np.where(init_fixed, x0_init, x_bar[0]).reshape(1, -1)
+    x_nodes_prior = np.vstack((x0_prior, np.asarray(x_prop)))
+    x_prop_plus, D_d, E_d, _ = dis_imp(x_nodes_prior, u_bar, params)
+
+    slice_imp = settings.sim.u.slice_impulsive
+    has_impulsive = bool(slice_imp.stop > slice_imp.start)
+
+    solver.update_boundary_conditions(x_init=settings.sim.x.initial, x_term=settings.sim.x.final)
+    solver.update_dynamics_linearization(
+        x_bar=x_bar,
+        u_bar=u_bar,
+        A_d=np.asarray(A_d),
+        B_d=np.asarray(B_d),
+        C_d=np.asarray(C_d),
+        x_prop=np.asarray(x_prop),
+        x_prop_plus=np.asarray(x_prop_plus) if has_impulsive else None,
+        D_d=np.asarray(D_d) if has_impulsive else None,
+        E_d=np.asarray(E_d) if has_impulsive else None,
+    )
+
+    nodal = []
+    for c in jc.nodal:
+        g = np.squeeze(np.asarray(c.func(x_bar, u_bar, 0, params)))
+        gx = np.asarray(c.grad_g_x(x_bar, u_bar, 0, params))
+        gu = np.asarray(c.grad_g_u(x_bar, u_bar, 0, params))
+        if g.ndim == 0:
+            g = np.broadcast_to(g, (x_bar.shape[0],))
+        elif g.ndim > 1:
+            g = g.reshape(g.shape[0], -1).sum(axis=1)
+        if gx.ndim == 1:
+            gx = np.broadcast_to(gx, (x_bar.shape[0], gx.shape[0]))
+        elif gx.ndim > 2:
+            gx = gx.reshape(gx.shape[0], -1)[:, : x_bar.shape[1]]
+        if gu.ndim == 1:
+            gu = np.broadcast_to(gu, (u_bar.shape[0], gu.shape[0]))
+        elif gu.ndim > 2:
+            gu = gu.reshape(gu.shape[0], -1)[:, : u_bar.shape[1]]
+        nodal.append({"g": g, "grad_g_x": gx, "grad_g_u": gu})
+
+    cross = []
+    for c in jc.cross_node:
+        cross.append(
+            {
+                "g": np.asarray(c.func(x_bar, u_bar, params)),
+                "grad_g_X": np.asarray(c.grad_g_X(x_bar, u_bar, params)),
+                "grad_g_U": np.asarray(c.grad_g_U(x_bar, u_bar, params)),
+            }
+        )
+    solver.update_constraint_linearizations(nodal=nodal or None, cross_node=cross or None)
+    solver.update_penalties(
+        lam_prox=np.asarray(state.lam_prox),
+        lam_cost=np.asarray(state.lam_cost),
+        lam_vc=np.asarray(state.lam_vc),
+        lam_vb_nodal=np.asarray(state.lam_vb_nodal),
+        lam_vb_cross=np.asarray(state.lam_vb_cross),
+    )
+    solver.update_proximal_terms()
 
 
 def subproblem_data_from_numpy_stash(solver) -> SubproblemData:

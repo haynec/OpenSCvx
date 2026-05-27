@@ -22,6 +22,7 @@ from openscvx.config import Config
 from .ptr_solver import (
     PTRSolver,
     PTRSolveResult,
+    StatusCode,
     SubproblemData,
     SubproblemSolution,
     status_str_to_code,
@@ -1154,12 +1155,42 @@ class CVXPyPTRSolver(PTRSolver):
                 lam_vb_nodal=np.asarray(data.lam_vb_nodal),
                 lam_vb_cross=np.asarray(data.lam_vb_cross),
             )
+            # Set the proximal-term parameter (``prox_c``) from the freshly
+            # updated penalties; the legacy ``_subproblem`` called this between
+            # ``update_penalties`` and ``solve``, and without it ``prox_c`` has
+            # no value on the first solve of a process.
+            self.update_proximal_terms()
             self.update_boundary_conditions(
                 x_init=_unmask_bc(data.x_init),
                 x_term=_unmask_bc(data.x_term),
             )
 
-            result = self.solve()
+            try:
+                result = self.solve()
+            except cp.error.SolverError:
+                # Infeasible / numerical failure. Surface it as a non-OPTIMAL
+                # status on a finite (zero) solution so the SCP loop fails
+                # loudly at the step() boundary, instead of the exception
+                # propagating through pure_callback as an opaque CpuCallback
+                # error.
+                return SubproblemSolution(
+                    x=jnp.zeros((N, n_x), dtype=f),
+                    u=jnp.zeros((N, n_u), dtype=f),
+                    nu=jnp.zeros((N - 1, n_x), dtype=f),
+                    nu_vb=jnp.zeros((N, n_nodal), dtype=f),
+                    nu_vb_cross=jnp.zeros((n_cross,), dtype=f),
+                    cost=jnp.asarray(0.0, dtype=f),
+                    status_code=jnp.asarray(int(StatusCode.INFEASIBLE), dtype=jnp.int32),
+                )
+
+            # ``optimal_inaccurate`` is a usable solution — the legacy path
+            # consumed it without error — so treat it as OPTIMAL; the step()
+            # status gate would otherwise reject the UNKNOWN it maps to.
+            code = (
+                StatusCode.OPTIMAL
+                if result.status == "optimal_inaccurate"
+                else status_str_to_code(result.status)
+            )
             return SubproblemSolution(
                 x=jnp.asarray(result.x, dtype=f),
                 u=jnp.asarray(result.u, dtype=f),
@@ -1180,7 +1211,7 @@ class CVXPyPTRSolver(PTRSolver):
                     dtype=f,
                 ),
                 cost=jnp.asarray(result.cost, dtype=f),
-                status_code=jnp.asarray(int(status_str_to_code(result.status)), dtype=jnp.int32),
+                status_code=jnp.asarray(int(code), dtype=jnp.int32),
             )
 
         def step(state, data: SubproblemData) -> SubproblemSolution:
