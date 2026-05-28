@@ -221,3 +221,6 @@ src/
 
 # Solver information
 solver_data/
+
+# Julia material 
+.julia/
