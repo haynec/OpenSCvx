@@ -361,8 +361,25 @@ def make_solve_loop(
             return (state.k <= k_max) & jnp.logical_not(_converged(state, ep_tr, ep_vb, ep_vc))
 
         def body(state: AlgorithmState) -> AlgorithmState:
+            # Under ``jax.vmap`` the ``lax.while_loop`` keeps running until
+            # every batch element has converged; without a freeze, the body
+            # would keep mutating already-converged elements (their iterates
+            # drift through repeated subproblem solves, and the autotuner
+            # would keep advancing ``lam_prox`` / ``lam_cost``). Selecting
+            # ``state`` for converged elements pins them to their first
+            # post-convergence iterate, so a batched solve agrees with the
+            # single-problem ``solve_jax`` on each element.
+            is_converged = _converged(state, ep_tr, ep_vb, ep_vc)
             next_state, _ = iteration_fn(state, params)
-            return next_state
+
+            def freeze(nxt, prev):
+                # ``is_converged`` is scalar (single-problem) or shape ``(B,)``
+                # (vmap'd); reshape with trailing 1-axes so it broadcasts over
+                # each leaf's remaining dims.
+                mask_shape = is_converged.shape + (1,) * (nxt.ndim - is_converged.ndim)
+                return jnp.where(is_converged.reshape(mask_shape), prev, nxt)
+
+            return jax.tree.map(freeze, next_state, state)
 
         return jax.lax.while_loop(cond, body, state)
 
