@@ -24,6 +24,8 @@ import jax
 
 os.environ["EQX_ON_ERROR"] = "nan"
 
+import jax.numpy as jnp
+
 from openscvx.algorithms import (
     Algorithm,
     AlgorithmHistory,
@@ -31,8 +33,6 @@ from openscvx.algorithms import (
     OptimizationResults,
     PenalizedTrustRegionConfig,
 )
-import jax.numpy as jnp
-
 from openscvx.algorithms.scvx.iteration import make_scp_iteration, make_solve_loop
 from openscvx.config import (
     Config,
@@ -693,9 +693,7 @@ class Problem:
         as a method so ``solve()`` / ``post_process()`` call sites read
         naturally.
         """
-        return OptimizationResults.from_history(
-            history, state, problem=self, converged=converged
-        )
+        return OptimizationResults.from_history(history, state, problem=self, converged=converged)
 
     def initialize(self):
         """Compile dynamics, constraints, and solvers; prepare for optimization.
@@ -1194,7 +1192,9 @@ class Problem:
             empty histories.
         """
         if self._iteration_fn is None:
-            raise ValueError("Problem has not been initialized. Call initialize() before solve_jax()")
+            raise ValueError(
+                "Problem has not been initialized. Call initialize() before solve_jax()"
+            )
 
         initial_state = self._resolve_initial_state(x_initial, x_final)
         params = parameters if parameters is not None else self._parameters

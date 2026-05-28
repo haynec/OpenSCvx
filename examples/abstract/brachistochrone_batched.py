@@ -111,9 +111,7 @@ if __name__ == "__main__":
     # Stack four ICs by varying the starting x-coordinate (component 0 of
     # the unified state vector is the x-position).
     shifts = jnp.array([0.0, 0.3, 0.6, 0.9])
-    x_initial_stack = jnp.stack(
-        [default_pin.at[0].set(default_pin[0] + s) for s in shifts]
-    )
+    x_initial_stack = jnp.stack([default_pin.at[0].set(default_pin[0] + s) for s in shifts])
 
     # Bare ``jax.vmap`` — the library exposes no batching wrapper of its own.
     batched_solve = jax.vmap(problem.solve_jax, in_axes=(0, None, None))

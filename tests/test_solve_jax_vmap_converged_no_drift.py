@@ -57,9 +57,7 @@ def _build_problem(backend: str, n: int = 30, k_max: int = 40):
         ),
         "velocity": g * ox.Cos(theta[0]),
     }
-    constraint_exprs = [ox.ctcs(s <= s.max) for s in states] + [
-        ox.ctcs(s.min <= s) for s in states
-    ]
+    constraint_exprs = [ox.ctcs(s <= s.max) for s in states] + [ox.ctcs(s.min <= s) for s in states]
 
     time = ox.Time(
         initial=0.0,
@@ -120,7 +118,10 @@ def test_vmap_no_drift_after_convergence(backend):
 
     for i in range(stacked.shape[0]):
         np.testing.assert_allclose(
-            batched_xs[i], bare_xs[i], atol=1e-5, rtol=1e-5,
+            batched_xs[i],
+            bare_xs[i],
+            atol=1e-5,
+            rtol=1e-5,
             err_msg=f"batch element {i} drifted after convergence under vmap",
         )
 

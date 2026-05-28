@@ -27,9 +27,7 @@ def test_vmap_solve_jax_matches_per_element(backend):
 
     # Stack four ICs by varying the x-coordinate of position (component 0).
     shifts = jnp.array([0.0, 0.3, -0.3, 0.6])
-    stacked = jnp.stack(
-        [x_init_default.at[0].set(x_init_default[0] + s) for s in shifts]
-    )
+    stacked = jnp.stack([x_init_default.at[0].set(x_init_default[0] + s) for s in shifts])
 
     # Per-element reference.
     bare_xs = []
