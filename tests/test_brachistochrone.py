@@ -129,8 +129,12 @@ def _assert_brachistochrone_accuracy(comparison, problem, result, solve_budget=1
         assert num_iters < 27, f"Took {num_iters} SCP iterations (expected < 15)"
 
     # Check timing - these are generous limits for a simple problem like brachistochrone
-    assert problem.timing_init < 15.0, (
-        f"Initialization took {problem.timing_init:.2f}s (expected < 12s)"
+    # TODO(norrisg): drop back below 15s once the batchable problem lands. Bumped to
+    # 20s here because the current branch warms `_solve_loop_fn` inside `initialize()`,
+    # which adds ~1-3s of XLA compile work to `timing_init` on slower CI hosts
+    # (Ubuntu Py 3.11-3.14 ran 15.2-17.3s on PR #514).
+    assert problem.timing_init < 20.0, (
+        f"Initialization took {problem.timing_init:.2f}s (expected < 20s)"
     )
     assert problem.timing_solve < solve_budget, (
         f"Solve took {problem.timing_solve:.2f}s (expected < {solve_budget}s)"
