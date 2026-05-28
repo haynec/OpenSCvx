@@ -4,9 +4,9 @@
 Python-loop driver — real-time prints, wall-clock `time_limit`, `continuous`
 mode, populated per-iteration history. `solve_jax()` is its JAX-pure
 sibling: it drives the same fused `iteration_fn` body inside a
-`lax.while_loop` and returns an
-[`OptimizationResults`](../../openscvx/algorithms/optimization_results.py)
-pytree, so it composes with `jax.vmap`, `jax.jit`, and `jax.grad`.
+`lax.while_loop` and returns an `OptimizationResults`
+(`openscvx/algorithms/optimization_results.py`) pytree, so it composes with
+`jax.vmap`, `jax.jit`, and `jax.grad`.
 
 ```python
 problem = ox.Problem(..., solver={"backend": "qpax"})
@@ -27,8 +27,7 @@ batched = jax.vmap(problem.solve_jax, in_axes=(0, 0, None))(
 fast_solve = jax.jit(problem.solve_jax)
 ```
 
-A worked example lives at
-[`examples/abstract/brachistochrone_batched.py`](../../examples/abstract/brachistochrone_batched.py)
+A worked example lives at `examples/abstract/brachistochrone_batched.py`
 — four brachistochrone problems with shifted starting x-coordinates,
 solved in parallel via `jax.vmap(problem.solve_jax)`.
 
@@ -52,9 +51,8 @@ discussion.
 
 ## What `solve_jax()` returns
 
-`solve_jax()` returns the same
-[`OptimizationResults`](../../openscvx/algorithms/optimization_results.py)
-type as `solve()`, but built via
+`solve_jax()` returns the same `OptimizationResults` type as `solve()`,
+but built via
 `OptimizationResults.from_final_state(state, problem=...)` instead of
 `from_history(history, final_state, ...)`. The differences:
 
@@ -100,9 +98,9 @@ multi-argument gradient uses `jax.grad(..., argnums=(0, 1))`.
 
 ### CVXPy under `vmap` is sequential
 
-The CVXPy backend's
-[`iteration_callback`](../../openscvx/solvers/cvxpy_ptr_solver.py) host-calls
-CVXPy through `jax.pure_callback` with `vmap_method="sequential"`. Host
+The CVXPy backend's `iteration_callback`
+(`openscvx/solvers/cvxpy_ptr_solver.py`) host-calls CVXPy through
+`jax.pure_callback` with `vmap_method="sequential"`. Host
 CVXPy is not thread-safe, so a `jax.vmap(problem.solve_jax)` over the
 CVXPy backend runs `B` sequential CVXPy solves. The QPAX and Moreau
 backends are pure JAX end-to-end and run in parallel under vmap.
