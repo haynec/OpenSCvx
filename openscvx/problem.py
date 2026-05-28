@@ -877,16 +877,12 @@ class Problem:
         # cost. A single concrete call populates ``jax.jit``'s shape-keyed cache;
         # subsequent bare calls hit it (and a future vmap retraces to batched
         # shapes the first time, same as if no warmup had happened).
+        # The ``_solve_loop_fn`` that backs :meth:`solve_jax` warms lazily on
+        # first call (see :meth:`_get_or_build_solve_loop`) — pre-warming it
+        # here would tax ``.solve()``-only users with ~1-3s of XLA compile work
+        # they never benefit from.
         warmup_state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
         jax.block_until_ready(self._iteration_fn(warmup_state, self._parameters))
-
-        # Build + warm the ``lax.while_loop`` closure that backs
-        # :meth:`solve_jax`. AOT via ``.lower().compile()`` would return an
-        # XLA executable that isn't vmap-traceable; a real-call warmup
-        # populates ``jax.jit``'s standard shape-keyed cache, which vmap
-        # retraces from on first use.
-        solve_loop = self._get_or_build_solve_loop(None)
-        jax.block_until_ready(solve_loop(warmup_state, self._parameters))
         print("✓ SCvx Subproblem Solver initialized")
 
         # Get columns from algorithm (now that autotuner is set) and start print thread
@@ -1130,8 +1126,15 @@ class Problem:
         thresholds are problem constants). Cache the closure on
         ``self._solve_loop_fn`` keyed on ``k_max`` and rebuild only when the
         caller supplies a non-default ``max_iters``. The closure is wrapped
-        in :func:`jax.jit` so :meth:`solve_jax` shares its compile cache
-        with the warmup call in :meth:`initialize`.
+        in :func:`jax.jit`, so the first :meth:`solve_jax` call pays the XLA
+        compile cost (~1-3s for brachistochrone-sized problems) and
+        subsequent calls hit ``jax.jit``'s shape-keyed cache. Users with a
+        latency-sensitive first call (MPC inner loops) can prime the cache
+        by running a throwaway ``problem.solve_jax()`` before their timed
+        window. AOT via ``.lower().compile()`` is not used: it returns a
+        ``Compiled`` XLA executable that isn't ``vmap``-traceable, whereas a
+        real-call warmup populates ``jax.jit``'s standard cache which vmap
+        retraces from on first use.
         """
         k_max = max_iters if max_iters is not None else self._algorithm.k_max
         if self._solve_loop_fn is None or self._solve_loop_k_max != k_max:
