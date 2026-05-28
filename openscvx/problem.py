@@ -1159,9 +1159,9 @@ class Problem:
     ) -> OptimizationResults:
         """Run the SCP algorithm — JAX-pure.
 
-        Composes with ``jax.vmap``, ``jax.jit``, and ``jax.grad``. Drives
-        the fused ``iteration_fn`` inside a ``lax.while_loop`` rather than
-        the Python ``while`` loop that :meth:`solve` uses. Returns an
+        Composes with ``jax.vmap`` and ``jax.jit``. Drives the fused
+        ``iteration_fn`` inside a ``lax.while_loop`` rather than the Python
+        ``while`` loop that :meth:`solve` uses. Returns an
         :class:`OptimizationResults` pytree built by
         :meth:`OptimizationResults.from_final_state` — per-iteration history
         (``X``/``U`` lists past the final iterate, ``*_history`` fields,
@@ -1170,23 +1170,9 @@ class Problem:
         ``time_limit``, ``continuous`` mode, or populated history, use
         :meth:`solve`.
 
-        Caveats:
-
-        * **CVXPy backend.** :meth:`~openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver.iteration_callback`
-          host-calls CVXPy through :func:`jax.pure_callback` with
-          ``vmap_method="sequential"`` — host CVXPy is not thread-safe, so a
-          ``jax.vmap(problem.solve_jax)`` over the CVXPy backend runs ``B``
-          sequential CVXPy solves. The QPAX and Moreau backends run in
-          parallel under vmap (no host callback).
-        * **Moreau warm-start.** :class:`~openscvx.solvers.moreau_ptr_solver.MoreauPTRSolver`'s
-          ``_warm_start`` carry is host-side mutable state that ``lax.while_loop``
-          can't thread, so the JAX-pure path cold-starts the inner Moreau
-          solve every iteration. :meth:`solve` continues to warm-start.
-        * **``jax.grad`` is best-effort, untested.** The QPAX backend's
-          ``solve_qp`` is not differentiable (its convergence flag costs
-          reverse-mode autodiff); the CVXPy backend's ``pure_callback`` is
-          non-differentiable by default. End-to-end gradient validation is
-          a follow-up.
+        With the CVXPy backend, ``jax.vmap(problem.solve_jax)`` runs ``B``
+        sequential CVXPy solves (host CVXPy is not thread-safe); the QPAX
+        and Moreau backends run in parallel under vmap.
 
         Args:
             x_initial: Initial-state boundary pin, shape ``(n_states,)``.
