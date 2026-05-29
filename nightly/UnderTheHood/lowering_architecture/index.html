@@ -18,6 +18,8 @@
         <link rel="prev" href="../vectorization_and_vmapping/">
       
       
+        <link rel="next" href="../batching_jit_grad/">
+      
       
         
       
@@ -1018,6 +1020,8 @@
       
         
       
+        
+      
     
     
     
@@ -1080,6 +1084,34 @@
     
   
     Brachistochrone
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Examples/abstract/brachistochrone_batched/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Brachistochrone Batched
   
 
     
@@ -9093,6 +9125,8 @@
       
         
       
+        
+      
     
     
     
@@ -9401,6 +9435,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../batching_jit_grad/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Batching, JIT, and Grad with Problem.solve_jax()
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -9857,8 +9919,13 @@ JAX export, used only by <code>post_process()</code> — so a compiled problem h
 <code>iteration_fn</code> plus one propagation export</strong>, not three discretization /
 propagation exports stitched together in Python. Because <code>iteration_fn</code> is a
 registered pytree in and out, it also composes with <code>jax.jit</code>; <code>make_solve_loop</code>
-wraps it in <code>lax.while_loop</code> as the primitive for a future fully-JAX-driven
-solve.</p>
+wraps it in <code>lax.while_loop</code> to drive the <strong>JAX-pure</strong> <code>Problem.solve_jax()</code>
+entry point, which composes with <code>jax.vmap</code>, <code>jax.jit</code>, and <code>jax.grad</code> (see
+<code>docs/UnderTheHood/batching_jit_grad.md</code>). The familiar
+<code>Problem.solve()</code> keeps its Python-loop shape — real-time prints, wall-clock
+<code>time_limit</code>, populated per-iteration history — and is the right entry
+point for interactive use. <code>solve_jax()</code> is the right entry point for
+batched / JIT'd / differentiable workflows.</p>
 <p>Picking a backend at construction time:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">openscvx</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">ox</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
@@ -9937,6 +10004,22 @@ many problems but caps the QP's conditioning.</p>
             </div>
           </a>
         
+        
+          
+          <a href="../batching_jit_grad/" class="md-footer__link md-footer__link--next" aria-label="Next: Batching, JIT, and Grad with Problem.solve_jax()">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Batching, JIT, and Grad with Problem.solve_jax()
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
         
       </nav>
     
