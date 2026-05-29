@@ -1,18 +1,55 @@
 import numpy as np
 import plotly.graph_objects as go
+from pathlib import Path
 from plotly.subplots import make_subplots
 
 from openscvx.algorithms import OptimizationResults
 
 from .plotting import _get_var
+from .publication import (
+    PUBLICATION_LEGEND_EXTRA_W,
+    PlotStyle,
+    VarSpec,
+    apply_publication_plotly_layout,
+    expand_var_components,
+    latex_component_label,
+    parse_var_spec,
+    save_scp_iterations_pdf,
+    wrap_publication_figure,
+)
+
+
+def _expand_scp_variables(
+    result: OptimizationResults,
+    specs: list[VarSpec] | None,
+    variables: list,
+) -> list[dict]:
+    """Expand variable specs into SCP iteration panel descriptors."""
+    components = expand_var_components(result, specs, variables, include_private=False)
+    expanded = []
+    for display_name, var_name, comp in components:
+        var = _get_var(result, var_name, variables)
+        s = var._slice
+        start = s.start if isinstance(s, slice) else s
+        expanded.append(
+            {
+                "name": display_name,
+                "idx": start + comp,
+                "parent": var_name,
+                "comp": comp,
+            }
+        )
+    return expanded
 
 
 def plot_scp_iterations(
     result: OptimizationResults,
-    state_names: list[str] | None = None,
-    control_names: list[str] | None = None,
+    state_names: list[VarSpec] | None = None,
+    control_names: list[VarSpec] | None = None,
     cmap_name: str = "viridis",
     show_propagation: bool = True,
+    style: PlotStyle = "dark",
+    pdf_path: str | Path | None = None,
 ) -> go.Figure:
     """Plot all SCP iterations overlaid with colormap-based coloring.
 
@@ -23,16 +60,26 @@ def plot_scp_iterations(
     Args:
         result: Optimization results containing iteration history
         state_names: Optional list of state names to include. If None, plots all states.
+            For multidimensional states, pass a single component with
+            ``("position", 0)``, ``"position:0"``, or ``"position[0]"``.
         control_names: Optional list of control names to include. If None, plots all controls.
+            Component selection uses the same syntax as ``state_names``.
         cmap_name: Matplotlib colormap name (default: "viridis")
         show_propagation: If True, show multi-shot propagation lines (default: True)
+        style: ``"dark"`` for the default Plotly theme, or ``"publication"`` for
+            a white theme with Latin Modern fonts, LaTeX labels, and automatic
+            PDF export.
+        pdf_path: Output path for the PDF when ``style="publication"``. Defaults
+            to ``figures/scp_iterations.pdf``.
 
     Returns:
-        Plotly figure with all iterations overlaid
+        Plotly figure, or a :class:`~openscvx.plotting.publication.PublicationFigure`
+        wrapper when ``style="publication"``.
 
     Example:
         >>> results = problem.solve()
         >>> plot_scp_iterations(results, ["position", "velocity"]).show()
+        >>> plot_scp_iterations(results, ["position:0"], style="publication").show()
     """
     import matplotlib.pyplot as plt
 
@@ -66,58 +113,49 @@ def plot_scp_iterations(
         n_iterations = min(n_iterations, len(X_prop_history))
 
     # Filter states and controls (exclude ctcs_aug and time)
-    states = [
+    all_states = [
         s for s in result._states if "ctcs_aug" not in s.name.lower() and s.name.lower() != "time"
     ]
-    controls = list(result._controls) if result._controls else []
+    all_controls = list(result._controls) if result._controls else []
 
-    state_filter = set(state_names) if state_names else None
-    control_filter = set(control_names) if control_names else None
+    plot_states = state_names is not None or control_names is None
+    plot_controls = control_names is not None or state_names is None
+    if state_names is not None and control_names is None:
+        plot_controls = False
+    if control_names is not None and state_names is None:
+        plot_states = False
 
-    if state_filter and control_filter is None:
-        controls = []
-    if control_filter and state_filter is None:
-        states = []
-    if state_filter:
-        states = [s for s in states if s.name in state_filter]
-        if not states:
-            available = {s.name for s in result._states if "ctcs_aug" not in s.name.lower()}
-            raise ValueError(
-                f"No states matched filter {state_names}. Available: {sorted(available)}"
-            )
-    if control_filter:
-        controls = [c for c in controls if c.name in control_filter]
-        if not controls:
-            available = {c.name for c in result._controls}
-            raise ValueError(
-                f"No controls matched filter {control_names}. Available: {sorted(available)}"
-            )
+    expanded_states: list[dict] = []
+    expanded_controls: list[dict] = []
 
-    if not states and not controls:
+    if plot_states:
+        state_specs = state_names if state_names is not None else None
+        if state_specs is not None:
+            available = {s.name for s in all_states}
+            for spec in state_specs:
+                name, _ = parse_var_spec(spec)
+                if name not in available:
+                    raise ValueError(
+                        f"No states matched filter {state_names}. Available: {sorted(available)}"
+                    )
+        expanded_states = _expand_scp_variables(result, state_specs, all_states)
+
+    if plot_controls:
+        control_specs = control_names if control_names is not None else None
+        if control_specs is not None:
+            available = {c.name for c in all_controls}
+            for spec in control_specs:
+                name, _ = parse_var_spec(spec)
+                if name not in available:
+                    raise ValueError(
+                        f"No controls matched filter {control_names}. Available: {sorted(available)}"
+                    )
+        expanded_controls = _expand_scp_variables(result, control_specs, all_controls)
+
+    if not expanded_states and not expanded_controls:
         raise ValueError("No states or controls to plot")
 
-    # Expand multi-dimensional variables to individual components
-    def expand_variables(variables):
-        expanded = []
-        for var in variables:
-            s = var._slice
-            start = s.start if isinstance(s, slice) else s
-            stop = s.stop if isinstance(s, slice) else start + 1
-            n_comp = (stop or start + 1) - (start or 0)
-
-            for i in range(n_comp):
-                expanded.append(
-                    {
-                        "name": f"{var.name}_{i}" if n_comp > 1 else var.name,
-                        "idx": start + i,
-                        "parent": var.name,
-                        "comp": i,
-                    }
-                )
-        return expanded
-
-    expanded_states = expand_variables(states)
-    expanded_controls = expand_variables(controls)
+    publication = style == "publication"
 
     # Grid layout
     n_states = len(expanded_states)
@@ -129,7 +167,11 @@ def plot_scp_iterations(
     total_rows = n_state_rows + n_control_rows
     max_cols = max(n_state_cols, n_control_cols)
 
-    subplot_titles = [s["name"] for s in expanded_states] + [c["name"] for c in expanded_controls]
+    if publication:
+        subplot_titles = [""] * (len(expanded_states) + len(expanded_controls))
+    else:
+        subplot_titles = [s["name"] for s in expanded_states] + [c["name"] for c in expanded_controls]
+
     fig = make_subplots(
         rows=total_rows,
         cols=max_cols,
@@ -277,24 +319,92 @@ def plot_scp_iterations(
                 )
 
     # Layout
-    fig.update_layout(
-        title_text="SCP Iterations",
-        template="plotly_dark",
-        showlegend=True,
-        legend={
-            "title": "Iterations",
-            "yanchor": "top",
-            "y": 0.99,
-            "xanchor": "left",
-            "x": 1.02,
-            "bgcolor": "rgba(0, 0, 0, 0.5)",
-            "itemclick": "toggle",
-            "itemdoubleclick": "toggleothers",
-        },
-    )
+    if publication:
+        apply_publication_plotly_layout(
+            fig,
+            n_rows=total_rows,
+            n_cols=max_cols,
+            extra_legend_width=PUBLICATION_LEGEND_EXTRA_W,
+        )
+        fig.update_layout(
+            showlegend=True,
+            legend={
+                "title": "Iterations",
+                "yanchor": "top",
+                "y": 0.99,
+                "xanchor": "left",
+                "x": 1.02,
+                "bgcolor": "rgba(255, 255, 255, 0.8)",
+                "itemclick": "toggle",
+                "itemdoubleclick": "toggleothers",
+            },
+        )
 
+        for state_idx, state in enumerate(expanded_states):
+            row = (state_idx // n_state_cols) + 1
+            col = (state_idx % n_state_cols) + 1
+            parent = _get_var(result, state["parent"], result._states)
+            dim = (parent._slice.stop or 1) - (parent._slice.start or 0)
+            fig.update_yaxes(
+                title_text=latex_component_label(state["parent"], state["comp"], dim=dim),
+                row=row,
+                col=col,
+            )
+
+        for control_idx, control in enumerate(expanded_controls):
+            row = n_state_rows + (control_idx // n_control_cols) + 1
+            col = (control_idx % n_control_cols) + 1
+            parent = _get_var(result, control["parent"], result._controls)
+            dim = (parent._slice.stop or 1) - (parent._slice.start or 0)
+            fig.update_yaxes(
+                title_text=latex_component_label(control["parent"], control["comp"], dim=dim),
+                row=row,
+                col=col,
+            )
+    else:
+        fig.update_layout(
+            title_text="SCP Iterations",
+            template="plotly_dark",
+            showlegend=True,
+            legend={
+                "title": "Iterations",
+                "yanchor": "top",
+                "y": 0.99,
+                "xanchor": "left",
+                "x": 1.02,
+                "bgcolor": "rgba(0, 0, 0, 0.5)",
+                "itemclick": "toggle",
+                "itemdoubleclick": "toggleothers",
+            },
+        )
+
+    x_label = r"$t\,\mathrm{(s)}$" if publication else "Time (s)"
     for col_idx in range(1, max_cols + 1):
-        fig.update_xaxes(title_text="Time (s)", row=total_rows, col=col_idx)
+        fig.update_xaxes(title_text=x_label, row=total_rows, col=col_idx)
+
+    if publication:
+        def _save(path: str | Path) -> None:
+            save_scp_iterations_pdf(
+                result,
+                expanded_states=expanded_states,
+                expanded_controls=expanded_controls,
+                n_state_cols=n_state_cols,
+                n_control_cols=n_control_cols,
+                n_state_rows=n_state_rows,
+                n_control_rows=n_control_rows,
+                n_iterations=n_iterations,
+                time_slice=time_slice,
+                X_prop_history=X_prop_history if show_propagation else None,
+                path=path,
+                cmap_name=cmap_name,
+            )
+
+        return wrap_publication_figure(
+            fig,
+            pdf_path=pdf_path,
+            default_pdf_name="scp_iterations.pdf",
+            save_fn=_save,
+        )
 
     return fig
 

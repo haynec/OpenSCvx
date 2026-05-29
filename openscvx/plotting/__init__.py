@@ -65,6 +65,7 @@ from .plotting import (
     plot_vector_norm,
     plot_virtual_control_heatmap,
 )
+from .publication import PublicationFigure, PlotStyle, VarSpec
 from .scp_iteration import plot_scp_convergence_histories, plot_scp_iterations
 
 __all__ = [
@@ -79,6 +80,9 @@ __all__ = [
     "plot_virtual_control_heatmap",
     "plot_scp_iterations",
     "plot_scp_convergence_histories",
+    "PublicationFigure",
+    "PlotStyle",
+    "VarSpec",
     # 3D visualization submodule (viser)
     "viser",
 ]
