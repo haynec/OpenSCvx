@@ -188,8 +188,13 @@ JAX export, used only by `post_process()` — so a compiled problem holds **one
 `iteration_fn` plus one propagation export**, not three discretization /
 propagation exports stitched together in Python. Because `iteration_fn` is a
 registered pytree in and out, it also composes with `jax.jit`; `make_solve_loop`
-wraps it in `lax.while_loop` as the primitive for a future fully-JAX-driven
-solve.
+wraps it in `lax.while_loop` to drive the **JAX-pure** `Problem.solve_jax()`
+entry point, which composes with `jax.vmap`, `jax.jit`, and `jax.grad` (see
+`docs/UnderTheHood/batching_jit_grad.md`). The familiar
+`Problem.solve()` keeps its Python-loop shape — real-time prints, wall-clock
+`time_limit`, populated per-iteration history — and is the right entry
+point for interactive use. `solve_jax()` is the right entry point for
+batched / JIT'd / differentiable workflows.
 
 Picking a backend at construction time:
 

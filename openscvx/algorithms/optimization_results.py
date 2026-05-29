@@ -1,10 +1,17 @@
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
+if TYPE_CHECKING:
+    from openscvx.algorithms.base import AlgorithmHistory, AlgorithmState
+    from openscvx.problem import Problem
 
+
+@jax.tree_util.register_pytree_node_class
 @dataclass
 class OptimizationResults:
     """
@@ -44,6 +51,30 @@ class OptimizationResults:
             Added by propagate_trajectory_results.
         plotting_data (dict[str, Any]): Flexible storage for plotting and application data.
 
+    !!! note "JAX pytree registration"
+        ``OptimizationResults`` is a registered JAX pytree, so the output of
+        :meth:`~openscvx.problem.Problem.solve_jax` composes with
+        ``jax.vmap`` / ``jax.jit`` / ``jax.grad``. The pytree *children* are
+        ``converged``, ``t_final``, ``nodes``, ``trajectory``, ``X``, ``U``,
+        and every ``*_history`` field — the data the user actually consumes.
+        Post-process fields (``t_full``, ``x_full``, ``u_full``, ``cost``,
+        ``ctcs_violation``), ``plotting_data``, and the internal ``_states`` /
+        ``_controls`` metadata are stashed in the treedef's *aux* instead, so
+        a batched ``solve_jax`` doesn't force callers to handle ``None``
+        leaves and ``post_process()`` outputs stay outside the vmap surface
+        (post-process per element after the batched solve).
+
+        The two construction paths produce different histories:
+
+        * :meth:`from_history` (``solve()``) populates the per-iteration
+          ``X`` / ``U`` / ``*_history`` lists from the Python loop's
+          :class:`~openscvx.algorithms.base.AlgorithmHistory`.
+        * :meth:`from_final_state` (``solve_jax()``) wraps only the final
+          iterate: ``X = [state.x]`` and ``U = [state.u]`` (single-element
+          lists so ``result.x`` / ``result.u`` continue to return the final
+          iterate), and every ``*_history`` field is empty — per-iteration
+          history requires Python-side list growth that can't run inside
+          ``lax.while_loop``.
 
     !!! note "For Developers"
         The ``metadata={"npz": ...}`` parameter on each field below is a built-in feature of
@@ -65,6 +96,30 @@ class OptimizationResults:
     _DICT = "dict"
     _OPT_ARRAY = "optional_array"
     _OPT_SCALAR = "optional_scalar"
+
+    # Pytree children: fields whose contents flow through ``jax.vmap`` /
+    # ``jax.jit`` / ``jax.grad``. Excludes ``_states`` / ``_controls`` (Python
+    # symbolic metadata), ``plotting_data`` (user scratch), and the
+    # post-process fields (``None`` until ``post_process()`` runs and not part
+    # of the ``solve_jax`` vmap surface — see the class docstring).
+    _PYTREE_CHILDREN = (
+        "converged",
+        "t_final",
+        "nodes",
+        "trajectory",
+        "X",
+        "U",
+        "discretization_history",
+        "J_tr_history",
+        "J_vb_history",
+        "J_vc_history",
+        "TR_history",
+        "VC_history",
+        "lam_prox_history",
+        "actual_reduction_history",
+        "pred_reduction_history",
+        "acceptance_ratio_history",
+    )
 
     # Core optimization results
     converged: bool = field(metadata={"npz": "scalar"})
@@ -137,6 +192,183 @@ class OptimizationResults:
     def __post_init__(self):
         """Initialize the results object."""
         pass
+
+    # ------------------------------------------------------------------
+    # JAX pytree registration
+    # ------------------------------------------------------------------
+
+    def tree_flatten(self):
+        """Split into JAX-traceable children and host-side aux.
+
+        See :attr:`_PYTREE_CHILDREN` for the children list. Aux carries the
+        symbolic metadata, scratch dict, and post-process fields verbatim so
+        the round-trip ``tree_unflatten(*tree_flatten(self))`` preserves the
+        instance.
+        """
+        children = tuple(getattr(self, name) for name in self._PYTREE_CHILDREN)
+        aux = (
+            self._states,
+            self._controls,
+            self.t_full,
+            self.x_full,
+            self.u_full,
+            self.cost,
+            self.ctcs_violation,
+            self.plotting_data,
+        )
+        return children, aux
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        kwargs = dict(zip(cls._PYTREE_CHILDREN, children))
+        (
+            _states,
+            _controls,
+            t_full,
+            x_full,
+            u_full,
+            cost,
+            ctcs_violation,
+            plotting_data,
+        ) = aux
+        return cls(
+            **kwargs,
+            _states=_states,
+            _controls=_controls,
+            t_full=t_full,
+            x_full=x_full,
+            u_full=u_full,
+            cost=cost,
+            ctcs_violation=ctcs_violation,
+            plotting_data=plotting_data,
+        )
+
+    # ------------------------------------------------------------------
+    # Constructors
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_final_state(
+        cls,
+        state: "AlgorithmState",
+        *,
+        problem: "Problem",
+    ) -> "OptimizationResults":
+        """JAX-pure construction from the final SCP iterate.
+
+        Used by :meth:`~openscvx.problem.Problem.solve_jax`. Every leaf is a
+        ``jnp.ndarray`` derived from ``state`` via static slicing, so the
+        result composes with ``jax.vmap`` / ``jax.jit`` / ``jax.grad`` over a
+        batched ``state``. ``X = [state.x]`` and ``U = [state.u]`` are
+        single-element lists so ``result.x`` / ``result.u`` continue to
+        return the final iterate; every ``*_history`` field is empty — the
+        Python-loop ``.solve()`` is the path that populates them.
+        """
+        settings = problem.settings
+        symbolic = problem.symbolic
+        algorithm = problem._algorithm
+
+        has_impulsive_controls = any(
+            control.parameterization == "impulsive" for control in symbolic.controls
+        )
+
+        nodes_dict: dict[str, jnp.ndarray] = {}
+        for sym_state in symbolic.states:
+            state_nodes = state.x[..., sym_state._slice]
+            if has_impulsive_controls:
+                bc = jnp.asarray(settings.sim.x.initial[sym_state._slice])
+                state_nodes = state_nodes.at[..., 0, :].set(bc)
+            nodes_dict[sym_state.name] = state_nodes
+
+        for control in symbolic.controls:
+            nodes_dict[control.name] = state.u[..., control._slice]
+
+        # Match the host-path ``t_final`` shape: a 1-vector along the time
+        # slice of the last node (vmap'd to ``(B, 1)``).
+        t_final = state.x[..., -1, :][..., settings.sim.time_slice]
+
+        converged = (
+            (state.J_tr < algorithm.ep_tr)
+            & (state.J_vb < algorithm.ep_vb)
+            & (state.J_vc < algorithm.ep_vc)
+        )
+
+        return cls(
+            converged=converged,
+            t_final=t_final,
+            nodes=nodes_dict,
+            trajectory={},
+            _states=symbolic.states_prop,
+            _controls=symbolic.controls,
+            X=[state.x],
+            U=[state.u],
+            discretization_history=[],
+            J_tr_history=[],
+            J_vb_history=[],
+            J_vc_history=[],
+            TR_history=[],
+            VC_history=[],
+            lam_prox_history=[],
+            actual_reduction_history=[],
+            pred_reduction_history=[],
+            acceptance_ratio_history=[],
+        )
+
+    @classmethod
+    def from_history(
+        cls,
+        history: "AlgorithmHistory",
+        final_state: "AlgorithmState",
+        *,
+        problem: "Problem",
+        converged: bool,
+    ) -> "OptimizationResults":
+        """Host-side construction from the Python-loop iteration history.
+
+        Used by :meth:`~openscvx.problem.Problem.solve` to package the full
+        per-iteration log produced by the Python ``while`` loop. Symmetric
+        with :meth:`from_final_state` — same return type, populated history.
+        """
+        settings = problem.settings
+        symbolic = problem.symbolic
+
+        has_impulsive_controls = any(
+            control.parameterization == "impulsive" for control in symbolic.controls
+        )
+
+        x_arr = np.asarray(final_state.x)
+        u_arr = np.asarray(final_state.u)
+
+        nodes_dict: dict[str, np.ndarray] = {}
+        for sym_state in symbolic.states:
+            state_nodes = x_arr[:, sym_state._slice].copy()
+            if has_impulsive_controls:
+                state_nodes[0] = settings.sim.x.initial[sym_state._slice]
+            nodes_dict[sym_state.name] = state_nodes
+
+        for control in symbolic.controls:
+            nodes_dict[control.name] = u_arr[:, control._slice]
+
+        return cls(
+            converged=converged,
+            t_final=x_arr[:, settings.sim.time_slice][-1],
+            nodes=nodes_dict,
+            trajectory={},
+            _states=symbolic.states_prop,
+            _controls=symbolic.controls,
+            X=history.X,
+            U=history.U,
+            discretization_history=history.V_history,
+            J_tr_history=float(final_state.J_tr),
+            J_vb_history=float(final_state.J_vb),
+            J_vc_history=float(final_state.J_vc),
+            TR_history=history.TR,
+            VC_history=history.VC,
+            lam_prox_history=history.lam_prox.copy(),
+            actual_reduction_history=history.actual_reduction.copy(),
+            pred_reduction_history=history.pred_reduction.copy(),
+            acceptance_ratio_history=history.acceptance_ratio.copy(),
+        )
 
     def update_plotting_data(self, **kwargs: Any) -> None:
         """

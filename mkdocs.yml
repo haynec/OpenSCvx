@@ -198,3 +198,4 @@ nav:
     - Under the Hood:
       - 'UnderTheHood/vectorization_and_vmapping.md'
       - 'UnderTheHood/lowering_architecture.md'
+      - 'UnderTheHood/batching_jit_grad.md'

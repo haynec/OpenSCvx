@@ -21,9 +21,10 @@ import time
 from typing import Dict, List, Optional, Union
 
 import jax
-import numpy as np
 
 os.environ["EQX_ON_ERROR"] = "nan"
+
+import jax.numpy as jnp
 
 from openscvx.algorithms import (
     Algorithm,
@@ -32,7 +33,7 @@ from openscvx.algorithms import (
     OptimizationResults,
     PenalizedTrustRegionConfig,
 )
-from openscvx.algorithms.scvx.iteration import make_scp_iteration
+from openscvx.algorithms.scvx.iteration import make_scp_iteration, make_solve_loop
 from openscvx.config import (
     Config,
     DevConfig,
@@ -369,6 +370,12 @@ class Problem:
         # Fused JAX-pure SCP iteration body (built in initialize()).
         self._iteration_fn: callable = None
 
+        # Closure cache for the ``lax.while_loop`` wrapper that backs
+        # :meth:`solve_jax`. Keyed on ``k_max`` — rebuilt only when the caller
+        # supplies a non-default ``max_iters``.
+        self._solve_loop_fn: Optional[callable] = None
+        self._solve_loop_k_max: Optional[int] = None
+
         # Set up emitter & queue (thread started in initialize() after columns are known)
         if self.settings.dev.printing:
             self.print_queue = queue.Queue()
@@ -682,51 +689,11 @@ class Problem:
     ) -> OptimizationResults:
         """Format the current iterate + history as :class:`OptimizationResults`.
 
-        Args:
-            state: The final-iterate pytree.
-            history: The CPU-side per-iteration log.
-            converged: Whether the optimization converged.
+        Thin wrapper around :meth:`OptimizationResults.from_history` — kept
+        as a method so ``solve()`` / ``post_process()`` call sites read
+        naturally.
         """
-        # Build nodes dictionary with all states and controls
-        nodes_dict = {}
-        has_impulsive_controls = any(
-            control.parameterization == "impulsive" for control in self.symbolic.controls
-        )
-
-        x_arr = np.asarray(state.x)
-        u_arr = np.asarray(state.u)
-
-        # Add all states (user-defined and augmented)
-        for sym_state in self.symbolic.states:
-            state_nodes = x_arr[:, sym_state._slice].copy()
-            if has_impulsive_controls:
-                state_nodes[0] = self.settings.sim.x.initial[sym_state._slice]
-            nodes_dict[sym_state.name] = state_nodes
-
-        # Add all controls (user-defined and augmented)
-        for control in self.symbolic.controls:
-            nodes_dict[control.name] = u_arr[:, control._slice]
-
-        return OptimizationResults(
-            converged=converged,
-            t_final=x_arr[:, self.settings.sim.time_slice][-1],
-            nodes=nodes_dict,
-            trajectory={},  # Populated by post_process
-            _states=self.symbolic.states_prop,  # Use propagation states for trajectory dict
-            _controls=self.symbolic.controls,
-            X=history.X,
-            U=history.U,
-            discretization_history=history.V_history,
-            J_tr_history=float(state.J_tr),
-            J_vb_history=float(state.J_vb),
-            J_vc_history=float(state.J_vc),
-            TR_history=history.TR,
-            VC_history=history.VC,
-            lam_prox_history=history.lam_prox.copy(),
-            actual_reduction_history=history.actual_reduction.copy(),
-            pred_reduction_history=history.pred_reduction.copy(),
-            acceptance_ratio_history=history.acceptance_ratio.copy(),
-        )
+        return OptimizationResults.from_history(history, state, problem=self, converged=converged)
 
     def initialize(self):
         """Compile dynamics, constraints, and solvers; prepare for optimization.
@@ -884,6 +851,11 @@ class Problem:
         # iteration_callback), and folds the result through the autotuner — one
         # JIT'd call per SCP step in place of the old NumPy↔JAX stitching.
         print("Initializing the SCvx Subproblem Solver...")
+        # Drop any prior ``solve_jax`` closure — it captures the previous
+        # ``iteration_fn`` and would re-use stale traces if ``initialize()``
+        # is invoked twice.
+        self._solve_loop_fn = None
+        self._solve_loop_k_max = None
         self._iteration_fn = jax.jit(
             make_scp_iteration(
                 dis_continuous=discretization_solver,
@@ -905,6 +877,10 @@ class Problem:
         # cost. A single concrete call populates ``jax.jit``'s shape-keyed cache;
         # subsequent bare calls hit it (and a future vmap retraces to batched
         # shapes the first time, same as if no warmup had happened).
+        # The ``_solve_loop_fn`` that backs :meth:`solve_jax` warms lazily on
+        # first call (see :meth:`_get_or_build_solve_loop`) — pre-warming it
+        # here would tax ``.solve()``-only users with ~1-3s of XLA compile work
+        # they never benefit from.
         warmup_state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
         jax.block_until_ready(self._iteration_fn(warmup_state, self._parameters))
         print("✓ SCvx Subproblem Solver initialized")
@@ -1038,6 +1014,12 @@ class Problem:
     ) -> OptimizationResults:
         """Run the SCP algorithm until convergence or iteration limit.
 
+        Drives the fused ``iteration_fn`` body from a Python ``while``
+        loop — real-time prints, wall-clock ``time_limit``, ``continuous``
+        mode, and the populated per-iteration history live here. For
+        batched solves, ``jax.jit`` compilation across calls, or
+        ``jax.grad`` through the solver, use :meth:`solve_jax`.
+
         Args:
             max_iters: Maximum iterations (default: algorithm.k_max)
             time_limit: Wall-clock time limit in seconds. Overrides
@@ -1109,6 +1091,119 @@ class Problem:
             self._history,
             int(self._state.k) <= k_max and not timed_out,
         )
+
+    def _resolve_initial_state(
+        self,
+        x_initial: Optional[jnp.ndarray],
+        x_final: Optional[jnp.ndarray],
+    ) -> AlgorithmState:
+        """Build a fresh :class:`AlgorithmState` with user-supplied boundary pins.
+
+        The pins live on the pytree (``x_init_pin`` / ``x_term_pin``) so the
+        fused iteration body assembles the subproblem's initial / terminal
+        rows as a pure function of state. Under ``jax.vmap`` over
+        ``x_initial`` / ``x_final``, the pins batch per element — each batch
+        slot gets its own boundary condition without recompilation.
+
+        ``None`` falls back to the defaults from
+        :meth:`AlgorithmState.from_settings`. A user-supplied vector replaces
+        the corresponding pin in full; pass ``jnp.nan`` at non-pinned
+        entries to match the convention :meth:`from_settings` uses (the
+        subproblem only consumes the pin where the boundary type is
+        ``"Fix"``).
+        """
+        state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
+        if x_initial is not None:
+            state = state.replace(x_init_pin=jnp.asarray(x_initial, dtype=state.x_init_pin.dtype))
+        if x_final is not None:
+            state = state.replace(x_term_pin=jnp.asarray(x_final, dtype=state.x_term_pin.dtype))
+        return state
+
+    def _get_or_build_solve_loop(self, max_iters: Optional[int]) -> callable:
+        """Return the cached ``jax.jit``'d ``lax.while_loop`` wrapper.
+
+        :func:`make_solve_loop` is hashable on ``k_max`` (the convergence
+        thresholds are problem constants). Cache the closure on
+        ``self._solve_loop_fn`` keyed on ``k_max`` and rebuild only when the
+        caller supplies a non-default ``max_iters``. The closure is wrapped
+        in :func:`jax.jit`, so the first :meth:`solve_jax` call pays the XLA
+        compile cost (~1-3s for brachistochrone-sized problems) and
+        subsequent calls hit ``jax.jit``'s shape-keyed cache. Users with a
+        latency-sensitive first call (MPC inner loops) can prime the cache
+        by running a throwaway ``problem.solve_jax()`` before their timed
+        window. AOT via ``.lower().compile()`` is not used: it returns a
+        ``Compiled`` XLA executable that isn't ``vmap``-traceable, whereas a
+        real-call warmup populates ``jax.jit``'s standard cache which vmap
+        retraces from on first use.
+        """
+        k_max = max_iters if max_iters is not None else self._algorithm.k_max
+        if self._solve_loop_fn is None or self._solve_loop_k_max != k_max:
+            self._solve_loop_fn = jax.jit(
+                make_solve_loop(
+                    self._iteration_fn,
+                    self._algorithm.ep_tr,
+                    self._algorithm.ep_vb,
+                    self._algorithm.ep_vc,
+                    k_max,
+                )
+            )
+            self._solve_loop_k_max = k_max
+        return self._solve_loop_fn
+
+    def solve_jax(
+        self,
+        x_initial: Optional[jnp.ndarray] = None,
+        x_final: Optional[jnp.ndarray] = None,
+        parameters: Optional[dict] = None,
+        *,
+        max_iters: Optional[int] = None,
+    ) -> OptimizationResults:
+        """Run the SCP algorithm — JAX-pure.
+
+        Composes with ``jax.vmap`` and ``jax.jit``. Drives the fused
+        ``iteration_fn`` inside a ``lax.while_loop`` rather than the Python
+        ``while`` loop that :meth:`solve` uses. Returns an
+        :class:`OptimizationResults` pytree built by
+        :meth:`OptimizationResults.from_final_state` — per-iteration history
+        (``X``/``U`` lists past the final iterate, ``*_history`` fields,
+        ``discretization_history``) is empty under this path, because list
+        growth doesn't fit inside ``lax.while_loop``. For prints, wall-clock
+        ``time_limit``, ``continuous`` mode, or populated history, use
+        :meth:`solve`.
+
+        With the CVXPy backend, ``jax.vmap(problem.solve_jax)`` runs ``B``
+        sequential CVXPy solves (host CVXPy is not thread-safe); the QPAX
+        and Moreau backends run in parallel under vmap.
+
+        Args:
+            x_initial: Initial-state boundary pin, shape ``(n_states,)``.
+                Replaces ``state.x_init_pin``; pass ``jnp.nan`` at non-Fix
+                entries to match :meth:`AlgorithmState.from_settings`'
+                convention. ``None`` uses the default from settings.
+            x_final: Terminal-state boundary pin, shape ``(n_states,)``.
+                Same conventions as ``x_initial``.
+            parameters: Problem parameters dict for the current solve. Use
+                this rather than mutating ``self.parameters`` if the
+                parameters are traced. ``None`` reuses ``self._parameters``.
+            max_iters: SCP iteration cap. ``None`` uses ``algorithm.k_max``;
+                a different value rebuilds the cached ``lax.while_loop``
+                closure (one extra trace; subsequent calls at the same
+                ``max_iters`` hit the cache).
+
+        Returns:
+            :class:`OptimizationResults` pytree with the final iterate and
+            empty histories.
+        """
+        if self._iteration_fn is None:
+            raise ValueError(
+                "Problem has not been initialized. Call initialize() before solve_jax()"
+            )
+
+        initial_state = self._resolve_initial_state(x_initial, x_final)
+        params = parameters if parameters is not None else self._parameters
+        solve_fn = self._get_or_build_solve_loop(max_iters)
+        final_state = solve_fn(initial_state, params)
+        return OptimizationResults.from_final_state(final_state, problem=self)
 
     def post_process(self) -> OptimizationResults:
         """Propagate solution through full nonlinear dynamics for high-fidelity trajectory.

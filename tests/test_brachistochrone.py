@@ -130,7 +130,7 @@ def _assert_brachistochrone_accuracy(comparison, problem, result, solve_budget=1
 
     # Check timing - these are generous limits for a simple problem like brachistochrone
     assert problem.timing_init < 15.0, (
-        f"Initialization took {problem.timing_init:.2f}s (expected < 12s)"
+        f"Initialization took {problem.timing_init:.2f}s (expected < 15s)"
     )
     assert problem.timing_solve < solve_budget, (
         f"Solve took {problem.timing_solve:.2f}s (expected < {solve_budget}s)"

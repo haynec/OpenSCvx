@@ -274,8 +274,16 @@ class MoreauPTRSolver(PTRSolver):
     :meth:`initialize` and calls it as
     ``(P_data, A_data, q, b) -> (JaxSolution, JaxSolveInfo)`` so the backend
     composes with ``jax.jit`` and ``jax.vmap``. The functional API does not
-    expose a warm-start hook, so the JAX-pure path is cold-start every
-    iteration; the NumPy :meth:`solve` path keeps the OO warm-start.
+    expose a warm-start hook, so every call is a cold start: both
+    :meth:`~openscvx.problem.Problem.solve` and
+    :meth:`~openscvx.problem.Problem.solve_jax` drive
+    ``iteration_callback`` for the SCP body, so neither thread Moreau's
+    ``_warm_start`` carry across SCP iterations. The OO warm-start path
+    still mutates ``_warm_start`` on each :meth:`solve` call (the legacy
+    NumPy entry point, no longer on the SCP hot path); restoring
+    warm-start to the SCP loop requires routing ``(x, z, s)`` through
+    :class:`AlgorithmState` as a real pytree carry — see the
+    Future Extensions in ``plans/jax-pure-solve.md``.
 
     Scope:
         Supported — state/control box, dynamics linearization (continuous
@@ -1255,7 +1263,12 @@ class MoreauPTRSolver(PTRSolver):
         path but does **not** accept a warm-start (see the 2026-05-17 Decision
         Log entry in ``plans/solver-iteration-callbacks.md``). Every call is a
         cold start; ``state`` is accepted only for cross-backend signature
-        uniformity.
+        uniformity. Both :meth:`~openscvx.problem.Problem.solve` and
+        :meth:`~openscvx.problem.Problem.solve_jax` route through this
+        callback for the SCP body, so the warm-start carry isn't threaded
+        on either path — threading it would require an
+        :class:`AlgorithmState.moreau_carry` field (future extension in
+        ``plans/jax-pure-solve.md``).
 
         The returned callable takes ``(state, data)``: ``state`` is the
         :class:`AlgorithmState` pytree, accepted for cross-backend signature
