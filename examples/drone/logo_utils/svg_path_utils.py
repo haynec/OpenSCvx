@@ -12,10 +12,19 @@ def print_svg_path_attributes(svg_file_path):
         print(f"Path {i}: {attr}")
 
 
-def extract_svg_path(svg_file_path, n_points=2000, flip_y=True, path_indices=None):
+def extract_svg_path(
+    svg_file_path,
+    n_points=2000,
+    flip_y=True,
+    path_indices=None,
+    preserve_aspect_ratio=False,
+):
     """
     Extract a continuous, high-resolution path from an SVG file using svgpathtools.
     Optionally, only use specific path indices.
+
+    When ``preserve_aspect_ratio`` is True, both axes share a uniform scale so wide
+    logos (e.g. wordmarks) are not squashed into a square bounding box.
     """
     paths, attributes, svg_attr = svg2paths2(svg_file_path)
     if path_indices is not None:
@@ -34,8 +43,18 @@ def extract_svg_path(svg_file_path, n_points=2000, flip_y=True, path_indices=Non
     min_y, max_y = np.min(all_points[:, 1]), np.max(all_points[:, 1])
     if flip_y:
         all_points[:, 1] = max_y - (all_points[:, 1] - min_y)
-    all_points[:, 0] = 20 * (all_points[:, 0] - min_x) / (max_x - min_x) - 10
-    all_points[:, 1] = 20 * (all_points[:, 1] - min_y) / (max_y - min_y) - 10
+    if preserve_aspect_ratio:
+        width = max_x - min_x
+        height = max_y - min_y
+        max_dim = max(width, height)
+        scale = 20.0 / max_dim
+        cx = 0.5 * (min_x + max_x)
+        cy = 0.5 * (min_y + max_y)
+        all_points[:, 0] = (all_points[:, 0] - cx) * scale
+        all_points[:, 1] = (all_points[:, 1] - cy) * scale
+    else:
+        all_points[:, 0] = 20 * (all_points[:, 0] - min_x) / (max_x - min_x) - 10
+        all_points[:, 1] = 20 * (all_points[:, 1] - min_y) / (max_y - min_y) - 10
     all_points = np.column_stack([all_points, np.full(len(all_points), 2.0)])
     idxs = np.linspace(0, len(all_points) - 1, n_points).astype(int)
     sampled_points = all_points[idxs]
@@ -50,5 +69,11 @@ def extract_svg_path(svg_file_path, n_points=2000, flip_y=True, path_indices=Non
     return path_function
 
 
-def get_svg_path_function(svg_file_path, path_indices=None):
-    return extract_svg_path(svg_file_path, n_points=2000, flip_y=True, path_indices=path_indices)
+def get_svg_path_function(svg_file_path, path_indices=None, preserve_aspect_ratio=False):
+    return extract_svg_path(
+        svg_file_path,
+        n_points=2000,
+        flip_y=True,
+        path_indices=path_indices,
+        preserve_aspect_ratio=preserve_aspect_ratio,
+    )

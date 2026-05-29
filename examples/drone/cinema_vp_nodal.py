@@ -1,10 +1,10 @@
-"""Cinematic viewpoint planning for aerial filming.
+"""Cinematic viewpoint planning for aerial filming with nodal constraints.
 
 This example demonstrates optimal trajectory planning for a quadrotor performing
 aerial cinematography with viewpoint constraints. The problem includes:
 
 - 6-DOF dynamics with fuel consumption tracking
-- _Continuous_ field-of-view (FOV) constraints to keep moving target in view
+- **Nodal** field-of-view (FOV) constraints to keep moving target in view
 - Sensor pointing constraints using camera cone geometry
 - Fuel-optimal trajectory generation
 - Attitude planning to maintain visual coverage
@@ -181,9 +181,9 @@ max_range_constraint = ox.linalg.Norm(kp_pose_symbolic - position) - max_range
 
 constraints.extend(
     [
-        ox.ctcs(vp_constraint <= 0.0),
-        ox.ctcs(min_range_constraint <= 0.0),
-        ox.ctcs(max_range_constraint <= 0.0),
+        vp_constraint <= 0.0,
+        min_range_constraint <= 0.0,
+        max_range_constraint <= 0.0,
     ]
 )
 

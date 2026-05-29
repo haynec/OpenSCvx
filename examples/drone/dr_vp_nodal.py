@@ -26,9 +26,9 @@ import openscvx as ox
 from examples.plotting_viser import (
     create_animated_plotting_server,
     create_scp_animated_plotting_server,
+    create_snapshot_plotting_server,
 )
 from openscvx import Problem
-from openscvx.plotting import plot_scp_convergence_histories
 from openscvx.utils import gen_vertices, rot
 
 n = 33  # Number of Nodes
@@ -72,8 +72,8 @@ torque.guess = np.zeros((n, 3))
 
 
 ### Sensor Params ###
-alpha_x = 4.0  # Angle for the x-axis of Sensor Cone
-alpha_y = 4.0  # Angle for the y-axis of Sensor Cone
+alpha_x = 6.0  # Angle for the x-axis of Sensor Cone
+alpha_y = 6.0  # Angle for the y-axis of Sensor Cone
 A_cone = np.diag(
     [
         1 / np.tan(np.pi / alpha_x),
@@ -250,8 +250,6 @@ if __name__ == "__main__":
 
     results.update_plotting_data(**plotting_dict)
 
-    plot_scp_convergence_histories(results).show()
-
     # Create both visualization servers (viser auto-assigns ports)
     traj_server = create_animated_plotting_server(
         results,
@@ -264,6 +262,11 @@ if __name__ == "__main__":
         results,
         attitude_stride=3,
         frame_duration_ms=200,
+    )
+    snapshot_server = create_snapshot_plotting_server(
+        results,
+        viewcone_scale=10.0,
+        initial_n_snapshots=5,
     )
 
     # Keep both servers running

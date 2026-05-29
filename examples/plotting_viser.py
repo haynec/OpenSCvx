@@ -109,6 +109,8 @@ def create_animated_plotting_server(
     trail_point_size: float = 0.15,
     show_grid: bool = True,
     scene_scale: float = 1.0,
+    dark_mode: bool = True,
+    background_color: tuple[int, int, int] | None = None,
     controls: str = "gui",
 ) -> viser.ViserServer | AnimatedServerHandle:
     """Create an animated trajectory visualization server.
@@ -168,6 +170,9 @@ def create_animated_plotting_server(
         show_grid: Whether to show the grid (default True)
         scene_scale: Divide all positions (and lengths) by this factor. Use >1 for
             large-scale trajectories (e.g., 100.0 for km-scale problems).
+        dark_mode: Whether to use the viser dark GUI theme (default True).
+        background_color: RGB canvas background. Defaults to black when
+            ``dark_mode`` is True and white when False.
         controls: ``"gui"`` (default) wires up play/pause/slider GUI and starts
             the wall-clock playback thread, returning the raw ``ViserServer``.
             ``"manual"`` skips the GUI/playback loop and instead returns an
@@ -213,12 +218,16 @@ def create_animated_plotting_server(
     get_kp_pose = results.get("get_kp_pose")
     total_time = results.get("total_time")
     relative_vector = results.get("relative_vector", False)
+    logo_trace_color = tuple(results.get("logo_trace_color", (0, 255, 255)))
 
     # Precompute colors
     colors = compute_velocity_colors(vel)
 
     # Create server
-    server = create_server(pos, show_grid=show_grid)
+    server = create_server(pos, dark_mode=dark_mode, show_grid=show_grid)
+    if background_color is None:
+        background_color = (0, 0, 0) if dark_mode else (255, 255, 255)
+    _set_scene_background(server, background_color)
 
     def _ray_plane_intersection(
         ray_origin: np.ndarray,
@@ -682,7 +691,7 @@ def create_animated_plotting_server(
                     server.scene.add_line_segments(
                         "/traced_path_on_plane",
                         points=traced_path_segments,
-                        colors=(0, 255, 255),  # Cyan: what the drone traced on the plane
+                        colors=logo_trace_color,
                         line_width=2.5,
                     )
 
@@ -1006,6 +1015,8 @@ def create_snapshot_plotting_server(
     show_grid: bool = False,
     ghost_point_size: float = 0.08,
     folder_name: str = "Snapshots",
+    show_targets: bool = True,
+    logo_trace_point_size: float | None = None,
     snapshot_builder: Callable[[viser.ViserServer, int, int], list] | None = None,
     vehicle_mesh: tuple[np.ndarray, np.ndarray] | None = None,
     vehicle_mesh_color: tuple[int, int, int] = (200, 200, 210),
@@ -1054,6 +1065,10 @@ def create_snapshot_plotting_server(
         show_grid: Whether to draw the ground grid.
         ghost_point_size: Point size for the ghost trajectory.
         folder_name: viser GUI folder name for the snapshot slider.
+        show_targets: Draw moving/static target markers and per-snapshot target spheres.
+        logo_trace_point_size: When set, render ``traced_path_on_plane`` as a point cloud at
+            this size instead of cyan line segments (partial per-snapshot trails use the same
+            size). A GUI slider is added to adjust the point size live.
 
     Returns:
         ViserServer instance.
@@ -1160,6 +1175,65 @@ def create_snapshot_plotting_server(
         server, pos, colors, opacity=0.35, point_size=ghost_point_size
     )
 
+    traj_time = np.asarray(results.trajectory["time"]).flatten()
+    relative_vector = results.get("relative_vector", False)
+    get_kp_pose = results.get("get_kp_pose")
+    total_time = results.get("total_time")
+
+    target_traj_scaled: np.ndarray | None = None
+    if get_kp_pose is not None and total_time is not None:
+        total_time_f = float(np.asarray(total_time).reshape(-1)[0])
+        target_traj_scaled = np.stack(
+            [
+                np.asarray(get_kp_pose(float(t) / total_time_f), dtype=np.float32)
+                for t in traj_time
+            ],
+            axis=0,
+        ) / scene_scale
+
+    intersection_points: np.ndarray | None = None
+    traced_path_on_plane = results.get("traced_path_on_plane")
+    logo_trace_color = tuple(results.get("logo_trace_color", (0, 255, 255)))
+    if traced_path_on_plane is not None:
+        intersection_points = np.asarray(traced_path_on_plane, dtype=np.float32) / scene_scale
+        if len(intersection_points) > 1 and logo_trace_point_size is None:
+            traced_path_segments = np.array(
+                [
+                    [intersection_points[i], intersection_points[i + 1]]
+                    for i in range(len(intersection_points) - 1)
+                ],
+                dtype=np.float32,
+            )
+            server.scene.add_line_segments(
+                "/snapshots/traced_path_on_plane",
+                points=traced_path_segments,
+                colors=logo_trace_color,
+                line_width=2.5,
+            )
+
+    logo_trace_state: dict[str, object] = {"handle": None}
+
+    def rebuild_logo_trace(point_size: float) -> None:
+        if intersection_points is None or len(intersection_points) == 0:
+            return
+        if logo_trace_point_size is None:
+            return
+        handle = logo_trace_state["handle"]
+        if handle is not None:
+            handle.remove()
+        logo_trace_state["handle"] = server.scene.add_point_cloud(
+            "/snapshots/traced_path_on_plane",
+            points=intersection_points,
+            colors=np.broadcast_to(
+                np.array([logo_trace_color], dtype=np.uint8),
+                (len(intersection_points), 3),
+            ).copy(),
+            point_size=float(point_size),
+        )
+
+    if logo_trace_point_size is not None:
+        rebuild_logo_trace(logo_trace_point_size)
+
     if waypoints is not None:
         scaled_waypoints = [np.asarray(p, dtype=np.float64) / scene_scale for p in waypoints]
         wp_colors = list(waypoint_colors) if waypoint_colors is not None else None
@@ -1171,10 +1245,9 @@ def create_snapshot_plotting_server(
             show_trails=False,
         )
 
-    traj_time = np.asarray(results.trajectory["time"]).flatten()
     dynamic_subjects = _results_has_moving_subject(results)
     subject_trajs_scaled: list[np.ndarray] | None = None
-    if init_poses is not None and dynamic_subjects:
+    if show_targets and dynamic_subjects:
         subject_trajs_scaled = [
             np.asarray(traj, dtype=np.float64) / scene_scale
             for traj in _subject_world_trajectories(results, traj_time)
@@ -1185,7 +1258,7 @@ def create_snapshot_plotting_server(
             radius=target_radius / scene_scale,
             show_trails=True,
         )
-    elif init_poses is not None:
+    elif show_targets and init_poses is not None:
         scaled_init_poses = [np.asarray(p) / scene_scale for p in init_poses]
         add_target_markers(
             server, scaled_init_poses, radius=target_radius / scene_scale
@@ -1256,7 +1329,7 @@ def create_snapshot_plotting_server(
                     snapshot_builder(server, i, int(frame_idx))
                 )
 
-            if subject_trajs_scaled is not None:
+            if show_targets and subject_trajs_scaled is not None:
                 for sub_idx, traj in enumerate(subject_trajs_scaled):
                     kp_handle = server.scene.add_icosphere(
                         f"/snapshots/target_{i}/sub_{sub_idx}",
@@ -1265,6 +1338,47 @@ def create_snapshot_plotting_server(
                         position=np.asarray(traj[frame_idx], dtype=np.float32),
                     )
                     snapshot_state["handles"].append(kp_handle)
+
+            if relative_vector and target_traj_scaled is not None:
+                rel_handle = server.scene.add_line_segments(
+                    f"/snapshots/relative_vector_{i}",
+                    points=np.array(
+                        [[pos[frame_idx], target_traj_scaled[frame_idx]]],
+                        dtype=np.float32,
+                    ),
+                    colors=(50, 255, 50),
+                    line_width=2.0,
+                )
+                snapshot_state["handles"].append(rel_handle)
+
+            if (
+                intersection_points is not None
+                and len(intersection_points) > 0
+                and logo_trace_point_size is None
+            ):
+                idx = min(int(frame_idx), len(intersection_points) - 1)
+                n_trail = idx + 1
+                if n_trail > 0:
+                    trail_handle = server.scene.add_point_cloud(
+                        f"/snapshots/relative_intersection_trail_{i}",
+                        points=intersection_points[:n_trail],
+                        colors=np.broadcast_to(
+                            np.array([[50, 200, 50]], dtype=np.uint8),
+                            (n_trail, 3),
+                        ).copy(),
+                        point_size=0.06,
+                    )
+                    snapshot_state["handles"].append(trail_handle)
+
+                int_pos = intersection_points[idx].copy()
+                int_pos[2] += 0.08
+                int_handle = server.scene.add_icosphere(
+                    f"/snapshots/relative_intersection_{i}",
+                    radius=0.08,
+                    color=(50, 255, 50),
+                    position=int_pos,
+                )
+                snapshot_state["handles"].append(int_handle)
 
     rebuild_snapshots(initial_n)
 
@@ -1276,10 +1390,25 @@ def create_snapshot_plotting_server(
             step=1,
             initial_value=float(initial_n),
         )
+        trace_size_slider = None
+        if logo_trace_point_size is not None and intersection_points is not None:
+            trace_size_slider = server.gui.add_slider(
+                "Logo trace point size",
+                min=0.001,
+                max=0.2,
+                step=0.001,
+                initial_value=float(logo_trace_point_size),
+            )
 
     @count_slider.on_update
     def _(_) -> None:
         rebuild_snapshots(int(round(count_slider.value)))
+
+    if trace_size_slider is not None:
+
+        @trace_size_slider.on_update
+        def _(_) -> None:
+            rebuild_logo_trace(float(trace_size_slider.value))
 
     return server
 

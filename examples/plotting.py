@@ -1,4 +1,6 @@
 import random
+from os import PathLike
+from pathlib import Path
 
 import numpy as np
 import plotly.graph_objects as go
@@ -320,6 +322,385 @@ def plot_dubins_car(results: OptimizationResults, params: Config):
     # Set axis to be equal
     fig.update_xaxes(scaleanchor="y", scaleratio=1)
     return fig
+
+
+_LM_PLOTLY_FAMILY = "Latin Modern Roman"
+_LM_PLOTLY_FONT = {"family": f"{_LM_PLOTLY_FAMILY}, LM Roman 10, serif", "size": 12}
+_LM_PLOTLY_TICK_FONT = {"family": f"{_LM_PLOTLY_FAMILY}, LM Roman 10, serif", "size": 11}
+
+
+def _find_latin_modern_otf():
+    """Locate Latin Modern Roman regular OTF (Font Book or MacTeX / TeX Live)."""
+    import subprocess
+    from pathlib import Path
+
+    for path in (
+        Path.home() / "Library/Fonts/lmroman10-regular.otf",
+        Path.home() / "Library/Fonts/lmroman12-regular.otf",
+    ):
+        if path.is_file():
+            return path
+
+    for name in ("lmroman10-regular.otf", "lmroman12-regular.otf"):
+        try:
+            proc = subprocess.run(
+                ["kpsewhich", name],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            path = Path(proc.stdout.strip())
+            if path.is_file():
+                return path
+        except (FileNotFoundError, subprocess.CalledProcessError, OSError):
+            pass
+
+        for root in (
+            Path("/Library/TeX/texmf-dist/fonts/opentype/public/lm"),
+            Path("/usr/local/texlive"),
+        ):
+            if root.is_file() and root.name == name:
+                return root
+            if root.is_dir():
+                hit = root / name
+                if hit.is_file():
+                    return hit
+            if root.exists():
+                for hit in root.rglob(name):
+                    return hit
+    return None
+
+
+def _latin_modern_plotly_font_css() -> str:
+    """Embed Latin Modern OTF so Plotly's browser renderer can use it."""
+    import base64
+
+    otf = _find_latin_modern_otf()
+    if otf is None:
+        return ""
+    data = base64.b64encode(otf.read_bytes()).decode("ascii")
+    family = _LM_PLOTLY_FAMILY
+    return f"""
+@font-face {{
+  font-family: '{family}';
+  src: url(data:font/opentype;base64,{data}) format('opentype');
+  font-weight: normal;
+  font-style: normal;
+}}
+.js-plotly-plot .plotly .main-svg {{
+  font-family: '{family}', serif !important;
+}}
+"""
+
+
+def _latin_modern_fontproperties():
+    """Matplotlib FontProperties for Latin Modern Roman (PDF export)."""
+    from matplotlib import font_manager
+
+    otf = _find_latin_modern_otf()
+    if otf is None:
+        return None
+    font_manager.fontManager.addfont(str(otf))
+    return font_manager.FontProperties(fname=str(otf))
+
+
+def _apply_latin_modern_plotly_layout(fig: go.Figure) -> None:
+    fig.update_layout(font=_LM_PLOTLY_FONT)
+    fig.update_xaxes(title_font=_LM_PLOTLY_FONT, tickfont=_LM_PLOTLY_TICK_FONT)
+    fig.update_yaxes(title_font=_LM_PLOTLY_FONT, tickfont=_LM_PLOTLY_TICK_FONT)
+
+
+def show_plotly_with_latin_modern(fig: go.Figure) -> None:
+    """Open a Plotly figure in the browser with Latin Modern for axes and legend.
+
+    Uses Plotly's one-shot HTTP server (same as ``Figure.show()``). Opening HTML via
+    ``file://`` with a CDN Plotly script often yields a blank page with no error.
+    """
+    from plotly.io import to_html
+    from plotly.io._base_renderers import open_html_in_browser
+
+    _apply_latin_modern_plotly_layout(fig)
+    css = _latin_modern_plotly_font_css()
+    if not css:
+        print(
+            "[plot] Latin Modern OTF not found; opening plot with default Plotly fonts."
+        )
+        fig.show()
+        return
+
+    html = to_html(fig, include_plotlyjs=True, full_html=True)
+    html = html.replace("</head>", f"<style>{css}</style></head>", 1)
+    open_html_in_browser(html)
+
+
+class DubinsWaypointStlFigure:
+    """Plotly figure with Latin Modern ``show()`` and matplotlib ``save_pdf()``."""
+
+    __slots__ = ("_fig", "_results", "_params")
+
+    def __init__(
+        self,
+        fig: go.Figure,
+        results: OptimizationResults,
+        params: Config | None,
+    ) -> None:
+        self._fig = fig
+        self._results = results
+        self._params = params
+
+    def show(self, *args, **kwargs) -> None:
+        show_plotly_with_latin_modern(self._fig)
+
+    def save_pdf(self, path: str | PathLike[str]) -> None:
+        save_dubins_car_waypoint_stl_pdf(self._results, path, self._params)
+
+    def __getattr__(self, name: str):
+        return getattr(self._fig, name)
+
+
+def save_dubins_car_waypoint_stl_pdf(
+    results: OptimizationResults,
+    path: str | PathLike[str],
+    params: Config | None = None,
+) -> None:
+    """Save the Dubins STL waypoint figure as a PDF (Latin Modern via matplotlib)."""
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Circle
+
+    position = np.asarray(results.trajectory["position"], dtype=np.float64)
+    x = position[:, 0]
+    y = position[:, 1]
+
+    obs_center = np.asarray(results.plotting_data["obs_center"], dtype=np.float64).flatten()
+    waypoint_radius = float(np.asarray(results.plotting_data["obs_radius"]).item())
+    safety_radius = float(
+        results.plotting_data.get("safety_threshold", waypoint_radius)
+    )
+
+    speed = np.asarray(results.trajectory.get("speed"), dtype=np.float64).reshape(-1)
+    theta = np.asarray(results.trajectory.get("theta"), dtype=np.float64).reshape(-1)
+    vel_x = speed * np.sin(theta)
+    vel_y = speed * np.cos(theta)
+    vel_norm = np.linalg.norm(np.stack([vel_x, vel_y], axis=1), axis=1)
+
+    lm_fp = _latin_modern_fontproperties()
+    if lm_fp is None:
+        print(
+            "[plot] Latin Modern OTF not found; PDF will use matplotlib default serif."
+        )
+
+    fig, ax = plt.subplots(figsize=(6.4, 6.4), dpi=100)
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+
+    center_xy = (float(obs_center[0]), float(obs_center[1]))
+    ax.add_patch(
+        Circle(
+            center_xy,
+            safety_radius,
+            fill=True,
+            facecolor=(0.86, 0.31, 0.31, 0.12),
+            edgecolor=(0.86, 0.31, 0.31, 0.9),
+            linewidth=2.0,
+            label=f"Safety region (r={safety_radius:.2f})",
+            zorder=1,
+        )
+    )
+    ax.add_patch(
+        Circle(
+            center_xy,
+            waypoint_radius,
+            fill=True,
+            facecolor=(0.12, 0.55, 0.24, 0.18),
+            edgecolor=(0.12, 0.55, 0.24, 0.95),
+            linewidth=2.0,
+            label=f"Waypoint ball (r={waypoint_radius:.2f})",
+            zorder=2,
+        )
+    )
+
+    sc = ax.scatter(
+        x,
+        y,
+        c=vel_norm,
+        cmap="viridis",
+        s=28,
+        linewidths=0,
+        zorder=4,
+        label="Trajectory",
+    )
+    ax.plot(x, y, color=(0.35, 0.35, 0.35, 0.35), linewidth=0.8, zorder=3)
+    ax.plot(
+        center_xy[0],
+        center_xy[1],
+        marker="x",
+        color="black",
+        markersize=8,
+        linestyle="None",
+        label="Waypoint center",
+        zorder=5,
+    )
+
+    cbar = fig.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label("‖v‖₂ (m/s)", fontproperties=lm_fp)
+    if lm_fp is not None:
+        for lbl in cbar.ax.get_yticklabels():
+            lbl.set_fontproperties(lm_fp)
+
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlabel("x (m)", fontproperties=lm_fp)
+    ax.set_ylabel("y (m)", fontproperties=lm_fp)
+    if lm_fp is not None:
+        for lbl in ax.get_xticklabels() + ax.get_yticklabels():
+            lbl.set_fontproperties(lm_fp)
+
+    leg = ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.42, -0.10),
+        ncol=2,
+        frameon=False,
+        prop=lm_fp,
+    )
+    if lm_fp is not None:
+        for text in leg.get_texts():
+            text.set_fontproperties(lm_fp)
+
+    ax.grid(True, color=(0.85, 0.85, 0.85), linewidth=0.6)
+    fig.subplots_adjust(left=0.12, right=0.82, bottom=0.20, top=0.98)
+
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, format="pdf", bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"[plot] Saved Dubins STL figure to {out.resolve()}")
+
+
+def plot_dubins_car_waypoint_stl(results: OptimizationResults, params: Config):
+    """Plot Dubins trajectory for STL waypoint examples (white theme, Latin Modern).
+
+    Call ``.show()`` to open in the browser with Latin Modern on axes, legend,
+    and colorbar. Call ``.save_pdf(path)`` for a publication PDF (matplotlib).
+
+    Shows the propagated path colored by the 2-norm of world-frame velocity,
+    the waypoint 2-norm ball (``obs_radius``), and the larger safety envelope
+    (``safety_threshold``) used for the conditional speed constraint.
+    """
+    fig = go.Figure()
+
+    position = np.asarray(results.trajectory["position"], dtype=np.float64)
+    x = position[:, 0]
+    y = position[:, 1]
+
+    obs_center = np.asarray(results.plotting_data["obs_center"], dtype=np.float64).flatten()
+    waypoint_radius = float(np.asarray(results.plotting_data["obs_radius"]).item())
+    safety_radius = float(
+        results.plotting_data.get("safety_threshold", waypoint_radius)
+    )
+
+    speed = np.asarray(results.trajectory.get("speed"), dtype=np.float64).reshape(-1)
+    theta = np.asarray(results.trajectory.get("theta"), dtype=np.float64).reshape(-1)
+    vel_x = speed * np.sin(theta)
+    vel_y = speed * np.cos(theta)
+    vel_norm = np.linalg.norm(np.stack([vel_x, vel_y], axis=1), axis=1)
+
+    theta_circle = np.linspace(0, 2 * np.pi, 100)
+
+    def _add_disk(radius: float, line_color: str, fill_color: str, name: str) -> None:
+        cx = obs_center[0] + radius * np.cos(theta_circle)
+        cy = obs_center[1] + radius * np.sin(theta_circle)
+        fig.add_trace(
+            go.Scatter(
+                x=cx,
+                y=cy,
+                mode="lines",
+                fill="toself",
+                fillcolor=fill_color,
+                line={"color": line_color, "width": 2},
+                name=name,
+                hoverinfo="skip",
+            )
+        )
+
+    _add_disk(
+        safety_radius,
+        line_color="rgba(220, 80, 80, 0.9)",
+        fill_color="rgba(220, 80, 80, 0.12)",
+        name=f"Safety region (r={safety_radius:.2f})",
+    )
+    _add_disk(
+        waypoint_radius,
+        line_color="rgba(30, 140, 60, 0.95)",
+        fill_color="rgba(30, 140, 60, 0.18)",
+        name=f"Waypoint ball (r={waypoint_radius:.2f})",
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=x,
+            y=y,
+            mode="lines+markers",
+            line={"color": "rgba(80, 80, 80, 0.35)", "width": 1},
+            marker={
+                "color": vel_norm,
+                "colorscale": "Viridis",
+                "size": 7,
+                "colorbar": {
+                    "title": {"text": "‖v‖₂ (m/s)", "font": _LM_PLOTLY_FONT},
+                    "tickfont": _LM_PLOTLY_TICK_FONT,
+                },
+                "showscale": True,
+            },
+            name="Trajectory",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=[obs_center[0]],
+            y=[obs_center[1]],
+            mode="markers",
+            marker={"color": "black", "size": 10, "symbol": "x"},
+            name="Waypoint center",
+        )
+    )
+
+    _square_px = 640
+    fig.update_layout(
+        template="plotly_white",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=_LM_PLOTLY_FONT,
+        autosize=False,
+        width=_square_px,
+        height=_square_px,
+        margin={"l": 60, "r": 90, "t": 24, "b": 88},
+        legend={
+            "orientation": "h",
+            "xref": "paper",
+            "yref": "paper",
+            "x": 0.42,
+            "xanchor": "center",
+            "y": 0.03,
+            "yanchor": "bottom",
+            "font": _LM_PLOTLY_FONT,
+        },
+    )
+    fig.update_xaxes(
+        scaleanchor="y",
+        scaleratio=1,
+        constrain="domain",
+        domain=[0.0, 0.82],
+        title_text="x (m)",
+        title_font=_LM_PLOTLY_FONT,
+        tickfont=_LM_PLOTLY_TICK_FONT,
+    )
+    fig.update_yaxes(
+        constrain="domain",
+        domain=[0.10, 1.0],
+        title_text="y (m)",
+        title_font=_LM_PLOTLY_FONT,
+        tickfont=_LM_PLOTLY_TICK_FONT,
+    )
+    return DubinsWaypointStlFigure(fig, results, params)
 
 
 def plot_velocity_vs_distance(results: OptimizationResults, params: Config):

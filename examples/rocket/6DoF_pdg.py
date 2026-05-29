@@ -47,11 +47,19 @@ def model_attitude_xyzw_to_viser_wxyz(attitude: np.ndarray) -> np.ndarray:
 
 
 def load_rocket_vehicle_mesh() -> tuple[np.ndarray, np.ndarray] | None:
-    """Load ``Rocket.STEP`` as a decimated mesh for Viser, or ``None`` to fall back to axes."""
-    if os.path.isfile(_ROCKET_MESH_CACHE_PATH) and os.path.isfile(_ROCKET_STEP_PATH):
-        if os.path.getmtime(_ROCKET_MESH_CACHE_PATH) >= os.path.getmtime(_ROCKET_STEP_PATH):
-            cached = np.load(_ROCKET_MESH_CACHE_PATH)
-            return cached["vertices"], cached["faces"]
+    """Load rocket mesh for Viser from cache or ``Rocket.STEP``, or ``None`` for axes."""
+    has_cache = os.path.isfile(_ROCKET_MESH_CACHE_PATH)
+    has_step = os.path.isfile(_ROCKET_STEP_PATH)
+
+    if has_cache and (
+        not has_step
+        or os.path.getmtime(_ROCKET_MESH_CACHE_PATH) >= os.path.getmtime(_ROCKET_STEP_PATH)
+    ):
+        cached = np.load(_ROCKET_MESH_CACHE_PATH)
+        return cached["vertices"], cached["faces"]
+
+    if not has_step:
+        return None
 
     try:
         import trimesh
@@ -362,7 +370,10 @@ if __name__ == "__main__":
 
     vehicle_mesh = load_rocket_vehicle_mesh()
     if vehicle_mesh is not None:
-        print("[viser] vehicle_mesh: Rocket.STEP (decimated)")
+        if os.path.isfile(_ROCKET_STEP_PATH):
+            print("[viser] vehicle_mesh: Rocket (from STEP or cache)")
+        else:
+            print("[viser] vehicle_mesh: Rocket (cached npz)")
     else:
         print("[viser] vehicle_mesh: None — using attitude axes")
 
