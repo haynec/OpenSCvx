@@ -48,7 +48,7 @@ a4 = 0.150  # Wrist to end-effector
 inertia = np.array([0.08, 0.06, 0.05, 0.04, 0.02, 0.01, 0.005])
 
 # Number of discretization nodes (parameterized by segments between waypoints)
-nodes_per_segment = 2
+nodes_per_segment = 1
 total_time = 4.0
 
 # =============================================================================

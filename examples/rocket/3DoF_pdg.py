@@ -59,17 +59,26 @@ mass.guess = np.linspace(mass.initial, 1690, n).reshape(-1, 1)
 # Define control — thrust force vector [Tx, Ty, Tz]
 thrust = ox.Control("thrust", shape=(3,), parameterization="ZOH")
 
-T_bar = 3.1 * 1e3
+T_bar = 3.1 * 1e3  # N, per-engine maximum thrust
 T1 = 0.3 * T_bar
 T2 = 0.8 * T_bar
 n_eng = 6
+T_max = n_eng * T_bar  # N, total cluster maximum thrust
+theta_val = 27 * np.pi / 180
 
-# Set bounds on control
-thrust.min = n_eng * np.array([-T_bar, -T_bar, -T_bar])
-thrust.max = n_eng * np.array([T_bar, T_bar, T_bar])
+# Thrust magnitude envelope (used for CTCS and normalized box/scaling bounds)
+rho_min = n_eng * T1 * np.cos(theta_val)
+rho_max = n_eng * T2 * np.cos(theta_val)
+
+# Box bounds on thrust components (physical authority)
+thrust.min = -T_max * np.ones(3)
+thrust.max = T_max * np.ones(3)
+# Tighter scaling bounds for SCP conditioning (active thrust envelope)
+thrust.scaling_min = -rho_max * np.ones(3)
+thrust.scaling_max = rho_max * np.ones(3)
 
 # Set initial control guess
-thrust.guess = np.repeat(np.expand_dims(np.array([0, 0, n_eng * (T2) / 2]), axis=0), n, axis=0)
+thrust.guess = np.repeat(np.expand_dims(np.array([0, 0, rho_max / 2]), axis=0), n, axis=0)
 
 # Define list of all states and controls
 states = [position, velocity, mass]
@@ -82,11 +91,7 @@ g_e = 9.807  # Gravitational acceleration on Earth in m/s^2
 # Create parameters for the problem
 I_sp = ox.Parameter("I_sp", value=225.0)
 g = ox.Parameter("g", value=3.7114)
-theta = ox.Parameter("theta", value=27 * np.pi / 180)
-
-# These will be computed symbolically in constraints
-rho_min = n_eng * T1 * np.cos(theta.value)  # Minimum thrust-to-weight ratio
-rho_max = n_eng * T2 * np.cos(theta.value)  # Maximum thrust-to-weight ratio
+theta = ox.Parameter("theta", value=theta_val)
 
 # Generate box constraints for all states
 constraints = []
@@ -101,8 +106,8 @@ for state in states:
 # Thrust magnitude constraints
 constraints.extend(
     [
-        ox.ctcs(rho_min <= ox.linalg.Norm(thrust), idx=1),
-        ox.ctcs(ox.linalg.Norm(thrust) <= rho_max, idx=1),
+        ox.ctcs(rho_min <= ox.linalg.Norm(thrust), idx=1, penalty="huber"),
+        ox.ctcs(ox.linalg.Norm(thrust) <= rho_max, idx=1, penalty="huber"),
     ]
 )
 

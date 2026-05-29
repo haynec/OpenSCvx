@@ -857,12 +857,11 @@ def _build_let_problem_bundle(float_dtype: str = LET_FLOAT_DTYPE) -> dict:
         "diffrax_kwargs": {"atol": integration_tol, "rtol": integration_tol},
     }
     algorithm = {
-        "k_max": 150,
         "lam_prox": 5e-2,
         "lam_vc": 3e1,
         "lam_vb": 2e-1,
         "lam_cost": 0.5,
-        "ep_tr": 1e-9,
+        "ep_tr": 1e-8,
         "ep_vc": 1e-6,
         "autotuner": ox.AugmentedLagrangian(),
     }
