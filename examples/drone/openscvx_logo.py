@@ -4,8 +4,8 @@ This example demonstrates trajectory planning for a quadrotor tracing out the Op
 logo. The problem includes:
 
 - 6-DOF rigid body dynamics (position, velocity, attitude quaternion, angular velocity)
-- Utilizes the BYOF framework to model the angle between the boresight vector and the vector to the
-    target.
+- Six sequential hoop (gate) constraints along the path (same model as ``drone_racing.py``)
+- BYOF dynamics for the angle between the body boresight and the moving logo target
 """
 
 import os
@@ -25,6 +25,7 @@ from examples.plotting_viser import (
     create_snapshot_plotting_server,
 )
 from openscvx import ByofSpec, Free, Minimize, Problem
+from openscvx.utils import rot
 
 # Prompt the user to instal svgpathtools if not already installed via pip
 try:
@@ -33,6 +34,7 @@ except ImportError:
     print("svgpathtools not found. Please install it with: pip install svgpathtools")
     sys.exit(1)
 
+from examples.drone.logo_utils.quadrotor_mesh import make_quadrotor_mesh
 from examples.drone.logo_utils.svg_path_utils import get_svg_path_function
 
 # -----------------------------------------------------------------------------
@@ -95,13 +97,13 @@ n = 500  # Number of Nodes
 total_time = 25.0  # Total time for the simulation (wider logo than ACL)
 
 # Fixed initial and final positions
-initial_pos = np.array([-15.0, 0.0, 5.0])
-final_pos = np.array([-12.0, -12.0, 5.0])
+initial_pos = np.array([-5.0, 0.0, 5.0])
+final_pos = np.array([-2.0, 0.0, 5.0])
 
 # State components (like other drone examples)
 position = ox.State("position", shape=(3,))
-position.max = np.array([20.0, 20.0, 20.0])
-position.min = np.array([-20.0, -20.0, -5.0])
+position.max = np.array([10.0, 10.0, 10.0])
+position.min = np.array([-10.0, -10.0, -5.0])
 position.initial = [Free(initial_pos[0]), Free(initial_pos[1]), Free(initial_pos[2])]
 position.final = [Free(final_pos[0]), Free(final_pos[1]), Free(final_pos[2])]
 
@@ -183,6 +185,48 @@ def get_kp_pose(t_normalized):
 
     rotated_pos = R_x @ (R_y @ scaled_pos)
     return rotated_pos + path_offset
+
+
+# -----------------------------------------------------------------------------
+# Hoops (same gate model as drone_racing.py)
+# -----------------------------------------------------------------------------
+
+hoop_radii = np.array([0.5, 1e-4, 0.5])
+_rot_z_90 = np.array(
+    [
+        [np.cos(np.pi / 2), -np.sin(np.pi / 2), 0.0],
+        [np.sin(np.pi / 2), np.cos(np.pi / 2), 0.0],
+        [0.0, 0.0, 1.0],
+    ]
+)
+_hoop_rot = _rot_z_90 @ rot
+A_hoop = _hoop_rot @ np.diag(1.0 / hoop_radii) @ _hoop_rot.T
+
+
+def _hoop_vertices(center: np.ndarray, radii: np.ndarray) -> list[np.ndarray]:
+    """Gate corner vertices using the same orientation as ``A_hoop``."""
+    return [
+        center + _hoop_rot @ np.array([radii[0], 0.0, radii[2]]),
+        center + _hoop_rot @ np.array([-radii[0], 0.0, radii[2]]),
+        center + _hoop_rot @ np.array([-radii[0], 0.0, -radii[2]]),
+        center + _hoop_rot @ np.array([radii[0], 0.0, -radii[2]]),
+    ]
+
+# COM offset from the moving logo target; hoops are placed along the mission timeline
+_hoop_com_offset = np.array([-2.0, 0.0, 1.2])
+_hoop_t_norms = [0.07, 0.25, 0.43, 0.57, 0.75, 0.93]
+hoop_nodes = [int(round(t * (n - 1))) for t in _hoop_t_norms]
+
+hoop_centers = [
+    np.asarray(get_kp_pose(t), dtype=np.float64) + _hoop_com_offset for t in _hoop_t_norms
+]
+hoop_centers[0] = 0.6 * initial_pos + 0.4 * hoop_centers[0]
+hoop_centers[-1] = 0.5 * hoop_centers[-1] + 0.5 * final_pos
+
+hoop_center_params = [
+    ox.Parameter(f"hoop_{i}_center", shape=(3,), value=center) for i, center in enumerate(hoop_centers)
+]
+hoop_vertices = [_hoop_vertices(center, hoop_radii) for center in hoop_centers]
 
 
 # -----------------------------------------------------------------------------
@@ -313,6 +357,18 @@ constraints = []
 for state in states:
     constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
+for node, hoop_center_param in zip(hoop_nodes, hoop_center_params):
+    constraints.append(
+        (
+            ox.linalg.Norm(
+                A_hoop @ position - A_hoop @ hoop_center_param,
+                ord="inf",
+            )
+            <= 1.0
+        )
+        .convex()
+        .at([node])
+    )
 
 byof: ByofSpec = {
     "dynamics": {
@@ -320,8 +376,11 @@ byof: ByofSpec = {
     }
 }
 
-# Initial guess: position drone to maintain LoS with moving target
-position_bar = np.linspace(initial_pos, final_pos, n)
+# Initial guess: keyframed COM path through hoops, then LoS attitudes toward logo target
+position_bar = ox.init.linspace(
+    keyframes=[initial_pos] + hoop_centers + [final_pos],
+    nodes=[0] + hoop_nodes + [n - 1],
+)
 velocity_bar = np.zeros((n, 3))
 angular_velocity_bar = np.zeros((n, 3))
 angle_metric_bar = np.zeros((n, 1))
@@ -367,7 +426,10 @@ problem = Problem(
     },
     float_dtype="float64",
     discretizer=ox.DiscretizeLinearizeVectorize(diffrax_kwargs={"atol": 1e-4}),
-    solver={"solver_args": {"canon_backend": "COO", "enforce_dpp": True}},
+    # solver={
+    #     "cvx_solver": "Mosek",
+    #     "solver_args": {"canon_backend": "COO", "enforce_dpp": True}
+    #     },
 )
 
 
@@ -384,6 +446,10 @@ plotting_dict = {
     "extend_boresight": True,
     "relative_vector": True,
     "logo_trace_color": (0, 0, 0),
+    "vertices": hoop_vertices,
+    "gate_centers": hoop_centers,
+    "A_gate": A_hoop,
+    "A_gate_c_params": [A_hoop @ center for center in hoop_centers],
 }
 
 if __name__ == "__main__":
@@ -446,17 +512,26 @@ if __name__ == "__main__":
     plot_virtual_control_heatmap(results).show()
     plot_trust_region_heatmap(results).show()
 
+    vehicle_mesh = make_quadrotor_mesh()
+    vehicle_mesh_color = (55, 60, 68)
+
     server = create_animated_plotting_server(
         results,
         thrust_key="thrust_force",
         show_grid=True,
         dark_mode=False,
+        vehicle_mesh=vehicle_mesh,
+        vehicle_mesh_color=vehicle_mesh_color,
     )
     create_snapshot_plotting_server(
         results,
         initial_n_snapshots=5,
         show_grid=True,
         show_targets=False,
-        logo_trace_point_size=0.02,
+        logo_trace_point_size=0.06,
+        ghost_opacity=1.0,
+        ghost_point_size=0.15,
+        vehicle_mesh=vehicle_mesh,
+        vehicle_mesh_color=vehicle_mesh_color,
     )
     server.sleep_forever()
