@@ -29,10 +29,16 @@ from openscvx import Problem
 from openscvx.integrators import solve_ivp_diffrax
 
 try:
-    from openscvx.plotting import plot_projections_2d, plot_states
+    from openscvx.plotting import plot_states
 except Exception:
-    plot_projections_2d = None
     plot_states = None
+
+try:
+    import matplotlib as mpl
+    import matplotlib.pyplot as plt
+except Exception:
+    mpl = None
+    plt = None
 
 
 def _enable_jax_x64() -> None:
@@ -63,7 +69,23 @@ kiz_box_width_km = 15.0
 kiz_box_width_dyn = kiz_box_width_km / r_ref_km
 
 integration_tol = 1e-14
-target_num_substeps = 4000
+target_num_substeps = 10000
+
+# Figure output settings for the matplotlib 3D + 2D projection plots.
+_FIGURE_DIR = Path(current_dir) / "figures"
+_FIGURE_DPI = 600
+
+# Shared styling palette for the matplotlib 3D + 2D projection plots.
+_KIZ_FACE = (76 / 255.0, 175 / 255.0, 80 / 255.0, 0.08)
+_KIZ_EDGE = (76 / 255.0, 175 / 255.0, 80 / 255.0, 0.85)
+_KIZ_EDGE_WIDTH = 0.6
+_IMPULSE_COLORS = ("#D62728", "#FF7F0E", "#9467BD")
+
+# CAPSTONE mesh assets for impulse markers in the 3D plot.
+_CAPSTONE_ASSET_DIR = Path(current_dir) / "capstone"
+_CAPSTONE_GLTF_PATH = _CAPSTONE_ASSET_DIR / "capstone.gltf"
+_CAPSTONE_MESH_CACHE_PATH = _CAPSTONE_ASSET_DIR / "capstone_plot_mesh.npz"
+_CAPSTONE_TARGET_LENGTH_KM = 5.0
 
 
 def _download_kernel(url: str, destination: Path) -> None:
@@ -338,15 +360,15 @@ def build_relative_loitering_problem(
             "diffrax_kwargs": {"atol": integration_tol, "rtol": integration_tol},
         },
         algorithm={
-            "k_max": 150,
-            "lam_prox": 4e-1,
-            "lam_vc": 1e2,
+            "k_max": 100,
+            "lam_prox": 5e-1,
+            "lam_vc": 2e2,
             "lam_cost": 1e0,
-            "ep_vc": 1e-8,
-            "ep_tr": 1e-8,
+            "ep_vc": 5e-8,
+            "ep_tr": 5e-8,
             "autotuner": ox.AugmentedLagrangian(),
         },
-        solver={"cvx_solver": "CLARABEL", "solver_args": {}},
+        solver={"cvx_solver": "MOSEK", "solver_args": {}},
         float_dtype="float64",
     )
 
@@ -432,9 +454,484 @@ def _apply_kiz_limits_to_state_plot(fig, kiz_half_width: float) -> None:
         )
 
 
+def _savefig_hi_dpi(fig, basename: str) -> None:
+    """Save fig as a high-DPI PNG in ``_FIGURE_DIR``."""
+    _FIGURE_DIR.mkdir(parents=True, exist_ok=True)
+    png_path = _FIGURE_DIR / f"{basename}.png"
+    fig.savefig(png_path, dpi=_FIGURE_DPI, bbox_inches="tight", transparent=True)
+    print(f"Saved {png_path}")
+
+
+def _ensure_texlive_on_path() -> None:
+    """Prepend a detected TeX Live bin dir to PATH so text.usetex=True works."""
+    if shutil.which("latex") is not None:
+        return
+    candidates = [
+        "/Library/TeX/texbin",
+        "/usr/local/texlive/2024/bin/universal-darwin",
+        "/usr/local/texlive/2024/bin/x86_64-darwin",
+        "/usr/local/texlive/2023/bin/universal-darwin",
+        "/opt/homebrew/bin",
+    ]
+    for d in candidates:
+        if Path(d, "latex").exists():
+            os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+            return
+
+
+def _apply_serif_mpl_rc() -> None:
+    """Shared mpl rcParams: real LaTeX rendering with Computer Modern serif."""
+    _ensure_texlive_on_path()
+    mpl.rcParams.update(
+        {
+            "text.usetex": True,
+            "font.family": "serif",
+            "font.serif": ["Computer Modern Roman", "CMU Serif", "DejaVu Serif"],
+            "mathtext.fontset": "cm",
+            "axes.unicode_minus": False,
+        }
+    )
+
+
+def _turbo_line_collection_3d(xyz: np.ndarray, t: np.ndarray, linewidth: float = 2.4):
+    """Per-segment Line3DCollection colored by t via viridis colormap."""
+    from mpl_toolkits.mplot3d.art3d import Line3DCollection
+
+    pts = xyz.reshape(-1, 1, 3)
+    segments = np.concatenate([pts[:-1], pts[1:]], axis=1)
+    norm = mpl.colors.Normalize(vmin=float(t[0]), vmax=float(t[-1]))
+    cmap = mpl.colormaps["viridis"]
+    t_mid = 0.5 * (t[:-1] + t[1:])
+    return Line3DCollection(segments, colors=cmap(norm(t_mid)), linewidth=linewidth), norm, cmap
+
+
+def _turbo_line_collection_2d(xy: np.ndarray, t: np.ndarray, linewidth: float = 2.4):
+    """Per-segment 2D LineCollection colored by t via viridis colormap."""
+    from matplotlib.collections import LineCollection
+
+    pts = xy.reshape(-1, 1, 2)
+    segments = np.concatenate([pts[:-1], pts[1:]], axis=1)
+    norm = mpl.colors.Normalize(vmin=float(t[0]), vmax=float(t[-1]))
+    cmap = mpl.colormaps["viridis"]
+    t_mid = 0.5 * (t[:-1] + t[1:])
+    return LineCollection(segments, colors=cmap(norm(t_mid)), linewidth=linewidth), norm, cmap
+
+
+def _load_capstone_plot_mesh() -> tuple[np.ndarray, np.ndarray] | None:
+    """Load CAPSTONE mesh for 3D impulse markers, scaled to plot units (km)."""
+    if _CAPSTONE_MESH_CACHE_PATH.is_file():
+        try:
+            with np.load(_CAPSTONE_MESH_CACHE_PATH, allow_pickle=False) as cached:
+                cache_scale = None
+                if "target_length_km" in cached.files:
+                    cache_scale = float(np.asarray(cached["target_length_km"]).reshape(-1)[0])
+                if cache_scale is not None and abs(cache_scale - _CAPSTONE_TARGET_LENGTH_KM) < 1e-12:
+                    return np.asarray(cached["vertices"], dtype=np.float64), np.asarray(
+                        cached["faces"], dtype=np.int64
+                    )
+        except Exception:
+            pass
+
+    if not _CAPSTONE_GLTF_PATH.is_file():
+        print(
+            "CAPSTONE model file not found at "
+            f"{_CAPSTONE_GLTF_PATH}; using point markers for impulses."
+        )
+        return None
+
+    try:
+        import trimesh
+    except ImportError:
+        print("Install trimesh to render CAPSTONE CAD markers (pip install trimesh).")
+        return None
+
+    try:
+        loaded = trimesh.load(str(_CAPSTONE_GLTF_PATH), force="scene")
+        mesh = loaded.to_mesh() if isinstance(loaded, trimesh.Scene) else loaded
+        vertices = np.asarray(mesh.vertices, dtype=np.float64)
+        faces = np.asarray(mesh.faces, dtype=np.int64)
+    except Exception as exc:
+        print(f"Failed to load CAPSTONE mesh ({exc}); using point markers for impulses.")
+        return None
+
+    if vertices.size == 0 or faces.size == 0:
+        print("CAPSTONE mesh is empty; using point markers for impulses.")
+        return None
+
+    vertices = vertices - np.mean(vertices, axis=0)
+    length = float(np.max(np.ptp(vertices, axis=0)))
+    if length > 1e-12:
+        vertices = vertices * (_CAPSTONE_TARGET_LENGTH_KM / length)
+
+    try:
+        np.savez(
+            _CAPSTONE_MESH_CACHE_PATH,
+            vertices=vertices.astype(np.float32),
+            faces=faces.astype(np.uint32),
+            target_length_km=np.array([_CAPSTONE_TARGET_LENGTH_KM], dtype=np.float64),
+        )
+    except Exception:
+        pass
+
+    return vertices, faces
+
+
+def _rotation_matrix_from_vectors(source_vec: np.ndarray, target_vec: np.ndarray) -> np.ndarray:
+    """Return a 3x3 rotation matrix that maps source_vec direction onto target_vec."""
+    src = np.asarray(source_vec, dtype=np.float64).reshape(3)
+    dst = np.asarray(target_vec, dtype=np.float64).reshape(3)
+
+    src_norm = float(np.linalg.norm(src))
+    dst_norm = float(np.linalg.norm(dst))
+    if src_norm < 1e-12 or dst_norm < 1e-12:
+        return np.eye(3, dtype=np.float64)
+
+    src_u = src / src_norm
+    dst_u = dst / dst_norm
+    cross = np.cross(src_u, dst_u)
+    dot = float(np.clip(np.dot(src_u, dst_u), -1.0, 1.0))
+    cross_norm = float(np.linalg.norm(cross))
+
+    if cross_norm < 1e-12:
+        if dot > 0.0:
+            return np.eye(3, dtype=np.float64)
+        # 180-deg rotation: choose any axis orthogonal to source.
+        ortho = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+        if abs(src_u[0]) > 0.9:
+            ortho = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+        axis = ortho - np.dot(ortho, src_u) * src_u
+        axis_norm = float(np.linalg.norm(axis))
+        if axis_norm < 1e-12:
+            ortho = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+            axis = ortho - np.dot(ortho, src_u) * src_u
+            axis_norm = float(np.linalg.norm(axis))
+        axis = axis / axis_norm
+        return -np.eye(3, dtype=np.float64) + 2.0 * np.outer(axis, axis)
+
+    k = np.array(
+        [
+            [0.0, -cross[2], cross[1]],
+            [cross[2], 0.0, -cross[0]],
+            [-cross[1], cross[0], 0.0],
+        ],
+        dtype=np.float64,
+    )
+    return np.eye(3, dtype=np.float64) + k + (k @ k) * ((1.0 - dot) / (cross_norm**2))
+
+
+def _add_spacecraft_mesh_marker(
+    ax,
+    center_km,
+    vertices_km,
+    faces,
+    major_axis,
+    impulse_direction,
+) -> None:
+    """Draw one white CAPSTONE mesh marker centered at a 3D point."""
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+    rot = _rotation_matrix_from_vectors(major_axis, impulse_direction)
+    verts_rot = np.asarray(vertices_km, dtype=np.float64) @ rot.T
+    tris = verts_rot[faces] + np.asarray(center_km, dtype=np.float64).reshape(1, 1, 3)
+    fc = mpl.colors.to_rgba("#FFFFFF", alpha=0.96)
+    ec = (0.1, 0.1, 0.1, 0.5)
+    marker = Poly3DCollection(
+        tris,
+        facecolors=fc,
+        edgecolors=ec,
+        linewidths=0.08,
+        zorder=10,
+    )
+    ax.add_collection3d(marker)
+
+
+def _plot_3d_kiz(results) -> None:
+    """Render 3D nominal trajectory in KIZ with robust-plot styling."""
+    if (mpl is None) or (plt is None):
+        print("Skipping 3D projection plot because Matplotlib is unavailable.")
+        return
+    from matplotlib.lines import Line2D
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+    _apply_serif_mpl_rc()
+
+    nom_pos = np.asarray(results.trajectory["position"], dtype=float)
+    t_full = np.asarray(results.trajectory["time"], dtype=float).reshape(-1)
+    node_pos = np.asarray(results.nodes["position"], dtype=float)
+    delta_v_nodes = np.asarray(results.nodes["delta_v"], dtype=float)
+
+    scale_km = float(r_ref_km)
+    nom_scaled = nom_pos * scale_km
+    node_scaled = node_pos * scale_km
+    nominal_imp_pts = node_scaled[np.asarray(impulse_nodes, dtype=int), :]
+
+    fig = plt.figure(figsize=(11.0, 9.0), facecolor="none")
+    fig.patch.set_alpha(0.0)
+    try:
+        ax = fig.add_subplot(111, projection="3d", computed_zorder=False)
+    except TypeError:
+        ax = fig.add_subplot(111, projection="3d")
+    ax.set_facecolor("none")
+    ax.patch.set_alpha(0.0)
+    ax.grid(True, alpha=0.25)
+    ax.xaxis.pane.set_facecolor((1.0, 1.0, 1.0, 0.0))
+    ax.yaxis.pane.set_facecolor((1.0, 1.0, 1.0, 0.0))
+    ax.zaxis.pane.set_facecolor((1.0, 1.0, 1.0, 0.0))
+
+    w = float(kiz_box_width_km)
+    corners = np.array(
+        [
+            [-w, -w, -w],
+            [w, -w, -w],
+            [w, w, -w],
+            [-w, w, -w],
+            [-w, -w, w],
+            [w, -w, w],
+            [w, w, w],
+            [-w, w, w],
+        ],
+        dtype=float,
+    )
+    edges = [
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 0),
+        (4, 5),
+        (5, 6),
+        (6, 7),
+        (7, 4),
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
+    ]
+    faces = [
+        [corners[0], corners[1], corners[2], corners[3]],
+        [corners[4], corners[5], corners[6], corners[7]],
+        [corners[0], corners[1], corners[5], corners[4]],
+        [corners[2], corners[3], corners[7], corners[6]],
+        [corners[1], corners[2], corners[6], corners[5]],
+        [corners[0], corners[3], corners[7], corners[4]],
+    ]
+    kiz_surface = Poly3DCollection(faces, facecolors=_KIZ_FACE, edgecolors="none", zorder=1)
+    ax.add_collection3d(kiz_surface)
+    for e0, e1 in edges:
+        ax.plot(
+            [corners[e0, 0], corners[e1, 0]],
+            [corners[e0, 1], corners[e1, 1]],
+            [corners[e0, 2], corners[e1, 2]],
+            color=_KIZ_EDGE,
+            linewidth=_KIZ_EDGE_WIDTH,
+            alpha=0.9,
+        )
+
+    lc3d, norm, cmap = _turbo_line_collection_3d(nom_scaled, t_full, linewidth=2.4)
+    ax.add_collection3d(lc3d)
+
+    capstone_mesh = _load_capstone_plot_mesh()
+    capstone_major_axis = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+    if capstone_mesh is not None:
+        centered = capstone_mesh[0] - np.mean(capstone_mesh[0], axis=0)
+        try:
+            _, _, vh = np.linalg.svd(centered, full_matrices=False)
+            major_axis = np.asarray(vh[0], dtype=np.float64)
+            major_axis_norm = float(np.linalg.norm(major_axis))
+            if major_axis_norm > 1e-12:
+                capstone_major_axis = major_axis / major_axis_norm
+                if capstone_major_axis[0] < 0.0:
+                    capstone_major_axis = -capstone_major_axis
+        except Exception:
+            pass
+
+    legend_handles = []
+    arrow_length_km = 0.35 * w
+    for q, node_q in enumerate(impulse_nodes):
+        color = _IMPULSE_COLORS[q % len(_IMPULSE_COLORS)]
+        impulse_direction = np.asarray(delta_v_nodes[node_q], dtype=np.float64)
+        impulse_norm = float(np.linalg.norm(impulse_direction))
+        if impulse_norm > 1e-14:
+            dir_unit = impulse_direction / impulse_norm
+            ax.quiver(
+                nominal_imp_pts[q, 0],
+                nominal_imp_pts[q, 1],
+                nominal_imp_pts[q, 2],
+                dir_unit[0],
+                dir_unit[1],
+                dir_unit[2],
+                length=arrow_length_km,
+                normalize=True,
+                arrow_length_ratio=0.25,
+                color=color,
+                linewidths=2.0,
+            )
+
+    for q, node_q in enumerate(impulse_nodes):
+        color = _IMPULSE_COLORS[q % len(_IMPULSE_COLORS)]
+        impulse_direction = np.asarray(delta_v_nodes[node_q], dtype=np.float64)
+        if capstone_mesh is None:
+            ax.scatter(
+                nominal_imp_pts[q, 0],
+                nominal_imp_pts[q, 1],
+                nominal_imp_pts[q, 2],
+                marker="o",
+                s=180,
+                color=color,
+                edgecolors="black",
+                linewidths=0.9,
+                zorder=10,
+            )
+        else:
+            _add_spacecraft_mesh_marker(
+                ax=ax,
+                center_km=nominal_imp_pts[q],
+                vertices_km=capstone_mesh[0],
+                faces=capstone_mesh[1],
+                major_axis=capstone_major_axis,
+                impulse_direction=impulse_direction,
+            )
+        legend_handles.append(
+            Line2D(
+                [0],
+                [0],
+                marker="o",
+                linestyle="",
+                markerfacecolor=color,
+                markeredgecolor="black",
+                markersize=9,
+                label=f"Impulse {q}",
+            )
+        )
+
+    lim = max(1.05 * w, 1.05 * float(np.max(np.abs(nom_scaled))))
+    ax.set_xlim(-lim, lim)
+    ax.set_ylim(-lim, lim)
+    ax.set_zlim(-lim, lim)
+    ax.set_box_aspect((1, 1, 1))
+    ax.set_axis_off()
+    ax.view_init(elev=10.0, azim=-10.0)
+
+    sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=ax, fraction=0.035, pad=-0.04, shrink=0.7)
+    cbar.set_label(r"$t\;[\mathrm{TU}]$", fontsize=18)
+    cbar.ax.tick_params(labelsize=16)
+
+    ax.legend(
+        handles=legend_handles,
+        loc="upper left",
+        bbox_to_anchor=(0.20, 0.83),
+        frameon=False,
+        fontsize=16,
+    )
+    fig.tight_layout()
+    _savefig_hi_dpi(fig, "relative_loitering_3d")
+    plt.show()
+
+
+def _plot_2d_projections(results) -> None:
+    """XY and XZ projections with robust-plot styling."""
+    if (mpl is None) or (plt is None):
+        print("Skipping 2D projection plot because Matplotlib is unavailable.")
+        return
+    from matplotlib.patches import Rectangle
+
+    _apply_serif_mpl_rc()
+
+    nom_pos = np.asarray(results.trajectory["position"], dtype=float)
+    t_full = np.asarray(results.trajectory["time"], dtype=float).reshape(-1)
+    node_pos = np.asarray(results.nodes["position"], dtype=float)
+
+    scale_km = float(r_ref_km)
+    nom_km = nom_pos * scale_km
+    node_km = node_pos * scale_km
+    w = float(kiz_box_width_km)
+
+    fig, axes = plt.subplots(1, 2, figsize=(13.5, 6.2), facecolor="none")
+    fig.patch.set_alpha(0.0)
+    axis_pairs = [(0, 1), (0, 2)]
+    labels = [
+        (r"$x\;[\mathrm{km}]$", r"$y\;[\mathrm{km}]$"),
+        (r"$x\;[\mathrm{km}]$", r"$z\;[\mathrm{km}]$"),
+    ]
+    titles = [
+        r"$xy$-projection",
+        r"$xz$-projection",
+    ]
+
+    last_norm = None
+    last_cmap = None
+    for ax, (ai, aj), (xlbl, ylbl), title in zip(axes, axis_pairs, labels, titles):
+        ax.set_facecolor("none")
+        ax.patch.set_alpha(0.0)
+        ax.grid(True, alpha=0.25)
+
+        ax.add_patch(
+            Rectangle(
+                (-w, -w),
+                2 * w,
+                2 * w,
+                facecolor=_KIZ_FACE,
+                edgecolor=_KIZ_EDGE,
+                linewidth=_KIZ_EDGE_WIDTH,
+                zorder=1,
+            )
+        )
+
+        xy = np.column_stack([nom_km[:, ai], nom_km[:, aj]])
+        lc, norm, cmap = _turbo_line_collection_2d(xy, t_full, linewidth=2.2)
+        lc.set_zorder(3)
+        ax.add_collection(lc)
+        last_norm, last_cmap = norm, cmap
+
+        for q, node_q in enumerate(impulse_nodes):
+            ax.scatter(
+                node_km[node_q, ai],
+                node_km[node_q, aj],
+                marker="o",
+                s=160,
+                color=_IMPULSE_COLORS[q % len(_IMPULSE_COLORS)],
+                edgecolors="black",
+                linewidths=0.9,
+                zorder=10,
+                label=f"Impulse {q}" if ai == 0 and aj == 1 else None,
+            )
+
+        all_pts = nom_km[:, [ai, aj]]
+        lim = max(1.05 * w, 1.05 * float(np.max(np.abs(all_pts))))
+        ax.set_xlim(-lim, lim)
+        ax.set_ylim(-lim, lim)
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_xlabel(xlbl, fontsize=15)
+        ax.set_ylabel(ylbl, fontsize=15)
+        ax.set_title(title, fontsize=15)
+        ax.tick_params(axis="both", which="major", labelsize=12)
+
+    if last_norm is not None:
+        sm = mpl.cm.ScalarMappable(norm=last_norm, cmap=last_cmap)
+        sm.set_array([])
+        cbar = fig.colorbar(sm, ax=axes, fraction=0.03, pad=0.02, shrink=0.85)
+        cbar.set_label(r"$t\;[\mathrm{TU}]$", fontsize=14)
+        cbar.ax.tick_params(labelsize=12)
+
+    axes[0].legend(loc="upper right", frameon=False, fontsize=14)
+    fig.suptitle(
+        r"Relative Loitering: $xy$ and $xz$ projections",
+        fontsize=16,
+    )
+    _savefig_hi_dpi(fig, "relative_loitering_xy_xz")
+    plt.show()
+
+
 if __name__ == "__main__":
     _enable_jax_x64()
     problem, context = build_relative_loitering_problem(force_recompute_halo=False, verbose=True)
+
+    # Plot-only oversampling: shrink the post-processing save step so the
+    # propagated trajectory used for plotting is denser.
+    # Must be set BEFORE initialize() so max_tau_len is sized accordingly.
+    plot_oversample_factor = 10
+    problem.settings.prp.dt = problem.settings.prp.dt / plot_oversample_factor
 
     problem.initialize()
     results = problem.solve()
@@ -442,16 +939,21 @@ if __name__ == "__main__":
 
     _print_solution_summary(results, context)
 
-    if (plot_projections_2d is None) or (plot_states is None):
+    if (mpl is None) or (plt is None):
         print(
-            "Skipping plotting because plotting dependencies failed to import. "
+            "Skipping 3D/2D projection plotting because Matplotlib is unavailable. "
             "Check NumPy/Matplotlib compatibility in your environment."
         )
     else:
-        fig_proj = plot_projections_2d(results, velocity_var_name="velocity")
-        fig_proj.update_layout(title="Relative Loitering Solution - XY, XZ, YZ Projections")
-        fig_proj.show()
+        _plot_3d_kiz(results)
+        _plot_2d_projections(results)
 
+    if plot_states is None:
+        print(
+            "Skipping state-time plotting because plotting dependencies failed to import. "
+            "Check NumPy/Plotly compatibility in your environment."
+        )
+    else:
         fig_states = plot_states(results, ["position", "velocity", "time"], cols=3)
         _apply_kiz_limits_to_state_plot(fig_states, kiz_box_width_dyn)
         fig_states.update_layout(title_text="Relative Loitering - State Evolution")
