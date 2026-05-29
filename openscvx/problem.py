@@ -18,7 +18,7 @@ import os
 import queue
 import threading
 import time
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import jax
 
@@ -370,11 +370,24 @@ class Problem:
         # Fused JAX-pure SCP iteration body (built in initialize()).
         self._iteration_fn: callable = None
 
+        # Sibling iteration body built over plain-``jax.jit`` inner solvers
+        # (never the ``jax.export`` wrappers ``save_compiled`` may produce),
+        # so it stays ``vmap``-safe and can be folded into the single exported
+        # ``solve_batched`` artifact. Equals ``_iteration_fn`` when
+        # ``save_compiled=False``. Built in initialize().
+        self._iteration_fn_jit_inner: callable = None
+
         # Closure cache for the ``lax.while_loop`` wrapper that backs
         # :meth:`solve_jax`. Keyed on ``k_max`` — rebuilt only when the caller
         # supplies a non-default ``max_iters``.
         self._solve_loop_fn: Optional[callable] = None
         self._solve_loop_k_max: Optional[int] = None
+
+        # Closure cache for the batched ``vmap``'d loop that backs
+        # :meth:`solve_batched`. Keyed on ``(B, k_max)`` — the fixed batch
+        # size is baked into the artifact, so a different ``B`` rebuilds.
+        self._solve_batched_fn: Optional[callable] = None
+        self._solve_batched_key: Optional[Tuple[int, int]] = None
 
         # Set up emitter & queue (thread started in initialize() after columns are known)
         if self.settings.dev.printing:
@@ -761,6 +774,13 @@ class Problem:
         discretization_solver_impulsive = get_impulsive_discretization_solver(
             self._lowered.dynamics_discrete
         )
+        # Keep the raw (un-jit, un-exported) solvers: under ``save_compiled``
+        # the versions below become ``jax.export`` wrappers, which have no
+        # ``vmap`` rule and so cannot back :meth:`solve_batched`'s internal
+        # ``vmap``. The jit-inner iteration body (built after ``_iteration_fn``)
+        # wraps these in plain ``jax.jit`` instead.
+        discretization_solver_raw = discretization_solver
+        discretization_solver_impulsive_raw = discretization_solver_impulsive
         self._propagation_solver = get_propagation_solver(
             self._compiled_dynamics_prop.f, self.settings, self._discretizer
         )
@@ -851,11 +871,13 @@ class Problem:
         # iteration_callback), and folds the result through the autotuner — one
         # JIT'd call per SCP step in place of the old NumPy↔JAX stitching.
         print("Initializing the SCvx Subproblem Solver...")
-        # Drop any prior ``solve_jax`` closure — it captures the previous
-        # ``iteration_fn`` and would re-use stale traces if ``initialize()``
-        # is invoked twice.
+        # Drop any prior ``solve_jax`` / ``solve_batched`` closures — they
+        # capture the previous ``iteration_fn`` and would re-use stale traces
+        # if ``initialize()`` is invoked twice.
         self._solve_loop_fn = None
         self._solve_loop_k_max = None
+        self._solve_batched_fn = None
+        self._solve_batched_key = None
         self._iteration_fn = jax.jit(
             make_scp_iteration(
                 dis_continuous=discretization_solver,
@@ -866,6 +888,25 @@ class Problem:
                 settings=self.settings,
             )
         )
+        # Sibling body for :meth:`solve_batched`'s internal ``vmap``. Under
+        # ``save_compiled`` the inner solvers above are ``jax.export`` wrappers
+        # that can't be vmapped, so rebuild over plain-``jax.jit`` solvers; the
+        # whole vmapped loop is exported as one artifact instead. When
+        # ``save_compiled=False`` the inner solvers are already jit, so reuse
+        # ``_iteration_fn`` rather than recompile the dynamics (§3, Q3).
+        if self.settings.sim.save_compiled and not self.settings.dev.debug:
+            self._iteration_fn_jit_inner = jax.jit(
+                make_scp_iteration(
+                    dis_continuous=jax.jit(discretization_solver_raw),
+                    dis_impulsive=jax.jit(discretization_solver_impulsive_raw),
+                    jax_constraints=self._compiled_constraints,
+                    solver_callback=self._solver.iteration_callback(),
+                    autotuner=self._algorithm.autotuner,
+                    settings=self.settings,
+                )
+            )
+        else:
+            self._iteration_fn_jit_inner = self._iteration_fn
         self._algorithm.initialize(
             self._iteration_fn,
             self.emitter_function,
@@ -1150,6 +1191,34 @@ class Problem:
             self._solve_loop_k_max = k_max
         return self._solve_loop_fn
 
+    def _get_or_build_solve_batched(self, B: int, max_iters: Optional[int]) -> callable:
+        """Return the cached ``jax.jit``'d batched ``lax.while_loop`` wrapper.
+
+        Mirrors :meth:`_get_or_build_solve_loop` but the loop body is
+        ``jax.vmap``'d over the leading batch axis of the ``AlgorithmState``
+        (parameters shared), so a single XLA program runs all ``B`` SCP solves.
+        It is built over :attr:`_iteration_fn_jit_inner` — the body whose inner
+        discretization solvers are plain ``jax.jit``, hence ``vmap``-safe — not
+        :attr:`_iteration_fn`, which under ``save_compiled`` wraps
+        ``call_exported`` solvers that have no ``vmap`` rule (§3). The closure
+        is cached on ``(B, k_max)``: the batch size is baked into the program,
+        so a different ``B`` retraces.
+        """
+        k_max = max_iters if max_iters is not None else self._algorithm.k_max
+        key = (B, k_max)
+        if self._solve_batched_fn is None or self._solve_batched_key != key:
+            loop = make_solve_loop(
+                self._iteration_fn_jit_inner,
+                self._algorithm.ep_tr,
+                self._algorithm.ep_vb,
+                self._algorithm.ep_vc,
+                k_max,
+            )
+            batched = jax.vmap(loop, in_axes=(0, None))
+            self._solve_batched_fn = jax.jit(batched)
+            self._solve_batched_key = key
+        return self._solve_batched_fn
+
     def solve_jax(
         self,
         x_initial: Optional[jnp.ndarray] = None,
@@ -1204,6 +1273,61 @@ class Problem:
         solve_fn = self._get_or_build_solve_loop(max_iters)
         final_state = solve_fn(initial_state, params)
         return OptimizationResults.from_final_state(final_state, problem=self)
+
+    def solve_batched(
+        self,
+        x0_stack: jnp.ndarray,
+        xf_stack: jnp.ndarray,
+        parameters: Optional[dict] = None,
+        *,
+        max_iters: Optional[int] = None,
+    ) -> OptimizationResults:
+        """Run ``B`` SCP solves over stacked boundary conditions — batch baked in.
+
+        Applies ``jax.vmap`` *internally* over ``x0_stack`` / ``xf_stack`` (the
+        parameters are shared across the batch) and drives the same fused
+        ``iteration_fn`` core as :meth:`solve_jax` inside one ``lax.while_loop``.
+        The result is a batched :class:`OptimizationResults` pytree: every array
+        leaf carries the leading batch axis ``B`` (``result.x.shape ==
+        (B, N, n_x)``), exactly as ``jax.vmap(solve_jax)`` produces. Per-iteration
+        history is empty, the same asymmetry :meth:`solve_jax` carries — list
+        growth doesn't fit inside ``lax.while_loop``; use :meth:`solve` for
+        populated history.
+
+        Why this exists alongside ``jax.vmap(solve_jax)``: because the batch axis
+        is owned here rather than by the caller, the whole vmapped loop is a
+        single function that can be exported to disk and reused across processes
+        (Phase 2). ``jax.vmap(solve_jax)`` is the right tool for in-program
+        batching that composes with ``grad``/``scan``; ``solve_batched`` is for
+        when cross-process cold-start dominates. With no export wired up the two
+        produce identical results.
+
+        Args:
+            x0_stack: Stacked initial-state boundary pins, shape
+                ``(B, n_states)``. Each row follows the :meth:`solve_jax`
+                ``x_initial`` convention (``jnp.nan`` at non-Fix entries).
+            xf_stack: Stacked terminal-state boundary pins, shape
+                ``(B, n_states)``. Same per-row convention as ``x0_stack``.
+            parameters: Problem parameters dict shared across the batch.
+                ``None`` reuses ``self._parameters``.
+            max_iters: SCP iteration cap. ``None`` uses ``algorithm.k_max``; a
+                different value (or a different ``B``) rebuilds the cached
+                batched closure.
+
+        Returns:
+            :class:`OptimizationResults` pytree with a leading ``B`` axis on
+            every leaf and empty histories.
+        """
+        if self._iteration_fn_jit_inner is None:
+            raise ValueError(
+                "Problem has not been initialized. Call initialize() before solve_batched()"
+            )
+
+        states = jax.vmap(self._resolve_initial_state)(x0_stack, xf_stack)
+        params = parameters if parameters is not None else self._parameters
+        batched_solve = self._get_or_build_solve_batched(x0_stack.shape[0], max_iters)
+        final_states = batched_solve(states, params)
+        return OptimizationResults.from_final_state(final_states, problem=self)
 
     def post_process(self) -> OptimizationResults:
         """Propagate solution through full nonlinear dynamics for high-fidelity trajectory.
