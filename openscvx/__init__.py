@@ -26,7 +26,7 @@ from openscvx.discretization import (
     VectorizeDiscretizeLinearize,
 )
 from openscvx.expert import ByofSpec
-from openscvx.integrations import DynamicsAdapter, MjxDynamics
+from openscvx.integrations import DynamicsAdapter, FraxDynamics, MjxDynamics
 from openscvx.loader import load_dict, load_json, load_yaml
 from openscvx.problem import Problem
 from openscvx.solvers import CVXPyPTRSolver, PTRSolver
@@ -198,6 +198,7 @@ __all__ = [
     # External-backend dynamics adapters
     "DynamicsAdapter",
     "MjxDynamics",
+    "FraxDynamics",
     # Discretization
     "DiscretizeLinearizeVectorize",
     "LinearizeDiscretize",

@@ -59,12 +59,16 @@ mjx = [
     "mujoco>=3.0",
     "mujoco-mjx>=3.0",
 ]
+frax = [
+    "frax>=0.0.4",
+]
 test = [
     "pytest",
     "scipy",
     "jaxlie",
     "svgpathtools",
-    "pytest-xdist"
+    "pytest-xdist",
+    "frax>=0.0.4",
 ]
 
 [tool.setuptools.packages.find]
