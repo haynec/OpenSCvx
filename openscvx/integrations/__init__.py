@@ -1,9 +1,18 @@
 """External-backend dynamics adapters for OpenSCvx.
 
-The recommended entry-point is `MjxDynamics`, which goes directly into the
-``dynamics=`` slot of `Problem` and constructs the matching State/Control
-objects for the user. Free-joint quaternion kinematics for floating-base
-models (drones, humanoids) are detected and handled automatically::
+Two backends are currently supported. `MjxDynamics` wraps a MuJoCo MJX model;
+`FraxDynamics` wraps a `frax.Robot` (Fast Robot Kinematics and Dynamics in
+JAX). Both go directly into the ``dynamics=`` slot of `Problem` and construct
+the matching State/Control objects for the user::
+
+    from openscvx.integrations import FraxDynamics
+    from frax.robots.franka_panda import load_panda
+
+    dyn = FraxDynamics(load_panda())
+    problem = ox.Problem(dynamics=dyn, states=dyn.states, controls=dyn.controls, ...)
+
+For MJX, free-joint quaternion kinematics for floating-base models (drones,
+humanoids) are detected and handled automatically::
 
     from openscvx.integrations import MjxDynamics
 
@@ -40,6 +49,7 @@ Example — quadrotor with free joint (``nq=7``, ``nv=6``)::
 from typing import Any
 
 from .base import DynamicsAdapter
+from .frax import FraxDynamics
 from .mjx import MjxDynamics
 
 
@@ -48,6 +58,13 @@ def mjx_dynamics(*args: Any, **kwargs: Any) -> Any:
     from .mjx import mjx_dynamics as _mjx_dynamics
 
     return _mjx_dynamics(*args, **kwargs)
+
+
+def frax_dynamics(*args: Any, **kwargs: Any) -> Any:
+    """Lazy delegate to the low-level frax BYOF factory."""
+    from .frax import frax_dynamics as _frax_dynamics
+
+    return _frax_dynamics(*args, **kwargs)
 
 
 def __getattr__(name: str) -> Any:
@@ -62,5 +79,7 @@ __all__ = [
     "DynamicsAdapter",
     "MjxDynamics",
     "mjx_dynamics",
+    "FraxDynamics",
+    "frax_dynamics",
     "menagerie",
 ]
