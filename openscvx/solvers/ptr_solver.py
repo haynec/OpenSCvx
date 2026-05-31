@@ -508,6 +508,39 @@ class PTRSolver(ConvexSolver):
         """
         raise NotImplementedError
 
+    @property
+    def exportable(self) -> bool:
+        """Whether this backend's solve survives ``jax.export`` serialization.
+
+        :meth:`~openscvx.problem.Problem.solve_batched` exports the whole
+        vmapped SCP loop to disk under ``save_compiled=True``, which requires
+        every op in the loop — the backend solve included — to lower to
+        serializable XLA. The pure-JAX backends (QPAX, Moreau) qualify, so the
+        base default is ``True``. CVXPy's :meth:`iteration_callback` is a
+        :func:`jax.pure_callback`, whose host call ``jax.export`` cannot
+        serialize, so it overrides this to ``False`` and ``solve_batched``
+        raises a teaching error rather than silently degrading to an in-process
+        solve.
+        """
+        return True
+
+    def _hash_into(self, hasher: "hashlib._Hash") -> None:
+        """Contribute this backend's identity to the ``solve_batched`` cache key.
+
+        The exported batched loop bakes in the backend class and its
+        ``solver_args`` (tolerances, iteration caps, ...), neither of which the
+        symbolic problem hash covers. Mirrors the symbolic ``_hash_into``
+        protocol (see :meth:`~openscvx.symbolic.expr.expr.Expr._hash_into`) so a
+        backend that adds a field affecting the artifact updates the hash right
+        next to that field.
+        """
+        from openscvx.utils.caching import hash_value_into
+
+        hasher.update(type(self).__name__.encode())
+        for key in sorted(self.solver_args or {}):
+            hasher.update(str(key).encode())
+            hash_value_into(hasher, self.solver_args[key])
+
     @staticmethod
     def _extract_impulsive_pins(
         constraints: "ConstraintSet",

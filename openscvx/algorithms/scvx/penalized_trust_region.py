@@ -170,6 +170,33 @@ class PenalizedTrustRegion(Algorithm):
     def lam_vb(self, value: float) -> None:
         self.weights.lam_vb = float(value)
 
+    def _hash_into(self, hasher: "hashlib._Hash") -> None:
+        """Contribute this algorithm's identity to the ``solve_batched`` cache key.
+
+        The exported batched loop bakes in the convergence thresholds, the
+        iteration cap, the initial penalty weights, and the autotuner's update
+        rule — none of which the symbolic problem hash covers. Each piece is
+        folded in next to where it lives (weights via their fields, the
+        autotuner via its own ``_hash_into``), mirroring the symbolic
+        ``_hash_into`` protocol so a new field is hashed where it is added.
+        """
+        from openscvx.utils.caching import hash_value_into
+
+        hasher.update(type(self).__name__.encode())
+        for value in (self.ep_tr, self.ep_vb, self.ep_vc, self.k_max):
+            hash_value_into(hasher, value)
+        w = self.weights
+        for value in (
+            w.lam_prox,
+            w.lam_vc,
+            w.lam_cost,
+            w.lam_vb,
+            w.lam_vb_nodal,
+            w.lam_vb_cross,
+        ):
+            hash_value_into(hasher, value)
+        self.autotuner._hash_into(hasher)
+
     def get_columns(self, verbosity: int = Verbosity.STANDARD) -> List[Column]:
         """Get the columns to display for iteration output."""
         all_columns = self.BASE_COLUMNS + self.autotuner.COLUMNS + self.TAIL_COLUMNS

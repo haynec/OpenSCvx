@@ -154,6 +154,20 @@ class Discretizer(ABC):
     #: must set this in ``__init__``.
     ode_solver: str
 
+    def _hash_into(self, hasher: "hashlib._Hash") -> None:
+        """Contribute the discretizer's scheme to the ``solve_batched`` cache key.
+
+        The exported batched loop bakes in the discrete-time Jacobians the
+        discretizer produces, so the scheme that produced them — the concrete
+        class, the control hold type, and the ODE solver — must invalidate the
+        artifact when it changes. Mirrors the symbolic ``_hash_into`` protocol.
+        """
+        from openscvx.utils.caching import hash_value_into
+
+        hasher.update(type(self).__name__.encode())
+        hash_value_into(hasher, self.dis_type)
+        hash_value_into(hasher, self.ode_solver)
+
     @abstractmethod
     def get_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
         """Create a discretization solver callable.

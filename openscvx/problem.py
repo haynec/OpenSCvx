@@ -65,9 +65,11 @@ from openscvx.symbolic.lower import lower_symbolic_problem
 from openscvx.symbolic.problem import SymbolicProblem
 from openscvx.utils import printing, profiling
 from openscvx.utils.caching import (
+    get_solve_batched_cache_path,
     get_solver_cache_paths,
     load_or_compile_discretization_solver,
     load_or_compile_propagation_solver,
+    load_or_export_solve_batched,
     prime_propagation_solver,
 )
 
@@ -1203,6 +1205,13 @@ class Problem:
         ``call_exported`` solvers that have no ``vmap`` rule (§3). The closure
         is cached on ``(B, k_max)``: the batch size is baked into the program,
         so a different ``B`` retraces.
+
+        Under ``save_compiled`` the whole vmapped loop is exported once to the
+        solver cache and deserialized on later processes (the single artifact
+        that makes ``solve_batched`` worth having); the returned object is then
+        a ``jax.export`` wrapper called via ``.call``. Export requires an
+        exportable backend — CVXPy raises a teaching error here rather than
+        silently degrading to an in-process solve.
         """
         k_max = max_iters if max_iters is not None else self._algorithm.k_max
         key = (B, k_max)
@@ -1215,7 +1224,33 @@ class Problem:
                 k_max,
             )
             batched = jax.vmap(loop, in_axes=(0, None))
-            self._solve_batched_fn = jax.jit(batched)
+            if self.settings.sim.save_compiled and not self.settings.dev.debug:
+                if not self._solver.exportable:
+                    raise ValueError(
+                        f"solve_batched(save_compiled=True) cannot export the "
+                        f"{type(self._solver).__name__} backend: its solve runs through a "
+                        f"jax.pure_callback, which jax.export cannot serialize. Use an "
+                        f"exportable backend (QPAXPTRSolver or MoreauPTRSolver), or set "
+                        f"save_compiled=False to run B sequential in-process solves."
+                    )
+                cache_file = get_solve_batched_cache_path(
+                    self.symbolic,
+                    self.settings,
+                    self._algorithm,
+                    self._solver,
+                    self._discretizer,
+                    B,
+                )
+                sample_state = jax.tree_util.tree_map(
+                    lambda a: jnp.broadcast_to(a, (B,) + jnp.shape(a)),
+                    AlgorithmState.from_settings(self.settings, self._algorithm.weights),
+                )
+                batched = load_or_export_solve_batched(
+                    batched, cache_file, sample_state, self._parameters
+                )
+            else:
+                batched = jax.jit(batched)
+            self._solve_batched_fn = batched
             self._solve_batched_key = key
         return self._solve_batched_fn
 
@@ -1296,11 +1331,22 @@ class Problem:
 
         Why this exists alongside ``jax.vmap(solve_jax)``: because the batch axis
         is owned here rather than by the caller, the whole vmapped loop is a
-        single function that can be exported to disk and reused across processes
-        (Phase 2). ``jax.vmap(solve_jax)`` is the right tool for in-program
-        batching that composes with ``grad``/``scan``; ``solve_batched`` is for
-        when cross-process cold-start dominates. With no export wired up the two
-        produce identical results.
+        single function that ``jax.export`` can serialize. Under
+        ``save_compiled=True`` the artifact is written to the solver cache on the
+        first call and deserialized on later processes — skipping the XLA compile
+        that ``jax.vmap(solve_jax)`` pays on every fresh launch. ``jax.vmap(
+        solve_jax)`` is the right tool for in-program batching that composes with
+        ``grad``/``scan``; ``solve_batched`` is for when cross-process cold-start
+        dominates. With ``save_compiled=False`` the two produce identical results
+        in-process.
+
+        Export requires a pure-JAX backend: under ``save_compiled=True`` the
+        CVXPy backend raises (its solve is a ``jax.pure_callback``, which
+        ``jax.export`` cannot serialize), pointing at QPAX / Moreau. The cache
+        key invalidates on any change that alters the exported loop — backend +
+        ``solver_args``, algorithm + autotuner + thresholds + weights,
+        discretizer, scaling, ``B``, and the JAX version — so a stale artifact is
+        never silently reused.
 
         Args:
             x0_stack: Stacked initial-state boundary pins, shape
@@ -1326,7 +1372,13 @@ class Problem:
         states = jax.vmap(self._resolve_initial_state)(x0_stack, xf_stack)
         params = parameters if parameters is not None else self._parameters
         batched_solve = self._get_or_build_solve_batched(x0_stack.shape[0], max_iters)
-        final_states = batched_solve(states, params)
+        # The exported (``save_compiled``) artifact is a ``jax.export`` wrapper
+        # dispatched via ``.call``; the in-process artifact is a plain callable.
+        final_states = (
+            batched_solve.call(states, params)
+            if hasattr(batched_solve, "call")
+            else batched_solve(states, params)
+        )
         return OptimizationResults.from_final_state(final_states, problem=self)
 
     def post_process(self) -> OptimizationResults:
