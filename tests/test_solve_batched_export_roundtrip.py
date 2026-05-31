@@ -78,9 +78,10 @@ def test_cache_key_invalidates_on_artifact_changing_state(tmp_path):
     prob = build_brachistochrone("qpax", n=8, k_max=20)
     prob.initialize()
 
-    def path(p, B=4):
+    def path(p, B=4, k_max=None):
         return get_solve_batched_cache_path(
-            p.symbolic, p.settings, p._algorithm, p._solver, p._discretizer, B, cache_dir=tmp_path
+            p.symbolic, p.settings, p._algorithm, p._solver, p._discretizer,
+            B, p._algorithm.k_max if k_max is None else k_max, cache_dir=tmp_path
         )
 
     base = path(prob)
@@ -91,11 +92,13 @@ def test_cache_key_invalidates_on_artifact_changing_state(tmp_path):
     # Batch size is baked into the artifact → part of the key.
     assert path(prob, B=2) != base
 
-    # k_max changes the unrolled loop bound.
+    # k_max is the resolved loop bound. Both routes that change it must re-key:
+    # bumping the algorithm default, and a per-call ``max_iters`` override.
     prob._algorithm.k_max += 1
     assert path(prob) != base
     prob._algorithm.k_max -= 1
     assert path(prob) == base
+    assert path(prob, k_max=prob._algorithm.k_max + 1) != base
 
     # solver_args (tolerances / iteration caps) are baked into the backend solve.
     saved_max_iter = prob._solver.solver_args.get("max_iter")

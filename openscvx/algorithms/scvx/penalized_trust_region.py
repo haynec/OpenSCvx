@@ -174,16 +174,22 @@ class PenalizedTrustRegion(Algorithm):
         """Contribute this algorithm's identity to the ``solve_batched`` cache key.
 
         The exported batched loop bakes in the convergence thresholds, the
-        iteration cap, the initial penalty weights, and the autotuner's update
-        rule — none of which the symbolic problem hash covers. Each piece is
-        folded in next to where it lives (weights via their fields, the
-        autotuner via its own ``_hash_into``), mirroring the symbolic
-        ``_hash_into`` protocol so a new field is hashed where it is added.
+        initial penalty weights, and the autotuner's update rule — none of which
+        the symbolic problem hash covers. Each piece is folded in next to where
+        it lives (weights via their fields, the autotuner via its own
+        ``_hash_into``), mirroring the symbolic ``_hash_into`` protocol so a new
+        field is hashed where it is added.
+
+        The iteration cap ``k_max`` is deliberately *not* folded in here: the
+        loop is built at a *resolved* bound (a ``solve_batched(max_iters=...)``
+        override supersedes ``self.k_max``), so the assembler stamps that
+        resolved value to avoid both a stale read and spurious invalidation when
+        ``self.k_max`` changes but the caller always overrides it.
         """
         from openscvx.utils.caching import hash_value_into
 
         hasher.update(type(self).__name__.encode())
-        for value in (self.ep_tr, self.ep_vb, self.ep_vc, self.k_max):
+        for value in (self.ep_tr, self.ep_vb, self.ep_vc):
             hash_value_into(hasher, value)
         w = self.weights
         for value in (

@@ -1193,7 +1193,9 @@ class Problem:
             self._solve_loop_k_max = k_max
         return self._solve_loop_fn
 
-    def _get_or_build_solve_batched(self, B: int, max_iters: Optional[int]) -> callable:
+    def _get_or_build_solve_batched(
+        self, B: int, max_iters: Optional[int], params: dict
+    ) -> callable:
         """Return the cached ``jax.jit``'d batched ``lax.while_loop`` wrapper.
 
         Mirrors :meth:`_get_or_build_solve_loop` but the loop body is
@@ -1240,13 +1242,17 @@ class Problem:
                     self._solver,
                     self._discretizer,
                     B,
+                    k_max,
                 )
                 sample_state = jax.tree_util.tree_map(
                     lambda a: jnp.broadcast_to(a, (B,) + jnp.shape(a)),
                     AlgorithmState.from_settings(self.settings, self._algorithm.weights),
                 )
+                # Trace the export against the same ``params`` the call will use,
+                # not ``self._parameters`` — under an export the input avals are
+                # frozen at trace time, so the two must agree.
                 batched = load_or_export_solve_batched(
-                    batched, cache_file, sample_state, self._parameters
+                    batched, cache_file, sample_state, params
                 )
             else:
                 batched = jax.jit(batched)
@@ -1355,10 +1361,13 @@ class Problem:
             xf_stack: Stacked terminal-state boundary pins, shape
                 ``(B, n_states)``. Same per-row convention as ``x0_stack``.
             parameters: Problem parameters dict shared across the batch.
-                ``None`` reuses ``self._parameters``.
+                ``None`` reuses ``self._parameters``. Values flow as runtime
+                inputs to the exported artifact; its pytree structure is fixed
+                at the first ``solve_batched`` call that builds the artifact.
             max_iters: SCP iteration cap. ``None`` uses ``algorithm.k_max``; a
                 different value (or a different ``B``) rebuilds the cached
-                batched closure.
+                batched closure *and* keys a distinct exported artifact, so an
+                override never reuses an artifact compiled at another bound.
 
         Returns:
             :class:`OptimizationResults` pytree with a leading ``B`` axis on
@@ -1371,7 +1380,7 @@ class Problem:
 
         states = jax.vmap(self._resolve_initial_state)(x0_stack, xf_stack)
         params = parameters if parameters is not None else self._parameters
-        batched_solve = self._get_or_build_solve_batched(x0_stack.shape[0], max_iters)
+        batched_solve = self._get_or_build_solve_batched(x0_stack.shape[0], max_iters, params)
         # The exported (``save_compiled``) artifact is a ``jax.export`` wrapper
         # dispatched via ``.call``; the in-process artifact is a plain callable.
         final_states = (
