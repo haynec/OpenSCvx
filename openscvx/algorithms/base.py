@@ -28,6 +28,8 @@ from jax import export
 from openscvx.utils.printing import Column
 
 if TYPE_CHECKING:
+    import hashlib
+
     from openscvx.config import Config
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
 

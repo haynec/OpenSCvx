@@ -49,6 +49,8 @@ from .base import ConvexSolver
 from .cones import ConeConstraint, NonnegConeConstraint, SOCConstraint, ZeroConeConstraint
 
 if TYPE_CHECKING:
+    import hashlib
+
     from openscvx.lowered.unified import UnifiedControl, UnifiedState
     from openscvx.symbolic.constraint_set import ConstraintSet
 

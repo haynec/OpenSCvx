@@ -80,8 +80,14 @@ def test_cache_key_invalidates_on_artifact_changing_state(tmp_path):
 
     def path(p, B=4, k_max=None):
         return get_solve_batched_cache_path(
-            p.symbolic, p.settings, p._algorithm, p._solver, p._discretizer,
-            B, p._algorithm.k_max if k_max is None else k_max, cache_dir=tmp_path
+            p.symbolic,
+            p.settings,
+            p._algorithm,
+            p._solver,
+            p._discretizer,
+            B,
+            p._algorithm.k_max if k_max is None else k_max,
+            cache_dir=tmp_path,
         )
 
     base = path(prob)

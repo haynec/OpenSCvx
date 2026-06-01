@@ -1251,9 +1251,7 @@ class Problem:
                 # Trace the export against the same ``params`` the call will use,
                 # not ``self._parameters`` — under an export the input avals are
                 # frozen at trace time, so the two must agree.
-                batched = load_or_export_solve_batched(
-                    batched, cache_file, sample_state, params
-                )
+                batched = load_or_export_solve_batched(batched, cache_file, sample_state, params)
             else:
                 batched = jax.jit(batched)
             self._solve_batched_fn = batched

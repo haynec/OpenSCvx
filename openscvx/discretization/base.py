@@ -25,6 +25,8 @@ import numpy as np
 from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:
+    import hashlib
+
     from openscvx.config import Config
     from openscvx.lowered.dynamics import Dynamics
 

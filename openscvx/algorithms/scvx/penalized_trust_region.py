@@ -35,6 +35,8 @@ from ..base import (
 from ..weights import Weights
 
 if TYPE_CHECKING:
+    import hashlib
+
     from openscvx.lowered import LoweredJaxConstraints
     from openscvx.symbolic.expr.control import Control
     from openscvx.symbolic.expr.state import State
