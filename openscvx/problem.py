@@ -33,7 +33,11 @@ from openscvx.algorithms import (
     OptimizationResults,
     PenalizedTrustRegionConfig,
 )
-from openscvx.algorithms.scvx.iteration import ScpIterationPhases, make_scp_iteration, make_solve_loop
+from openscvx.algorithms.scvx.iteration import (
+    ScpIterationPhases,
+    make_scp_iteration,
+    make_solve_loop,
+)
 from openscvx.config import (
     Config,
     DevConfig,
