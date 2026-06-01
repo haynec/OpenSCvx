@@ -277,6 +277,12 @@ class PTRSolver(ConvexSolver):
     # can suggest which backends do support a given cone type.
     _solver_registry: ClassVar[List[Type["PTRSolver"]]] = []
 
+    #: Backend-specific solve options (tolerances, iteration caps, ...). Each
+    #: concrete backend assigns its own in ``__init__``; declared here with a
+    #: ``None`` default so the base :meth:`_hash_into` contract is self-contained
+    #: — a subclass that omits it hashes as an empty mapping rather than raising.
+    solver_args: Optional[dict] = None
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         PTRSolver._solver_registry.append(cls)

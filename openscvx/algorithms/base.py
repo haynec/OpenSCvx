@@ -213,8 +213,16 @@ class AutotuningBase(ABC):
         parameter that steers it (penalty ramps, acceptance thresholds, weight
         clips). The default hashes the concrete class plus all instance
         attributes — sufficient because autotuner parameters are plain scalars.
-        Folded in by :meth:`Algorithm._hash_into`; mirrors the symbolic
-        ``_hash_into`` protocol.
+        Folded in by the algorithm's ``_hash_into`` (e.g.
+        :meth:`~openscvx.algorithms.scvx.penalized_trust_region.PenalizedTrustRegion._hash_into`);
+        mirrors the symbolic ``_hash_into`` protocol.
+
+        Caveat: the ``vars(self)`` sweep hashes *every* instance attribute, so a
+        subclass that stashes an iteration-count- or ``k_max``-derived field
+        would silently re-introduce the double-count that the algorithm's own
+        ``_hash_into`` deliberately avoids (the loop bound is keyed once, on the
+        assembler's resolved ``k_max``). Keep such fields out of the autotuner,
+        or override this method to exclude them.
         """
         from openscvx.utils.caching import hash_value_into
 
