@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from openscvx.symbolic.expr.state import State
 
     from ..base import AutotuningBase
+    from .iteration import ScpIterationPhases
 
 warnings.filterwarnings("ignore")
 
@@ -109,6 +110,7 @@ class PenalizedTrustRegion(Algorithm):
         # the fused JAX-pure SCP body; ``step()`` is a thin Python wrapper that
         # calls it, records history, and emits.
         self._iteration_fn: Callable | None = None
+        self._timed_phases: "ScpIterationPhases | None" = None
         self._jax_constraints: "LoweredJaxConstraints" = None
         self._emitter: callable = None
 
@@ -181,16 +183,19 @@ class PenalizedTrustRegion(Algorithm):
         emitter: callable,
         jax_constraints: "LoweredJaxConstraints",
         settings: Config,
+        timed_phases: "ScpIterationPhases | None" = None,
     ) -> None:
         """Store the fused SCP iteration body and per-iteration infrastructure.
 
         ``iteration_fn`` is built and JIT-warmed by :meth:`Problem.initialize`;
-        :meth:`step` is a thin Python wrapper that calls it, records history,
-        and emits diagnostics. The boundary conditions the subproblem pins are
-        carried on :class:`AlgorithmState` (``x_init_pin`` / ``x_term_pin``), so
-        there is no solver state to prime here.
+        :meth:`step` drives ``timed_phases`` (when provided) so discretization
+        and convex-solve wall times can be reported separately, then records
+        history and emits diagnostics. The boundary conditions the subproblem
+        pins are carried on :class:`AlgorithmState` (``x_init_pin`` /
+        ``x_term_pin``), so there is no solver state to prime here.
         """
         self._iteration_fn = iteration_fn
+        self._timed_phases = timed_phases
         self._emitter = emitter
         self._jax_constraints = jax_constraints
 
@@ -207,18 +212,34 @@ class PenalizedTrustRegion(Algorithm):
         diagnostics it returns into ``history``, emits progress, and reports
         convergence from the metrics on the next state.
         """
-        if self._iteration_fn is None:
+        if self._timed_phases is None:
             raise RuntimeError(
                 "PenalizedTrustRegion.step() called before initialize(). "
                 "Call initialize() first to set up the iteration body."
             )
 
         iter_index = int(state.k)
+        phases = self._timed_phases
 
         t0 = time.time()
-        next_state, diag = self._iteration_fn(state, params)
+        disc = phases.discretize_current(state, params)
+        jax.block_until_ready(disc)
+        dis_time = time.time() - t0
+
+        data = phases.build_subproblem_data(state, disc, params)
+
+        t0 = time.time()
+        solution = phases.solve_subproblem(state, data)
+        jax.block_until_ready(solution)
+        subprop_time = time.time() - t0
+
+        t0 = time.time()
+        cand_disc = phases.discretize_candidate(solution, params)
+        jax.block_until_ready(cand_disc)
+        dis_time += time.time() - t0
+
+        next_state, diag = phases.complete_iteration(state, solution, cand_disc, params)
         jax.block_until_ready((next_state, diag))
-        step_time = time.time() - t0
 
         # Fail loudly on a bad subproblem solve before it becomes the next
         # linearization point. Two gates: a non-OPTIMAL status from the backend
@@ -257,8 +278,8 @@ class PenalizedTrustRegion(Algorithm):
 
         emission_data = {
             "iter": iter_index,
-            "dis_time": 0.0,
-            "subprop_time": step_time * 1000.0,
+            "dis_time": dis_time * 1000.0,
+            "subprop_time": subprop_time * 1000.0,
             "J_tr": scalars["J_tr"],
             "J_vb": scalars["J_vb"],
             "J_vc": scalars["J_vc"],
