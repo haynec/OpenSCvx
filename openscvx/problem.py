@@ -41,7 +41,7 @@ from openscvx.algorithms import (
     OptimizationResults,
     PenalizedTrustRegionConfig,
 )
-from openscvx.algorithms.scvx.iteration import make_scp_iteration, make_solve_loop
+from openscvx.algorithms.scvx.iteration import ScpIterationPhases, make_scp_iteration, make_solve_loop
 from openscvx.config import (
     Config,
     DevConfig,
@@ -1167,43 +1167,30 @@ class Problem:
         # capture the previous ``iteration_fn`` and would re-use stale traces
         # if ``initialize()`` is invoked twice.
         self._solve_loop_fn = None
-        self._solve_batched_fn = None
-        self._solve_batched_key = None
-        self._solve_batched_is_exported = False
-        self._iteration_fn = jax.jit(
-            make_scp_iteration(
-                dis_continuous=discretization_solver,
-                dis_impulsive=discretization_solver_impulsive,
-                jax_constraints=self._compiled_constraints,
-                solver_callback=self._solver.iteration_callback(),
-                autotuner=self._algorithm.autotuner,
-                settings=self.settings,
-            )
+        self._solve_loop_k_max = None
+        scp_phases = make_scp_iteration(
+            dis_continuous=discretization_solver,
+            dis_impulsive=discretization_solver_impulsive,
+            jax_constraints=self._compiled_constraints,
+            solver_callback=self._solver.iteration_callback(),
+            autotuner=self._algorithm.autotuner,
+            settings=self.settings,
         )
-        # Sibling body for :meth:`solve_batched`'s internal ``vmap``. Under
-        # ``save_compiled`` the inner solvers above are ``jax.export`` wrappers
-        # that can't be vmapped, so rebuild over plain-``jax.jit`` solvers; the
-        # whole vmapped loop is exported as one artifact instead. When
-        # ``save_compiled=False`` the inner solvers are already jit, so reuse
-        # ``_iteration_fn`` rather than recompile the dynamics (§3, Q3).
-        if self.settings.sim.save_compiled and not self.settings.dev.debug:
-            self._iteration_fn_jit_inner = jax.jit(
-                make_scp_iteration(
-                    dis_continuous=jax.jit(discretization_solver_raw),
-                    dis_impulsive=jax.jit(discretization_solver_impulsive_raw),
-                    jax_constraints=self._compiled_constraints,
-                    solver_callback=self._solver.iteration_callback(),
-                    autotuner=self._algorithm.autotuner,
-                    settings=self.settings,
-                )
-            )
-        else:
-            self._iteration_fn_jit_inner = self._iteration_fn
+        timed_phases = ScpIterationPhases(
+            iteration_fn=jax.jit(scp_phases.iteration_fn),
+            discretize_current=jax.jit(scp_phases.discretize_current),
+            build_subproblem_data=jax.jit(scp_phases.build_subproblem_data),
+            solve_subproblem=jax.jit(scp_phases.solve_subproblem),
+            discretize_candidate=jax.jit(scp_phases.discretize_candidate),
+            complete_iteration=jax.jit(scp_phases.complete_iteration),
+        )
+        self._iteration_fn = timed_phases.iteration_fn
         self._algorithm.initialize(
             self._iteration_fn,
             self.emitter_function,
             self._compiled_constraints,
             self.settings,
+            timed_phases=timed_phases,
         )
 
         # Warm the JIT cache so the first ``.solve()`` doesn't pay the compile
@@ -1216,6 +1203,21 @@ class Problem:
         # they never benefit from.
         warmup_state = self._default_state()
         jax.block_until_ready(self._iteration_fn(warmup_state, self._parameters))
+        # Warm the decomposed phases used by PenalizedTrustRegion.step() so the
+        # first printed iteration reports real dis/solve timings, not compile.
+        warmup_disc = timed_phases.discretize_current(warmup_state, self._parameters)
+        warmup_data = timed_phases.build_subproblem_data(
+            warmup_state, warmup_disc, self._parameters
+        )
+        warmup_solution = timed_phases.solve_subproblem(warmup_state, warmup_data)
+        warmup_cand_disc = timed_phases.discretize_candidate(
+            warmup_solution, self._parameters
+        )
+        jax.block_until_ready(
+            timed_phases.complete_iteration(
+                warmup_state, warmup_solution, warmup_cand_disc, self._parameters
+            )
+        )
         print("✓ SCvx Subproblem Solver initialized")
 
         # Get columns from algorithm (now that autotuner is set) and start print thread

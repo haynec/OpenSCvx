@@ -29,7 +29,7 @@ body from a Python ``while`` loop, so behavior is unchanged.
 """
 
 from dataclasses import dataclass, fields
-from typing import TYPE_CHECKING, Callable, Tuple
+from typing import TYPE_CHECKING, Callable, NamedTuple, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -86,6 +86,27 @@ class IterationDiagnostics:
         return cls(*children)
 
 
+class ScpIterationPhases(NamedTuple):
+    """Decomposed SCP iteration body for timed Python stepping.
+
+    ``iteration_fn`` is the fused composition of the other callables — use it
+    for ``jax.jit`` warm-up, ``make_solve_loop``, and parity tests. The Python
+    SCP loop in :meth:`~openscvx.algorithms.scvx.penalized_trust_region.PenalizedTrustRegion.step`
+    drives the pieces separately so discretization and convex-solve wall times
+    can be reported independently.
+    """
+
+    iteration_fn: Callable[[AlgorithmState, dict], Tuple[AlgorithmState, IterationDiagnostics]]
+    discretize_current: Callable[[AlgorithmState, dict], tuple]
+    build_subproblem_data: Callable[[AlgorithmState, tuple, dict], SubproblemData]
+    solve_subproblem: Callable[[AlgorithmState, SubproblemData], SubproblemSolution]
+    discretize_candidate: Callable[[SubproblemSolution, dict], tuple]
+    complete_iteration: Callable[
+        [AlgorithmState, SubproblemSolution, tuple, dict],
+        Tuple[AlgorithmState, IterationDiagnostics],
+    ]
+
+
 def make_scp_iteration(
     dis_continuous: Callable,
     dis_impulsive: Callable,
@@ -93,7 +114,7 @@ def make_scp_iteration(
     solver_callback: Callable[[AlgorithmState, SubproblemData], SubproblemSolution],
     autotuner: "AutotuningBase",
     settings: "Config",
-) -> Callable[[AlgorithmState, dict], Tuple[AlgorithmState, IterationDiagnostics]]:
+) -> ScpIterationPhases:
     """Build one JAX-pure SCP iteration body.
 
     The returned ``iteration_fn(state, params)`` performs a single SCP step and
@@ -133,7 +154,8 @@ def make_scp_iteration(
         settings: Problem configuration (scaling matrices, boundary types).
 
     Returns:
-        ``iteration_fn(state, params) -> (next_state, diagnostics)``.
+        :class:`ScpIterationPhases` whose ``iteration_fn`` is the fused
+        ``(state, params) -> (next_state, diagnostics)`` body.
     """
     N = settings.sim.n
     n_x = settings.sim.n_states
@@ -230,13 +252,12 @@ def make_scp_iteration(
                 cost = cost - x[-1, i]
         return cost
 
-    def iteration_fn(
-        state: AlgorithmState, params: dict
-    ) -> Tuple[AlgorithmState, IterationDiagnostics]:
-        # 1–2. Discretize the current iterate for the subproblem linearization.
-        A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, _, _ = _discretize(state.x, state.u, params)
+    def discretize_current(state: AlgorithmState, params: dict):
+        """Discretize the current iterate for the subproblem linearization."""
+        return _discretize(state.x, state.u, params)
 
-        # 3. Linearize the constraints about the current iterate.
+    def build_subproblem_data(state: AlgorithmState, disc: tuple, params: dict) -> SubproblemData:
+        A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, _, _ = disc
         (
             nodal_g,
             nodal_grad_x,
@@ -245,9 +266,7 @@ def make_scp_iteration(
             cross_grad_X,
             cross_grad_U,
         ) = _linearize_constraints(state.x, state.u, params)
-
-        # 4. Pack the subproblem inputs.
-        data = SubproblemData(
+        return SubproblemData(
             x_bar=state.x,
             u_bar=state.u,
             A_d=A_d,
@@ -273,14 +292,19 @@ def make_scp_iteration(
             params=params,
         )
 
-        # 5. Solve the convex subproblem.
-        solution = solver_callback(state, data)
+    def solve_subproblem(state: AlgorithmState, data: SubproblemData) -> SubproblemSolution:
+        return solver_callback(state, data)
 
-        # 6a. Discretize the candidate for the autotuner's propagation fields
-        # and the history's raw discretization matrices.
-        _, _, _, cand_x_prop, cand_x_prop_plus, _, _, V_cand, W_cand = _discretize(
-            solution.x, solution.u, params
-        )
+    def discretize_candidate(solution: SubproblemSolution, params: dict):
+        return _discretize(solution.x, solution.u, params)
+
+    def complete_iteration(
+        state: AlgorithmState,
+        solution: SubproblemSolution,
+        cand_disc: tuple,
+        params: dict,
+    ) -> Tuple[AlgorithmState, IterationDiagnostics]:
+        _, _, _, cand_x_prop, cand_x_prop_plus, _, _, V_cand, W_cand = cand_disc
         candidate = CandidateIterate()
         candidate.x = solution.x
         candidate.u = solution.u
@@ -288,8 +312,6 @@ def make_scp_iteration(
         candidate.x_prop_plus = cand_x_prop_plus
         candidate.J_lin = solution.cost
 
-        # 6b. SCP convergence metrics (scaled trust region / virtual control /
-        # virtual buffer), matching the legacy ``_subproblem`` reductions.
         tr_x = inv_S_x @ (solution.x - state.x).T
         tr_u = inv_S_u @ (solution.u - state.u).T
         TR = jnp.concatenate([tr_x, tr_u], axis=0)
@@ -305,7 +327,6 @@ def make_scp_iteration(
             J_vc=jnp.asarray(J_vc, dtype=state.J_vc.dtype),
         )
 
-        # 6c. Autotuner: pure functional update producing the next iterate.
         next_state = autotuner.update_weights(state, candidate, jax_constraints, settings, params)
         next_state = next_state.replace(k=state.k + 1)
 
@@ -320,7 +341,23 @@ def make_scp_iteration(
         )
         return next_state, diagnostics
 
-    return iteration_fn
+    def iteration_fn(
+        state: AlgorithmState, params: dict
+    ) -> Tuple[AlgorithmState, IterationDiagnostics]:
+        disc = discretize_current(state, params)
+        data = build_subproblem_data(state, disc, params)
+        solution = solve_subproblem(state, data)
+        cand_disc = discretize_candidate(solution, params)
+        return complete_iteration(state, solution, cand_disc, params)
+
+    return ScpIterationPhases(
+        iteration_fn=iteration_fn,
+        discretize_current=discretize_current,
+        build_subproblem_data=build_subproblem_data,
+        solve_subproblem=solve_subproblem,
+        discretize_candidate=discretize_candidate,
+        complete_iteration=complete_iteration,
+    )
 
 
 def _converged(state: AlgorithmState) -> jnp.ndarray:
