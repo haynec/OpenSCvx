@@ -24,4 +24,4 @@ def build_iteration_fn(prob):
         solver_callback=prob.solver.iteration_callback(),
         autotuner=prob.algorithm.autotuner,
         settings=prob.settings,
-    )
+    ).iteration_fn

@@ -1214,9 +1214,7 @@ class Problem:
             warmup_state, warmup_disc, self._parameters
         )
         warmup_solution = timed_phases.solve_subproblem(warmup_state, warmup_data)
-        warmup_cand_disc = timed_phases.discretize_candidate(
-            warmup_solution, self._parameters
-        )
+        warmup_cand_disc = timed_phases.discretize_candidate(warmup_solution, self._parameters)
         jax.block_until_ready(
             timed_phases.complete_iteration(
                 warmup_state, warmup_solution, warmup_cand_disc, self._parameters
