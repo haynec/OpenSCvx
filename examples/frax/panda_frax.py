@@ -104,6 +104,11 @@ problem = ox.Problem(
         "autotuner": ox.ConstantProximalWeight(),
     },
     float_dtype="float64",
+    solver = {
+        "cvx_solver": "CLARABEL",
+        "solver_args": {
+        },
+    },
 )
 
 
