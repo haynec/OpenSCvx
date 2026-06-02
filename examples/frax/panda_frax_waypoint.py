@@ -242,31 +242,159 @@ def visualize(
     _, update_trail = add_animated_trail(server, ee_pos, ee_colors, point_size=0.008)
     _, update_marker = add_position_marker(server, ee_pos, radius=0.012)
 
-    link_rgb = np.linspace([80, 100, 180], [255, 120, 80], n_segs).astype(np.uint8)
-    link_colors = np.stack([link_rgb, link_rgb], axis=1)
+    # -----------------------------------------------------------------------
+    # Load Panda CAD meshes and pre-compute per-frame link transforms.
+    # Falls back to line-segment stick model if mujoco / trimesh / menagerie
+    # assets are unavailable.
+    # -----------------------------------------------------------------------
+    n_frames = len(q_traj)
+    _use_cad_mesh = False
+    _link_meshes_local: dict = {}
+    _link_body_ids: dict = {}
+    _link_world_T: dict = {}
+    try:
+        import mujoco
+        import trimesh  # type: ignore
 
-    init_points = np.stack(
-        [np.stack([keypoints[0, k], keypoints[0, k + 1]]) for k in range(n_segs)]
-    ).astype(np.float32)
-    arm_handle = server.scene.add_line_segments(
-        "/panda_links",
-        points=init_points,
-        colors=link_colors,
-        line_width=5.0,
-    )
+        from openscvx.integrations.menagerie import get_model_dir
 
+        _panda_dir = get_model_dir("franka_emika_panda")
+        _mj_model_vis = mujoco.MjModel.from_xml_path(str(_panda_dir / "panda_nohand.xml"))
+        _mj_model_vis.opt.disableflags |= mujoco.mjtDisableBit.mjDSBL_CONTACT
+        _mj_data_vis = mujoco.MjData(_mj_model_vis)
+        _asset_dir = _panda_dir / "assets"
+
+        _link_visual_files = {
+            "link0": [
+                "link0_0.obj", "link0_1.obj", "link0_2.obj", "link0_3.obj",
+                "link0_4.obj", "link0_5.obj", "link0_7.obj", "link0_8.obj",
+                "link0_9.obj", "link0_10.obj", "link0_11.obj",
+            ],
+            "link1": ["link1.obj"],
+            "link2": ["link2.obj"],
+            "link3": ["link3_0.obj", "link3_1.obj", "link3_2.obj", "link3_3.obj"],
+            "link4": ["link4_0.obj", "link4_1.obj", "link4_2.obj", "link4_3.obj"],
+            "link5": ["link5_0.obj", "link5_1.obj", "link5_2.obj"],
+            "link6": [
+                "link6_0.obj", "link6_1.obj", "link6_2.obj", "link6_3.obj",
+                "link6_4.obj", "link6_5.obj", "link6_6.obj", "link6_7.obj",
+                "link6_8.obj", "link6_9.obj", "link6_10.obj", "link6_11.obj",
+                "link6_12.obj", "link6_13.obj", "link6_14.obj", "link6_15.obj",
+                "link6_16.obj",
+            ],
+            "link7": [
+                "link7_0.obj", "link7_1.obj", "link7_2.obj", "link7_3.obj",
+                "link7_4.obj", "link7_5.obj", "link7_6.obj", "link7_7.obj",
+            ],
+        }
+
+        for link_name, files in _link_visual_files.items():
+            all_verts, all_faces, offset = [], [], 0
+            for fname in files:
+                obj_path = _asset_dir / fname
+                if not obj_path.exists():
+                    continue
+                tm = trimesh.load(str(obj_path), force="mesh", process=False)
+                all_verts.append(np.asarray(tm.vertices, dtype=np.float32))
+                all_faces.append(np.asarray(tm.faces, dtype=np.uint32) + offset)
+                offset += len(tm.vertices)
+            if not all_verts:
+                continue
+            _link_meshes_local[link_name] = (np.vstack(all_verts), np.vstack(all_faces))
+            _link_body_ids[link_name] = mujoco.mj_name2id(
+                _mj_model_vis, mujoco.mjtObj.mjOBJ_BODY, link_name
+            )
+
+        for name in _link_meshes_local:
+            _link_world_T[name] = np.zeros((n_frames, 4, 4))
+        for t_idx in range(n_frames):
+            _mj_data_vis.qpos[:7] = q_traj[t_idx]
+            mujoco.mj_kinematics(_mj_model_vis, _mj_data_vis)
+            for name, body_id in _link_body_ids.items():
+                T = np.eye(4)
+                T[:3, :3] = _mj_data_vis.xmat[body_id].copy().reshape(3, 3)
+                T[:3, 3] = _mj_data_vis.xpos[body_id].copy()
+                _link_world_T[name][t_idx] = T
+
+        _use_cad_mesh = len(_link_meshes_local) > 0
+        if _use_cad_mesh:
+            print(f"[viser] Loaded {len(_link_meshes_local)} Panda CAD link meshes from menagerie.")
+    except Exception as exc:
+        print(
+            f"[viser] CAD mesh unavailable "
+            f"({type(exc).__name__}: {exc}); falling back to line segments."
+        )
+
+    # -----------------------------------------------------------------------
+    # Robot body: CAD meshes when available, line segments otherwise.
+    # -----------------------------------------------------------------------
     server.scene.add_box(
         "/panda_base",
         dimensions=(0.12, 0.12, 0.08),
         position=(0.0, 0.0, 0.04),
         color=(60, 60, 60),
     )
+    update_robot = None
+    if _use_cad_mesh:
+        from scipy.spatial.transform import Rotation as _Rotation
 
-    def update_arm(frame_idx: int) -> None:
-        pts = np.stack(
-            [np.stack([keypoints[frame_idx, k], keypoints[frame_idx, k + 1]]) for k in range(n_segs)]
+        def _pose_from_T(T: np.ndarray):
+            R = np.asarray(T, dtype=np.float64)[:3, :3]
+            t = T[:3, 3]
+            q_xyzw = _Rotation.from_matrix(R).as_quat()
+            wxyz = (float(q_xyzw[3]), float(q_xyzw[0]), float(q_xyzw[1]), float(q_xyzw[2]))
+            return (float(t[0]), float(t[1]), float(t[2])), wxyz
+
+        _panda_link_color = {
+            "link0": (120, 120, 120),
+            "link1": (215, 215, 218),
+            "link2": (215, 215, 218),
+            "link3": (215, 215, 218),
+            "link4": (215, 215, 218),
+            "link5": (210, 210, 215),
+            "link6": (200, 205, 215),
+            "link7": (190, 195, 210),
+        }
+        _link_handles = {}
+        for link_name, (verts_local, faces) in _link_meshes_local.items():
+            T0 = _link_world_T[link_name][0]
+            pos0, wxyz0 = _pose_from_T(T0)
+            handle = server.scene.add_mesh_simple(
+                f"/robot/{link_name}",
+                vertices=np.asarray(verts_local, dtype=np.float32, order="C"),
+                faces=faces,
+                color=_panda_link_color.get(link_name, (210, 210, 215)),
+                opacity=1.0,
+                position=pos0,
+                wxyz=wxyz0,
+            )
+            _link_handles[link_name] = handle
+
+        def update_robot(frame_idx: int) -> None:
+            for link_name, handle in _link_handles.items():
+                T = _link_world_T[link_name][frame_idx]
+                pos, wxyz = _pose_from_T(T)
+                handle.position = pos
+                handle.wxyz = wxyz
+
+    else:
+        link_rgb = np.linspace([80, 100, 180], [255, 120, 80], n_segs).astype(np.uint8)
+        link_colors = np.stack([link_rgb, link_rgb], axis=1)
+        init_points = np.stack(
+            [np.stack([keypoints[0, k], keypoints[0, k + 1]]) for k in range(n_segs)]
         ).astype(np.float32)
-        arm_handle.points = pts
+        arm_handle = server.scene.add_line_segments(
+            "/panda_links",
+            points=init_points,
+            colors=link_colors,
+            line_width=5.0,
+        )
+
+        def update_robot(frame_idx: int) -> None:
+            pts = np.stack(
+                [np.stack([keypoints[frame_idx, k], keypoints[frame_idx, k + 1]]) for k in range(n_segs)]
+            ).astype(np.float32)
+            arm_handle.points = pts
 
     fig_joints = go.Figure()
     for j in range(robot.num_joints):
@@ -309,7 +437,7 @@ def visualize(
     add_animation_controls(
         server,
         t_vec,
-        [update_arm, update_trail, update_marker, update_joints, update_tau],
+        [update_robot, update_trail, update_marker, update_joints, update_tau],
     )
     server.sleep_forever()
 
