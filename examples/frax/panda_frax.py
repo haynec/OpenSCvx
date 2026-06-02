@@ -44,7 +44,7 @@ q, qd = dyn.states
 (tau,) = dyn.controls
 
 n_j = robot.num_joints  # 7
-n = 40
+n = 8
 total_time = 3.0
 
 # Home configuration and a reachable target configuration.
@@ -56,10 +56,25 @@ q.final = q_goal
 qd.initial = np.zeros(n_j)
 qd.final = np.zeros(n_j)
 
-# Initial guesses: linear interpolation in joint space, zero velocity/torque.
-q.guess = np.linspace(q_start, q_goal, n)
+# Initial guesses: linear interpolation in joint space, zero velocity.
+#
+# The torque guess is *gravity-compensating*, not zero. frax integrates the
+# full rigid-body dynamics (mass matrix + Coriolis + gravity), so a zero-torque
+# guess implies the arm is in free-fall: forward_dynamics(q, 0, 0) returns joint
+# accelerations of tens of rad/s² at this configuration. Over a coarse time grid
+# (few nodes ⇒ large dt) the propagated guess diverges wildly from the qd≈0
+# guess, producing huge dynamics defects that drive the convex subproblem
+# infeasible. Seeding tau with g(q) makes forward_dynamics(q, 0, g(q)) ≈ 0, so
+# the qd channel of the guess is self-consistent and SCvx converges even at very
+# low node counts. (Linear ``I q̈ = τ`` models without gravity don't need this.)
+q_guess = np.linspace(q_start, q_goal, n)
+q.guess = q_guess
 qd.guess = np.zeros((n, n_j))
-tau.guess = np.zeros((n, robot.num_actuated_joints))
+# gravity_vector returns one entry per joint; tau covers only the actuated
+# joints, so take the last num_actuated_joints entries (the FraxDynamics adapter
+# slices torque bounds the same way for floating-base robots).
+grav = np.array([np.asarray(robot.gravity_vector(qi)) for qi in q_guess])
+tau.guess = grav[:, n_j - robot.num_actuated_joints :]
 
 # Box constraints from the auto-populated bounds (continuous-time enforcement).
 constraints = []
@@ -73,8 +88,7 @@ time = ox.Time(
     final=ox.Minimize(total_time),
     min=0.0,
     max=2.0 * total_time,
-    time_dilation_min=0.05 * total_time,
-    time_dilation_max=2.0 * total_time,
+    uniform_time_grid=True,
 )
 
 problem = ox.Problem(
@@ -85,10 +99,9 @@ problem = ox.Problem(
     constraints=constraints,
     N=n,
     algorithm={
-        "lam_vb": 1e1,
-        "lam_vc": 4e2,
+        "lam_vc": 1e1,
         "lam_cost": 4e-1,
-        "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
+        "autotuner": ox.ConstantProximalWeight(),
     },
     float_dtype="float64",
 )
