@@ -506,6 +506,7 @@ class Problem:
         self._columns = None
 
         self.timing_init = None
+        self.timing_compile = None
         self.timing_solve = None
         self.timing_post = None
         self._profiling_session = None
@@ -1007,6 +1008,7 @@ class Problem:
         self._solve_loop_k_max = None
         self._solve_batched_fn = None
         self._solve_batched_key = None
+        self._solve_batched_is_exported = False
         self._iteration_fn = jax.jit(
             make_scp_iteration(
                 dis_continuous=discretization_solver,
@@ -1382,8 +1384,19 @@ class Problem:
                 # not ``self._parameters`` — under an export the input avals are
                 # frozen at trace time, so the two must agree.
                 batched = load_or_export_solve_batched(batched, cache_file, sample_state, params)
+                self._solve_batched_is_exported = True
             else:
-                batched = jax.jit(batched)
+                # AOT-compile now so solve_batched() execution is compile-free.
+                # sample_state provides concrete shapes/dtypes; the compiled
+                # artifact accepts any inputs with those same shapes/dtypes.
+                sample_state = jax.tree_util.tree_map(
+                    lambda a: jnp.broadcast_to(a, (B,) + jnp.shape(a)),
+                    AlgorithmState.from_settings(self.settings, self._algorithm.weights),
+                )
+                t_0_compile = time.time()
+                batched = jax.jit(batched).lower(sample_state, params).compile()
+                self.timing_compile = time.time() - t_0_compile
+                self._solve_batched_is_exported = False
             self._solve_batched_fn = batched
             self._solve_batched_key = key
         return self._solve_batched_fn
@@ -1586,16 +1599,23 @@ class Problem:
                 xf_stack = jnp.asarray(xf_np)
 
         states = jax.vmap(self._resolve_initial_state)(x0_stack, xf_stack)
+        # _get_or_build_solve_batched triggers AOT compilation on the first call
+        # and stores self.timing_compile.  Subsequent calls return the cached
+        # compiled artifact immediately, so t_0_solve captures execution only.
         batched_solve = self._get_or_build_solve_batched(
             x0_stack.shape[0], max_iters, params_for_solve
         )
-        # The exported (``save_compiled``) artifact is a ``jax.export`` wrapper
-        # dispatched via ``.call``; the in-process artifact is a plain callable.
-        final_states = (
-            batched_solve.call(states, params_for_solve)
-            if hasattr(batched_solve, "call")
-            else batched_solve(states, params_for_solve)
-        )
+        t_0_solve = time.time()
+        # jax.export.Exported wrappers (save_compiled path) are invoked via
+        # .call(); jax.stages.Compiled (AOT path) is a plain callable.
+        # We track which case we have via self._solve_batched_is_exported rather
+        # than hasattr() since Compiled also happens to have a .call attribute.
+        if getattr(self, "_solve_batched_is_exported", False):
+            final_states = batched_solve.call(states, params_for_solve)
+        else:
+            final_states = batched_solve(states, params_for_solve)
+        jax.block_until_ready(final_states)
+        self.timing_solve = time.time() - t_0_solve
         return OptimizationResults.from_final_state(final_states, problem=self)
 
     def post_process(self) -> OptimizationResults:
@@ -1705,6 +1725,7 @@ class Problem:
         costs: List[float] = []
         ctcs_violations = []
 
+        t_0_post = time.time()
         for b in range(B):
             single = _make_single_result(results, b)
             prop = propagate_trajectory_results(
@@ -1724,6 +1745,8 @@ class Problem:
             costs.append(prop.cost)
             ctcs_violations.append(prop.ctcs_violation)
 
+        self.timing_post = time.time() - t_0_post
+
         results.t_full = np.stack(t_fulls)        # (B, n_times)
         results.x_full = np.stack(x_fulls)        # (B, n_times, n_prop_states)
         results.u_full = np.stack(u_fulls)        # (B, n_times, n_controls)
@@ -1734,6 +1757,14 @@ class Problem:
         results.cost = np.array(costs)            # (B,)
         if ctcs_violations[0] is not None:
             results.ctcs_violation = np.stack(ctcs_violations)
+
+        printing.print_batch_results_summary(
+            results,
+            self.timing_post,
+            self.timing_init,
+            self.timing_solve,
+            timing_compile=self.timing_compile,
+        )
         return results
 
     def citation(self) -> str:

@@ -47,18 +47,15 @@ sys.path.append(repo_root_dir)
 import openscvx as ox
 from openscvx import Problem
 from openscvx.plotting.viser import (
-    add_animated_trail,
     add_animation_controls,
-    add_attitude_frame,
     add_glideslope_cone,
-    add_position_marker,
     compute_velocity_colors,
     create_server,
 )
 
 # ── Problem dimensions ──────────────────────────────────────────────────────
 N = 5          # discretization nodes
-N_BATCH = 50   # number of simultaneous solves
+N_BATCH = 200   # number of simultaneous solves
 
 # ── Random initial-condition generator ─────────────────────────────────────
 # Position bounds: [-10, 10]^3.  For physical realism we keep altitude
@@ -239,7 +236,7 @@ problem = Problem(
     constraints=constraint_exprs,
     time=time_config,
     float_dtype="float64",
-    solver={"backend": "moreau", "tol_gap_abs": 1e-7, "tol_feas": 1e-7},
+    solver=ox.MoreauPTRSolver(),
     algorithm={
         "autotuner": ox.ConstantProximalWeight(),
         "lam_cost":  1e-2,
@@ -277,13 +274,12 @@ def create_pdg_batched_viser_server(
     *,
     gamma_deg: float = 75.0,
 ) -> viser.ViserServer:
-    """Build a Viser scene showing all batched PDG propagated trajectories.
+    """Build a Viser scene animating all batched PDG trajectories simultaneously.
 
-    Trajectories are drawn from ``results.x_full`` (high-fidelity nonlinear
-    propagation) rather than the coarse SCP nodes, giving smooth continuous
-    paths.  All ``B`` trajectories are shown simultaneously (green = converged,
-    red = diverged).  A slider lets the user pick one run to highlight with an
-    animated trail, position marker, and attitude frame.
+    All ``B`` propagated trajectories play back at the same time.  Each run
+    gets its own growing trail (coloured by velocity magnitude) and a position
+    marker that slides along the path.  Static faint traces show the full
+    extent of each trajectory as context.
 
     Args:
         results: :class:`~openscvx.algorithms.OptimizationResults` returned by
@@ -300,112 +296,102 @@ def create_pdg_batched_viser_server(
     converged = np.asarray(results.converged, dtype=bool).reshape(-1)
     B, T = x_full.shape[0], x_full.shape[1]
 
-    # State layout: mass[0], position[1:4], velocity[4:7], attitude[7:11],
-    # angular_velocity[11:14].  Same indices in x_full as in the SCP x array.
+    # State layout: mass[0], position[1:4], velocity[4:7], attitude[7:11].
     pos_model = x_full[:, :, 1:4]                   # (B, T, 3)
-    att_xyzw  = x_full[:, :, 7:11]                  # (B, T, 4) — [q1,q2,q3,q4=w]
     vel_model = x_full[:, :, 4:7]                   # (B, T, 3)
 
     pos_viser = model_to_viser(pos_model)            # (B, T, 3)  Viser frame
-    att_wxyz  = quat_xyzw_to_wxyz(att_xyzw)         # (B, T, 4)  [w,x,y,z]
 
     # Create server — frame camera around all trajectory points.
     server = create_server(pos_viser.reshape(-1, 3))
     server.gui.configure_theme(dark_mode=True)
 
     # ── Static scene ─────────────────────────────────────────────────────────
-    server.scene.add_grid(
-        "/grid",
-        width=30.0,
-        height=30.0,
-        position=(0.0, 0.0, 0.0),
-    )
+    server.scene.add_grid("/grid", width=30.0, height=30.0, position=(0.0, 0.0, 0.0))
     server.scene.add_icosphere(
-        "/markers/landing",
-        radius=0.25,
-        position=(0.0, 0.0, 0.0),
-        color=(255, 80, 80),
+        "/markers/landing", radius=0.25, position=(0.0, 0.0, 0.0), color=(255, 80, 80),
     )
 
-    # Glideslope cone.  The constraint is 0.1*||pos[1:]|| <= tan(γ)*pos[0],
-    # i.e. ||pos[1:]|| <= 10·tan(γ)·pos[0], so the effective half-angle is
-    # atan(10·tan(γ)).  In Viser, altitude is the +z axis.
     effective_half_angle = float(
         np.degrees(np.arctan(10.0 * np.tan(np.radians(gamma_deg))))
     )
     add_glideslope_cone(
-        server,
-        apex=(0.0, 0.0, 0.0),
-        height=12.0,
+        server, apex=(0.0, 0.0, 0.0), height=12.0,
         glideslope_angle_deg=effective_half_angle,
-        axis=(0.0, 0.0, 1.0),
-        color=(80, 200, 120),
-        opacity=0.12,
+        axis=(0.0, 0.0, 1.0), color=(80, 200, 120), opacity=0.12,
     )
 
-    # ── All propagated trajectories ───────────────────────────────────────────
+    # ── Faint static traces (full trajectory extent) ──────────────────────────
     for b in range(B):
-        color = (80, 210, 100) if converged[b] else (220, 70, 70)
-        pts = pos_viser[b].astype(np.float32)        # (T, 3)
-        segments = np.stack([pts[:-1], pts[1:]], axis=1)
+        color = (40, 120, 55) if converged[b] else (110, 40, 40)
+        pts = pos_viser[b].astype(np.float32)
         server.scene.add_line_segments(
-            f"/runs/{b}/path",
-            points=segments,
+            f"/traces/{b}",
+            points=np.stack([pts[:-1], pts[1:]], axis=1),
             colors=color,
-            line_width=2.0,
+            line_width=1.0,
         )
         server.scene.add_icosphere(
-            f"/runs/{b}/start",
-            radius=0.12,
+            f"/traces/{b}/start",
+            radius=0.10,
             position=tuple(pts[0]),
-            color=(120, 220, 255) if converged[b] else (255, 160, 80),
+            color=(80, 160, 200) if converged[b] else (200, 120, 60),
         )
 
-    # ── Highlighted run (animated over propagated time) ───────────────────────
-    ctx: dict = {"run": 0}
-    _pos    = pos_viser[0].copy()      # (T, 3)
-    _att    = att_wxyz[0].copy()       # (T, 4)
-    _vel    = vel_model[0].copy()      # (T, 3)
-    _colors = compute_velocity_colors(_vel)
+    # ── Per-element animated trails and position markers ──────────────────────
+    # The helpers (add_animated_trail / add_position_marker) hardcode scene
+    # paths, so we inline the equivalent logic with unique per-element paths.
 
-    _, update_trail    = add_animated_trail(server, _pos, _colors, point_size=0.18)
-    _, update_marker   = add_position_marker(server, _pos, radius=0.25, color=(100, 200, 255))
-    _, update_attitude = add_attitude_frame(server, _pos, _att, axes_length=0.6)
-    highlight_cbs = [cb for cb in (update_trail, update_marker, update_attitude) if cb is not None]
+    def _make_trail(handle, pts: np.ndarray, cols: np.ndarray):
+        """Return a closure that grows the trail up to the given frame."""
+        def update(frame_idx: int) -> None:
+            idx = frame_idx + 1
+            handle.points = pts[:idx]
+            handle.colors = cols[:idx]
+        return update
 
-    # traj_time is the real-time axis for run 0 (updated in _load_run).
-    traj_time = t_full[0].copy()       # (T,)
+    def _make_marker(handle, pts: np.ndarray):
+        """Return a closure that moves the marker to the given frame position."""
+        def update(frame_idx: int) -> None:
+            handle.position = pts[frame_idx]
+        return update
 
-    def _load_run(run_idx: int) -> None:
-        ctx["run"] = run_idx
-        _pos[...]    = pos_viser[run_idx]
-        _att[...]    = att_wxyz[run_idx]
-        _vel[...]    = vel_model[run_idx]
-        _colors[...] = compute_velocity_colors(_vel)
-        traj_time[:] = t_full[run_idx]
-        for cb in highlight_cbs:
-            cb(0)
+    all_update_cbs = []
+    for b in range(B):
+        pts_b    = pos_viser[b].astype(np.float32)       # (T, 3)
+        colors_b = compute_velocity_colors(vel_model[b]).astype(np.uint8)
+
+        trail_handle = server.scene.add_point_cloud(
+            f"/animated/{b}/trail",
+            points=pts_b[:1],
+            colors=colors_b[:1],
+            point_size=0.13,
+        )
+        marker_color = (80, 210, 100) if converged[b] else (220, 70, 70)
+        marker_handle = server.scene.add_icosphere(
+            f"/animated/{b}/marker",
+            radius=0.20,
+            color=marker_color,
+            position=tuple(pts_b[0]),
+        )
+
+        all_update_cbs.append(_make_trail(trail_handle, pts_b, colors_b))
+        all_update_cbs.append(_make_marker(marker_handle, pts_b))
 
     # ── GUI ──────────────────────────────────────────────────────────────────
     n_ok = int(converged.sum())
     with server.gui.add_folder("Batch overview"):
         server.gui.add_markdown(
-            f"**{B} initial conditions** — "
+            f"**{B} trajectories animating simultaneously**  \n"
             f"green = converged ({n_ok}), red = diverged ({B - n_ok})."
         )
-        run_slider = server.gui.add_slider(
-            "Highlight run",
-            min=0,
-            max=B - 1,
-            step=1,
-            initial_value=0,
-        )
 
-        @run_slider.on_update
-        def _(_) -> None:
-            _load_run(int(run_slider.value))
+    # Use the mean terminal time as the representative playback axis so the
+    # slider labels reflect a typical trajectory duration.
+    mean_t_final = float(t_full[:, -1].mean())
+    traj_time = np.linspace(0.0, mean_t_final, T)
 
-    add_animation_controls(server, traj_time, highlight_cbs, folder_name="Playback")
+    add_animation_controls(server, traj_time, all_update_cbs, folder_name="Playback")
 
     return server
 
@@ -413,76 +399,23 @@ def create_pdg_batched_viser_server(
 # ── Main ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print("Initializing 6-DoF PDG problem (Moreau backend) …")
-    t0 = time.perf_counter()
     problem.initialize()
-    t_init = time.perf_counter() - t0
-    print(f"  initialize()  {t_init:.2f} s")
 
     # Sample N_BATCH random initial positions
     ic_batch = sample_initial_positions(N_BATCH)
-    print(f"\nSampled {N_BATCH} random initial positions (altitude ∈ [3, 9] m, lateral ∈ [-7, 7] m)")
-    print(f"  ic_batch.shape = {ic_batch.shape}")
+    print(f"Sampled {N_BATCH} initial positions  (alt ∈ [3, 9] m, lat ∈ [-7, 7] m)")
 
-    # ── First call: compile + solve ───────────────────────────────────────────
-    print(f"\nRunning solve_batched (first call — includes XLA compile) …")
-    t0 = time.perf_counter()
-    results = problem.solve_batched(
-        parameters={"initial_position": ic_batch},
-    )
-    t_first = time.perf_counter() - t0
-    print(f"  solve_batched  {t_first:.2f} s  (incl. compile)")
+    # ── Compile + solve ───────────────────────────────────────────────────────
+    # AOT compilation happens inside solve_batched and is timed separately;
+    # timing_solve reflects pure SCP execution only.
+    print("Compiling and running solve_batched …")
+    results = problem.solve_batched(parameters={"initial_position": ic_batch})
 
     # ── Post-process: propagate all B solutions through nonlinear dynamics ────
-    print(f"\nRunning post_process_batched ({N_BATCH} elements, sequential) …")
-    t0 = time.perf_counter()
+    print("Post-processing (nonlinear propagation) …")
     results = problem.post_process_batched(results)
-    t_prop = time.perf_counter() - t0
-    print(f"  post_process_batched  {t_prop:.2f} s")
-    print(f"  propagated shapes: x_full={results.x_full.shape}, t_full={results.t_full.shape}")
-
-    # ── Second call: cached artifact ──────────────────────────────────────────
-    ic_batch2 = sample_initial_positions(N_BATCH, seed=99)
-    print(f"\nRunning solve_batched (second call — compiled artifact cached) …")
-    t0 = time.perf_counter()
-    results2 = problem.solve_batched(
-        parameters={"initial_position": ic_batch2},
-    )
-    t_second = time.perf_counter() - t0
-    print(f"  solve_batched  {t_second:.2f} s")
-
-    # ── Convergence statistics ────────────────────────────────────────────────
-    # results.x has shape (B, N, n_x); results.converged has shape (B,)
-    converged = np.asarray(results.converged)
-    converged2 = np.asarray(results2.converged)
-
-    print(f"\n── First batch results ──────────────────────────────────────────")
-    print(f"  Converged:   {int(converged.sum())} / {N_BATCH}")
-    print(f"  Diverged:    {int((~converged).sum())} / {N_BATCH}")
-
-    if converged.any():
-        x_traj = np.asarray(results.x)          # (B, N, n_x)
-        # Position occupies state indices 1:4 (mass is index 0)
-        pos_traj = x_traj[converged, :, 1:4]    # (n_conv, N, 3)
-        x0_pos   = pos_traj[:, 0, :]            # initial position at node 0
-        xf_pos   = pos_traj[:, -1, :]           # terminal position at node N-1
-
-        print(f"\n  Requested initial altitudes (first 5 converged):")
-        conv_idx = np.where(converged)[0][:5]
-        for i in conv_idx:
-            req  = ic_batch[i]
-            got  = x_traj[i, 0, 1:4]
-            print(f"    sample {i:2d}  requested=[{req[0]:.2f}, {req[1]:.2f}, {req[2]:.2f}]  "
-                  f"got=[{got[0]:.2f}, {got[1]:.2f}, {got[2]:.2f}]")
-
-        print(f"\n  Terminal position errors (||pos_f - [0,0,0]||, first 5 converged):")
-        for i in conv_idx:
-            err = float(np.linalg.norm(xf_pos[i - conv_idx[0]]))
-            print(f"    sample {i:2d}  terminal error = {err:.4f} m")
-
-    print(f"\n── Second batch results ─────────────────────────────────────────")
-    print(f"  Converged:   {int(converged2.sum())} / {N_BATCH}")
 
     # ── Viser visualisation ───────────────────────────────────────────────────
-    print("\nLaunching Viser — all 50 propagated PDG trajectories + highlight playback …")
+    print("\nLaunching Viser — all trajectories animating simultaneously …")
     viser_server = create_pdg_batched_viser_server(results, ic_batch)
     viser_server.sleep_forever()
