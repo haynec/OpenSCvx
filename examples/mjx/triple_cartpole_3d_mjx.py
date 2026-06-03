@@ -501,9 +501,7 @@ def visualize(results) -> None:
             )
 
         # Per-segment nonlinear propagation (each segment = one integrate call).
-        seg_tip_paths = segment_tip_paths_from_V(
-            V_multishot, n_x=n_x, n_u=n_u, n_q=n_q
-        )
+        seg_tip_paths = segment_tip_paths_from_V(V_multishot, n_x=n_x, n_u=n_u, n_q=n_q)
         tip_seg_list = [
             np.stack([seg[i], seg[i + 1]], axis=0)
             for seg in seg_tip_paths

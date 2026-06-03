@@ -23,10 +23,10 @@ from typing import Callable
 
 import numpy as np
 import viser
+import viser.transforms as vtf
 
 from openscvx.plotting.viser.coordinates import model_vec_to_viser_xyz
 from openscvx.plotting.viser.primitives import _generate_cone_mesh
-import viser.transforms as vtf
 
 # Type alias for update callbacks: fn(frame_idx: int) -> None
 UpdateCallback = Callable[[int], None]

@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import viser
 
+from examples.plotting import _results_has_moving_subject, _subject_world_trajectories
 from openscvx.algorithms import OptimizationResults
 from openscvx.plotting import plot_controls
 from openscvx.plotting.viser import (
@@ -49,7 +50,6 @@ from openscvx.plotting.viser import (
     create_server,
     extract_propagation_positions,
 )
-from examples.plotting import _results_has_moving_subject, _subject_world_trajectories
 from openscvx.plotting.viser.animated import _normalize_wxyz, place_body_frame, place_viewcone
 
 # =============================================================================
@@ -402,16 +402,11 @@ def create_animated_plotting_server(
                     and len(np.asarray(logo_plane_normal).flatten()) >= 3
                 )
                 if use_logo_plane:
-                    plane_pt = (
-                        np.asarray(logo_plane_point, dtype=np.float32).reshape(3) / scene_scale
-                    )
                     plane_n = np.asarray(logo_plane_normal, dtype=np.float32).reshape(3)
                     plane_n = plane_n / (np.linalg.norm(plane_n) + 1e-10)
                 elif plane_z is not None:
-                    plane_pt = None
                     plane_n = None
                 else:
-                    plane_pt = None
                     plane_n = None
 
                 if plane_z is not None or use_logo_plane:
@@ -429,9 +424,7 @@ def create_animated_plotting_server(
                             line_width=3.0,
                         )
 
-                        _logo_trail_rgb = np.array(
-                            [list(logo_trace_color)], dtype=np.uint8
-                        )
+                        _logo_trail_rgb = np.array([list(logo_trace_color)], dtype=np.uint8)
 
                         # Growing point-cloud trail for the boresight intersection.
                         boresight_trail_cloud = server.scene.add_point_cloud(
@@ -949,7 +942,9 @@ def compute_poe_joint_keypoints(
             t_k = np.asarray(results.trajectory[t_key][t_idx], dtype=np.float64)
             q0 = np.append(joint_zero_pos[k], 1.0)
             keypoints[t_idx, k] = (t_k @ q0)[:3]
-        t_n = np.asarray(results.trajectory[f"{transform_prefix}{n_joints}"][t_idx], dtype=np.float64)
+        t_n = np.asarray(
+            results.trajectory[f"{transform_prefix}{n_joints}"][t_idx], dtype=np.float64
+        )
         keypoints[t_idx, n_joints] = (t_n @ t_home)[:3, 3]
 
     return keypoints
@@ -1003,7 +998,9 @@ def build_cad_link_snapshot_builder(
 
     link_colors = link_colors or {}
 
-    def _pose_from_T(T: np.ndarray) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
+    def _pose_from_T(
+        T: np.ndarray,
+    ) -> tuple[tuple[float, float, float], tuple[float, float, float, float]]:
         R = np.asarray(T, dtype=np.float64)[:3, :3]
         t = T[:3, 3]
         q_xyzw = Rotation.from_matrix(R).as_quat()
@@ -1171,8 +1168,12 @@ def create_snapshot_plotting_server(
     if target_positions is not None:
         init_poses = target_positions
 
-    waypoints = waypoint_positions if waypoint_positions is not None else results.get("waypoint_positions")
-    waypoint_colors = waypoint_colors if waypoint_colors is not None else results.get("waypoint_colors")
+    waypoints = (
+        waypoint_positions if waypoint_positions is not None else results.get("waypoint_positions")
+    )
+    waypoint_colors = (
+        waypoint_colors if waypoint_colors is not None else results.get("waypoint_colors")
+    )
 
     obs_center = obstacle_center if obstacle_center is not None else results.get("obstacle_center")
     obs_radius = obstacle_radius if obstacle_radius is not None else results.get("obstacle_radius")
@@ -1214,9 +1215,7 @@ def create_snapshot_plotting_server(
             radii=[np.full(3, 1.0 / float(obs_radius) / scene_scale)],
         )
 
-    add_ghost_trajectory(
-        server, pos, colors, opacity=ghost_opacity, point_size=ghost_point_size
-    )
+    add_ghost_trajectory(server, pos, colors, opacity=ghost_opacity, point_size=ghost_point_size)
 
     traj_time = np.asarray(results.trajectory["time"]).flatten()
     relative_vector = results.get("relative_vector", False)
@@ -1226,13 +1225,16 @@ def create_snapshot_plotting_server(
     target_traj_scaled: np.ndarray | None = None
     if get_kp_pose is not None and total_time is not None:
         total_time_f = float(np.asarray(total_time).reshape(-1)[0])
-        target_traj_scaled = np.stack(
-            [
-                np.asarray(get_kp_pose(float(t) / total_time_f), dtype=np.float32)
-                for t in traj_time
-            ],
-            axis=0,
-        ) / scene_scale
+        target_traj_scaled = (
+            np.stack(
+                [
+                    np.asarray(get_kp_pose(float(t) / total_time_f), dtype=np.float32)
+                    for t in traj_time
+                ],
+                axis=0,
+            )
+            / scene_scale
+        )
 
     logo_trace_points: np.ndarray | None = None
     if has_attitude and results.get("extend_boresight", False):
@@ -1246,7 +1248,11 @@ def create_snapshot_plotting_server(
 
     logo_trace_color = tuple(results.get("logo_trace_color", (0, 0, 0)))
 
-    if logo_trace_points is not None and len(logo_trace_points) > 1 and logo_trace_point_size is None:
+    if (
+        logo_trace_points is not None
+        and len(logo_trace_points) > 1
+        and logo_trace_point_size is None
+    ):
         traced_path_segments = np.array(
             [
                 [logo_trace_points[i], logo_trace_points[i + 1]]
@@ -1310,9 +1316,7 @@ def create_snapshot_plotting_server(
         )
     elif show_targets and init_poses is not None:
         scaled_init_poses = [np.asarray(p) / scene_scale for p in init_poses]
-        add_target_markers(
-            server, scaled_init_poses, radius=target_radius / scene_scale
-        )
+        add_target_markers(server, scaled_init_poses, radius=target_radius / scene_scale)
 
     snapshot_state: dict[str, list] = {"handles": []}
 
@@ -1375,9 +1379,7 @@ def create_snapshot_plotting_server(
                 snapshot_state["handles"].append(cone_handle)
 
             if snapshot_builder is not None:
-                snapshot_state["handles"].extend(
-                    snapshot_builder(server, i, int(frame_idx))
-                )
+                snapshot_state["handles"].extend(snapshot_builder(server, i, int(frame_idx)))
 
             if show_targets and subject_trajs_scaled is not None:
                 for sub_idx, traj in enumerate(subject_trajs_scaled):

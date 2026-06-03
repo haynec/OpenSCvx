@@ -525,7 +525,11 @@ def _load_capstone_plot_mesh() -> tuple[np.ndarray, np.ndarray] | None:
                 cache_scale = None
                 if "target_length_km" in cached.files:
                     cache_scale = float(np.asarray(cached["target_length_km"]).reshape(-1)[0])
-                if cache_scale is not None and abs(cache_scale - _CAPSTONE_TARGET_LENGTH_KM) < 1e-12:
+                scale_matches = (
+                    cache_scale is not None
+                    and abs(cache_scale - _CAPSTONE_TARGET_LENGTH_KM) < 1e-12
+                )
+                if scale_matches:
                     return np.asarray(cached["vertices"], dtype=np.float64), np.asarray(
                         cached["faces"], dtype=np.int64
                     )

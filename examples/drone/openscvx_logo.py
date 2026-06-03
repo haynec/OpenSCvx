@@ -212,6 +212,7 @@ def _hoop_vertices(center: np.ndarray, radii: np.ndarray) -> list[np.ndarray]:
         center + _hoop_rot @ np.array([radii[0], 0.0, -radii[2]]),
     ]
 
+
 # COM offset from the moving logo target; hoops are placed along the mission timeline
 _hoop_com_offset = np.array([-2.0, 0.0, 1.2])
 _hoop_t_norms = [0.07, 0.25, 0.43, 0.57, 0.75, 0.93]
@@ -224,7 +225,8 @@ hoop_centers[0] = 0.6 * initial_pos + 0.4 * hoop_centers[0]
 hoop_centers[-1] = 0.5 * hoop_centers[-1] + 0.5 * final_pos
 
 hoop_center_params = [
-    ox.Parameter(f"hoop_{i}_center", shape=(3,), value=center) for i, center in enumerate(hoop_centers)
+    ox.Parameter(f"hoop_{i}_center", shape=(3,), value=center)
+    for i, center in enumerate(hoop_centers)
 ]
 hoop_vertices = [_hoop_vertices(center, hoop_radii) for center in hoop_centers]
 

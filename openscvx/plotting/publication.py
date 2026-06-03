@@ -60,11 +60,7 @@ def publication_grid_size(
         + _PUBLICATION_MARGIN["r"]
         + extra_legend_width
     )
-    height = (
-        n_rows * _PUBLICATION_PANEL_H_PX
-        + _PUBLICATION_MARGIN["t"]
-        + _PUBLICATION_MARGIN["b"]
-    )
+    height = n_rows * _PUBLICATION_PANEL_H_PX + _PUBLICATION_MARGIN["t"] + _PUBLICATION_MARGIN["b"]
     return width, height
 
 
@@ -121,7 +117,7 @@ def expand_var_components(
     include_private: bool = False,
 ) -> list[tuple[str, str, int]]:
     """Expand variable specs into ``(display_name, var_name, component_idx)`` entries."""
-    from .plotting import _get_var, _get_var_dim
+    from .plotting import _get_var_dim
 
     filtered = list(variables)
     if not include_private:
@@ -150,9 +146,7 @@ def expand_var_components(
         dim = _get_var_dim(result, var_name, variables)
         if comp is not None:
             if comp < 0 or comp >= dim:
-                raise ValueError(
-                    f"Component {comp} out of range for '{var_name}' (dim={dim})"
-                )
+                raise ValueError(f"Component {comp} out of range for '{var_name}' (dim={dim})")
             display = latex_component_label(var_name, comp) if dim > 1 else var_name
             components.append((display, var_name, comp))
         elif dim == 1:
@@ -236,7 +230,7 @@ def _latin_modern_plotly_font_css() -> str:
     if otf is None:
         return ""
     data = base64.b64encode(otf.read_bytes()).decode("ascii")
-    family = _LM_PLOTLY_FAMILY  # noqa: keep private here; it's only the font name string
+    family = _LM_PLOTLY_FAMILY  # private constant; only the CSS font-family name string
     return f"""
 @font-face {{
   font-family: '{family}';
@@ -294,9 +288,7 @@ def show_plotly_with_latin_modern(fig: go.Figure) -> None:
 
     css = _latin_modern_plotly_font_css()
     if not css:
-        print(
-            "[plot] Latin Modern OTF not found; opening plot with default Plotly fonts."
-        )
+        print("[plot] Latin Modern OTF not found; opening plot with default Plotly fonts.")
         fig.show()
         return
 
@@ -369,9 +361,7 @@ def save_timeseries_pdf(
 
     lm_fp = latin_modern_fontproperties()
     if lm_fp is None:
-        print(
-            "[plot] Latin Modern OTF not found; PDF will use matplotlib default serif."
-        )
+        print("[plot] Latin Modern OTF not found; PDF will use matplotlib default serif.")
 
     n_panels = len(components)
     n_cols = min(cols, n_panels)
@@ -517,9 +507,7 @@ def save_scp_iterations_pdf(
 
     lm_fp = latin_modern_fontproperties()
     if lm_fp is None:
-        print(
-            "[plot] Latin Modern OTF not found; PDF will use matplotlib default serif."
-        )
+        print("[plot] Latin Modern OTF not found; PDF will use matplotlib default serif.")
 
     n_states = len(expanded_states)
     n_controls = len(expanded_controls)
@@ -601,7 +589,9 @@ def save_scp_iterations_pdf(
         parent = _get_var(result, state["parent"], result._states)
         comp_idx = state["comp"]
         dim = _get_var_dim_from_obj(parent)
-        ax.set_ylabel(latex_component_label(state["parent"], comp_idx, dim=dim), fontproperties=lm_fp)
+        ax.set_ylabel(
+            latex_component_label(state["parent"], comp_idx, dim=dim), fontproperties=lm_fp
+        )
         for bound_val in (parent.min, parent.max):
             if bound_val is not None and np.isfinite(bound_val[comp_idx]):
                 ax.plot(
@@ -622,7 +612,9 @@ def save_scp_iterations_pdf(
         parent = _get_var(result, control["parent"], result._controls)
         comp_idx = control["comp"]
         dim = _get_var_dim_from_obj(parent)
-        ax.set_ylabel(latex_component_label(control["parent"], comp_idx, dim=dim), fontproperties=lm_fp)
+        ax.set_ylabel(
+            latex_component_label(control["parent"], comp_idx, dim=dim), fontproperties=lm_fp
+        )
         for bound_val in (parent.min, parent.max):
             if bound_val is not None and np.isfinite(bound_val[comp_idx]):
                 ax.plot(

@@ -175,11 +175,10 @@ problem = Problem(
     constraints=constraints,
     N=n,
     float_dtype="float64",
-    solver = {
+    solver={
         "cvx_solver": "Mosek",
-        "solver_args": {
-        },
-    }
+        "solver_args": {},
+    },
 )
 
 # =============================================================================

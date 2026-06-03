@@ -22,8 +22,14 @@ from openscvx.algorithms import OptimizationResults
 from openscvx.config import Config
 from openscvx.plotting.publication import (
     LM_PLOTLY_FONT as _LM_PLOTLY_FONT,
+)
+from openscvx.plotting.publication import (
     LM_PLOTLY_TICK_FONT as _LM_PLOTLY_TICK_FONT,
+)
+from openscvx.plotting.publication import (
     latin_modern_fontproperties as _latin_modern_fontproperties,
+)
+from openscvx.plotting.publication import (
     show_plotly_with_latin_modern,
 )
 from openscvx.utils import get_kp_pose
@@ -370,9 +376,7 @@ def save_dubins_car_waypoint_stl_pdf(
 
     obs_center = np.asarray(results.plotting_data["obs_center"], dtype=np.float64).flatten()
     waypoint_radius = float(np.asarray(results.plotting_data["obs_radius"]).item())
-    safety_radius = float(
-        results.plotting_data.get("safety_threshold", waypoint_radius)
-    )
+    safety_radius = float(results.plotting_data.get("safety_threshold", waypoint_radius))
 
     speed = np.asarray(results.trajectory.get("speed"), dtype=np.float64).reshape(-1)
     theta = np.asarray(results.trajectory.get("theta"), dtype=np.float64).reshape(-1)
@@ -382,9 +386,7 @@ def save_dubins_car_waypoint_stl_pdf(
 
     lm_fp = _latin_modern_fontproperties()
     if lm_fp is None:
-        print(
-            "[plot] Latin Modern OTF not found; PDF will use matplotlib default serif."
-        )
+        print("[plot] Latin Modern OTF not found; PDF will use matplotlib default serif.")
 
     fig, ax = plt.subplots(figsize=(6.4, 6.4), dpi=100)
     fig.patch.set_facecolor("white")
@@ -490,9 +492,7 @@ def plot_dubins_car_waypoint_stl(results: OptimizationResults, params: Config):
 
     obs_center = np.asarray(results.plotting_data["obs_center"], dtype=np.float64).flatten()
     waypoint_radius = float(np.asarray(results.plotting_data["obs_radius"]).item())
-    safety_radius = float(
-        results.plotting_data.get("safety_threshold", waypoint_radius)
-    )
+    safety_radius = float(results.plotting_data.get("safety_threshold", waypoint_radius))
 
     speed = np.asarray(results.trajectory.get("speed"), dtype=np.float64).reshape(-1)
     theta = np.asarray(results.trajectory.get("theta"), dtype=np.float64).reshape(-1)
@@ -965,7 +965,10 @@ def _poses_at_times(pose: np.ndarray, t_samples: np.ndarray, t_ref: np.ndarray) 
             return pose
         if pose.shape[0] == len(t_ref):
             return np.column_stack(
-                [np.interp(t_samples, t_ref, pose[:, i], left=pose[0, i], right=pose[-1, i]) for i in range(3)]
+                [
+                    np.interp(t_samples, t_ref, pose[:, i], left=pose[0, i], right=pose[-1, i])
+                    for i in range(3)
+                ]
             )
         if pose.shape[0] > 1:
             idx = np.linspace(0, pose.shape[0] - 1, len(t_samples)).astype(int)
@@ -994,7 +997,8 @@ def _subject_world_trajectories(results, t_samples: np.ndarray) -> list[np.ndarr
 
     if "moving_subject" in results and "init_poses" in results:
         init_poses = results.plotting_data["init_poses"]
-        offset = np.asarray(init_poses[0] if isinstance(init_poses, list) else init_poses).reshape(3)
+        raw = init_poses[0] if isinstance(init_poses, list) else init_poses
+        offset = np.asarray(raw).reshape(3)
         traj = np.asarray(get_kp_pose(t_samples, offset))
         if traj.ndim == 1:
             traj = traj.reshape(-1, 3)
@@ -1045,9 +1049,7 @@ def _get_ee_quaternion_trajectory(results) -> np.ndarray:
     return np.array([_wxyz_from_rotation_matrix(t_j7[i] @ t_home) for i in range(len(t_j7))])
 
 
-def _camera_poses_at_times(
-    results, t_samples: np.ndarray
-) -> tuple[np.ndarray, np.ndarray]:
+def _camera_poses_at_times(results, t_samples: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Camera mount position and attitude (wxyz) sampled at ``t_samples``."""
     t_samples = np.asarray(t_samples, dtype=np.float64).flatten()
     t_ref = np.asarray(results.trajectory["time"], dtype=np.float64).flatten()
@@ -1069,7 +1071,10 @@ def _camera_poses_at_times(
         return cam_pos, cam_quat
 
     pos = np.column_stack(
-        [np.interp(t_samples, t_ref, cam_pos[:, i], left=cam_pos[0, i], right=cam_pos[-1, i]) for i in range(3)]
+        [
+            np.interp(t_samples, t_ref, cam_pos[:, i], left=cam_pos[0, i], right=cam_pos[-1, i])
+            for i in range(3)
+        ]
     )
     idx = np.clip(np.searchsorted(t_ref, t_samples, side="left"), 0, len(t_ref) - 1)
     return pos, cam_quat[idx]
@@ -1114,9 +1119,7 @@ def _camera_cone_outline_xy(result, n_grid: int = 50) -> tuple[np.ndarray, np.nd
     if "norm_type" not in result:
         raise ValueError("`norm_type` not found in results.")
 
-    A = np.diag(
-        [1 / np.tan(np.pi / result["alpha_y"]), 1 / np.tan(np.pi / result["alpha_x"])]
-    )
+    A = np.diag([1 / np.tan(np.pi / result["alpha_y"]), 1 / np.tan(np.pi / result["alpha_x"])])
     range_limit = 10 if _results_has_moving_subject(result) else 80
     norm_type = result["norm_type"]
     ord_ = np.inf if norm_type == "inf" else norm_type
@@ -1124,12 +1127,16 @@ def _camera_cone_outline_xy(result, n_grid: int = 50) -> tuple[np.ndarray, np.nd
     x = np.linspace(-range_limit, range_limit, n_grid)
     y = np.linspace(-range_limit, range_limit, n_grid)
     X, Y = np.meshgrid(x, y)
-    X, Y, Z = X.flatten(), Y.flatten(), np.array(
-        [
-            np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord=ord_)
-            for x_val in x
-            for y_val in y
-        ]
+    X, Y, Z = (
+        X.flatten(),
+        Y.flatten(),
+        np.array(
+            [
+                np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord=ord_)
+                for x_val in x
+                for y_val in y
+            ]
+        ),
     )
     X, Y = X / Z, Y / Z
     order = np.argsort(np.arctan2(Y, X))
@@ -1240,9 +1247,7 @@ def _apply_camera_view_layout(
         fig.update_layout(autosize=False, width=width, height=height)
 
 
-def plot_camera_view(
-    result: OptimizationResults, params: Config | dict | None = None
-) -> go.Figure:
+def plot_camera_view(result: OptimizationResults, params: Config | dict | None = None) -> go.Figure:
     """Static 2D camera view with full keypoint trajectories and SCP nodes.
 
     Requires viewplanning plotting data on ``result``: ``init_poses``, ``R_sb``,

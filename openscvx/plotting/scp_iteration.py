@@ -1,6 +1,7 @@
+from pathlib import Path
+
 import numpy as np
 import plotly.graph_objects as go
-from pathlib import Path
 from plotly.subplots import make_subplots
 
 from openscvx.algorithms import OptimizationResults
@@ -148,7 +149,8 @@ def plot_scp_iterations(
                 name, _ = parse_var_spec(spec)
                 if name not in available:
                     raise ValueError(
-                        f"No controls matched filter {control_names}. Available: {sorted(available)}"
+                        f"No controls matched filter {control_names}. "
+                        f"Available: {sorted(available)}"
                     )
         expanded_controls = _expand_scp_variables(result, control_specs, all_controls)
 
@@ -170,7 +172,9 @@ def plot_scp_iterations(
     if publication:
         subplot_titles = [""] * (len(expanded_states) + len(expanded_controls))
     else:
-        subplot_titles = [s["name"] for s in expanded_states] + [c["name"] for c in expanded_controls]
+        subplot_titles = [s["name"] for s in expanded_states] + [
+            c["name"] for c in expanded_controls
+        ]
 
     fig = make_subplots(
         rows=total_rows,
@@ -383,6 +387,7 @@ def plot_scp_iterations(
         fig.update_xaxes(title_text=x_label, row=total_rows, col=col_idx)
 
     if publication:
+
         def _save(path: str | Path) -> None:
             save_scp_iterations_pdf(
                 result,

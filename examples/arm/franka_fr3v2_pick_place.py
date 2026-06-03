@@ -381,7 +381,7 @@ problem = ox.Problem(
         "lam_vb": 1e1,
         "lam_vc": 4e2,
         "lam_cost": 4e-1,
-        "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0, ep=1E-1),
+        "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0, ep=1e-1),
     },
     algebraic_prop={
         "ee_position": p_ee,

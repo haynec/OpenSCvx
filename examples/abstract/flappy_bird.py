@@ -20,8 +20,12 @@ Discrete dynamics at impulsive nodes:
 
 import os
 import sys
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    import viser
 
 # Add grandparent directory to path for optional plotting imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -277,7 +281,8 @@ def _plot_flappy(
     """
     import plotly.graph_objects as go
 
-    from openscvx.plotting.publication import LM_PLOTLY_FONT as _LM_PLOTLY_FONT, LM_PLOTLY_TICK_FONT as _LM_PLOTLY_TICK_FONT
+    from openscvx.plotting.publication import LM_PLOTLY_FONT as _LM_PLOTLY_FONT
+    from openscvx.plotting.publication import LM_PLOTLY_TICK_FONT as _LM_PLOTLY_TICK_FONT
 
     pos_nodes = np.asarray(results.nodes["position"])
     fig = go.Figure()
@@ -377,13 +382,13 @@ def save_flappy_bird_pdf(
     import matplotlib.pyplot as plt
     from matplotlib.patches import Rectangle
 
-    from openscvx.plotting.publication import latin_modern_fontproperties as _latin_modern_fontproperties
+    from openscvx.plotting.publication import (
+        latin_modern_fontproperties as _latin_modern_fontproperties,
+    )
 
     lm_fp = _latin_modern_fontproperties()
     if lm_fp is None:
-        print(
-            "[plot] Latin Modern OTF not found; PDF will use matplotlib default serif."
-        )
+        print("[plot] Latin Modern OTF not found; PDF will use matplotlib default serif.")
 
     fig, ax = plt.subplots(figsize=(10.0, 3.2), dpi=100)
     fig.patch.set_facecolor("white")
@@ -455,7 +460,9 @@ def save_flappy_bird_pdf(
         for lbl in ax.get_xticklabels() + ax.get_yticklabels():
             lbl.set_fontproperties(lm_fp)
 
-    leg = ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=1, frameon=False, prop=lm_fp)
+    leg = ax.legend(
+        loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=1, frameon=False, prop=lm_fp
+    )
     if lm_fp is not None:
         for text in leg.get_texts():
             text.set_fontproperties(lm_fp)
@@ -618,7 +625,9 @@ def create_flappy_bird_viser_server(
 
     t_arr = np.asarray(results.t_full, dtype=np.float64).flatten()
     if t_arr.size < 2:
-        t_arr = np.linspace(0.0, float(results.t_final), max(len(results.trajectory["position"]), 2))
+        t_arr = np.linspace(
+            0.0, float(results.t_final), max(len(results.trajectory["position"]), 2)
+        )
 
     pos_xy = np.asarray(results.trajectory["position"], dtype=np.float64)
     vel_xy = np.asarray(results.trajectory.get("velocity"), dtype=np.float64)
@@ -628,12 +637,6 @@ def create_flappy_bird_viser_server(
     pos = _xy_to_scene(pos_xy).astype(np.float32)
     vel3 = _xy_to_scene(vel_xy)
     colors = compute_velocity_colors(vel3)
-
-    dv_series = results.trajectory.get("delta_v_y")
-    if dv_series is not None:
-        dv_y = np.asarray(dv_series, dtype=np.float64).reshape(-1)
-    else:
-        dv_y = np.zeros(len(pos))
 
     server = viser.ViserServer()
     server.scene.set_up_direction("+y")
@@ -708,7 +711,9 @@ def create_flappy_bird_viser_server(
     dv_nodes = np.asarray(results.nodes.get("delta_v_y", np.zeros((n_nodes, 1)))).reshape(-1)
 
     def _frame_to_node(frame_idx: int) -> int:
-        return int(np.clip(np.searchsorted(t_nodes, t_arr[frame_idx], side="right") - 1, 0, n_nodes - 1))
+        return int(
+            np.clip(np.searchsorted(t_nodes, t_arr[frame_idx], side="right") - 1, 0, n_nodes - 1)
+        )
 
     def update_trace(frame_idx: int) -> None:
         idx = min(frame_idx + 1, len(pos))

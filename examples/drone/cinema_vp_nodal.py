@@ -23,12 +23,12 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 import openscvx as ox
+from examples.plotting import plot_camera_view
 from examples.plotting_viser import (
     create_animated_plotting_server,
     create_scp_animated_plotting_server,
     create_snapshot_plotting_server,
 )
-from examples.plotting import plot_camera_view
 from openscvx import Problem
 from openscvx.utils import get_kp_pose
 

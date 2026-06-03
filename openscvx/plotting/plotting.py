@@ -393,6 +393,7 @@ def plot_states(
         fig.update_xaxes(title_text=x_label, row=n_rows, col=col_idx)
 
     if publication:
+
         def _save(path: str | Path) -> None:
             save_timeseries_pdf(
                 result,
@@ -608,6 +609,7 @@ def plot_controls(
         fig.update_xaxes(title_text=x_label, row=n_rows, col=col_idx)
 
     if publication:
+
         def _save(path: str | Path) -> None:
             save_timeseries_pdf(
                 result,

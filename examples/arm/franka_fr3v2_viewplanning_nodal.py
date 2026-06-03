@@ -37,7 +37,6 @@ sys.path.append(grandparent_dir)
 import openscvx as ox
 from examples.plotting import plot_camera_view
 from examples.plotting_viser import (
-    build_arm_line_snapshot_builder,
     build_cad_link_snapshot_builder,
     compute_poe_joint_keypoints,
     create_snapshot_plotting_server,
@@ -372,9 +371,7 @@ if __name__ == "__main__":
             [d7, 0.0, z567],
         ]
     )
-    keypoints = compute_poe_joint_keypoints(
-        results, _joint_zero_pos, N_JOINTS, t_home=T_home_np
-    )
+    keypoints = compute_poe_joint_keypoints(results, _joint_zero_pos, N_JOINTS, t_home=T_home_np)
 
     _use_cad_mesh = False
     _link_meshes_local: dict = {}

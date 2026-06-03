@@ -158,7 +158,8 @@ def plot_obstacle_avoidance_vmap_2d(
     """Static Plotly view of the planar trajectory and circular obstacles."""
     import plotly.graph_objects as go
 
-    from openscvx.plotting.publication import LM_PLOTLY_FONT as _LM_PLOTLY_FONT, LM_PLOTLY_TICK_FONT as _LM_PLOTLY_TICK_FONT
+    from openscvx.plotting.publication import LM_PLOTLY_FONT as _LM_PLOTLY_FONT
+    from openscvx.plotting.publication import LM_PLOTLY_TICK_FONT as _LM_PLOTLY_TICK_FONT
 
     fig = go.Figure()
     centers = np.asarray(obstacle_centers, dtype=np.float64)
@@ -265,13 +266,13 @@ def save_obstacle_avoidance_vmap_2d_pdf(
     import matplotlib.pyplot as plt
     from matplotlib.patches import Circle
 
-    from openscvx.plotting.publication import latin_modern_fontproperties as _latin_modern_fontproperties
+    from openscvx.plotting.publication import (
+        latin_modern_fontproperties as _latin_modern_fontproperties,
+    )
 
     lm_fp = _latin_modern_fontproperties()
     if lm_fp is None:
-        print(
-            "[plot] Latin Modern OTF not found; PDF will use matplotlib default serif."
-        )
+        print("[plot] Latin Modern OTF not found; PDF will use matplotlib default serif.")
 
     dpi = 100
     fig, ax = plt.subplots(figsize=(width / dpi, height / dpi), dpi=dpi)

@@ -19,7 +19,7 @@ import openscvx as ox
 from examples.plotting_viser import (
     create_animated_plotting_server,
     create_scp_animated_plotting_server,
-    create_snapshot_plotting_server
+    create_snapshot_plotting_server,
 )
 from openscvx import Problem
 from openscvx.plotting.viser.coordinates import model_vec_to_viser_xyz

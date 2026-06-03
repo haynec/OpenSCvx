@@ -324,10 +324,7 @@ def visualize(results) -> None:
             tip_vel = np.zeros_like(tip_pos)
 
     cart_pos = np.array(
-        [
-            [float(fk_multishot_anim[i][0][0]), 0.0, 0.0]
-            for i in range(len(fk_multishot_anim))
-        ],
+        [[float(fk_multishot_anim[i][0][0]), 0.0, 0.0] for i in range(len(fk_multishot_anim))],
         dtype=np.float64,
     )
     if len(t_play) > 1:
@@ -385,9 +382,7 @@ def visualize(results) -> None:
                 point_size=0.006,
             )
 
-        seg_tip_paths = segment_tip_paths_from_V(
-            V_multishot, n_x=n_x, n_u=n_u, n_q=n_q
-        )
+        seg_tip_paths = segment_tip_paths_from_V(V_multishot, n_x=n_x, n_u=n_u, n_q=n_q)
         tip_seg_list = [
             np.stack([seg[i], seg[i + 1]], axis=0)
             for seg in seg_tip_paths
