@@ -158,7 +158,7 @@ def plot_obstacle_avoidance_vmap_2d(
     """Static Plotly view of the planar trajectory and circular obstacles."""
     import plotly.graph_objects as go
 
-    from examples.plotting import _LM_PLOTLY_FONT, _LM_PLOTLY_TICK_FONT
+    from openscvx.plotting.publication import LM_PLOTLY_FONT as _LM_PLOTLY_FONT, LM_PLOTLY_TICK_FONT as _LM_PLOTLY_TICK_FONT
 
     fig = go.Figure()
     centers = np.asarray(obstacle_centers, dtype=np.float64)
@@ -265,7 +265,7 @@ def save_obstacle_avoidance_vmap_2d_pdf(
     import matplotlib.pyplot as plt
     from matplotlib.patches import Circle
 
-    from examples.plotting import _latin_modern_fontproperties
+    from openscvx.plotting.publication import latin_modern_fontproperties as _latin_modern_fontproperties
 
     lm_fp = _latin_modern_fontproperties()
     if lm_fp is None:
@@ -376,7 +376,7 @@ class ObstacleAvoidanceVmap2dFigure:
         self._height = height
 
     def show(self, *args, **kwargs) -> None:
-        from examples.plotting import show_plotly_with_latin_modern
+        from openscvx.plotting.publication import show_plotly_with_latin_modern
 
         show_plotly_with_latin_modern(self._fig)
 

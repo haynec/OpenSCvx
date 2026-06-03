@@ -277,7 +277,7 @@ def _plot_flappy(
     """
     import plotly.graph_objects as go
 
-    from examples.plotting import _LM_PLOTLY_FONT, _LM_PLOTLY_TICK_FONT
+    from openscvx.plotting.publication import LM_PLOTLY_FONT as _LM_PLOTLY_FONT, LM_PLOTLY_TICK_FONT as _LM_PLOTLY_TICK_FONT
 
     pos_nodes = np.asarray(results.nodes["position"])
     fig = go.Figure()
@@ -377,7 +377,7 @@ def save_flappy_bird_pdf(
     import matplotlib.pyplot as plt
     from matplotlib.patches import Rectangle
 
-    from examples.plotting import _latin_modern_fontproperties
+    from openscvx.plotting.publication import latin_modern_fontproperties as _latin_modern_fontproperties
 
     lm_fp = _latin_modern_fontproperties()
     if lm_fp is None:
@@ -483,7 +483,7 @@ class FlappyBirdFigure:
         self._world_y = world_y
 
     def show(self, *args, **kwargs) -> None:
-        from examples.plotting import show_plotly_with_latin_modern
+        from openscvx.plotting.publication import show_plotly_with_latin_modern
 
         show_plotly_with_latin_modern(self._fig)
 

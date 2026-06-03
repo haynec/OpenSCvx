@@ -500,18 +500,6 @@ if __name__ == "__main__":
     results["logo_plane_point"] = plane_point
     results["logo_plane_normal"] = plane_normal
 
-    from openscvx.plotting import (
-        plot_controls,
-        plot_states,
-        plot_trust_region_heatmap,
-        plot_virtual_control_heatmap,
-    )
-
-    plot_states(results).show()
-    plot_controls(results).show()
-    plot_virtual_control_heatmap(results).show()
-    plot_trust_region_heatmap(results).show()
-
     vehicle_mesh = make_quadrotor_mesh()
     vehicle_mesh_color = (55, 60, 68)
 

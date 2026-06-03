@@ -106,7 +106,6 @@ A_cone = np.diag(
 )
 c = jnp.array([0, 0, 1])
 norm_type = 2
-# R_sb = jnp.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]])
 R_sb = np.eye(3)
 
 vp_targets = np.array(

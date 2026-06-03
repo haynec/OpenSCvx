@@ -27,16 +27,6 @@ from openscvx.plotting.viser.coordinates import model_vec_to_viser_xyz
 # Position components live at indices 1:4 in the state vector (mass is index 0).
 _POSITION_STATE_SLICE = slice(1, 4)
 
-_ROCKET_STEP_PATH = os.path.join(current_dir, "Rocket.STEP")
-_ROCKET_MESH_CACHE_PATH = os.path.join(current_dir, "Rocket_viser_mesh_upright.npz")
-# SolidWorks STEP: rocket length is +Y; align with body +Z so it lands upright in Viser (Z-up).
-_CAD_TO_BODY = np.array(
-    [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]],
-    dtype=np.float64,
-)
-_ROCKET_MESH_TARGET_LENGTH = 2.0
-_ROCKET_VOXEL_PITCH = 0.05
-
 
 def model_attitude_xyzw_to_viser_wxyz(attitude: np.ndarray) -> np.ndarray:
     """PDG stores ``[q1, q2, q3, q4]`` (xyzw); Viser expects ``[w, x, y, z]``."""
@@ -44,56 +34,6 @@ def model_attitude_xyzw_to_viser_wxyz(attitude: np.ndarray) -> np.ndarray:
     if q.ndim == 1:
         return np.array([q[3], q[0], q[1], q[2]], dtype=np.float64)
     return np.stack([q[..., 3], q[..., 0], q[..., 1], q[..., 2]], axis=-1)
-
-
-def load_rocket_vehicle_mesh() -> tuple[np.ndarray, np.ndarray] | None:
-    """Load rocket mesh for Viser from cache or ``Rocket.STEP``, or ``None`` for axes."""
-    has_cache = os.path.isfile(_ROCKET_MESH_CACHE_PATH)
-    has_step = os.path.isfile(_ROCKET_STEP_PATH)
-
-    if has_cache and (
-        not has_step
-        or os.path.getmtime(_ROCKET_MESH_CACHE_PATH) >= os.path.getmtime(_ROCKET_STEP_PATH)
-    ):
-        cached = np.load(_ROCKET_MESH_CACHE_PATH)
-        return cached["vertices"], cached["faces"]
-
-    if not has_step:
-        return None
-
-    try:
-        import trimesh
-    except ImportError:
-        print(
-            "[viser] Install trimesh and cascadio to show Rocket.STEP "
-            "(pip install trimesh cascadio); using attitude axes."
-        )
-        return None
-
-    try:
-        mesh = trimesh.load(_ROCKET_STEP_PATH, force="mesh")
-    except Exception as exc:
-        print(f"[viser] Failed to load Rocket.STEP: {exc}; using attitude axes.")
-        return None
-
-    mesh.vertices = np.asarray(mesh.vertices, dtype=np.float64)
-    mesh.vertices -= mesh.centroid
-    mesh.vertices = mesh.vertices @ _CAD_TO_BODY.T
-    length = float(np.max(mesh.extents))
-    if length > 1e-9:
-        mesh.vertices *= _ROCKET_MESH_TARGET_LENGTH / length
-
-    try:
-        voxel_grid = mesh.voxelized(pitch=_ROCKET_VOXEL_PITCH)
-        simplified = voxel_grid.marching_cubes
-        simplified.apply_transform(voxel_grid.transform)
-    except Exception:
-        simplified = mesh
-
-    vertices = np.asarray(simplified.vertices, dtype=np.float32)
-    faces = np.asarray(simplified.faces, dtype=np.uint32)
-    np.savez(_ROCKET_MESH_CACHE_PATH, vertices=vertices, faces=faces)
-    return vertices, faces
 
 
 def remap_attitude_for_viser(result) -> None:
@@ -368,16 +308,7 @@ if __name__ == "__main__":
     result = problem.post_process()
     prepare_rocket_results_for_viser(result)
 
-    vehicle_mesh = load_rocket_vehicle_mesh()
-    if vehicle_mesh is not None:
-        if os.path.isfile(_ROCKET_STEP_PATH):
-            print("[viser] vehicle_mesh: Rocket (from STEP or cache)")
-        else:
-            print("[viser] vehicle_mesh: Rocket (cached npz)")
-    else:
-        print("[viser] vehicle_mesh: None — using attitude axes")
-
-    # Create PDG trajectory visualization
+    # Create PDG trajectory visualization (body-frame axes show attitude)
     traj_server = create_animated_plotting_server(
         result,
         thrust_key="thrust",
@@ -387,8 +318,6 @@ if __name__ == "__main__":
         thrust_plume_color=(255, 130, 50),
         thrust_plume_opacity=0.5,
         thrust_remap_world_to_viser=True,
-        vehicle_mesh=vehicle_mesh,
-        vehicle_mesh_color=(185, 190, 200),
     )
 
     # Create SCP iteration visualization
@@ -401,8 +330,6 @@ if __name__ == "__main__":
         result,
         initial_n_snapshots=5,
         show_grid=True,
-        vehicle_mesh=vehicle_mesh,
-        vehicle_mesh_color=(185, 190, 200),
     )
 
     # Keep both servers running
