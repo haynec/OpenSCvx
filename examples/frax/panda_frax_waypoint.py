@@ -43,7 +43,7 @@ q, qd = dyn.states
 (tau,) = dyn.controls
 
 n_j = robot.num_joints
-n = 20
+n = 12
 total_time = 5.0
 waypoint_node = n // 2
 ee_tol = 0.02  # m
@@ -159,8 +159,6 @@ time = ox.Time(
     final=ox.Minimize(total_time),
     min=0.0,
     max=2.0 * total_time,
-    time_dilation_min=0.05 * total_time,
-    time_dilation_max=2.0 * total_time,
 )
 
 problem = ox.Problem(
@@ -171,16 +169,12 @@ problem = ox.Problem(
     constraints=constraints,
     byof=byof,
     N=n,
+    float_dtype="float64",
     algorithm={
         "lam_vb": 1e1,
         "lam_vc": 1e1,
         "lam_cost": 1e-1,
     },
-    discretizer={"diffrax_kwargs": {"atol": 1e-12, "rtol": 1e-12}},
-    float_dtype="float64",
-    solver={"cvx_solver": "QOCO",
-    "solver_args": {"abstol": 1e-8, "reltol": 1e-11, "enforce_dpp": True}},
-    licq_max=1e-8,
 )
 
 
@@ -203,12 +197,56 @@ def _compute_panda_keypoints(q_traj: np.ndarray, robot) -> tuple[np.ndarray, np.
     return keypoints, ee_pos
 
 
+def _q_from_V_multishot(
+    V: np.ndarray,
+    n_x: int,
+    n_u: int,
+    q_slice: slice,
+    t_nodes: np.ndarray,
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """Unpack joint angles from the SCP multi-shoot V matrix.
+
+    V has shape ``((N-1) * i4, n_substeps)`` where
+    ``i4 = n_x + n_x² + 2·n_x·n_u``.  The first ``n_x`` rows of each
+    ``i4``-row block are the integrated state at that substep.
+
+    Returns ``(q_traj, t_traj)`` or ``(None, None)`` if extraction fails.
+    """
+    i4 = n_x + n_x * n_x + 2 * n_x * n_u
+    n_rows, n_sub = V.shape
+    if i4 <= 0 or n_rows % i4 != 0 or n_sub < 1:
+        return None, None
+    n_seg = n_rows // i4
+    if n_seg != len(t_nodes) - 1:
+        return None, None
+    q_rows: list[np.ndarray] = []
+    t_rows: list[float] = []
+    for seg in range(n_seg):
+        t0, t1 = float(t_nodes[seg]), float(t_nodes[seg + 1])
+        j0 = 0 if seg == 0 else 1  # skip duplicated segment-start sample
+        for j in range(j0, n_sub):
+            alpha = j / (n_sub - 1) if n_sub > 1 else 0.0
+            x_vec = np.asarray(V[seg * i4 : seg * i4 + n_x, j], dtype=np.float64)
+            q_rows.append(x_vec[q_slice])
+            t_rows.append((1.0 - alpha) * t0 + alpha * t1)
+    if not q_rows:
+        return None, None
+    return np.stack(q_rows), np.asarray(t_rows, dtype=np.float64)
+
+
 def visualize(
     results,
     robot,
     ee_targets: list[np.ndarray],
     target_colors: list[tuple[int, int, int]],
 ) -> None:
+    """Animate the Panda trajectory in Viser with joint/torque plots.
+
+    Uses the multi-shoot V matrix from the final SCP iteration when available
+    (``results.discretization_history[-1]``), showing the per-segment
+    integration substeps exactly as the solver used them.  Falls back to the
+    post-process single propagation (``results.trajectory``) if V is absent.
+    """
     import plotly.graph_objects as go
 
     from openscvx.plotting.viser import (
@@ -225,6 +263,36 @@ def visualize(
     t_vec = np.asarray(results.trajectory["time"]).flatten()
     q_traj = np.asarray(results.trajectory["q"])
     tau_traj = np.asarray(results.trajectory["tau"])
+
+    # ── Prefer multishot V over post-process single propagation ──────────────
+    _dh = getattr(results, "discretization_history", None) or []
+    if _dh:
+        _V = np.asarray(_dh[-1], dtype=np.float64)
+        _n_x = results.x.shape[1]
+        _n_u = results.u.shape[1]
+        _t_nodes_raw = results.nodes.get("time", None)
+        if _t_nodes_raw is None:
+            _t_nodes = np.linspace(0.0, float(t_vec[-1]), len(results.nodes["q"]))
+        else:
+            _t_nodes = np.asarray(_t_nodes_raw).flatten()
+        _q_ms, _t_ms = _q_from_V_multishot(_V, _n_x, _n_u, q.slice, _t_nodes)
+        if _q_ms is not None:
+            print(
+                f"[viser] Multishot V: {len(_q_ms)} frames across "
+                f"{len(_t_nodes) - 1} segments."
+            )
+            q_traj, t_vec = _q_ms, _t_ms
+            # Torque is ZOH: replicate each node's tau value across its substeps.
+            _tau_nodes = np.asarray(results.nodes["tau"])
+            _n_sub = _V.shape[1]
+            _tau_rows: list[np.ndarray] = []
+            for _seg in range(len(_t_nodes) - 1):
+                _j0 = 0 if _seg == 0 else 1
+                for _j in range(_j0, _n_sub):
+                    _tau_rows.append(_tau_nodes[_seg])
+            tau_traj = np.stack(_tau_rows)
+        else:
+            print("[viser] Multishot V extraction failed; using post-process trajectory.")
 
     keypoints, ee_pos = _compute_panda_keypoints(q_traj, robot)
     n_segs = robot.num_joints + 1
