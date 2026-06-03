@@ -1042,6 +1042,10 @@ class CVXPyPTRSolver(PTRSolver):
         # Unscale state and control trajectories
         x_scaled = self._problem.var_dict["x"].value  # (N, n_states)
         u_scaled = self._problem.var_dict["u"].value  # (N, n_controls)
+        if x_scaled is None or u_scaled is None:
+            raise cp.error.SolverError(
+                f"CVXPy returned no primal solution (status={self._problem.status!r})"
+            )
         x = (S_x @ x_scaled.T + np.expand_dims(c_x, axis=1)).T
         u = (S_u @ u_scaled.T + np.expand_dims(c_u, axis=1)).T
 

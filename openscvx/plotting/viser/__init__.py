@@ -52,6 +52,7 @@ constraints, etc.), see the files under ``examples/``.
 """
 
 # Server setup, animated components, Plotly integration, static primitives, and SCP visualization
+from .cito_contact import add_cito_contact_visualization
 from .animated import (
     UpdateCallback,
     add_animated_trail,
@@ -95,6 +96,7 @@ __all__ = [
     "add_ellipsoid_obstacles",
     "add_glideslope_cone",
     "add_ghost_trajectory",
+    "add_cito_contact_visualization",
     # Orbit helpers
     "add_circular_orbit",
     # Animated components

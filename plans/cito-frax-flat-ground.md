@@ -65,7 +65,7 @@ Frax `fext` is `(num_joints, 6)` world wrenches per joint index; point contacts 
 | State | Role |
 |-------|------|
 | `q`, `qd` | Mechanical (adapter) |
-| `y_*` | Auxiliary integrators for integral cross-complementarity — extra `State`s in the **example**, `.y` rates from **integrations BYOF** |
+| `y_*` | Five auxiliary integrators per contact (`y_phi_n`, `y_sd`, `y_lambda`, `y_gamma`, `y_rho`); cross FB uses `Δy_phi_n` vs `Δy_sd`, not nodal `sd` |
 
 No `x^-` / `x^+`. Fused shooting (existing):
 
@@ -114,7 +114,7 @@ New module **`openscvx/integrations/frax_cito.py`** (re-export from `integration
 | `cito_aux_byof` | `y_*` integrands for cross-complementarity only |
 | `cito_impact_byof` | `dynamics_discrete` for `qd` jump + restitution `epsilon_c` |
 | `cito_continuous_complementarity_fns` | Nodal FB on `(phi^n, sd)`, `(phi^n, lambda)`, `(gamma, rho)` |
-| `cito_cross_complementarity_fns` | `cross_nodal` FB on `Δy` integrals (paper eq. 9–11) |
+| `cito_cross_complementarity_fns` | `cross_nodal` FB on `Δy_phi_n`/`Δy_sd`, `Δy_phi_n`/`Δy_lambda`, `Δy_gamma`/`Δy_rho` (paper eq. 9–11) |
 | `cito_impact_complementarity_fns` | Nodal FB on impact pairs `(Phi^n, sd)`, etc. — **separate** from cross |
 | `fischer_burmeister(a, b, delta)` | **Always** take `delta` as an argument; wire `config.delta` at call sites |
 | `apply_base_attitude_limits` | Roll/pitch ±30° (parametric); yaw free |

@@ -225,6 +225,11 @@ problem = Problem(
     constraints=constraints,
     N=n,
     algorithm={"ep_tr": 1e-3},
+    solver={
+        "cvx_solver": "CLARABEL",
+        "solver_args": {
+        },
+    }
 )
 
 plotting_dict = {
