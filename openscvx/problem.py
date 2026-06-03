@@ -1487,6 +1487,7 @@ class Problem:
         xf_stack: Optional[jnp.ndarray] = None,
         parameters: Optional[dict] = None,
         *,
+        x_guess_stack: Optional[jnp.ndarray] = None,
         max_iters: Optional[int] = None,
     ) -> OptimizationResults:
         """Run ``B`` SCP solves over stacked boundary conditions — batch baked in.
@@ -1540,6 +1541,17 @@ class Problem:
                 shared across the batch. Values flow as runtime inputs to the
                 exported artifact; its pytree structure is fixed at the first
                 ``solve_batched`` call that builds the artifact.
+            x_guess_stack: Per-element initial guess for the state trajectory,
+                shape ``(B, N, n_states)``.  When provided, replaces the
+                shared ``AlgorithmState.x`` after the vmapped boundary pins
+                are built but before the SCP iterations start.  Each batch
+                element therefore starts from its own warm starting point
+                rather than the global problem-level guess stored in
+                ``problem.settings.sim.x.guess``.  ``None`` falls back to the
+                shared guess (broadcast from the single problem-level guess).
+                The AOT-compiled artifact is unaffected because shapes and
+                dtypes are identical to the default; only the concrete values
+                differ at runtime.
             max_iters: SCP iteration cap. ``None`` uses ``algorithm.k_max``; a
                 different value (or a different ``B``) rebuilds the cached
                 batched closure *and* keys a distinct exported artifact, so an
@@ -1605,6 +1617,12 @@ class Problem:
         batched_solve = self._get_or_build_solve_batched(
             x0_stack.shape[0], max_iters, params_for_solve
         )
+        # Inject per-element initial guesses after compilation (shapes/dtypes
+        # match the compiled artifact) but before execution.
+        if x_guess_stack is not None:
+            states = states.replace(
+                x=jnp.asarray(x_guess_stack, dtype=states.x.dtype)
+            )
         t_0_solve = time.time()
         # jax.export.Exported wrappers (save_compiled path) are invoked via
         # .call(); jax.stages.Compiled (AOT path) is a plain callable.
