@@ -67,6 +67,7 @@ from .cones import NonnegConeConstraint, SOCConstraint, ZeroConeConstraint
 from .ptr_solver import (
     PTRSolver,
     PTRSolveResult,
+    ParamFixPin,
     StatusCode,
     SubproblemData,
     SubproblemSolution,
@@ -493,6 +494,9 @@ class MoreauPTRSolver(PTRSolver):
 
         self.layout = _ConicLayout(N=N, n_x=n_x, n_u=n_u, n_nodal=len(jax_constraints.nodal))
         self._jax_constraints = jax_constraints
+        self._x_unified = x_unified
+
+
 
     def initialize(self, lowered: "LoweredProblem", settings: "Config") -> None:
         """Build the static conic structure and construct ``moreau.jax.Solver``.

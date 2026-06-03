@@ -56,6 +56,30 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
+# Param-fix pin descriptor
+# ---------------------------------------------------------------------------
+
+
+class ParamFixPin(NamedTuple):
+    """Boundary-condition pin derived from a ``(State == Parameter).convex().at([0/N-1])`` constraint.
+
+    Attributes:
+        state_slice: Absolute slice into the unified-state vector for the
+            pinned components. For a full-state pin this equals
+            ``state._slice``; for a sub-slice pin (e.g. ``position[1:3]``)
+            it is offset by ``state._slice.start``.
+        param_name: Name of the ``Parameter`` whose runtime value drives
+            the pin.
+        node_type: ``"init"`` for a node-0 pin; ``"term"`` for a node-N-1
+            pin.
+    """
+
+    state_slice: slice
+    param_name: str
+    node_type: str  # "init" or "term"
+
+
+# ---------------------------------------------------------------------------
 # Status codes
 # ---------------------------------------------------------------------------
 
@@ -593,6 +617,118 @@ class PTRSolver(ConvexSolver):
                 return None
             pins.append(([int(k) for k in entry.nodes], lhs._slice))
         return pins
+
+    @staticmethod
+    def _classify_nodal_convex(
+        constraints: "ConstraintSet",
+        N: int,
+    ) -> Optional[Tuple[List[Tuple[List[int], slice]], List[ParamFixPin]]]:
+        """Classify every ``nodal_convex`` entry as an impulsive or param-fix pin.
+
+        Returns ``(impulsive_pins, param_fix_pins)`` when every entry in
+        ``constraints.nodal_convex`` is recognised as one of:
+
+        * **Impulsive zero-pin** — ``NodalConstraint(Equality(Control[s], 0), nodes)``,
+          auto-injected by
+          :func:`openscvx.symbolic.lower._augment_impulsive_constraints`.
+        * **Param-fix pin** — ``NodalConstraint(Equality(lhs, Parameter), nodes=[0])``
+          or ``nodes=[N-1]``, where *lhs* is either a ``State`` or an
+          ``Index(State, slice)``.  Accepts both the original form and the
+          canonicalised form ``Equality(Sub(lhs, Parameter), Constant(0))``.
+
+        Returns ``None`` if any entry does not match either shape, so the
+        caller can fall back to ``super().lower_convex_constraints()``.
+        """
+        from openscvx.symbolic.expr.arithmetic import Sub
+        from openscvx.symbolic.expr.array import Index
+        from openscvx.symbolic.expr.constraint import Equality, NodalConstraint
+        from openscvx.symbolic.expr.control import Control
+        from openscvx.symbolic.expr.expr import Constant
+        from openscvx.symbolic.expr.parameter import Parameter
+        from openscvx.symbolic.expr.state import State
+
+        def _unwrap_state_param(
+            lhs: "Expr", rhs: "Expr"
+        ) -> Optional[Tuple["Expr", "Parameter"]]:
+            """Return (state_expr, param) from either:
+
+            * original form  ``lhs=State/Index(State), rhs=Parameter``
+            * canonical form ``lhs=Sub(State/Index(State), Parameter), rhs=Constant(0)``
+            """
+            if isinstance(rhs, Parameter):
+                return lhs, rhs
+            if (
+                isinstance(lhs, Sub)
+                and isinstance(rhs, Constant)
+                and np.all(np.asarray(rhs.value) == 0)
+                and isinstance(lhs.right, Parameter)
+            ):
+                return lhs.left, lhs.right
+            return None
+
+        if constraints.cross_node_convex:
+            return None
+
+        impulsive: List[Tuple[List[int], slice]] = []
+        param_fix: List[ParamFixPin] = []
+
+        for entry in constraints.nodal_convex:
+            if not isinstance(entry, NodalConstraint):
+                return None
+            inner = entry.constraint
+            if not isinstance(inner, Equality):
+                return None
+            lhs, rhs = inner.lhs, inner.rhs
+
+            # -- Impulsive zero-pin: Control[s] == 0 --
+            if (
+                isinstance(lhs, Control)
+                and lhs._slice is not None
+                and isinstance(rhs, Constant)
+                and np.all(np.asarray(rhs.value) == 0)
+            ):
+                impulsive.append(([int(k) for k in entry.nodes], lhs._slice))
+                continue
+
+            # -- Param-fix pin: (State or State[s1:s2]) == Parameter at node 0 or N-1 --
+            nodes = entry.nodes
+            if nodes == [0]:
+                node_type = "init"
+            elif nodes == [N - 1]:
+                node_type = "term"
+            else:
+                return None  # multi-node or mid-trajectory — not supported
+
+            unwrapped = _unwrap_state_param(lhs, rhs)
+            if unwrapped is None:
+                return None
+            state_expr, param = unwrapped
+
+            if isinstance(state_expr, State) and state_expr._slice is not None:
+                state_unified_slice = state_expr._slice
+            elif (
+                isinstance(state_expr, Index)
+                and isinstance(state_expr.base, State)
+                and state_expr.base._slice is not None
+                and isinstance(state_expr.index, slice)
+            ):
+                state_start = state_expr.base._slice.start
+                sub_start, sub_stop, sub_step = state_expr.index.indices(state_expr.base._shape[0])
+                if sub_step != 1:
+                    return None
+                state_unified_slice = slice(state_start + sub_start, state_start + sub_stop)
+            else:
+                return None
+
+            param_fix.append(
+                ParamFixPin(
+                    state_slice=state_unified_slice,
+                    param_name=param.name,
+                    node_type=node_type,
+                )
+            )
+
+        return impulsive, param_fix
 
     @staticmethod
     def _scaling(unified: Union["UnifiedState", "UnifiedControl"]) -> Tuple[np.ndarray, np.ndarray]:

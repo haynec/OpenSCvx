@@ -58,6 +58,7 @@ from .cones import NonnegConeConstraint, SOCConstraint, ZeroConeConstraint
 from .ptr_solver import (
     PTRSolver,
     PTRSolveResult,
+    ParamFixPin,
     StatusCode,
     SubproblemData,
     SubproblemSolution,
@@ -332,6 +333,9 @@ class QPAXPTRSolver(PTRSolver):
 
         self.layout = _QPLayout(N=N, n_x=n_x, n_u=n_u, n_nodal=len(jax_constraints.nodal))
         self._jax_constraints = jax_constraints
+        self._x_unified = x_unified
+
+
 
     def initialize(self, lowered: "LoweredProblem", settings: "Config") -> None:
         """Validate the constraint subset QPAX supports and stash settings.
