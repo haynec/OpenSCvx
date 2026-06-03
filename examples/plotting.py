@@ -20,6 +20,12 @@ except ImportError:
 
 from openscvx.algorithms import OptimizationResults
 from openscvx.config import Config
+from openscvx.plotting.publication import (
+    LM_PLOTLY_FONT as _LM_PLOTLY_FONT,
+    LM_PLOTLY_TICK_FONT as _LM_PLOTLY_TICK_FONT,
+    latin_modern_fontproperties as _latin_modern_fontproperties,
+    show_plotly_with_latin_modern,
+)
 from openscvx.utils import get_kp_pose
 
 
@@ -322,115 +328,6 @@ def plot_dubins_car(results: OptimizationResults, params: Config):
     # Set axis to be equal
     fig.update_xaxes(scaleanchor="y", scaleratio=1)
     return fig
-
-
-_LM_PLOTLY_FAMILY = "Latin Modern Roman"
-_LM_PLOTLY_FONT = {"family": f"{_LM_PLOTLY_FAMILY}, LM Roman 10, serif", "size": 12}
-_LM_PLOTLY_TICK_FONT = {"family": f"{_LM_PLOTLY_FAMILY}, LM Roman 10, serif", "size": 11}
-
-
-def _find_latin_modern_otf():
-    """Locate Latin Modern Roman regular OTF (Font Book or MacTeX / TeX Live)."""
-    import subprocess
-    from pathlib import Path
-
-    for path in (
-        Path.home() / "Library/Fonts/lmroman10-regular.otf",
-        Path.home() / "Library/Fonts/lmroman12-regular.otf",
-    ):
-        if path.is_file():
-            return path
-
-    for name in ("lmroman10-regular.otf", "lmroman12-regular.otf"):
-        try:
-            proc = subprocess.run(
-                ["kpsewhich", name],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
-            path = Path(proc.stdout.strip())
-            if path.is_file():
-                return path
-        except (FileNotFoundError, subprocess.CalledProcessError, OSError):
-            pass
-
-        for root in (
-            Path("/Library/TeX/texmf-dist/fonts/opentype/public/lm"),
-            Path("/usr/local/texlive"),
-        ):
-            if root.is_file() and root.name == name:
-                return root
-            if root.is_dir():
-                hit = root / name
-                if hit.is_file():
-                    return hit
-            if root.exists():
-                for hit in root.rglob(name):
-                    return hit
-    return None
-
-
-def _latin_modern_plotly_font_css() -> str:
-    """Embed Latin Modern OTF so Plotly's browser renderer can use it."""
-    import base64
-
-    otf = _find_latin_modern_otf()
-    if otf is None:
-        return ""
-    data = base64.b64encode(otf.read_bytes()).decode("ascii")
-    family = _LM_PLOTLY_FAMILY
-    return f"""
-@font-face {{
-  font-family: '{family}';
-  src: url(data:font/opentype;base64,{data}) format('opentype');
-  font-weight: normal;
-  font-style: normal;
-}}
-.js-plotly-plot .plotly .main-svg {{
-  font-family: '{family}', serif !important;
-}}
-"""
-
-
-def _latin_modern_fontproperties():
-    """Matplotlib FontProperties for Latin Modern Roman (PDF export)."""
-    from matplotlib import font_manager
-
-    otf = _find_latin_modern_otf()
-    if otf is None:
-        return None
-    font_manager.fontManager.addfont(str(otf))
-    return font_manager.FontProperties(fname=str(otf))
-
-
-def _apply_latin_modern_plotly_layout(fig: go.Figure) -> None:
-    fig.update_layout(font=_LM_PLOTLY_FONT)
-    fig.update_xaxes(title_font=_LM_PLOTLY_FONT, tickfont=_LM_PLOTLY_TICK_FONT)
-    fig.update_yaxes(title_font=_LM_PLOTLY_FONT, tickfont=_LM_PLOTLY_TICK_FONT)
-
-
-def show_plotly_with_latin_modern(fig: go.Figure) -> None:
-    """Open a Plotly figure in the browser with Latin Modern for axes and legend.
-
-    Uses Plotly's one-shot HTTP server (same as ``Figure.show()``). Opening HTML via
-    ``file://`` with a CDN Plotly script often yields a blank page with no error.
-    """
-    from plotly.io import to_html
-    from plotly.io._base_renderers import open_html_in_browser
-
-    _apply_latin_modern_plotly_layout(fig)
-    css = _latin_modern_plotly_font_css()
-    if not css:
-        print(
-            "[plot] Latin Modern OTF not found; opening plot with default Plotly fonts."
-        )
-        fig.show()
-        return
-
-    html = to_html(fig, include_plotlyjs=True, full_html=True)
-    html = html.replace("</head>", f"<style>{css}</style></head>", 1)
-    open_html_in_browser(html)
 
 
 class DubinsWaypointStlFigure:

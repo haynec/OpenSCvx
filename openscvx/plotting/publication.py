@@ -15,8 +15,8 @@ PlotStyle = Literal["dark", "publication"]
 VarSpec = str | tuple[str, int]
 
 _LM_PLOTLY_FAMILY = "Latin Modern Roman"
-_LM_PLOTLY_FONT = {"family": f"{_LM_PLOTLY_FAMILY}, LM Roman 10, serif", "size": 12}
-_LM_PLOTLY_TICK_FONT = {"family": f"{_LM_PLOTLY_FAMILY}, LM Roman 10, serif", "size": 11}
+LM_PLOTLY_FONT = {"family": f"{_LM_PLOTLY_FAMILY}, LM Roman 10, serif", "size": 12}
+LM_PLOTLY_TICK_FONT = {"family": f"{_LM_PLOTLY_FAMILY}, LM Roman 10, serif", "size": 11}
 
 _TIME_LABEL = r"$t\,\mathrm{(s)}$"
 
@@ -236,7 +236,7 @@ def _latin_modern_plotly_font_css() -> str:
     if otf is None:
         return ""
     data = base64.b64encode(otf.read_bytes()).decode("ascii")
-    family = _LM_PLOTLY_FAMILY
+    family = _LM_PLOTLY_FAMILY  # noqa: keep private here; it's only the font name string
     return f"""
 @font-face {{
   font-family: '{family}';
@@ -267,21 +267,21 @@ def apply_publication_plotly_layout(
         template="plotly_white",
         paper_bgcolor="white",
         plot_bgcolor="white",
-        font=_LM_PLOTLY_FONT,
+        font=LM_PLOTLY_FONT,
         autosize=False,
         width=width,
         height=height,
         margin=_PUBLICATION_MARGIN,
     )
     fig.update_xaxes(
-        title_font=_LM_PLOTLY_FONT,
-        tickfont=_LM_PLOTLY_TICK_FONT,
+        title_font=LM_PLOTLY_FONT,
+        tickfont=LM_PLOTLY_TICK_FONT,
         gridcolor="rgba(0,0,0,0.08)",
         zerolinecolor="rgba(0,0,0,0.15)",
     )
     fig.update_yaxes(
-        title_font=_LM_PLOTLY_FONT,
-        tickfont=_LM_PLOTLY_TICK_FONT,
+        title_font=LM_PLOTLY_FONT,
+        tickfont=LM_PLOTLY_TICK_FONT,
         gridcolor="rgba(0,0,0,0.08)",
         zerolinecolor="rgba(0,0,0,0.15)",
     )

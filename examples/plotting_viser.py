@@ -1,10 +1,16 @@
 """Viser-based trajectory visualization templates.
 
-This module provides convenience functions for common visualization patterns.
-These are templates meant to be copied and customized for specific problems.
+This module provides high-level, domain-specific visualization servers built on
+top of the composable primitives in ``openscvx.plotting.viser``.  It is the
+right place for opinionated compositions (snapshot grids, full-arm snapshots,
+pick-and-place waypoints) that depend on problem-specific trajectory keys.
 
-For the composable primitives, see openscvx.plotting.animation.
-For real-time examples, see examples/realtime/*.py.
+Boundary
+--------
+- **Primitives** (reusable, stable API): ``openscvx.plotting.viser``
+- **Templates** (opinionated, example-layer): this module
+
+For real-time examples, see ``examples/realtime/*.py``.
 """
 
 from __future__ import annotations

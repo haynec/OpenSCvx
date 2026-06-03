@@ -23,7 +23,6 @@ EXCLUDED_EXAMPLES = {
     "animations/*.py",
     "arm/7_dof_arm_collision.py",
     "drone/logo.py",
-    "drone/openscvx_logo.py",
     # Heavy MJX examples (keep cartpole + skydio below)
     "mjx/double_cartpole_mjx.py",
     "mjx/triple_cartpole_mjx.py",
