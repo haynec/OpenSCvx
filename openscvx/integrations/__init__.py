@@ -50,6 +50,12 @@ from typing import Any
 
 from .base import DynamicsAdapter
 from .frax import FraxDynamics
+from .frax_cito import (
+    CitoFraxDynamics,
+    ContactModelConfig,
+    DfohControlLayout,
+    load_monoped_3d,
+)
 from .mjx import MjxDynamics
 
 
@@ -81,5 +87,9 @@ __all__ = [
     "mjx_dynamics",
     "FraxDynamics",
     "frax_dynamics",
+    "CitoFraxDynamics",
+    "ContactModelConfig",
+    "DfohControlLayout",
+    "load_monoped_3d",
     "menagerie",
 ]

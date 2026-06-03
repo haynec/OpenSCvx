@@ -1,0 +1,125 @@
+<?xml version="1.0"?>
+<!-- 3D monoped: 6-DoF floating base (frax prismatic + RPY chain) + hip + knee -->
+<robot name="monoped_3d">
+  <link name="world">
+    <inertial>
+      <mass value="0"/>
+      <inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/>
+    </inertial>
+  </link>
+
+  <joint name="x_prismatic" type="prismatic">
+    <parent link="world"/>
+    <child link="x_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-1.5" upper="1.5" effort="0" velocity="3.0"/>
+  </joint>
+  <link name="x_link">
+    <inertial><mass value="0"/><inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/></inertial>
+  </link>
+
+  <joint name="y_prismatic" type="prismatic">
+    <parent link="x_link"/>
+    <child link="y_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-1.0" upper="1.0" effort="0" velocity="3.0"/>
+  </joint>
+  <link name="y_link">
+    <inertial><mass value="0"/><inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/></inertial>
+  </link>
+
+  <joint name="z_prismatic" type="prismatic">
+    <parent link="y_link"/>
+    <child link="z_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="0.40" upper="1.40" effort="0" velocity="4.0"/>
+  </joint>
+  <link name="z_link">
+    <inertial><mass value="0"/><inertia ixx="0" ixz="0" ixy="0" iyy="0" iyz="0" izz="0"/></inertial>
+  </link>
+
+  <joint name="roll_joint" type="revolute">
+    <parent link="z_link"/>
+    <child link="roll_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="1 0 0"/>
+    <limit lower="-3.14159" upper="3.14159" effort="0" velocity="8.0"/>
+  </joint>
+  <link name="roll_link">
+    <inertial><mass value="0"/><inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/></inertial>
+  </link>
+
+  <joint name="pitch_joint" type="revolute">
+    <parent link="roll_link"/>
+    <child link="pitch_link"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-3.14159" upper="3.14159" effort="0" velocity="8.0"/>
+  </joint>
+  <link name="pitch_link">
+    <inertial><mass value="0"/><inertia ixx="0" ixy="0" ixz="0" iyy="0" iyz="0" izz="0"/></inertial>
+  </link>
+
+  <joint name="yaw_joint" type="revolute">
+    <parent link="pitch_link"/>
+    <child link="torso"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-3.14159" upper="3.14159" effort="0" velocity="8.0"/>
+  </joint>
+
+  <link name="torso">
+    <inertial>
+      <origin xyz="0 0 0.05" rpy="0 0 0"/>
+      <mass value="8.0"/>
+      <inertia ixx="0.08" ixy="0" ixz="0" iyy="0.08" iyz="0" izz="0.05"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0.08" rpy="0 0 0"/>
+      <geometry><box size="0.25 0.18 0.16"/></geometry>
+    </visual>
+  </link>
+
+  <joint name="hip_joint" type="revolute">
+    <parent link="torso"/>
+    <child link="thigh"/>
+    <origin xyz="0 0 -0.05" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <!-- Hip pitch: extension (negative) to flexion (positive) for jump crouch -->
+    <limit lower="-1.85" upper="0.95" effort="120" velocity="14"/>
+  </joint>
+  <link name="thigh">
+    <inertial>
+      <origin xyz="0 0 -0.175" rpy="0 0 0"/>
+      <mass value="2.5"/>
+      <inertia ixx="0.03" ixy="0" ixz="0" iyy="0.03" iyz="0" izz="0.005"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -0.175" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.04" length="0.35"/></geometry>
+    </visual>
+  </link>
+
+  <joint name="knee_joint" type="revolute">
+    <parent link="thigh"/>
+    <child link="shank"/>
+    <origin xyz="0 0 -0.35" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <!-- Knee: 0 = full extension, ~2.1 = deep crouch -->
+    <limit lower="0.0" upper="2.15" effort="120" velocity="14"/>
+  </joint>
+  <link name="shank">
+    <inertial>
+      <origin xyz="0 0 -0.175" rpy="0 0 0"/>
+      <mass value="1.2"/>
+      <inertia ixx="0.015" ixy="0" ixz="0" iyy="0.015" iyz="0" izz="0.003"/>
+    </inertial>
+    <visual>
+      <origin xyz="0 0 -0.175" rpy="0 0 0"/>
+      <geometry><cylinder radius="0.035" length="0.35"/></geometry>
+    </visual>
+  </link>
+</robot>
