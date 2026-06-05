@@ -111,9 +111,7 @@ modified_centers = np.asarray(modified_centers)
 
 gate_center_params = []
 for i, modified_center in enumerate(modified_centers):
-    gate_center_params.append(
-        ox.Parameter(f"gate_{i}_center", shape=(3,), value=modified_center)
-    )
+    gate_center_params.append(ox.Parameter(f"gate_{i}_center", shape=(3,), value=modified_center))
 
 nodes_per_gate = 2
 gate_nodes = np.arange(nodes_per_gate, N, nodes_per_gate)
@@ -225,10 +223,7 @@ def _batch_palette(B: int) -> list[tuple[int, int, int]]:
 
     if B <= 0:
         return []
-    return [
-        tuple(int(255 * c) for c in colorsys.hsv_to_rgb(i / B, 0.82, 0.95))
-        for i in range(B)
-    ]
+    return [tuple(int(255 * c) for c in colorsys.hsv_to_rgb(i / B, 0.82, 0.95)) for i in range(B)]
 
 
 def _run_color(
@@ -382,9 +377,7 @@ def create_racing_batched_viser_server(
     for b in range(B):
         r, g, bl = palette[b]
         status = "✓" if converged[b] else "✗"
-        legend_lines.append(
-            f'<span style="color:rgb({r},{g},{bl})">■</span> run {b} {status}'
-        )
+        legend_lines.append(f'<span style="color:rgb({r},{g},{bl})">■</span> run {b} {status}')
     with server.gui.add_folder("Batch overview"):
         server.gui.add_markdown("\n".join(legend_lines))
 
