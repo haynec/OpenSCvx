@@ -130,8 +130,7 @@ def _expand_batched_trajectory_guess(
     if arr.ndim == 2:
         if tuple(arr.shape) != (N, n):
             raise ValueError(
-                f"solve_batched: shared {name} must have shape (N, n)=({N}, {n}), "
-                f"got {arr.shape}."
+                f"solve_batched: shared {name} must have shape (N, n)=({N}, {n}), got {arr.shape}."
             )
         return jnp.asarray(np.broadcast_to(np.asarray(arr), (B, N, n)).copy())
     if arr.ndim == 3:
@@ -165,8 +164,8 @@ def _make_single_result(
     ``converged``, ``t_final``, ``_states``, ``_controls``.  History fields
     are left empty (they are not needed for post-processing).
     """
-    x_b = np.asarray(results.X[-1])[b]   # (N, n_x)
-    u_b = np.asarray(results.U[-1])[b]   # (N, n_u)
+    x_b = np.asarray(results.X[-1])[b]  # (N, n_x)
+    u_b = np.asarray(results.U[-1])[b]  # (N, n_u)
     t_final_b = float(np.asarray(results.t_final[b]).reshape(-1)[0])
     return OptimizationResults(
         converged=bool(np.asarray(results.converged).reshape(-1)[b]),
@@ -674,7 +673,6 @@ class Problem:
             if state.final is not None:
                 self._lowered.x_prop_unified.final[state._slice] = state.final
                 self._lowered.x_prop_unified.final_type[state._slice] = state.final_type
-
 
         # Push to the solver — both backends short-circuit on a pre-initialize
         # call, so this is safe to invoke from any lifecycle point.
@@ -1562,12 +1560,8 @@ class Problem:
         n_x = self.settings.sim.n_states
         n_u = self.settings.sim.n_controls
         _default = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
-        x0_stack = jnp.asarray(
-            np.broadcast_to(np.asarray(_default.x_init_pin), (B, n_x)).copy()
-        )
-        xf_stack = jnp.asarray(
-            np.broadcast_to(np.asarray(_default.x_term_pin), (B, n_x)).copy()
-        )
+        x0_stack = jnp.asarray(np.broadcast_to(np.asarray(_default.x_init_pin), (B, n_x)).copy())
+        xf_stack = jnp.asarray(np.broadcast_to(np.asarray(_default.x_term_pin), (B, n_x)).copy())
         x_guess_stack = _expand_batched_trajectory_guess(
             x_guess, B=B, N=N, n=n_x, name="x_guess", default=_default.x
         )
@@ -1680,11 +1674,11 @@ class Problem:
         if self._lowered is None:
             raise ValueError("Problem not initialized. Call initialize() first.")
 
-        x_batch = np.asarray(results.X[-1])   # (B, N, n_x)
+        x_batch = np.asarray(results.X[-1])  # (B, N, n_x)
         B = x_batch.shape[0]
 
         if n_times is None:
-            t_finals = np.asarray(results.t_final).reshape(-1)   # (B,)
+            t_finals = np.asarray(results.t_final).reshape(-1)  # (B,)
             T_max = float(t_finals.max())
             n_times = max(int(np.ceil(T_max / self.settings.prp.dt)) + 1, 2)
 
@@ -1717,14 +1711,13 @@ class Problem:
 
         self.timing_post = time.time() - t_0_post
 
-        results.t_full = np.stack(t_fulls)        # (B, n_times)
-        results.x_full = np.stack(x_fulls)        # (B, n_times, n_prop_states)
-        results.u_full = np.stack(u_fulls)        # (B, n_times, n_controls)
+        results.t_full = np.stack(t_fulls)  # (B, n_times)
+        results.x_full = np.stack(x_fulls)  # (B, n_times, n_prop_states)
+        results.u_full = np.stack(u_fulls)  # (B, n_times, n_controls)
         results.trajectory = {
-            k: np.stack([traj[k] for traj in trajectories])
-            for k in trajectories[0]
+            k: np.stack([traj[k] for traj in trajectories]) for k in trajectories[0]
         }
-        results.cost = np.array(costs)            # (B,)
+        results.cost = np.array(costs)  # (B,)
         if ctcs_violations[0] is not None:
             results.ctcs_violation = np.stack(ctcs_violations)
 

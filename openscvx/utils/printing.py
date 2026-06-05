@@ -333,10 +333,10 @@ def print_batch_results_summary(
     """
     converged = np.asarray(result.converged, dtype=bool).reshape(-1)
     B = converged.shape[0]
-    n_ok  = int(converged.sum())
+    n_ok = int(converged.sum())
     n_bad = B - n_ok
 
-    t_full_arr = np.asarray(result.t_full)          # (B, T)
+    t_full_arr = np.asarray(result.t_full)  # (B, T)
     T = t_full_arr.shape[1]
     dt = float(t_full_arr[0, 1] - t_full_arr[0, 0]) if T > 1 else 0.0
 
@@ -344,8 +344,7 @@ def print_batch_results_summary(
     if converged.any():
         t_f_conv = t_finals[converged]
         t_f_str = (
-            f"{t_f_conv.mean():.3f} s  "
-            f"(min {t_f_conv.min():.3f} s, max {t_f_conv.max():.3f} s)"
+            f"{t_f_conv.mean():.3f} s  (min {t_f_conv.min():.3f} s, max {t_f_conv.max():.3f} s)"
         )
     else:
         t_f_str = "N/A (no converged solutions)"
@@ -353,10 +352,7 @@ def print_batch_results_summary(
     cost_arr = np.asarray(result.cost)
     if converged.any():
         c_conv = cost_arr[converged]
-        cost_str = (
-            f"{c_conv.mean():.4f}  "
-            f"(min {c_conv.min():.4f}, max {c_conv.max():.4f})"
-        )
+        cost_str = f"{c_conv.mean():.4f}  (min {c_conv.min():.4f}, max {c_conv.max():.4f})"
     else:
         cost_str = "N/A"
 
@@ -367,9 +363,9 @@ def print_batch_results_summary(
     else:
         ctcs_str = "N/A"
 
-    t_init    = timing_init    or 0.0
+    t_init = timing_init or 0.0
     t_compile = timing_compile or 0.0
-    t_solve   = timing_solve   or 0.0
+    t_solve = timing_solve or 0.0
     total_time = t_init + t_compile + t_solve + timing_post
 
     lines = [

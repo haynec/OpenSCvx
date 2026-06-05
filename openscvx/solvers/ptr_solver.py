@@ -39,14 +39,26 @@ Backends:
 from abc import abstractmethod
 from dataclasses import dataclass, fields
 from enum import IntEnum
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Dict, FrozenSet, List, Optional, Tuple, Type, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    ClassVar,
+    Dict,
+    FrozenSet,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+)
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 from .base import ConvexSolver
-from .cones import ConeConstraint, NonnegConeConstraint, SOCConstraint, ZeroConeConstraint
+from .cones import ConeConstraint
 
 if TYPE_CHECKING:
     import hashlib
@@ -396,16 +408,12 @@ class PTRSolver(ConvexSolver):
             for cls in PTRSolver._solver_registry
             if cone_cls in cls.SUPPORTED_CONE_TYPES
         ]
-        msg = (
-            f"{type(self).__name__} does not support "
-            f"{cone_cls.__name__} constraints."
-        )
+        msg = f"{type(self).__name__} does not support {cone_cls.__name__} constraints."
         if alternatives:
             msg += f"  Backends that do: {', '.join(alternatives)}."
         else:
             msg += (
-                "  No registered JAX backend supports this cone type; "
-                "use CVXPyPTRSolver instead."
+                "  No registered JAX backend supports this cone type; use CVXPyPTRSolver instead."
             )
         raise NotImplementedError(msg)
 

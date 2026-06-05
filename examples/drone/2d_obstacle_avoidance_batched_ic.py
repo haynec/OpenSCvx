@@ -3,8 +3,9 @@
 Same planar double-integrator + CTCS obstacle-avoidance problem as
 ``2d_obstacle_avoidance.py``, but ``solve_batched`` runs all B solves in one
 compiled dispatch (Moreau backend).  The initial position is a ``Parameter``
-pinned via ``(position == initial_position).convex().at([0])``.  Passing a ``(B, 2)`` array as ``parameters={"initial_position": ic_batch}``
-pins each IC via the convex equality at node 0.  Per-batch ``x_guess`` stacks
+pinned via ``(position == initial_position).convex().at([0])``.  Pass
+``parameters={"initial_position": ic_batch}`` (shape ``(B, 2)``) to pin each
+IC at node 0.  Per-batch ``x_guess`` stacks
 (a position linspace from each IC to the shared target) seed the SCP iterate
 independently.  ``post_process_batched`` then propagates
 every converged solution through the full nonlinear dynamics.
@@ -15,7 +16,6 @@ blue, diverged in orange — on top of the obstacle field.
 
 import os
 import sys
-import time
 
 import numpy as np
 
@@ -27,8 +27,8 @@ import openscvx as ox
 from openscvx import Problem
 
 # ── Batch configuration ────────────────────────────────────────────────────────
-N_BATCH = 200    # number of initial conditions to solve simultaneously
-N = 40           # SCP discretisation nodes
+N_BATCH = 200  # number of initial conditions to solve simultaneously
+N = 40  # SCP discretisation nodes
 TOTAL_TIME = 120.0
 
 # ── Obstacle field (identical to 2d_obstacle_avoidance.py) ────────────────────
@@ -45,13 +45,13 @@ for i in range(n_rows):
         y += np.random.uniform(-1.0, 1.0)
         obstacle_centers_list.append([x, y])
 
-obstacle_centers = np.array(obstacle_centers_list)   # (n_obs, 2)
+obstacle_centers = np.array(obstacle_centers_list)  # (n_obs, 2)
 obstacle_radii = np.random.uniform(
     obstacle_radius_min, obstacle_radius_max, size=len(obstacle_centers_list)
 )
 
 # ── States ─────────────────────────────────────────────────────────────────────
-_default_ic = np.array([-10.0, -10.0])   # used for guess; actual IC set by ZeroConeConstraint
+_default_ic = np.array([-10.0, -10.0])  # used for guess; actual IC set by ZeroConeConstraint
 
 position = ox.State("position", shape=(2,))
 position.max = np.array([150.0, 150.0])
@@ -216,8 +216,10 @@ def plot_batched_2d_trajectories(results, ic_batch: np.ndarray):
         xc, yc = center
         fig.add_shape(
             type="circle",
-            x0=xc - radius, y0=yc - radius,
-            x1=xc + radius, y1=yc + radius,
+            x0=xc - radius,
+            y0=yc - radius,
+            x1=xc + radius,
+            y1=yc + radius,
             fillcolor="rgba(220, 180, 180, 0.30)",
             line={"color": "rgba(200, 120, 120, 0.45)", "width": 1},
             layer="below",
@@ -228,10 +230,11 @@ def plot_batched_2d_trajectories(results, ic_batch: np.ndarray):
     for b in range(B):
         ok = bool(converged[b])
         color = "rgba(30, 130, 220, 0.65)" if ok else "rgba(220, 100, 30, 0.50)"
-        pos = pos_all[b]        # (T, 2)
+        pos = pos_all[b]  # (T, 2)
         fig.add_trace(
             go.Scatter(
-                x=pos[:, 0], y=pos[:, 1],
+                x=pos[:, 0],
+                y=pos[:, 1],
                 mode="lines",
                 line={"color": color, "width": 1.5 if ok else 1.0},
                 showlegend=False,
@@ -240,21 +243,25 @@ def plot_batched_2d_trajectories(results, ic_batch: np.ndarray):
         )
 
     # ── Start markers (one per batch element) ─────────────────────────────────
-    starts_ok  = ic_batch[converged]
+    starts_ok = ic_batch[converged]
     starts_bad = ic_batch[~converged]
     if len(starts_ok):
         fig.add_trace(
             go.Scatter(
-                x=starts_ok[:, 0], y=starts_ok[:, 1],
-                mode="markers", name="Start (converged)",
+                x=starts_ok[:, 0],
+                y=starts_ok[:, 1],
+                mode="markers",
+                name="Start (converged)",
                 marker={"color": "rgba(20, 100, 200, 0.9)", "size": 7, "symbol": "circle"},
             )
         )
     if len(starts_bad):
         fig.add_trace(
             go.Scatter(
-                x=starts_bad[:, 0], y=starts_bad[:, 1],
-                mode="markers", name="Start (diverged)",
+                x=starts_bad[:, 0],
+                y=starts_bad[:, 1],
+                mode="markers",
+                name="Start (diverged)",
                 marker={"color": "rgba(200, 80, 20, 0.9)", "size": 7, "symbol": "circle-open"},
             )
         )
@@ -263,8 +270,10 @@ def plot_batched_2d_trajectories(results, ic_batch: np.ndarray):
     tgt = position.final
     fig.add_trace(
         go.Scatter(
-            x=[tgt[0]], y=[tgt[1]],
-            mode="markers", name="Target",
+            x=[tgt[0]],
+            y=[tgt[1]],
+            mode="markers",
+            name="Target",
             marker={"color": "black", "size": 12, "symbol": "star"},
         )
     )

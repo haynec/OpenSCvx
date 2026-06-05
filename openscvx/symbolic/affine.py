@@ -99,9 +99,7 @@ def is_affine_in_state_control(expr: "Expr") -> bool:
     # Sub: .left, .right
     # -----------------------------------------------------------------
     if isinstance(expr, Sub):
-        return is_affine_in_state_control(expr.left) and is_affine_in_state_control(
-            expr.right
-        )
+        return is_affine_in_state_control(expr.left) and is_affine_in_state_control(expr.right)
 
     # -----------------------------------------------------------------
     # Neg: .operand
@@ -156,11 +154,7 @@ def is_affine_in_state_control(expr: "Expr") -> bool:
         return all(is_affine_in_state_control(c) for c in expr.children())
 
     if isinstance(expr, Block):
-        return all(
-            is_affine_in_state_control(cell)
-            for row in expr.blocks
-            for cell in row
-        )
+        return all(is_affine_in_state_control(cell) for row in expr.blocks for cell in row)
 
     # -----------------------------------------------------------------
     # Everything else (Norm, Power, Sin, Cos, …) → not affine.

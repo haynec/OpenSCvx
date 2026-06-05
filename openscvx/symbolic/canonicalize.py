@@ -157,9 +157,7 @@ def canonicalize_nodal_constraint(
 
             # The bound must be affine in state/control (scalar).
             if not is_affine_in_state_control(rhs):
-                raise ValueError(
-                    f"Norm upper bound is not affine in state/control: {rhs!r}."
-                )
+                raise ValueError(f"Norm upper bound is not affine in state/control: {rhs!r}.")
 
             # L1 norm: not yet supported (needs auxiliary variables).
             if ord_ == 1:
@@ -223,8 +221,7 @@ def canonicalize_nodal_constraint(
 
             # Unknown norm order.
             raise NotImplementedError(
-                f"Norm order {ord_!r} is not supported.  Supported orders: "
-                "1, 2, 'fro', 'inf'."
+                f"Norm order {ord_!r} is not supported.  Supported orders: 1, 2, 'fro', 'inf'."
             )
 
         # --------------------------------------------------------------

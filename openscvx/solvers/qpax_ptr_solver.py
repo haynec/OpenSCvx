@@ -54,7 +54,7 @@ import numpy as np
 
 from openscvx.config import Config
 
-from .cones import NonnegConeConstraint, SOCConstraint, ZeroConeConstraint
+from .cones import NonnegConeConstraint, ZeroConeConstraint
 from .ptr_solver import (
     PTRSolver,
     PTRSolveResult,
@@ -80,7 +80,6 @@ if TYPE_CHECKING:
     from openscvx.lowered import LoweredProblem
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
     from openscvx.lowered.unified import UnifiedControl, UnifiedState
-    from openscvx.symbolic.constraint_set import ConstraintSet
 
 
 # Tiny diagonal regularization added to Q on rows whose cost is purely
@@ -333,8 +332,6 @@ class QPAXPTRSolver(PTRSolver):
         self.layout = _QPLayout(N=N, n_x=n_x, n_u=n_u, n_nodal=len(jax_constraints.nodal))
         self._jax_constraints = jax_constraints
         self._x_unified = x_unified
-
-
 
     def initialize(self, lowered: "LoweredProblem", settings: "Config") -> None:
         """Validate the constraint subset QPAX supports and stash settings.
@@ -829,12 +826,18 @@ class QPAXPTRSolver(PTRSolver):
                 x_k = x_bar_np[k]
                 u_k = u_bar_np[k]
                 f0 = np.asarray(cc.jax_fn(x_k, u_k, k, params), dtype=float).reshape(cc.m)
-                J_x = np.asarray(
-                    jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params), dtype=float
-                ).reshape(cc.m, n_x) * S_x[None, :]
-                J_u = np.asarray(
-                    jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params), dtype=float
-                ).reshape(cc.m, n_u) * S_u[None, :]
+                J_x = (
+                    np.asarray(
+                        jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params), dtype=float
+                    ).reshape(cc.m, n_x)
+                    * S_x[None, :]
+                )
+                J_u = (
+                    np.asarray(
+                        jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params), dtype=float
+                    ).reshape(cc.m, n_u)
+                    * S_u[None, :]
+                )
                 rhs = -f0
                 if isinstance(cc, ZeroConeConstraint):
                     for i in range(cc.m):
@@ -1354,12 +1357,14 @@ class QPAXPTRSolver(PTRSolver):
                 x_k = data.x_bar[k]
                 u_k = data.u_bar[k]
                 f0 = jnp.reshape(cc.jax_fn(x_k, u_k, k, params), (cc.m,))
-                J_x = jnp.reshape(
-                    jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params), (cc.m, n_x)
-                ) * S_x[None, :]
-                J_u = jnp.reshape(
-                    jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params), (cc.m, n_u)
-                ) * S_u[None, :]
+                J_x = (
+                    jnp.reshape(jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params), (cc.m, n_x))
+                    * S_x[None, :]
+                )
+                J_u = (
+                    jnp.reshape(jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params), (cc.m, n_u))
+                    * S_u[None, :]
+                )
                 # Build dense row block: (cc.m, n_z).
                 block = jnp.zeros((cc.m, L.n_z), dtype=f)
                 dx_start = L.sl_dx.start + k * n_x

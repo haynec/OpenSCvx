@@ -93,7 +93,6 @@ if TYPE_CHECKING:
     from openscvx.lowered import LoweredProblem
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
     from openscvx.lowered.unified import UnifiedControl, UnifiedState
-    from openscvx.symbolic.constraint_set import ConstraintSet
 
 # Tiny diagonal regularisation added to P on dx/du slots.  Moreau's IPM
 # Cholesky factors (P + Gᵀ diag(z/s) G); keeping the diagonal positive avoids
@@ -494,8 +493,6 @@ class MoreauPTRSolver(PTRSolver):
         self.layout = _ConicLayout(N=N, n_x=n_x, n_u=n_u, n_nodal=len(jax_constraints.nodal))
         self._jax_constraints = jax_constraints
         self._x_unified = x_unified
-
-
 
     def initialize(self, lowered: "LoweredProblem", settings: "Config") -> None:
         """Build the static conic structure and construct ``moreau.jax.Solver``.
@@ -1162,12 +1159,18 @@ class MoreauPTRSolver(PTRSolver):
                     x_k = x_bar[k]
                     u_k = u_bar[k]
                     f0 = np.asarray(cc.jax_fn(x_k, u_k, k, params), dtype=float).reshape(cc.m)
-                    J_x = np.asarray(
-                        jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params), dtype=float
-                    ).reshape(cc.m, n_x) * S_x[None, :]
-                    J_u = np.asarray(
-                        jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params), dtype=float
-                    ).reshape(cc.m, n_u) * S_u[None, :]
+                    J_x = (
+                        np.asarray(
+                            jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params), dtype=float
+                        ).reshape(cc.m, n_x)
+                        * S_x[None, :]
+                    )
+                    J_u = (
+                        np.asarray(
+                            jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params), dtype=float
+                        ).reshape(cc.m, n_u)
+                        * S_u[None, :]
+                    )
                     rhs = -f0
                     for i in range(cc.m):
                         coeffs = list(J_x[i]) + list(J_u[i])
@@ -1253,12 +1256,18 @@ class MoreauPTRSolver(PTRSolver):
                     x_k = x_bar[k]
                     u_k = u_bar[k]
                     f0 = np.asarray(cc.jax_fn(x_k, u_k, k, params), dtype=float).reshape(cc.m)
-                    J_x = np.asarray(
-                        jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params), dtype=float
-                    ).reshape(cc.m, n_x) * S_x[None, :]
-                    J_u = np.asarray(
-                        jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params), dtype=float
-                    ).reshape(cc.m, n_u) * S_u[None, :]
+                    J_x = (
+                        np.asarray(
+                            jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params), dtype=float
+                        ).reshape(cc.m, n_x)
+                        * S_x[None, :]
+                    )
+                    J_u = (
+                        np.asarray(
+                            jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params), dtype=float
+                        ).reshape(cc.m, n_u)
+                        * S_u[None, :]
+                    )
                     rhs = -f0
                     for i in range(cc.m):
                         coeffs = list(J_x[i]) + list(J_u[i])
@@ -1288,20 +1297,32 @@ class MoreauPTRSolver(PTRSolver):
                     u_k = u_bar[k]
                     # Bound function.
                     bound0 = float(np.asarray(cc.bound_fn(x_k, u_k, k, params)))
-                    Jb_x = np.asarray(
-                        jax.jacfwd(cc.bound_fn, argnums=0)(x_k, u_k, k, params), dtype=float
-                    ).reshape(n_x) * S_x
-                    Jb_u = np.asarray(
-                        jax.jacfwd(cc.bound_fn, argnums=1)(x_k, u_k, k, params), dtype=float
-                    ).reshape(n_u) * S_u
+                    Jb_x = (
+                        np.asarray(
+                            jax.jacfwd(cc.bound_fn, argnums=0)(x_k, u_k, k, params), dtype=float
+                        ).reshape(n_x)
+                        * S_x
+                    )
+                    Jb_u = (
+                        np.asarray(
+                            jax.jacfwd(cc.bound_fn, argnums=1)(x_k, u_k, k, params), dtype=float
+                        ).reshape(n_u)
+                        * S_u
+                    )
                     # Arg function.
                     arg0 = np.asarray(cc.arg_fn(x_k, u_k, k, params), dtype=float).reshape(cc.m_arg)
-                    Ja_x = np.asarray(
-                        jax.jacfwd(cc.arg_fn, argnums=0)(x_k, u_k, k, params), dtype=float
-                    ).reshape(cc.m_arg, n_x) * S_x[None, :]
-                    Ja_u = np.asarray(
-                        jax.jacfwd(cc.arg_fn, argnums=1)(x_k, u_k, k, params), dtype=float
-                    ).reshape(cc.m_arg, n_u) * S_u[None, :]
+                    Ja_x = (
+                        np.asarray(
+                            jax.jacfwd(cc.arg_fn, argnums=0)(x_k, u_k, k, params), dtype=float
+                        ).reshape(cc.m_arg, n_x)
+                        * S_x[None, :]
+                    )
+                    Ja_u = (
+                        np.asarray(
+                            jax.jacfwd(cc.arg_fn, argnums=1)(x_k, u_k, k, params), dtype=float
+                        ).reshape(cc.m_arg, n_u)
+                        * S_u[None, :]
+                    )
                     # Bound row: A = −J_b·S, b = bound0  →  s[0] = bound0 + J_b·Δ.
                     emit(list(-Jb_x) + list(-Jb_u), bound0)
                     # Arg rows: A = −J_a[i]·S, b = arg0[i]  →  s[1+i] = arg0[i] + J_a[i]·Δ.
@@ -1575,12 +1596,18 @@ class MoreauPTRSolver(PTRSolver):
                     x_k = data.x_bar[k]
                     u_k = data.u_bar[k]
                     f0 = jnp.reshape(cc.jax_fn(x_k, u_k, k, params_user), (cc.m,))
-                    J_x = jnp.reshape(
-                        jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params_user), (cc.m, n_x)
-                    ) * S_x[None, :]
-                    J_u = jnp.reshape(
-                        jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params_user), (cc.m, n_u)
-                    ) * S_u[None, :]
+                    J_x = (
+                        jnp.reshape(
+                            jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params_user), (cc.m, n_x)
+                        )
+                        * S_x[None, :]
+                    )
+                    J_u = (
+                        jnp.reshape(
+                            jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params_user), (cc.m, n_u)
+                        )
+                        * S_u[None, :]
+                    )
                     row_vals = jnp.concatenate([J_x, J_u], axis=1)  # (cc.m, n_x+n_u)
                     coo_blocks.append(row_vals.reshape(-1))
                     b_blocks.append(-f0)
@@ -1655,12 +1682,18 @@ class MoreauPTRSolver(PTRSolver):
                     x_k = data.x_bar[k]
                     u_k = data.u_bar[k]
                     f0 = jnp.reshape(cc.jax_fn(x_k, u_k, k, params_user), (cc.m,))
-                    J_x = jnp.reshape(
-                        jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params_user), (cc.m, n_x)
-                    ) * S_x[None, :]
-                    J_u = jnp.reshape(
-                        jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params_user), (cc.m, n_u)
-                    ) * S_u[None, :]
+                    J_x = (
+                        jnp.reshape(
+                            jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params_user), (cc.m, n_x)
+                        )
+                        * S_x[None, :]
+                    )
+                    J_u = (
+                        jnp.reshape(
+                            jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params_user), (cc.m, n_u)
+                        )
+                        * S_u[None, :]
+                    )
                     row_vals = jnp.concatenate([J_x, J_u], axis=1)
                     coo_blocks.append(row_vals.reshape(-1))
                     b_blocks.append(-f0)
@@ -1682,19 +1715,33 @@ class MoreauPTRSolver(PTRSolver):
                     x_k = data.x_bar[k]
                     u_k = data.u_bar[k]
                     bound0 = jnp.reshape(cc.bound_fn(x_k, u_k, k, params_user), ())
-                    Jb_x = jnp.reshape(
-                        jax.jacfwd(cc.bound_fn, argnums=0)(x_k, u_k, k, params_user), (n_x,)
-                    ) * S_x
-                    Jb_u = jnp.reshape(
-                        jax.jacfwd(cc.bound_fn, argnums=1)(x_k, u_k, k, params_user), (n_u,)
-                    ) * S_u
+                    Jb_x = (
+                        jnp.reshape(
+                            jax.jacfwd(cc.bound_fn, argnums=0)(x_k, u_k, k, params_user), (n_x,)
+                        )
+                        * S_x
+                    )
+                    Jb_u = (
+                        jnp.reshape(
+                            jax.jacfwd(cc.bound_fn, argnums=1)(x_k, u_k, k, params_user), (n_u,)
+                        )
+                        * S_u
+                    )
                     arg0 = jnp.reshape(cc.arg_fn(x_k, u_k, k, params_user), (cc.m_arg,))
-                    Ja_x = jnp.reshape(
-                        jax.jacfwd(cc.arg_fn, argnums=0)(x_k, u_k, k, params_user), (cc.m_arg, n_x)
-                    ) * S_x[None, :]
-                    Ja_u = jnp.reshape(
-                        jax.jacfwd(cc.arg_fn, argnums=1)(x_k, u_k, k, params_user), (cc.m_arg, n_u)
-                    ) * S_u[None, :]
+                    Ja_x = (
+                        jnp.reshape(
+                            jax.jacfwd(cc.arg_fn, argnums=0)(x_k, u_k, k, params_user),
+                            (cc.m_arg, n_x),
+                        )
+                        * S_x[None, :]
+                    )
+                    Ja_u = (
+                        jnp.reshape(
+                            jax.jacfwd(cc.arg_fn, argnums=1)(x_k, u_k, k, params_user),
+                            (cc.m_arg, n_u),
+                        )
+                        * S_u[None, :]
+                    )
                     # Bound row A coeffs (negated, concatenated x then u).
                     bound_A = jnp.concatenate([-Jb_x, -Jb_u])  # (n_x + n_u,)
                     coo_blocks.append(bound_A)

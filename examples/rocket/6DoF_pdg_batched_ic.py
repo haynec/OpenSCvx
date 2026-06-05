@@ -26,13 +26,11 @@ from __future__ import annotations
 
 import os
 import sys
-import time
 
 import jax
 
 jax.config.update("jax_enable_x64", True)
 
-import jax.numpy as jnp
 import numpy as np
 import viser
 
@@ -50,8 +48,9 @@ from openscvx.plotting.viser import (
 )
 
 # ── Problem dimensions ──────────────────────────────────────────────────────
-N = 5          # discretization nodes
-N_BATCH = 200   # number of simultaneous solves
+N = 5  # discretization nodes
+N_BATCH = 200  # number of simultaneous solves
+
 
 # ── Random initial-condition generator ─────────────────────────────────────
 # Position bounds: [-10, 10]^3.  For physical realism we keep altitude
@@ -82,43 +81,44 @@ def build_batched_x_guess(problem, ic_batch: np.ndarray) -> np.ndarray:
     )
     return x_guess_batch
 
+
 # ── Runtime parameters ──────────────────────────────────────────────────────
-gI         = ox.Parameter("gI",    value=1.0)
-l_arm      = ox.Parameter("l",     value=0.25)
-J_diag     = ox.Parameter("J_diag", shape=(3,), value=np.array([0.168 * 2e-2, 0.168, 0.168]))
-J_mat      = ox.Diag(J_diag)
-J_inv_mat  = ox.Inv(ox.Diag(J_diag))
-g0         = ox.Parameter("g0",    value=1.0)
-Isp        = ox.Parameter("Isp",   value=30.0)
-m_dry      = ox.Parameter("m_dry", value=1.0)
-v_max      = ox.Parameter("v_max", value=3.0)
-w_max      = ox.Parameter("w_max", value=0.3752)
-del_max    = ox.Parameter("del_max", value=20.0)
-theta_max  = ox.Parameter("theta_max", value=75.0)
-T_min      = ox.Parameter("T_min", value=1.5)
-T_max      = ox.Parameter("T_max", value=6.5)
-gamma      = ox.Parameter("gamma", value=75.0)
-beta       = ox.Parameter("beta",  value=0.01)
-c_ax       = ox.Parameter("c_ax",  value=0.5)
-c_ayz      = ox.Parameter("c_ayz", value=1.0)
-S_a        = ox.Parameter("S_a",   value=0.5)
-rho        = ox.Parameter("rho",   value=1.0)
-l_p        = ox.Parameter("l_p",   value=0.05)
+gI = ox.Parameter("gI", value=1.0)
+l_arm = ox.Parameter("l", value=0.25)
+J_diag = ox.Parameter("J_diag", shape=(3,), value=np.array([0.168 * 2e-2, 0.168, 0.168]))
+J_mat = ox.Diag(J_diag)
+J_inv_mat = ox.Inv(ox.Diag(J_diag))
+g0 = ox.Parameter("g0", value=1.0)
+Isp = ox.Parameter("Isp", value=30.0)
+m_dry = ox.Parameter("m_dry", value=1.0)
+v_max = ox.Parameter("v_max", value=3.0)
+w_max = ox.Parameter("w_max", value=0.3752)
+del_max = ox.Parameter("del_max", value=20.0)
+theta_max = ox.Parameter("theta_max", value=75.0)
+T_min = ox.Parameter("T_min", value=1.5)
+T_max = ox.Parameter("T_max", value=6.5)
+gamma = ox.Parameter("gamma", value=75.0)
+beta = ox.Parameter("beta", value=0.01)
+c_ax = ox.Parameter("c_ax", value=0.5)
+c_ayz = ox.Parameter("c_ayz", value=1.0)
+S_a = ox.Parameter("S_a", value=0.5)
+rho = ox.Parameter("rho", value=1.0)
+l_p = ox.Parameter("l_p", value=0.05)
 
 # Batched parameter: each solve receives its own initial_position value.
 initial_position = ox.Parameter("initial_position", shape=(3,), value=np.array([7.5, 4.5, 2.5]))
-final_position   = ox.Parameter("final_position",   shape=(2,), value=np.array([0.0, 0.0]))
+final_position = ox.Parameter("final_position", shape=(2,), value=np.array([0.0, 0.0]))
 
-CA    = ox.Diag(ox.Concat(c_ax, c_ayz, c_ayz))
+CA = ox.Diag(ox.Concat(c_ax, c_ayz, c_ayz))
 r_arm = ox.Concat(-l_arm, 0.0, 0.0)
-r_cp  = ox.Concat(l_p,    0.0, 0.0)
+r_cp = ox.Concat(l_p, 0.0, 0.0)
 
 # ── States ──────────────────────────────────────────────────────────────────
 mass = ox.State("mass", shape=(1,))
 mass.max = [2.0]
 mass.min = [1.0]
 mass.initial = [2.0]
-mass.final   = [ox.Maximize(1.5)]
+mass.final = [ox.Maximize(1.5)]
 
 position = ox.State("position", shape=(3,))
 position.max = [10.0, 10.0, 10.0]
@@ -127,30 +127,30 @@ position.initial = [ox.Free(7.5), ox.Free(4.5), ox.Free(2.5)]
 position.final = [0.0, ox.Free(0.0), ox.Free(0.0)]
 
 velocity = ox.State("velocity", shape=(3,))
-velocity.max = [ v_max.value,  v_max.value,  v_max.value]
+velocity.max = [v_max.value, v_max.value, v_max.value]
 velocity.min = [-v_max.value, -v_max.value, -v_max.value]
 velocity.initial = [-0.5, -2.8, 0.0]
-velocity.final   = [-0.1,  0.0, 0.0]
+velocity.final = [-0.1, 0.0, 0.0]
 
 attitude = ox.State("attitude", shape=(4,))
 attitude.max = [1.0, 1.0, 1.0, 1.0]
 attitude.min = [-1.0, -1.0, -1.0, -1.0]
 attitude.initial = [ox.Free(0.0), ox.Free(0.0), ox.Free(0.0), ox.Free(1.0)]
-attitude.final   = [0.0, 0.0, 0.0, 1.0]
+attitude.final = [0.0, 0.0, 0.0, 1.0]
 
 angular_velocity = ox.State("angular_velocity", shape=(3,))
-angular_velocity.max = [ w_max.value,  w_max.value,  w_max.value]
+angular_velocity.max = [w_max.value, w_max.value, w_max.value]
 angular_velocity.min = [-w_max.value, -w_max.value, -w_max.value]
 angular_velocity.initial = [1e-8, 0.0, 0.0]
-angular_velocity.final   = [1e-8, 0.0, 0.0]
+angular_velocity.final = [1e-8, 0.0, 0.0]
 
 # ── Controls ─────────────────────────────────────────────────────────────────
 thrust = ox.Control("thrust", shape=(3,))
-thrust.max = [ T_max.value,  T_max.value,  T_max.value]
+thrust.max = [T_max.value, T_max.value, T_max.value]
 thrust.min = [-T_max.value, -T_max.value, -T_max.value]
 thrust.guess = np.linspace(
     np.array([gI.value * mass.initial[0], 0, 0]),
-    np.array([gI.value * m_dry.value,     0, 0]),
+    np.array([gI.value * m_dry.value, 0, 0]),
     N,
 ).reshape(-1, 3)
 
@@ -159,37 +159,38 @@ q1, q2, q3, q4 = attitude[0], attitude[1], attitude[2], attitude[3]
 
 CBI = ox.Block(
     [
-        [q4**2 + q1**2 - q2**2 - q3**2, 2*(q1*q2 - q4*q3),              2*(q4*q2 + q1*q3)             ],
-        [2*(q4*q3 + q1*q2),              q4**2 - q1**2 + q2**2 - q3**2,  2*(q2*q3 - q4*q1)             ],
-        [2*(q1*q3 - q4*q2),              2*(q4*q1 + q2*q3),              q4**2 - q1**2 - q2**2 + q3**2],
+        [q4**2 + q1**2 - q2**2 - q3**2, 2 * (q1 * q2 - q4 * q3), 2 * (q4 * q2 + q1 * q3)],
+        [2 * (q4 * q3 + q1 * q2), q4**2 - q1**2 + q2**2 - q3**2, 2 * (q2 * q3 - q4 * q1)],
+        [2 * (q1 * q3 - q4 * q2), 2 * (q4 * q1 + q2 * q3), q4**2 - q1**2 - q2**2 + q3**2],
     ]
 ).T
 
 
 def cross(a, b):
     return ox.Concat(
-        a[1]*b[2] - a[2]*b[1],
-        a[2]*b[0] - a[0]*b[2],
-        a[0]*b[1] - a[1]*b[0],
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
     )
 
 
 w1, w2, w3 = angular_velocity[0], angular_velocity[1], angular_velocity[2]
 attitude_dot = ox.Concat(
-    0.5*(w1*q4 - w2*q3 + w3*q2),
-    0.5*(w1*q3 - w3*q1 + w2*q4),
-    0.5*(w2*q1 - w1*q2 + w3*q4),
-    -0.5*(w1*q1 + w2*q2 + w3*q3),
+    0.5 * (w1 * q4 - w2 * q3 + w3 * q2),
+    0.5 * (w1 * q3 - w3 * q1 + w2 * q4),
+    0.5 * (w2 * q1 - w1 * q2 + w3 * q4),
+    -0.5 * (w1 * q1 + w2 * q2 + w3 * q3),
 )
 
 A_aero = -0.5 * rho * ox.linalg.Norm(velocity) * S_a * CA @ CBI @ velocity
 
 dynamics = {
-    "mass":             -(1 / (Isp * g0)) * ox.linalg.Norm(thrust) - beta,
-    "position":         velocity,
-    "velocity":         CBI.T @ (thrust + A_aero) / mass[0] + ox.Concat(-gI, 0.0, 0.0),
-    "attitude":         attitude_dot,
-    "angular_velocity": J_inv_mat @ (
+    "mass": -(1 / (Isp * g0)) * ox.linalg.Norm(thrust) - beta,
+    "position": velocity,
+    "velocity": CBI.T @ (thrust + A_aero) / mass[0] + ox.Concat(-gI, 0.0, 0.0),
+    "attitude": attitude_dot,
+    "angular_velocity": J_inv_mat
+    @ (
         cross(r_arm, thrust)
         + cross(r_cp, A_aero)
         - cross(angular_velocity, J_mat @ angular_velocity)
@@ -197,7 +198,7 @@ dynamics = {
 }
 
 # ── Constraints ──────────────────────────────────────────────────────────────
-states   = [mass, position, velocity, attitude, angular_velocity]
+states = [mass, position, velocity, attitude, angular_velocity]
 controls = [thrust]
 
 constraint_exprs = []
@@ -205,23 +206,23 @@ for st in states:
     constraint_exprs.extend([ox.ctcs(st <= st.max), ox.ctcs(st.min <= st)])
 
 # Initial and terminal position constraints — batched over initial_position.
-constraint_exprs.append((position       == initial_position).convex().at([0]))
-constraint_exprs.append((position[1:3]  == final_position).convex().at([N - 1]))
+constraint_exprs.append((position == initial_position).convex().at([0]))
+constraint_exprs.append((position[1:3] == final_position).convex().at([N - 1]))
 
 constraint_exprs.append(ox.ctcs(1.0 * (mass - m_dry) >= 0))
-constraint_exprs.append(ox.ctcs(
-    0.1 * ox.linalg.Norm(position[1:]) - ox.Tan(gamma * np.pi / 180.0) * position[0] <= 0
-))
-constraint_exprs.append(ox.ctcs(0.1 * ox.linalg.Norm(velocity)**2 - v_max**2 <= 0))
-constraint_exprs.append(ox.ctcs(
-    1.0 * ox.Cos(theta_max * np.pi / 180.0) - 1.0 + 2.0 * (q2**2 + q3**2) <= 0
-))
-constraint_exprs.append(ox.ctcs(1.0 * ox.linalg.Norm(angular_velocity)**2 - w_max**2 <= 0))
-constraint_exprs.append(ox.ctcs(
-    0.1 * ox.linalg.Norm(thrust) - thrust[0] / ox.Cos(del_max * np.pi / 180.0) <= 0
-))
-constraint_exprs.append(ox.ctcs(0.1 * ox.linalg.Norm(thrust)**2 - T_max**2 <= 0))
-constraint_exprs.append(ox.ctcs(0.1 * T_min**2 - ox.linalg.Norm(thrust)**2 <= 0))
+constraint_exprs.append(
+    ox.ctcs(0.1 * ox.linalg.Norm(position[1:]) - ox.Tan(gamma * np.pi / 180.0) * position[0] <= 0)
+)
+constraint_exprs.append(ox.ctcs(0.1 * ox.linalg.Norm(velocity) ** 2 - v_max**2 <= 0))
+constraint_exprs.append(
+    ox.ctcs(1.0 * ox.Cos(theta_max * np.pi / 180.0) - 1.0 + 2.0 * (q2**2 + q3**2) <= 0)
+)
+constraint_exprs.append(ox.ctcs(1.0 * ox.linalg.Norm(angular_velocity) ** 2 - w_max**2 <= 0))
+constraint_exprs.append(
+    ox.ctcs(0.1 * ox.linalg.Norm(thrust) - thrust[0] / ox.Cos(del_max * np.pi / 180.0) <= 0)
+)
+constraint_exprs.append(ox.ctcs(0.1 * ox.linalg.Norm(thrust) ** 2 - T_max**2 <= 0))
+constraint_exprs.append(ox.ctcs(0.1 * T_min**2 - ox.linalg.Norm(thrust) ** 2 <= 0))
 
 # ── Time ─────────────────────────────────────────────────────────────────────
 t_final_guess = 10.0
@@ -246,11 +247,11 @@ problem = Problem(
     solver=ox.MoreauPTRSolver(),
     algorithm={
         "autotuner": ox.ConstantProximalWeight(),
-        "lam_cost":  1e-2,
-        "lam_vc":    1e1,
-        "lam_prox":  1e0,
-        "ep_tr":     5e-3,
-        "ep_vc":     1e-6,
+        "lam_cost": 1e-2,
+        "lam_vc": 1e1,
+        "lam_prox": 1e0,
+        "ep_tr": 5e-3,
+        "ep_vc": 1e-6,
     },
 )
 
@@ -259,6 +260,7 @@ problem = Problem(
 # The model uses position = [altitude, lat_y, lat_z].
 # Viser convention follows the realtime PDG example: model (a, b, c) → Viser (c, b, a).
 # Altitude (position[0]) therefore maps to the Viser z-axis.
+
 
 def model_to_viser(pts: np.ndarray) -> np.ndarray:
     """Remap ``(*, 3)`` model-frame positions to Viser XYZ.
@@ -298,16 +300,16 @@ def create_pdg_batched_viser_server(
             ``0.1 * ||pos[1:]|| <= tan(gamma) * pos[0]``.  Converted to
             the visualised cone half-angle internally.
     """
-    x_full    = np.asarray(results.x_full)          # (B, T, n_x)
-    t_full    = np.asarray(results.t_full)           # (B, T)
+    x_full = np.asarray(results.x_full)  # (B, T, n_x)
+    t_full = np.asarray(results.t_full)  # (B, T)
     converged = np.asarray(results.converged, dtype=bool).reshape(-1)
     B, T = x_full.shape[0], x_full.shape[1]
 
     # State layout: mass[0], position[1:4], velocity[4:7], attitude[7:11].
-    pos_model = x_full[:, :, 1:4]                   # (B, T, 3)
-    vel_model = x_full[:, :, 4:7]                   # (B, T, 3)
+    pos_model = x_full[:, :, 1:4]  # (B, T, 3)
+    vel_model = x_full[:, :, 4:7]  # (B, T, 3)
 
-    pos_viser = model_to_viser(pos_model)            # (B, T, 3)  Viser frame
+    pos_viser = model_to_viser(pos_model)  # (B, T, 3)  Viser frame
 
     # Create server — frame camera around all trajectory points.
     server = create_server(pos_viser.reshape(-1, 3))
@@ -316,16 +318,21 @@ def create_pdg_batched_viser_server(
     # ── Static scene ─────────────────────────────────────────────────────────
     server.scene.add_grid("/grid", width=30.0, height=30.0, position=(0.0, 0.0, 0.0))
     server.scene.add_icosphere(
-        "/markers/landing", radius=0.25, position=(0.0, 0.0, 0.0), color=(255, 80, 80),
+        "/markers/landing",
+        radius=0.25,
+        position=(0.0, 0.0, 0.0),
+        color=(255, 80, 80),
     )
 
-    effective_half_angle = float(
-        np.degrees(np.arctan(10.0 * np.tan(np.radians(gamma_deg))))
-    )
+    effective_half_angle = float(np.degrees(np.arctan(10.0 * np.tan(np.radians(gamma_deg)))))
     add_glideslope_cone(
-        server, apex=(0.0, 0.0, 0.0), height=12.0,
+        server,
+        apex=(0.0, 0.0, 0.0),
+        height=12.0,
         glideslope_angle_deg=effective_half_angle,
-        axis=(0.0, 0.0, 1.0), color=(80, 200, 120), opacity=0.12,
+        axis=(0.0, 0.0, 1.0),
+        color=(80, 200, 120),
+        opacity=0.12,
     )
 
     # ── Faint static traces (full trajectory extent) ──────────────────────────
@@ -351,21 +358,25 @@ def create_pdg_batched_viser_server(
 
     def _make_trail(handle, pts: np.ndarray, cols: np.ndarray):
         """Return a closure that grows the trail up to the given frame."""
+
         def update(frame_idx: int) -> None:
             idx = frame_idx + 1
             handle.points = pts[:idx]
             handle.colors = cols[:idx]
+
         return update
 
     def _make_marker(handle, pts: np.ndarray):
         """Return a closure that moves the marker to the given frame position."""
+
         def update(frame_idx: int) -> None:
             handle.position = pts[frame_idx]
+
         return update
 
     all_update_cbs = []
     for b in range(B):
-        pts_b    = pos_viser[b].astype(np.float32)       # (T, 3)
+        pts_b = pos_viser[b].astype(np.float32)  # (T, 3)
         colors_b = compute_velocity_colors(vel_model[b]).astype(np.uint8)
 
         trail_handle = server.scene.add_point_cloud(
