@@ -58,7 +58,6 @@ from .cones import NonnegConeConstraint, SOCConstraint, ZeroConeConstraint
 from .ptr_solver import (
     PTRSolver,
     PTRSolveResult,
-    ParamFixPin,
     StatusCode,
     SubproblemData,
     SubproblemSolution,
@@ -1349,7 +1348,7 @@ class QPAXPTRSolver(PTRSolver):
         # User cone constraints (hard, affine).
         # J_x/J_u are physical-space Jacobians; multiply by S_x/S_u to convert
         # to coefficients for scaled decision variables dx_scaled / du_scaled.
-        params = self._parameters_dict
+        params = data.params
         for cc in self._user_cone_constraints:
             for k in cc.nodes:
                 x_k = data.x_bar[k]

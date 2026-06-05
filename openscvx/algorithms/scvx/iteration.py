@@ -270,6 +270,7 @@ def make_scp_iteration(
             lam_vb_cross=state.lam_vb_cross,
             x_init=state.x_init_pin,
             x_term=state.x_term_pin,
+            params=params,
         )
 
         # 5. Solve the convex subproblem.

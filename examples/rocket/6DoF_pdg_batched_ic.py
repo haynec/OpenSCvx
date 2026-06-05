@@ -1,27 +1,23 @@
 """Batched 6-DoF powered descent guidance — ``solve_batched`` over initial conditions.
 
-Runs ``N_BATCH = 50`` SCP solves in parallel, each starting from a different random
-initial position drawn uniformly within the position bounds.  Demonstrates the
-param-fix-pin mechanism introduced to support
-``(state == parameter).convex().at([0])`` in the JAX-native backends:
+Runs ``N_BATCH = 200`` SCP solves in parallel, each starting from a different random
+initial position drawn uniformly within the position bounds.
 
-* At lowering time :meth:`~openscvx.solvers.moreau_ptr_solver.MoreauPTRSolver` detects
-  ``(position == initial_position).convex().at([0])`` as a param-fix pin and absorbs
-  it into the ``"Fix"`` boundary-condition infrastructure.
-* At call time :meth:`~openscvx.problem.Problem.solve_batched` receives a
-  ``(B, 3)`` batched ``initial_position`` parameter and auto-builds the
-  ``x0_stack`` from it — no manual stack construction required.
+The initial position is a ``Parameter`` pinned via
+``(position == initial_position).convex().at([0])``.  Per-batch ``x_guess``
+stacks (position linspace from each sampled IC to the terminal guess) seed the
+SCP iterate independently via :meth:`~openscvx.problem.Problem.solve_batched`.
 
 The same physics as ``base_problems/6DoF_pdg_realtime_base.py`` but rebuilt
 with a Moreau backend so the whole SCP loop is a single XLA kernel.
 
-After solving, all 50 trajectories are propagated through the full nonlinear
+After solving, all trajectories are propagated through the full nonlinear
 dynamics via :meth:`~openscvx.problem.Problem.post_process_batched`, and the
 smooth high-fidelity paths are shown in the Viser visualisation.
 
 Run::
 
-    python examples/realtime/6DoF_pdg_batched_ic.py
+    python examples/rocket/6DoF_pdg_batched_ic.py
 
 Requires ``pip install openscvx[moreau]``.
 """
@@ -71,6 +67,21 @@ def sample_initial_positions(n: int, *, seed: int = 42) -> np.ndarray:
     lateral_z = rng.uniform(-7.0, 7.0, size=(n,))
     return np.stack([altitude, lateral_y, lateral_z], axis=-1)
 
+
+def build_batched_x_guess(problem, ic_batch: np.ndarray) -> np.ndarray:
+    """Build per-batch state guesses with position linspace IC → terminal."""
+    base_x = np.asarray(problem.state.x)  # (N, n_x)
+    pos_sl = position._slice
+    final_pos = base_x[-1, pos_sl]
+    B = ic_batch.shape[0]
+    x_guess_batch = np.broadcast_to(base_x, (B,) + base_x.shape).copy()
+    t = np.linspace(0.0, 1.0, N)
+    x_guess_batch[:, :, pos_sl] = (
+        ic_batch[:, None, :] * (1.0 - t[None, :, None])
+        + final_pos[None, None, :] * t[None, :, None]
+    )
+    return x_guess_batch
+
 # ── Runtime parameters ──────────────────────────────────────────────────────
 gI         = ox.Parameter("gI",    value=1.0)
 l_arm      = ox.Parameter("l",     value=0.25)
@@ -94,7 +105,7 @@ S_a        = ox.Parameter("S_a",   value=0.5)
 rho        = ox.Parameter("rho",   value=1.0)
 l_p        = ox.Parameter("l_p",   value=0.05)
 
-# Boundary-condition parameters (the ones we will batch over)
+# Batched parameter: each solve receives its own initial_position value.
 initial_position = ox.Parameter("initial_position", shape=(3,), value=np.array([7.5, 4.5, 2.5]))
 final_position   = ox.Parameter("final_position",   shape=(2,), value=np.array([0.0, 0.0]))
 
@@ -112,11 +123,7 @@ mass.final   = [ox.Maximize(1.5)]
 position = ox.State("position", shape=(3,))
 position.max = [10.0, 10.0, 10.0]
 position.min = [-10.0, -10.0, -10.0]
-position.initial = [
-    ox.Free(float(initial_position.value[0])),
-    ox.Free(float(initial_position.value[1])),
-    ox.Free(float(initial_position.value[2])),
-]
+position.initial = [ox.Free(7.5), ox.Free(4.5), ox.Free(2.5)]
 position.final = [0.0, ox.Free(0.0), ox.Free(0.0)]
 
 velocity = ox.State("velocity", shape=(3,))
@@ -197,7 +204,7 @@ constraint_exprs = []
 for st in states:
     constraint_exprs.extend([ox.ctcs(st <= st.max), ox.ctcs(st.min <= st)])
 
-# Param-fix boundary constraints — these are the pins we batch over.
+# Initial and terminal position constraints — batched over initial_position.
 constraint_exprs.append((position       == initial_position).convex().at([0]))
 constraint_exprs.append((position[1:3]  == final_position).convex().at([N - 1]))
 
@@ -406,10 +413,15 @@ if __name__ == "__main__":
     print(f"Sampled {N_BATCH} initial positions  (alt ∈ [3, 9] m, lat ∈ [-7, 7] m)")
 
     # ── Compile + solve ───────────────────────────────────────────────────────
-    # AOT compilation happens inside solve_batched and is timed separately;
-    # timing_solve reflects pure SCP execution only.
+    # B is inferred from ic_batch.shape[0].  solve_batched vmaps over
+    # initial_position (shape (B, 3)) while broadcasting all other parameters.
+    # Per-batch x_guess seeds each SCP iterate with an IC-consistent trajectory.
+    x_guess_batch = build_batched_x_guess(problem, ic_batch)
     print("Compiling and running solve_batched …")
-    results = problem.solve_batched(parameters={"initial_position": ic_batch})
+    results = problem.solve_batched(
+        parameters={"initial_position": ic_batch},
+        x_guess=x_guess_batch,
+    )
 
     # ── Post-process: propagate all B solutions through nonlinear dynamics ────
     print("Post-processing (nonlinear propagation) …")

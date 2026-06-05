@@ -3,7 +3,7 @@
 ``solve_batched`` owns the batch axis internally (``jax.vmap`` applied inside
 the method) where :func:`jax.vmap` over :meth:`Problem.solve_jax` leaves it to
 the caller. With no export wired up (Phase 1) the two are just different
-spellings of the same batched solve, so over a stack of boundary conditions
+spellings of the same batched solve, so over a stack of trajectory guesses
 each batch element must agree with the corresponding ``jax.vmap(solve_jax)``
 result. CVXPy runs the ``B`` solves sequentially (host CVXPy isn't
 thread-safe); QPAX runs them in parallel under vmap. Parallels
@@ -26,36 +26,40 @@ def test_solve_batched_matches_vmap_solve_jax(backend):
     prob = build_brachistochrone(backend, n=8, k_max=20)
     prob.initialize()
 
-    # Default pins (full unified vectors with ``nan`` at non-Fix entries).
-    x_init_default = prob.state.x_init_pin
-    x_term_default = prob.state.x_term_pin
+    base_x = prob.state.x
 
-    # Stack four ICs by varying the x-coordinate of position (component 0);
-    # the terminal pin is shared, so broadcast it to the same leading axis.
+    # Stack four guesses by varying the x-coordinate of position (component 0).
     shifts = jnp.array([0.0, 0.3, -0.3, 0.6])
-    x0_stack = jnp.stack([x_init_default.at[0].set(x_init_default[0] + s) for s in shifts])
-    xf_stack = jnp.broadcast_to(x_term_default, x0_stack.shape)
+    x_guess_stack = jnp.stack([base_x.at[0, 0].set(base_x[0, 0] + s) for s in shifts])
 
-    # Reference: caller-owned vmap over solve_jax across both stacks.
-    reference = jax.vmap(prob.solve_jax, in_axes=(0, 0, None))(x0_stack, xf_stack, None)
+    # Per-element reference.
+    bare_xs = []
+    bare_us = []
+    for i in range(x_guess_stack.shape[0]):
+        res = prob.solve_jax(x_guess=x_guess_stack[i])
+        bare_xs.append(np.asarray(res.x))
+        bare_us.append(np.asarray(res.u))
+    bare_xs = np.stack(bare_xs)
+    bare_us = np.stack(bare_us)
 
     # Internal-vmap batched solve.
-    batched = prob.solve_batched(x0_stack, xf_stack)
+    batched = prob.solve_batched(x_guess=x_guess_stack)
 
-    assert batched.x.shape == reference.x.shape == (x0_stack.shape[0], 8, x0_stack.shape[1])
-    np.testing.assert_allclose(np.asarray(batched.x), np.asarray(reference.x), atol=1e-5, rtol=1e-5)
-    np.testing.assert_allclose(np.asarray(batched.u), np.asarray(reference.u), atol=1e-5, rtol=1e-5)
-    # ``converged`` carries the per-batch leading axis.
-    assert batched.converged.shape == (x0_stack.shape[0],)
+    assert batched.x.shape == bare_xs.shape == (x_guess_stack.shape[0], 8, base_x.shape[1])
+    np.testing.assert_allclose(np.asarray(batched.x), bare_xs, atol=1e-5, rtol=1e-5)
+    np.testing.assert_allclose(np.asarray(batched.u), bare_us, atol=1e-5, rtol=1e-5)
+    assert batched.converged.shape == (x_guess_stack.shape[0],)
 
     jax.clear_caches()
 
 
 def test_solve_batched_before_initialize_raises():
     prob = build_brachistochrone("qpax" if _has_qpax() else "cvxpy", n=8, k_max=1)
-    x_stack = jnp.zeros((2, prob.settings.sim.n_states))
+    N = prob.settings.sim.n
+    n_x = prob.settings.sim.n_states
+    x_stack = jnp.zeros((2, N, n_x))
     with pytest.raises(ValueError, match="initialize"):
-        prob.solve_batched(x_stack, x_stack)
+        prob.solve_batched(x_guess=x_stack)
 
 
 def _has_qpax() -> bool:

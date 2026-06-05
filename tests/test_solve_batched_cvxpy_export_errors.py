@@ -19,13 +19,11 @@ def test_cvxpy_export_raises_teaching_error():
     prob.settings.sim.save_compiled = True
     prob.initialize()
 
-    x_init = prob.state.x_init_pin
-    x_term = prob.state.x_term_pin
-    x0_stack = jnp.broadcast_to(x_init, (3,) + x_init.shape)
-    xf_stack = jnp.broadcast_to(x_term, (3,) + x_term.shape)
+    base_x = prob.state.x
+    x_guess_stack = jnp.broadcast_to(base_x, (3,) + base_x.shape)
 
     with pytest.raises(ValueError, match="pure_callback|QPAX|Moreau"):
-        prob.solve_batched(x0_stack, xf_stack)
+        prob.solve_batched(x_guess=x_guess_stack)
 
 
 def test_cvxpy_sequential_path_still_works_without_export():
@@ -33,10 +31,8 @@ def test_cvxpy_sequential_path_still_works_without_export():
     prob.settings.sim.save_compiled = False
     prob.initialize()
 
-    x_init = prob.state.x_init_pin
-    x_term = prob.state.x_term_pin
-    x0_stack = jnp.stack([x_init.at[0].set(x_init[0] + s) for s in (0.0, 0.3)])
-    xf_stack = jnp.broadcast_to(x_term, x0_stack.shape)
+    base_x = prob.state.x
+    x_guess_stack = jnp.stack([base_x.at[0, 0].set(base_x[0, 0] + s) for s in (0.0, 0.3)])
 
-    batched = prob.solve_batched(x0_stack, xf_stack)
-    assert batched.x.shape == (2, 8, x_init.shape[0])
+    batched = prob.solve_batched(x_guess=x_guess_stack)
+    assert batched.x.shape == (2, 8, base_x.shape[1])

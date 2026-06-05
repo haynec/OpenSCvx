@@ -67,7 +67,6 @@ from .cones import NonnegConeConstraint, SOCConstraint, ZeroConeConstraint
 from .ptr_solver import (
     PTRSolver,
     PTRSolveResult,
-    ParamFixPin,
     StatusCode,
     SubproblemData,
     SubproblemSolution,
@@ -1569,7 +1568,7 @@ class MoreauPTRSolver(PTRSolver):
         # User ZeroConeConstraint rows (hard equality).
         # Coefficients scaled by S_x/S_u: dx_scaled = Δx_phys / S_x, so the
         # coefficient for dx_scaled[k, j] is J_x_phys[i, j] * S_x[j].
-        params_user = self._parameters_dict
+        params_user = data.params
         for cc in self._user_cone_constraints:
             if isinstance(cc, ZeroConeConstraint):
                 for k in cc.nodes:

@@ -144,6 +144,7 @@ def _subproblem_data_from_solver(prob) -> SubproblemData:
         lam_vb_cross=jnp.asarray(lam_vb_cross),
         x_init=jnp.asarray(x_init),
         x_term=jnp.asarray(x_term),
+        params={},
     )
 
 

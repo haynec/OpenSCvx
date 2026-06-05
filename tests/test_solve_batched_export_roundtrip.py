@@ -21,12 +21,9 @@ from tests.solvers._iteration_callback_helpers import build_brachistochrone
 pytestmark = pytest.mark.filterwarnings("ignore")
 
 
-def _stacks(prob, shifts=(0.0, 0.3, -0.3, 0.6)):
-    x_init = prob.state.x_init_pin
-    x_term = prob.state.x_term_pin
-    x0_stack = jnp.stack([x_init.at[0].set(x_init[0] + s) for s in shifts])
-    xf_stack = jnp.broadcast_to(x_term, x0_stack.shape)
-    return x0_stack, xf_stack
+def _guess_stack(prob, shifts=(0.0, 0.3, -0.3, 0.6)):
+    base_x = prob.state.x
+    return jnp.stack([base_x.at[0, 0].set(base_x[0, 0] + s) for s in shifts])
 
 
 def test_export_roundtrip_matches_and_skips_recompile(monkeypatch, tmp_path):
@@ -40,14 +37,14 @@ def test_export_roundtrip_matches_and_skips_recompile(monkeypatch, tmp_path):
     ref_prob = build_brachistochrone("qpax", n=8, k_max=20)
     ref_prob.settings.sim.save_compiled = False
     ref_prob.initialize()
-    reference = ref_prob.solve_batched(*_stacks(ref_prob))
+    reference = ref_prob.solve_batched(x_guess=_guess_stack(ref_prob))
     jax.clear_caches()
 
     # First process: traces, exports, writes the artifact.
     prob1 = build_brachistochrone("qpax", n=8, k_max=20)
     prob1.settings.sim.save_compiled = True
     prob1.initialize()
-    first = prob1.solve_batched(*_stacks(prob1))
+    first = prob1.solve_batched(x_guess=_guess_stack(prob1))
 
     artifacts = list(tmp_path.glob("compiled_solve_batched_*.jax"))
     assert len(artifacts) == 1, "first solve_batched should write exactly one artifact"
@@ -63,7 +60,7 @@ def test_export_roundtrip_matches_and_skips_recompile(monkeypatch, tmp_path):
     prob2 = build_brachistochrone("qpax", n=8, k_max=20)
     prob2.settings.sim.save_compiled = True
     prob2.initialize()
-    second = prob2.solve_batched(*_stacks(prob2))
+    second = prob2.solve_batched(x_guess=_guess_stack(prob2))
 
     assert artifact.stat().st_mtime_ns == mtime_after_first, "second solve must not re-export"
     np.testing.assert_allclose(np.asarray(second.x), np.asarray(first.x), atol=1e-5, rtol=1e-5)
