@@ -54,6 +54,7 @@ import numpy as np
 
 from openscvx.config import Config
 
+from .cones import NonnegConeConstraint, SOCConstraint, ZeroConeConstraint
 from .ptr_solver import (
     PTRSolver,
     PTRSolveResult,
@@ -178,14 +179,16 @@ class QPAXPTRSolver(PTRSolver):
     Scope:
         Supported — state/control box, dynamics linearization (continuous
         and impulsive), boundary ``Fix``, uniform time grid, linearized
-        nodal nonconvex, CTCS LICQ-style rows.
+        nodal nonconvex, CTCS LICQ-style rows, user affine equality /
+        inequality ``.convex()`` constraints
+        (:class:`~openscvx.solvers.cones.ZeroConeConstraint` and
+        :class:`~openscvx.solvers.cones.NonnegConeConstraint`).
 
-        Not supported — user ``.convex()`` constraints and cross-node
-        constraints. Each raises :class:`NotImplementedError` with a "use
-        :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`" pointer.
-        Cross-node support may be added in the future; ``.convex()`` would
-        need a second-order-cone solver and is unlikely to land here
-        directly.
+        Not supported — SOC ``.convex()`` constraints and cross-node
+        constraints.  Each raises :class:`NotImplementedError`.  SOC
+        support requires a second-order-cone solver; use
+        :class:`openscvx.solvers.moreau_ptr_solver.MoreauPTRSolver` or
+        :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver` instead.
 
     Differentiability hook for future work:
         ``qpax.solve_qp_primal`` is differentiable via ``jax.custom_vjp``.
@@ -208,6 +211,8 @@ class QPAXPTRSolver(PTRSolver):
         layout: ``_QPLayout`` describing the flat decision-vector slot ranges.
             Populated by :meth:`create_variables`.
     """
+
+    SUPPORTED_CONE_TYPES = frozenset({ZeroConeConstraint, NonnegConeConstraint})
 
     def __init__(
         self,
@@ -257,9 +262,11 @@ class QPAXPTRSolver(PTRSolver):
         self._n_constraints: int = 0
 
         # Populated by lower_convex_constraints. Auto-augmented impulsive
-        # zero-pin constraints land here; any genuine user .convex() trips
-        # the default refusal.
+        # zero-pin constraints land here; genuine user .convex() constraints
+        # land in _user_cone_constraints after canonicalization.
         self._impulsive_pins: List[Tuple[List[int], slice]] = []
+        self._user_cone_constraints: List = []
+        self._parameters_dict: dict = {}
 
         # Per-iteration data, set by update_* methods.
         self._dyn: dict = {}
@@ -326,28 +333,6 @@ class QPAXPTRSolver(PTRSolver):
         self.layout = _QPLayout(N=N, n_x=n_x, n_u=n_u, n_nodal=len(jax_constraints.nodal))
         self._jax_constraints = jax_constraints
 
-    def lower_convex_constraints(
-        self,
-        constraints: "ConstraintSet",
-        parameters: Optional[dict] = None,
-    ) -> Tuple[List, dict]:
-        """Absorb auto-generated impulsive zero-pin constraints; refuse the rest.
-
-        :func:`openscvx.symbolic.lower._augment_impulsive_constraints` injects
-        ``Control == 0`` equalities at non-impulse nodes for every impulsive
-        control. Those constraints live in ``constraints.nodal_convex`` even
-        though no user ``.convex()`` was written; we recognize their fixed
-        shape and stash a pin list for :meth:`_assemble_qp` to emit as
-        plain equality rows. Anything that doesn't match the auto-augmentation
-        shape (e.g. a genuine user ``.convex()`` constraint) falls through to
-        the default refusal in :class:`ConvexSolver`.
-        """
-        pins = self._extract_impulsive_pins(constraints)
-        if pins is None:
-            return super().lower_convex_constraints(constraints, parameters)
-        self._impulsive_pins = pins
-        return [], {}
-
     def initialize(self, lowered: "LoweredProblem", settings: "Config") -> None:
         """Validate the constraint subset QPAX supports and stash settings.
 
@@ -410,6 +395,13 @@ class QPAXPTRSolver(PTRSolver):
             n_ineq += 2 * (nodes[1] - start_i)
         n_ineq += 2 * (N - 1) * n_x  # |nu| L1 slack
         n_ineq += 2 * N * L.n_nodal  # pos(nu_vb) slack
+
+        # User cone constraints (hard, no virtual buffer).
+        for cc in self._user_cone_constraints:
+            if isinstance(cc, ZeroConeConstraint):
+                n_eq += len(cc.nodes) * cc.m
+            elif isinstance(cc, NonnegConeConstraint):
+                n_ineq += len(cc.nodes) * cc.m
 
         return n_eq + n_ineq
 
@@ -822,6 +814,44 @@ class QPAXPTRSolver(PTRSolver):
                 G_rows.append(row)
                 h_rows.append(0.0)
 
+        # User cone constraints — hard (no virtual buffer), affine.
+        # J_x/J_u are physical-space Jacobians; multiply by S_x/S_u to convert
+        # to coefficients for scaled decision variables dx_scaled / du_scaled.
+        x_bar_np = self._dyn["x_bar"]  # (N, n_x) unscaled
+        u_bar_np = self._dyn["u_bar"]  # (N, n_u) unscaled
+        params = self._parameters_dict
+
+        for cc in self._user_cone_constraints:
+            for k in cc.nodes:
+                x_k = x_bar_np[k]
+                u_k = u_bar_np[k]
+                f0 = np.asarray(cc.jax_fn(x_k, u_k, k, params), dtype=float).reshape(cc.m)
+                J_x = np.asarray(
+                    jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params), dtype=float
+                ).reshape(cc.m, n_x) * S_x[None, :]
+                J_u = np.asarray(
+                    jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params), dtype=float
+                ).reshape(cc.m, n_u) * S_u[None, :]
+                rhs = -f0
+                if isinstance(cc, ZeroConeConstraint):
+                    for i in range(cc.m):
+                        row = np.zeros(L.n_z, dtype=float)
+                        row[L.sl_dx.start + k * n_x : L.sl_dx.start + (k + 1) * n_x] = J_x[i]
+                        row[L.sl_du.start + k * n_u : L.sl_du.start + (k + 1) * n_u] = J_u[i]
+                        A_rows.append(row)
+                        b_rows.append(float(rhs[i]))
+                elif isinstance(cc, NonnegConeConstraint):
+                    for i in range(cc.m):
+                        row = np.zeros(L.n_z, dtype=float)
+                        row[L.sl_dx.start + k * n_x : L.sl_dx.start + (k + 1) * n_x] = J_x[i]
+                        row[L.sl_du.start + k * n_u : L.sl_du.start + (k + 1) * n_u] = J_u[i]
+                        G_rows.append(row)
+                        h_rows.append(float(rhs[i]))
+
+        # Rebuild A_mat/b_vec now that user-cone equality rows may have been added.
+        A_mat = np.asarray(A_rows, dtype=float) if A_rows else np.zeros((0, L.n_z))
+        b_vec = np.asarray(b_rows, dtype=float) if b_rows else np.zeros(0)
+
         G_mat = np.asarray(G_rows, dtype=float) if G_rows else np.zeros((0, L.n_z))
         h_vec = np.asarray(h_rows, dtype=float) if h_rows else np.zeros(0)
 
@@ -1231,9 +1261,6 @@ class QPAXPTRSolver(PTRSolver):
             A_blocks.append(block)
             b_blocks.append(-c_x[ctcs_idx_arr])
 
-        A_mat = jnp.concatenate(A_blocks, axis=0) if A_blocks else jnp.zeros((0, L.n_z), dtype=f)
-        b_vec = jnp.concatenate(b_blocks, axis=0) if b_blocks else jnp.zeros((0,), dtype=f)
-
         # ---------- inequality rows (G z ≤ h) ----------
         G_blocks: List[jnp.ndarray] = []
         h_blocks: List[jnp.ndarray] = []
@@ -1314,6 +1341,40 @@ class QPAXPTRSolver(PTRSolver):
             block = block.at[2 * row_idx + 1, spos_cols].set(-1.0)
             G_blocks.append(block)
             h_blocks.append(jnp.zeros((2 * N,), dtype=f))
+
+        # User cone constraints (hard, affine).
+        # J_x/J_u are physical-space Jacobians; multiply by S_x/S_u to convert
+        # to coefficients for scaled decision variables dx_scaled / du_scaled.
+        params = self._parameters_dict
+        for cc in self._user_cone_constraints:
+            for k in cc.nodes:
+                x_k = data.x_bar[k]
+                u_k = data.u_bar[k]
+                f0 = jnp.reshape(cc.jax_fn(x_k, u_k, k, params), (cc.m,))
+                J_x = jnp.reshape(
+                    jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params), (cc.m, n_x)
+                ) * S_x[None, :]
+                J_u = jnp.reshape(
+                    jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params), (cc.m, n_u)
+                ) * S_u[None, :]
+                # Build dense row block: (cc.m, n_z).
+                block = jnp.zeros((cc.m, L.n_z), dtype=f)
+                dx_start = L.sl_dx.start + k * n_x
+                du_start = L.sl_du.start + k * n_u
+                dx_idx_range = jnp.arange(dx_start, dx_start + n_x)
+                du_idx_range = jnp.arange(du_start, du_start + n_u)
+                block = block.at[:, dx_idx_range].set(J_x)
+                block = block.at[:, du_idx_range].set(J_u)
+                rhs = -f0
+                if isinstance(cc, ZeroConeConstraint):
+                    A_blocks.append(block)
+                    b_blocks.append(rhs)
+                elif isinstance(cc, NonnegConeConstraint):
+                    G_blocks.append(block)
+                    h_blocks.append(rhs)
+
+        A_mat = jnp.concatenate(A_blocks, axis=0) if A_blocks else jnp.zeros((0, L.n_z), dtype=f)
+        b_vec = jnp.concatenate(b_blocks, axis=0) if b_blocks else jnp.zeros((0,), dtype=f)
 
         G_mat = jnp.concatenate(G_blocks, axis=0) if G_blocks else jnp.zeros((0, L.n_z), dtype=f)
         h_vec = jnp.concatenate(h_blocks, axis=0) if h_blocks else jnp.zeros((0,), dtype=f)

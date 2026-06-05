@@ -39,13 +39,14 @@ Backends:
 from abc import abstractmethod
 from dataclasses import dataclass, fields
 from enum import IntEnum
-from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Dict, FrozenSet, List, Optional, Tuple, Type, Union
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 from .base import ConvexSolver
+from .cones import ConeConstraint, NonnegConeConstraint, SOCConstraint, ZeroConeConstraint
 
 if TYPE_CHECKING:
     from openscvx.lowered.unified import UnifiedControl, UnifiedState
@@ -260,7 +261,137 @@ class PTRSolver(ConvexSolver):
 
     Subclasses must additionally implement :meth:`create_variables` and
     :meth:`initialize` from :class:`ConvexSolver`.
+
+    Attributes:
+        SUPPORTED_CONE_TYPES: The set of
+            :class:`~openscvx.solvers.cones.ConeConstraint` subclasses this
+            backend can assemble.  An empty frozenset (the default) means the
+            backend rejects **all** user ``.convex()`` constraints.  Concrete
+            subclasses declare their capabilities by overriding this attribute.
     """
+
+    # Subclasses declare which cone types they support.
+    SUPPORTED_CONE_TYPES: ClassVar[FrozenSet[Type[ConeConstraint]]] = frozenset()
+
+    # Registry populated via __init_subclass__ so _raise_unsupported_cone_error
+    # can suggest which backends do support a given cone type.
+    _solver_registry: ClassVar[List[Type["PTRSolver"]]] = []
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        PTRSolver._solver_registry.append(cls)
+
+    # ------------------------------------------------------------------
+    # Principled convex-constraint lowering (shared by QPAX and Moreau)
+    # ------------------------------------------------------------------
+
+    def lower_convex_constraints(
+        self,
+        constraints: "ConstraintSet",
+        parameters: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[List[Any], Dict[str, Any]]:
+        """Lower user ``.convex()`` constraints into cone constraints.
+
+        Separates auto-generated impulsive zero-pin equalities from genuine
+        user constraints, canonicalises the latter via
+        :func:`~openscvx.symbolic.canonicalize.canonicalize_nodal_constraint`,
+        and verifies each cone type against :attr:`SUPPORTED_CONE_TYPES`.
+
+        Cross-node convex constraints are not yet supported by the JAX
+        backends and raise :class:`NotImplementedError`.
+
+        Raises:
+            NotImplementedError: For cross-node convex constraints or
+                unsupported cone types (with a message listing which backends
+                do support the cone type).
+            ValueError: If a constraint is not affine in state/control.
+        """
+        from openscvx.symbolic.canonicalize import canonicalize_nodal_constraint
+
+        if constraints.cross_node_convex:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not support cross-node .convex() "
+                f"constraints ({len(constraints.cross_node_convex)} defined). "
+                "Use CVXPyPTRSolver."
+            )
+
+        pins, user_nodal = self._partition_nodal_convex(constraints)
+        self._impulsive_pins = pins
+
+        user_cones: List[ConeConstraint] = []
+        for nc in user_nodal:
+            cones = canonicalize_nodal_constraint(nc)
+            for cone in cones:
+                if type(cone) not in self.SUPPORTED_CONE_TYPES:
+                    self._raise_unsupported_cone_error(cone)
+                user_cones.append(cone)
+
+        self._user_cone_constraints: List[ConeConstraint] = user_cones
+        self._parameters_dict: Dict[str, Any] = parameters or {}
+        return [], {}
+
+    @staticmethod
+    def _partition_nodal_convex(
+        constraints: "ConstraintSet",
+    ) -> Tuple[List[Tuple[List[int], slice]], List]:
+        """Separate auto-generated impulsive zero-pin constraints from genuine
+        user-defined convex constraints.
+
+        Auto-generated pins match the pattern ``Control == 0`` injected by
+        :func:`~openscvx.symbolic.lower._augment_impulsive_constraints`.  All
+        other ``nodal_convex`` entries are returned as user-defined constraints.
+
+        Returns:
+            tuple: ``(pins, user_nodal)`` where *pins* is a list of
+            ``(nodes, ctrl_slice)`` pairs and *user_nodal* is the list of
+            :class:`~openscvx.symbolic.expr.constraint.NodalConstraint`
+            objects that need full canonicalization.
+        """
+        from openscvx.symbolic.expr.constraint import Equality, NodalConstraint
+        from openscvx.symbolic.expr.control import Control
+        from openscvx.symbolic.expr.expr import Constant
+
+        pins: List[Tuple[List[int], slice]] = []
+        user_nodal: List = []
+
+        for entry in constraints.nodal_convex:
+            if (
+                isinstance(entry, NodalConstraint)
+                and isinstance(entry.constraint, Equality)
+                and isinstance(entry.constraint.rhs, Constant)
+                and np.all(np.asarray(entry.constraint.rhs.value) == 0)
+                and isinstance(entry.constraint.lhs, Control)
+                and entry.constraint.lhs._slice is not None
+            ):
+                pins.append(([int(k) for k in entry.nodes], entry.constraint.lhs._slice))
+            else:
+                user_nodal.append(entry)
+
+        return pins, user_nodal
+
+    def _raise_unsupported_cone_error(self, cone: ConeConstraint) -> None:
+        """Raise :class:`NotImplementedError` naming which backends support *cone*.
+
+        Scans :attr:`_solver_registry` to find alternatives.
+        """
+        cone_cls = type(cone)
+        alternatives = [
+            cls.__name__
+            for cls in PTRSolver._solver_registry
+            if cone_cls in cls.SUPPORTED_CONE_TYPES
+        ]
+        msg = (
+            f"{type(self).__name__} does not support "
+            f"{cone_cls.__name__} constraints."
+        )
+        if alternatives:
+            msg += f"  Backends that do: {', '.join(alternatives)}."
+        else:
+            msg += (
+                "  No registered JAX backend supports this cone type; "
+                "use CVXPyPTRSolver instead."
+            )
+        raise NotImplementedError(msg)
 
     @abstractmethod
     def update_dynamics_linearization(

@@ -187,10 +187,10 @@ def test_cvxpy_spec_rejects_jax_backend_fields():
 
 
 def test_qpax_rejects_user_convex_constraints():
-    """User .convex() constraints lower to second-order cones — outside QP.
-    The refusal lives on ``ConvexSolver.lower_convex_constraints`` (default
-    implementation), so QPAX rejects them during ``Problem(...)`` lowering —
-    fail-fast, before any heavier setup runs."""
+    """User .convex() norm constraints canonicalise to SOCConstraint.
+    QPAXPTRSolver's ``SUPPORTED_CONE_TYPES`` excludes SOC, so lowering must
+    raise ``NotImplementedError`` with a message naming the unsupported cone
+    and suggesting MoreauPTRSolver as an alternative."""
     n = 5
     pos = ox.State("pos", shape=(2,))
     pos.min = np.array([-10.0, -10.0])
@@ -217,7 +217,7 @@ def test_qpax_rejects_user_convex_constraints():
 
     with pytest.raises(
         NotImplementedError,
-        match=r"QPAXPTRSolver does not support user-defined \.convex\(\)",
+        match=r"QPAXPTRSolver does not support SOCConstraint",
     ):
         Problem(
             dynamics=dyn,

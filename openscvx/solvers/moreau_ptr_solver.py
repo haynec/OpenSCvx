@@ -63,6 +63,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 import numpy as np
 from scipy import sparse as sp
 
+from .cones import NonnegConeConstraint, SOCConstraint, ZeroConeConstraint
 from .ptr_solver import (
     PTRSolver,
     PTRSolveResult,
@@ -266,8 +267,8 @@ class MoreauPTRSolver(PTRSolver):
     Compared to :class:`QPAXPTRSolver`, this backend uses fewer decision
     variables and constraint rows for the same PTR physics (SOC epigraphs for
     ``|nu|`` instead of two nonneg slack rows each), warm-starts between SCP
-    iterations on successful solves, and opens a path to user ``.convex()``
-    SOCP support in a follow-up.
+    iterations on successful solves, and natively handles user
+    :class:`~openscvx.solvers.cones.SOCConstraint` convex constraints.
 
     The JAX-pure entry point :meth:`iteration_callback` builds Moreau's
     functional factory ``moreau.jax.solver(...)`` once at
@@ -288,17 +289,23 @@ class MoreauPTRSolver(PTRSolver):
     Scope:
         Supported — state/control box, dynamics linearization (continuous
         and impulsive), boundary Fix, uniform time grid, linearized nodal
-        nonconvex, CTCS LICQ rows.
+        nonconvex, CTCS LICQ rows, user ``.convex()`` affine equality,
+        affine inequality, and second-order-cone constraints.
 
-        Not supported — user ``.convex()`` constraints and cross-node
-        constraints. Each raises :class:`NotImplementedError` with a "use
-        :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`" pointer.
+        Not supported — cross-node constraints (raises
+        :class:`NotImplementedError` with a "use CVXPyPTRSolver" pointer).
 
     Differentiability hook for future work:
         ``moreau.jax.Solver`` differentiates through the solve via implicit
         differentiation on the KKT conditions. Once the surrounding SCP
         pipeline stays in ``jit``, ``jax.grad`` / ``jax.vmap`` can reach
         through a full SCvx solve.
+
+    Class attributes:
+        SUPPORTED_CONE_TYPES: Accepts
+            :class:`~openscvx.solvers.cones.ZeroConeConstraint`,
+            :class:`~openscvx.solvers.cones.NonnegConeConstraint`, and
+            :class:`~openscvx.solvers.cones.SOCConstraint`.
 
     Args:
         max_iter: Maximum number of IPM iterations forwarded to
@@ -324,6 +331,8 @@ class MoreauPTRSolver(PTRSolver):
         layout: :class:`_ConicLayout` describing flat decision-vector slot
             ranges. Populated by :meth:`create_variables`.
     """
+
+    SUPPORTED_CONE_TYPES = frozenset({ZeroConeConstraint, NonnegConeConstraint, SOCConstraint})
 
     def __init__(
         self,
@@ -407,10 +416,10 @@ class MoreauPTRSolver(PTRSolver):
         self._coo_cols: Optional[np.ndarray] = None
         self._n_con: int = 0
 
-        # Populated by lower_convex_constraints. Auto-augmented impulsive
-        # zero-pin constraints land here; any genuine user .convex() trips
-        # the default refusal.
+        # Populated by PTRSolver.lower_convex_constraints.
         self._impulsive_pins: List[Tuple[List[int], slice]] = []
+        self._user_cone_constraints: List = []
+        self._parameters_dict: dict = {}
 
         # Per-iteration data, set by update_* methods.
         self._dyn: dict = {}
@@ -484,28 +493,6 @@ class MoreauPTRSolver(PTRSolver):
 
         self.layout = _ConicLayout(N=N, n_x=n_x, n_u=n_u, n_nodal=len(jax_constraints.nodal))
         self._jax_constraints = jax_constraints
-
-    def lower_convex_constraints(
-        self,
-        constraints: "ConstraintSet",
-        parameters: Optional[Dict] = None,
-    ) -> Tuple[List, Dict]:
-        """Absorb auto-generated impulsive zero-pin constraints; refuse the rest.
-
-        :func:`openscvx.symbolic.lower._augment_impulsive_constraints` injects
-        ``Control == 0`` equalities at non-impulse nodes for every impulsive
-        control. Those constraints live in ``constraints.nodal_convex`` even
-        though no user ``.convex()`` was written; we recognize their fixed
-        shape and stash a pin list for the structural pass / assembler to
-        emit as plain zero-cone rows. Anything that doesn't match the
-        auto-augmentation shape (e.g. a genuine user ``.convex()`` SOC) falls
-        through to the default refusal in :class:`ConvexSolver`.
-        """
-        pins = self._extract_impulsive_pins(constraints)
-        if pins is None:
-            return super().lower_convex_constraints(constraints, parameters)
-        self._impulsive_pins = pins
-        return [], {}
 
     def initialize(self, lowered: "LoweredProblem", settings: "Config") -> None:
         """Build the static conic structure and construct ``moreau.jax.Solver``.
@@ -834,6 +821,17 @@ class MoreauPTRSolver(PTRSolver):
                     add(row, L.u_idx(node, j))
                     row += 1
 
+        # User ZeroConeConstraint rows (hard equality, one row per scalar output).
+        for cc in self._user_cone_constraints:
+            if isinstance(cc, ZeroConeConstraint):
+                for k in cc.nodes:
+                    for _ in range(cc.m):
+                        for j in range(n_x):
+                            add(row, L.dx_idx(k, j))
+                        for j in range(n_u):
+                            add(row, L.du_idx(k, j))
+                        row += 1
+
         # Uniform time grid: u[k,j] − u[k-1,j] = 0
         if settings.sim._uniform_time_grid:
             td = settings.sim.time_dilation_slice
@@ -907,6 +905,17 @@ class MoreauPTRSolver(PTRSolver):
                 add(row, L.t_vb_idx(c_idx, k))
                 row += 1
 
+        # User NonnegConeConstraint rows.
+        for cc in self._user_cone_constraints:
+            if isinstance(cc, NonnegConeConstraint):
+                for k in cc.nodes:
+                    for _ in range(cc.m):
+                        for j in range(n_x):
+                            add(row, L.dx_idx(k, j))
+                        for j in range(n_u):
+                            add(row, L.du_idx(k, j))
+                        row += 1
+
         n_nn = row - n_eq
 
         # ================================================================
@@ -922,6 +931,22 @@ class MoreauPTRSolver(PTRSolver):
                 add(row, L.nu_idx(k, j))
                 row += 1
                 soc_dims.append(2)
+
+        # User SOCConstraint rows: each node contributes SOC(m_arg + 1).
+        # Row layout: [bound, arg[0], arg[1], ..., arg[m_arg-1]].
+        # Moreau convention s = b - Az ∈ K_soc: ‖s[1:]‖ ≤ s[0].
+        # Since arg and bound are affine in (x, u), columns are dx[k, :] and du[k, :].
+        for cc in self._user_cone_constraints:
+            if isinstance(cc, SOCConstraint):
+                soc_dim = cc.m_arg + 1
+                for k in cc.nodes:
+                    for _ in range(soc_dim):
+                        for j in range(n_x):
+                            add(row, L.dx_idx(k, j))
+                        for j in range(n_u):
+                            add(row, L.du_idx(k, j))
+                        row += 1
+                    soc_dims.append(soc_dim)
 
         return coo_rows, coo_cols, n_eq, n_nn, soc_dims
 
@@ -1123,6 +1148,28 @@ class MoreauPTRSolver(PTRSolver):
                 for j in range(ctrl_slice.start, ctrl_slice.stop):
                     emit([1.0], -inv_S_u[j] * c_u[j])
 
+        # User ZeroConeConstraint rows.
+        # Linearize: (J_x·S_x)·dx_scaled + (J_u·S_u)·du_scaled = -f0.
+        # Jacobians are w.r.t. physical x/u; dx_scaled = Δx_phys / S_x, so
+        # the coefficient for dx_scaled[k, j] is J_x_phys[i, j] * S_x[j].
+        params = self._parameters_dict
+        for cc in self._user_cone_constraints:
+            if isinstance(cc, ZeroConeConstraint):
+                for k in cc.nodes:
+                    x_k = x_bar[k]
+                    u_k = u_bar[k]
+                    f0 = np.asarray(cc.jax_fn(x_k, u_k, k, params), dtype=float).reshape(cc.m)
+                    J_x = np.asarray(
+                        jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params), dtype=float
+                    ).reshape(cc.m, n_x) * S_x[None, :]
+                    J_u = np.asarray(
+                        jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params), dtype=float
+                    ).reshape(cc.m, n_u) * S_u[None, :]
+                    rhs = -f0
+                    for i in range(cc.m):
+                        coeffs = list(J_x[i]) + list(J_u[i])
+                        emit(coeffs, float(rhs[i]))
+
         # Uniform time grid: u[k,j] − u[k-1,j] = 0
         if settings.sim._uniform_time_grid:
             td = settings.sim.time_dilation_slice
@@ -1193,6 +1240,27 @@ class MoreauPTRSolver(PTRSolver):
             for k in range(N):
                 emit([-1.0], 0.0)  # s = 0 − (−t_vb) = t_vb ≥ 0
 
+        # User NonnegConeConstraint rows.
+        # s = b − Az ≥ 0;  A = J·S (scaled Jacobian), b = -f0.
+        # Jacobians are w.r.t. physical x/u; multiply by S_x/S_u to get
+        # coefficients for the scaled decision variables dx_scaled / du_scaled.
+        for cc in self._user_cone_constraints:
+            if isinstance(cc, NonnegConeConstraint):
+                for k in cc.nodes:
+                    x_k = x_bar[k]
+                    u_k = u_bar[k]
+                    f0 = np.asarray(cc.jax_fn(x_k, u_k, k, params), dtype=float).reshape(cc.m)
+                    J_x = np.asarray(
+                        jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params), dtype=float
+                    ).reshape(cc.m, n_x) * S_x[None, :]
+                    J_u = np.asarray(
+                        jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params), dtype=float
+                    ).reshape(cc.m, n_u) * S_u[None, :]
+                    rhs = -f0
+                    for i in range(cc.m):
+                        coeffs = list(J_x[i]) + list(J_u[i])
+                        emit(coeffs, float(rhs[i]))
+
         # ================================================================
         # SOC rows: SOC(2) for |nu[k,j]| ≤ t_vc[k,j]
         # s = b − Az: row 0 has only t_vc (coeff −1), row 1 has only nu (coeff −1)
@@ -1203,6 +1271,39 @@ class MoreauPTRSolver(PTRSolver):
             for j in range(n_x):
                 emit([-1.0], 0.0)  # row for t_vc
                 emit([-1.0], 0.0)  # row for nu
+
+        # User SOCConstraint rows: SOC(m_arg + 1) per node.
+        # Layout: [bound_row, arg_row_0, …, arg_row_{m_arg-1}].
+        # Moreau convention: s = b − Az ∈ K_soc, ‖s[1:]‖ ≤ s[0].
+        # Linearized: s[0] = bound0 + J_b·Δ, s[1+i] = arg0[i] + J_a[i]·Δ.
+        # s = b − A·z → A = −J·S, b = val.  Jacobians scaled by S_x/S_u to
+        # convert from physical-space to scaled-decision-variable coefficients.
+        for cc in self._user_cone_constraints:
+            if isinstance(cc, SOCConstraint):
+                for k in cc.nodes:
+                    x_k = x_bar[k]
+                    u_k = u_bar[k]
+                    # Bound function.
+                    bound0 = float(np.asarray(cc.bound_fn(x_k, u_k, k, params)))
+                    Jb_x = np.asarray(
+                        jax.jacfwd(cc.bound_fn, argnums=0)(x_k, u_k, k, params), dtype=float
+                    ).reshape(n_x) * S_x
+                    Jb_u = np.asarray(
+                        jax.jacfwd(cc.bound_fn, argnums=1)(x_k, u_k, k, params), dtype=float
+                    ).reshape(n_u) * S_u
+                    # Arg function.
+                    arg0 = np.asarray(cc.arg_fn(x_k, u_k, k, params), dtype=float).reshape(cc.m_arg)
+                    Ja_x = np.asarray(
+                        jax.jacfwd(cc.arg_fn, argnums=0)(x_k, u_k, k, params), dtype=float
+                    ).reshape(cc.m_arg, n_x) * S_x[None, :]
+                    Ja_u = np.asarray(
+                        jax.jacfwd(cc.arg_fn, argnums=1)(x_k, u_k, k, params), dtype=float
+                    ).reshape(cc.m_arg, n_u) * S_u[None, :]
+                    # Bound row: A = −J_b·S, b = bound0  →  s[0] = bound0 + J_b·Δ.
+                    emit(list(-Jb_x) + list(-Jb_u), bound0)
+                    # Arg rows: A = −J_a[i]·S, b = arg0[i]  →  s[1+i] = arg0[i] + J_a[i]·Δ.
+                    for i in range(cc.m_arg):
+                        emit(list(-Ja_x[i]) + list(-Ja_u[i]), float(arg0[i]))
 
         return (
             P_data,
@@ -1461,6 +1562,26 @@ class MoreauPTRSolver(PTRSolver):
                     coo_blocks.append(jnp.asarray([1.0], dtype=f))
                     b_blocks.append((-inv_S_u[j] * c_u[j])[None])
 
+        # User ZeroConeConstraint rows (hard equality).
+        # Coefficients scaled by S_x/S_u: dx_scaled = Δx_phys / S_x, so the
+        # coefficient for dx_scaled[k, j] is J_x_phys[i, j] * S_x[j].
+        params_user = self._parameters_dict
+        for cc in self._user_cone_constraints:
+            if isinstance(cc, ZeroConeConstraint):
+                for k in cc.nodes:
+                    x_k = data.x_bar[k]
+                    u_k = data.u_bar[k]
+                    f0 = jnp.reshape(cc.jax_fn(x_k, u_k, k, params_user), (cc.m,))
+                    J_x = jnp.reshape(
+                        jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params_user), (cc.m, n_x)
+                    ) * S_x[None, :]
+                    J_u = jnp.reshape(
+                        jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params_user), (cc.m, n_u)
+                    ) * S_u[None, :]
+                    row_vals = jnp.concatenate([J_x, J_u], axis=1)  # (cc.m, n_x+n_u)
+                    coo_blocks.append(row_vals.reshape(-1))
+                    b_blocks.append(-f0)
+
         # Uniform time grid: u[k, j] - u[k-1, j] = 0.
         if sim._uniform_time_grid:
             td = sim.time_dilation_slice
@@ -1523,11 +1644,62 @@ class MoreauPTRSolver(PTRSolver):
             coo_blocks.append(jnp.full((N,), -1.0, dtype=f))
             b_blocks.append(jnp.zeros((N,), dtype=f))
 
+        # User NonnegConeConstraint rows.
+        # Jacobians scaled by S_x/S_u for the dx_scaled / du_scaled convention.
+        for cc in self._user_cone_constraints:
+            if isinstance(cc, NonnegConeConstraint):
+                for k in cc.nodes:
+                    x_k = data.x_bar[k]
+                    u_k = data.u_bar[k]
+                    f0 = jnp.reshape(cc.jax_fn(x_k, u_k, k, params_user), (cc.m,))
+                    J_x = jnp.reshape(
+                        jax.jacfwd(cc.jax_fn, argnums=0)(x_k, u_k, k, params_user), (cc.m, n_x)
+                    ) * S_x[None, :]
+                    J_u = jnp.reshape(
+                        jax.jacfwd(cc.jax_fn, argnums=1)(x_k, u_k, k, params_user), (cc.m, n_u)
+                    ) * S_u[None, :]
+                    row_vals = jnp.concatenate([J_x, J_u], axis=1)
+                    coo_blocks.append(row_vals.reshape(-1))
+                    b_blocks.append(-f0)
+
         # SOC: 2 rows per |nu| pair, coeffs [-1] each (t_vc row, then nu row).
         n_soc = 2 * (N - 1) * n_x
         soc_coeffs = jnp.full((n_soc,), -1.0, dtype=f)
         coo_blocks.append(soc_coeffs)
         b_blocks.append(jnp.zeros((n_soc,), dtype=f))
+
+        # User SOCConstraint rows: SOC(m_arg + 1) per node.
+        # Bound row:  A = −J_b·S, b = bound0  →  s[0] = b − A·z = bound0 + J_b·Δ.
+        # Arg rows:   A = −J_a[i]·S, b = arg0[i].
+        # Jacobians scaled by S_x/S_u to convert physical Jacobians to
+        # coefficients for scaled decision variables dx_scaled / du_scaled.
+        for cc in self._user_cone_constraints:
+            if isinstance(cc, SOCConstraint):
+                for k in cc.nodes:
+                    x_k = data.x_bar[k]
+                    u_k = data.u_bar[k]
+                    bound0 = jnp.reshape(cc.bound_fn(x_k, u_k, k, params_user), ())
+                    Jb_x = jnp.reshape(
+                        jax.jacfwd(cc.bound_fn, argnums=0)(x_k, u_k, k, params_user), (n_x,)
+                    ) * S_x
+                    Jb_u = jnp.reshape(
+                        jax.jacfwd(cc.bound_fn, argnums=1)(x_k, u_k, k, params_user), (n_u,)
+                    ) * S_u
+                    arg0 = jnp.reshape(cc.arg_fn(x_k, u_k, k, params_user), (cc.m_arg,))
+                    Ja_x = jnp.reshape(
+                        jax.jacfwd(cc.arg_fn, argnums=0)(x_k, u_k, k, params_user), (cc.m_arg, n_x)
+                    ) * S_x[None, :]
+                    Ja_u = jnp.reshape(
+                        jax.jacfwd(cc.arg_fn, argnums=1)(x_k, u_k, k, params_user), (cc.m_arg, n_u)
+                    ) * S_u[None, :]
+                    # Bound row A coeffs (negated, concatenated x then u).
+                    bound_A = jnp.concatenate([-Jb_x, -Jb_u])  # (n_x + n_u,)
+                    coo_blocks.append(bound_A)
+                    b_blocks.append(bound0[None])
+                    # Arg rows A coeffs (negated).
+                    arg_A = jnp.concatenate([-Ja_x, -Ja_u], axis=1)  # (m_arg, n_x+n_u)
+                    coo_blocks.append(arg_A.reshape(-1))
+                    b_blocks.append(arg0)
 
         coo_vals = jnp.concatenate(coo_blocks) if coo_blocks else jnp.zeros((0,), dtype=f)
         b_vec = jnp.concatenate(b_blocks) if b_blocks else jnp.zeros((0,), dtype=f)
