@@ -83,15 +83,22 @@ from openscvx.utils.caching import (
 def _infer_batch_size(
     user_params: Optional[dict],
     *,
+    x0_stack=None,
+    xf_stack=None,
     x_guess=None,
     u_guess=None,
 ) -> int:
     """Infer the batch size B for :meth:`Problem.solve_batched`.
 
-    Returns the leading axis of the first batched entry among *x_guess*,
-    *u_guess* (shape ``(B, N, n)``), or a non-scalar value in *user_params*.
+    Returns the leading axis of the first batched entry among *x0_stack*,
+    *xf_stack*, *x_guess*, *u_guess*, or a non-scalar value in *user_params*.
     Raises ``ValueError`` when no batched entry is found.
     """
+    for value in (x0_stack, xf_stack):
+        if value is not None:
+            arr = jnp.asarray(value)
+            if arr.ndim >= 2:
+                return int(arr.shape[0])
     for value in (x_guess, u_guess):
         if value is not None:
             arr = jnp.asarray(value)
@@ -1477,6 +1484,8 @@ class Problem:
         self,
         parameters: Optional[dict] = None,
         *,
+        x0_stack: Optional[jnp.ndarray] = None,
+        xf_stack: Optional[jnp.ndarray] = None,
         x_guess: Optional[jnp.ndarray] = None,
         u_guess: Optional[jnp.ndarray] = None,
         max_iters: Optional[int] = None,
@@ -1502,14 +1511,21 @@ class Problem:
         are broadcast across the batch.  ``B`` is inferred from the first
         batched entry in *parameters*, *x_guess*, or *u_guess*.
 
+        **Boundary pins**: pass ``x0_stack`` / ``xf_stack`` as ``(B, n_x)``
+        arrays to batch initial and terminal Fix boundary conditions without
+        declaring a runtime ``.convex()`` constraint (cheaper than parameter
+        pins evaluated every SCP iteration)::
+
+            results = problem.solve_batched(x0_stack=x0_stack, xf_stack=xf_stack)
+
         **Trajectory guesses**: pass ``x_guess`` / ``u_guess`` as shared
         ``(N, n)`` arrays (broadcast to every batch element) or per-batch
         ``(B, N, n)`` stacks to seed each solve's SCP iterate independently::
 
             results = problem.solve_batched(
-                parameters={"initial_position": ic_batch},
+                x0_stack=x0_stack,
+                xf_stack=xf_stack,
                 x_guess=x_guess_batch,
-                u_guess=u_guess_batch,
             )
 
         Why this exists alongside ``jax.vmap(solve_jax)``: because the batch
@@ -1533,7 +1549,12 @@ class Problem:
                 ``B`` are vmapped over (each batch element receives its own
                 slice); parameters with a different shape are broadcast.
                 ``B`` is inferred from the first batched entry supplied here,
-                in *x_guess*, or in *u_guess* (raises if none is found).
+                in *x0_stack*, *xf_stack*, *x_guess*, or *u_guess* (raises
+                if none is found).
+            x0_stack: Initial boundary pins, shape ``(B, n_states)``.  ``None``
+                broadcasts the default ``x_init_pin`` from settings.
+            xf_stack: Terminal boundary pins, shape ``(B, n_states)``.  ``None``
+                broadcasts the default ``x_term_pin`` from settings.
             x_guess: State trajectory guess, shape ``(N, n_states)`` shared
                 across the batch or ``(B, N, n_states)`` per element.
                 ``None`` uses the default from settings.
@@ -1555,13 +1576,29 @@ class Problem:
 
         params_for_solve = dict(self._parameters, **(parameters or {}))
 
-        B = _infer_batch_size(parameters, x_guess=x_guess, u_guess=u_guess)
+        B = _infer_batch_size(
+            parameters, x0_stack=x0_stack, xf_stack=xf_stack, x_guess=x_guess, u_guess=u_guess
+        )
         N = self.settings.sim.n
         n_x = self.settings.sim.n_states
         n_u = self.settings.sim.n_controls
         _default = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
-        x0_stack = jnp.asarray(np.broadcast_to(np.asarray(_default.x_init_pin), (B, n_x)).copy())
-        xf_stack = jnp.asarray(np.broadcast_to(np.asarray(_default.x_term_pin), (B, n_x)).copy())
+        if x0_stack is None:
+            x0_stack = jnp.asarray(np.broadcast_to(np.asarray(_default.x_init_pin), (B, n_x)).copy())
+        else:
+            x0_stack = jnp.asarray(x0_stack)
+            if x0_stack.shape != (B, n_x):
+                raise ValueError(
+                    f"solve_batched: x0_stack must have shape (B, n_x)=({B}, {n_x}), got {x0_stack.shape}."
+                )
+        if xf_stack is None:
+            xf_stack = jnp.asarray(np.broadcast_to(np.asarray(_default.x_term_pin), (B, n_x)).copy())
+        else:
+            xf_stack = jnp.asarray(xf_stack)
+            if xf_stack.shape != (B, n_x):
+                raise ValueError(
+                    f"solve_batched: xf_stack must have shape (B, n_x)=({B}, {n_x}), got {xf_stack.shape}."
+                )
         x_guess_stack = _expand_batched_trajectory_guess(
             x_guess, B=B, N=N, n=n_x, name="x_guess", default=_default.x
         )
@@ -1681,6 +1718,12 @@ class Problem:
             t_finals = np.asarray(results.t_final).reshape(-1)  # (B,)
             T_max = float(t_finals.max())
             n_times = max(int(np.ceil(T_max / self.settings.prp.dt)) + 1, 2)
+
+        # The propagation solver is compiled with a per-segment tau capacity of
+        # ``max_tau_len``.  A uniform ``linspace`` grid sized from the batch
+        # ``T_max`` can place more output times into one normalized segment than
+        # that capacity when shorter trajectories are padded to the same count.
+        n_times = min(n_times, self.settings.prp.max_tau_len)
 
         t_fulls: List[np.ndarray] = []
         x_fulls: List[np.ndarray] = []

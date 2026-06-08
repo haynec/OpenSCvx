@@ -1,12 +1,12 @@
 """Batched 6-DoF powered descent guidance — ``solve_batched`` over initial conditions.
 
-Runs ``N_BATCH = 200`` SCP solves in parallel, each starting from a different random
-initial position drawn uniformly within the position bounds.
-
-The initial position is a ``Parameter`` pinned via
-``(position == initial_position).convex().at([0])``.  Per-batch ``x_guess``
-stacks (position linspace from each sampled IC to the terminal guess) seed the
-SCP iterate independently via :meth:`~openscvx.problem.Problem.solve_batched`.
+Runs ``N_BATCH`` SCP solves in parallel, each starting from a different random
+initial position drawn uniformly within the position bounds.  Each batch element
+gets its own row in ``x0_stack`` (shape ``(B, n_x)``): the default
+``x_init_pin`` from :meth:`~openscvx.problem.Problem.initialize`, with the
+position slice overwritten from the sampled ICs.  Terminal conditions are shared
+via a broadcast ``xf_stack``.  Per-batch ``x_guess`` stacks (position linspace
+from each sampled IC to the terminal guess) seed the SCP iterate independently.
 
 The same physics as ``base_problems/6DoF_pdg_realtime_base.py`` but rebuilt
 with a Moreau backend so the whole SCP loop is a single XLA kernel.
@@ -31,6 +31,7 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
+import jax.numpy as jnp
 import numpy as np
 import viser
 
@@ -50,6 +51,9 @@ from openscvx.plotting.viser import (
 # ── Problem dimensions ──────────────────────────────────────────────────────
 N = 5  # discretization nodes
 N_BATCH = 200  # number of simultaneous solves
+
+# Position lives at unified-state indices 1:4 (mass is index 0).
+POSITION_SLICE = slice(1, 4)
 
 
 # ── Random initial-condition generator ─────────────────────────────────────
@@ -205,8 +209,7 @@ constraint_exprs = []
 for st in states:
     constraint_exprs.extend([ox.ctcs(st <= st.max), ox.ctcs(st.min <= st)])
 
-# Initial and terminal position constraints — batched over initial_position.
-constraint_exprs.append((position == initial_position).convex().at([0]))
+# Terminal lateral position; initial position is batched via x0_stack (Fix BC).
 constraint_exprs.append((position[1:3] == final_position).convex().at([N - 1]))
 
 constraint_exprs.append(ox.ctcs(1.0 * (mass - m_dry) >= 0))
@@ -254,6 +257,8 @@ problem = Problem(
         "ep_vc": 1e-6,
     },
 )
+
+problem.settings.prp.dt = 0.02
 
 
 # ── Viser coordinate helpers ─────────────────────────────────────────────────
@@ -424,13 +429,19 @@ if __name__ == "__main__":
     print(f"Sampled {N_BATCH} initial positions  (alt ∈ [3, 9] m, lat ∈ [-7, 7] m)")
 
     # ── Compile + solve ───────────────────────────────────────────────────────
-    # B is inferred from ic_batch.shape[0].  solve_batched vmaps over
-    # initial_position (shape (B, 3)) while broadcasting all other parameters.
-    # Per-batch x_guess seeds each SCP iterate with an IC-consistent trajectory.
+    # Stack boundary pins: default Fix entries plus per-batch position ICs.
+    default_init = np.asarray(problem.state.x_init_pin)
+    x0_stack = np.broadcast_to(default_init, (N_BATCH, default_init.shape[0])).copy()
+    x0_stack[:, POSITION_SLICE] = ic_batch
+    x0_stack = jnp.asarray(x0_stack)
+    xf_pin = np.asarray(problem.state.x_term_pin)
+    xf_stack = jnp.broadcast_to(xf_pin, (N_BATCH, xf_pin.shape[0]))
     x_guess_batch = build_batched_x_guess(problem, ic_batch)
+
     print("Compiling and running solve_batched …")
     results = problem.solve_batched(
-        parameters={"initial_position": ic_batch},
+        x0_stack=x0_stack,
+        xf_stack=xf_stack,
         x_guess=x_guess_batch,
     )
 
