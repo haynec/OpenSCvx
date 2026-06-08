@@ -53,8 +53,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, Tuple
 
-import numpy as np
 import jax.numpy as jnp
+import numpy as np
 
 from openscvx.integrations._utils import _resolve_slice
 from openscvx.integrations.base import DynamicsAdapter

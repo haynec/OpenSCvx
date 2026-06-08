@@ -101,7 +101,7 @@ problem = ox.Problem(
     algorithm={
         "lam_vc": 1e1,
         "lam_cost": 4e-1,
-        "autotuner": ox.AugmentedLagrangian(ep = 1E0),
+        "autotuner": ox.AugmentedLagrangian(ep=1e0),
     },
     float_dtype="float64",
 )
@@ -204,9 +204,17 @@ def visualize(results, robot, q_start: np.ndarray, q_goal: np.ndarray) -> None:
         # Visual OBJ files per body (group=2 geoms from panda_nohand.xml).
         _link_visual_files = {
             "link0": [
-                "link0_0.obj", "link0_1.obj", "link0_2.obj", "link0_3.obj",
-                "link0_4.obj", "link0_5.obj", "link0_7.obj", "link0_8.obj",
-                "link0_9.obj", "link0_10.obj", "link0_11.obj",
+                "link0_0.obj",
+                "link0_1.obj",
+                "link0_2.obj",
+                "link0_3.obj",
+                "link0_4.obj",
+                "link0_5.obj",
+                "link0_7.obj",
+                "link0_8.obj",
+                "link0_9.obj",
+                "link0_10.obj",
+                "link0_11.obj",
             ],
             "link1": ["link1.obj"],
             "link2": ["link2.obj"],
@@ -214,15 +222,33 @@ def visualize(results, robot, q_start: np.ndarray, q_goal: np.ndarray) -> None:
             "link4": ["link4_0.obj", "link4_1.obj", "link4_2.obj", "link4_3.obj"],
             "link5": ["link5_0.obj", "link5_1.obj", "link5_2.obj"],
             "link6": [
-                "link6_0.obj", "link6_1.obj", "link6_2.obj", "link6_3.obj",
-                "link6_4.obj", "link6_5.obj", "link6_6.obj", "link6_7.obj",
-                "link6_8.obj", "link6_9.obj", "link6_10.obj", "link6_11.obj",
-                "link6_12.obj", "link6_13.obj", "link6_14.obj", "link6_15.obj",
+                "link6_0.obj",
+                "link6_1.obj",
+                "link6_2.obj",
+                "link6_3.obj",
+                "link6_4.obj",
+                "link6_5.obj",
+                "link6_6.obj",
+                "link6_7.obj",
+                "link6_8.obj",
+                "link6_9.obj",
+                "link6_10.obj",
+                "link6_11.obj",
+                "link6_12.obj",
+                "link6_13.obj",
+                "link6_14.obj",
+                "link6_15.obj",
                 "link6_16.obj",
             ],
             "link7": [
-                "link7_0.obj", "link7_1.obj", "link7_2.obj", "link7_3.obj",
-                "link7_4.obj", "link7_5.obj", "link7_6.obj", "link7_7.obj",
+                "link7_0.obj",
+                "link7_1.obj",
+                "link7_2.obj",
+                "link7_3.obj",
+                "link7_4.obj",
+                "link7_5.obj",
+                "link7_6.obj",
+                "link7_7.obj",
             ],
         }
 
@@ -330,7 +356,10 @@ def visualize(results, robot, q_start: np.ndarray, q_goal: np.ndarray) -> None:
 
         def update_robot(frame_idx: int) -> None:
             pts = np.stack(
-                [np.stack([keypoints[frame_idx, k], keypoints[frame_idx, k + 1]]) for k in range(n_segs)]
+                [
+                    np.stack([keypoints[frame_idx, k], keypoints[frame_idx, k + 1]])
+                    for k in range(n_segs)
+                ]
             ).astype(np.float32)
             arm_handle.points = pts
 
