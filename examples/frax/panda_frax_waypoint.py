@@ -53,7 +53,7 @@ q_goal = np.array([0.6, -0.3, 0.2, -1.8, 0.3, 1.2, 0.5])
 
 ee_start = np.asarray(robot.ee_transform(q_start))[:3, 3]
 ee_goal = np.asarray(robot.ee_transform(q_goal))[:3, 3]
-# Intermediate target: modest offset from the start pose (reachable, visibly off the start→goal chord).
+# Intermediate target: modest offset from the start pose.
 ee_waypoint = ee_start + np.array([0.08, 0.05, 0.04])
 
 q_min = np.asarray(robot.joint_lower_limits, dtype=float)
@@ -277,10 +277,7 @@ def visualize(
             _t_nodes = np.asarray(_t_nodes_raw).flatten()
         _q_ms, _t_ms = _q_from_V_multishot(_V, _n_x, _n_u, q.slice, _t_nodes)
         if _q_ms is not None:
-            print(
-                f"[viser] Multishot V: {len(_q_ms)} frames across "
-                f"{len(_t_nodes) - 1} segments."
-            )
+            print(f"[viser] Multishot V: {len(_q_ms)} frames across {len(_t_nodes) - 1} segments.")
             q_traj, t_vec = _q_ms, _t_ms
             # Torque is ZOH: replicate each node's tau value across its substeps.
             _tau_nodes = np.asarray(results.nodes["tau"])
@@ -334,9 +331,17 @@ def visualize(
 
         _link_visual_files = {
             "link0": [
-                "link0_0.obj", "link0_1.obj", "link0_2.obj", "link0_3.obj",
-                "link0_4.obj", "link0_5.obj", "link0_7.obj", "link0_8.obj",
-                "link0_9.obj", "link0_10.obj", "link0_11.obj",
+                "link0_0.obj",
+                "link0_1.obj",
+                "link0_2.obj",
+                "link0_3.obj",
+                "link0_4.obj",
+                "link0_5.obj",
+                "link0_7.obj",
+                "link0_8.obj",
+                "link0_9.obj",
+                "link0_10.obj",
+                "link0_11.obj",
             ],
             "link1": ["link1.obj"],
             "link2": ["link2.obj"],
@@ -344,15 +349,33 @@ def visualize(
             "link4": ["link4_0.obj", "link4_1.obj", "link4_2.obj", "link4_3.obj"],
             "link5": ["link5_0.obj", "link5_1.obj", "link5_2.obj"],
             "link6": [
-                "link6_0.obj", "link6_1.obj", "link6_2.obj", "link6_3.obj",
-                "link6_4.obj", "link6_5.obj", "link6_6.obj", "link6_7.obj",
-                "link6_8.obj", "link6_9.obj", "link6_10.obj", "link6_11.obj",
-                "link6_12.obj", "link6_13.obj", "link6_14.obj", "link6_15.obj",
+                "link6_0.obj",
+                "link6_1.obj",
+                "link6_2.obj",
+                "link6_3.obj",
+                "link6_4.obj",
+                "link6_5.obj",
+                "link6_6.obj",
+                "link6_7.obj",
+                "link6_8.obj",
+                "link6_9.obj",
+                "link6_10.obj",
+                "link6_11.obj",
+                "link6_12.obj",
+                "link6_13.obj",
+                "link6_14.obj",
+                "link6_15.obj",
                 "link6_16.obj",
             ],
             "link7": [
-                "link7_0.obj", "link7_1.obj", "link7_2.obj", "link7_3.obj",
-                "link7_4.obj", "link7_5.obj", "link7_6.obj", "link7_7.obj",
+                "link7_0.obj",
+                "link7_1.obj",
+                "link7_2.obj",
+                "link7_3.obj",
+                "link7_4.obj",
+                "link7_5.obj",
+                "link7_6.obj",
+                "link7_7.obj",
             ],
         }
 
@@ -460,7 +483,10 @@ def visualize(
 
         def update_robot(frame_idx: int) -> None:
             pts = np.stack(
-                [np.stack([keypoints[frame_idx, k], keypoints[frame_idx, k + 1]]) for k in range(n_segs)]
+                [
+                    np.stack([keypoints[frame_idx, k], keypoints[frame_idx, k + 1]])
+                    for k in range(n_segs)
+                ]
             ).astype(np.float32)
             arm_handle.points = pts
 

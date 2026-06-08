@@ -84,9 +84,7 @@ _wp_configs = [q_home, q_pre_grasp, q_grasp, q_pre_grasp, q_pre_place, q_place]
 _wp_names = ["home", "pre_grasp", "grasp", "pre_grasp", "pre_place", "place"]
 
 # Compute EE targets from FK (exact, no IK error)
-waypoint_ee_positions = [
-    np.asarray(robot.ee_transform(q_i))[:3, 3] for q_i in _wp_configs
-]
+waypoint_ee_positions = [np.asarray(robot.ee_transform(q_i))[:3, 3] for q_i in _wp_configs]
 
 nodes_per_segment = 4
 n_segments = len(_wp_configs) - 1  # 5
@@ -136,6 +134,7 @@ for control in dyn.controls:
 # All BYOF CTCS use idx=0 (sharing the same augmented state as the symbolic
 # box CTCS above).  Sign convention: g <= 0 means satisfied.
 
+
 # --- Nodal EE position constraints (one per waypoint) ---------------------
 # Use a factory to capture each waypoint array without adding extra parameters
 # to the BYOF function signature (which must be exactly (x, u, node, params)).
@@ -145,6 +144,7 @@ def _make_ee_pos_residual(wp_jnp):
         T = robot.ee_transform(q_val)
         p = jnp.asarray(T)[:3, 3]
         return jnp.linalg.norm(p - wp_jnp) - ee_tol
+
     return _fn
 
 
@@ -319,10 +319,7 @@ def visualize(results, robot) -> None:
             _t_nodes = np.asarray(_t_nodes_raw).flatten()
         _q_ms, _t_ms = _q_from_V_multishot(_V, _n_x, _n_u, q.slice, _t_nodes)
         if _q_ms is not None:
-            print(
-                f"[viser] Multishot V: {len(_q_ms)} frames across "
-                f"{len(_t_nodes) - 1} segments."
-            )
+            print(f"[viser] Multishot V: {len(_q_ms)} frames across {len(_t_nodes) - 1} segments.")
             q_traj, t_vec = _q_ms, _t_ms
         else:
             print("[viser] Multishot V extraction failed; using post-process trajectory.")
@@ -386,9 +383,17 @@ def visualize(results, robot) -> None:
 
         _link_visual_files = {
             "link0": [
-                "link0_0.obj", "link0_1.obj", "link0_2.obj", "link0_3.obj",
-                "link0_4.obj", "link0_5.obj", "link0_7.obj", "link0_8.obj",
-                "link0_9.obj", "link0_10.obj", "link0_11.obj",
+                "link0_0.obj",
+                "link0_1.obj",
+                "link0_2.obj",
+                "link0_3.obj",
+                "link0_4.obj",
+                "link0_5.obj",
+                "link0_7.obj",
+                "link0_8.obj",
+                "link0_9.obj",
+                "link0_10.obj",
+                "link0_11.obj",
             ],
             "link1": ["link1.obj"],
             "link2": ["link2.obj"],
@@ -396,15 +401,33 @@ def visualize(results, robot) -> None:
             "link4": ["link4_0.obj", "link4_1.obj", "link4_2.obj", "link4_3.obj"],
             "link5": ["link5_0.obj", "link5_1.obj", "link5_2.obj"],
             "link6": [
-                "link6_0.obj", "link6_1.obj", "link6_2.obj", "link6_3.obj",
-                "link6_4.obj", "link6_5.obj", "link6_6.obj", "link6_7.obj",
-                "link6_8.obj", "link6_9.obj", "link6_10.obj", "link6_11.obj",
-                "link6_12.obj", "link6_13.obj", "link6_14.obj", "link6_15.obj",
+                "link6_0.obj",
+                "link6_1.obj",
+                "link6_2.obj",
+                "link6_3.obj",
+                "link6_4.obj",
+                "link6_5.obj",
+                "link6_6.obj",
+                "link6_7.obj",
+                "link6_8.obj",
+                "link6_9.obj",
+                "link6_10.obj",
+                "link6_11.obj",
+                "link6_12.obj",
+                "link6_13.obj",
+                "link6_14.obj",
+                "link6_15.obj",
                 "link6_16.obj",
             ],
             "link7": [
-                "link7_0.obj", "link7_1.obj", "link7_2.obj", "link7_3.obj",
-                "link7_4.obj", "link7_5.obj", "link7_6.obj", "link7_7.obj",
+                "link7_0.obj",
+                "link7_1.obj",
+                "link7_2.obj",
+                "link7_3.obj",
+                "link7_4.obj",
+                "link7_5.obj",
+                "link7_6.obj",
+                "link7_7.obj",
             ],
         }
 
@@ -536,10 +559,7 @@ if __name__ == "__main__":
     print("Franka Panda Pick-and-Place via frax dynamics")
     print("=" * 60)
     print(f"Nodes: {n}  ({nodes_per_segment} per segment, {n_segments} segments)")
-    print(
-        f"Obstacle: center={list(np.round(obstacle_center, 3))} m, "
-        f"r={obstacle_radius} m"
-    )
+    print(f"Obstacle: center={list(np.round(obstacle_center, 3))} m, r={obstacle_radius} m")
     for name, pos, node in zip(_wp_names, waypoint_ee_positions, waypoint_nodes):
         print(f"  {name:>12s} (node {node:2d}): EE={list(np.round(pos, 3))}")
     print()

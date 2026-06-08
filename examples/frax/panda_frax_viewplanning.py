@@ -172,6 +172,7 @@ _A_cone_jnp = jnp.array(A_cone)
 _c_jnp = jnp.array(_c_np)
 _R_sb_jnp = jnp.array(R_sb)
 
+
 # Use a factory so each viewpoint is captured cleanly without adding extra
 # parameters to the BYOF function signature (must be exactly (x, u, node, params)).
 def _make_vp_ctcs(pt_jnp):
@@ -187,12 +188,11 @@ def _make_vp_ctcs(pt_jnp):
         vec = _A_cone_jnp @ p_s
         safe_norm = jnp.sqrt(jnp.sum(vec**2) + 1e-30)
         return safe_norm - (_c_jnp @ p_s)
+
     return _fn
 
 
-_byof_ctcs_vp = [
-    {"constraint_fn": _make_vp_ctcs(jnp.array(pt))} for pt in vp_targets
-]
+_byof_ctcs_vp = [{"constraint_fn": _make_vp_ctcs(jnp.array(pt))} for pt in vp_targets]
 
 byof: dict = {
     "nodal_constraints": [
@@ -341,10 +341,7 @@ def visualize(results, robot) -> None:
             _t_nodes = np.asarray(_t_nodes_raw).flatten()
         _q_ms, _t_ms = _q_from_V_multishot(_V, _n_x, _n_u, q.slice, _t_nodes)
         if _q_ms is not None:
-            print(
-                f"[viser] Multishot V: {len(_q_ms)} frames across "
-                f"{len(_t_nodes) - 1} segments."
-            )
+            print(f"[viser] Multishot V: {len(_q_ms)} frames across {len(_t_nodes) - 1} segments.")
             q_traj, t_vec = _q_ms, _t_ms
         else:
             print("[viser] Multishot V extraction failed; using post-process trajectory.")
@@ -410,9 +407,17 @@ def visualize(results, robot) -> None:
 
         _link_visual_files = {
             "link0": [
-                "link0_0.obj", "link0_1.obj", "link0_2.obj", "link0_3.obj",
-                "link0_4.obj", "link0_5.obj", "link0_7.obj", "link0_8.obj",
-                "link0_9.obj", "link0_10.obj", "link0_11.obj",
+                "link0_0.obj",
+                "link0_1.obj",
+                "link0_2.obj",
+                "link0_3.obj",
+                "link0_4.obj",
+                "link0_5.obj",
+                "link0_7.obj",
+                "link0_8.obj",
+                "link0_9.obj",
+                "link0_10.obj",
+                "link0_11.obj",
             ],
             "link1": ["link1.obj"],
             "link2": ["link2.obj"],
@@ -420,15 +425,33 @@ def visualize(results, robot) -> None:
             "link4": ["link4_0.obj", "link4_1.obj", "link4_2.obj", "link4_3.obj"],
             "link5": ["link5_0.obj", "link5_1.obj", "link5_2.obj"],
             "link6": [
-                "link6_0.obj", "link6_1.obj", "link6_2.obj", "link6_3.obj",
-                "link6_4.obj", "link6_5.obj", "link6_6.obj", "link6_7.obj",
-                "link6_8.obj", "link6_9.obj", "link6_10.obj", "link6_11.obj",
-                "link6_12.obj", "link6_13.obj", "link6_14.obj", "link6_15.obj",
+                "link6_0.obj",
+                "link6_1.obj",
+                "link6_2.obj",
+                "link6_3.obj",
+                "link6_4.obj",
+                "link6_5.obj",
+                "link6_6.obj",
+                "link6_7.obj",
+                "link6_8.obj",
+                "link6_9.obj",
+                "link6_10.obj",
+                "link6_11.obj",
+                "link6_12.obj",
+                "link6_13.obj",
+                "link6_14.obj",
+                "link6_15.obj",
                 "link6_16.obj",
             ],
             "link7": [
-                "link7_0.obj", "link7_1.obj", "link7_2.obj", "link7_3.obj",
-                "link7_4.obj", "link7_5.obj", "link7_6.obj", "link7_7.obj",
+                "link7_0.obj",
+                "link7_1.obj",
+                "link7_2.obj",
+                "link7_3.obj",
+                "link7_4.obj",
+                "link7_5.obj",
+                "link7_6.obj",
+                "link7_7.obj",
             ],
         }
 
