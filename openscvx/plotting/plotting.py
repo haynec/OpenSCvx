@@ -1,7 +1,20 @@
+from pathlib import Path
+
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from openscvx.algorithms import OptimizationResults
+
+from .publication import (
+    PlotStyle,
+    VarSpec,
+    apply_publication_plotly_layout,
+    expand_var_components,
+    latex_component_label,
+    publication_trace_colors,
+    save_timeseries_pdf,
+    wrap_publication_figure,
+)
 
 
 def _get_var(result: OptimizationResults, var_name: str, var_list: list):
@@ -48,6 +61,7 @@ def _add_component_traces(
     impulsive: bool = False,
     plot_trajectory: bool = True,
     split_nodes: bool = False,
+    colors: dict[str, str] | None = None,
 ):
     """Add traces for a single component of a variable to a subplot.
 
@@ -63,6 +77,15 @@ def _add_component_traces(
         max_val: Optional maximum bound to show as horizontal line
     """
     import numpy as np
+
+    if colors is None:
+        colors = {
+            "trajectory": "green",
+            "nodes": "cyan",
+            "nodes_prior": "#D98B8B",
+            "bounds": "red",
+            "impulses": "orange",
+        }
 
     t_nodes = result.nodes["time"].flatten()
     has_trajectory = bool(result.trajectory) and var_name in result.trajectory
@@ -80,7 +103,7 @@ def _add_component_traces(
                 name="Trajectory",
                 showlegend=show_legend,
                 legendgroup="trajectory",
-                line={"color": "green", "width": 2},
+                line={"color": colors["trajectory"], "width": 2},
             ),
             row=row,
             col=col,
@@ -99,7 +122,7 @@ def _add_component_traces(
                     name="Prior state",
                     showlegend=show_legend,
                     legendgroup="nodes_prior",
-                    marker={"color": "#D98B8B", "size": 7, "symbol": "diamond"},
+                    marker={"color": colors["nodes_prior"], "size": 7, "symbol": "diamond"},
                 ),
                 row=row,
                 col=col,
@@ -113,7 +136,7 @@ def _add_component_traces(
                         name="Posterior state",
                         showlegend=show_legend,
                         legendgroup="nodes_posterior",
-                        marker={"color": "cyan", "size": 6, "symbol": "circle"},
+                        marker={"color": colors["nodes"], "size": 6, "symbol": "circle"},
                     ),
                     row=row,
                     col=col,
@@ -127,7 +150,7 @@ def _add_component_traces(
                     name="Nodes",
                     showlegend=show_legend,
                     legendgroup="nodes",
-                    marker={"color": "cyan", "size": 6, "symbol": "circle"},
+                    marker={"color": colors["nodes"], "size": 6, "symbol": "circle"},
                 ),
                 row=row,
                 col=col,
@@ -149,7 +172,7 @@ def _add_component_traces(
                         name="Impulses",
                         showlegend=show_legend,
                         legendgroup="impulses",
-                        line={"color": "orange", "width": 2, "dash": "dash"},
+                        line={"color": colors["impulses"], "width": 2, "dash": "dash"},
                     ),
                     row=row,
                     col=col,
@@ -160,14 +183,14 @@ def _add_component_traces(
     if min_val is not None and np.isfinite(min_val):
         fig.add_hline(
             y=min_val,
-            line={"color": "red", "width": 1.5, "dash": "dash"},
+            line={"color": colors["bounds"], "width": 1.5, "dash": "dash"},
             row=row,
             col=col,
         )
     if max_val is not None and np.isfinite(max_val):
         fig.add_hline(
             y=max_val,
-            line={"color": "red", "width": 1.5, "dash": "dash"},
+            line={"color": colors["bounds"], "width": 1.5, "dash": "dash"},
             row=row,
             col=col,
         )
@@ -270,9 +293,11 @@ def plot_state_component(
 
 def plot_states(
     result: OptimizationResults,
-    state_names: list[str] | None = None,
+    state_names: list[VarSpec] | None = None,
     include_private: bool = False,
     cols: int = 4,
+    style: PlotStyle = "dark",
+    pdf_path: str | Path | None = None,
 ) -> go.Figure:
     """Plot state variables in a subplot grid.
 
@@ -282,52 +307,50 @@ def plot_states(
     Args:
         result: Optimization results containing state trajectories
         state_names: List of state names to plot. If None, plots all states.
+            For multidimensional states, pass a single component with
+            ``("position", 0)``, ``"position:0"``, or ``"position[0]"``.
         include_private: Whether to include private states (names starting with '_')
         cols: Maximum number of columns in subplot grid
+        style: ``"dark"`` for the default Plotly theme, or ``"publication"`` for
+            a white theme with Latin Modern fonts, LaTeX labels, and automatic
+            PDF export.
+        pdf_path: Output path for the PDF when ``style="publication"``. Defaults
+            to ``figures/state_trajectories.pdf``.
 
     Returns:
-        Plotly figure with subplot grid
+        Plotly figure, or a :class:`~openscvx.plotting.publication.PublicationFigure`
+        wrapper when ``style="publication"``.
 
     Examples:
         >>> plot_states(result, ["position"])  # 3 subplots for x, y, z
-        >>> plot_states(result, ["position", "velocity"])  # 6 subplots
-        >>> plot_states(result)  # All states
+        >>> plot_states(result, ["position:2"])  # z component only
+        >>> plot_states(result, [("position", 0), "velocity"])  # x and all velocity
+        >>> plot_states(result, style="publication", pdf_path="figures/states.pdf")
     """
 
-    states = result._states
-    if not include_private:
-        states = [s for s in states if not s.name.startswith("_")]
+    components = expand_var_components(
+        result,
+        state_names,
+        result._states,
+        include_private=include_private,
+    )
 
-    if state_names is not None:
-        available = {s.name for s in states}
-        missing = set(state_names) - available
-        if missing:
-            raise ValueError(f"States not found in result: {missing}")
-        # Preserve order from state_names
-        state_order = {name: i for i, name in enumerate(state_names)}
-        states = sorted(
-            [s for s in states if s.name in state_names],
-            key=lambda s: state_order[s.name],
-        )
-
-    # Build list of (display_name, var_name, component_idx)
-    components = []
-    for s in states:
-        dim = _get_var_dim(result, s.name, result._states)
-        if dim == 1:
-            components.append((s.name, s.name, 0))
-        else:
-            for i in range(dim):
-                components.append((f"{s.name}_{i}", s.name, i))
-
-    if not components:
-        raise ValueError("No state components to plot")
+    publication = style == "publication"
+    colors = publication_trace_colors() if publication else None
 
     n_cols = min(cols, len(components))
     n_rows = (len(components) + n_cols - 1) // n_cols
 
-    fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[c[0] for c in components])
-    fig.update_layout(title_text="State Trajectories", template="plotly_dark")
+    if publication:
+        subplot_titles = [""] * len(components)
+    else:
+        subplot_titles = [c[0] for c in components]
+
+    fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=subplot_titles)
+    if publication:
+        apply_publication_plotly_layout(fig, n_rows=n_rows, n_cols=n_cols)
+    else:
+        fig.update_layout(title_text="State Trajectories", template="plotly_dark")
 
     has_impulsive_controls = _has_impulsive_controls(result)
 
@@ -350,11 +373,44 @@ def plot_states(
             min_val=min_val,
             max_val=max_val,
             split_nodes=has_impulsive_controls,
+            colors=colors,
         )
 
+        if publication:
+            fig.update_yaxes(
+                title_text=latex_component_label(
+                    var_name,
+                    comp_idx,
+                    dim=_get_var_dim(result, var_name, result._states),
+                ),
+                row=row,
+                col=col,
+            )
+
     # Add x-axis labels to bottom row
+    x_label = r"$t\,\mathrm{(s)}$" if publication else "Time (s)"
     for col_idx in range(1, n_cols + 1):
-        fig.update_xaxes(title_text="Time (s)", row=n_rows, col=col_idx)
+        fig.update_xaxes(title_text=x_label, row=n_rows, col=col_idx)
+
+    if publication:
+
+        def _save(path: str | Path) -> None:
+            save_timeseries_pdf(
+                result,
+                components,
+                var_list=result._states,
+                path=path,
+                suptitle="",
+                cols=cols,
+                split_nodes=has_impulsive_controls,
+            )
+
+        return wrap_publication_figure(
+            fig,
+            pdf_path=pdf_path,
+            default_pdf_name="state_trajectories.pdf",
+            save_fn=_save,
+        )
 
     return fig
 
@@ -453,9 +509,11 @@ def plot_control_component(
 
 def plot_controls(
     result: OptimizationResults,
-    control_names: list[str] | None = None,
+    control_names: list[VarSpec] | None = None,
     include_private: bool = False,
     cols: int = 3,
+    style: PlotStyle = "dark",
+    pdf_path: str | Path | None = None,
 ) -> go.Figure:
     """Plot control variables in a subplot grid.
 
@@ -465,51 +523,49 @@ def plot_controls(
     Args:
         result: Optimization results containing control trajectories
         control_names: List of control names to plot. If None, plots all controls.
+            For multidimensional controls, pass a single component with
+            ``("thrust_force", 2)``, ``"thrust_force:2"``, or ``"thrust_force[2]"``.
         include_private: Whether to include private controls (names starting with '_')
         cols: Maximum number of columns in subplot grid
+        style: ``"dark"`` for the default Plotly theme, or ``"publication"`` for
+            a white theme with Latin Modern fonts, LaTeX labels, and automatic
+            PDF export.
+        pdf_path: Output path for the PDF when ``style="publication"``. Defaults
+            to ``figures/control_trajectories.pdf``.
 
     Returns:
-        Plotly figure with subplot grid
+        Plotly figure, or a :class:`~openscvx.plotting.publication.PublicationFigure`
+        wrapper when ``style="publication"``.
 
     Examples:
-        >>> plot_controls(result, ["thrust"])  # 3 subplots for x, y, z
-        >>> plot_controls(result)  # All controls
+        >>> plot_controls(result, ["thrust_force"])  # 3 subplots for x, y, z
+        >>> plot_controls(result, ["thrust_force:2"])  # fz only
+        >>> plot_controls(result, style="publication")
     """
 
-    controls = result._controls
-    if not include_private:
-        controls = [c for c in controls if not c.name.startswith("_")]
+    components = expand_var_components(
+        result,
+        control_names,
+        result._controls,
+        include_private=include_private,
+    )
 
-    if control_names is not None:
-        available = {c.name for c in controls}
-        missing = set(control_names) - available
-        if missing:
-            raise ValueError(f"Controls not found in result: {missing}")
-        # Preserve order from control_names
-        control_order = {name: i for i, name in enumerate(control_names)}
-        controls = sorted(
-            [c for c in controls if c.name in control_names],
-            key=lambda c: control_order[c.name],
-        )
-
-    # Build list of (display_name, var_name, component_idx)
-    components = []
-    for c in controls:
-        dim = _get_var_dim(result, c.name, result._controls)
-        if dim == 1:
-            components.append((c.name, c.name, 0))
-        else:
-            for i in range(dim):
-                components.append((f"{c.name}_{i}", c.name, i))
-
-    if not components:
-        raise ValueError("No control components to plot")
+    publication = style == "publication"
+    colors = publication_trace_colors() if publication else None
 
     n_cols = min(cols, len(components))
     n_rows = (len(components) + n_cols - 1) // n_cols
 
-    fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[c[0] for c in components])
-    fig.update_layout(title_text="Control Trajectories", template="plotly_dark")
+    if publication:
+        subplot_titles = [""] * len(components)
+    else:
+        subplot_titles = [c[0] for c in components]
+
+    fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=subplot_titles)
+    if publication:
+        apply_publication_plotly_layout(fig, n_rows=n_rows, n_cols=n_cols)
+    else:
+        fig.update_layout(title_text="Control Trajectories", template="plotly_dark")
 
     for idx, (_, var_name, comp_idx) in enumerate(components):
         row = (idx // n_cols) + 1
@@ -533,11 +589,45 @@ def plot_controls(
             max_val=max_val,
             impulsive=is_impulsive,
             plot_trajectory=not is_impulsive,
+            colors=colors,
         )
 
+        if publication:
+            fig.update_yaxes(
+                title_text=latex_component_label(
+                    var_name,
+                    comp_idx,
+                    dim=_get_var_dim(result, var_name, result._controls),
+                ),
+                row=row,
+                col=col,
+            )
+
     # Add x-axis labels to bottom row
+    x_label = r"$t\,\mathrm{(s)}$" if publication else "Time (s)"
     for col_idx in range(1, n_cols + 1):
-        fig.update_xaxes(title_text="Time (s)", row=n_rows, col=col_idx)
+        fig.update_xaxes(title_text=x_label, row=n_rows, col=col_idx)
+
+    if publication:
+
+        def _save(path: str | Path) -> None:
+            save_timeseries_pdf(
+                result,
+                components,
+                var_list=result._controls,
+                path=path,
+                suptitle="",
+                cols=cols,
+                impulsive_fn=_is_impulsive_control,
+                plot_trajectory_fn=lambda name: not _is_impulsive_control(result, name),
+            )
+
+        return wrap_publication_figure(
+            fig,
+            pdf_path=pdf_path,
+            default_pdf_name="control_trajectories.pdf",
+            save_fn=_save,
+        )
 
     return fig
 

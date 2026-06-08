@@ -60,6 +60,7 @@ from .animated import (
     add_position_marker,
     add_target_marker,
     add_target_markers,
+    add_thrust_plume,
     add_thrust_vector,
     add_viewcone,
 )
@@ -104,6 +105,7 @@ __all__ = [
     "add_target_marker",
     "add_target_markers",
     "add_thrust_vector",
+    "add_thrust_plume",
     "add_attitude_frame",
     "add_viewcone",
     # Animation controls

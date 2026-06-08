@@ -20,6 +20,7 @@ from openscvx.plotting.plotting import (
     plot_state_component,
     plot_states,
 )
+from openscvx.plotting.publication import PublicationFigure, parse_var_spec
 
 
 class TestPlotStatesFunction:
@@ -137,6 +138,51 @@ class TestPlotStatesFunction:
         # Should only have traces for position (2 components * 2 traces each = 4)
         # Each component gets trajectory + nodes trace
         assert len(fig.data) == 4
+
+    def test_plot_states_single_component_spec(self):
+        """Test plot_states with a single multidimensional component."""
+        result = Mock(spec=OptimizationResults)
+
+        result.nodes = {
+            "time": np.linspace(0, 1, 10).reshape(-1, 1),
+            "position": np.random.randn(10, 3),
+        }
+
+        result.trajectory = {
+            "time": np.linspace(0, 1, 100).reshape(-1, 1),
+            "position": np.random.randn(100, 3),
+        }
+
+        pos_state = Mock()
+        pos_state.name = "position"
+        pos_state._slice = slice(0, 3)
+        pos_state.min = None
+        pos_state.max = None
+
+        result._states = [pos_state]
+        result._controls = []
+
+        fig = plot_states(result, ["position:2"])
+        assert fig is not None
+        assert len(fig.data) == 2
+
+        fig_tuple = plot_states(result, [("position", 1)])
+        assert len(fig_tuple.data) == 2
+
+    def test_plot_states_publication_style(self, mock_result_basic, tmp_path):
+        """Test publication style returns wrapper and saves PDF."""
+        pdf_path = tmp_path / "states.pdf"
+        fig = plot_states(
+            mock_result_basic,
+            style="publication",
+            pdf_path=pdf_path,
+        )
+        assert isinstance(fig, PublicationFigure)
+        assert pdf_path.is_file()
+        # 3 panels in one row: 3 * 320 + margins
+        assert fig.layout.width == 1088
+        assert fig.layout.height == 400
+        assert fig.layout.autosize is False
 
     def test_plot_states_with_empty_trajectory(self):
         """Test plot_states when trajectory is empty."""
@@ -435,6 +481,28 @@ class TestPlotControlsFunction:
 
         # Should have exactly 2 legend traces (Trajectory and Nodes)
         assert len(legend_traces) == 2
+
+    def test_plot_controls_single_component_spec(self, mock_result_basic):
+        """Test plot_controls with a single multidimensional component."""
+        fig = plot_controls(mock_result_basic, ["control_u:1"])
+        assert fig is not None
+        assert len(fig.data) == 2
+
+
+class TestVarSpecParsing:
+    """Test variable spec parsing for component selection."""
+
+    def test_parse_var_spec_plain_name(self):
+        assert parse_var_spec("position") == ("position", None)
+
+    def test_parse_var_spec_colon_syntax(self):
+        assert parse_var_spec("position:2") == ("position", 2)
+
+    def test_parse_var_spec_bracket_syntax(self):
+        assert parse_var_spec("velocity[0]") == ("velocity", 0)
+
+    def test_parse_var_spec_tuple(self):
+        assert parse_var_spec(("thrust_force", 2)) == ("thrust_force", 2)
 
 
 class TestPlotControlComponentFunction:

@@ -71,6 +71,10 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 import openscvx as ox
+from examples.plotting_viser import (
+    build_cad_link_snapshot_builder,
+    create_snapshot_plotting_server,
+)
 from openscvx.plotting import plot_controls, plot_scp_iterations
 
 # =============================================================================
@@ -197,7 +201,7 @@ waypoint_positions = [home_pos, pre_grasp_pos, grasp_pos, pre_grasp_pos, pre_pla
 # Use EE-pointing-down orientation for all IK keyframes
 waypoint_orientations = [q_down] * len(waypoint_names)
 
-nodes_per_segment = 2
+nodes_per_segment = 1
 n_segments = len(waypoint_positions) - 1
 n = nodes_per_segment * n_segments + 1
 waypoint_nodes = [i * nodes_per_segment for i in range(len(waypoint_positions))]
@@ -377,7 +381,7 @@ problem = ox.Problem(
         "lam_vb": 1e1,
         "lam_vc": 4e2,
         "lam_cost": 4e-1,
-        "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
+        "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0, ep=1e-1),
     },
     algebraic_prop={
         "ee_position": p_ee,
@@ -907,6 +911,30 @@ if __name__ == "__main__":
         traj_time,
         _anim_cb,
         loop=True,
+    )
+
+    _cad_snapshot_builder = None
+    if _use_cad_mesh:
+        _cad_snapshot_builder = build_cad_link_snapshot_builder(
+            _link_meshes_local,
+            _link_world_T,
+            link_colors=_link_color,
+        )
+    create_snapshot_plotting_server(
+        results,
+        position_key="ee_position",
+        velocity_key="velocity",
+        show_body_frame=False,
+        show_viewcone=False,
+        waypoint_positions=[np.asarray(p) for p in waypoint_positions],
+        waypoint_colors=[_marker_colors[name] for name in waypoint_names],
+        obstacle_center=obstacle_center,
+        obstacle_radius=obstacle_radius,
+        arm_keypoints=None if _use_cad_mesh else keypoints,
+        snapshot_builder=_cad_snapshot_builder,
+        initial_n_snapshots=5,
+        target_radius=0.012,
+        ghost_point_size=0.005,
     )
 
     server.sleep_forever()

@@ -24,12 +24,12 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 import openscvx as ox
-from examples.plotting import plot_dubins_car, plot_velocity_vs_waypoint
+from examples.plotting import plot_dubins_car_waypoint_stl, plot_velocity_vs_waypoint
 from openscvx import Problem
 from openscvx.plotting import plot_controls, plot_states
 
-n = 20
-total_time = 3.0  # Total simulation time
+n = 30
+total_time = 2.5  # Total simulation time
 
 # Define state components
 position = ox.State("position", shape=(2,))  # 2D position [x, y]
@@ -95,7 +95,7 @@ constraints.append(
 
 constraints.append(
     ox.ctcs(waypoint_region).over(
-        (8, 12),
+        (10, 20),
     )
 )
 
@@ -133,16 +133,18 @@ problem = Problem(
         "lam_prox": 6e-3,
         "lam_vc": 1e1,
         "lam_cost": 1e-3,
-        "ep_vc": 1e-6,
-        "ep_tr": 1e-3,
+        # "ep_vc": 1e-6,
+        # "ep_tr": 1e-3,
     },
     float_dtype="float64",
     licq_max=1e-10,
     solver={
-        "cvx_solver": "CLARABEL",
+        "cvx_solver": "Mosek",
         "solver_args": {
             "canon_backend": "COO",
             "enforce_dpp": True,
+            # "abstol": 1e-7,
+            # "reltol": 1e-10,
         },
     },
 )
@@ -166,8 +168,9 @@ if __name__ == "__main__":
     results = problem.post_process()
     results.update(plotting_dict)
 
-    # Plot trajectory
-    plot_dubins_car(results, problem.settings).show()
+    dubins_fig = plot_dubins_car_waypoint_stl(results, problem.settings)
+    dubins_fig.show()
+    dubins_fig.save_pdf("figures/dubins_car_waypoint_stl.pdf")
     plot_states(results).show()
     plot_controls(results).show()
 
