@@ -26,6 +26,7 @@ from examples.plotting_viser import (
     create_scp_animated_plotting_server,
 )
 from openscvx import Problem
+from openscvx.plotting.viser.coordinates import model_vec_to_viser_xyz
 from openscvx.utils import printing as _openscvx_printing
 
 
@@ -94,27 +95,13 @@ def print_scp_table_header_once(problem: Problem) -> None:
 
 _silence_openscvx_console_printing()
 
-# Position components live at indices 1:4 in the state vector (mass is index 0).
+# Alias for scripts that imported POSITION_STATE_SLICE from this module.
 POSITION_STATE_SLICE = slice(1, 4)
 
 
-def model_vec_to_viser_xyz(v: np.ndarray) -> np.ndarray:
-    """Map model-frame 3-vectors to Viser (x, y, z): (z, y, x) component order → (x, y, z).
-
-    Linear involution: same mapping converts Viser coordinates back to model.
-    """
-    a = np.asarray(v, dtype=np.float64)
-    if a.size == 0:
-        return a
-    if a.ndim == 1 and a.shape[0] == 3:
-        return np.array([a[2], a[1], a[0]], dtype=np.float64)
-    if a.ndim >= 2 and a.shape[-1] == 3:
-        return np.stack([a[..., 2], a[..., 1], a[..., 0]], axis=-1)
-    return a
-
-
 def remap_optimization_results_for_viser_xyz(
-    results, position_slice: slice = POSITION_STATE_SLICE
+    results,
+    position_slice: slice = POSITION_STATE_SLICE,
 ) -> None:
     """After ``post_process()``, remap stored trajectories and SCP history for Viser axes."""
     traj = results.trajectory

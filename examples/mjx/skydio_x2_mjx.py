@@ -50,6 +50,7 @@ import openscvx as ox
 from examples.plotting_viser import (
     create_animated_plotting_server,
     create_scp_animated_plotting_server,
+    create_snapshot_plotting_server,
 )
 from openscvx import Problem
 from openscvx.utils import gen_vertices, rot
@@ -176,7 +177,6 @@ problem = Problem(
         "lam_prox": 1e-1,
         "lam_cost": 1e-2,
         "lam_vc": 1e1,
-        # "autotuner": ox.ConstantProximalWeight(),
     },
     float_dtype="float64",
 )
@@ -268,6 +268,10 @@ if __name__ == "__main__":
         results,
         position_slice=slice(0, 3),
         attitude_slice=slice(3, 7),
+    )
+    snapshot_server = create_snapshot_plotting_server(
+        results,
+        initial_n_snapshots=5,
     )
     traj_server.sleep_forever()
     scp_server.sleep_forever()

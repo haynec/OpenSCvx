@@ -1,9 +1,9 @@
-"""Franka FR3 v2 view planning — wrist camera viewcone + PoE FK.
+"""Franka FR3 v2 view planning with nodal viewcone constraints — PoE FK.
 
 Same kinematics and MuJoCo Menagerie visualisation as
 ``franka_fr3v2_pick_place.py``, but the task matches ``7_dof_arm_vp.py``:
 move the end-effector while keeping several workspace points inside a
-wrist-mounted camera field of view (continuous viewcone inequality).
+wrist-mounted camera field of view (**nodal** viewcone inequality at each node).
 
 Kinematics
 ----------
@@ -105,6 +105,7 @@ A_cone = np.diag(
 )
 c = jnp.array([0, 0, 1])
 norm_type = 2
+# R_sb = jnp.array([[0, 1, 0], [0, 0, 1], [1, 0, 0]])
 R_sb = np.eye(3)
 
 vp_targets = np.array(
@@ -119,8 +120,8 @@ vp_targets = np.array(
 # Discretisation
 # =============================================================================
 
-n = 9
-total_time = 5.0
+n = 2
+total_time = 1.5
 
 # =============================================================================
 # States and controls
@@ -201,15 +202,11 @@ def g_vp(p_target):
 
 
 constraints.append(
-    ox.ctcs(
-        ox.Vmap(
-            lambda pose: g_vp(pose),
-            batch=vp_targets,
-        )
-        <= 0.0,
-        penalty="smooth_relu",
-        idx=1,
+    ox.Vmap(
+        lambda pose: g_vp(pose),
+        batch=vp_targets,
     )
+    <= 0.0
 )
 
 # =============================================================================
@@ -270,9 +267,7 @@ problem = ox.Problem(
     algorithm={
         "lam_vb": 1e0,
         "lam_vc": 1e1,
-        "ep_tr": 1e-6,
-        # "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
-        "autotuner": ox.RampProximalWeight(ramp_factor=1.1, lam_prox_max=1e1),
+        "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
     },
     float_dtype="float64",
     licq_max=1e-8,
@@ -289,7 +284,7 @@ problem.settings.prp.dt = 0.01
 # =============================================================================
 
 if __name__ == "__main__":
-    print("Franka FR3 v2 View Planning — PoE FK + wrist camera viewcone")
+    print("Franka FR3 v2 View Planning (nodal) — PoE FK + wrist camera viewcone")
     print("=" * 60)
     print(f"Nodes: {n}  |  View targets: {len(vp_targets)}")
     print(f"Start EE (nominal): {home_ee_pos}")

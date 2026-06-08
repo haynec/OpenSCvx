@@ -27,11 +27,12 @@ import openscvx as ox
 from examples.plotting_viser import (
     create_animated_plotting_server,
     create_scp_animated_plotting_server,
+    create_snapshot_plotting_server,
 )
 from openscvx import Problem
 
 n = 6  # Number of nodes
-total_time = 10.0  # Total time for the simulation
+total_time = 30.0  # Total time for the simulation
 
 # =============================================================================
 # State and Control Definitions
@@ -39,10 +40,10 @@ total_time = 10.0  # Total time for the simulation
 
 # 3D position
 position = ox.State("position", shape=(3,))
-position.max = np.array([15.0, 15.0, 15.0])
+position.max = np.array([150.0, 150.0, 15.0])
 position.min = np.array([-15.0, -15.0, 0.0])
 position.initial = np.array([-10.0, -10.0, 2.0])
-position.final = np.array([10.0, 10.0, 2.0])
+position.final = np.array([100.0, 100.0, 7.0])
 
 # 3D velocity
 velocity = ox.State("velocity", shape=(3,))
@@ -72,8 +73,8 @@ np.random.seed(42)
 obstacle_centers = []
 
 # Tweak number of obstacles by changing the grid sizes
-n_rows = 4
-n_cols = 4
+n_rows = 20
+n_cols = 20
 n_lays = 4
 
 # Create a 3D field of obstacles: rows (x) x columns (y) x layers (z)
@@ -173,7 +174,11 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"ep_tr": 1e-3},
+    float_dtype="float64",
+    solver={
+        "cvx_solver": "Mosek",
+        "solver_args": {},
+    },
 )
 
 # =============================================================================
@@ -204,6 +209,10 @@ if __name__ == "__main__":
         results,
         attitude_stride=3,
         frame_duration_ms=200,
+    )
+    snapshot_server = create_snapshot_plotting_server(
+        results,
+        initial_n_snapshots=5,
     )
 
     # Keep servers running

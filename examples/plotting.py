@@ -1,4 +1,6 @@
 import random
+from os import PathLike
+from pathlib import Path
 
 import numpy as np
 import plotly.graph_objects as go
@@ -18,6 +20,18 @@ except ImportError:
 
 from openscvx.algorithms import OptimizationResults
 from openscvx.config import Config
+from openscvx.plotting.publication import (
+    LM_PLOTLY_FONT as _LM_PLOTLY_FONT,
+)
+from openscvx.plotting.publication import (
+    LM_PLOTLY_TICK_FONT as _LM_PLOTLY_TICK_FONT,
+)
+from openscvx.plotting.publication import (
+    latin_modern_fontproperties as _latin_modern_fontproperties,
+)
+from openscvx.plotting.publication import (
+    show_plotly_with_latin_modern,
+)
 from openscvx.utils import get_kp_pose
 
 
@@ -320,6 +334,270 @@ def plot_dubins_car(results: OptimizationResults, params: Config):
     # Set axis to be equal
     fig.update_xaxes(scaleanchor="y", scaleratio=1)
     return fig
+
+
+class DubinsWaypointStlFigure:
+    """Plotly figure with Latin Modern ``show()`` and matplotlib ``save_pdf()``."""
+
+    __slots__ = ("_fig", "_results", "_params")
+
+    def __init__(
+        self,
+        fig: go.Figure,
+        results: OptimizationResults,
+        params: Config | None,
+    ) -> None:
+        self._fig = fig
+        self._results = results
+        self._params = params
+
+    def show(self, *args, **kwargs) -> None:
+        show_plotly_with_latin_modern(self._fig)
+
+    def save_pdf(self, path: str | PathLike[str]) -> None:
+        save_dubins_car_waypoint_stl_pdf(self._results, path, self._params)
+
+    def __getattr__(self, name: str):
+        return getattr(self._fig, name)
+
+
+def save_dubins_car_waypoint_stl_pdf(
+    results: OptimizationResults,
+    path: str | PathLike[str],
+    params: Config | None = None,
+) -> None:
+    """Save the Dubins STL waypoint figure as a PDF (Latin Modern via matplotlib)."""
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Circle
+
+    position = np.asarray(results.trajectory["position"], dtype=np.float64)
+    x = position[:, 0]
+    y = position[:, 1]
+
+    obs_center = np.asarray(results.plotting_data["obs_center"], dtype=np.float64).flatten()
+    waypoint_radius = float(np.asarray(results.plotting_data["obs_radius"]).item())
+    safety_radius = float(results.plotting_data.get("safety_threshold", waypoint_radius))
+
+    speed = np.asarray(results.trajectory.get("speed"), dtype=np.float64).reshape(-1)
+    theta = np.asarray(results.trajectory.get("theta"), dtype=np.float64).reshape(-1)
+    vel_x = speed * np.sin(theta)
+    vel_y = speed * np.cos(theta)
+    vel_norm = np.linalg.norm(np.stack([vel_x, vel_y], axis=1), axis=1)
+
+    lm_fp = _latin_modern_fontproperties()
+    if lm_fp is None:
+        print("[plot] Latin Modern OTF not found; PDF will use matplotlib default serif.")
+
+    fig, ax = plt.subplots(figsize=(6.4, 6.4), dpi=100)
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+
+    center_xy = (float(obs_center[0]), float(obs_center[1]))
+    ax.add_patch(
+        Circle(
+            center_xy,
+            safety_radius,
+            fill=True,
+            facecolor=(0.86, 0.31, 0.31, 0.12),
+            edgecolor=(0.86, 0.31, 0.31, 0.9),
+            linewidth=2.0,
+            label=f"Safety region (r={safety_radius:.2f})",
+            zorder=1,
+        )
+    )
+    ax.add_patch(
+        Circle(
+            center_xy,
+            waypoint_radius,
+            fill=True,
+            facecolor=(0.12, 0.55, 0.24, 0.18),
+            edgecolor=(0.12, 0.55, 0.24, 0.95),
+            linewidth=2.0,
+            label=f"Waypoint ball (r={waypoint_radius:.2f})",
+            zorder=2,
+        )
+    )
+
+    sc = ax.scatter(
+        x,
+        y,
+        c=vel_norm,
+        cmap="viridis",
+        s=28,
+        linewidths=0,
+        zorder=4,
+        label="Trajectory",
+    )
+    ax.plot(x, y, color=(0.35, 0.35, 0.35, 0.35), linewidth=0.8, zorder=3)
+    ax.plot(
+        center_xy[0],
+        center_xy[1],
+        marker="x",
+        color="black",
+        markersize=8,
+        linestyle="None",
+        label="Waypoint center",
+        zorder=5,
+    )
+
+    cbar = fig.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label("‖v‖₂ (m/s)", fontproperties=lm_fp)
+    if lm_fp is not None:
+        for lbl in cbar.ax.get_yticklabels():
+            lbl.set_fontproperties(lm_fp)
+
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlabel("x (m)", fontproperties=lm_fp)
+    ax.set_ylabel("y (m)", fontproperties=lm_fp)
+    if lm_fp is not None:
+        for lbl in ax.get_xticklabels() + ax.get_yticklabels():
+            lbl.set_fontproperties(lm_fp)
+
+    leg = ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.42, -0.10),
+        ncol=2,
+        frameon=False,
+        prop=lm_fp,
+    )
+    if lm_fp is not None:
+        for text in leg.get_texts():
+            text.set_fontproperties(lm_fp)
+
+    ax.grid(True, color=(0.85, 0.85, 0.85), linewidth=0.6)
+    fig.subplots_adjust(left=0.12, right=0.82, bottom=0.20, top=0.98)
+
+    out = Path(path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out, format="pdf", bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"[plot] Saved Dubins STL figure to {out.resolve()}")
+
+
+def plot_dubins_car_waypoint_stl(results: OptimizationResults, params: Config):
+    """Plot Dubins trajectory for STL waypoint examples (white theme, Latin Modern).
+
+    Call ``.show()`` to open in the browser with Latin Modern on axes, legend,
+    and colorbar. Call ``.save_pdf(path)`` for a publication PDF (matplotlib).
+
+    Shows the propagated path colored by the 2-norm of world-frame velocity,
+    the waypoint 2-norm ball (``obs_radius``), and the larger safety envelope
+    (``safety_threshold``) used for the conditional speed constraint.
+    """
+    fig = go.Figure()
+
+    position = np.asarray(results.trajectory["position"], dtype=np.float64)
+    x = position[:, 0]
+    y = position[:, 1]
+
+    obs_center = np.asarray(results.plotting_data["obs_center"], dtype=np.float64).flatten()
+    waypoint_radius = float(np.asarray(results.plotting_data["obs_radius"]).item())
+    safety_radius = float(results.plotting_data.get("safety_threshold", waypoint_radius))
+
+    speed = np.asarray(results.trajectory.get("speed"), dtype=np.float64).reshape(-1)
+    theta = np.asarray(results.trajectory.get("theta"), dtype=np.float64).reshape(-1)
+    vel_x = speed * np.sin(theta)
+    vel_y = speed * np.cos(theta)
+    vel_norm = np.linalg.norm(np.stack([vel_x, vel_y], axis=1), axis=1)
+
+    theta_circle = np.linspace(0, 2 * np.pi, 100)
+
+    def _add_disk(radius: float, line_color: str, fill_color: str, name: str) -> None:
+        cx = obs_center[0] + radius * np.cos(theta_circle)
+        cy = obs_center[1] + radius * np.sin(theta_circle)
+        fig.add_trace(
+            go.Scatter(
+                x=cx,
+                y=cy,
+                mode="lines",
+                fill="toself",
+                fillcolor=fill_color,
+                line={"color": line_color, "width": 2},
+                name=name,
+                hoverinfo="skip",
+            )
+        )
+
+    _add_disk(
+        safety_radius,
+        line_color="rgba(220, 80, 80, 0.9)",
+        fill_color="rgba(220, 80, 80, 0.12)",
+        name=f"Safety region (r={safety_radius:.2f})",
+    )
+    _add_disk(
+        waypoint_radius,
+        line_color="rgba(30, 140, 60, 0.95)",
+        fill_color="rgba(30, 140, 60, 0.18)",
+        name=f"Waypoint ball (r={waypoint_radius:.2f})",
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=x,
+            y=y,
+            mode="lines+markers",
+            line={"color": "rgba(80, 80, 80, 0.35)", "width": 1},
+            marker={
+                "color": vel_norm,
+                "colorscale": "Viridis",
+                "size": 7,
+                "colorbar": {
+                    "title": {"text": "‖v‖₂ (m/s)", "font": _LM_PLOTLY_FONT},
+                    "tickfont": _LM_PLOTLY_TICK_FONT,
+                },
+                "showscale": True,
+            },
+            name="Trajectory",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=[obs_center[0]],
+            y=[obs_center[1]],
+            mode="markers",
+            marker={"color": "black", "size": 10, "symbol": "x"},
+            name="Waypoint center",
+        )
+    )
+
+    _square_px = 640
+    fig.update_layout(
+        template="plotly_white",
+        paper_bgcolor="white",
+        plot_bgcolor="white",
+        font=_LM_PLOTLY_FONT,
+        autosize=False,
+        width=_square_px,
+        height=_square_px,
+        margin={"l": 60, "r": 90, "t": 24, "b": 88},
+        legend={
+            "orientation": "h",
+            "xref": "paper",
+            "yref": "paper",
+            "x": 0.42,
+            "xanchor": "center",
+            "y": 0.03,
+            "yanchor": "bottom",
+            "font": _LM_PLOTLY_FONT,
+        },
+    )
+    fig.update_xaxes(
+        scaleanchor="y",
+        scaleratio=1,
+        constrain="domain",
+        domain=[0.0, 0.82],
+        title_text="x (m)",
+        title_font=_LM_PLOTLY_FONT,
+        tickfont=_LM_PLOTLY_TICK_FONT,
+    )
+    fig.update_yaxes(
+        constrain="domain",
+        domain=[0.10, 1.0],
+        title_text="y (m)",
+        title_font=_LM_PLOTLY_FONT,
+        tickfont=_LM_PLOTLY_TICK_FONT,
+    )
+    return DubinsWaypointStlFigure(fig, results, params)
 
 
 def plot_velocity_vs_distance(results: OptimizationResults, params: Config):
@@ -655,178 +933,359 @@ def plot_dubins_car_disjoint(results: OptimizationResults, params: Config):
     return fig
 
 
+def _results_has_moving_subject(results) -> bool:
+    """True when keypoints vary in time (parametric, callback, or precomputed trajectory)."""
+    if results.get("moving_subject"):
+        return True
+    if "get_kp_pose" in results:
+        return True
+    init_poses = results.get("init_poses")
+    if init_poses is None:
+        return False
+    t_ref = results.trajectory.get("time")
+    n_ref = len(np.asarray(t_ref).flatten()) if t_ref is not None else None
+    for pose in init_poses:
+        pose = np.asarray(pose)
+        if pose.ndim == 2 and pose.shape[1] == 3 and n_ref is not None and pose.shape[0] == n_ref:
+            return True
+    return False
+
+
+def _poses_at_times(pose: np.ndarray, t_samples: np.ndarray, t_ref: np.ndarray) -> np.ndarray:
+    """World-frame subject positions (len(t_samples), 3) from a static or time-varying pose."""
+    pose = np.asarray(pose)
+    t_samples = np.asarray(t_samples).flatten()
+    t_ref = np.asarray(t_ref).flatten()
+
+    if pose.ndim == 1:
+        return np.repeat(pose.reshape(1, 3), len(t_samples), axis=0)
+
+    if pose.ndim == 2 and pose.shape[1] == 3:
+        if pose.shape[0] == len(t_samples):
+            return pose
+        if pose.shape[0] == len(t_ref):
+            return np.column_stack(
+                [
+                    np.interp(t_samples, t_ref, pose[:, i], left=pose[0, i], right=pose[-1, i])
+                    for i in range(3)
+                ]
+            )
+        if pose.shape[0] > 1:
+            idx = np.linspace(0, pose.shape[0] - 1, len(t_samples)).astype(int)
+            return pose[idx]
+
+    raise ValueError(f"Unsupported pose shape {pose.shape} for time sampling.")
+
+
+def _subject_world_trajectories(results, t_samples: np.ndarray) -> list[np.ndarray]:
+    """World-frame (N, 3) trajectories per subject sampled at ``t_samples``."""
+    t_samples = np.asarray(t_samples).flatten()
+    t_ref = np.asarray(results.trajectory["time"]).flatten()
+    subs_traj: list[np.ndarray] = []
+
+    if "get_kp_pose" in results:
+        fn = results["get_kp_pose"]
+        total_time = results.get("total_time")
+        if total_time is None:
+            total_time = float(t_ref[-1]) if len(t_ref) else 1.0
+        samples = [
+            np.asarray(fn(float(t / total_time) if total_time else float(t))).reshape(3)
+            for t in t_samples
+        ]
+        subs_traj.append(np.stack(samples, axis=0))
+        return subs_traj
+
+    if "moving_subject" in results and "init_poses" in results:
+        init_poses = results.plotting_data["init_poses"]
+        raw = init_poses[0] if isinstance(init_poses, list) else init_poses
+        offset = np.asarray(raw).reshape(3)
+        traj = np.asarray(get_kp_pose(t_samples, offset))
+        if traj.ndim == 1:
+            traj = traj.reshape(-1, 3)
+        subs_traj.append(traj)
+        return subs_traj
+
+    if "init_poses" not in results:
+        raise ValueError("No valid method to get keypoint poses.")
+
+    init_poses = results.get("init_poses")
+    if isinstance(init_poses, np.ndarray) and init_poses.ndim == 2 and init_poses.shape[1] == 3:
+        init_poses = [init_poses[i] for i in range(init_poses.shape[0])]
+    for pose in init_poses:
+        subs_traj.append(_poses_at_times(pose, t_samples, t_ref))
+
+    return subs_traj
+
+
+def _uses_manipulator_camera_pose(results) -> bool:
+    """True when the camera is mounted on an EE with ``ee_position`` in the trajectory."""
+    return "ee_position" in results.trajectory
+
+
+def _wxyz_from_rotation_matrix(R: np.ndarray) -> np.ndarray:
+    from scipy.spatial.transform import Rotation
+
+    R = np.asarray(R, dtype=np.float64)
+    if R.shape == (4, 4):
+        R = R[:3, :3]
+    q_xyzw = Rotation.from_matrix(R).as_quat()
+    return np.array([q_xyzw[3], q_xyzw[0], q_xyzw[1], q_xyzw[2]])
+
+
+def _get_ee_quaternion_trajectory(results) -> np.ndarray:
+    """EE attitude (wxyz) on the propagation time grid."""
+    stored = results.get("ee_attitude")
+    if stored is not None:
+        return np.asarray(stored, dtype=np.float64)
+    if "ee_attitude" in results.trajectory:
+        return np.asarray(results.trajectory["ee_attitude"], dtype=np.float64)
+    if "T_j7" not in results.trajectory:
+        raise ValueError(
+            "Manipulator camera view requires ee_attitude in results/trajectory "
+            "or T_j7 + T_home to reconstruct EE orientation."
+        )
+    t_home = np.asarray(results.get("T_home", np.eye(4)), dtype=np.float64)
+    t_j7 = np.asarray(results.trajectory["T_j7"], dtype=np.float64)
+    return np.array([_wxyz_from_rotation_matrix(t_j7[i] @ t_home) for i in range(len(t_j7))])
+
+
+def _camera_poses_at_times(results, t_samples: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Camera mount position and attitude (wxyz) sampled at ``t_samples``."""
+    t_samples = np.asarray(t_samples, dtype=np.float64).flatten()
+    t_ref = np.asarray(results.trajectory["time"], dtype=np.float64).flatten()
+
+    if _uses_manipulator_camera_pose(results):
+        cam_pos = np.asarray(results.trajectory["ee_position"], dtype=np.float64)
+        cam_quat = _get_ee_quaternion_trajectory(results)
+    else:
+        x_full = results.x_full
+        if x_full is None or x_full.shape[1] < 10:
+            raise ValueError(
+                "Camera pose requires ee_position (manipulator) or x_full with "
+                "position + attitude (aerial)."
+            )
+        cam_pos = np.asarray(x_full[:, 0:3], dtype=np.float64)
+        cam_quat = np.asarray(x_full[:, 6:10], dtype=np.float64)
+
+    if len(t_samples) == len(t_ref) and np.allclose(t_samples, t_ref, rtol=0.0, atol=1e-9):
+        return cam_pos, cam_quat
+
+    pos = np.column_stack(
+        [
+            np.interp(t_samples, t_ref, cam_pos[:, i], left=cam_pos[0, i], right=cam_pos[-1, i])
+            for i in range(3)
+        ]
+    )
+    idx = np.clip(np.searchsorted(t_ref, t_samples, side="left"), 0, len(t_ref) - 1)
+    return pos, cam_quat[idx]
+
+
+def _project_subjects_to_sensor(
+    results, subs_traj: list[np.ndarray], t_samples: np.ndarray
+) -> list[np.ndarray]:
+    """Map world-frame subject trajectories into the wrist/sensor frame."""
+    R_sb = np.asarray(results.plotting_data["R_sb"], dtype=np.float64)
+    cam_pos, cam_quat = _camera_poses_at_times(results, t_samples)
+    subs_traj_sen = []
+    for sub_traj in subs_traj:
+        sen = []
+        for i, sub_pose in enumerate(sub_traj):
+            r_ee = qdcm(cam_quat[i])
+            sen.append(R_sb @ r_ee.T @ (np.asarray(sub_pose) - cam_pos[i]))
+        subs_traj_sen.append(np.array(sen, dtype=np.float64))
+    return subs_traj_sen
+
+
 def full_subject_traj_time(results: OptimizationResults, params: Config):
-    x_full = results.x_full
-    x_nodes = results.x
     t_nodes = results.nodes["time"]
     t_full = results.trajectory["time"]
-    subs_traj = []
-    subs_traj_node = []
+    subs_traj = _subject_world_trajectories(results, t_full)
+    subs_traj_node = _subject_world_trajectories(results, t_nodes)
     subs_traj_sen = []
     subs_traj_sen_node = []
 
-    # if hasattr(params.dyn, 'get_kp_pose'):
-    if "moving_subject" in results and "init_poses" in results:
-        init_poses = results.plotting_data["init_poses"]
-        subs_traj.append(get_kp_pose(t_full, init_poses))
-        subs_traj_node.append(get_kp_pose(t_nodes, init_poses))
-        subs_traj_node[0] = subs_traj_node[0].squeeze()
-    elif "init_poses" in results:
-        init_poses = results.plotting_data["init_poses"]
-        for pose in init_poses:
-            # repeat the pose for all time steps
-            pose_full = np.repeat(pose[:, np.newaxis], x_full.shape[0], axis=1).T
-            subs_traj.append(pose_full)
-
-            pose_node = np.repeat(pose[:, np.newaxis], x_nodes.shape[0], axis=1).T
-            subs_traj_node.append(pose_node)
-    else:
-        raise ValueError("No valid method to get keypoint poses.")
-
     if "R_sb" in results:
-        R_sb = results.plotting_data["R_sb"]
-        for sub_traj in subs_traj:
-            sub_traj_sen = []
-            for i in range(x_full.shape[0]):
-                sub_pose = sub_traj[i]
-                sub_traj_sen.append(R_sb @ qdcm(x_full[i, 6:10]).T @ (sub_pose - x_full[i, 0:3]))
-            subs_traj_sen.append(np.array(sub_traj_sen).squeeze())
-
-        for sub_traj_node in subs_traj_node:
-            sub_traj_sen_node = []
-            for i in range(x_nodes.shape[0]):
-                sub_pose = sub_traj_node[i]
-                sub_traj_sen_node.append(
-                    R_sb @ qdcm(x_nodes[i, 6:10]).T @ (sub_pose - x_nodes[i, 0:3]).T
-                )
-            subs_traj_sen_node.append(np.array(sub_traj_sen_node).squeeze())
+        subs_traj_sen = _project_subjects_to_sensor(results, subs_traj, t_full)
+        subs_traj_sen_node = _project_subjects_to_sensor(results, subs_traj_node, t_nodes)
         return subs_traj, subs_traj_sen, subs_traj_node, subs_traj_sen_node
     else:
         raise ValueError("`R_sb` not found in results. Cannot compute sensor frame.")
 
 
-def plot_camera_view(result: OptimizationResults, params: Config) -> None:
+def _camera_cone_outline_xy(result, n_grid: int = 50) -> tuple[np.ndarray, np.ndarray]:
+    """Closed (x, y) polyline for the red camera-frame outline in 2D sensor view."""
+    if "alpha_x" not in result or "alpha_y" not in result:
+        raise ValueError("`alpha_x` and `alpha_y` not found in results.")
+    if "norm_type" not in result:
+        raise ValueError("`norm_type` not found in results.")
+
+    A = np.diag([1 / np.tan(np.pi / result["alpha_y"]), 1 / np.tan(np.pi / result["alpha_x"])])
+    range_limit = 10 if _results_has_moving_subject(result) else 80
+    norm_type = result["norm_type"]
+    ord_ = np.inf if norm_type == "inf" else norm_type
+
+    x = np.linspace(-range_limit, range_limit, n_grid)
+    y = np.linspace(-range_limit, range_limit, n_grid)
+    X, Y = np.meshgrid(x, y)
+    X, Y, Z = (
+        X.flatten(),
+        Y.flatten(),
+        np.array(
+            [
+                np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord=ord_)
+                for x_val in x
+                for y_val in y
+            ]
+        ),
+    )
+    X, Y = X / Z, Y / Z
+    order = np.argsort(np.arctan2(Y, X))
+    X, Y = X[order], Y[order]
+    return np.append(X, X[0]), np.append(Y, Y[0])
+
+
+def _project_sensor_xy(positions: np.ndarray) -> np.ndarray:
+    """Perspective-project sensor-frame (x, y, z) onto the image plane."""
+    projected = np.asarray(positions, dtype=np.float64).copy()
+    if projected.size == 0:
+        return projected
+    projected[:, 0] /= projected[:, 2]
+    projected[:, 1] /= projected[:, 2]
+    return projected
+
+
+def _camera_subject_traces(
+    sub_traj_sen: np.ndarray,
+    sub_traj_sen_node: np.ndarray,
+    color: str,
+    *,
+    traj_end: int | None = None,
+    n_nodes_visible: int | None = None,
+) -> list[go.Scatter]:
+    """Build trajectory line + node marker traces for 2D camera plots."""
+    sub_traj = _project_sensor_xy(np.asarray(sub_traj_sen))
+    if traj_end is not None:
+        sub_traj = sub_traj[:traj_end]
+
+    sub_nodes = _project_sensor_xy(np.asarray(sub_traj_sen_node))
+    if n_nodes_visible is not None:
+        sub_nodes = sub_nodes[:n_nodes_visible]
+
+    return [
+        go.Scatter(
+            x=sub_traj[:, 0],
+            y=sub_traj[:, 1],
+            mode="lines",
+            line={"color": color, "width": 3},
+            showlegend=False,
+        ),
+        go.Scatter(
+            x=sub_nodes[:, 0],
+            y=sub_nodes[:, 1],
+            mode="markers",
+            marker={"color": color, "size": 10},
+            showlegend=False,
+        ),
+    ]
+
+
+def _add_camera_frame_outline(fig: go.Figure, result) -> None:
+    cone_x, cone_y = _camera_cone_outline_xy(result)
+    fig.add_trace(
+        go.Scatter(
+            x=cone_x,
+            y=cone_y,
+            mode="lines",
+            line={"color": "red", "width": 5},
+            name=r"$\text{Camera Frame}$",
+            showlegend=False,
+        )
+    )
+
+
+def _apply_camera_view_layout(
+    fig: go.Figure,
+    title: str,
+    *,
+    width: int | None = None,
+    height: int | None = None,
+    template: str = "plotly_dark",
+) -> None:
+    """Shared axis styling for static and animated 2D camera views."""
+    layout_kwargs: dict = {
+        "title": title,
+        "title_x": 0.5,
+        "title_y": 0.9,
+        "template": template,
+        "title_font_size": 20,
+        "legend_font_size": 15,
+        "margin": {"l": 0, "r": 0, "b": 0, "t": 0},
+    }
+    if template == "simple_white":
+        layout_kwargs["paper_bgcolor"] = "white"
+        layout_kwargs["plot_bgcolor"] = "white"
+    fig.update_layout(**layout_kwargs)
+    fig.update_xaxes(
+        showgrid=False,
+        zeroline=False,
+        showticklabels=False,
+        ticks="outside",
+        tickwidth=0,
+        tickcolor="black",
+        range=[-1.1, 1.1],
+    )
+    fig.update_yaxes(
+        showgrid=False,
+        zeroline=False,
+        showticklabels=False,
+        ticks="outside",
+        tickwidth=0,
+        tickcolor="black",
+        range=[-1.1, 1.1],
+    )
+    if width is not None and height is not None:
+        fig.update_layout(autosize=False, width=width, height=height)
+
+
+def plot_camera_view(result: OptimizationResults, params: Config | dict | None = None) -> go.Figure:
+    """Static 2D camera view with full keypoint trajectories and SCP nodes.
+
+    Requires viewplanning plotting data on ``result``: ``init_poses``, ``R_sb``,
+    ``alpha_x``, ``alpha_y``, and ``norm_type``. Pass a dict as ``params`` to
+    call ``update_plotting_data`` (manipulator VP, drone VP). For arms, also set
+    ``T_home`` or ``ee_attitude`` when EE orientation is not in ``x_full``.
+    """
+    if isinstance(params, dict):
+        result.update_plotting_data(**params)
+    if "init_poses" not in result:
+        raise ValueError(
+            "plot_camera_view requires viewplanning results (init_poses, R_sb, alpha_x/y, "
+            "norm_type). Manipulator examples should use create_snapshot_plotting_server "
+            "instead."
+        )
     title = r"$\text{Camera View}$"
     _, sub_positions_sen, _, sub_positions_sen_node = full_subject_traj_time(result, params)
     fig = go.Figure()
 
-    # Create a cone plot
-    A = np.diag(
-        [
-            1 / np.tan(np.pi / result.plotting_data["alpha_y"]),
-            1 / np.tan(np.pi / result.plotting_data["alpha_x"]),
-        ]
-    )  # Conic Matrix
+    _add_camera_frame_outline(fig, result)
 
-    # Meshgrid
-    if "moving_subject" in result:
-        x = np.linspace(-10, 10, 100)
-        y = np.linspace(-10, 10, 100)
-        z = np.linspace(-10, 10, 100)
-    else:
-        x = np.linspace(-80, 80, 100)
-        y = np.linspace(-80, 80, 100)
-        z = np.linspace(-80, 80, 100)
+    colors = generate_subject_colors(len(sub_positions_sen), min_rgb=10, max_rgb=255)
+    for sub_idx, sub_traj in enumerate(sub_positions_sen):
+        for trace in _camera_subject_traces(
+            sub_traj,
+            sub_positions_sen_node[sub_idx],
+            colors[sub_idx],
+        ):
+            fig.add_trace(trace)
 
-    X, Y = np.meshgrid(x, y)
+    _apply_camera_view_layout(fig, title, width=800, height=800, template="simple_white")
 
-    # Define the condition for the second order cone
-    z = []
-    for x_val in x:
-        for y_val in y:
-            if result.plotting_data["norm_type"] == "inf":
-                z.append(np.linalg.norm(A @ np.array([x_val, y_val]), axis=0, ord=np.inf))
-            else:
-                z.append(
-                    np.linalg.norm(
-                        A @ np.array([x_val, y_val]), axis=0, ord=result.plotting_data["norm_type"]
-                    )
-                )
-    z = np.array(z)
-
-    # Extract the points from the meshgrid
-    X = X.flatten()
-    Y = Y.flatten()
-    Z = z.flatten()
-
-    # Normalize the coordinates by the Z value
-    X = X / Z
-    Y = Y / Z
-
-    # Order the points so they are connected in radial order about the origin
-    order = np.argsort(np.arctan2(Y, X))
-    X = X[order]
-    Y = Y[order]
-
-    # Repeat the first point to close the cone
-    X = np.append(X, X[0])
-    Y = np.append(Y, Y[0])
-
-    # Plot the points on a red scatter plot
-    fig.add_trace(
-        go.Scatter(
-            x=X, y=Y, mode="lines", line={"color": "red", "width": 5}, name=r"$\text{Camera Frame}$"
-        )
-    )
-
-    sub_idx = 0
-    for sub_traj in sub_positions_sen:
-        color = (
-            f"rgb({random.randint(10, 255)}, {random.randint(10, 255)}, {random.randint(10, 255)})"
-        )
-        sub_traj = np.array(sub_traj)
-        sub_traj[:, 0] = sub_traj[:, 0] / sub_traj[:, 2]
-        sub_traj[:, 1] = sub_traj[:, 1] / sub_traj[:, 2]
-        fig.add_trace(
-            go.Scatter(
-                x=sub_traj[:, 0],
-                y=sub_traj[:, 1],
-                mode="lines",
-                line={"color": color, "width": 3},
-                name=r"$\text{Subject }" + str(sub_idx) + "$",
-            )
-        )
-
-        sub_traj_nodal = np.array(sub_positions_sen_node[sub_idx])
-        sub_traj_nodal[:, 0] = sub_traj_nodal[:, 0] / sub_traj_nodal[:, 2]
-        sub_traj_nodal[:, 1] = sub_traj_nodal[:, 1] / sub_traj_nodal[:, 2]
-        fig.add_trace(
-            go.Scatter(
-                x=sub_traj_nodal[:, 0],
-                y=sub_traj_nodal[:, 1],
-                mode="markers",
-                marker={"color": color, "size": 20},
-                name=r"$\text{Subject }" + str(sub_idx) + r"\text{ Node}$",
-            )
-        )
-        sub_idx += 1
-
-    # Center the title for the plot
-    fig.update_layout(title=title, title_x=0.5)
-    fig.update_layout(template="simple_white")
-
-    # Increase title size
-    fig.update_layout(title_font_size=20)
-
-    # Increase legend size
-    fig.update_layout(legend_font_size=15)
-
-    # fig.update_yaxes(scaleanchor="x", scaleratio=1,)
-    fig.update_layout(height=600)
-
-    # Set x axis and y axis limits
-    fig.update_xaxes(range=[-1.0, 1.0])
-    fig.update_yaxes(range=[-1.0, 1.0])
-    # Set aspect ratio to be equal
-    fig.update_layout(autosize=False, width=800, height=800)
-
-    # Save figure as svg
     fig.write_image("figures/camera_view.svg")
 
     return fig
 
 
-def plot_camera_animation(result: dict, params: Config, path="") -> None:
+def plot_camera_animation(result: dict, params: Config, path="") -> go.Figure:
     title = r"$\text{Camera Animation}$"
     _, subs_positions_sen, _, subs_positions_sen_node = full_subject_traj_time(result, params)
     fig = go.Figure()
@@ -837,96 +1296,23 @@ def plot_camera_animation(result: dict, params: Config, path="") -> None:
             go.Scatter3d(x=[], y=[], z=[], mode="lines+markers", line={"color": "blue", "width": 2})
         )
 
-    # Create a cone plot
-    if "alpha_x" in result and "alpha_y" in result:
-        A = np.diag(
-            [1 / np.tan(np.pi / result["alpha_y"]), 1 / np.tan(np.pi / result["alpha_x"])]
-        )  # Conic Matrix
-    else:
-        raise ValueError("`alpha_x` and `alpha_y` not found in result dictionary.")
+    _add_camera_frame_outline(fig, result)
 
-    # Meshgrid
-    range_limit = 10 if "moving_subject" in result else 80
-    x = np.linspace(-range_limit, range_limit, 50)
-    y = np.linspace(-range_limit, range_limit, 50)
-    X, Y = np.meshgrid(x, y)
-
-    # Define the condition for the second order cone
-    if "norm_type" in result:
-        z = np.array(
-            [
-                np.linalg.norm(
-                    A @ np.array([x_val, y_val]),
-                    axis=0,
-                    ord=(np.inf if result["norm_type"] == "inf" else result["norm_type"]),
-                )
-                for x_val in x
-                for y_val in y
-            ]
-        )
-    else:
-        raise ValueError("`norm_type` not found in result dictionary.")
-
-    # Extract the points from the meshgrid
-    X, Y, Z = X.flatten(), Y.flatten(), z.flatten()
-
-    # Normalize the coordinates by the Z value
-    X, Y = X / Z, Y / Z
-
-    # Order the points so they are connected in radial order about the origin
-    order = np.argsort(np.arctan2(Y, X))
-    X, Y = X[order], Y[order]
-
-    # Repeat the first point to close the cone
-    X, Y = np.append(X, X[0]), np.append(Y, Y[0])
-
-    # Plot the points on a red scatter plot
-    fig.add_trace(
-        go.Scatter(
-            x=X,
-            y=Y,
-            mode="lines",
-            line={"color": "red", "width": 5},
-            name=r"$\text{Camera Frame}$",
-            showlegend=False,
-        )
-    )
-
-    # Choose a random color for each subject
     colors = generate_subject_colors(len(subs_positions_sen), min_rgb=10, max_rgb=255)
 
     frames = []
-    # Animate the subjects along their trajectories
     for i in range(0, len(subs_positions_sen[0]), 2):
         frame_data = []
         for sub_idx, sub_traj in enumerate(subs_positions_sen):
-            color = colors[sub_idx]
-            sub_traj = np.array(sub_traj)
-            sub_traj_nodal = np.array(subs_positions_sen_node[sub_idx])
-            sub_traj[:, 0] /= sub_traj[:, 2]
-            sub_traj[:, 1] /= sub_traj[:, 2]
-            frame_data.append(
-                go.Scatter(
-                    x=sub_traj[: i + 1, 0],
-                    y=sub_traj[: i + 1, 1],
-                    mode="lines",
-                    line={"color": color, "width": 3},
-                    showlegend=False,
-                )
-            )
-
-            # Add in node when loop has reached point where node is present
-            scaled_index = int((i // (sub_traj.shape[0] / sub_traj_nodal.shape[0])) + 1)
-            sub_node_plot = sub_traj_nodal[:scaled_index]
-            sub_node_plot[:, 0] /= sub_node_plot[:, 2]
-            sub_node_plot[:, 1] /= sub_node_plot[:, 2]
-            frame_data.append(
-                go.Scatter(
-                    x=sub_node_plot[:, 0],
-                    y=sub_node_plot[:, 1],
-                    mode="markers",
-                    marker={"color": color, "size": 10},
-                    showlegend=False,
+            sub_traj_nodal = np.asarray(subs_positions_sen_node[sub_idx])
+            scaled_index = int((i // (len(sub_traj) / sub_traj_nodal.shape[0])) + 1)
+            frame_data.extend(
+                _camera_subject_traces(
+                    sub_traj,
+                    sub_traj_nodal,
+                    colors[sub_idx],
+                    traj_end=i + 1,
+                    n_nodes_visible=scaled_index,
                 )
             )
 
@@ -934,44 +1320,8 @@ def plot_camera_animation(result: dict, params: Config, path="") -> None:
 
     fig.frames = frames
 
-    # Add animation controls using modular component
     add_animation_controls(fig, slider_x=0.15, slider_y=0.15, play_speed=50, frame_speed=500)
-
-    # Center the title for the plot
-    fig.update_layout(title=title, title_x=0.5)
-    fig.update_layout(template="plotly_dark")
-    # Remove grid lines
-    fig.update_xaxes(showgrid=False)
-    fig.update_yaxes(showgrid=False)
-
-    # Remove center line
-    fig.update_xaxes(zeroline=False)
-    fig.update_yaxes(zeroline=False)
-
-    # Increase title size
-    fig.update_layout(title_font_size=20)
-
-    # Increase legend size
-    fig.update_layout(legend_font_size=15)
-
-    # Remove the axis numbers
-    fig.update_xaxes(showticklabels=False)
-    fig.update_yaxes(showticklabels=False)
-    # Remove ticks enrtirely
-    fig.update_xaxes(ticks="outside", tickwidth=0, tickcolor="black")
-    fig.update_yaxes(ticks="outside", tickwidth=0, tickcolor="black")
-
-    # Set x axis and y axis limits
-    fig.update_xaxes(range=[-1.1, 1.1])
-    fig.update_yaxes(range=[-1.1, 1.1])
-
-    # Move Title down
-    fig.update_layout(title_y=0.9)
-
-    # Set aspect ratio to be equal
-    # fig.update_layout(autosize=False, width=650, height=650)
-    # Remove marigns
-    fig.update_layout(margin={"l": 0, "r": 0, "b": 0, "t": 0})
+    _apply_camera_view_layout(fig, title)
 
     return fig
 

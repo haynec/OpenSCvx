@@ -65,6 +65,15 @@ from .plotting import (
     plot_vector_norm,
     plot_virtual_control_heatmap,
 )
+from .publication import (
+    LM_PLOTLY_FONT,
+    LM_PLOTLY_TICK_FONT,
+    PlotStyle,
+    PublicationFigure,
+    VarSpec,
+    latin_modern_fontproperties,
+    show_plotly_with_latin_modern,
+)
 from .scp_iteration import plot_scp_convergence_histories, plot_scp_iterations
 
 __all__ = [
@@ -79,6 +88,13 @@ __all__ = [
     "plot_virtual_control_heatmap",
     "plot_scp_iterations",
     "plot_scp_convergence_histories",
+    "PublicationFigure",
+    "PlotStyle",
+    "VarSpec",
+    "LM_PLOTLY_FONT",
+    "LM_PLOTLY_TICK_FONT",
+    "latin_modern_fontproperties",
+    "show_plotly_with_latin_modern",
     # 3D visualization submodule (viser)
     "viser",
 ]
