@@ -185,7 +185,7 @@ def _obstacle_ctcs(x, u, node, params):
 
 _byof_ctcs = [
     {"constraint_fn": _floor_ctcs},
-    # {"constraint_fn": _self_collision_ctcs},
+    {"constraint_fn": _self_collision_ctcs},
     {"constraint_fn": _obstacle_ctcs},
 ]
 
