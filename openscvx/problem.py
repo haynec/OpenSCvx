@@ -1584,20 +1584,26 @@ class Problem:
         n_u = self.settings.sim.n_controls
         _default = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
         if x0_stack is None:
-            x0_stack = jnp.asarray(np.broadcast_to(np.asarray(_default.x_init_pin), (B, n_x)).copy())
+            x0_stack = jnp.asarray(
+                np.broadcast_to(np.asarray(_default.x_init_pin), (B, n_x)).copy()
+            )
         else:
             x0_stack = jnp.asarray(x0_stack)
             if x0_stack.shape != (B, n_x):
                 raise ValueError(
-                    f"solve_batched: x0_stack must have shape (B, n_x)=({B}, {n_x}), got {x0_stack.shape}."
+                    f"solve_batched: x0_stack must have shape (B, n_x)=({B}, {n_x}), "
+                    f"got {x0_stack.shape}."
                 )
         if xf_stack is None:
-            xf_stack = jnp.asarray(np.broadcast_to(np.asarray(_default.x_term_pin), (B, n_x)).copy())
+            xf_stack = jnp.asarray(
+                np.broadcast_to(np.asarray(_default.x_term_pin), (B, n_x)).copy()
+            )
         else:
             xf_stack = jnp.asarray(xf_stack)
             if xf_stack.shape != (B, n_x):
                 raise ValueError(
-                    f"solve_batched: xf_stack must have shape (B, n_x)=({B}, {n_x}), got {xf_stack.shape}."
+                    f"solve_batched: xf_stack must have shape (B, n_x)=({B}, {n_x}), "
+                    f"got {xf_stack.shape}."
                 )
         x_guess_stack = _expand_batched_trajectory_guess(
             x_guess, B=B, N=N, n=n_x, name="x_guess", default=_default.x
