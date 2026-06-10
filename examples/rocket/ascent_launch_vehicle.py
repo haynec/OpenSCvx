@@ -4,9 +4,9 @@
 SIAM Press, 2009.
 
 - Dynamics: Position, velocity, mass in rotating ECI frame with exponential atmosphere drag.
-- Stage separations: Impulsive ``delta_mass`` controls at fixed transition nodes; thrust and 
+- Stage separations: Impulsive ``delta_mass`` controls at fixed transition nodes; thrust and
 mass-flow are piecewise-constant per phase via ``ox.Cond``.
-- Terminal constraints: Five orbital elements (a, e, i, Ω, ω) enforced symbolically via a 
+- Terminal constraints: Five orbital elements (a, e, i, Ω, ω) enforced symbolically via a
 Cartesian-to-OE map built with ``ox.Acos``/``ox.Atan2``.
 - Initial guess: Conic true-anomaly arc from launch site to GTO periapsis.
 """
@@ -584,7 +584,7 @@ problem = ox.Problem(
     solver={
         "cvx_solver": "qocogen",
         "cvxpygen": True,
-        "solver_args": {"abstol": 1e-6, "reltol": 1e-9},
+        "solver_args": {"abstol": 1e-6, "reltol": 1e-9, "verbose": True},
     },
 )
 
