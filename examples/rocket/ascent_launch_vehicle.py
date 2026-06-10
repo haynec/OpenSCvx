@@ -567,12 +567,12 @@ problem = ox.Problem(
     N=n,
     float_dtype="float64",
     discretizer=ox.LinearizeDiscretizeSparse(),
-    algorithm={"autotuner": ox.AugmentedLagrangian(eta_lambda=1E0)},
+    algorithm={"autotuner": ox.AugmentedLagrangian(eta_lambda=1e0)},
     solver={
-    "cvx_solver": "qocogen",
-    "cvxpygen": True,
-    "solver_args": {"abstol":1e-6, "reltol":1e-9},
-}
+        "cvx_solver": "qocogen",
+        "cvxpygen": True,
+        "solver_args": {"abstol": 1e-6, "reltol": 1e-9},
+    },
 )
 
 problem.settings.dev.printing = False
