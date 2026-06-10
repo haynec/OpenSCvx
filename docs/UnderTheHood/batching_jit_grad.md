@@ -60,7 +60,7 @@ that one difference is the whole point.
   no outer `vmap` rule (`call_exported` cannot be batched), so an exported
   artifact can never be re-vmapped, and every fresh process re-traces and
   re-compiles the entire loop.
-* `solve_batched(x0_stack, xf_stack)` — *the library* owns the axis. The vmap
+* `solve_batched(x_initial=x0_batch)` — *the library* owns the axis. The vmap
   is applied **inside** the method, before any export, so the whole loop lowers
   to ordinary batched XLA ops and serializes cleanly. Under
   `save_compiled=True` it is written to the solver cache on the first run and
@@ -74,7 +74,7 @@ problem.initialize()
 
 # First process: traces, exports, writes <cache>/compiled_solve_batched_<hash>.jax
 # Later processes: deserialize-and-.call, no compile.
-batched = problem.solve_batched(x0_stack, xf_stack, params)
+batched = problem.solve_batched(x_initial=x0_batch, parameters=params)
 # batched.x.shape == (B, N, n_states) — same pytree jax.vmap(solve_jax) returns.
 ```
 

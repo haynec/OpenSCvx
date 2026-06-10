@@ -23,7 +23,7 @@ import os
 import queue
 import threading
 import time
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import jax
 import numpy as np
@@ -80,81 +80,98 @@ from openscvx.utils.caching import (
 )
 
 
-def _infer_batch_size(
-    user_params: Optional[dict],
-    *,
-    x0_stack=None,
-    xf_stack=None,
-    x_guess=None,
-    u_guess=None,
-) -> int:
-    """Infer the batch size B for :meth:`Problem.solve_batched`.
+def _resolve_batch_spec(
+    entries: Dict[str, Tuple[Any, Tuple[int, ...]]],
+    in_axes: Optional[Dict[str, Optional[int]]] = None,
+) -> Tuple[int, Dict[str, Optional[int]]]:
+    """Decide which entries of a batched solve carry a batch axis.
 
-    Returns the leading axis of the first batched entry among *x0_stack*,
-    *xf_stack*, *x_guess*, *u_guess*, or a non-scalar value in *user_params*.
-    Raises ``ValueError`` when no batched entry is found.
+    The one rule behind :meth:`Problem.solve_batched`: a value whose shape
+    equals its declared (unbatched) shape is shared across the batch; a value
+    with exactly one extra leading axis is batched along it. Rank against the
+    declared shape decides — never the leading-axis value — so a shared entry
+    whose leading axis happens to equal ``B`` is never misread as batched.
+
+    Args:
+        entries: ``{name: (value, declared_shape)}`` over every batchable
+            input. ``None`` values are skipped (the caller substitutes
+            defaults for them).
+        in_axes: Optional ``{name: 0 | None}`` overriding inference for the
+            named entries (``0`` = batched along the leading axis, ``None`` =
+            shared); unlisted entries fall back to the rank rule.
+
+    Returns:
+        ``(B, axes)`` — the common batch size and a ``{name: 0 | None}`` dict
+        over the non-``None`` entries, ready to use as a ``jax.vmap``
+        ``in_axes`` pytree.
+
+    Raises:
+        ValueError: If a value matches neither accepted shape, if batched
+            entries disagree on the leading axis, if no entry is batched, or
+            if *in_axes* names an unknown or absent entry or uses an axis
+            other than ``0`` / ``None``.
     """
-    for value in (x0_stack, xf_stack):
-        if value is not None:
-            arr = jnp.asarray(value)
-            if arr.ndim >= 2:
-                return int(arr.shape[0])
-    for value in (x_guess, u_guess):
-        if value is not None:
-            arr = jnp.asarray(value)
-            if arr.ndim >= 3:
-                return int(arr.shape[0])
-    if user_params:
-        for value in user_params.values():
-            arr = jnp.asarray(value)
-            if arr.ndim > 0:
-                return int(arr.shape[0])
-    raise ValueError(
-        "solve_batched: cannot infer batch size B. "
-        "Pass at least one batched entry in parameters "
-        "(e.g. parameters={'initial_position': array_of_shape_B_x_n}), "
-        "or batched x_guess/u_guess arrays of shape (B, N, n)."
-    )
-
-
-def _expand_batched_trajectory_guess(
-    arr,
-    *,
-    B: int,
-    N: int,
-    n: int,
-    name: str,
-    default: jnp.ndarray,
-) -> jnp.ndarray:
-    """Broadcast or validate a trajectory guess for :meth:`Problem.solve_batched`.
-
-    Accepts ``None`` (use *default*), a shared ``(N, n)`` array, or a
-    per-batch ``(B, N, n)`` stack.
-    """
-    if arr is None:
-        return jnp.asarray(np.broadcast_to(np.asarray(default), (B, N, n)).copy())
-    arr = jnp.asarray(arr)
-    if arr.ndim == 2:
-        if tuple(arr.shape) != (N, n):
+    in_axes = in_axes or {}
+    unknown = set(in_axes) - set(entries)
+    if unknown:
+        raise ValueError(
+            f"solve_batched: in_axes names unknown entr{'y' if len(unknown) == 1 else 'ies'} "
+            f"{sorted(unknown)}; batchable entries are {sorted(entries)}."
+        )
+    for name, ax in in_axes.items():
+        if ax not in (0, None):
             raise ValueError(
-                f"solve_batched: shared {name} must have shape (N, n)=({N}, {n}), got {arr.shape}."
+                f"solve_batched: in_axes['{name}'] must be 0 (batched along the "
+                f"leading axis) or None (shared); got {ax!r}."
             )
-        return jnp.asarray(np.broadcast_to(np.asarray(arr), (B, N, n)).copy())
-    if arr.ndim == 3:
-        if int(arr.shape[0]) != B:
+        if ax == 0 and entries[name][0] is None:
             raise ValueError(
-                f"solve_batched: batched {name} leading axis must equal B={B}, "
-                f"got shape {arr.shape}."
+                f"solve_batched: in_axes marks '{name}' as batched, but no value "
+                f"was passed for it."
             )
-        if tuple(arr.shape[1:]) != (N, n):
+
+    axes: Dict[str, Optional[int]] = {}
+    batched: List[Tuple[str, int]] = []  # (name, leading axis)
+    for name, (value, declared) in entries.items():
+        if value is None:
+            continue
+        shape = tuple(jnp.shape(value))
+        declared = tuple(declared)
+        if name in in_axes:
+            axes[name] = in_axes[name]
+            if in_axes[name] == 0:
+                if not shape:
+                    raise ValueError(
+                        f"solve_batched: in_axes marks '{name}' as batched, but it "
+                        f"is a scalar with no leading axis to batch over."
+                    )
+                batched.append((name, shape[0]))
+        elif shape == declared:
+            axes[name] = None
+        elif len(shape) == len(declared) + 1 and shape[1:] == declared:
+            axes[name] = 0
+            batched.append((name, shape[0]))
+        else:
             raise ValueError(
-                f"solve_batched: batched {name} must have shape (B, N, n)=({B}, {N}, {n}), "
-                f"got {arr.shape}."
+                f"solve_batched: '{name}' has shape {shape}, but its unbatched "
+                f"shape is {declared}; pass {declared} to share it across the "
+                f"batch, or (B,) + {declared} to batch it."
             )
-        return arr
-    raise ValueError(
-        f"solve_batched: {name} must be None, shape (N, n), or (B, N, n); got {arr.shape}."
-    )
+
+    if not batched:
+        raise ValueError(
+            "solve_batched: every argument matches its unbatched shape, so there "
+            "is no batch axis. Use solve_jax() for a single solve, or mark an "
+            "entry as batched explicitly via in_axes (e.g. in_axes={'x_initial': 0})."
+        )
+    ref_name, B = batched[0]
+    for name, b in batched[1:]:
+        if b != B:
+            raise ValueError(
+                f"solve_batched: batch sizes disagree: '{ref_name}' has leading "
+                f"axis {B} but '{name}' has leading axis {b}."
+            )
+    return B, axes
 
 
 def _make_single_result(
@@ -182,29 +199,6 @@ def _make_single_result(
         _states=results._states,
         _controls=results._controls,
     )
-
-
-def _solve_batched_param_in_axes(params: dict, B: int):
-    """Per-parameter vmap ``in_axes`` spec for the parameters pytree.
-
-    Returns ``0`` when every parameter carries a leading batch axis of size ``B``,
-    ``None`` when none do (all shared), or a per-key ``dict`` when the dict is
-    mixed — JAX ``vmap`` accepts any pytree-shaped ``in_axes`` value, so a dict
-    of ``{key: 0 | None}`` correctly batches only the parameters that carry the
-    batch dimension while broadcasting the rest.
-    """
-    if not params:
-        return None
-    axes = {
-        key: (0 if (jnp.asarray(v).ndim > 0 and int(jnp.asarray(v).shape[0]) == B) else None)
-        for key, v in params.items()
-    }
-    vals = list(axes.values())
-    if all(ax == 0 for ax in vals):
-        return 0
-    if all(ax is None for ax in vals):
-        return None
-    return axes  # mixed: return per-key spec; JAX vmap handles it
 
 
 class Problem:
@@ -519,10 +513,11 @@ class Problem:
         self._solve_loop_k_max: Optional[int] = None
 
         # Closure cache for the batched ``vmap``'d loop that backs
-        # :meth:`solve_batched`. Keyed on ``(B, k_max)`` — the fixed batch
-        # size is baked into the artifact, so a different ``B`` rebuilds.
+        # :meth:`solve_batched`. Keyed on ``(B, k_max, param_axes)`` — batch
+        # size and per-parameter batching are baked into the artifact, so
+        # changing either rebuilds.
         self._solve_batched_fn: Optional[callable] = None
-        self._solve_batched_key: Optional[Tuple[int, int]] = None
+        self._solve_batched_key: Optional[tuple] = None
 
         # Set up emitter & queue (thread started in initialize() after columns are known)
         if self.settings.dev.printing:
@@ -1337,21 +1332,25 @@ class Problem:
         return self._solve_loop_fn
 
     def _get_or_build_solve_batched(
-        self, B: int, max_iters: Optional[int], params: dict
+        self,
+        B: int,
+        max_iters: Optional[int],
+        params: dict,
+        param_axes: Dict[str, Optional[int]],
     ) -> callable:
         """Return the cached ``jax.jit``'d batched ``lax.while_loop`` wrapper.
 
         Mirrors :meth:`_get_or_build_solve_loop` but the loop body is
-        ``jax.vmap``'d over the leading batch axis of the ``AlgorithmState`` and,
-        when every parameter array carries that same axis, over parameters too;
-        otherwise parameters are shared across the batch. A single XLA program
-        runs all ``B`` SCP solves.
+        ``jax.vmap``'d over the leading batch axis of the ``AlgorithmState``
+        and over each parameter whose entry in *param_axes* is ``0``;
+        parameters at ``None`` are shared across the batch. A single XLA
+        program runs all ``B`` SCP solves.
         It is built over :attr:`_iteration_fn_jit_inner` — the body whose inner
         discretization solvers are plain ``jax.jit``, hence ``vmap``-safe — not
         :attr:`_iteration_fn`, which under ``save_compiled`` wraps
         ``call_exported`` solvers that have no ``vmap`` rule (§3). The closure
-        is cached on ``(B, k_max)``: the batch size is baked into the program,
-        so a different ``B`` retraces.
+        is cached on ``(B, k_max, param_axes)``: batch size and per-parameter
+        batching are baked into the program, so changing either retraces.
 
         Under ``save_compiled`` the whole vmapped loop is exported once to the
         solver cache and deserialized on later processes (the single artifact
@@ -1361,7 +1360,7 @@ class Problem:
         silently degrading to an in-process solve.
         """
         k_max = max_iters if max_iters is not None else self._algorithm.k_max
-        key = (B, k_max)
+        key = (B, k_max, tuple(sorted(param_axes.items())))
         if self._solve_batched_fn is None or self._solve_batched_key != key:
             loop = make_solve_loop(
                 self._iteration_fn_jit_inner,
@@ -1370,7 +1369,6 @@ class Problem:
                 self._algorithm.ep_vc,
                 k_max,
             )
-            param_axes = _solve_batched_param_in_axes(params, B)
             batched = jax.vmap(loop, in_axes=(0, param_axes))
             if self.settings.sim.save_compiled and not self.settings.dev.debug:
                 if not self._solver.exportable:
@@ -1482,51 +1480,39 @@ class Problem:
 
     def solve_batched(
         self,
+        x_initial: Optional[jnp.ndarray] = None,
+        x_final: Optional[jnp.ndarray] = None,
         parameters: Optional[dict] = None,
         *,
-        x0_stack: Optional[jnp.ndarray] = None,
-        xf_stack: Optional[jnp.ndarray] = None,
         x_guess: Optional[jnp.ndarray] = None,
         u_guess: Optional[jnp.ndarray] = None,
         max_iters: Optional[int] = None,
+        in_axes: Optional[dict] = None,
     ) -> OptimizationResults:
-        """Run ``B`` SCP solves in parallel, batching over parameters.
+        """Run ``B`` SCP solves in parallel as one batched XLA program.
 
-        Applies ``jax.vmap`` *internally* and drives the same fused
-        ``iteration_fn`` core as :meth:`solve_jax` inside one
-        ``lax.while_loop``.  The result is a batched
-        :class:`OptimizationResults` pytree: every array leaf carries the
-        leading batch axis ``B`` (e.g. ``result.x.shape == (B, N, n_x)``).
-
-        **Batching over parameters**: declare any state or constraint whose
-        value changes across solves as an ``ox.Parameter``, then pass an
-        ``(B, ...)``-shaped array for it in *parameters*::
-
-            ic_param = ox.Parameter("ic", shape=(3,), value=default_ic)
-            constraints += [(state == ic_param).convex().at([0])]
-            ...
-            results = problem.solve_batched(parameters={"ic": ic_batch})
-
-        Parameters whose leading axis equals ``B`` are vmapped over; all others
-        are broadcast across the batch.  ``B`` is inferred from the first
-        batched entry in *parameters*, *x_guess*, or *u_guess*.
-
-        **Boundary pins**: pass ``x0_stack`` / ``xf_stack`` as ``(B, n_x)``
-        arrays to batch initial and terminal Fix boundary conditions without
-        declaring a runtime ``.convex()`` constraint (cheaper than parameter
-        pins evaluated every SCP iteration)::
-
-            results = problem.solve_batched(x0_stack=x0_stack, xf_stack=xf_stack)
-
-        **Trajectory guesses**: pass ``x_guess`` / ``u_guess`` as shared
-        ``(N, n)`` arrays (broadcast to every batch element) or per-batch
-        ``(B, N, n)`` stacks to seed each solve's SCP iterate independently::
+        Takes the same arguments as :meth:`solve_jax`, with one rule on top:
+        **add a leading batch axis to whatever varies across solves**. An
+        argument whose shape matches its unbatched shape is shared by every
+        batch element; an argument with exactly one extra leading axis is
+        batched along it. The batch size ``B`` is the common leading axis of
+        the batched entries, and every array leaf of the returned
+        :class:`OptimizationResults` carries it (e.g. ``result.x.shape ==
+        (B, N, n_x)``)::
 
             results = problem.solve_batched(
-                x0_stack=x0_stack,
-                xf_stack=xf_stack,
-                x_guess=x_guess_batch,
+                x_initial=x0_batch,              # (B, n_x): batched pins
+                parameters={
+                    "gate_center": centers,      # (B, 3) vs declared (3,) -> batched
+                    "gate_radius": 0.5,          # declared shape -> shared
+                },
             )
+
+        Rank against the declared shape decides — never the leading-axis
+        value — so a shared parameter whose leading axis happens to equal
+        ``B`` stays shared. For the rare entry the rank rule cannot express
+        (e.g. batching a declared rank-1 parameter element-wise), pass an
+        explicit *in_axes*.
 
         Why this exists alongside ``jax.vmap(solve_jax)``: because the batch
         axis is owned here the whole vmapped loop is a single function that
@@ -1543,27 +1529,37 @@ class Problem:
         ``B``, and the JAX version — so a stale artifact is never silently
         reused.
 
+        **What cannot be batched**: ``N``, the solver backend, the
+        discretizer/integrator, the autotuner type, and ``float_dtype``
+        change array shapes or program structure, so ``B`` such solves can
+        never share one XLA program. There is deliberately no slot for them
+        here — sweep them with a Python loop over separately built
+        ``Problem`` instances.
+
         Args:
-            parameters: Problem parameters dict.  ``None`` reuses
-                ``self._parameters``.  Parameters whose leading axis equals
-                ``B`` are vmapped over (each batch element receives its own
-                slice); parameters with a different shape are broadcast.
-                ``B`` is inferred from the first batched entry supplied here,
-                in *x0_stack*, *xf_stack*, *x_guess*, or *u_guess* (raises
-                if none is found).
-            x0_stack: Initial boundary pins, shape ``(B, n_states)``.  ``None``
-                broadcasts the default ``x_init_pin`` from settings.
-            xf_stack: Terminal boundary pins, shape ``(B, n_states)``.  ``None``
-                broadcasts the default ``x_term_pin`` from settings.
-            x_guess: State trajectory guess, shape ``(N, n_states)`` shared
-                across the batch or ``(B, N, n_states)`` per element.
+            x_initial: Initial-state boundary pin — shape ``(n_x,)`` shared
+                across the batch or ``(B, n_x)`` batched. Same
+                ``jnp.nan``-at-non-Fix convention as :meth:`solve_jax`.
                 ``None`` uses the default from settings.
-            u_guess: Control trajectory guess, shape ``(N, n_controls)`` or
-                ``(B, N, n_controls)``.  ``None`` uses the default from
+            x_final: Terminal-state boundary pin — ``(n_x,)`` or
+                ``(B, n_x)``. Same conventions as ``x_initial``.
+            parameters: Problem parameters for this solve, merged over
+                ``self.parameters``. Each value either matches the
+                parameter's declared shape (shared) or carries one extra
+                leading axis, ``(B,) + declared`` (batched).
+            x_guess: State trajectory guess — ``(N, n_x)`` shared or
+                ``(B, N, n_x)`` batched. ``None`` uses the default from
                 settings.
-            max_iters: SCP iteration cap.  ``None`` uses
-                ``algorithm.k_max``; a different value (or a different ``B``)
-                rebuilds the cached batched closure.
+            u_guess: Control trajectory guess — ``(N, n_u)`` or
+                ``(B, N, n_u)``. ``None`` uses the default from settings.
+            max_iters: SCP iteration cap. ``None`` uses ``algorithm.k_max``;
+                a different value (or a different ``B``) rebuilds the cached
+                batched closure.
+            in_axes: Explicit batching override in ``jax.vmap``'s vocabulary:
+                a dict keyed by argument name with leaves ``0`` (batched) or
+                ``None`` (shared); ``"parameters"`` maps to a per-key dict,
+                e.g. ``in_axes={"parameters": {"gate_center": 0}}``. Partial
+                specs are fine — unlisted entries use the rank rule.
 
         Returns:
             :class:`OptimizationResults` pytree with a leading ``B`` axis on
@@ -1574,48 +1570,68 @@ class Problem:
                 "Problem has not been initialized. Call initialize() before solve_batched()"
             )
 
-        params_for_solve = dict(self._parameters, **(parameters or {}))
+        user_params = parameters or {}
+        unknown = set(user_params) - set(self._parameters)
+        if unknown:
+            raise ValueError(
+                f"solve_batched: unknown parameter(s) {sorted(unknown)}; "
+                f"declared parameters are {sorted(self._parameters)}."
+            )
 
-        B = _infer_batch_size(
-            parameters, x0_stack=x0_stack, xf_stack=xf_stack, x_guess=x_guess, u_guess=u_guess
-        )
         N = self.settings.sim.n
         n_x = self.settings.sim.n_states
         n_u = self.settings.sim.n_controls
+        entries = {
+            "x_initial": (x_initial, (n_x,)),
+            "x_final": (x_final, (n_x,)),
+            "x_guess": (x_guess, (N, n_x)),
+            "u_guess": (u_guess, (N, n_u)),
+        }
+        for key, value in user_params.items():
+            entries[f"parameters.{key}"] = (value, tuple(np.shape(self._parameters[key])))
+
+        # Flatten the user-facing in_axes ({"parameters": {key: ax}}) to the
+        # per-entry names the resolver (and its error messages) uses.
+        flat_in_axes = {}
+        for name, ax in (in_axes or {}).items():
+            if name == "parameters":
+                if not isinstance(ax, dict):
+                    raise ValueError(
+                        f"solve_batched: in_axes['parameters'] must be a per-key "
+                        f"dict, e.g. {{'gate_center': 0}}; got {ax!r}."
+                    )
+                flat_in_axes.update({f"parameters.{key}": v for key, v in ax.items()})
+            else:
+                flat_in_axes[name] = ax
+
+        B, axes = _resolve_batch_spec(entries, flat_in_axes)
+
+        # Shared state-side inputs — and the defaults for omitted ones —
+        # broadcast to a leading B axis; batched ones pass through.
         _default = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
-        if x0_stack is None:
-            x0_stack = jnp.asarray(
-                np.broadcast_to(np.asarray(_default.x_init_pin), (B, n_x)).copy()
-            )
-        else:
-            x0_stack = jnp.asarray(x0_stack)
-            if x0_stack.shape != (B, n_x):
-                raise ValueError(
-                    f"solve_batched: x0_stack must have shape (B, n_x)=({B}, {n_x}), "
-                    f"got {x0_stack.shape}."
-                )
-        if xf_stack is None:
-            xf_stack = jnp.asarray(
-                np.broadcast_to(np.asarray(_default.x_term_pin), (B, n_x)).copy()
-            )
-        else:
-            xf_stack = jnp.asarray(xf_stack)
-            if xf_stack.shape != (B, n_x):
-                raise ValueError(
-                    f"solve_batched: xf_stack must have shape (B, n_x)=({B}, {n_x}), "
-                    f"got {xf_stack.shape}."
-                )
-        x_guess_stack = _expand_batched_trajectory_guess(
-            x_guess, B=B, N=N, n=n_x, name="x_guess", default=_default.x
-        )
-        u_guess_stack = _expand_batched_trajectory_guess(
-            u_guess, B=B, N=N, n=n_u, name="u_guess", default=_default.u
-        )
+        defaults = {
+            "x_initial": _default.x_init_pin,
+            "x_final": _default.x_term_pin,
+            "x_guess": _default.x,
+            "u_guess": _default.u,
+        }
+        stacks = {}
+        for name, default in defaults.items():
+            value = entries[name][0]
+            arr = jnp.asarray(default if value is None else value)
+            if axes.get(name) is None:
+                arr = jnp.broadcast_to(arr, (B,) + arr.shape)
+            stacks[name] = arr
 
         states = jax.vmap(self._resolve_initial_state)(
-            x0_stack, xf_stack, x_guess_stack, u_guess_stack
+            stacks["x_initial"], stacks["x_final"], stacks["x_guess"], stacks["u_guess"]
         )
-        batched_solve = self._get_or_build_solve_batched(B, max_iters, params_for_solve)
+
+        params_for_solve = dict(self._parameters, **user_params)
+        param_axes = {key: axes.get(f"parameters.{key}") for key in params_for_solve}
+        batched_solve = self._get_or_build_solve_batched(
+            B, max_iters, params_for_solve, param_axes
+        )
         t_0_solve = time.time()
         if getattr(self, "_solve_batched_is_exported", False):
             final_states = batched_solve.call(states, params_for_solve)

@@ -1,0 +1,186 @@
+"""Unit tests for the rank-based batch resolver behind ``Problem.solve_batched``.
+
+``_resolve_batch_spec`` implements the one rule of the batched-solve API: a
+value whose shape equals its declared (unbatched) shape is shared across the
+batch; a value with exactly one extra leading axis is batched along it. Rank
+against the declared shape decides — never the leading-axis value — with an
+explicit ``jax.vmap``-style ``in_axes`` dict as the override. Pure-function
+tests: no problem build, no solver runs.
+"""
+
+import numpy as np
+import pytest
+
+from openscvx.problem import _resolve_batch_spec
+
+# === Rank rule ===
+
+
+def test_shared_when_shape_matches_declared():
+    B, axes = _resolve_batch_spec(
+        {
+            "x_initial": (np.zeros((4, 3)), (3,)),
+            "parameters.center": (np.zeros(3), (3,)),
+        }
+    )
+    assert B == 4
+    assert axes == {"x_initial": 0, "parameters.center": None}
+
+
+def test_batched_when_one_extra_leading_axis():
+    B, axes = _resolve_batch_spec({"x_guess": (np.zeros((5, 10, 3)), (10, 3))})
+    assert B == 5
+    assert axes == {"x_guess": 0}
+
+
+def test_scalar_declared_batched_as_vector():
+    B, axes = _resolve_batch_spec(
+        {
+            "parameters.radius": (np.zeros(7), ()),
+            "parameters.gain": (1.5, ()),
+        }
+    )
+    assert B == 7
+    assert axes == {"parameters.radius": 0, "parameters.gain": None}
+
+
+def test_none_values_are_skipped():
+    B, axes = _resolve_batch_spec(
+        {
+            "x_initial": (np.zeros((2, 3)), (3,)),
+            "x_final": (None, (3,)),
+        }
+    )
+    assert B == 2
+    assert axes == {"x_initial": 0}
+
+
+def test_shared_matrix_with_leading_axis_equal_to_B_stays_shared():
+    # Declared (4, 3) passed as (4, 3) alongside a B=4 batched pin: rank
+    # matches declared, so the coincidental leading axis must not batch it.
+    B, axes = _resolve_batch_spec(
+        {
+            "x_initial": (np.zeros((4, 6)), (6,)),
+            "parameters.waypoints": (np.zeros((4, 3)), (4, 3)),
+        }
+    )
+    assert B == 4
+    assert axes == {"x_initial": 0, "parameters.waypoints": None}
+
+
+def test_matrix_batched_with_full_extra_axis():
+    B, axes = _resolve_batch_spec({"parameters.waypoints": (np.zeros((4, 4, 3)), (4, 3))})
+    assert B == 4
+    assert axes == {"parameters.waypoints": 0}
+
+
+# === in_axes overrides ===
+
+
+def test_in_axes_forces_batched_on_rank_matching_value():
+    # A declared-(4,) parameter passed as (4,) reads as shared; in_axes says
+    # it is one scalar per batch element.
+    B, axes = _resolve_batch_spec(
+        {"parameters.weights": (np.zeros(4), (4,))},
+        in_axes={"parameters.weights": 0},
+    )
+    assert B == 4
+    assert axes == {"parameters.weights": 0}
+
+
+def test_in_axes_forces_shared():
+    B, axes = _resolve_batch_spec(
+        {
+            "x_initial": (np.zeros((2, 3)), (3,)),
+            "x_guess": (np.zeros((2, 10, 3)), (10, 3)),
+        },
+        in_axes={"x_guess": None},
+    )
+    assert B == 2
+    assert axes == {"x_initial": 0, "x_guess": None}
+
+
+def test_in_axes_partial_spec_merges_with_inference():
+    B, axes = _resolve_batch_spec(
+        {
+            "parameters.weights": (np.zeros(4), (4,)),
+            "parameters.center": (np.zeros((4, 3)), (3,)),
+        },
+        in_axes={"parameters.weights": 0},
+    )
+    assert B == 4
+    assert axes == {"parameters.weights": 0, "parameters.center": 0}
+
+
+def test_in_axes_unknown_name_raises():
+    with pytest.raises(ValueError, match=r"unknown entry.*'x_intial'"):
+        _resolve_batch_spec(
+            {"x_initial": (np.zeros((2, 3)), (3,))},
+            in_axes={"x_intial": 0},
+        )
+
+
+def test_in_axes_invalid_axis_value_raises():
+    with pytest.raises(ValueError, match=r"in_axes\['x_initial'\] must be 0.*or None"):
+        _resolve_batch_spec(
+            {"x_initial": (np.zeros((2, 3)), (3,))},
+            in_axes={"x_initial": 1},
+        )
+
+
+def test_in_axes_on_absent_entry_raises():
+    with pytest.raises(ValueError, match=r"'x_final' as batched, but no value"):
+        _resolve_batch_spec(
+            {
+                "x_initial": (np.zeros((2, 3)), (3,)),
+                "x_final": (None, (3,)),
+            },
+            in_axes={"x_final": 0},
+        )
+
+
+def test_in_axes_forced_zero_on_scalar_raises():
+    with pytest.raises(ValueError, match=r"scalar with no leading axis"):
+        _resolve_batch_spec(
+            {"parameters.gain": (1.5, ())},
+            in_axes={"parameters.gain": 0},
+        )
+
+
+def test_in_axes_forced_zero_with_disagreeing_batch_size_raises():
+    with pytest.raises(ValueError, match=r"'x_initial' has leading axis 2.*'parameters.weights' has leading axis 4"):
+        _resolve_batch_spec(
+            {
+                "x_initial": (np.zeros((2, 3)), (3,)),
+                "parameters.weights": (np.zeros(4), (4,)),
+            },
+            in_axes={"parameters.weights": 0},
+        )
+
+
+# === Teaching errors ===
+
+
+def test_shape_mismatch_names_entry_and_shapes():
+    with pytest.raises(ValueError, match=r"'parameters.center' has shape \(5, 2\).*unbatched.*\(3,\)"):
+        _resolve_batch_spec({"parameters.center": (np.zeros((5, 2)), (3,))})
+
+
+def test_batch_size_disagreement_names_both_entries():
+    with pytest.raises(ValueError, match=r"'x_initial' has leading axis 4 but 'x_final' has leading axis 5"):
+        _resolve_batch_spec(
+            {
+                "x_initial": (np.zeros((4, 3)), (3,)),
+                "x_final": (np.zeros((5, 3)), (3,)),
+            }
+        )
+
+
+def test_no_batched_entry_suggests_solve_jax():
+    with pytest.raises(ValueError, match=r"solve_jax\(\).*in_axes"):
+        _resolve_batch_spec(
+            {
+                "x_initial": (np.zeros(3), (3,)),
+                "parameters.center": (np.zeros(3), (3,)),
+            }
+        )

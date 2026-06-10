@@ -2,7 +2,7 @@
 
 Runs ``N_BATCH`` SCP solves in parallel, each starting from a different random
 initial position drawn uniformly within the position bounds.  Per-batch ICs are
-passed through ``x0_stack``: position is declared ``Fix`` at the symbolic level
+passed through ``x_initial``: position is declared ``Fix`` at the symbolic level
 (so the solver consumes ``x_init_pin``), then each batch row overwrites the
 position slice with the sampled values.  This avoids the per-iteration
 ``(position == parameter).convex()`` constraint while still enforcing the full
@@ -110,7 +110,7 @@ mass.final = [ox.Maximize(1.5)]
 position = ox.State("position", shape=(3,))
 position.max = [10.0, 10.0, 10.0]
 position.min = [-10.0, -10.0, -10.0]
-# Fix so x0_stack pins are consumed; per-batch values overwrite these defaults.
+# Fix so x_initial pins are consumed; per-batch values overwrite these defaults.
 position.initial = [7.5, 4.5, 2.5]
 position.final = [0.0, ox.Free(0.0), ox.Free(0.0)]
 
@@ -193,7 +193,7 @@ constraint_exprs = []
 for st in states:
     constraint_exprs.extend([ox.ctcs(st <= st.max), ox.ctcs(st.min <= st)])
 
-# Initial position via x0_stack (Fix BC); terminal lateral via convex constraint.
+# Initial position via x_initial pins (Fix BC); terminal lateral via convex constraint.
 constraint_exprs.append((position[1:3] == final_position).convex().at([N - 1]))
 
 constraint_exprs.append(ox.ctcs(1.0 * (mass - m_dry) >= 0))
@@ -414,15 +414,14 @@ if __name__ == "__main__":
     print(f"Sampled {N_BATCH} initial positions  (alt ∈ [3, 9] m, lat ∈ [-7, 7] m)")
 
     # ── Compile + solve ───────────────────────────────────────────────────────
+    # x_initial is (B, n_x) — one extra leading axis — so it is batched; the
+    # terminal pin is omitted, so every element shares the default.
     default_init = np.asarray(problem.state.x_init_pin)
-    x0_stack = np.broadcast_to(default_init, (N_BATCH, default_init.shape[0])).copy()
-    x0_stack[:, POSITION_SLICE] = ic_batch
-    x0_stack = jnp.asarray(x0_stack)
-    xf_pin = np.asarray(problem.state.x_term_pin)
-    xf_stack = jnp.broadcast_to(xf_pin, (N_BATCH, xf_pin.shape[0]))
+    x_initial = np.broadcast_to(default_init, (N_BATCH, default_init.shape[0])).copy()
+    x_initial[:, POSITION_SLICE] = ic_batch
 
     print("Compiling and running solve_batched …")
-    results = problem.solve_batched(x0_stack=x0_stack, xf_stack=xf_stack)
+    results = problem.solve_batched(x_initial=jnp.asarray(x_initial))
 
     # ── Post-process: propagate all B solutions through nonlinear dynamics ────
     print("Post-processing (nonlinear propagation) …")
