@@ -203,12 +203,8 @@ def test_moreau_spec_rejects_qpax_only_fields():
 # ============================================================================
 
 
-def test_moreau_rejects_user_convex_constraints():
-    """User .convex() constraints lower to second-order cones — not yet
-    supported by MoreauPTRSolver v1.  The refusal lives on
-    ``ConvexSolver.lower_convex_constraints`` (inherited default), so Moreau
-    rejects them during ``Problem(...)`` lowering — fail-fast before setup."""
-    n = 5
+def _make_pos_vel_problem_base(n=5):
+    """Return the (pos, vel, u, dyn, time) fixtures used by rejection tests."""
     pos = ox.State("pos", shape=(2,))
     pos.min = np.array([-10.0, -10.0])
     pos.max = np.array([10.0, 10.0])
@@ -225,9 +221,42 @@ def test_moreau_rejects_user_convex_constraints():
     u.guess = np.zeros((n, 2))
     dyn = {"pos": vel, "vel": u}
     time = ox.Time(initial=0.0, final=("minimize", 2.0), min=0.0, max=10.0)
+    return pos, vel, u, dyn, time
 
+
+def test_moreau_accepts_soc_convex_constraints():
+    """MoreauPTRSolver now supports SOC (.convex()) constraints.
+
+    An L2-norm inequality ``‖pos‖₂ ≤ 8`` canonicalises to a
+    :class:`~openscvx.solvers.cones.SOCConstraint` which is in
+    :attr:`MoreauPTRSolver.SUPPORTED_CONE_TYPES`.  Problem construction
+    must succeed without raising."""
+    n = 5
+    pos, vel, u, dyn, time = _make_pos_vel_problem_base(n)
     cvx_constraint = (ox.linalg.Norm(pos) <= 8.0).convex()
+    # Should not raise — Moreau supports SOC.
+    Problem(
+        dynamics=dyn,
+        states=[pos, vel],
+        controls=[u],
+        time=time,
+        constraints=[cvx_constraint],
+        N=n,
+        float_dtype="float64",
+        solver={"backend": "moreau"},
+    )
 
+
+def test_moreau_rejects_l1_norm_convex_constraints():
+    """L1-norm .convex() constraints are not yet supported by any JAX backend.
+
+    They require auxiliary epigraph variables that the current assemblers
+    do not introduce.  :func:`~openscvx.symbolic.canonicalize.canonicalize_nodal_constraint`
+    must raise :exc:`NotImplementedError` for this pattern."""
+    n = 5
+    pos, vel, u, dyn, time = _make_pos_vel_problem_base(n)
+    # L1 norm — requires auxiliary variables, not yet supported.
+    cvx_constraint = (ox.linalg.Norm(pos, ord=1) <= 8.0).convex()
     with pytest.raises(NotImplementedError):
         Problem(
             dynamics=dyn,
@@ -238,6 +267,29 @@ def test_moreau_rejects_user_convex_constraints():
             N=n,
             float_dtype="float64",
             solver={"backend": "moreau"},
+        )
+
+
+def test_qpax_rejects_soc_convex_constraints():
+    """QPAXPTRSolver does not support SOC constraints.
+
+    An L2-norm inequality canonicalises to
+    :class:`~openscvx.solvers.cones.SOCConstraint` which is **not** in
+    :attr:`QPAXPTRSolver.SUPPORTED_CONE_TYPES`.  The solver must raise
+    :exc:`NotImplementedError` during lowering."""
+    n = 5
+    pos, vel, u, dyn, time = _make_pos_vel_problem_base(n)
+    cvx_constraint = (ox.linalg.Norm(pos) <= 8.0).convex()
+    with pytest.raises(NotImplementedError):
+        Problem(
+            dynamics=dyn,
+            states=[pos, vel],
+            controls=[u],
+            time=time,
+            constraints=[cvx_constraint],
+            N=n,
+            float_dtype="float64",
+            solver={"backend": "qpax"},
         )
 
 

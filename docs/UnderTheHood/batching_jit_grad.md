@@ -49,6 +49,81 @@ Python loop) are exactly the failure class the two-method design exists to
 prevent. See `plans/jax-pure-solve.md`'s Decision Log for the longer
 discussion.
 
+## Batched, disk-cached solves with `solve_batched()`
+
+`jax.vmap(solve_jax)` and `solve_batched()` both run `B` SCP solves over
+stacked boundary conditions; they differ in **who owns the batch axis**, and
+that one difference is the whole point.
+
+* `jax.vmap(solve_jax)` — *the caller* owns the axis. Maximally idiomatic,
+  composes with `grad` / `scan`, but **in-process JIT only**: `jax.export` has
+  no outer `vmap` rule (`call_exported` cannot be batched), so an exported
+  artifact can never be re-vmapped, and every fresh process re-traces and
+  re-compiles the entire loop.
+* `solve_batched(x0_stack, xf_stack)` — *the library* owns the axis. The vmap
+  is applied **inside** the method, before any export, so the whole loop lowers
+  to ordinary batched XLA ops and serializes cleanly. Under
+  `save_compiled=True` it is written to the solver cache on the first run and
+  deserialized on later processes — skipping the XLA compile that
+  `jax.vmap(solve_jax)` pays on every launch.
+
+```python
+problem = ox.Problem(..., solver={"backend": "qpax"})
+problem.settings.sim.save_compiled = True
+problem.initialize()
+
+# First process: traces, exports, writes <cache>/compiled_solve_batched_<hash>.jax
+# Later processes: deserialize-and-.call, no compile.
+batched = problem.solve_batched(x0_stack, xf_stack, params)
+# batched.x.shape == (B, N, n_states) — same pytree jax.vmap(solve_jax) returns.
+```
+
+Pick `solve_batched` when **cross-process cold-start dominates** — short-lived
+processes (CI sweeps, notebook restarts, deployed workers) that otherwise pay
+the compile every launch. Pick `jax.vmap(solve_jax)` for everything in-program,
+where you own the transforms and want `grad` / `scan` composition. With
+`save_compiled=False`, `solve_batched` is just an in-process batched wrapper and
+the two produce identical results.
+
+The exported artifact is closed and deployable, not composable: it is the
+`call_exported`-has-no-outer-`vmap`-rule wall again. Use `solve_jax` for
+user-driven `jax.vmap` / `jax.grad`; `solve_batched` for a cached batched solve.
+
+### CVXPy cannot be exported
+
+Export requires every op in the loop — the backend solve included — to lower to
+serializable XLA. CVXPy's `iteration_callback` is a `jax.pure_callback`, and
+`jax.export` cannot serialize host callbacks. So `PTRSolver.exportable` is
+`False` for CVXPy (and `True` for QPAX / Moreau), and
+`solve_batched(save_compiled=True)` on the CVXPy backend **raises a teaching
+error** pointing at QPAX / Moreau rather than silently degrading to an uncached
+in-process solve. With `save_compiled=False`, CVXPy still runs `B` sequential
+in-process solves.
+
+### Cache invalidation is correctness, not just freshness
+
+The exported loop closes over far more than the symbolic problem does. Caching
+on the symbolic hash alone would silently deserialize a **stale artifact** when
+any of that extra state changes — a wrong-answer bug, not a cache miss. So
+`get_solve_batched_cache_path` (`openscvx/utils/caching.py`) extends the
+symbolic hash with everything additionally baked into the loop, each runtime
+object contributing through its own `_hash_into` (the same protocol the symbolic
+layer uses):
+
+* the convex backend class + its `solver_args`,
+* the algorithm + autotuner + convergence thresholds + initial weights,
+* the discretizer scheme (class + hold type + ODE solver),
+* the state/control scaling matrices `inv_S_x` / `inv_S_u`,
+* the fixed batch size `B` (the artifact is exported at one `B`), and
+* the JAX version (exported artifacts are not guaranteed to survive an
+  incompatible jax bump).
+
+Change any of these — backend, a tolerance, `k_max`, a state bound — and you get
+a different cache path, so a stale artifact is never reused.
+
+`examples/abstract/brachistochrone_batched.py` shows both paths side by side;
+re-running it is itself the cross-process demo.
+
 ## What `solve_jax()` returns
 
 `solve_jax()` returns the same `OptimizationResults` type as `solve()`,

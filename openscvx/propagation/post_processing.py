@@ -1,7 +1,6 @@
 import copy
 from typing import Callable, Optional
 
-import jax.numpy as jnp
 import numpy as np
 
 from openscvx.algorithms import OptimizationResults
@@ -20,6 +19,7 @@ def propagate_trajectory_results(
     dynamics_discrete: Optional[Callable] = None,
     algebraic_prop: Optional[dict] = None,
     discretizer: Optional[Discretizer] = None,
+    n_times: Optional[int] = None,
 ) -> OptimizationResults:
     """Propagate the optimal trajectory and compute additional results.
 
@@ -42,6 +42,11 @@ def propagate_trajectory_results(
         algebraic_prop (dict, optional): Dictionary mapping output names to vmapped JAX functions.
         discretizer: Discretizer instance (used for ``dis_type``).
             Defaults to ``None`` which uses FOH.
+        n_times (int, optional): When provided, build the dense output time grid as
+            ``np.linspace(t[0], t[-1], n_times)`` instead of the default
+            ``np.arange(t[0], t[-1], settings.prp.dt)``.  Useful when multiple
+            trajectories must be stacked into a uniform array (e.g. the output of
+            :meth:`~openscvx.problem.Problem.post_process_batched`).
 
     Returns:
         OptimizationResults: Updated results object containing:
@@ -58,35 +63,36 @@ def propagate_trajectory_results(
 
     t = np.array(s_to_t(x, u, settings, discretizer)).squeeze()
 
-    # Build dense output times and always include the exact terminal time.
-    # This ensures trajectory[..., -1] corresponds to the true final state.
-    t_full = np.arange(t[0], t[-1], settings.prp.dt)
-    if t_full.size == 0 or not np.isclose(t_full[-1], t[-1]):
-        t_full = np.concatenate([t_full, np.array([t[-1]])])
+    # Build dense output times.
+    if n_times is not None:
+        t_full = np.linspace(t[0], t[-1], n_times)
+    else:
+        # Default: step at prp.dt and always include the exact terminal time so
+        # that trajectory[..., -1] corresponds to the true final state.
+        t_full = np.arange(t[0], t[-1], settings.prp.dt)
+        if t_full.size == 0 or not np.isclose(t_full[-1], t[-1]):
+            t_full = np.concatenate([t_full, np.array([t[-1]])])
 
     tau_vals, u_full = t_to_tau(u, t_full, t, settings, discretizer)
 
-    # Create a copy of x_prop for propagation to avoid mutating settings
-    # Match free values from initial state to the initial value from the result
+    # Create a copy of x_prop for propagation to avoid mutating settings.
     x_prop_for_propagation = copy.copy(settings.sim.x_prop)
 
-    # Only copy for states that exist in optimization (propagation may have extra states at the end)
     n_opt_states = x.shape[1]
     n_prop_states = settings.sim.x_prop.initial.shape[0]
 
+    # For a converged solution x[0, :] is the actual IC for every optimisation-state
+    # component regardless of initial_type (Fix / Free / Maximize).  Using the
+    # trajectory value directly avoids a subtle bug where "Fix" components would
+    # be seeded from settings.sim.x_prop.initial — the lowering-time default —
+    # rather than the value enforced by a param-fix pin for this particular solve.
     if n_opt_states == n_prop_states:
-        # Same size - copy all
-        # Use metadata from settings (immutable configuration)
-        mask = jnp.array([t == "Free" for t in settings.sim.x.initial_type], dtype=bool)
-        x_prop_for_propagation.initial = jnp.where(mask, x[0, :], settings.sim.x_prop.initial)
+        x_prop_for_propagation.initial = np.array(x[0, :], dtype=float)
     else:
-        # Propagation has extra states - only copy the overlapping portion
-        # Use metadata from settings (immutable configuration)
-        mask = jnp.array([t == "Free" for t in settings.sim.x.initial_type], dtype=bool)
-        x_prop_initial_updated = settings.sim.x_prop.initial.copy()
-        x_prop_initial_updated[:n_opt_states] = jnp.where(
-            mask, x[0, :], settings.sim.x_prop.initial[:n_opt_states]
-        )
+        # Propagation has extra states appended beyond the optimisation states;
+        # copy only the overlapping prefix and leave prop-only states untouched.
+        x_prop_initial_updated = np.array(settings.sim.x_prop.initial, dtype=float)
+        x_prop_initial_updated[:n_opt_states] = np.array(x[0, :], dtype=float)
         x_prop_for_propagation.initial = x_prop_initial_updated
 
     # Temporarily replace x_prop with our modified copy for propagation

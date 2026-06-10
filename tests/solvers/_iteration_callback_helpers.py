@@ -272,4 +272,5 @@ def subproblem_data_from_numpy_stash(solver) -> SubproblemData:
         lam_vb_cross=jnp.zeros((0,)),
         x_init=jnp.asarray(x_init),
         x_term=jnp.asarray(x_term),
+        params=solver._parameters_dict,
     )

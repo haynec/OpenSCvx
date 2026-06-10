@@ -23,10 +23,13 @@ from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax import export
 
 from openscvx.utils.printing import Column
 
 if TYPE_CHECKING:
+    import hashlib
+
     from openscvx.config import Config
     from openscvx.lowered.jax_constraints import LoweredJaxConstraints
 
@@ -204,6 +207,31 @@ class AutotuningBase(ABC):
     # ``update_weights`` is one node in the outer compiled graph and the inner
     # JIT boundary disappears — the flag becomes a silent no-op on that path.
     JIT_UPDATE_WEIGHTS: bool = True
+
+    def _hash_into(self, hasher: "hashlib._Hash") -> None:
+        """Contribute the autotuner's update rule to the ``solve_batched`` cache key.
+
+        The exported batched loop bakes in ``update_weights`` and every numeric
+        parameter that steers it (penalty ramps, acceptance thresholds, weight
+        clips). The default hashes the concrete class plus all instance
+        attributes — sufficient because autotuner parameters are plain scalars.
+        Folded in by the algorithm's ``_hash_into`` (e.g.
+        :meth:`~openscvx.algorithms.scvx.penalized_trust_region.PenalizedTrustRegion._hash_into`);
+        mirrors the symbolic ``_hash_into`` protocol.
+
+        Caveat: the ``vars(self)`` sweep hashes *every* instance attribute, so a
+        subclass that stashes an iteration-count- or ``k_max``-derived field
+        would silently re-introduce the double-count that the algorithm's own
+        ``_hash_into`` deliberately avoids (the loop bound is keyed once, on the
+        assembler's resolved ``k_max``). Keep such fields out of the autotuner,
+        or override this method to exclude them.
+        """
+        from openscvx.utils.caching import hash_value_into
+
+        hasher.update(type(self).__name__.encode())
+        for name in sorted(vars(self)):
+            hasher.update(name.encode())
+            hash_value_into(hasher, getattr(self, name))
 
     @staticmethod
     def calculate_cost_from_state(
@@ -522,6 +550,20 @@ class AlgorithmState:
             x_init_pin=put(jnp.asarray(x_init_pin, dtype=f)),
             x_term_pin=put(jnp.asarray(x_term_pin, dtype=f)),
         )
+
+
+# ``AlgorithmState`` is the in/out pytree of the exported ``solve_batched``
+# artifact, so ``jax.export`` must know how to (de)serialize its treedef on top
+# of the runtime pytree registration above — a separate registry. The auxdata is
+# ``None`` (see ``tree_flatten``), so serialization is empty bytes and rebuild
+# falls back to the registered ``tree_unflatten``. Registered at import so any
+# process that deserializes the artifact has it.
+export.register_pytree_node_serialization(
+    AlgorithmState,
+    serialized_name="openscvx.algorithms.base.AlgorithmState",
+    serialize_auxdata=lambda aux: b"",
+    deserialize_auxdata=lambda data: None,
+)
 
 
 # ---------------------------------------------------------------------------

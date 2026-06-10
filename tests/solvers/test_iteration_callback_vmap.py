@@ -52,7 +52,7 @@ def _make_batch(data: SubproblemData, scales) -> SubproblemData:
     leaves = {f.name: getattr(data, f.name) for f in data.__dataclass_fields__.values()}
     leaves["lam_prox"] = stack_lam_prox(leaves["lam_prox"])
     for name in list(leaves):
-        if name == "lam_prox":
+        if name in ("lam_prox", "params"):
             continue
         leaves[name] = stack_other(leaves[name])
     return SubproblemData(**leaves)

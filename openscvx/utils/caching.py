@@ -45,6 +45,27 @@ def _hash_byof(byof: Optional["ByofSpec"]) -> bytes:
     return b"".join(codes)
 
 
+def hash_value_into(hasher: "hashlib._Hash", value: Any) -> None:
+    """Fold a scalar / array / ``None`` into ``hasher`` deterministically.
+
+    Shared by the ``_hash_into`` methods of the runtime objects the
+    ``solve_batched`` artifact closes over — the convex backend, the
+    algorithm/autotuner, the discretizer — and by
+    :func:`get_solve_batched_cache_path` for the scaling matrices. Mirrors the
+    symbolic ``_hash_into`` protocol's byte-level updates so the same value
+    always contributes the same bytes (arrays by shape + dtype + contents,
+    everything else by ``repr``).
+    """
+    if value is None:
+        hasher.update(b"None")
+    elif isinstance(value, np.ndarray):
+        arr = np.ascontiguousarray(value)
+        hasher.update(f"{arr.shape}:{arr.dtype}:".encode())
+        hasher.update(arr.tobytes())
+    else:
+        hasher.update(repr(value).encode())
+
+
 def get_solver_cache_paths(
     symbolic_problem: "SymbolicProblem",
     dt: float,
@@ -93,6 +114,79 @@ def get_solver_cache_paths(
     prop_solver_file = solver_dir / f"compiled_propagation_solver_{final_hash}.jax"
 
     return dis_solver_file, prop_solver_file
+
+
+def get_solve_batched_cache_path(
+    symbolic_problem: "SymbolicProblem",
+    settings: Any,
+    algorithm: Any,
+    solver: Any,
+    discretizer: Any,
+    B: int,
+    k_max: int,
+    cache_dir: Optional[Path] = None,
+) -> Path:
+    """Cache path for the exported :meth:`Problem.solve_batched` artifact.
+
+    The vmapped SCP loop closes over far more than the symbolic problem does, so
+    caching it on :func:`get_solver_cache_paths`' key would silently deserialize
+    a **stale artifact** whenever any of the extra closed-over state changes — a
+    wrong-answer bug, not a cache miss. This assembler extends
+    :func:`hash_symbolic_problem` (dynamics, constraints, boundary-condition
+    types, parameter shapes) with everything *additionally* baked into the loop:
+
+    * the convex backend class and its ``solver_args`` (via ``solver._hash_into``),
+    * the algorithm + autotuner + convergence thresholds + initial penalty
+      weights (via ``algorithm._hash_into``),
+    * the discretizer scheme (via ``discretizer._hash_into``),
+    * the state/control scaling matrices ``inv_S_x`` / ``inv_S_u`` (settings-
+      derived, not covered by any subsystem hash),
+    * the fixed batch size ``B`` (the artifact is exported at one ``B``),
+    * the resolved iteration cap ``k_max`` — the *actual* loop bound baked into
+      the exported ``lax.while_loop``, which a ``solve_batched(max_iters=...)``
+      override can change independently of ``algorithm.k_max``, and
+    * the JAX version (exported artifacts are not guaranteed to survive an
+      incompatible jax bump — the worst failure mode is deserializing one).
+
+    Each runtime object contributes through its own ``_hash_into`` — the same
+    two-tier split the symbolic layer uses — so a new field that changes the
+    artifact is hashed next to where it lives, never reached into from here.
+
+    Args:
+        symbolic_problem: The preprocessed :class:`SymbolicProblem`.
+        settings: Problem :class:`~openscvx.config.Config`; supplies the
+            scaling matrices.
+        algorithm: The SCP algorithm (and its autotuner / weights).
+        solver: The convex subproblem backend.
+        discretizer: The dynamics discretizer.
+        B: Fixed batch size the artifact is exported at.
+        k_max: Resolved SCP iteration cap baked into the exported loop
+            (``max_iters`` if the caller overrode it, else ``algorithm.k_max``).
+        cache_dir: Override for the cache directory. ``None`` uses
+            :func:`openscvx.get_cache_dir`.
+
+    Returns:
+        Path to the ``compiled_solve_batched_<hash>.jax`` artifact.
+    """
+    from openscvx.symbolic.hashing import hash_symbolic_problem
+
+    hasher = hashlib.sha256()
+    hasher.update(hash_symbolic_problem(symbolic_problem).encode())
+    solver._hash_into(hasher)
+    algorithm._hash_into(hasher)
+    discretizer._hash_into(hasher)
+    hash_value_into(hasher, settings.sim.inv_S_x)
+    hash_value_into(hasher, settings.sim.inv_S_u)
+    hasher.update(f"B:{B}".encode())
+    hasher.update(f"k_max:{k_max}".encode())
+    hasher.update(f"jax:{jax.__version__}".encode())
+
+    final_hash = hasher.hexdigest()[:32]
+
+    solver_dir = cache_dir if cache_dir is not None else get_cache_dir()
+    solver_dir.mkdir(parents=True, exist_ok=True)
+
+    return solver_dir / f"compiled_solve_batched_{final_hash}.jax"
 
 
 def load_or_compile_discretization_solver(
@@ -158,6 +252,54 @@ def load_or_compile_discretization_solver(
     print(f"✓ {name} discretization solver compiled and saved")
 
     return compiled_solver
+
+
+def load_or_export_solve_batched(
+    batched_fn: callable,
+    cache_file: Path,
+    sample_state: Any,
+    sample_params: Dict[str, Any],
+) -> Any:
+    """Load the exported batched solve from disk, or export and cache it.
+
+    Mirrors :func:`load_or_compile_discretization_solver` but at whole-loop
+    granularity: the single artifact is the *entire* vmapped SCP loop exported
+    at a fixed batch size, not a per-solver piece. On a cache hit the artifact
+    is deserialized with no XLA compile; on a miss the loop is exported against
+    the sample batched :class:`~openscvx.algorithms.base.AlgorithmState` and
+    parameters, serialized, and returned.
+
+    Unlike the per-solver solvers — whose ``call_exported`` has no ``vmap`` rule
+    and so cannot be folded into an outer ``vmap`` — this artifact already has
+    the batch baked in, so it is the one exportable form of a batched solve.
+
+    Args:
+        batched_fn: The ``jax.vmap``'d ``lax.while_loop`` to export — a pure
+            ``(batched_state, params) -> batched_state`` over an exportable
+            (QPAX / Moreau) backend.
+        cache_file: Path from :func:`get_solve_batched_cache_path`.
+        sample_state: A batched ``AlgorithmState`` with the artifact's leading
+            axis ``B``; supplies shapes/dtypes for the export trace.
+        sample_params: Problem parameters dict; supplies shapes/dtypes.
+
+    Returns:
+        A ``jax.export`` wrapper — call it via ``.call(state, params)``.
+    """
+    try:
+        with open(cache_file, "rb") as f:
+            wrapper = export.deserialize(f.read())
+        print("✓ Loaded existing batched solve")
+        return wrapper
+    except FileNotFoundError:
+        print("Exporting batched solve...")
+
+    wrapper = export.export(jax.jit(batched_fn))(sample_state, sample_params)
+
+    with open(cache_file, "wb") as f:
+        f.write(wrapper.serialize())
+    print("✓ Batched solve exported and saved")
+
+    return wrapper
 
 
 def load_or_compile_propagation_solver(

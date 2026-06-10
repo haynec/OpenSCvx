@@ -1,20 +1,30 @@
-"""Batched brachistochrone via ``jax.vmap(problem.solve_jax)``.
+"""Batched brachistochrone — two ways to solve four problems at once.
 
 Solves four brachistochrone problems in parallel — each with a different
-starting x-coordinate — using the JAX-pure
-:meth:`~openscvx.problem.Problem.solve_jax` entry point. ``solve_jax``
-returns an :class:`~openscvx.algorithms.optimization_results.OptimizationResults`
-pytree, so ``jax.vmap`` over the boundary-condition pins is the standard JAX
-composition pattern; no library-specific batching API is needed.
+starting x-coordinate — and contrasts the two batching entry points:
 
-Run with ``python examples/abstract/brachistochrone_batched.py``.
+* ``jax.vmap(problem.solve_jax)`` — the caller owns the batch axis. Maximally
+  idiomatic, composes with ``grad`` / ``scan``, but in-process JIT only: every
+  fresh process re-traces and re-compiles the whole SCP loop.
+* ``problem.solve_batched(x0_stack, xf_stack)`` — the library owns the batch
+  axis, so the whole vmapped loop is a single function that ``jax.export`` can
+  serialize. Under ``save_compiled=True`` it is written to the solver cache on
+  the first run and deserialized on later runs, skipping that compile. Reach
+  for it when cross-process cold-start dominates (CI sweeps, short-lived
+  workers); reach for ``jax.vmap(solve_jax)`` when you stay inside one program.
+
+Run with ``python examples/abstract/brachistochrone_batched.py``. Re-running is
+itself the cross-process demo: the second invocation deserializes the cached
+``solve_batched`` artifact instead of compiling it.
 
 Notes:
 
 * Under the QPAX backend used here, vmap'd subproblem solves run in
   parallel (no host callback). The CVXPy backend is single-threaded under
   vmap because :func:`jax.pure_callback` uses ``vmap_method="sequential"``
-  for thread safety — see :meth:`solve_jax`'s docstring.
+  for thread safety — see :meth:`solve_jax`'s docstring. That same host
+  callback is why ``solve_batched(save_compiled=True)`` refuses CVXPy: it
+  cannot be exported.
 * The Moreau warm-start is bypassed on the JAX-pure path (its carry is
   host-side state that ``lax.while_loop`` doesn't thread). Use QPAX or
   CVXPy when you want batched solves.
@@ -113,14 +123,33 @@ if __name__ == "__main__":
     shifts = jnp.array([0.0, 0.3, 0.6, 0.9])
     x_initial_stack = jnp.stack([default_pin.at[0].set(default_pin[0] + s) for s in shifts])
 
-    # Bare ``jax.vmap`` — the library exposes no batching wrapper of its own.
+    # --- caller owns the batch axis: jax.vmap(solve_jax) ---------------------
+    # Bare ``jax.vmap`` — composes like any JAX transform, in-process only.
     batched_solve = jax.vmap(problem.solve_jax, in_axes=(0, None, None))
     results = batched_solve(x_initial_stack, None, None)
 
     # ``results`` is a batched ``OptimizationResults`` pytree — every child
     # (``X``, ``U``, ``t_final``, ``converged``, ...) has a leading batch axis.
-    print(f"Batched solve over {x_initial_stack.shape[0]} initial conditions:")
+    print(f"jax.vmap(solve_jax) over {x_initial_stack.shape[0]} initial conditions:")
     print(f"  result.x.shape:   {results.x.shape}")
     print(f"  result.u.shape:   {results.u.shape}")
     print(f"  result.t_final:   {np.asarray(results.t_final).reshape(-1)}")
     print(f"  result.converged: {np.asarray(results.converged)}")
+
+    # --- library owns the batch axis: solve_batched, disk-cached -------------
+    # The same batched solve, but ``solve_batched`` owns the vmap so the whole
+    # loop is one exportable artifact. Under ``save_compiled=True`` it lands in
+    # the solver cache on the first run; re-run this script (a fresh process) to
+    # see it deserialized instead of recompiled. ``xf`` is shared across the
+    # batch, so broadcast the default terminal pin to the same leading axis.
+    export_problem = build_problem()
+    export_problem.settings.sim.save_compiled = True
+    export_problem.initialize()
+
+    x_term_stack = jnp.broadcast_to(export_problem.state.x_term_pin, x_initial_stack.shape)
+    batched = export_problem.solve_batched(x_initial_stack, x_term_stack)
+
+    print(f"\nsolve_batched (save_compiled=True) over {x_initial_stack.shape[0]} ICs:")
+    print(f"  result.x.shape:   {batched.x.shape}")
+    print(f"  result.t_final:   {np.asarray(batched.t_final).reshape(-1)}")
+    print(f"  result.converged: {np.asarray(batched.converged)}")

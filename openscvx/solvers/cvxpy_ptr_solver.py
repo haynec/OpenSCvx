@@ -210,6 +210,18 @@ class CVXPyPTRSolver(PTRSolver):
         self._slice_imp = slice(0, 0)
 
     @property
+    def exportable(self) -> bool:
+        """CVXPy is not ``jax.export``-serializable — see :attr:`PTRSolver.exportable`.
+
+        The JAX-pure :meth:`iteration_callback` wraps the host CVXPy solve in a
+        :func:`jax.pure_callback`, and ``jax.export`` cannot serialize host
+        callbacks. ``solve_batched(save_compiled=True)`` therefore refuses this
+        backend with a teaching error pointing at QPAX / Moreau rather than
+        silently falling back to an uncached in-process solve.
+        """
+        return False
+
+    @property
     def ocp_vars(self) -> "CVXPyVariables":
         """The CVXPy variables and parameters.
 

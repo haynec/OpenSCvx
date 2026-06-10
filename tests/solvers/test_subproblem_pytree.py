@@ -54,6 +54,7 @@ def _dummy_subproblem_data(N=4, n_x=3, n_u=2, n_nodal=2, n_cross=1):
         lam_vb_cross=jnp.ones((n_cross,)),
         x_init=jnp.array([0.0, jnp.nan, 1.0]),
         x_term=jnp.full((n_x,), jnp.nan),
+        params={},
     )
 
 

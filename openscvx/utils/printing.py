@@ -8,6 +8,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import jax
+import numpy as np
 from termcolor import colored
 
 if TYPE_CHECKING:
@@ -305,6 +306,86 @@ def print_results_summary(result: "OptimizationResults", timing_post, timing_ini
     ]
 
     print_summary_box(lines, "Results Summary")
+
+
+def print_batch_results_summary(
+    result: "OptimizationResults",
+    timing_post: float,
+    timing_init: Optional[float],
+    timing_solve: Optional[float],
+    *,
+    timing_compile: Optional[float] = None,
+) -> None:
+    """Print a results summary box for a batched post-processed solve.
+
+    Mirrors :func:`print_results_summary` for the output of
+    :meth:`~openscvx.problem.Problem.post_process_batched`.
+
+    Args:
+        result: Post-processed :class:`~openscvx.algorithms.OptimizationResults`
+            with ``x_full``, ``t_full``, ``cost``, and ``ctcs_violation`` set.
+        timing_post:    Propagation wall-clock time in seconds.
+        timing_init:    Initialize wall-clock time in seconds (``None`` if unknown).
+        timing_solve:   Batched-solve execution time in seconds (``None`` if unknown).
+            Compile time is excluded; see ``timing_compile``.
+        timing_compile: XLA/AOT compile time in seconds for the batched solve
+            (``None`` when the compiled artifact was loaded from cache).
+    """
+    converged = np.asarray(result.converged, dtype=bool).reshape(-1)
+    B = converged.shape[0]
+    n_ok = int(converged.sum())
+    n_bad = B - n_ok
+
+    t_full_arr = np.asarray(result.t_full)  # (B, T)
+    T = t_full_arr.shape[1]
+    dt = float(t_full_arr[0, 1] - t_full_arr[0, 0]) if T > 1 else 0.0
+
+    t_finals = t_full_arr[:, -1]
+    if converged.any():
+        t_f_conv = t_finals[converged]
+        t_f_str = (
+            f"{t_f_conv.mean():.3f} s  (min {t_f_conv.min():.3f} s, max {t_f_conv.max():.3f} s)"
+        )
+    else:
+        t_f_str = "N/A (no converged solutions)"
+
+    cost_arr = np.asarray(result.cost)
+    if converged.any():
+        c_conv = cost_arr[converged]
+        cost_str = f"{c_conv.mean():.4f}  (min {c_conv.min():.4f}, max {c_conv.max():.4f})"
+    else:
+        cost_str = "N/A"
+
+    ctcs = result.ctcs_violation
+    if ctcs is not None and converged.any():
+        ctcs_arr = np.abs(np.asarray(ctcs)[converged])
+        ctcs_str = f"{ctcs_arr.max():.2e}"
+    else:
+        ctcs_str = "N/A"
+
+    t_init = timing_init or 0.0
+    t_compile = timing_compile or 0.0
+    t_solve = timing_solve or 0.0
+    total_time = t_init + t_compile + t_solve + timing_post
+
+    lines = [
+        "Batch Results Summary",
+        f"Batch size:              {B}",
+        f"Converged:               {n_ok} / {B}  ({100 * n_ok / B:.0f}%)",
+        f"Diverged:                {n_bad} / {B}",
+        "SEP",
+        f"Initialize time:         {t_init:.3f} s",
+        f"Compile time:            {t_compile:.3f} s",
+        f"Batched solve time:      {t_solve:.3f} s",
+        f"Propagation time:        {timing_post:.3f} s",
+        f"Total time:              {total_time:.3f} s",
+        "SEP",
+        f"Propagated steps:        {T}  (dt \u2248 {dt:.4f} s)",
+        f"Terminal time (conv.):   {t_f_str}",
+        f"Cost (conv.):            {cost_str}",
+        f"Max CTCS violation:      {ctcs_str}",
+    ]
+    print_summary_box(lines, "Batch Results Summary")
 
 
 def intro():
