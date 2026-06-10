@@ -132,17 +132,19 @@ def test_solve_batched_mixed_shared_and_batched_parameters():
     gravity_batch = jnp.array([[9.0], [9.81], [10.5]])  # (B, 1) vs declared (1,) -> batched
     gain_shared = jnp.array([0.9])  # declared shape (1,) -> shared
 
-    batched = prob.solve_batched(
-        parameters={"gravity": gravity_batch, "gain": gain_shared}
-    )
+    batched = prob.solve_batched(parameters={"gravity": gravity_batch, "gain": gain_shared})
     assert batched.x.shape[0] == gravity_batch.shape[0]
 
     for i in range(gravity_batch.shape[0]):
         ref = prob.solve_jax(
             parameters=dict(prob.parameters, gravity=gravity_batch[i], gain=gain_shared)
         )
-        np.testing.assert_allclose(np.asarray(batched.x[i]), np.asarray(ref.x), atol=1e-5, rtol=1e-5)
-        np.testing.assert_allclose(np.asarray(batched.u[i]), np.asarray(ref.u), atol=1e-5, rtol=1e-5)
+        np.testing.assert_allclose(
+            np.asarray(batched.x[i]), np.asarray(ref.x), atol=1e-5, rtol=1e-5
+        )
+        np.testing.assert_allclose(
+            np.asarray(batched.u[i]), np.asarray(ref.u), atol=1e-5, rtol=1e-5
+        )
 
     jax.clear_caches()
 
@@ -206,7 +208,9 @@ def test_solve_batched_ep_tr_sweep_matches_solve_jax():
 def test_solve_batched_unknown_parameter_key_raises():
     prob = _build_brachistochrone_with_params("cvxpy", n=4, k_max=1)
     prob.initialize()
-    with pytest.raises(ValueError, match=r"unknown parameter.*'gravty'.*declared parameters.*'gravity'"):
+    with pytest.raises(
+        ValueError, match=r"unknown parameter.*'gravty'.*declared parameters.*'gravity'"
+    ):
         prob.solve_batched(parameters={"gravty": jnp.zeros((2, 1))})
 
 

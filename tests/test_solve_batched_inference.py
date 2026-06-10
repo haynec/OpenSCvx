@@ -148,7 +148,9 @@ def test_in_axes_forced_zero_on_scalar_raises():
 
 
 def test_in_axes_forced_zero_with_disagreeing_batch_size_raises():
-    with pytest.raises(ValueError, match=r"'x_initial' has leading axis 2.*'parameters.weights' has leading axis 4"):
+    with pytest.raises(
+        ValueError, match=r"'x_initial' has leading axis 2.*'parameters.weights' has leading axis 4"
+    ):
         _resolve_batch_spec(
             {
                 "x_initial": (np.zeros((2, 3)), (3,)),
@@ -162,12 +164,16 @@ def test_in_axes_forced_zero_with_disagreeing_batch_size_raises():
 
 
 def test_shape_mismatch_names_entry_and_shapes():
-    with pytest.raises(ValueError, match=r"'parameters.center' has shape \(5, 2\).*unbatched.*\(3,\)"):
+    with pytest.raises(
+        ValueError, match=r"'parameters.center' has shape \(5, 2\).*unbatched.*\(3,\)"
+    ):
         _resolve_batch_spec({"parameters.center": (np.zeros((5, 2)), (3,))})
 
 
 def test_batch_size_disagreement_names_both_entries():
-    with pytest.raises(ValueError, match=r"'x_initial' has leading axis 4 but 'x_final' has leading axis 5"):
+    with pytest.raises(
+        ValueError, match=r"'x_initial' has leading axis 4 but 'x_final' has leading axis 5"
+    ):
         _resolve_batch_spec(
             {
                 "x_initial": (np.zeros((4, 3)), (3,)),

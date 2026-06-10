@@ -126,8 +126,7 @@ def _resolve_batch_spec(
             )
         if ax == 0 and entries[name][0] is None:
             raise ValueError(
-                f"solve_batched: in_axes marks '{name}' as batched, but no value "
-                f"was passed for it."
+                f"solve_batched: in_axes marks '{name}' as batched, but no value was passed for it."
             )
 
     axes: Dict[str, Optional[int]] = {}
