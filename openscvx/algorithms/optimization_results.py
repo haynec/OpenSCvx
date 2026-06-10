@@ -6,6 +6,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from .scvx.iteration import _converged
+
 if TYPE_CHECKING:
     from openscvx.algorithms.base import AlgorithmHistory, AlgorithmState
     from openscvx.problem import Problem
@@ -266,7 +268,6 @@ class OptimizationResults:
         """
         settings = problem.settings
         symbolic = problem.symbolic
-        algorithm = problem._algorithm
 
         has_impulsive_controls = any(
             control.parameterization == "impulsive" for control in symbolic.controls
@@ -287,11 +288,10 @@ class OptimizationResults:
         # slice of the last node (vmap'd to ``(B, 1)``).
         t_final = state.x[..., -1, :][..., settings.sim.time_slice]
 
-        converged = (
-            (state.J_tr < algorithm.ep_tr)
-            & (state.J_vb < algorithm.ep_vb)
-            & (state.J_vc < algorithm.ep_vc)
-        )
+        # Per-element thresholds ride the state pytree, so a batched solve
+        # with a tolerance sweep reports convergence against each element's
+        # own ep_* values.
+        converged = _converged(state)
 
         return cls(
             converged=converged,

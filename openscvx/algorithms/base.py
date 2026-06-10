@@ -199,9 +199,16 @@ class AutotuningBase(ABC):
             bodies (a handful of XLA ops) override to ``False`` so the SCP loop
             calls ``update_weights`` directly — JAX's eager dispatch is cheaper
             than the JIT'd closure's pytree-flatten overhead for those cases.
+        lam_cost_drop: Default iteration after which ``lam_cost`` relaxation
+            applies (``-1`` = never). Subclasses with the relaxation override
+            this in ``__init__``; the value is snapshotted onto
+            ``AlgorithmState.lam_cost_drop`` (see
+            :meth:`AlgorithmState.from_settings`), which is what
+            ``update_weights`` reads at trace time.
     """
 
     COLUMNS: List[Column] = []
+    lam_cost_drop: int = -1
     # Governs only the Python-loop ``Problem.solve()`` path. Once the SCP body
     # lives inside ``lax.while_loop`` (see ``plans/batchable-problem.md``),
     # ``update_weights`` is one node in the outer compiled graph and the inner
@@ -219,12 +226,12 @@ class AutotuningBase(ABC):
         :meth:`~openscvx.algorithms.scvx.penalized_trust_region.PenalizedTrustRegion._hash_into`);
         mirrors the symbolic ``_hash_into`` protocol.
 
-        Caveat: the ``vars(self)`` sweep hashes *every* instance attribute, so a
-        subclass that stashes an iteration-count- or ``k_max``-derived field
-        would silently re-introduce the double-count that the algorithm's own
-        ``_hash_into`` deliberately avoids (the loop bound is keyed once, on the
-        assembler's resolved ``k_max``). Keep such fields out of the autotuner,
-        or override this method to exclude them.
+        Caveat: the ``vars(self)`` sweep hashes *every* instance attribute,
+        including ones that are runtime state inputs rather than baked
+        constants (e.g. ``lam_cost_drop``, which rides
+        ``AlgorithmState.lam_cost_drop``). For those the hash is merely
+        conservative — changing them re-exports an artifact that would have
+        been reusable — never incorrect.
         """
         from openscvx.utils.caching import hash_value_into
 
@@ -410,6 +417,18 @@ class AlgorithmState:
         x_term_pin: Terminal-state boundary condition, shape ``(n_states,)``.
             ``jnp.nan`` where the state is not pinned at tf (``final_type`` is
             not ``"Fix"``).
+        ep_tr: Convergence threshold on ``J_tr`` (scalar). Carried on the
+            pytree — like ``x_init_pin`` / ``lam_cost_init`` — so the SCP loop
+            reads it as a runtime input: per-solve overrides and ``jax.vmap``
+            sweeps need no retrace, and one exported ``solve_batched`` artifact
+            serves every tolerance setting.
+        ep_vb: Convergence threshold on ``J_vb`` (scalar).
+        ep_vc: Convergence threshold on ``J_vc`` (scalar).
+        k_max: SCP iteration cap (scalar, ``k``'s integer dtype). The loop
+            runs while ``k <= k_max``; a traced bound is valid inside
+            ``lax.while_loop``, so the cap is per-solve and batchable too.
+        lam_cost_drop: Iteration after which autotuners relax ``lam_cost``
+            (scalar, ``k``'s integer dtype; ``-1`` = never).
     """
 
     x: jnp.ndarray
@@ -433,6 +452,11 @@ class AlgorithmState:
     adaptive_state_code: jnp.ndarray
     x_init_pin: jnp.ndarray
     x_term_pin: jnp.ndarray
+    ep_tr: jnp.ndarray
+    ep_vb: jnp.ndarray
+    ep_vc: jnp.ndarray
+    k_max: jnp.ndarray
+    lam_cost_drop: jnp.ndarray
 
     # Field order is the source of truth for tree_flatten / tree_unflatten;
     # keep _FIELDS in sync with the dataclass field declarations above.
@@ -458,6 +482,11 @@ class AlgorithmState:
         "adaptive_state_code",
         "x_init_pin",
         "x_term_pin",
+        "ep_tr",
+        "ep_vb",
+        "ep_vc",
+        "k_max",
+        "lam_cost_drop",
     )
 
     def replace(self, **changes) -> "AlgorithmState":
@@ -477,6 +506,12 @@ class AlgorithmState:
         cls,
         settings: "Config",
         weights: "Weights",
+        *,
+        ep_tr: float,
+        ep_vb: float,
+        ep_vc: float,
+        k_max: int,
+        lam_cost_drop: int,
     ) -> "AlgorithmState":
         """Construct the initial iterate from configuration.
 
@@ -484,6 +519,12 @@ class AlgorithmState:
         the diagnostic scalars to zero / :py:attr:`AdaptiveStateCode.INITIAL`.
         ``x_prop`` and ``x_prop_plus`` are zero-initialized; the SCP algorithm
         fills them at the first discretization step.
+
+        The SCP loop constants (``ep_tr`` / ``ep_vb`` / ``ep_vc`` / ``k_max`` /
+        ``lam_cost_drop``) are snapshotted onto the pytree here — the caller
+        passes them off the algorithm and its autotuner (see
+        ``Problem._default_state``), and per-solve overrides land via
+        ``state.replace``.
         """
         n = settings.sim.n
         n_states = settings.sim.n_states
@@ -549,6 +590,13 @@ class AlgorithmState:
             adaptive_state_code=put(jnp.asarray(int(AdaptiveStateCode.INITIAL), dtype=i)),
             x_init_pin=put(jnp.asarray(x_init_pin, dtype=f)),
             x_term_pin=put(jnp.asarray(x_term_pin, dtype=f)),
+            ep_tr=put(jnp.asarray(ep_tr, dtype=f)),
+            ep_vb=put(jnp.asarray(ep_vb, dtype=f)),
+            ep_vc=put(jnp.asarray(ep_vc, dtype=f)),
+            # Integer constants share k's dtype so `k <= k_max` (and the
+            # autotuners' `k > lam_cost_drop`) compare without promotion.
+            k_max=put(jnp.asarray(k_max, dtype=i)),
+            lam_cost_drop=put(jnp.asarray(lam_cost_drop, dtype=i)),
         )
 
 

@@ -507,15 +507,15 @@ class Problem:
         self._iteration_fn_jit_inner: callable = None
 
         # Closure cache for the ``lax.while_loop`` wrapper that backs
-        # :meth:`solve_jax`. Keyed on ``k_max`` — rebuilt only when the caller
-        # supplies a non-default ``max_iters``.
+        # :meth:`solve_jax`. Built once per ``initialize()`` — convergence
+        # thresholds and the iteration cap ride the state pytree, so they
+        # never force a rebuild.
         self._solve_loop_fn: Optional[callable] = None
-        self._solve_loop_k_max: Optional[int] = None
 
         # Closure cache for the batched ``vmap``'d loop that backs
-        # :meth:`solve_batched`. Keyed on ``(B, k_max, param_axes)`` — batch
-        # size and per-parameter batching are baked into the artifact, so
-        # changing either rebuilds.
+        # :meth:`solve_batched`. Keyed on ``(B, param_axes)`` — batch size and
+        # per-parameter batching are baked into the artifact, so changing
+        # either rebuilds.
         self._solve_batched_fn: Optional[callable] = None
         self._solve_batched_key: Optional[tuple] = None
 
@@ -681,6 +681,39 @@ class Problem:
         self._solver.update_boundary_conditions(
             x_init=self._lowered.x_unified.initial,
             x_term=self._lowered.x_unified.final,
+        )
+
+    def _sync_scp_constants(self):
+        """Sync the SCP loop constants from the algorithm config onto the state.
+
+        ``ep_tr`` / ``ep_vb`` / ``ep_vc`` / ``k_max`` / ``lam_cost_drop`` are
+        snapshotted onto :class:`AlgorithmState` when it is created, so a
+        mutation like ``problem.algorithm.ep_tr = 1e-6`` between ``solve()``
+        calls would otherwise go stale. Re-read them here, alongside
+        :meth:`_sync_parameters` / :meth:`_sync_boundary_conditions`.
+
+        Note:
+            Safe to call before initialize() - it will simply do nothing.
+        """
+        if self._state is None:
+            return
+
+        algo = self._algorithm
+        state = self._state
+        # Commit each leaf to the device exactly as ``from_settings`` does:
+        # ``iteration_fn``'s jit cache keys on committed sharding, so an
+        # uncommitted leaf here would trigger a recompile on the next step.
+        device = jax.devices()[0]
+
+        def put(value, like):
+            return jax.device_put(jnp.asarray(value, dtype=like.dtype), device)
+
+        self._state = state.replace(
+            ep_tr=put(algo.ep_tr, state.ep_tr),
+            ep_vb=put(algo.ep_vb, state.ep_vb),
+            ep_vc=put(algo.ep_vc, state.ep_vc),
+            k_max=put(algo.k_max, state.k_max),
+            lam_cost_drop=put(algo.autotuner.lam_cost_drop, state.lam_cost_drop),
         )
 
     def _sync_guesses(self):
@@ -1006,7 +1039,6 @@ class Problem:
         # capture the previous ``iteration_fn`` and would re-use stale traces
         # if ``initialize()`` is invoked twice.
         self._solve_loop_fn = None
-        self._solve_loop_k_max = None
         self._solve_batched_fn = None
         self._solve_batched_key = None
         self._solve_batched_is_exported = False
@@ -1054,7 +1086,7 @@ class Problem:
         # first call (see :meth:`_get_or_build_solve_loop`) — pre-warming it
         # here would tax ``.solve()``-only users with ~1-3s of XLA compile work
         # they never benefit from.
-        warmup_state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
+        warmup_state = self._default_state()
         jax.block_until_ready(self._iteration_fn(warmup_state, self._parameters))
         print("✓ SCvx Subproblem Solver initialized")
 
@@ -1072,7 +1104,7 @@ class Problem:
             self.emitter_function = lambda data: None
 
         # Create fresh solver state + history pair.
-        self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
+        self._state = self._default_state()
         self._history = AlgorithmHistory.from_settings(self.settings)
 
         t_f_while = time.time()
@@ -1128,7 +1160,7 @@ class Problem:
         self._sync_boundary_conditions()
 
         # Create fresh solver state + history from settings
-        self._state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
+        self._state = self._default_state()
         self._history = AlgorithmHistory.from_settings(self.settings)
 
         # Reset solution
@@ -1204,9 +1236,10 @@ class Problem:
             OptimizationResults with trajectory and convergence info
                 (call post_process() for full propagation)
         """
-        # Sync parameters and boundary conditions before solving
+        # Sync parameters, boundary conditions, and SCP constants before solving
         self._sync_parameters()
         self._sync_boundary_conditions()
+        self._sync_scp_constants()
 
         required = [
             self._compiled_dynamics_prop,
@@ -1265,48 +1298,78 @@ class Problem:
             int(self._state.k) <= k_max and not timed_out,
         )
 
+    def _default_state(self) -> AlgorithmState:
+        """Fresh :class:`AlgorithmState` from settings and the algorithm's SCP constants.
+
+        The single assembly point for :meth:`AlgorithmState.from_settings`'
+        keyword constants: convergence thresholds and the iteration cap come
+        off the algorithm, ``lam_cost_drop`` off its autotuner.
+        """
+        algo = self._algorithm
+        return AlgorithmState.from_settings(
+            self.settings,
+            algo.weights,
+            ep_tr=algo.ep_tr,
+            ep_vb=algo.ep_vb,
+            ep_vc=algo.ep_vc,
+            k_max=algo.k_max,
+            lam_cost_drop=algo.autotuner.lam_cost_drop,
+        )
+
     def _resolve_initial_state(
         self,
         x_initial: Optional[jnp.ndarray],
         x_final: Optional[jnp.ndarray],
         x_guess: Optional[jnp.ndarray] = None,
         u_guess: Optional[jnp.ndarray] = None,
+        ep_tr: Optional[jnp.ndarray] = None,
+        ep_vb: Optional[jnp.ndarray] = None,
+        ep_vc: Optional[jnp.ndarray] = None,
+        lam_cost_drop: Optional[jnp.ndarray] = None,
+        max_iters: Optional[jnp.ndarray] = None,
     ) -> AlgorithmState:
-        """Build a fresh :class:`AlgorithmState` with user-supplied boundary pins.
+        """Build a fresh :class:`AlgorithmState` with per-solve overrides applied.
 
-        The pins live on the pytree (``x_init_pin`` / ``x_term_pin``) so the
-        fused iteration body assembles the subproblem's initial / terminal
-        rows as a pure function of state. Under ``jax.vmap`` over
-        ``x_initial`` / ``x_final`` / ``x_guess`` / ``u_guess``, each batch
-        slot gets its own boundary condition and SCP seed iterate without
-        recompilation.
+        This is the single place per-solve inputs land on the state pytree:
+        boundary pins (``x_init_pin`` / ``x_term_pin``), trajectory
+        warm-starts (``x`` / ``u``), and the SCP loop constants
+        (``ep_tr`` / ``ep_vb`` / ``ep_vc`` / ``lam_cost_drop`` /
+        ``max_iters`` → ``k_max``). Because every override is a pytree field,
+        ``jax.vmap`` over any subset gives each batch slot its own boundary
+        condition, seed iterate, and hyperparameters without recompilation.
 
-        ``None`` falls back to the defaults from
-        :meth:`AlgorithmState.from_settings`. A user-supplied vector replaces
-        the corresponding pin in full; pass ``jnp.nan`` at non-pinned
-        entries to match the convention :meth:`from_settings` uses (the
-        subproblem only consumes the pin where the boundary type is
-        ``"Fix"``).  Optional ``x_guess`` / ``u_guess`` replace
-        ``state.x`` / ``state.u`` (the trajectory warm-start).
+        ``None`` falls back to the defaults from :meth:`_default_state`. A
+        user-supplied pin replaces the corresponding field in full; pass
+        ``jnp.nan`` at non-pinned entries to match the convention
+        :meth:`AlgorithmState.from_settings` uses (the subproblem only
+        consumes the pin where the boundary type is ``"Fix"``).
         """
-        state = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
-        if x_initial is not None:
-            state = state.replace(x_init_pin=jnp.asarray(x_initial, dtype=state.x_init_pin.dtype))
-        if x_final is not None:
-            state = state.replace(x_term_pin=jnp.asarray(x_final, dtype=state.x_term_pin.dtype))
-        if x_guess is not None:
-            state = state.replace(x=jnp.asarray(x_guess, dtype=state.x.dtype))
-        if u_guess is not None:
-            state = state.replace(u=jnp.asarray(u_guess, dtype=state.u.dtype))
-        return state
+        state = self._default_state()
+        overrides = {
+            "x_init_pin": x_initial,
+            "x_term_pin": x_final,
+            "x": x_guess,
+            "u": u_guess,
+            "ep_tr": ep_tr,
+            "ep_vb": ep_vb,
+            "ep_vc": ep_vc,
+            "lam_cost_drop": lam_cost_drop,
+            "k_max": max_iters,
+        }
+        return state.replace(
+            **{
+                name: jnp.asarray(value, dtype=getattr(state, name).dtype)
+                for name, value in overrides.items()
+                if value is not None
+            }
+        )
 
-    def _get_or_build_solve_loop(self, max_iters: Optional[int]) -> callable:
+    def _get_or_build_solve_loop(self) -> callable:
         """Return the cached ``jax.jit``'d ``lax.while_loop`` wrapper.
 
-        :func:`make_solve_loop` is hashable on ``k_max`` (the convergence
-        thresholds are problem constants). Cache the closure on
-        ``self._solve_loop_fn`` keyed on ``k_max`` and rebuild only when the
-        caller supplies a non-default ``max_iters``. The closure is wrapped
+        Built once per ``initialize()`` — the convergence thresholds and the
+        iteration cap are :class:`AlgorithmState` fields, i.e. runtime inputs,
+        so no per-solve setting forces a rebuild. The closure is wrapped
         in :func:`jax.jit`, so the first :meth:`solve_jax` call pays the XLA
         compile cost (~1-3s for brachistochrone-sized problems) and
         subsequent calls hit ``jax.jit``'s shape-keyed cache. Users with a
@@ -1317,24 +1380,13 @@ class Problem:
         real-call warmup populates ``jax.jit``'s standard cache which vmap
         retraces from on first use.
         """
-        k_max = max_iters if max_iters is not None else self._algorithm.k_max
-        if self._solve_loop_fn is None or self._solve_loop_k_max != k_max:
-            self._solve_loop_fn = jax.jit(
-                make_solve_loop(
-                    self._iteration_fn,
-                    self._algorithm.ep_tr,
-                    self._algorithm.ep_vb,
-                    self._algorithm.ep_vc,
-                    k_max,
-                )
-            )
-            self._solve_loop_k_max = k_max
+        if self._solve_loop_fn is None:
+            self._solve_loop_fn = jax.jit(make_solve_loop(self._iteration_fn))
         return self._solve_loop_fn
 
     def _get_or_build_solve_batched(
         self,
         B: int,
-        max_iters: Optional[int],
         params: dict,
         param_axes: Dict[str, Optional[int]],
     ) -> callable:
@@ -1349,8 +1401,10 @@ class Problem:
         discretization solvers are plain ``jax.jit``, hence ``vmap``-safe — not
         :attr:`_iteration_fn`, which under ``save_compiled`` wraps
         ``call_exported`` solvers that have no ``vmap`` rule (§3). The closure
-        is cached on ``(B, k_max, param_axes)``: batch size and per-parameter
+        is cached on ``(B, param_axes)``: batch size and per-parameter
         batching are baked into the program, so changing either retraces.
+        Tolerances and the iteration cap ride the state pytree, so they never
+        retrace or re-export.
 
         Under ``save_compiled`` the whole vmapped loop is exported once to the
         solver cache and deserialized on later processes (the single artifact
@@ -1359,16 +1413,9 @@ class Problem:
         exportable backend — CVXPy raises a teaching error here rather than
         silently degrading to an in-process solve.
         """
-        k_max = max_iters if max_iters is not None else self._algorithm.k_max
-        key = (B, k_max, tuple(sorted(param_axes.items())))
+        key = (B, tuple(sorted(param_axes.items())))
         if self._solve_batched_fn is None or self._solve_batched_key != key:
-            loop = make_solve_loop(
-                self._iteration_fn_jit_inner,
-                self._algorithm.ep_tr,
-                self._algorithm.ep_vb,
-                self._algorithm.ep_vc,
-                k_max,
-            )
+            loop = make_solve_loop(self._iteration_fn_jit_inner)
             batched = jax.vmap(loop, in_axes=(0, param_axes))
             if self.settings.sim.save_compiled and not self.settings.dev.debug:
                 if not self._solver.exportable:
@@ -1386,11 +1433,11 @@ class Problem:
                     self._solver,
                     self._discretizer,
                     B,
-                    k_max,
+                    param_axes,
                 )
                 sample_state = jax.tree_util.tree_map(
                     lambda a: jnp.broadcast_to(a, (B,) + jnp.shape(a)),
-                    AlgorithmState.from_settings(self.settings, self._algorithm.weights),
+                    self._default_state(),
                 )
                 # Trace the export against the same ``params`` the call will use,
                 # not ``self._parameters`` — under an export the input avals are
@@ -1403,7 +1450,7 @@ class Problem:
                 # artifact accepts any inputs with those same shapes/dtypes.
                 sample_state = jax.tree_util.tree_map(
                     lambda a: jnp.broadcast_to(a, (B,) + jnp.shape(a)),
-                    AlgorithmState.from_settings(self.settings, self._algorithm.weights),
+                    self._default_state(),
                 )
                 t_0_compile = time.time()
                 batched = jax.jit(batched).lower(sample_state, params).compile()
@@ -1421,6 +1468,10 @@ class Problem:
         *,
         x_guess: Optional[jnp.ndarray] = None,
         u_guess: Optional[jnp.ndarray] = None,
+        ep_tr: Optional[jnp.ndarray] = None,
+        ep_vb: Optional[jnp.ndarray] = None,
+        ep_vc: Optional[jnp.ndarray] = None,
+        lam_cost_drop: Optional[jnp.ndarray] = None,
         max_iters: Optional[int] = None,
     ) -> OptimizationResults:
         """Run the SCP algorithm — JAX-pure.
@@ -1455,10 +1506,18 @@ class Problem:
                 settings (``State.guess`` at ``initialize()``).
             u_guess: Initial control trajectory guess, shape ``(N, n_controls)``.
                 Replaces ``state.u``; ``None`` uses the default from settings.
-            max_iters: SCP iteration cap. ``None`` uses ``algorithm.k_max``;
-                a different value rebuilds the cached ``lax.while_loop``
-                closure (one extra trace; subsequent calls at the same
-                ``max_iters`` hit the cache).
+            ep_tr: Convergence threshold on ``J_tr`` (scalar). Replaces
+                ``state.ep_tr``; ``None`` uses ``algorithm.ep_tr``.
+            ep_vb: Convergence threshold on ``J_vb`` (scalar). ``None`` uses
+                ``algorithm.ep_vb``.
+            ep_vc: Convergence threshold on ``J_vc`` (scalar). ``None`` uses
+                ``algorithm.ep_vc``.
+            lam_cost_drop: Iteration after which autotuners relax
+                ``lam_cost`` (scalar; ``-1`` = never). ``None`` uses the
+                autotuner's configured value.
+            max_iters: SCP iteration cap (scalar). ``None`` uses
+                ``algorithm.k_max``. A runtime input like the tolerances —
+                no value forces a retrace.
 
         Returns:
             :class:`OptimizationResults` pytree with the final iterate and
@@ -1472,9 +1531,17 @@ class Problem:
         params = parameters if parameters is not None else self._parameters
 
         initial_state = self._resolve_initial_state(
-            x_initial, x_final, x_guess=x_guess, u_guess=u_guess
+            x_initial,
+            x_final,
+            x_guess=x_guess,
+            u_guess=u_guess,
+            ep_tr=ep_tr,
+            ep_vb=ep_vb,
+            ep_vc=ep_vc,
+            lam_cost_drop=lam_cost_drop,
+            max_iters=max_iters,
         )
-        solve_fn = self._get_or_build_solve_loop(max_iters)
+        solve_fn = self._get_or_build_solve_loop()
         final_state = solve_fn(initial_state, params)
         return OptimizationResults.from_final_state(final_state, problem=self)
 
@@ -1486,7 +1553,11 @@ class Problem:
         *,
         x_guess: Optional[jnp.ndarray] = None,
         u_guess: Optional[jnp.ndarray] = None,
-        max_iters: Optional[int] = None,
+        ep_tr: Optional[jnp.ndarray] = None,
+        ep_vb: Optional[jnp.ndarray] = None,
+        ep_vc: Optional[jnp.ndarray] = None,
+        lam_cost_drop: Optional[jnp.ndarray] = None,
+        max_iters: Optional[jnp.ndarray] = None,
         in_axes: Optional[dict] = None,
     ) -> OptimizationResults:
         """Run ``B`` SCP solves in parallel as one batched XLA program.
@@ -1506,6 +1577,7 @@ class Problem:
                     "gate_center": centers,      # (B, 3) vs declared (3,) -> batched
                     "gate_radius": 0.5,          # declared shape -> shared
                 },
+                ep_tr=jnp.logspace(-5, -3, B),   # (B,) vs declared () -> tolerance sweep
             )
 
         Rank against the declared shape decides — never the leading-axis
@@ -1526,8 +1598,10 @@ class Problem:
         Export requires a pure-JAX backend: under ``save_compiled=True`` the
         CVXPy backend raises.  The cache key invalidates on any change that
         alters the exported loop — backend, algorithm, discretizer, scaling,
-        ``B``, and the JAX version — so a stale artifact is never silently
-        reused.
+        ``B``, the shared/batched parameter split, and the JAX version — so a
+        stale artifact is never silently reused.  Tolerances and ``max_iters``
+        are runtime inputs on the state pytree, so one artifact serves every
+        setting of them.
 
         **What cannot be batched**: ``N``, the solver backend, the
         discretizer/integrator, the autotuner type, and ``float_dtype``
@@ -1552,9 +1626,22 @@ class Problem:
                 settings.
             u_guess: Control trajectory guess — ``(N, n_u)`` or
                 ``(B, N, n_u)``. ``None`` uses the default from settings.
-            max_iters: SCP iteration cap. ``None`` uses ``algorithm.k_max``;
-                a different value (or a different ``B``) rebuilds the cached
-                batched closure.
+            ep_tr: Convergence threshold on ``J_tr`` — ``()`` shared or
+                ``(B,)`` for a per-element tolerance sweep. ``None`` uses
+                ``algorithm.ep_tr``.
+            ep_vb: Convergence threshold on ``J_vb`` — ``()`` or ``(B,)``.
+                ``None`` uses ``algorithm.ep_vb``.
+            ep_vc: Convergence threshold on ``J_vc`` — ``()`` or ``(B,)``.
+                ``None`` uses ``algorithm.ep_vc``.
+            lam_cost_drop: Iteration after which autotuners relax
+                ``lam_cost`` (``-1`` = never) — ``()`` or ``(B,)``. ``None``
+                uses the autotuner's configured value.
+            max_iters: SCP iteration cap — ``()`` shared or ``(B,)``
+                per-element budgets. ``None`` uses ``algorithm.k_max``. A
+                runtime input: changing it reuses the cached (or exported)
+                batched closure. The batch runs until its slowest element
+                converges or exhausts its own cap; finished elements are
+                frozen, not re-iterated.
             in_axes: Explicit batching override in ``jax.vmap``'s vocabulary:
                 a dict keyed by argument name with leaves ``0`` (batched) or
                 ``None`` (shared); ``"parameters"`` maps to a per-key dict,
@@ -1586,6 +1673,11 @@ class Problem:
             "x_final": (x_final, (n_x,)),
             "x_guess": (x_guess, (N, n_x)),
             "u_guess": (u_guess, (N, n_u)),
+            "ep_tr": (ep_tr, ()),
+            "ep_vb": (ep_vb, ()),
+            "ep_vc": (ep_vc, ()),
+            "lam_cost_drop": (lam_cost_drop, ()),
+            "max_iters": (max_iters, ()),
         }
         for key, value in user_params.items():
             entries[f"parameters.{key}"] = (value, tuple(np.shape(self._parameters[key])))
@@ -1608,12 +1700,17 @@ class Problem:
 
         # Shared state-side inputs — and the defaults for omitted ones —
         # broadcast to a leading B axis; batched ones pass through.
-        _default = AlgorithmState.from_settings(self.settings, self._algorithm.weights)
+        _default = self._default_state()
         defaults = {
             "x_initial": _default.x_init_pin,
             "x_final": _default.x_term_pin,
             "x_guess": _default.x,
             "u_guess": _default.u,
+            "ep_tr": _default.ep_tr,
+            "ep_vb": _default.ep_vb,
+            "ep_vc": _default.ep_vc,
+            "lam_cost_drop": _default.lam_cost_drop,
+            "max_iters": _default.k_max,
         }
         stacks = {}
         for name, default in defaults.items():
@@ -1624,14 +1721,20 @@ class Problem:
             stacks[name] = arr
 
         states = jax.vmap(self._resolve_initial_state)(
-            stacks["x_initial"], stacks["x_final"], stacks["x_guess"], stacks["u_guess"]
+            stacks["x_initial"],
+            stacks["x_final"],
+            stacks["x_guess"],
+            stacks["u_guess"],
+            stacks["ep_tr"],
+            stacks["ep_vb"],
+            stacks["ep_vc"],
+            stacks["lam_cost_drop"],
+            stacks["max_iters"],
         )
 
         params_for_solve = dict(self._parameters, **user_params)
         param_axes = {key: axes.get(f"parameters.{key}") for key in params_for_solve}
-        batched_solve = self._get_or_build_solve_batched(
-            B, max_iters, params_for_solve, param_axes
-        )
+        batched_solve = self._get_or_build_solve_batched(B, params_for_solve, param_axes)
         t_0_solve = time.time()
         if getattr(self, "_solve_batched_is_exported", False):
             final_states = batched_solve.call(states, params_for_solve)

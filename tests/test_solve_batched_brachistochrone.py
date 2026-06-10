@@ -147,6 +147,59 @@ def test_solve_batched_mixed_shared_and_batched_parameters():
     jax.clear_caches()
 
 
+# === Hyperparameter sweeps ===
+
+
+def test_solve_batched_max_iters_sweep_matches_solve_jax():
+    pytest.importorskip("qpax")
+
+    prob = build_brachistochrone("qpax", n=8, k_max=20)
+    prob.initialize()
+
+    # Per-element iteration budgets, all below the convergence point so the
+    # cap binds and each element stops at a different iterate. (B,) vs
+    # declared () -> batched; everything else is the shared default.
+    budgets = jnp.array([2, 4, 8])
+    batched = prob.solve_batched(max_iters=budgets)
+    assert batched.x.shape[0] == budgets.shape[0]
+
+    for i, budget in enumerate(np.asarray(budgets)):
+        ref = prob.solve_jax(max_iters=int(budget))
+        np.testing.assert_allclose(
+            np.asarray(batched.x[i]), np.asarray(ref.x), atol=1e-5, rtol=1e-5
+        )
+        np.testing.assert_allclose(
+            np.asarray(batched.u[i]), np.asarray(ref.u), atol=1e-5, rtol=1e-5
+        )
+
+    # The budgets actually bind: different caps end at different iterates.
+    assert not np.allclose(np.asarray(batched.x[0]), np.asarray(batched.x[2]), atol=1e-8)
+
+    jax.clear_caches()
+
+
+def test_solve_batched_ep_tr_sweep_matches_solve_jax():
+    pytest.importorskip("qpax")
+
+    prob = build_brachistochrone("qpax", n=8, k_max=20)
+    prob.initialize()
+
+    # Loose-to-tight trust-region tolerances: the loose element converges
+    # iterations earlier, so the per-element final iterates differ.
+    tolerances = jnp.array([1e-1, 1e-5])
+    batched = prob.solve_batched(ep_tr=tolerances)
+
+    for i, tol in enumerate(np.asarray(tolerances)):
+        ref = prob.solve_jax(ep_tr=float(tol))
+        np.testing.assert_allclose(
+            np.asarray(batched.x[i]), np.asarray(ref.x), atol=1e-5, rtol=1e-5
+        )
+
+    assert not np.allclose(np.asarray(batched.x[0]), np.asarray(batched.x[1]), atol=1e-8)
+
+    jax.clear_caches()
+
+
 # === Teaching errors ===
 
 

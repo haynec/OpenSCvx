@@ -85,7 +85,7 @@ class AdaptiveProximalWeight(AutotuningBase):
         J_nonlin = nonlin_cost + nonlin_pen + nodal_pen
 
         lam_cost_next = jnp.where(
-            state.k > self.lam_cost_drop,
+            state.k > state.lam_cost_drop,
             state.lam_cost * self.lam_cost_relax,
             state.lam_cost_init,
         )

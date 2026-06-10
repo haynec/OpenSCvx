@@ -75,7 +75,15 @@ def state(settings, weights):
     # Pre-populate x_prop / x_prop_plus so the autotuner's "previous iterate"
     # branch (k > 1) has finite values to compare against. The actual numbers
     # are arbitrary — we only check jit vs. bare equivalence.
-    base = AlgorithmState.from_settings(settings, weights)
+    base = AlgorithmState.from_settings(
+        settings,
+        weights,
+        ep_tr=1e-4,
+        ep_vb=1e-4,
+        ep_vc=1e-8,
+        k_max=200,
+        lam_cost_drop=-1,
+    )
     return base.replace(
         x_prop=jnp.asarray(np.array([[0.1, 0.1], [0.9, 0.9]])),
         x_prop_plus=jnp.asarray(np.array([[0.0, 0.0], [0.1, 0.1], [0.9, 0.9]])),

@@ -54,7 +54,7 @@ class ConstantProximalWeight(AutotuningBase):
         Pure functional update — see class docstring.
         """
         lam_cost_next = jnp.where(
-            state.k > self.lam_cost_drop,
+            state.k > state.lam_cost_drop,
             state.lam_cost * self.lam_cost_relax,
             state.lam_cost_init,
         )

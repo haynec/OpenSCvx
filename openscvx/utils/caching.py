@@ -123,7 +123,7 @@ def get_solve_batched_cache_path(
     solver: Any,
     discretizer: Any,
     B: int,
-    k_max: int,
+    param_axes: Dict[str, Optional[int]],
     cache_dir: Optional[Path] = None,
 ) -> Path:
     """Cache path for the exported :meth:`Problem.solve_batched` artifact.
@@ -136,17 +136,21 @@ def get_solve_batched_cache_path(
     types, parameter shapes) with everything *additionally* baked into the loop:
 
     * the convex backend class and its ``solver_args`` (via ``solver._hash_into``),
-    * the algorithm + autotuner + convergence thresholds + initial penalty
-      weights (via ``algorithm._hash_into``),
+    * the algorithm + autotuner + initial penalty weights (via
+      ``algorithm._hash_into``),
     * the discretizer scheme (via ``discretizer._hash_into``),
     * the state/control scaling matrices ``inv_S_x`` / ``inv_S_u`` (settings-
       derived, not covered by any subsystem hash),
     * the fixed batch size ``B`` (the artifact is exported at one ``B``),
-    * the resolved iteration cap ``k_max`` — the *actual* loop bound baked into
-      the exported ``lax.while_loop``, which a ``solve_batched(max_iters=...)``
-      override can change independently of ``algorithm.k_max``, and
+    * the per-parameter batch axes ``param_axes`` — the shared/batched split is
+      baked into the ``jax.vmap`` program, so an artifact traced for one split
+      must never be loaded for another, and
     * the JAX version (exported artifacts are not guaranteed to survive an
       incompatible jax bump — the worst failure mode is deserializing one).
+
+    The convergence thresholds and iteration cap are deliberately *absent*:
+    they ride the ``AlgorithmState`` pytree as runtime inputs, so one artifact
+    serves every tolerance and ``max_iters`` setting.
 
     Each runtime object contributes through its own ``_hash_into`` — the same
     two-tier split the symbolic layer uses — so a new field that changes the
@@ -160,8 +164,8 @@ def get_solve_batched_cache_path(
         solver: The convex subproblem backend.
         discretizer: The dynamics discretizer.
         B: Fixed batch size the artifact is exported at.
-        k_max: Resolved SCP iteration cap baked into the exported loop
-            (``max_iters`` if the caller overrode it, else ``algorithm.k_max``).
+        param_axes: Per-parameter ``{name: 0 | None}`` vmap axes the loop was
+            built with (``0`` = batched, ``None`` = shared).
         cache_dir: Override for the cache directory. ``None`` uses
             :func:`openscvx.get_cache_dir`.
 
@@ -178,7 +182,7 @@ def get_solve_batched_cache_path(
     hash_value_into(hasher, settings.sim.inv_S_x)
     hash_value_into(hasher, settings.sim.inv_S_u)
     hasher.update(f"B:{B}".encode())
-    hasher.update(f"k_max:{k_max}".encode())
+    hasher.update(f"param_axes:{tuple(sorted(param_axes.items()))}".encode())
     hasher.update(f"jax:{jax.__version__}".encode())
 
     final_hash = hasher.hexdigest()[:32]

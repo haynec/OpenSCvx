@@ -122,7 +122,15 @@ def weights():
 @pytest.fixture
 def algorithm_state(settings, weights):
     """Initial :class:`AlgorithmState` for the 3-node test problem."""
-    return AlgorithmState.from_settings(settings, weights)
+    return AlgorithmState.from_settings(
+        settings,
+        weights,
+        ep_tr=1e-4,
+        ep_vb=1e-4,
+        ep_vc=1e-8,
+        k_max=200,
+        lam_cost_drop=-1,
+    )
 
 
 def _candidate_x_prop_plus(N: int = 3, n_x: int = 2) -> np.ndarray:

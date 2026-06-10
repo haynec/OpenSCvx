@@ -78,6 +78,60 @@ batched = problem.solve_batched(x_initial=x0_batch, parameters=params)
 # batched.x.shape == (B, N, n_states) — same pytree jax.vmap(solve_jax) returns.
 ```
 
+### One rule: add a leading batch axis to whatever varies
+
+`solve_batched` takes exactly `solve_jax`'s arguments. Every batchable input
+has a *declared* (unbatched) shape the library knows — `(n_x,)` for the
+boundary pins, `(N, n_x)` / `(N, n_u)` for the trajectory guesses, the
+parameter's stored shape for each parameter, and `()` for the SCP
+hyperparameters. An argument that matches its declared shape is **shared** by
+every batch element; one with exactly one extra leading axis is **batched**
+along it. Rank against the declared shape decides — never the leading-axis
+value — so a shared `(B, n)` matrix parameter is never misread as batched:
+
+```python
+results = problem.solve_batched(
+    x_initial=x0_batch,                  # (B, n_x): rank = declared+1 -> batched
+    parameters={
+        "gate_center": centers,          # (B, 3) vs declared (3,)  -> batched
+        "gate_radius": 0.5,              # declared shape           -> shared
+    },
+)
+```
+
+For the rare entry the rank rule cannot express — e.g. batching a declared
+rank-1 parameter element-wise — pass an explicit `in_axes` in `jax.vmap`'s
+vocabulary (`0` = batched along the leading axis, `None` = shared; partial
+specs fall back to the rank rule):
+
+```python
+results = problem.solve_batched(
+    parameters={"weights": w},           # (B,) is also w's declared shape...
+    in_axes={"parameters": {"weights": 0}},  # ...so say "batched" explicitly
+)
+```
+
+### Hyperparameter sweeps
+
+The SCP loop constants — `ep_tr` / `ep_vb` / `ep_vc` / `lam_cost_drop` /
+`max_iters` — ride the `AlgorithmState` pytree as runtime inputs rather than
+closure constants. Two consequences:
+
+* On `solve_jax`, each is a per-solve keyword: `solve_jax(ep_tr=1e-6,
+  max_iters=50)` retraces nothing.
+* On `solve_batched`, each follows the same rank rule (declared `()`): a
+  `(B,)` vector sweeps it per element, batched alongside (or instead of) any
+  other input, against one cached artifact:
+
+```python
+sweep = problem.solve_batched(ep_tr=jnp.logspace(-6, -3, B))   # tolerance sweep
+budgets = problem.solve_batched(max_iters=jnp.array([5, 10, 20]))  # per-element caps
+```
+
+The batch runs until its slowest element converges or exhausts its own cap;
+finished elements are frozen, not re-iterated, so each element matches the
+corresponding single `solve_jax` run.
+
 Pick `solve_batched` when **cross-process cold-start dominates** — short-lived
 processes (CI sweeps, notebook restarts, deployed workers) that otherwise pay
 the compile every launch. Pick `jax.vmap(solve_jax)` for everything in-program,
@@ -111,15 +165,20 @@ object contributing through its own `_hash_into` (the same protocol the symbolic
 layer uses):
 
 * the convex backend class + its `solver_args`,
-* the algorithm + autotuner + convergence thresholds + initial weights,
+* the algorithm + autotuner + initial weights,
 * the discretizer scheme (class + hold type + ODE solver),
 * the state/control scaling matrices `inv_S_x` / `inv_S_u`,
-* the fixed batch size `B` (the artifact is exported at one `B`), and
+* the fixed batch size `B` (the artifact is exported at one `B`),
+* the per-parameter shared/batched split (baked into the `jax.vmap` program),
+  and
 * the JAX version (exported artifacts are not guaranteed to survive an
   incompatible jax bump).
 
-Change any of these — backend, a tolerance, `k_max`, a state bound — and you get
-a different cache path, so a stale artifact is never reused.
+Change any of these — backend, a penalty weight, a state bound, which
+parameters are batched — and you get a different cache path, so a stale
+artifact is never reused. The convergence thresholds and `max_iters` are
+deliberately *not* in the key: they are runtime inputs on the state pytree, so
+one artifact serves every tolerance and iteration-cap setting.
 
 `examples/abstract/brachistochrone_batched.py` shows both paths side by side;
 re-running it is itself the cross-process demo.
@@ -158,10 +217,16 @@ problem.solve_jax(
     parameters=None,     # parameters dict for this solve; falls back to
                          #     ``self._parameters``
     *,
-    max_iters=None,      # SCP iteration cap; non-default rebuilds the
-                         #     cached ``lax.while_loop`` closure (one extra
-                         #     trace; subsequent calls at the same cap hit
-                         #     the cache)
+    x_guess=None,        # (N, n_x) state trajectory warm-start
+    u_guess=None,        # (N, n_u) control trajectory warm-start
+    ep_tr=None,          # convergence threshold on J_tr; falls back to
+                         #     ``algorithm.ep_tr``
+    ep_vb=None,          # convergence threshold on J_vb
+    ep_vc=None,          # convergence threshold on J_vc
+    lam_cost_drop=None,  # iteration after which lam_cost relaxes (-1 = never)
+    max_iters=None,      # SCP iteration cap; falls back to ``algorithm.k_max``.
+                         #     A runtime input on the state pytree — no value
+                         #     forces a retrace
 )
 ```
 
