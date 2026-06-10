@@ -81,18 +81,23 @@ def propagate_trajectory_results(
     n_opt_states = x.shape[1]
     n_prop_states = settings.sim.x_prop.initial.shape[0]
 
-    # For a converged solution x[0, :] is the actual IC for every optimisation-state
-    # component regardless of initial_type (Fix / Free / Maximize).  Using the
-    # trajectory value directly avoids a subtle bug where "Fix" components would
-    # be seeded from settings.sim.x_prop.initial — the lowering-time default —
-    # rather than the value enforced by a param-fix pin for this particular solve.
+    # Seed from x[0, :] directly so param-fixed "Fix" components use this solve's
+    # pinned value rather than the lowering-time x_prop.initial default.
+    x0_opt = np.array(x[0, :], dtype=float)
+
+    # Seed from the pre-impulse state to avoid impulse duplication
+    if dynamics_discrete is not None and np.any(settings.sim.u._impulsive_mask()):
+        init_fixed = np.asarray(settings.sim.x.initial_type) == "Fix"
+        x_initial = np.asarray(settings.sim.x.initial, dtype=float)
+        x0_opt = np.where(init_fixed, x_initial, x0_opt)
+
     if n_opt_states == n_prop_states:
-        x_prop_for_propagation.initial = np.array(x[0, :], dtype=float)
+        x_prop_for_propagation.initial = x0_opt
     else:
         # Propagation has extra states appended beyond the optimisation states;
         # copy only the overlapping prefix and leave prop-only states untouched.
         x_prop_initial_updated = np.array(settings.sim.x_prop.initial, dtype=float)
-        x_prop_initial_updated[:n_opt_states] = np.array(x[0, :], dtype=float)
+        x_prop_initial_updated[:n_opt_states] = x0_opt
         x_prop_for_propagation.initial = x_prop_initial_updated
 
     # Temporarily replace x_prop with our modified copy for propagation
