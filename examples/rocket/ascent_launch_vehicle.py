@@ -1,3 +1,16 @@
+"""
+4-phase Delta II-style ascent from KSC (28.5° lat) to GTO, based on the benchmark from Betts,
+*Practical Methods for Optimal Control and Estimation Using Nonlinear Programming*,
+SIAM Press, 2009.
+
+- Dynamics: Position, velocity, mass in rotating ECI frame with exponential atmosphere drag.
+- Stage separations: Impulsive ``delta_mass`` controls at fixed transition nodes; thrust and 
+mass-flow are piecewise-constant per phase via ``ox.Cond``.
+- Terminal constraints: Five orbital elements (a, e, i, Ω, ω) enforced symbolically via a 
+Cartesian-to-OE map built with ``ox.Acos``/``ox.Atan2``.
+- Initial guess: Conic true-anomaly arc from launch site to GTO periapsis.
+"""
+
 import os
 import sys
 
