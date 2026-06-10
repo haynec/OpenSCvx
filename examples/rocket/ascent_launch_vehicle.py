@@ -5,11 +5,6 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-try:
-    from .helpers import orbital_elements_2_cartesian_rv
-except ImportError:
-    from helpers import orbital_elements_2_cartesian_rv
-
 current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 if grandparent_dir not in sys.path:
@@ -66,6 +61,88 @@ def build_true_anomaly_transfer_guess(r_start, r_end, mu, n_nodes):
     r_guess = r_pqw @ R_i_pqw.T
     v_guess = v_pqw @ R_i_pqw.T
     return r_guess, v_guess
+
+
+def orbital_elements_2_cartesian_rv(orbital_elements, gravitational_parameter):
+
+    semimajor, eccentricity, inclination, right_ascension, arg_periapsis, true_anomaly = (
+        orbital_elements
+    )
+
+    if eccentricity == 0:
+        raise ValueError("The current implementation does not admit null eccentricity")
+
+    p = semimajor * (1 - eccentricity**2)
+    r = p / (1 + eccentricity * np.cos(true_anomaly))
+    r_vect = np.array([r * np.cos(true_anomaly), r * np.sin(true_anomaly), 0.0])
+    v_vect = np.sqrt(gravitational_parameter / p) * np.array(
+        [-np.sin(true_anomaly), eccentricity + np.cos(true_anomaly), 0.0]
+    )
+
+    cos_Om = np.cos(right_ascension)
+    sin_Om = np.sin(right_ascension)
+    cos_om = np.cos(arg_periapsis)
+    sin_om = np.sin(arg_periapsis)
+    cos_i = np.cos(inclination)
+    sin_i = np.sin(inclination)
+
+    R = np.array(
+        [
+            [
+                cos_Om * cos_om - sin_Om * sin_om * cos_i,
+                -cos_Om * sin_om - sin_Om * cos_om * cos_i,
+                sin_Om * sin_i,
+            ],
+            [
+                sin_Om * cos_om + cos_Om * sin_om * cos_i,
+                -sin_Om * sin_om + cos_Om * cos_om * cos_i,
+                -cos_Om * sin_i,
+            ],
+            [sin_om * sin_i, cos_om * sin_i, cos_i],
+        ]
+    )
+
+    ri = R @ r_vect
+    vi = R @ v_vect
+
+    return ri, vi
+
+
+def cartesian_rv_2_orbital_elements(r_vect, v_vect, gravitational_parameter):
+    K = np.array([0.0, 0.0, 1.0])
+
+    h_vect = np.cross(r_vect, v_vect)
+    n_vect = np.cross(K, h_vect)
+
+    n_norm = np.linalg.norm(n_vect)
+    h_norm_sq = np.linalg.norm(h_vect) ** 2
+    v_norm_sq = np.linalg.norm(v_vect) ** 2
+    r_norm = np.linalg.norm(r_vect)
+
+    e_vect = (1.0 / gravitational_parameter) * (
+        (v_norm_sq - gravitational_parameter / r_norm) * r_vect - (r_vect @ v_vect) * v_vect
+    )
+    p = h_norm_sq / gravitational_parameter
+    eccentricity = np.linalg.norm(e_vect)
+    e_sq = eccentricity**2
+    semimajor = p / (1 - e_sq)
+
+    inclination = np.arccos(h_vect[2] / np.sqrt(h_norm_sq))
+    right_ascension = np.arccos(n_vect[0] / n_norm)
+    if n_vect[1] < 0 - np.finfo(float).eps:
+        right_ascension = 2 * np.pi - right_ascension
+
+    arg_periapsis = np.arccos((n_vect @ e_vect) / (n_norm * eccentricity))
+    if e_vect[2] < 0:
+        arg_periapsis = 2 * np.pi - arg_periapsis
+
+    true_anomaly = np.arccos((e_vect @ r_vect) / (eccentricity * r_norm))
+    if (r_vect @ v_vect) < 0:
+        true_anomaly = 2 * np.pi - true_anomaly
+
+    return np.array(
+        [semimajor, eccentricity, inclination, right_ascension, arg_periapsis, true_anomaly]
+    )
 
 
 def cartesian_rv_to_orbital_elements_symbolic(r_vect, v_vect, gravitational_parameter):
