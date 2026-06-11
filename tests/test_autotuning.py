@@ -877,14 +877,17 @@ def test_algorithm_autotuner_configurable():
         "rho_init",
         "rho_max",
     }
-    autotuner.hyper = dataclasses.replace(autotuner.hyper, rho_max=1e7)
+    # rho_max is a reserved-but-unused knob: setting it to a non-default value
+    # at construction warns. Pin that as behavior, then confirm the value lands.
+    with pytest.warns(UserWarning, match="reserved"):
+        autotuner = AugmentedLagrangian(rho_max=1e7)
     assert autotuner.hyper.rho_max == 1e7
 
 
 def test_custom_autotuner_instance():
     """Custom autotuner instance can be passed to PenalizedTrustRegion."""
-    custom_autotuner = AugmentedLagrangian()
-    custom_autotuner.hyper = dataclasses.replace(custom_autotuner.hyper, rho_max=1e7)
+    with pytest.warns(UserWarning, match="reserved"):
+        custom_autotuner = AugmentedLagrangian(rho_max=1e7)
     custom_autotuner.lam_prox_max = 1e6
     custom_autotuner.lam_vc_max = 1e6
     algorithm = PenalizedTrustRegion(autotuner=custom_autotuner)
@@ -904,8 +907,10 @@ def test_augmented_lagrangian_exported():
     assert hasattr(auto_tuner, "lam_prox_max")
     assert hasattr(auto_tuner, "lam_vc_max")
 
-    # Should be able to modify parameters
-    auto_tuner.hyper = dataclasses.replace(auto_tuner.hyper, rho_max=1e7)
+    # Should be able to modify parameters. Setting the reserved rho_max to a
+    # non-default value at construction warns; pin that.
+    with pytest.warns(UserWarning, match="reserved"):
+        auto_tuner = ox.AugmentedLagrangian(rho_max=1e7)
     auto_tuner.lam_prox_max = 1e6
     assert auto_tuner.hyper.rho_max == 1e7
     assert auto_tuner.lam_prox_max == 1e6

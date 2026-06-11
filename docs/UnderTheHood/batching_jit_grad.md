@@ -161,15 +161,27 @@ The batch runs until its slowest element converges or exhausts its own cap;
 finished elements are frozen, not re-iterated, so each element matches the
 corresponding single `solve_jax` run.
 
-**New autotuners batch for free.** An autotuner's tunable knobs follow the
-same derivation: declare them as fields on a `HyperParams` subclass — bare
-annotations, no decorator; subclassing applies the frozen-dataclass transform
-and the JAX pytree registration, and the annotation picks the dtype (`int`
-gets the iteration counter's, `float` the problem's) — assign an instance to
-`self.hyper`, and read `state.hyper.<field>` inside `update_weights` (see the
-`AutotuningBase` docstring). The declaration is the registration — each field
-immediately works as a `solve_jax` override, a `solve_batched` sweep target,
-and a runtime input of the exported artifact, with zero edits anywhere else:
+**Every built-in autotuner knob batches for free.** All numeric knobs of the
+built-in autotuners are declared hyperparameters — the trust-region factors
+(`gamma_1` / `gamma_2`), the acceptance thresholds (`eta_0` / `eta_1` /
+`eta_2`), the weight clips, the cost-relaxation schedule — so any of them is a
+`solve_jax` override and a `solve_batched` sweep target by name:
+
+```python
+# sweep the trust-region growth factor across a batch, one cached artifact
+results = problem.solve_batched(algorithm={"gamma_1": jnp.linspace(1.5, 3.0, B)})
+```
+
+**New autotuners batch the same way.** A custom autotuner's tunable knobs
+follow the same derivation: declare them as fields on a `HyperParams` subclass
+— bare annotations, no decorator; subclassing applies the frozen-dataclass
+transform and the JAX pytree registration, and the annotation picks the dtype
+(`int` gets the iteration counter's, `float` the problem's) — assign an
+instance to `self.hyper`, and read `state.hyper.<field>` inside
+`update_weights` (see the `AutotuningBase` docstring). The declaration is the
+registration — each field immediately works as a `solve_jax` override, a
+`solve_batched` sweep target, and a runtime input of the exported artifact,
+with zero edits anywhere else:
 
 ```python
 from openscvx.algorithms import AutotuningBase, HyperParams

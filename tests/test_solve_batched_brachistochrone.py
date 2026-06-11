@@ -340,6 +340,37 @@ def test_user_autotuner_knob_sweeps_through_solve_batched():
     jax.clear_caches()
 
 
+def test_solve_batched_gamma_1_sweep_diverges():
+    """Sweeping the trust-region growth factor ``gamma_1`` steers the solve.
+
+    This is the PR #525 ask end-to-end: ``gamma_1`` is a promoted
+    :class:`AugmentedLagrangian` knob, so it rides the ``algorithm`` override
+    channel and a ``(B,)`` vector sweeps it per element through ``solve_batched``.
+    Different growth factors take different lam_prox paths, so the swept
+    elements genuinely diverge (different iterate trajectories), and each
+    element matches its single ``solve_jax`` reference.
+    """
+    pytest.importorskip("qpax")
+
+    prob = build_brachistochrone("qpax", n=8, k_max=20, autotuner=AugmentedLagrangian())
+    prob.initialize()
+
+    gammas = jnp.array([1.5, 2.0, 3.0])  # gamma_1 > 1; bigger -> faster prox growth
+    batched = prob.solve_batched(algorithm={"gamma_1": gammas})
+    assert batched.x.shape[0] == gammas.shape[0]
+
+    for i, g in enumerate(np.asarray(gammas)):
+        ref = prob.solve_jax(algorithm={"gamma_1": float(g)})
+        np.testing.assert_allclose(
+            np.asarray(batched.x[i]), np.asarray(ref.x), atol=1e-5, rtol=1e-5
+        )
+
+    # The knob actually steers the solve: the extreme elements diverge.
+    assert not np.allclose(np.asarray(batched.x[0]), np.asarray(batched.x[2]), atol=1e-8)
+
+    jax.clear_caches()
+
+
 def test_augmented_lagrangian_declared_knobs_are_overridable():
     pytest.importorskip("qpax")
 
