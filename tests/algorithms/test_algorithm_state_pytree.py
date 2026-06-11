@@ -11,9 +11,15 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from openscvx.algorithms import AdaptiveStateCode, AlgorithmState
+from openscvx.algorithms import AdaptiveStateCode, AlgorithmState, HyperParams
 from openscvx.algorithms.weights import Weights
 from openscvx.config import Config, DevConfig, PropagationConfig, SimConfig
+
+
+class _Hyper(HyperParams):
+    """One declared knob so the ``hyper`` field contributes a pytree leaf."""
+
+    lam_cost_drop: int = -1
 
 
 class _DummyState:
@@ -59,7 +65,7 @@ def state():
         ep_vb=1e-4,
         ep_vc=1e-8,
         k_max=200,
-        lam_cost_drop=-1,
+        hyper=_Hyper(),
     )
 
 

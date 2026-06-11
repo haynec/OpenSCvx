@@ -13,13 +13,19 @@ from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 
-from ..base import AdaptiveStateCode, AutotuningBase
+from ..base import AdaptiveStateCode, AutotuningBase, HyperParams
 from .augmented_lagrangian import AugmentedLagrangian
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
     from ..base import AlgorithmState, CandidateIterate
+
+
+class AdaptiveProximalWeightHyper(HyperParams):
+    """Declared hyperparameters for :class:`AdaptiveProximalWeight`."""
+
+    lam_cost_drop: int = -1
 
 
 class AdaptiveProximalWeight(AutotuningBase):
@@ -54,7 +60,7 @@ class AdaptiveProximalWeight(AutotuningBase):
         self.eta_2 = eta_2
         self.lam_prox_min = lam_prox_min
         self.lam_prox_max = lam_prox_max
-        self.lam_cost_drop = lam_cost_drop
+        self.hyper = AdaptiveProximalWeightHyper(lam_cost_drop=lam_cost_drop)
         self.lam_cost_relax = lam_cost_relax
 
     def update_weights(
@@ -85,7 +91,7 @@ class AdaptiveProximalWeight(AutotuningBase):
         J_nonlin = nonlin_cost + nonlin_pen + nodal_pen
 
         lam_cost_next = jnp.where(
-            state.k > state.lam_cost_drop,
+            state.k > state.hyper.lam_cost_drop,
             state.lam_cost * self.lam_cost_relax,
             state.lam_cost_init,
         )

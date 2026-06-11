@@ -11,12 +11,18 @@ from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 
-from ..base import AdaptiveStateCode, AutotuningBase
+from ..base import AdaptiveStateCode, AutotuningBase, HyperParams
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
     from ..base import AlgorithmState, CandidateIterate
+
+
+class RampProximalWeightHyper(HyperParams):
+    """Declared hyperparameters for :class:`RampProximalWeight`."""
+
+    lam_cost_drop: int = -1
 
 
 class RampProximalWeight(AutotuningBase):
@@ -40,7 +46,7 @@ class RampProximalWeight(AutotuningBase):
     ):
         self.ramp_factor = ramp_factor
         self.lam_prox_max = lam_prox_max
-        self.lam_cost_drop = lam_cost_drop
+        self.hyper = RampProximalWeightHyper(lam_cost_drop=lam_cost_drop)
         self.lam_cost_relax = lam_cost_relax
 
     def update_weights(
@@ -56,7 +62,7 @@ class RampProximalWeight(AutotuningBase):
         Pure functional update — see class docstring.
         """
         lam_cost_next = jnp.where(
-            state.k > state.lam_cost_drop,
+            state.k > state.hyper.lam_cost_drop,
             state.lam_cost * self.lam_cost_relax,
             state.lam_cost_init,
         )

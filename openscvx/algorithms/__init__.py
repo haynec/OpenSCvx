@@ -53,6 +53,7 @@ from .base import (
     AlgorithmState,
     AutotuningBase,
     DiscretizationResult,
+    HyperParams,
     adaptive_state_code_to_str,
 )
 from .optimization_results import OptimizationResults
@@ -145,6 +146,7 @@ __all__ = [
     # PTR algorithm
     "PenalizedTrustRegion",
     "AutotuningBase",
+    "HyperParams",
     "AugmentedLagrangian",
     "AdaptiveProximalWeight",
     "ConstantProximalWeight",

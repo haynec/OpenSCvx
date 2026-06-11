@@ -15,6 +15,12 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from openscvx.algorithms import (
+    AdaptiveStateCode,
+    AugmentedLagrangian,
+    AutotuningBase,
+    HyperParams,
+)
 from tests.solvers._iteration_callback_helpers import build_brachistochrone
 
 # === Boundary-pin batching ===
@@ -187,17 +193,155 @@ def test_solve_batched_ep_tr_sweep_matches_solve_jax():
     prob.initialize()
 
     # Loose-to-tight trust-region tolerances: the loose element converges
-    # iterations earlier, so the per-element final iterates differ.
+    # iterations earlier, so the per-element final iterates differ. ep_tr is
+    # a scalar state field, so (B,) vs () -> batched through `overrides`.
     tolerances = jnp.array([1e-1, 1e-5])
-    batched = prob.solve_batched(ep_tr=tolerances)
+    batched = prob.solve_batched(overrides={"ep_tr": tolerances})
 
     for i, tol in enumerate(np.asarray(tolerances)):
-        ref = prob.solve_jax(ep_tr=float(tol))
+        ref = prob.solve_jax(overrides={"ep_tr": float(tol)})
         np.testing.assert_allclose(
             np.asarray(batched.x[i]), np.asarray(ref.x), atol=1e-5, rtol=1e-5
         )
 
     assert not np.allclose(np.asarray(batched.x[0]), np.asarray(batched.x[1]), atol=1e-8)
+
+    jax.clear_caches()
+
+
+def test_solve_batched_lam_prox_fill_sweep_matches_solve_jax():
+    pytest.importorskip("qpax")
+
+    prob = build_brachistochrone("qpax", n=8, k_max=20)
+    prob.initialize()
+
+    # lam_prox is an (N, n_x + n_u) state field; a (B,) vector is the
+    # batched *fill* form — one scalar per element, each broadcast to the
+    # field shape. Different trust-region weights walk different iterate
+    # paths, so the elements genuinely diverge.
+    weights = jnp.array([0.5, 1.0, 4.0])
+    batched = prob.solve_batched(overrides={"lam_prox": weights})
+    assert batched.x.shape[0] == weights.shape[0]
+
+    for i, w in enumerate(np.asarray(weights)):
+        # solve_jax takes the scalar (shared-fill) form of the same override.
+        ref = prob.solve_jax(overrides={"lam_prox": float(w)})
+        np.testing.assert_allclose(
+            np.asarray(batched.x[i]), np.asarray(ref.x), atol=1e-5, rtol=1e-5
+        )
+        np.testing.assert_allclose(
+            np.asarray(batched.u[i]), np.asarray(ref.u), atol=1e-5, rtol=1e-5
+        )
+
+    assert not np.allclose(np.asarray(batched.x[0]), np.asarray(batched.x[2]), atol=1e-8)
+
+    jax.clear_caches()
+
+
+def test_solve_batched_overrides_k_max_matches_max_iters_kwarg():
+    pytest.importorskip("qpax")
+
+    prob = build_brachistochrone("qpax", n=8, k_max=20)
+    prob.initialize()
+
+    # k_max has a dedicated kwarg (max_iters) whose default stack
+    # solve_batched always materializes; the override spelling must beat
+    # that default, not silently lose to it.
+    budgets = jnp.array([2, 8])
+    via_kwarg = prob.solve_batched(max_iters=budgets)
+    via_override = prob.solve_batched(overrides={"k_max": budgets})
+
+    np.testing.assert_allclose(
+        np.asarray(via_override.x), np.asarray(via_kwarg.x), atol=1e-9, rtol=0
+    )
+    # The budgets actually bind — this is not two default-k_max solves agreeing.
+    assert not np.allclose(np.asarray(via_kwarg.x[0]), np.asarray(via_kwarg.x[1]), atol=1e-8)
+
+    jax.clear_caches()
+
+
+# === Autotuner-declared hyperparameters (state.hyper) ===
+
+
+class _ProxRampHyper(HyperParams):
+    """The toy autotuner's one declared knob."""
+
+    prox_scale: float = 1.0
+
+
+class _ProxRampAutotuner(AutotuningBase):
+    """Toy user autotuner: one declared knob scaling ``lam_prox`` per iteration.
+
+    Defined entirely inside the test — the point is that declaring
+    ``prox_scale`` on a :class:`HyperParams` subclass and reading it from
+    ``state.hyper`` is the *whole* integration: overrides and batched sweeps
+    work with zero library edits.
+    """
+
+    JIT_UPDATE_WEIGHTS = False
+
+    def __init__(self, prox_scale: float = 1.0):
+        self.hyper = _ProxRampHyper(prox_scale=prox_scale)
+
+    def update_weights(self, state, candidate, nodal_constraints, settings, params):
+        return state.replace(
+            x=candidate.x,
+            u=candidate.u,
+            x_prop=candidate.x_prop,
+            x_prop_plus=candidate.x_prop_plus,
+            lam_prox=state.lam_prox * state.hyper.prox_scale,
+            adaptive_state_code=jnp.asarray(
+                int(AdaptiveStateCode.ACCEPT_CONSTANT), dtype=jnp.int32
+            ),
+        )
+
+
+def test_user_autotuner_knob_sweeps_through_solve_batched():
+    pytest.importorskip("qpax")
+
+    prob = build_brachistochrone("qpax", n=8, k_max=10, autotuner=_ProxRampAutotuner())
+    prob.initialize()
+
+    # The declared knob is a valid override name purely by declaration; a
+    # (B,) vector sweeps it per element and each element matches the
+    # corresponding single solve.
+    scales = jnp.array([0.8, 1.0, 1.4])
+    batched = prob.solve_batched(overrides={"prox_scale": scales})
+    assert batched.x.shape[0] == scales.shape[0]
+
+    for i, s in enumerate(np.asarray(scales)):
+        ref = prob.solve_jax(overrides={"prox_scale": float(s)})
+        np.testing.assert_allclose(
+            np.asarray(batched.x[i]), np.asarray(ref.x), atol=1e-5, rtol=1e-5
+        )
+
+    # The knob actually steers the solve: different ramps, different iterates.
+    assert not np.allclose(np.asarray(batched.x[0]), np.asarray(batched.x[2]), atol=1e-8)
+
+    jax.clear_caches()
+
+
+def test_augmented_lagrangian_declared_knobs_are_overridable():
+    pytest.importorskip("qpax")
+
+    # AugmentedLagrangian declares rho_init / rho_max / lam_cost_drop on its
+    # HyperParams container, so the override channel accepts them by name. rho_init
+    # and rho_max currently have no read sites in update_weights (vestigial
+    # knobs), so the sweep exercises the plumbing — accepted name, batched
+    # state, per-element agreement — with results identical to the baseline.
+    prob = build_brachistochrone("qpax", n=8, k_max=6, autotuner=AugmentedLagrangian())
+    prob.initialize()
+
+    base = prob.solve_jax()
+    single = prob.solve_jax(overrides={"rho_init": 5.0, "rho_max": 1e3})
+    np.testing.assert_allclose(np.asarray(single.x), np.asarray(base.x), atol=1e-12)
+
+    batched = prob.solve_batched(overrides={"rho_init": jnp.array([1.0, 5.0])})
+    assert batched.x.shape[0] == 2
+    for i in range(2):
+        np.testing.assert_allclose(
+            np.asarray(batched.x[i]), np.asarray(base.x), atol=1e-5, rtol=1e-5
+        )
 
     jax.clear_caches()
 
@@ -212,6 +356,31 @@ def test_solve_batched_unknown_parameter_key_raises():
         ValueError, match=r"unknown parameter.*'gravty'.*declared parameters.*'gravity'"
     ):
         prob.solve_batched(parameters={"gravty": jnp.zeros((2, 1))})
+
+
+def test_overrides_unknown_name_lists_valid_names():
+    prob = build_brachistochrone("cvxpy", n=4, k_max=1)
+    prob.initialize()
+    with pytest.raises(ValueError, match=r"unknown override name.*'ep_trr'.*'ep_tr'"):
+        prob.solve_batched(overrides={"ep_trr": jnp.zeros(2)})
+    with pytest.raises(ValueError, match=r"solve_jax: unknown override name.*'ep_trr'"):
+        prob.solve_jax(overrides={"ep_trr": 1e-4})
+
+
+def test_overrides_kwarg_collision_names_the_kwarg():
+    prob = build_brachistochrone("cvxpy", n=4, k_max=1)
+    prob.initialize()
+    with pytest.raises(ValueError, match=r"overrides\['k_max'\].*max_iters kwarg"):
+        prob.solve_batched(max_iters=jnp.array([2, 3]), overrides={"k_max": 5})
+    with pytest.raises(ValueError, match=r"overrides\['x'\].*x_guess kwarg"):
+        prob.solve_jax(x_guess=prob.state.x, overrides={"x": prob.state.x})
+
+
+def test_solve_jax_override_shape_mismatch_points_at_solve_batched():
+    prob = build_brachistochrone("cvxpy", n=4, k_max=1)
+    prob.initialize()
+    with pytest.raises(ValueError, match=r"overrides\['ep_tr'\] has shape \(2,\).*solve_batched"):
+        prob.solve_jax(overrides={"ep_tr": jnp.zeros(2)})
 
 
 def test_solve_batched_before_initialize_raises():

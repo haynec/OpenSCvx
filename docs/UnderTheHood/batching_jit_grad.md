@@ -111,26 +111,62 @@ results = problem.solve_batched(
 )
 ```
 
-### Hyperparameter sweeps
+### Hyperparameter sweeps: the `overrides` dict
 
-The SCP loop constants — `ep_tr` / `ep_vb` / `ep_vc` / `lam_cost_drop` /
-`max_iters` — ride the `AlgorithmState` pytree as runtime inputs rather than
-closure constants. Two consequences:
+Every `AlgorithmState` field is a runtime input riding the state pytree, and
+one `overrides` dict reaches any of them by name — convergence thresholds
+(`ep_tr` / `ep_vb` / `ep_vc`), penalty weights (`lam_prox` / `lam_vc` /
+`lam_cost`), the seed iterate, autotuner hyperparameters. There is no
+whitelist: the field declaration is the registration, and the
+`AlgorithmState` attribute docs are the override reference. (`max_iters`
+survives as a named kwarg — sugar for `overrides={"k_max": ...}`; passing
+both raises, as does an override that shadows any other named kwarg's
+field.)
 
-* On `solve_jax`, each is a per-solve keyword: `solve_jax(ep_tr=1e-6,
-  max_iters=50)` retraces nothing.
-* On `solve_batched`, each follows the same rank rule (declared `()`): a
-  `(B,)` vector sweeps it per element, batched alongside (or instead of) any
-  other input, against one cached artifact:
+* On `solve_jax`, each value matches the field's shape, or is a scalar
+  broadcast to it: `solve_jax(overrides={"ep_tr": 1e-6, "lam_prox": 2.0})`
+  retraces nothing.
+* On `solve_batched`, each value follows the rank rule against the field's
+  shape, plus two **fill** forms for array-shaped fields: a scalar (shared)
+  or a `(B,)` vector (one scalar per element, broadcast to the field shape).
+  Exact shapes win when both parse; `in_axes={"overrides": {name: 0}}`
+  forces the per-element reading. All against one cached artifact:
 
 ```python
-sweep = problem.solve_batched(ep_tr=jnp.logspace(-6, -3, B))   # tolerance sweep
+sweep = problem.solve_batched(overrides={"ep_tr": jnp.logspace(-6, -3, B)})
+weights = problem.solve_batched(overrides={"lam_prox": jnp.array([0.5, 1.0, 4.0])})
 budgets = problem.solve_batched(max_iters=jnp.array([5, 10, 20]))  # per-element caps
 ```
 
 The batch runs until its slowest element converges or exhausts its own cap;
 finished elements are frozen, not re-iterated, so each element matches the
 corresponding single `solve_jax` run.
+
+**New autotuners batch for free.** An autotuner's tunable knobs follow the
+same derivation: declare them as fields on a `HyperParams` subclass — bare
+annotations, no decorator; subclassing applies the frozen-dataclass transform
+and the JAX pytree registration, and the annotation picks the dtype (`int`
+gets the iteration counter's, `float` the problem's) — assign an instance to
+`self.hyper`, and read `state.hyper.<field>` inside `update_weights` (see the
+`AutotuningBase` docstring). The declaration is the registration — each field
+immediately works as a `solve_jax` override, a `solve_batched` sweep target,
+and a runtime input of the exported artifact, with zero edits anywhere else:
+
+```python
+from openscvx.algorithms import AutotuningBase, HyperParams
+
+class MyHyper(HyperParams):
+    ramp: float = 2.0
+
+class MyAutotuner(AutotuningBase):
+    def __init__(self, ramp: float = 2.0):
+        self.hyper = MyHyper(ramp=ramp)
+
+    def update_weights(self, state, ...):
+        ...state.hyper.ramp...
+
+results = problem.solve_batched(overrides={"ramp": jnp.linspace(1.5, 3.0, B)})
+```
 
 Pick `solve_batched` when **cross-process cold-start dominates** — short-lived
 processes (CI sweeps, notebook restarts, deployed workers) that otherwise pay
@@ -176,9 +212,10 @@ layer uses):
 
 Change any of these — backend, a penalty weight, a state bound, which
 parameters are batched — and you get a different cache path, so a stale
-artifact is never reused. The convergence thresholds and `max_iters` are
-deliberately *not* in the key: they are runtime inputs on the state pytree, so
-one artifact serves every tolerance and iteration-cap setting.
+artifact is never reused. Everything `overrides` can reach — convergence
+thresholds, `max_iters`, weights, autotuner hyperparameters — is deliberately
+*not* in the key: those are runtime inputs on the state pytree, so one
+artifact serves every setting of them.
 
 `examples/abstract/brachistochrone_batched.py` shows both paths side by side;
 re-running it is itself the cross-process demo.
@@ -219,14 +256,12 @@ problem.solve_jax(
     *,
     x_guess=None,        # (N, n_x) state trajectory warm-start
     u_guess=None,        # (N, n_u) control trajectory warm-start
-    ep_tr=None,          # convergence threshold on J_tr; falls back to
-                         #     ``algorithm.ep_tr``
-    ep_vb=None,          # convergence threshold on J_vb
-    ep_vc=None,          # convergence threshold on J_vc
-    lam_cost_drop=None,  # iteration after which lam_cost relaxes (-1 = never)
-    max_iters=None,      # SCP iteration cap; falls back to ``algorithm.k_max``.
-                         #     A runtime input on the state pytree — no value
-                         #     forces a retrace
+    max_iters=None,      # SCP iteration cap; sugar for overrides={"k_max": ...};
+                         #     falls back to ``algorithm.k_max``
+    overrides=None,      # any AlgorithmState field by name (ep_tr, lam_prox,
+                         #     ...); values match the field shape or fill it
+                         #     from a scalar. Runtime inputs on the state
+                         #     pytree — no value forces a retrace
 )
 ```
 

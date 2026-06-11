@@ -17,7 +17,7 @@ from openscvx.problem import _resolve_batch_spec
 
 
 def test_shared_when_shape_matches_declared():
-    B, axes = _resolve_batch_spec(
+    B, axes, _ = _resolve_batch_spec(
         {
             "x_initial": (np.zeros((4, 3)), (3,)),
             "parameters.center": (np.zeros(3), (3,)),
@@ -28,13 +28,13 @@ def test_shared_when_shape_matches_declared():
 
 
 def test_batched_when_one_extra_leading_axis():
-    B, axes = _resolve_batch_spec({"x_guess": (np.zeros((5, 10, 3)), (10, 3))})
+    B, axes, _ = _resolve_batch_spec({"x_guess": (np.zeros((5, 10, 3)), (10, 3))})
     assert B == 5
     assert axes == {"x_guess": 0}
 
 
 def test_scalar_declared_batched_as_vector():
-    B, axes = _resolve_batch_spec(
+    B, axes, _ = _resolve_batch_spec(
         {
             "parameters.radius": (np.zeros(7), ()),
             "parameters.gain": (1.5, ()),
@@ -45,7 +45,7 @@ def test_scalar_declared_batched_as_vector():
 
 
 def test_none_values_are_skipped():
-    B, axes = _resolve_batch_spec(
+    B, axes, _ = _resolve_batch_spec(
         {
             "x_initial": (np.zeros((2, 3)), (3,)),
             "x_final": (None, (3,)),
@@ -58,7 +58,7 @@ def test_none_values_are_skipped():
 def test_shared_matrix_with_leading_axis_equal_to_B_stays_shared():
     # Declared (4, 3) passed as (4, 3) alongside a B=4 batched pin: rank
     # matches declared, so the coincidental leading axis must not batch it.
-    B, axes = _resolve_batch_spec(
+    B, axes, _ = _resolve_batch_spec(
         {
             "x_initial": (np.zeros((4, 6)), (6,)),
             "parameters.waypoints": (np.zeros((4, 3)), (4, 3)),
@@ -69,7 +69,7 @@ def test_shared_matrix_with_leading_axis_equal_to_B_stays_shared():
 
 
 def test_matrix_batched_with_full_extra_axis():
-    B, axes = _resolve_batch_spec({"parameters.waypoints": (np.zeros((4, 4, 3)), (4, 3))})
+    B, axes, _ = _resolve_batch_spec({"parameters.waypoints": (np.zeros((4, 4, 3)), (4, 3))})
     assert B == 4
     assert axes == {"parameters.waypoints": 0}
 
@@ -80,7 +80,7 @@ def test_matrix_batched_with_full_extra_axis():
 def test_in_axes_forces_batched_on_rank_matching_value():
     # A declared-(4,) parameter passed as (4,) reads as shared; in_axes says
     # it is one scalar per batch element.
-    B, axes = _resolve_batch_spec(
+    B, axes, _ = _resolve_batch_spec(
         {"parameters.weights": (np.zeros(4), (4,))},
         in_axes={"parameters.weights": 0},
     )
@@ -89,7 +89,7 @@ def test_in_axes_forces_batched_on_rank_matching_value():
 
 
 def test_in_axes_forces_shared():
-    B, axes = _resolve_batch_spec(
+    B, axes, _ = _resolve_batch_spec(
         {
             "x_initial": (np.zeros((2, 3)), (3,)),
             "x_guess": (np.zeros((2, 10, 3)), (10, 3)),
@@ -101,7 +101,7 @@ def test_in_axes_forces_shared():
 
 
 def test_in_axes_partial_spec_merges_with_inference():
-    B, axes = _resolve_batch_spec(
+    B, axes, _ = _resolve_batch_spec(
         {
             "parameters.weights": (np.zeros(4), (4,)),
             "parameters.center": (np.zeros((4, 3)), (3,)),
@@ -158,6 +158,101 @@ def test_in_axes_forced_zero_with_disagreeing_batch_size_raises():
             },
             in_axes={"parameters.weights": 0},
         )
+
+
+# === Fill forms (overrides entries) ===
+
+
+def test_fill_scalar_is_shared_fill():
+    B, axes, fills = _resolve_batch_spec(
+        {
+            "x_initial": (np.zeros((3, 6)), (6,)),
+            "overrides.lam_prox": (2.0, (10, 4)),
+        },
+        fill={"overrides.lam_prox"},
+    )
+    assert B == 3
+    assert axes["overrides.lam_prox"] is None
+    assert fills == {"overrides.lam_prox"}
+
+
+def test_fill_vector_is_batched_fill():
+    B, axes, fills = _resolve_batch_spec(
+        {"overrides.lam_prox": (np.zeros(5), (10, 4))},
+        fill={"overrides.lam_prox"},
+    )
+    assert B == 5
+    assert axes == {"overrides.lam_prox": 0}
+    assert fills == {"overrides.lam_prox"}
+
+
+def test_fill_exact_shapes_win_over_fills():
+    # The field's exact shape and (B,) + it parse as exact, never as fill.
+    B, axes, fills = _resolve_batch_spec(
+        {
+            "overrides.lam_vc": (np.zeros((7, 4)), (7, 4)),
+            "overrides.lam_cost": (np.zeros((3, 2)), (2,)),
+        },
+        fill={"overrides.lam_vc", "overrides.lam_cost"},
+    )
+    assert B == 3
+    assert axes == {"overrides.lam_vc": None, "overrides.lam_cost": 0}
+    assert fills == set()
+
+
+def test_fill_rank1_field_of_length_B_reads_shared_exact():
+    # The documented collision: a rank-1 field whose length equals B parses
+    # as shared-exact by precedence...
+    B, axes, fills = _resolve_batch_spec(
+        {
+            "x_initial": (np.zeros((4, 6)), (6,)),
+            "overrides.lam_cost": (np.zeros(4), (4,)),
+        },
+        fill={"overrides.lam_cost"},
+    )
+    assert axes["overrides.lam_cost"] is None
+    assert fills == set()
+
+
+def test_fill_in_axes_forces_batched_fill_on_rank1_field():
+    # ...and in_axes={name: 0} forces the per-element fill reading.
+    B, axes, fills = _resolve_batch_spec(
+        {"overrides.lam_cost": (np.zeros(4), (4,))},
+        in_axes={"overrides.lam_cost": 0},
+        fill={"overrides.lam_cost"},
+    )
+    assert B == 4
+    assert axes == {"overrides.lam_cost": 0}
+    assert fills == {"overrides.lam_cost"}
+
+
+def test_fill_scalar_on_scalar_field_is_exact_not_fill():
+    B, axes, fills = _resolve_batch_spec(
+        {
+            "overrides.ep_tr": (1e-4, ()),
+            "overrides.k_max": (np.zeros(6), ()),
+        },
+        fill={"overrides.ep_tr", "overrides.k_max"},
+    )
+    assert B == 6
+    assert axes == {"overrides.ep_tr": None, "overrides.k_max": 0}
+    assert fills == set()
+
+
+def test_fill_bad_rank_lists_all_four_forms():
+    with pytest.raises(ValueError, match=r"scalar \(\) to fill.*\(B,\) to fill one scalar"):
+        _resolve_batch_spec(
+            {"overrides.lam_prox": (np.zeros((2, 3, 4, 5)), (10, 4))},
+            fill={"overrides.lam_prox"},
+        )
+
+
+def test_non_fill_entry_rejects_fill_forms():
+    # Without fill capability a (B,) value against a (10, 3) declared shape
+    # is just a shape mismatch — and the error does not advertise fills.
+    with pytest.raises(ValueError, match=r"'x_guess' has shape \(5,\)") as exc:
+        _resolve_batch_spec({"x_guess": (np.zeros(5), (10, 3))})
+    assert "fill" not in str(exc.value)
 
 
 # === Teaching errors ===

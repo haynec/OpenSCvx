@@ -30,6 +30,7 @@ def build_brachistochrone(
     n: int = 4,
     k_max: int = 1,
     constraint_style: str = "ctcs",
+    autotuner="ConstantProximalWeight",
 ):
     """Build the brachistochrone problem at small ``N`` for callback tests.
 
@@ -46,6 +47,8 @@ def build_brachistochrone(
         constraint_style: ``"ctcs"`` (CTCS box rows; the default) or
             ``"nodal"`` (plain nodal inequalities; exercises the
             nodal-constraint assembly block that's dormant under CTCS-only).
+        autotuner: Autotuner name or instance, passed straight through to the
+            algorithm config (instances let tests exercise custom autotuners).
     """
     import openscvx as ox
 
@@ -106,7 +109,7 @@ def build_brachistochrone(
         N=n,
         float_dtype="float64",
         algorithm={
-            "autotuner": "ConstantProximalWeight",
+            "autotuner": autotuner,
             "lam_prox": 1e0,
             "lam_cost": 6e-1,
             "k_max": k_max,
