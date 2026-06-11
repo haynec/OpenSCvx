@@ -949,8 +949,10 @@ class AlgorithmHistory:
 class Algorithm(ABC):
     """Abstract base class for successive convexification algorithms.
 
-    Subclasses implement :py:meth:`initialize` and :py:meth:`step`. ``step``
-    takes the current :class:`AlgorithmState` and a CPU-side
+    An ``Algorithm`` owns the SCP iteration end to end: it *builds* the
+    JAX-pure iteration body (:meth:`build_iteration`), *stores* it
+    (:meth:`initialize`), and *drives* it one step at a time (:meth:`step`).
+    ``step`` takes the current :class:`AlgorithmState` and a CPU-side
     :class:`AlgorithmHistory`, returns the next state plus a convergence flag,
     and appends to ``history`` for diagnostics.
 
@@ -960,18 +962,76 @@ class Algorithm(ABC):
         :class:`AlgorithmHistory` (Python-side), threaded explicitly through
         ``step()``.
 
+    The surface :class:`~openscvx.problem.Problem` relies on, beyond the
+    abstract methods below:
+
+    - ``autotuner`` — the :class:`AutotuningBase` whose declared ``hyper``
+      fields :class:`~openscvx.problem.Problem` enumerates to build the
+      per-solve / batched override channel.
+    - ``ep_tr`` / ``ep_vb`` / ``ep_vc`` — convergence thresholds
+      :meth:`Problem._sync_scp_constants` snapshots onto
+      :class:`AlgorithmState` before each solve.
+    - :meth:`get_columns` — the iteration-table columns to print.
+    - ``weights.build_vb_arrays`` — called once in
+      :meth:`Problem.initialize` to size the virtual-buffer weight arrays.
+    - :meth:`_hash_into` — contributes the algorithm's identity to the
+      ``solve_batched`` export cache key.
+
     Attributes:
         weights: SCP weights used by the algorithm and autotuner.
+            Subclasses must set this in ``__init__``.
+        autotuner: The penalty-weight update rule (:class:`AutotuningBase`).
             Subclasses must set this in ``__init__``.
         k_max: Maximum number of SCP iterations.
             Subclasses must set this in ``__init__``.
         t_max: Optional wall-clock time limit in seconds. ``None`` means no
             limit. Subclasses must set this in ``__init__``.
+        ep_tr: Trust-region convergence threshold.
+            Subclasses must set this in ``__init__``.
+        ep_vb: Virtual-buffer convergence threshold.
+            Subclasses must set this in ``__init__``.
+        ep_vc: Virtual-control convergence threshold.
+            Subclasses must set this in ``__init__``.
     """
 
     weights: "Weights"
+    autotuner: "AutotuningBase"
     k_max: int
     t_max: Optional[float]
+    ep_tr: float
+    ep_vb: float
+    ep_vc: float
+
+    @abstractmethod
+    def build_iteration(
+        self,
+        dis_continuous: Callable,
+        dis_impulsive: Callable,
+        jax_constraints: "LoweredJaxConstraints",
+        solver_callback: Callable,
+        settings: "Config",
+    ) -> Callable:
+        """Build the JAX-pure SCP iteration body for this algorithm.
+
+        :class:`~openscvx.problem.Problem` assembles the discretization
+        solvers, lowered constraints, and convex-solver callback, then asks
+        the algorithm to fuse them into one step. The algorithm owns this
+        because the fusion is algorithm-specific (which autotuner runs, which
+        penalty terms are assembled); ``Problem`` stays algorithm-agnostic.
+
+        Args:
+            dis_continuous: Discretizer for the continuous dynamics.
+            dis_impulsive: Discretizer for the impulsive/discrete dynamics.
+            jax_constraints: Lowered JAX constraints the body operates over.
+            solver_callback: The convex backend's ``iteration_callback``.
+            settings: Problem configuration.
+
+        Returns:
+            The JAX-pure ``(state, params) -> (next_state, diagnostics)``
+            iteration body. :class:`~openscvx.problem.Problem` wraps it in
+            ``jax.jit`` and hands it back via :meth:`initialize`.
+        """
+        raise NotImplementedError
 
     @abstractmethod
     def initialize(
@@ -985,8 +1045,9 @@ class Algorithm(ABC):
 
         Args:
             iteration_fn: The JAX-pure ``(state, params) -> (next_state,
-                diagnostics)`` body built by
-                :func:`~openscvx.algorithms.scvx.iteration.make_scp_iteration`.
+                diagnostics)`` body returned by :meth:`build_iteration`,
+                already wrapped in ``jax.jit`` by
+                :class:`~openscvx.problem.Problem`.
             emitter: Per-iteration diagnostics sink (printing queue / no-op).
             jax_constraints: Lowered JAX constraints the body operates over.
             settings: Problem configuration.
@@ -1015,6 +1076,49 @@ class Algorithm(ABC):
             satisfied.
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def get_columns(self, verbosity: int) -> List[Column]:
+        """Return the iteration-table columns to print at ``verbosity``.
+
+        :class:`~openscvx.problem.Problem` calls this once per solve to lay
+        out the progress table. Implementations typically concatenate the
+        algorithm's own columns with the autotuner's ``COLUMNS`` and filter by
+        each column's ``min_verbosity``.
+        """
+        raise NotImplementedError
+
+    def _hash_into(self, hasher: "hashlib._Hash") -> None:
+        """Contribute this algorithm's identity to the ``solve_batched`` cache key.
+
+        The exported batched loop bakes in the initial penalty weights and the
+        autotuner's update rule — none of which the symbolic problem hash
+        covers. The default folds in the concrete class name, then each
+        :class:`~openscvx.algorithms.weights.Weights` field, then the
+        autotuner via its own ``_hash_into`` — mirroring the symbolic
+        ``_hash_into`` protocol so a new weight is hashed where it is added.
+
+        The convergence thresholds (``ep_tr`` / ``ep_vb`` / ``ep_vc``) and the
+        iteration cap ``k_max`` / time limit ``t_max`` are deliberately *not*
+        folded in here: they ride the :class:`AlgorithmState` pytree as runtime
+        inputs, so one exported artifact serves every tolerance and
+        ``max_iters`` setting. Override only if an algorithm's identity needs
+        something beyond ``weights`` + ``autotuner``.
+        """
+        from openscvx.utils.caching import hash_value_into
+
+        hasher.update(type(self).__name__.encode())
+        w = self.weights
+        for value in (
+            w.lam_prox,
+            w.lam_vc,
+            w.lam_cost,
+            w.lam_vb,
+            w.lam_vb_nodal,
+            w.lam_vb_cross,
+        ):
+            hash_value_into(hasher, value)
+        self.autotuner._hash_into(hasher)
 
     @abstractmethod
     def citation(self) -> List[str]:

@@ -30,11 +30,9 @@ from ..base import (
     adaptive_state_code_to_str,
 )
 from ..weights import Weights
-from .iteration import _converged
+from .iteration import _converged, make_scp_iteration
 
 if TYPE_CHECKING:
-    import hashlib
-
     from openscvx.lowered import LoweredJaxConstraints
     from openscvx.symbolic.expr.control import Control
     from openscvx.symbolic.expr.state import State
@@ -167,36 +165,28 @@ class PenalizedTrustRegion(Algorithm):
     def lam_vb(self, value: float) -> None:
         self.weights.lam_vb = float(value)
 
-    def _hash_into(self, hasher: "hashlib._Hash") -> None:
-        """Contribute this algorithm's identity to the ``solve_batched`` cache key.
+    def build_iteration(
+        self,
+        dis_continuous: Callable,
+        dis_impulsive: Callable,
+        jax_constraints: "LoweredJaxConstraints",
+        solver_callback: Callable,
+        settings: Config,
+    ) -> Callable:
+        """Fuse the discretizers, constraints, and solver into the PTR step.
 
-        The exported batched loop bakes in the initial penalty weights and the
-        autotuner's update rule — none of which the symbolic problem hash
-        covers. Each piece is folded in next to where it lives (weights via
-        their fields, the autotuner via its own ``_hash_into``), mirroring the
-        symbolic ``_hash_into`` protocol so a new field is hashed where it is
-        added.
-
-        The convergence thresholds and the iteration cap ``k_max`` are
-        deliberately *not* folded in here: they ride the
-        :class:`AlgorithmState` pytree as runtime inputs (``state.ep_tr`` /
-        ``state.k_max``), so one exported artifact serves every tolerance and
-        ``max_iters`` setting.
+        Thin wrapper around
+        :func:`~openscvx.algorithms.scvx.iteration.make_scp_iteration`,
+        threading this algorithm's :attr:`autotuner` into the fused body.
         """
-        from openscvx.utils.caching import hash_value_into
-
-        hasher.update(type(self).__name__.encode())
-        w = self.weights
-        for value in (
-            w.lam_prox,
-            w.lam_vc,
-            w.lam_cost,
-            w.lam_vb,
-            w.lam_vb_nodal,
-            w.lam_vb_cross,
-        ):
-            hash_value_into(hasher, value)
-        self.autotuner._hash_into(hasher)
+        return make_scp_iteration(
+            dis_continuous=dis_continuous,
+            dis_impulsive=dis_impulsive,
+            jax_constraints=jax_constraints,
+            solver_callback=solver_callback,
+            autotuner=self.autotuner,
+            settings=settings,
+        )
 
     def get_columns(self, verbosity: int = Verbosity.STANDARD) -> List[Column]:
         """Get the columns to display for iteration output."""
