@@ -120,30 +120,34 @@ One deliberate divergence from `jax.vmap`: the *default* is "infer by rank",
 not `0`-everything — an all-shared batched solve has no batch axis to find,
 and inference is what makes mixed shared/batched dicts ergonomic.
 
-### Hyperparameter sweeps: the `overrides` dict
+### Hyperparameter sweeps: the `algorithm` dict
 
-Every `AlgorithmState` field is a runtime input riding the state pytree, and
-one `overrides` dict reaches any of them by name — convergence thresholds
-(`ep_tr` / `ep_vb` / `ep_vc`), penalty weights (`lam_prox` / `lam_vc` /
-`lam_cost`), the seed iterate, autotuner hyperparameters. There is no
-whitelist: the field declaration is the registration, and the
-`AlgorithmState` attribute docs are the override reference. (`max_iters`
-survives as a named kwarg — sugar for `overrides={"k_max": ...}`; passing
-both raises, as does an override that shadows any other named kwarg's
-field.)
+Solve-time mirrors construction-time: the `Problem` constructor configures
+the SCP algorithm with a dict (`algorithm={"ep_tr": 1e-5, "lam_prox": 1.0}`),
+and the solve methods take the same box with the same names as per-solve,
+batchable inputs. Every `AlgorithmState` field is a runtime input riding the
+state pytree, and the `algorithm` dict reaches any of them by name —
+convergence thresholds (`ep_tr` / `ep_vb` / `ep_vc`), penalty weights
+(`lam_prox` / `lam_vc` / `lam_cost`), the seed iterate, autotuner
+hyperparameters. There is no whitelist: the field declaration is the
+registration, and the `AlgorithmState` attribute docs are the reference.
+(`max_iters` survives as a named kwarg — sugar for `algorithm={"k_max":
+...}`; passing both raises, as does an entry that shadows any other named
+kwarg's field. Construction-only keys of the constructor dict — `autotuner`,
+`t_max` — raise pointing back at the constructor.)
 
 * On `solve_jax`, each value matches the field's shape, or is a scalar
-  broadcast to it: `solve_jax(overrides={"ep_tr": 1e-6, "lam_prox": 2.0})`
+  broadcast to it: `solve_jax(algorithm={"ep_tr": 1e-6, "lam_prox": 2.0})`
   retraces nothing.
 * On `solve_batched`, each value follows the rank rule against the field's
   shape, plus two **fill** forms for array-shaped fields: a scalar (shared)
   or a `(B,)` vector (one scalar per element, broadcast to the field shape).
-  Exact shapes win when both parse; `in_axes={"overrides": {name: 0}}`
+  Exact shapes win when both parse; `in_axes={"algorithm": {name: 0}}`
   forces the per-element reading. All against one cached artifact:
 
 ```python
-sweep = problem.solve_batched(overrides={"ep_tr": jnp.logspace(-6, -3, B)})
-weights = problem.solve_batched(overrides={"lam_prox": jnp.array([0.5, 1.0, 4.0])})
+sweep = problem.solve_batched(algorithm={"ep_tr": jnp.logspace(-6, -3, B)})
+weights = problem.solve_batched(algorithm={"lam_prox": jnp.array([0.5, 1.0, 4.0])})
 budgets = problem.solve_batched(max_iters=jnp.array([5, 10, 20]))  # per-element caps
 ```
 
@@ -174,7 +178,7 @@ class MyAutotuner(AutotuningBase):
     def update_weights(self, state, ...):
         ...state.hyper.ramp...
 
-results = problem.solve_batched(overrides={"ramp": jnp.linspace(1.5, 3.0, B)})
+results = problem.solve_batched(algorithm={"ramp": jnp.linspace(1.5, 3.0, B)})
 ```
 
 Pick `solve_batched` when **cross-process cold-start dominates** — short-lived
@@ -221,7 +225,7 @@ layer uses):
 
 Change any of these — backend, a penalty weight, a state bound, which
 parameters are batched — and you get a different cache path, so a stale
-artifact is never reused. Everything `overrides` can reach — convergence
+artifact is never reused. Everything the `algorithm` dict can reach — convergence
 thresholds, `max_iters`, weights, autotuner hyperparameters — is deliberately
 *not* in the key: those are runtime inputs on the state pytree, so one
 artifact serves every setting of them.
@@ -265,12 +269,13 @@ problem.solve_jax(
     *,
     x_guess=None,        # (N, n_x) state trajectory warm-start
     u_guess=None,        # (N, n_u) control trajectory warm-start
-    max_iters=None,      # SCP iteration cap; sugar for overrides={"k_max": ...};
-                         #     falls back to ``algorithm.k_max``
-    overrides=None,      # any AlgorithmState field by name (ep_tr, lam_prox,
-                         #     ...); values match the field shape or fill it
-                         #     from a scalar. Runtime inputs on the state
-                         #     pytree — no value forces a retrace
+    max_iters=None,      # SCP iteration cap; sugar for algorithm={"k_max": ...};
+                         #     falls back to the configured k_max
+    algorithm=None,      # any AlgorithmState field by name (ep_tr, lam_prox,
+                         #     ...) — the constructor's algorithm-dict names;
+                         #     values match the field shape or fill it from a
+                         #     scalar. Runtime inputs on the state pytree — no
+                         #     value forces a retrace
 )
 ```
 

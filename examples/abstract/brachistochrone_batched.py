@@ -154,12 +154,13 @@ if __name__ == "__main__":
     print(f"  result.t_final:   {np.asarray(batched.t_final).reshape(-1)}")
     print(f"  result.converged: {np.asarray(batched.converged)}")
 
-    # Hyperparameters batch by the same rule, through the `overrides` dict:
-    # any AlgorithmState field by name. ep_tr is a scalar field, so a (B,)
-    # vector sweeps the convergence tolerance per element — same artifact, no
-    # recompile, since the fields are runtime inputs on the state pytree.
+    # Algorithm knobs batch by the same rule, through the `algorithm` dict —
+    # the same names as the Problem constructor's algorithm config. ep_tr is
+    # a scalar field, so a (B,) vector sweeps the convergence tolerance per
+    # element — same artifact, no recompile, since the knobs are runtime
+    # inputs on the state pytree.
     sweep = export_problem.solve_batched(
-        overrides={"ep_tr": jnp.logspace(-4, -1, 4), "ep_vc": 1e-7}
+        algorithm={"ep_tr": jnp.logspace(-4, -1, 4), "ep_vc": 1e-7}
     )
     print(f"  ep_tr sweep t_final:   {np.asarray(sweep.t_final).reshape(-1)}")
     print(f"  ep_tr sweep converged: {np.asarray(sweep.converged)}")

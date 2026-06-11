@@ -281,8 +281,8 @@ class AutotuningBase(ABC):
                 ...state.hyper.ramp...
 
     The declaration is the registration: the field becomes a per-solve
-    override (``solve_jax(overrides={"ramp": ...})``), a batchable sweep
-    target (``solve_batched(overrides={"ramp": jnp.linspace(...)})``), and a
+    override (``solve_jax(algorithm={"ramp": ...})``), a batchable sweep
+    target (``solve_batched(algorithm={"ramp": jnp.linspace(...)})``), and a
     runtime input of the exported batched artifact — with zero core edits.
     Structural choices that select code paths (flags, enums) stay ordinary
     attributes; they are part of the traced program, not data.

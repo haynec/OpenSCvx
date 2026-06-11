@@ -110,7 +110,7 @@ def _resolve_batch_spec(
             named entries (``0`` = batched along the leading axis, ``None`` =
             shared); unlisted entries fall back to the rank rule.
         fill: Optional set of entry names that accept the scalar / ``(B,)``
-            fill forms (the state-field overrides).
+            fill forms (the ``algorithm`` knobs).
 
     Returns:
         ``(B, axes, fills)`` — the common batch size, a ``{name: 0 | None}``
@@ -216,7 +216,7 @@ def _flatten_in_axes(in_axes, entries: Dict[str, Tuple[Any, Tuple[int, ...]]]) -
     """Flatten the user-facing ``in_axes`` to the resolver's per-entry names.
 
     Mirrors ``jax.vmap``'s prefix semantics: a bare ``0`` batches every
-    passed input, and ``0`` / ``None`` at ``"parameters"`` / ``"overrides"``
+    passed input, and ``0`` / ``None`` at ``"parameters"`` / ``"algorithm"``
     applies to every key passed in that dict; per-key dicts pick out
     individual entries. One deliberate divergence from ``vmap``: a bare
     ``None`` keeps its default meaning — infer by rank — because vmap's
@@ -225,7 +225,7 @@ def _flatten_in_axes(in_axes, entries: Dict[str, Tuple[Any, Tuple[int, ...]]]) -
     Args:
         in_axes: ``None`` (infer), ``0`` (batch everything passed), or a dict
             keyed by argument name with leaves ``0`` / ``None`` — where
-            ``"parameters"`` and ``"overrides"`` take either a prefix
+            ``"parameters"`` and ``"algorithm"`` take either a prefix
             (``0`` / ``None``) or a per-key dict.
         entries: The resolver's ``{name: (value, declared_shape)}`` map;
             supplies the passed-entry names a prefix expands over.
@@ -244,7 +244,7 @@ def _flatten_in_axes(in_axes, entries: Dict[str, Tuple[Any, Tuple[int, ...]]]) -
         )
     flat = {}
     for name, ax in in_axes.items():
-        if name in ("parameters", "overrides"):
+        if name in ("parameters", "algorithm"):
             if isinstance(ax, dict):
                 flat.update({f"{name}.{key}": v for key, v in ax.items()})
             elif ax in (0, None):
@@ -261,7 +261,7 @@ def _flatten_in_axes(in_axes, entries: Dict[str, Tuple[Any, Tuple[int, ...]]]) -
 
 
 # Named solve kwargs and the AlgorithmState field each one targets. The
-# ``overrides`` dict reaches the same fields by name, so passing both for one
+# ``algorithm`` dict reaches the same fields by name, so passing both for one
 # field is ambiguous — the solve methods raise, pointing at the kwarg.
 _OVERRIDE_KWARG_FIELDS = {
     "x_initial": "x_init_pin",
@@ -270,6 +270,14 @@ _OVERRIDE_KWARG_FIELDS = {
     "u_guess": "u",
     "max_iters": "k_max",
 }
+
+# Constructor-only keys of the ``algorithm`` config that select program
+# structure or live outside the traced SCP loop: ``autotuner`` picks the
+# weight-update rule, and ``t_max`` is a wall-clock budget only the
+# interactive ``solve()`` honors. Neither can be a per-solve input, so
+# ``algorithm={...}`` at solve time names them with a construction-time
+# error rather than the generic unknown-name one.
+_ALGORITHM_CONSTRUCTION_KEYS = ("autotuner", "t_max")
 
 
 def _override_target(state: "AlgorithmState", name: str) -> jnp.ndarray:
@@ -1437,30 +1445,40 @@ class Problem:
             hyper=algo.autotuner.hyper,
         )
 
-    def _validate_overrides(self, where: str, overrides: dict, kwargs: Dict[str, Any]) -> None:
-        """Reject unknown override names and overrides that shadow a named kwarg.
+    def _validate_overrides(self, where: str, algorithm: dict, kwargs: Dict[str, Any]) -> None:
+        """Reject unknown ``algorithm`` keys and entries that shadow a named kwarg.
 
         The set of valid names is *derived*, never listed: every
         :class:`AlgorithmState` field (``_FIELDS``) plus every field of the
-        autotuner's declared ``hyper`` container. Adding a state field — or
-        declaring an autotuner knob — is thereby the registration. *kwargs*
-        maps each named solve kwarg to the value the caller received; an
-        override targeting the same field as a kwarg that was actually passed
-        is ambiguous and raises.
+        autotuner's declared ``hyper`` container — the same names the user
+        wrote in the ``Problem`` constructor's ``algorithm`` dict. Adding a
+        state field — or declaring an autotuner knob — is thereby the
+        registration. Construction-only keys of that dict
+        (:data:`_ALGORITHM_CONSTRUCTION_KEYS`) get a teaching error of their
+        own. *kwargs* maps each named solve kwarg to the value the caller
+        received; an entry targeting the same field as a kwarg that was
+        actually passed is ambiguous and raises.
         """
         fields = [name for name in AlgorithmState._FIELDS if name != "hyper"]
         hyper_keys = sorted(fld.name for fld in dc_fields(self._algorithm.autotuner.hyper))
-        unknown = sorted(set(overrides) - set(fields) - set(hyper_keys))
+        for name in algorithm:
+            if name in _ALGORITHM_CONSTRUCTION_KEYS:
+                raise ValueError(
+                    f"{where}: algorithm['{name}'] is a construction-time setting, "
+                    f"not a per-solve input; rebuild the Problem with "
+                    f"Problem(..., algorithm={{'{name}': ...}}) to change it."
+                )
+        unknown = sorted(set(algorithm) - set(fields) - set(hyper_keys))
         if unknown:
             raise ValueError(
-                f"{where}: unknown override name(s) {unknown}; overridable names "
+                f"{where}: unknown algorithm key(s) {unknown}; overridable names "
                 f"are the AlgorithmState fields {sorted(fields)} and the "
                 f"autotuner's declared hyperparameters {hyper_keys}."
             )
         for kwarg, field in _OVERRIDE_KWARG_FIELDS.items():
-            if field in overrides and kwargs.get(kwarg) is not None:
+            if field in algorithm and kwargs.get(kwarg) is not None:
                 raise ValueError(
-                    f"{where}: overrides['{field}'] and the {kwarg} kwarg target the "
+                    f"{where}: algorithm['{field}'] and the {kwarg} kwarg target the "
                     f"same state field; pass the {kwarg} kwarg only."
                 )
 
@@ -1471,14 +1489,14 @@ class Problem:
         x_guess: Optional[jnp.ndarray] = None,
         u_guess: Optional[jnp.ndarray] = None,
         max_iters: Optional[jnp.ndarray] = None,
-        overrides: Optional[dict] = None,
+        algorithm: Optional[dict] = None,
     ) -> AlgorithmState:
         """Build a fresh :class:`AlgorithmState` with per-solve overrides applied.
 
         This is the single place per-solve inputs land on the state pytree:
         boundary pins (``x_init_pin`` / ``x_term_pin``), trajectory
         warm-starts (``x`` / ``u``), ``max_iters`` → ``k_max``, and the
-        generic *overrides* dict (validated field names; values broadcast to
+        validated *algorithm* knob dict (field names; values broadcast to
         the field shape, so a scalar fills an array-shaped field). Because
         every override is a pytree field, ``jax.vmap`` over any subset gives
         each batch slot its own boundary condition, seed iterate, and
@@ -1491,7 +1509,7 @@ class Problem:
         consumes the pin where the boundary type is ``"Fix"``).
         """
         state = self._default_state()
-        # Named kwargs first, overrides on top: ``solve_batched`` always
+        # Named kwargs first, algorithm knobs on top: ``solve_batched`` always
         # materializes the kwarg defaults (broadcast stacks), and an override
         # must beat a default. A genuine user-passed duplicate never reaches
         # here — ``_validate_overrides`` rejects it.
@@ -1505,7 +1523,7 @@ class Problem:
         ):
             if value is not None:
                 updates[_OVERRIDE_KWARG_FIELDS[kwarg]] = value
-        updates.update(overrides or {})
+        updates.update(algorithm or {})
 
         def cast(name, value):
             target = _override_target(state, name)
@@ -1623,7 +1641,7 @@ class Problem:
         x_guess: Optional[jnp.ndarray] = None,
         u_guess: Optional[jnp.ndarray] = None,
         max_iters: Optional[int] = None,
-        overrides: Optional[dict] = None,
+        algorithm: Optional[dict] = None,
     ) -> OptimizationResults:
         """Run the SCP algorithm — JAX-pure.
 
@@ -1658,19 +1676,22 @@ class Problem:
             u_guess: Initial control trajectory guess, shape ``(N, n_controls)``.
                 Replaces ``state.u``; ``None`` uses the default from settings.
             max_iters: SCP iteration cap (scalar). Sugar for
-                ``overrides={"k_max": ...}``; passing both raises. ``None``
-                uses ``algorithm.k_max``. A runtime input on the state
+                ``algorithm={"k_max": ...}``; passing both raises. ``None``
+                uses the configured ``k_max``. A runtime input on the state
                 pytree — no value forces a retrace.
-            overrides: Per-solve values for any :class:`AlgorithmState`
-                field by name — convergence thresholds (``ep_tr`` /
-                ``ep_vb`` / ``ep_vc``), weights (``lam_prox`` / ``lam_vc`` /
-                ``lam_cost``), autotuner hyperparameters, and so on; the
-                ``AlgorithmState`` attribute docs are the reference. Each
-                value either matches the field's shape or is a scalar
-                (broadcast to it). All are runtime inputs: no value forces a
-                retrace. Fields with a dedicated kwarg (``x_guess`` →
-                ``x``, ``x_initial`` → ``x_init_pin``, ...) raise here when
-                both are passed.
+            algorithm: Per-solve algorithm knobs, by the same names as the
+                ``Problem`` constructor's ``algorithm`` dict — convergence
+                thresholds (``ep_tr`` / ``ep_vb`` / ``ep_vc``), weights
+                (``lam_prox`` / ``lam_vc`` / ``lam_cost``), autotuner
+                hyperparameters, and any other :class:`AlgorithmState`
+                field; the ``AlgorithmState`` attribute docs are the
+                reference. Each value either matches the field's shape or
+                is a scalar (broadcast to it). All are runtime inputs: no
+                value forces a retrace. Fields with a dedicated kwarg
+                (``x_guess`` → ``x``, ``x_initial`` → ``x_init_pin``, ...)
+                raise here when both are passed; construction-only keys
+                (``autotuner``, ``t_max``) raise pointing at the
+                constructor.
 
         Returns:
             :class:`OptimizationResults` pytree with the final iterate and
@@ -1683,10 +1704,10 @@ class Problem:
 
         params = parameters if parameters is not None else self._parameters
 
-        overrides = dict(overrides or {})
+        algorithm = dict(algorithm or {})
         self._validate_overrides(
             "solve_jax",
-            overrides,
+            algorithm,
             {
                 "x_initial": x_initial,
                 "x_final": x_final,
@@ -1696,12 +1717,12 @@ class Problem:
             },
         )
         default_state = self._default_state()
-        for name, value in overrides.items():
+        for name, value in algorithm.items():
             declared = tuple(jnp.shape(_override_target(default_state, name)))
             shape = tuple(jnp.shape(value))
             if shape not in (declared, ()):
                 raise ValueError(
-                    f"solve_jax: overrides['{name}'] has shape {shape}, but the "
+                    f"solve_jax: algorithm['{name}'] has shape {shape}, but the "
                     f"field has shape {declared}; pass {declared}, or a scalar to "
                     f"fill it. For a per-element sweep, use solve_batched()."
                 )
@@ -1712,7 +1733,7 @@ class Problem:
             x_guess=x_guess,
             u_guess=u_guess,
             max_iters=max_iters,
-            overrides=overrides,
+            algorithm=algorithm,
         )
         solve_fn = self._get_or_build_solve_loop()
         final_state = solve_fn(initial_state, params)
@@ -1727,7 +1748,7 @@ class Problem:
         x_guess: Optional[jnp.ndarray] = None,
         u_guess: Optional[jnp.ndarray] = None,
         max_iters: Optional[jnp.ndarray] = None,
-        overrides: Optional[dict] = None,
+        algorithm: Optional[dict] = None,
         in_axes: Optional[dict] = None,
     ) -> OptimizationResults:
         """Run ``B`` SCP solves in parallel as one batched XLA program.
@@ -1747,7 +1768,7 @@ class Problem:
                     "gate_center": centers,               # (B, 3) vs declared (3,) -> batched
                     "gate_radius": 0.5,                   # declared shape -> shared
                 },
-                overrides={
+                algorithm={
                     "ep_tr": jnp.logspace(-5, -3, B),     # (B,) vs field () -> tolerance sweep
                     "lam_prox": jnp.linspace(1.0, 4.0, B),  # (B,) fill: one scalar per element
                 },
@@ -1800,26 +1821,27 @@ class Problem:
             u_guess: Control trajectory guess — ``(N, n_u)`` or
                 ``(B, N, n_u)``. ``None`` uses the default from settings.
             max_iters: SCP iteration cap — ``()`` shared or ``(B,)``
-                per-element budgets. Sugar for ``overrides={"k_max": ...}``;
-                passing both raises. ``None`` uses ``algorithm.k_max``. A
-                runtime input: changing it reuses the cached (or exported)
+                per-element budgets. Sugar for ``algorithm={"k_max": ...}``;
+                passing both raises. ``None`` uses the configured ``k_max``.
+                A runtime input: changing it reuses the cached (or exported)
                 batched closure. The batch runs until its slowest element
                 converges or exhausts its own cap; finished elements are
                 frozen, not re-iterated.
-            overrides: Per-solve values for any :class:`AlgorithmState`
-                field by name (see :meth:`solve_jax`); all runtime inputs
-                against one cached artifact. Each value takes the rank rule's
-                two shapes — the field's shape (shared) or ``(B,) +`` it
-                (batched) — plus two **fill** forms for array-shaped fields:
-                a scalar (shared) or ``(B,)`` (one scalar per element, each
-                broadcast to the field shape). Exact shapes win when both
-                parse; ``in_axes={"overrides": {name: 0}}`` forces the
-                per-element fill reading.
+            algorithm: Per-solve algorithm knobs, by the same names as the
+                ``Problem`` constructor's ``algorithm`` dict (see
+                :meth:`solve_jax`); all runtime inputs against one cached
+                artifact. Each value takes the rank rule's two shapes — the
+                field's shape (shared) or ``(B,) +`` it (batched) — plus two
+                **fill** forms for array-shaped fields: a scalar (shared) or
+                ``(B,)`` (one scalar per element, each broadcast to the
+                field shape). Exact shapes win when both parse;
+                ``in_axes={"algorithm": {name: 0}}`` forces the per-element
+                fill reading.
             in_axes: Explicit batching override in ``jax.vmap``'s vocabulary,
                 including its prefix semantics: a bare ``0`` batches every
                 passed input; a dict keyed by argument name takes leaves
                 ``0`` (batched) or ``None`` (shared), where ``"parameters"``
-                and ``"overrides"`` accept either a prefix (``0`` / ``None``,
+                and ``"algorithm"`` accept either a prefix (``0`` / ``None``,
                 applied to every passed key) or a per-key dict, e.g.
                 ``in_axes={"parameters": {"gate_center": 0}}``. Partial
                 specs are fine — unlisted entries use the rank rule. Unlike
@@ -1844,10 +1866,10 @@ class Problem:
                 f"declared parameters are {sorted(self._parameters)}."
             )
 
-        overrides = dict(overrides or {})
+        algorithm = dict(algorithm or {})
         self._validate_overrides(
             "solve_batched",
-            overrides,
+            algorithm,
             {
                 "x_initial": x_initial,
                 "x_final": x_final,
@@ -1870,16 +1892,16 @@ class Problem:
         }
         for key, value in user_params.items():
             entries[f"parameters.{key}"] = (value, tuple(np.shape(self._parameters[key])))
-        for name, value in overrides.items():
+        for name, value in algorithm.items():
             declared = tuple(jnp.shape(_override_target(_default, name)))
-            entries[f"overrides.{name}"] = (value, declared)
+            entries[f"algorithm.{name}"] = (value, declared)
 
         flat_in_axes = _flatten_in_axes(in_axes, entries)
 
         B, axes, fills = _resolve_batch_spec(
             entries,
             flat_in_axes,
-            fill={f"overrides.{name}" for name in overrides},
+            fill={f"algorithm.{name}" for name in algorithm},
         )
 
         # Shared state-side inputs — and the defaults for omitted ones —
@@ -1899,12 +1921,12 @@ class Problem:
                 arr = jnp.broadcast_to(arr, (B,) + arr.shape)
             stacks[name] = arr
 
-        # Overrides normalize to (B,) + field shape: fills first broadcast
-        # their scalars up to the field shape, shared entries then gain the
-        # leading batch axis.
-        override_stacks = {}
-        for name, value in overrides.items():
-            entry = f"overrides.{name}"
+        # Algorithm knobs normalize to (B,) + field shape: fills first
+        # broadcast their scalars up to the field shape, shared entries then
+        # gain the leading batch axis.
+        algorithm_stacks = {}
+        for name, value in algorithm.items():
+            entry = f"algorithm.{name}"
             field_shape = entries[entry][1]
             arr = jnp.asarray(value)
             if entry in fills and axes[entry] == 0:
@@ -1915,7 +1937,7 @@ class Problem:
                 arr = jnp.broadcast_to(arr, field_shape)
             if axes[entry] is None:
                 arr = jnp.broadcast_to(arr, (B,) + arr.shape)
-            override_stacks[name] = arr
+            algorithm_stacks[name] = arr
 
         states = jax.vmap(self._resolve_initial_state)(
             stacks["x_initial"],
@@ -1923,7 +1945,7 @@ class Problem:
             stacks["x_guess"],
             stacks["u_guess"],
             stacks["max_iters"],
-            override_stacks,
+            algorithm_stacks,
         )
 
         params_for_solve = dict(self._parameters, **user_params)

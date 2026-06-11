@@ -160,43 +160,43 @@ def test_in_axes_forced_zero_with_disagreeing_batch_size_raises():
         )
 
 
-# === Fill forms (overrides entries) ===
+# === Fill forms (algorithm entries) ===
 
 
 def test_fill_scalar_is_shared_fill():
     B, axes, fills = _resolve_batch_spec(
         {
             "x_initial": (np.zeros((3, 6)), (6,)),
-            "overrides.lam_prox": (2.0, (10, 4)),
+            "algorithm.lam_prox": (2.0, (10, 4)),
         },
-        fill={"overrides.lam_prox"},
+        fill={"algorithm.lam_prox"},
     )
     assert B == 3
-    assert axes["overrides.lam_prox"] is None
-    assert fills == {"overrides.lam_prox"}
+    assert axes["algorithm.lam_prox"] is None
+    assert fills == {"algorithm.lam_prox"}
 
 
 def test_fill_vector_is_batched_fill():
     B, axes, fills = _resolve_batch_spec(
-        {"overrides.lam_prox": (np.zeros(5), (10, 4))},
-        fill={"overrides.lam_prox"},
+        {"algorithm.lam_prox": (np.zeros(5), (10, 4))},
+        fill={"algorithm.lam_prox"},
     )
     assert B == 5
-    assert axes == {"overrides.lam_prox": 0}
-    assert fills == {"overrides.lam_prox"}
+    assert axes == {"algorithm.lam_prox": 0}
+    assert fills == {"algorithm.lam_prox"}
 
 
 def test_fill_exact_shapes_win_over_fills():
     # The field's exact shape and (B,) + it parse as exact, never as fill.
     B, axes, fills = _resolve_batch_spec(
         {
-            "overrides.lam_vc": (np.zeros((7, 4)), (7, 4)),
-            "overrides.lam_cost": (np.zeros((3, 2)), (2,)),
+            "algorithm.lam_vc": (np.zeros((7, 4)), (7, 4)),
+            "algorithm.lam_cost": (np.zeros((3, 2)), (2,)),
         },
-        fill={"overrides.lam_vc", "overrides.lam_cost"},
+        fill={"algorithm.lam_vc", "algorithm.lam_cost"},
     )
     assert B == 3
-    assert axes == {"overrides.lam_vc": None, "overrides.lam_cost": 0}
+    assert axes == {"algorithm.lam_vc": None, "algorithm.lam_cost": 0}
     assert fills == set()
 
 
@@ -206,44 +206,44 @@ def test_fill_rank1_field_of_length_B_reads_shared_exact():
     B, axes, fills = _resolve_batch_spec(
         {
             "x_initial": (np.zeros((4, 6)), (6,)),
-            "overrides.lam_cost": (np.zeros(4), (4,)),
+            "algorithm.lam_cost": (np.zeros(4), (4,)),
         },
-        fill={"overrides.lam_cost"},
+        fill={"algorithm.lam_cost"},
     )
-    assert axes["overrides.lam_cost"] is None
+    assert axes["algorithm.lam_cost"] is None
     assert fills == set()
 
 
 def test_fill_in_axes_forces_batched_fill_on_rank1_field():
     # ...and in_axes={name: 0} forces the per-element fill reading.
     B, axes, fills = _resolve_batch_spec(
-        {"overrides.lam_cost": (np.zeros(4), (4,))},
-        in_axes={"overrides.lam_cost": 0},
-        fill={"overrides.lam_cost"},
+        {"algorithm.lam_cost": (np.zeros(4), (4,))},
+        in_axes={"algorithm.lam_cost": 0},
+        fill={"algorithm.lam_cost"},
     )
     assert B == 4
-    assert axes == {"overrides.lam_cost": 0}
-    assert fills == {"overrides.lam_cost"}
+    assert axes == {"algorithm.lam_cost": 0}
+    assert fills == {"algorithm.lam_cost"}
 
 
 def test_fill_scalar_on_scalar_field_is_exact_not_fill():
     B, axes, fills = _resolve_batch_spec(
         {
-            "overrides.ep_tr": (1e-4, ()),
-            "overrides.k_max": (np.zeros(6), ()),
+            "algorithm.ep_tr": (1e-4, ()),
+            "algorithm.k_max": (np.zeros(6), ()),
         },
-        fill={"overrides.ep_tr", "overrides.k_max"},
+        fill={"algorithm.ep_tr", "algorithm.k_max"},
     )
     assert B == 6
-    assert axes == {"overrides.ep_tr": None, "overrides.k_max": 0}
+    assert axes == {"algorithm.ep_tr": None, "algorithm.k_max": 0}
     assert fills == set()
 
 
 def test_fill_bad_rank_lists_all_four_forms():
     with pytest.raises(ValueError, match=r"scalar \(\) to fill.*\(B,\) to fill one scalar"):
         _resolve_batch_spec(
-            {"overrides.lam_prox": (np.zeros((2, 3, 4, 5)), (10, 4))},
-            fill={"overrides.lam_prox"},
+            {"algorithm.lam_prox": (np.zeros((2, 3, 4, 5)), (10, 4))},
+            fill={"algorithm.lam_prox"},
         )
 
 
@@ -263,7 +263,7 @@ _PREFIX_ENTRIES = {
     "x_guess": (None, (10, 3)),
     "parameters.center": (np.zeros((4, 3)), (3,)),
     "parameters.radius": (0.5, ()),
-    "overrides.ep_tr": (np.zeros(4), ()),
+    "algorithm.ep_tr": (np.zeros(4), ()),
 }
 
 
@@ -277,7 +277,7 @@ def test_flatten_bare_zero_batches_every_passed_input():
         "x_initial": 0,
         "parameters.center": 0,
         "parameters.radius": 0,
-        "overrides.ep_tr": 0,
+        "algorithm.ep_tr": 0,
     }
 
 
@@ -286,6 +286,8 @@ def test_flatten_subtree_prefix_applies_to_every_passed_key():
     assert flat == {"parameters.center": 0, "parameters.radius": 0}
     flat = _flatten_in_axes({"parameters": None, "x_initial": 0}, _PREFIX_ENTRIES)
     assert flat == {"parameters.center": None, "parameters.radius": None, "x_initial": 0}
+    flat = _flatten_in_axes({"algorithm": 0}, _PREFIX_ENTRIES)
+    assert flat == {"algorithm.ep_tr": 0}
 
 
 def test_flatten_per_key_dict_unchanged():

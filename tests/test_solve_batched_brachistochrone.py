@@ -215,12 +215,12 @@ def test_solve_batched_ep_tr_sweep_matches_solve_jax():
 
     # Loose-to-tight trust-region tolerances: the loose element converges
     # iterations earlier, so the per-element final iterates differ. ep_tr is
-    # a scalar state field, so (B,) vs () -> batched through `overrides`.
+    # a scalar state field, so (B,) vs () -> batched through `algorithm`.
     tolerances = jnp.array([1e-1, 1e-5])
-    batched = prob.solve_batched(overrides={"ep_tr": tolerances})
+    batched = prob.solve_batched(algorithm={"ep_tr": tolerances})
 
     for i, tol in enumerate(np.asarray(tolerances)):
-        ref = prob.solve_jax(overrides={"ep_tr": float(tol)})
+        ref = prob.solve_jax(algorithm={"ep_tr": float(tol)})
         np.testing.assert_allclose(
             np.asarray(batched.x[i]), np.asarray(ref.x), atol=1e-5, rtol=1e-5
         )
@@ -241,12 +241,12 @@ def test_solve_batched_lam_prox_fill_sweep_matches_solve_jax():
     # field shape. Different trust-region weights walk different iterate
     # paths, so the elements genuinely diverge.
     weights = jnp.array([0.5, 1.0, 4.0])
-    batched = prob.solve_batched(overrides={"lam_prox": weights})
+    batched = prob.solve_batched(algorithm={"lam_prox": weights})
     assert batched.x.shape[0] == weights.shape[0]
 
     for i, w in enumerate(np.asarray(weights)):
         # solve_jax takes the scalar (shared-fill) form of the same override.
-        ref = prob.solve_jax(overrides={"lam_prox": float(w)})
+        ref = prob.solve_jax(algorithm={"lam_prox": float(w)})
         np.testing.assert_allclose(
             np.asarray(batched.x[i]), np.asarray(ref.x), atol=1e-5, rtol=1e-5
         )
@@ -259,7 +259,7 @@ def test_solve_batched_lam_prox_fill_sweep_matches_solve_jax():
     jax.clear_caches()
 
 
-def test_solve_batched_overrides_k_max_matches_max_iters_kwarg():
+def test_solve_batched_algorithm_k_max_matches_max_iters_kwarg():
     pytest.importorskip("qpax")
 
     prob = build_brachistochrone("qpax", n=8, k_max=20)
@@ -270,7 +270,7 @@ def test_solve_batched_overrides_k_max_matches_max_iters_kwarg():
     # that default, not silently lose to it.
     budgets = jnp.array([2, 8])
     via_kwarg = prob.solve_batched(max_iters=budgets)
-    via_override = prob.solve_batched(overrides={"k_max": budgets})
+    via_override = prob.solve_batched(algorithm={"k_max": budgets})
 
     np.testing.assert_allclose(
         np.asarray(via_override.x), np.asarray(via_kwarg.x), atol=1e-9, rtol=0
@@ -327,11 +327,11 @@ def test_user_autotuner_knob_sweeps_through_solve_batched():
     # (B,) vector sweeps it per element and each element matches the
     # corresponding single solve.
     scales = jnp.array([0.8, 1.0, 1.4])
-    batched = prob.solve_batched(overrides={"prox_scale": scales})
+    batched = prob.solve_batched(algorithm={"prox_scale": scales})
     assert batched.x.shape[0] == scales.shape[0]
 
     for i, s in enumerate(np.asarray(scales)):
-        ref = prob.solve_jax(overrides={"prox_scale": float(s)})
+        ref = prob.solve_jax(algorithm={"prox_scale": float(s)})
         np.testing.assert_allclose(
             np.asarray(batched.x[i]), np.asarray(ref.x), atol=1e-5, rtol=1e-5
         )
@@ -354,10 +354,10 @@ def test_augmented_lagrangian_declared_knobs_are_overridable():
     prob.initialize()
 
     base = prob.solve_jax()
-    single = prob.solve_jax(overrides={"rho_init": 5.0, "rho_max": 1e3})
+    single = prob.solve_jax(algorithm={"rho_init": 5.0, "rho_max": 1e3})
     np.testing.assert_allclose(np.asarray(single.x), np.asarray(base.x), atol=1e-12)
 
-    batched = prob.solve_batched(overrides={"rho_init": jnp.array([1.0, 5.0])})
+    batched = prob.solve_batched(algorithm={"rho_init": jnp.array([1.0, 5.0])})
     assert batched.x.shape[0] == 2
     for i in range(2):
         np.testing.assert_allclose(
@@ -379,29 +379,46 @@ def test_solve_batched_unknown_parameter_key_raises():
         prob.solve_batched(parameters={"gravty": jnp.zeros((2, 1))})
 
 
-def test_overrides_unknown_name_lists_valid_names():
+def test_algorithm_unknown_key_lists_valid_names():
     prob = build_brachistochrone("cvxpy", n=4, k_max=1)
     prob.initialize()
-    with pytest.raises(ValueError, match=r"unknown override name.*'ep_trr'.*'ep_tr'"):
-        prob.solve_batched(overrides={"ep_trr": jnp.zeros(2)})
-    with pytest.raises(ValueError, match=r"solve_jax: unknown override name.*'ep_trr'"):
-        prob.solve_jax(overrides={"ep_trr": 1e-4})
+    with pytest.raises(ValueError, match=r"unknown algorithm key.*'ep_trr'.*'ep_tr'"):
+        prob.solve_batched(algorithm={"ep_trr": jnp.zeros(2)})
+    with pytest.raises(ValueError, match=r"solve_jax: unknown algorithm key.*'ep_trr'"):
+        prob.solve_jax(algorithm={"ep_trr": 1e-4})
 
 
-def test_overrides_kwarg_collision_names_the_kwarg():
+def test_algorithm_construction_key_teaches_rebuild():
     prob = build_brachistochrone("cvxpy", n=4, k_max=1)
     prob.initialize()
-    with pytest.raises(ValueError, match=r"overrides\['k_max'\].*max_iters kwarg"):
-        prob.solve_batched(max_iters=jnp.array([2, 3]), overrides={"k_max": 5})
-    with pytest.raises(ValueError, match=r"overrides\['x'\].*x_guess kwarg"):
-        prob.solve_jax(x_guess=prob.state.x, overrides={"x": prob.state.x})
+    # `autotuner` selects program structure and `t_max` is a wall-clock budget
+    # outside the traced loop — both are construction-time settings, so they
+    # get the rebuild-the-Problem teaching error, not the generic unknown-name
+    # one.
+    with pytest.raises(
+        ValueError, match=r"algorithm\['autotuner'\].*construction-time.*rebuild the Problem"
+    ):
+        prob.solve_jax(algorithm={"autotuner": "RampProximalWeight"})
+    with pytest.raises(
+        ValueError, match=r"algorithm\['t_max'\].*construction-time.*rebuild the Problem"
+    ):
+        prob.solve_batched(algorithm={"t_max": jnp.ones(2)})
 
 
-def test_solve_jax_override_shape_mismatch_points_at_solve_batched():
+def test_algorithm_kwarg_collision_names_the_kwarg():
     prob = build_brachistochrone("cvxpy", n=4, k_max=1)
     prob.initialize()
-    with pytest.raises(ValueError, match=r"overrides\['ep_tr'\] has shape \(2,\).*solve_batched"):
-        prob.solve_jax(overrides={"ep_tr": jnp.zeros(2)})
+    with pytest.raises(ValueError, match=r"algorithm\['k_max'\].*max_iters kwarg"):
+        prob.solve_batched(max_iters=jnp.array([2, 3]), algorithm={"k_max": 5})
+    with pytest.raises(ValueError, match=r"algorithm\['x'\].*x_guess kwarg"):
+        prob.solve_jax(x_guess=prob.state.x, algorithm={"x": prob.state.x})
+
+
+def test_solve_jax_algorithm_shape_mismatch_points_at_solve_batched():
+    prob = build_brachistochrone("cvxpy", n=4, k_max=1)
+    prob.initialize()
+    with pytest.raises(ValueError, match=r"algorithm\['ep_tr'\] has shape \(2,\).*solve_batched"):
+        prob.solve_jax(algorithm={"ep_tr": jnp.zeros(2)})
 
 
 def test_solve_batched_before_initialize_raises():
