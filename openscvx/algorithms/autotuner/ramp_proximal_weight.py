@@ -27,7 +27,10 @@ class RampProximalWeightHyper(HyperParams):
     iteration, and the default ``lam_cost_relax=1.0`` makes that a no-op.
     """
 
+    ramp_factor: float = 1.0
+    lam_prox_max: float = 1e3
     lam_cost_drop: int = -1
+    lam_cost_relax: float = 1.0
 
 
 class RampProximalWeight(AutotuningBase):
@@ -46,10 +49,12 @@ class RampProximalWeight(AutotuningBase):
         lam_cost_drop: int = -1,
         lam_cost_relax: float = 1.0,
     ):
-        self.ramp_factor = ramp_factor
-        self.lam_prox_max = lam_prox_max
-        self.hyper = RampProximalWeightHyper(lam_cost_drop=lam_cost_drop)
-        self.lam_cost_relax = lam_cost_relax
+        self.hyper = RampProximalWeightHyper(
+            ramp_factor=ramp_factor,
+            lam_prox_max=lam_prox_max,
+            lam_cost_drop=lam_cost_drop,
+            lam_cost_relax=lam_cost_relax,
+        )
 
     def update_weights(
         self,
@@ -65,12 +70,14 @@ class RampProximalWeight(AutotuningBase):
         """
         lam_cost_next = jnp.where(
             state.k > state.hyper.lam_cost_drop,
-            state.lam_cost * self.lam_cost_relax,
+            state.lam_cost * state.hyper.lam_cost_relax,
             state.lam_cost_init,
         )
 
-        was_at_max = jnp.all(state.lam_prox >= self.lam_prox_max)
-        new_lam_prox = jnp.minimum(state.lam_prox * self.ramp_factor, self.lam_prox_max)
+        was_at_max = jnp.all(state.lam_prox >= state.hyper.lam_prox_max)
+        new_lam_prox = jnp.minimum(
+            state.lam_prox * state.hyper.ramp_factor, state.hyper.lam_prox_max
+        )
 
         code = jnp.where(
             was_at_max,

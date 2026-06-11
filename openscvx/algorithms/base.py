@@ -288,8 +288,13 @@ class AutotuningBase(ABC):
     override (``solve_jax(algorithm={"ramp": ...})``), a batchable sweep
     target (``solve_batched(algorithm={"ramp": jnp.linspace(...)})``), and a
     runtime input of the exported batched artifact — with zero core edits.
-    Structural choices that select code paths (flags, enums) stay ordinary
-    attributes; they are part of the traced program, not data.
+    Every numeric knob of the built-in autotuners is declared this way, so the
+    only attributes that stay on ``self`` are structural choices that select
+    code paths (the ``COMPUTES_ACCEPTANCE_METRICS`` flag); they are part of the
+    traced program, not data. For ergonomics, declared knobs are still
+    readable and writable as bare attributes (``autotuner.ramp = 3.0``): the
+    proxy below routes the access into ``hyper`` so a constructor — or a test —
+    may keep assigning knobs by name.
 
     Class Attributes:
         COLUMNS: List of Column specs for autotuner-specific metrics to display.
@@ -313,6 +318,36 @@ class AutotuningBase(ABC):
     COLUMNS: List[Column] = []
     COMPUTES_ACCEPTANCE_METRICS: bool = True
     hyper: HyperParams = HyperParams()
+
+    def __getattr__(self, name: str):
+        """Read a declared hyperparameter as a bare attribute.
+
+        Promoted knobs live on the frozen ``hyper`` container, but the
+        documented API and constructors still touch them by name
+        (``autotuner.lam_prox_max``). ``__getattr__`` fires only on failed
+        normal lookups, so real attributes (``COLUMNS``, ``hyper`` itself) are
+        unaffected; a name matching a ``hyper`` field resolves there.
+        """
+        hyper = self.__dict__.get("hyper")
+        if hyper is not None and name in {f.name for f in dc_fields(hyper)}:
+            return getattr(hyper, name)
+        raise AttributeError(f"{type(self).__name__!r} has no attribute {name!r}")
+
+    def __setattr__(self, name: str, value) -> None:
+        """Route a write to a declared hyperparameter into the frozen ``hyper``.
+
+        Without this, assigning a promoted knob as a bare attribute
+        (``autotuner.lam_prox_max = 1e6``) would silently shadow the ``hyper``
+        field and never reach the solve. A name matching a ``hyper`` field is
+        applied via :func:`dataclasses.replace`; every other attribute
+        (including ``hyper`` itself) is set normally, so constructors may keep
+        assigning knobs by name — they route into ``hyper``.
+        """
+        hyper = self.__dict__.get("hyper")
+        if hyper is not None and name != "hyper" and name in {f.name for f in dc_fields(hyper)}:
+            super().__setattr__("hyper", dc_replace(hyper, **{name: value}))
+        else:
+            super().__setattr__(name, value)
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Contribute the autotuner's update rule to the ``solve_batched`` cache key.

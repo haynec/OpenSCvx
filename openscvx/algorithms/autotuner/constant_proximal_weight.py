@@ -28,6 +28,7 @@ class ConstantProximalWeightHyper(HyperParams):
     """
 
     lam_cost_drop: int = -1
+    lam_cost_relax: float = 1.0
 
 
 class ConstantProximalWeight(AutotuningBase):
@@ -46,8 +47,10 @@ class ConstantProximalWeight(AutotuningBase):
         lam_cost_drop: int = -1,
         lam_cost_relax: float = 1.0,
     ):
-        self.hyper = ConstantProximalWeightHyper(lam_cost_drop=lam_cost_drop)
-        self.lam_cost_relax = lam_cost_relax
+        self.hyper = ConstantProximalWeightHyper(
+            lam_cost_drop=lam_cost_drop,
+            lam_cost_relax=lam_cost_relax,
+        )
 
     def update_weights(
         self,
@@ -63,7 +66,7 @@ class ConstantProximalWeight(AutotuningBase):
         """
         lam_cost_next = jnp.where(
             state.k > state.hyper.lam_cost_drop,
-            state.lam_cost * self.lam_cost_relax,
+            state.lam_cost * state.hyper.lam_cost_relax,
             state.lam_cost_init,
         )
 

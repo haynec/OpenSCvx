@@ -17,19 +17,12 @@ from openscvx.algorithms import (
     AlgorithmState,
     AugmentedLagrangian,
     ConstantProximalWeight,
-    HyperParams,
     RampProximalWeight,
 )
 from openscvx.algorithms.base import CandidateIterate
 from openscvx.algorithms.weights import Weights
 from openscvx.config import Config, DevConfig, PropagationConfig, SimConfig
 from openscvx.lowered.jax_constraints import LoweredJaxConstraints
-
-
-class _Hyper(HyperParams):
-    """The one knob every autotuner under test reads from ``state.hyper``."""
-
-    lam_cost_drop: int = -1
 
 
 # -- Tiny problem fixture ---------------------------------------------------
@@ -79,23 +72,29 @@ def weights():
 
 
 @pytest.fixture
-def state(settings, weights):
-    # Pre-populate x_prop / x_prop_plus so the autotuner's "previous iterate"
-    # branch (k > 1) has finite values to compare against. The actual numbers
-    # are arbitrary — we only check jit vs. bare equivalence.
-    base = AlgorithmState.from_settings(
-        settings,
-        weights,
-        ep_tr=1e-4,
-        ep_vb=1e-4,
-        ep_vc=1e-8,
-        k_max=200,
-        hyper=_Hyper(),
-    )
-    return base.replace(
-        x_prop=jnp.asarray(np.array([[0.1, 0.1], [0.9, 0.9]])),
-        x_prop_plus=jnp.asarray(np.array([[0.0, 0.0], [0.1, 0.1], [0.9, 0.9]])),
-    )
+def make_state(settings, weights):
+    # Seed ``state.hyper`` from the autotuner under test: every numeric knob now
+    # rides ``AlgorithmState.hyper``, so the state must carry the autotuner's
+    # own hyper container for ``update_weights`` to read its knobs. Pre-populate
+    # x_prop / x_prop_plus so the "previous iterate" branch (k > 1) has finite
+    # values to compare against; the actual numbers are arbitrary — we only
+    # check jit vs. bare equivalence.
+    def _make(hyper):
+        base = AlgorithmState.from_settings(
+            settings,
+            weights,
+            ep_tr=1e-4,
+            ep_vb=1e-4,
+            ep_vc=1e-8,
+            k_max=200,
+            hyper=hyper,
+        )
+        return base.replace(
+            x_prop=jnp.asarray(np.array([[0.1, 0.1], [0.9, 0.9]])),
+            x_prop_plus=jnp.asarray(np.array([[0.0, 0.0], [0.1, 0.1], [0.9, 0.9]])),
+        )
+
+    return _make
 
 
 @pytest.fixture
@@ -179,9 +178,10 @@ def _make_jit_target(autotuner, constraints, settings):
         ),
     ],
 )
-def test_jit_matches_bare_iter1(make_autotuner, state, candidate, empty_constraints, settings):
+def test_jit_matches_bare_iter1(make_autotuner, make_state, candidate, empty_constraints, settings):
     """Iteration 1 (INITIAL branch) traces and matches the bare call."""
     autotuner = make_autotuner()
+    state = make_state(autotuner.hyper)
     bare = autotuner.update_weights(state, candidate, empty_constraints, settings, {})
 
     jit_target = _make_jit_target(autotuner, empty_constraints, settings)
@@ -197,14 +197,14 @@ def test_jit_matches_bare_iter1(make_autotuner, state, candidate, empty_constrai
         pytest.param(lambda: AdaptiveProximalWeight(), id="adaptive_proximal"),
     ],
 )
-def test_jit_matches_bare_iter2(make_autotuner, state, candidate, empty_constraints, settings):
+def test_jit_matches_bare_iter2(make_autotuner, make_state, candidate, empty_constraints, settings):
     """Iteration k>1 (acceptance-ratio branch) traces and matches the bare call.
 
     Constant / Ramp autotuners are excluded because they take the same branch
     regardless of ``k``; their iter-1 test above already covers the trace.
     """
     autotuner = make_autotuner()
-    state_k2 = state.replace(k=jnp.asarray(2, dtype=jnp.int32))
+    state_k2 = make_state(autotuner.hyper).replace(k=jnp.asarray(2, dtype=jnp.int32))
 
     bare = autotuner.update_weights(state_k2, candidate, empty_constraints, settings, {})
 

@@ -5,7 +5,6 @@ optimization problems through iterative convex approximation.
 """
 
 import time
-import warnings
 from typing import TYPE_CHECKING, Callable, Dict, List, Tuple, Union
 
 import jax
@@ -41,8 +40,6 @@ if TYPE_CHECKING:
     from openscvx.symbolic.expr.state import State
 
     from ..base import AutotuningBase
-
-warnings.filterwarnings("ignore")
 
 
 class PenalizedTrustRegion(Algorithm):
