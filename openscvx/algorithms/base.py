@@ -267,6 +267,14 @@ class AutotuningBase(ABC):
     converts that back to a human-readable label only on the Python-loop
     printing path.
 
+    **The returned state IS the next iterate.** The SCP loop discards
+    everything except what ``update_weights`` returns, so accepting the
+    subproblem's candidate means carrying its trajectory onto the returned
+    state — ``x`` / ``u`` / ``x_prop`` / ``x_prop_plus`` from ``candidate`` —
+    while rejecting means keeping the previous fields and adjusting only the
+    weights. An update that never copies the candidate produces a solver that
+    runs to ``k_max`` without the iterate ever moving, silently.
+
     **Declaring tunable hyperparameters.** A numeric knob a user might sweep
     (a penalty ramp, a relaxation iteration) must not be read off ``self``
     inside ``update_weights`` — a Python attribute is baked into the trace
@@ -281,20 +289,30 @@ class AutotuningBase(ABC):
             def __init__(self, ramp: float = 2.0):
                 self.hyper = MyHyper(ramp=ramp)
 
-            def update_weights(self, state, ...):
-                ...state.hyper.ramp...
+            def update_weights(self, state, candidate, *args):
+                return state.replace(
+                    # accept the candidate: it becomes the next iterate
+                    x=candidate.x,
+                    u=candidate.u,
+                    x_prop=candidate.x_prop,
+                    x_prop_plus=candidate.x_prop_plus,
+                    lam_prox=state.lam_prox * state.hyper.ramp,
+                    adaptive_state_code=...,
+                )
 
     The declaration is the registration: the field becomes a per-solve
     override (``solve_jax(algorithm={"ramp": ...})``), a batchable sweep
     target (``solve_batched(algorithm={"ramp": jnp.linspace(...)})``), and a
     runtime input of the exported batched artifact — with zero core edits.
     Every numeric knob of the built-in autotuners is declared this way, so the
-    only attributes that stay on ``self`` are structural choices that select
-    code paths (the ``COMPUTES_ACCEPTANCE_METRICS`` flag); they are part of the
-    traced program, not data. For ergonomics, declared knobs are still
-    readable and writable as bare attributes (``autotuner.ramp = 3.0``): the
-    proxy below routes the access into ``hyper`` so a constructor — or a test —
-    may keep assigning knobs by name.
+    only configuration left outside ``hyper`` is structural choices that select
+    code paths (class attributes like ``COMPUTES_ACCEPTANCE_METRICS``); they
+    are part of the traced program, not data. For ergonomics, declared knobs
+    are still readable and writable as bare attributes
+    (``autotuner.ramp = 3.0``): the proxy below routes the access into
+    ``hyper`` so a constructor — or a test — may keep assigning knobs by name.
+    Assign ``self.hyper`` *first* in ``__init__``; a knob assigned before
+    ``hyper`` exists lands as a plain instance attribute the proxy cannot see.
 
     Class Attributes:
         COLUMNS: List of Column specs for autotuner-specific metrics to display.
@@ -341,10 +359,15 @@ class AutotuningBase(ABC):
         field and never reach the solve. A name matching a ``hyper`` field is
         applied via :func:`dataclasses.replace`; every other attribute
         (including ``hyper`` itself) is set normally, so constructors may keep
-        assigning knobs by name — they route into ``hyper``.
+        assigning knobs by name — they route into ``hyper``, provided
+        ``self.hyper`` was assigned first (see the class docstring).
         """
         hyper = self.__dict__.get("hyper")
         if hyper is not None and name != "hyper" and name in {f.name for f in dc_fields(hyper)}:
+            # Clear any instance attribute shadowing the knob (left by an
+            # assignment made before ``hyper`` existed) so reads resolve
+            # through ``__getattr__`` to the value just written.
+            self.__dict__.pop(name, None)
             super().__setattr__("hyper", dc_replace(hyper, **{name: value}))
         else:
             super().__setattr__(name, value)
@@ -359,10 +382,9 @@ class AutotuningBase(ABC):
         scalars. ``hyper`` is excluded: declared hyperparameters ride
         ``AlgorithmState.hyper`` as runtime inputs, so one artifact serves
         every setting of them (the same reasoning that keeps the ``ep_*``
-        thresholds out of the algorithm's hash). Folded in by the algorithm's
-        ``_hash_into`` (e.g.
-        :meth:`~openscvx.algorithms.scvx.penalized_trust_region.PenalizedTrustRegion._hash_into`);
-        mirrors the symbolic ``_hash_into`` protocol.
+        thresholds out of the algorithm's hash). Folded in by
+        :meth:`Algorithm._hash_into`; mirrors the symbolic ``_hash_into``
+        protocol.
         """
         from openscvx.utils.caching import hash_value_into
 
@@ -483,16 +505,21 @@ class AutotuningBase(ABC):
                 ``state.lam_cost_init``; autotuners read from there rather than
                 from the algorithm's ``Weights`` object so the JIT'd closure
                 stays cache-stable across weight mutations.
-            candidate: Subproblem result (read-only here).
+            candidate: Subproblem result (read-only here). On acceptance its
+                trajectory fields must be carried onto the returned state —
+                see the class docstring.
             nodal_constraints: Lowered JAX constraints.
             settings: Configuration object.
             params: Problem parameter dictionary.
 
         Returns:
-            The next-iterate :class:`AlgorithmState`. Its
-            :py:attr:`AlgorithmState.adaptive_state_code` encodes the
-            autotuner's decision; the SCP loop records that into history and
-            maps it to a printable label.
+            The next-iterate :class:`AlgorithmState` — the SCP loop uses
+            nothing else, so an accepting update carries
+            ``candidate.x / u / x_prop / x_prop_plus`` onto it, while a
+            rejecting update keeps the previous fields and adjusts only the
+            weights. Its :py:attr:`AlgorithmState.adaptive_state_code` encodes
+            the autotuner's decision; the SCP loop records that into history
+            and maps it to a printable label.
         """
 
 
@@ -625,8 +652,9 @@ class AlgorithmState:
 
         Copies trajectory guesses, expands weights to dense arrays, and seeds
         the diagnostic scalars to zero / :py:attr:`AdaptiveStateCode.INITIAL`.
-        ``x_prop`` and ``x_prop_plus`` are zero-initialized; the SCP algorithm
-        fills them at the first discretization step.
+        ``x_prop`` and ``x_prop_plus`` are zero-initialized; the autotuner
+        fills them when it carries the first accepted candidate onto the
+        state (see :meth:`AutotuningBase.update_weights`).
 
         The SCP loop constants (``ep_tr`` / ``ep_vb`` / ``ep_vc`` / ``k_max``)
         and the autotuner's declared hyperparameters (*hyper*, from
@@ -1020,16 +1048,23 @@ class Algorithm(ABC):
         penalty terms are assembled); ``Problem`` stays algorithm-agnostic.
 
         Args:
-            dis_continuous: Discretizer for the continuous dynamics.
-            dis_impulsive: Discretizer for the impulsive/discrete dynamics.
+            dis_continuous: Continuous-dynamics discretization solver,
+                ``(x, u, params) -> (A_d, B_d, C_d, x_prop, V)``.
+            dis_impulsive: Impulsive/discrete-dynamics discretization solver,
+                ``(x_nodes, u, params) -> (x_prop_plus, D_d, E_d, W)``.
             jax_constraints: Lowered JAX constraints the body operates over.
-            solver_callback: The convex backend's ``iteration_callback``.
+            solver_callback: The convex backend's ``iteration_callback``,
+                ``(state, SubproblemData) -> SubproblemSolution`` (see
+                :class:`~openscvx.solvers.ptr_solver.PTRSolver`).
             settings: Problem configuration.
 
         Returns:
             The JAX-pure ``(state, params) -> (next_state, diagnostics)``
-            iteration body. :class:`~openscvx.problem.Problem` wraps it in
-            ``jax.jit`` and hands it back via :meth:`initialize`.
+            iteration body. It must advance ``state.k`` by one per call —
+            both ``Problem.solve()``'s Python loop and the ``lax.while_loop``
+            behind ``solve_jax`` terminate on ``k`` reaching ``k_max``.
+            :class:`~openscvx.problem.Problem` wraps the body in ``jax.jit``
+            and hands it back via :meth:`initialize`.
         """
         raise NotImplementedError
 
@@ -1093,10 +1128,11 @@ class Algorithm(ABC):
 
         The exported batched loop bakes in the initial penalty weights and the
         autotuner's update rule — none of which the symbolic problem hash
-        covers. The default folds in the concrete class name, then each
-        :class:`~openscvx.algorithms.weights.Weights` field, then the
+        covers. The default folds in the concrete class name, then the six
+        :class:`~openscvx.algorithms.weights.Weights` fields enumerated
+        below (a new ``Weights`` field must be added to that tuple), then the
         autotuner via its own ``_hash_into`` — mirroring the symbolic
-        ``_hash_into`` protocol so a new weight is hashed where it is added.
+        ``_hash_into`` protocol.
 
         The convergence thresholds (``ep_tr`` / ``ep_vb`` / ``ep_vc``) and the
         iteration cap ``k_max`` / time limit ``t_max`` are deliberately *not*

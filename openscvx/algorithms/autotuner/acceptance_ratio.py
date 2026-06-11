@@ -64,7 +64,9 @@ class AcceptanceRatioAutotuner(AutotuningBase):
     ``ACCEPT_CONSTANT`` / ``ACCEPT_LOWER`` — via a ``jnp.where`` cascade so the
     whole update traces under ``jax.jit``. Subclasses supply the multiplier
     rule (how ``lam_vc`` / ``lam_vb_*`` respond on acceptance) through
-    :meth:`_update_multipliers`.
+    :meth:`_update_multipliers`, and must assign an
+    :class:`AcceptanceRatioHyper` (or subclass) instance to ``self.hyper`` in
+    ``__init__`` — the shared body reads its knobs off ``state.hyper``.
 
     ``update_weights`` is a pure functional update on the
     :class:`AlgorithmState` pytree; see the base-class contract.
