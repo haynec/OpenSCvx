@@ -24,7 +24,6 @@ from openscvx.algorithms.weights import Weights
 from openscvx.config import Config, DevConfig, PropagationConfig, SimConfig
 from openscvx.lowered.jax_constraints import LoweredJaxConstraints
 
-
 # -- Tiny problem fixture ---------------------------------------------------
 
 

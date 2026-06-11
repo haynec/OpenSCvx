@@ -88,9 +88,7 @@ def test_build_iteration_matches_direct_factory(backend, primal_atol):
 
     # Same components routed through the Algorithm ABC contract.
     dis_continuous = jax.jit(prob.discretizer.get_solver(prob.lowered.dynamics, prob.settings))
-    dis_impulsive = jax.jit(
-        get_impulsive_discretization_solver(prob.lowered.dynamics_discrete)
-    )
+    dis_impulsive = jax.jit(get_impulsive_discretization_solver(prob.lowered.dynamics_discrete))
     via_abc = prob.algorithm.build_iteration(
         dis_continuous=dis_continuous,
         dis_impulsive=dis_impulsive,
