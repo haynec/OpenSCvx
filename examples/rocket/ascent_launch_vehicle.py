@@ -584,7 +584,7 @@ problem = ox.Problem(
     solver={
         "cvx_solver": "qocogen",
         "cvxpygen": True,
-        "solver_args": {"abstol": 1e-6, "reltol": 1e-9, "verbose": True},
+        "solver_args": {"abstol": 1e-6, "reltol": 1e-9},
     },
 )
 
