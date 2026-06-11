@@ -1203,9 +1203,9 @@ class CVXPyPTRSolver(PTRSolver):
             # status gate would otherwise reject the UNKNOWN it maps to.
             code = (
                 StatusCode.OPTIMAL
-                if (result.status == "optimal_inaccurate") or 
-                (result.status == "solved") or
-                (result.status == "1 (for description visit https://qoco-org.github.io/qoco/)")
+                if (result.status == "optimal_inaccurate")
+                or (result.status == "solved")
+                or (result.status == "1 (for description visit https://qoco-org.github.io/qoco/)")
                 else status_str_to_code(result.status)
             )
             return SubproblemSolution(
