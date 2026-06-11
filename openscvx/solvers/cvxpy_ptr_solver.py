@@ -664,21 +664,24 @@ class CVXPyPTRSolver(PTRSolver):
         based on the configuration.
         """
         if self.cvxpygen:
-            try:
-                import pickle
-
-                from solver.cpg_solver import cpg_solve
-
-                with open("solver/problem.pickle", "rb") as f:
-                    pickle.load(f)
-                self._problem.register_solve("CPG", cpg_solve)
-                solver_args = self.solver_args
-                self._solve_fn = lambda: self._problem.solve(method="CPG", **solver_args)
-            except ImportError:
+            cpg_solver_path = os.path.join("solver", "cpg_solver.py")
+            if not os.path.isfile(cpg_solver_path):
                 raise ImportError(
                     "cvxpygen solver not found. Make sure cvxpygen is installed and code "
-                    "generation has been run. Install with: pip install openscvx[cvxpygen]"
+                    "generation has been run. Install with: uv pip install openscvx[cvxpygen]"
                 )
+            try:
+                from solver.cpg_solver import cpg_solve
+            except ImportError as exc:
+                raise ImportError(
+                    "cvxpygen solver not found. Make sure cvxpygen is installed and code "
+                    "generation has been run. Install with: uv pip install openscvx[cvxpygen]"
+                ) from exc
+            # cvxpygen v1.0+ registers CPG during generate_code(); re-register here so
+            # reusing an existing solver/ directory (without regenerating) still works.
+            self._problem.register_solve("CPG", cpg_solve)
+            solver_args = self.solver_args
+            self._solve_fn = lambda: self._problem.solve(method="CPG", **solver_args)
         else:
             solver = self.cvx_solver
             solver_args = dict(self.solver_args)
@@ -1200,7 +1203,9 @@ class CVXPyPTRSolver(PTRSolver):
             # status gate would otherwise reject the UNKNOWN it maps to.
             code = (
                 StatusCode.OPTIMAL
-                if result.status == "optimal_inaccurate"
+                if (result.status == "optimal_inaccurate")
+                or (result.status == "solved")
+                or (result.status == "1 (for description visit https://qoco-org.github.io/qoco/)")
                 else status_str_to_code(result.status)
             )
             return SubproblemSolution(

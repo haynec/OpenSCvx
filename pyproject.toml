@@ -40,7 +40,7 @@ Homepage = "https://openscvx.github.io/OpenSCvx/"
 
 [project.optional-dependencies]
 cvxpygen = [
-    "cvxpygen",
+    "cvxpygen>=1.0.0",
     "qocogen",
 ]
 qpax = [
