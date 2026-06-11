@@ -158,7 +158,8 @@ if __name__ == "__main__":
     # the same names as the Problem constructor's algorithm config. ep_tr is
     # a scalar field, so a (B,) vector sweeps the convergence tolerance per
     # element — same artifact, no recompile, since the knobs are runtime
-    # inputs on the state pytree.
+    # inputs on the state pytree. The batch size is never passed: it is read
+    # off the array's leading axis (4 tolerances -> B = 4).
     sweep = export_problem.solve_batched(
         algorithm={"ep_tr": jnp.logspace(-4, -1, 4), "ep_vc": 1e-7}
     )

@@ -87,7 +87,11 @@ parameter's stored shape for each parameter, and `()` for the SCP
 hyperparameters. An argument that matches its declared shape is **shared** by
 every batch element; one with exactly one extra leading axis is **batched**
 along it. Rank against the declared shape decides — never the leading-axis
-value — so a shared `(B, n)` matrix parameter is never misread as batched:
+value — so a shared `(B, n)` matrix parameter is never misread as batched.
+(`B` in these shape patterns is plain notation for the batch size, not
+syntax: it is never passed anywhere — like `jax.vmap`, the library reads it
+off the leading axis of whatever you batched and cross-checks that all
+batched inputs agree.)
 
 ```python
 results = problem.solve_batched(
@@ -146,6 +150,8 @@ kwarg's field. Construction-only keys of the constructor dict — `autotuner`,
   forces the per-element reading. All against one cached artifact:
 
 ```python
+B = 8  # batch size — an ordinary int used to build the arrays; the solver
+       # never receives it, it reads B off the leading axes
 sweep = problem.solve_batched(algorithm={"ep_tr": jnp.logspace(-6, -3, B)})
 weights = problem.solve_batched(algorithm={"lam_prox": jnp.array([0.5, 1.0, 4.0])})
 budgets = problem.solve_batched(max_iters=jnp.array([5, 10, 20]))  # per-element caps
