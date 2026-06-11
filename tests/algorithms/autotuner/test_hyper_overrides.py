@@ -22,7 +22,6 @@ no full solves run here — it stays fast.
 
 import dataclasses
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -43,7 +42,6 @@ from openscvx.algorithms.base import (
 from openscvx.algorithms.weights import Weights
 from openscvx.config import Config, DevConfig, PropagationConfig, SimConfig
 from openscvx.lowered.jax_constraints import LoweredJaxConstraints
-
 
 # --- Synthetic fixtures (mirrors tests/test_autotuning.py) ------------------
 
@@ -142,16 +140,20 @@ def _override_run(autotuner, state, candidate, constraints, settings, knob, valu
     "make_autotuner, knob, override_value, k, observe",
     [
         pytest.param(AugmentedLagrangian, "gamma_1", 5.0, 2, "lam_prox", id="auglag_gamma_1"),
-        pytest.param(
-            AdaptiveProximalWeight, "gamma_1", 5.0, 2, "lam_prox", id="adaptive_gamma_1"
-        ),
-        pytest.param(
-            RampProximalWeight, "ramp_factor", 3.0, 1, "lam_prox", id="ramp_ramp_factor"
-        ),
+        pytest.param(AdaptiveProximalWeight, "gamma_1", 5.0, 2, "lam_prox", id="adaptive_gamma_1"),
+        pytest.param(RampProximalWeight, "ramp_factor", 3.0, 1, "lam_prox", id="ramp_ramp_factor"),
     ],
 )
 def test_constructor_and_proxy_channels(
-    make_autotuner, knob, override_value, k, observe, settings, weights, candidate, empty_constraints
+    make_autotuner,
+    knob,
+    override_value,
+    k,
+    observe,
+    settings,
+    weights,
+    candidate,
+    empty_constraints,
 ):
     """Channels (a) constructor and (b) proxy mutation both reach update_weights."""
     # Default run.
@@ -179,16 +181,20 @@ def test_constructor_and_proxy_channels(
     "make_autotuner, knob, override_value, k, observe",
     [
         pytest.param(AugmentedLagrangian, "gamma_1", 5.0, 2, "lam_prox", id="auglag_gamma_1"),
-        pytest.param(
-            AdaptiveProximalWeight, "gamma_1", 5.0, 2, "lam_prox", id="adaptive_gamma_1"
-        ),
-        pytest.param(
-            RampProximalWeight, "ramp_factor", 3.0, 1, "lam_prox", id="ramp_ramp_factor"
-        ),
+        pytest.param(AdaptiveProximalWeight, "gamma_1", 5.0, 2, "lam_prox", id="adaptive_gamma_1"),
+        pytest.param(RampProximalWeight, "ramp_factor", 3.0, 1, "lam_prox", id="ramp_ramp_factor"),
     ],
 )
 def test_solve_override_channel(
-    make_autotuner, knob, override_value, k, observe, settings, weights, candidate, empty_constraints
+    make_autotuner,
+    knob,
+    override_value,
+    k,
+    observe,
+    settings,
+    weights,
+    candidate,
+    empty_constraints,
 ):
     """Channel (c): a state.hyper override diverges from the default-knob run."""
     autotuner = make_autotuner()
@@ -204,7 +210,9 @@ def test_solve_override_channel(
     )
 
 
-def test_constant_proximal_weight_lam_cost_relax_channels(settings, weights, candidate, empty_constraints):
+def test_constant_proximal_weight_lam_cost_relax_channels(
+    settings, weights, candidate, empty_constraints
+):
     """ConstantProximalWeight's only behavioral knob (lam_cost_relax) across channels.
 
     ConstantProximalWeight never touches ``lam_prox``; its observable knob is

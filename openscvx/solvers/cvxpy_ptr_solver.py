@@ -20,22 +20,6 @@ import numpy as np
 
 from openscvx.config import Config
 
-# CVXPY noise emitted by this backend's subproblem assembly and solve, accepted
-# knowingly and silenced by message so every other warning stays visible. The
-# ``*``-matmul deprecation is our own usage (fixing it means auditing the
-# assembly expressions — tracked separately); the sparse-access warnings fire
-# inside CVXPY when we read multi-dim parameter values.
-warnings.filterwarnings(
-    "ignore", message=r"\s*This use of ``\*`` has resulted in matrix multiplication"
-)
-warnings.filterwarnings("ignore", message=r"Reading from a sparse CVXPY expression via `\.value`")
-warnings.filterwarnings(
-    "ignore", message=r"Accessing a sparse CVXPY expression via a dense representation"
-)
-warnings.filterwarnings(
-    "ignore", message=r"The problem has an expression with dimension greater than 2"
-)
-
 from .ptr_solver import (
     PTRSolver,
     PTRSolveResult,
@@ -59,6 +43,22 @@ try:
 except ImportError:
     CVXPYGEN_AVAILABLE = False
     cpg = None
+
+# CVXPY noise emitted by this backend's subproblem assembly and solve, accepted
+# knowingly and silenced by message so every other warning stays visible. The
+# ``*``-matmul deprecation is our own usage (fixing it means auditing the
+# assembly expressions — tracked separately); the sparse-access warnings fire
+# inside CVXPY when we read multi-dim parameter values.
+warnings.filterwarnings(
+    "ignore", message=r"\s*This use of ``\*`` has resulted in matrix multiplication"
+)
+warnings.filterwarnings("ignore", message=r"Reading from a sparse CVXPY expression via `\.value`")
+warnings.filterwarnings(
+    "ignore", message=r"Accessing a sparse CVXPY expression via a dense representation"
+)
+warnings.filterwarnings(
+    "ignore", message=r"The problem has an expression with dimension greater than 2"
+)
 
 
 ## TODO: (fabio) add support for impulsive controls
