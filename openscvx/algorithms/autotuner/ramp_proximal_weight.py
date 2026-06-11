@@ -37,6 +37,8 @@ class RampProximalWeight(AutotuningBase):
     :class:`AlgorithmState` pytree; see the base-class contract.
     """
 
+    COMPUTES_ACCEPTANCE_METRICS = False
+
     def __init__(
         self,
         ramp_factor: float = 1.0,

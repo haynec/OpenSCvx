@@ -294,6 +294,13 @@ class AutotuningBase(ABC):
     Class Attributes:
         COLUMNS: List of Column specs for autotuner-specific metrics to display.
             Subclasses override this to add their own columns.
+        COMPUTES_ACCEPTANCE_METRICS: Whether ``update_weights`` computes a
+            predicted/actual reduction and the resulting acceptance ratio. The
+            SCP loop records and prints those diagnostics only when this is
+            ``True`` (the default); tuners that never reject an iterate — e.g.
+            :class:`~openscvx.algorithms.autotuner.constant_proximal_weight.ConstantProximalWeight`
+            and :class:`~openscvx.algorithms.autotuner.ramp_proximal_weight.RampProximalWeight`
+            — set it ``False``.
         hyper: The autotuner's declared hyperparameters — a
             :class:`HyperParams` instance carrying plain-Python defaults
             (the empty base when it declares none). Snapshotted onto
@@ -304,6 +311,7 @@ class AutotuningBase(ABC):
     """
 
     COLUMNS: List[Column] = []
+    COMPUTES_ACCEPTANCE_METRICS: bool = True
     hyper: HyperParams = HyperParams()
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:

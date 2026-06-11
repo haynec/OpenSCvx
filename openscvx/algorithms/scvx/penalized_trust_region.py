@@ -23,8 +23,6 @@ from openscvx.utils.printing import (
 )
 
 from ..autotuner.augmented_lagrangian import AugmentedLagrangian
-from ..autotuner.constant_proximal_weight import ConstantProximalWeight
-from ..autotuner.ramp_proximal_weight import RampProximalWeight
 from ..base import (
     Algorithm,
     AlgorithmHistory,
@@ -281,9 +279,7 @@ class PenalizedTrustRegion(Algorithm):
         candidate.TR = np.asarray(diag.TR)
         candidate.J_lin = float(diag.J_lin)
 
-        use_full_metrics = not isinstance(
-            self.autotuner, (ConstantProximalWeight, RampProximalWeight)
-        )
+        use_full_metrics = self.autotuner.COMPUTES_ACCEPTANCE_METRICS
         scalars, lam_prox_np = history.record_iteration(
             next_state, candidate, record_diagnostics=use_full_metrics
         )

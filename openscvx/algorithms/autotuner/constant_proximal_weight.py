@@ -39,6 +39,8 @@ class ConstantProximalWeight(AutotuningBase):
     :class:`AlgorithmState` pytree; see the base-class contract.
     """
 
+    COMPUTES_ACCEPTANCE_METRICS = False
+
     def __init__(
         self,
         lam_cost_drop: int = -1,
