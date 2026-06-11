@@ -212,6 +212,54 @@ def _resolve_batch_spec(
     return B, axes, fills
 
 
+def _flatten_in_axes(in_axes, entries: Dict[str, Tuple[Any, Tuple[int, ...]]]) -> dict:
+    """Flatten the user-facing ``in_axes`` to the resolver's per-entry names.
+
+    Mirrors ``jax.vmap``'s prefix semantics: a bare ``0`` batches every
+    passed input, and ``0`` / ``None`` at ``"parameters"`` / ``"overrides"``
+    applies to every key passed in that dict; per-key dicts pick out
+    individual entries. One deliberate divergence from ``vmap``: a bare
+    ``None`` keeps its default meaning — infer by rank — because vmap's
+    all-broadcast reading would leave a batched solve with no batch axis.
+
+    Args:
+        in_axes: ``None`` (infer), ``0`` (batch everything passed), or a dict
+            keyed by argument name with leaves ``0`` / ``None`` — where
+            ``"parameters"`` and ``"overrides"`` take either a prefix
+            (``0`` / ``None``) or a per-key dict.
+        entries: The resolver's ``{name: (value, declared_shape)}`` map;
+            supplies the passed-entry names a prefix expands over.
+
+    Returns:
+        ``{entry_name: 0 | None}`` for :func:`_resolve_batch_spec`.
+    """
+    if in_axes is None:
+        return {}
+    if in_axes == 0:
+        return {name: 0 for name, (value, _) in entries.items() if value is not None}
+    if not isinstance(in_axes, dict):
+        raise ValueError(
+            f"solve_batched: in_axes must be 0 (batch every input), a dict "
+            f"keyed by argument name, or None (infer by rank); got {in_axes!r}."
+        )
+    flat = {}
+    for name, ax in in_axes.items():
+        if name in ("parameters", "overrides"):
+            if isinstance(ax, dict):
+                flat.update({f"{name}.{key}": v for key, v in ax.items()})
+            elif ax in (0, None):
+                flat.update({entry: ax for entry in entries if entry.startswith(f"{name}.")})
+            else:
+                raise ValueError(
+                    f"solve_batched: in_axes['{name}'] must be 0 or None (a "
+                    f"prefix applied to every passed key) or a per-key dict, "
+                    f"e.g. {{'gate_center': 0}}; got {ax!r}."
+                )
+        else:
+            flat[name] = ax
+    return flat
+
+
 # Named solve kwargs and the AlgorithmState field each one targets. The
 # ``overrides`` dict reaches the same fields by name, so passing both for one
 # field is ambiguous — the solve methods raise, pointing at the kwarg.
@@ -1767,12 +1815,17 @@ class Problem:
                 broadcast to the field shape). Exact shapes win when both
                 parse; ``in_axes={"overrides": {name: 0}}`` forces the
                 per-element fill reading.
-            in_axes: Explicit batching override in ``jax.vmap``'s vocabulary:
-                a dict keyed by argument name with leaves ``0`` (batched) or
-                ``None`` (shared); ``"parameters"`` and ``"overrides"`` map
-                to per-key dicts, e.g.
+            in_axes: Explicit batching override in ``jax.vmap``'s vocabulary,
+                including its prefix semantics: a bare ``0`` batches every
+                passed input; a dict keyed by argument name takes leaves
+                ``0`` (batched) or ``None`` (shared), where ``"parameters"``
+                and ``"overrides"`` accept either a prefix (``0`` / ``None``,
+                applied to every passed key) or a per-key dict, e.g.
                 ``in_axes={"parameters": {"gate_center": 0}}``. Partial
-                specs are fine — unlisted entries use the rank rule.
+                specs are fine — unlisted entries use the rank rule. Unlike
+                ``vmap``, the default (``None``) means *infer by rank*, not
+                broadcast-everything — an all-shared batched solve has no
+                batch axis to find.
 
         Returns:
             :class:`OptimizationResults` pytree with a leading ``B`` axis on
@@ -1821,19 +1874,7 @@ class Problem:
             declared = tuple(jnp.shape(_override_target(_default, name)))
             entries[f"overrides.{name}"] = (value, declared)
 
-        # Flatten the user-facing in_axes ({"parameters": {key: ax}}) to the
-        # per-entry names the resolver (and its error messages) uses.
-        flat_in_axes = {}
-        for name, ax in (in_axes or {}).items():
-            if name in ("parameters", "overrides"):
-                if not isinstance(ax, dict):
-                    raise ValueError(
-                        f"solve_batched: in_axes['{name}'] must be a per-key "
-                        f"dict, e.g. {{'gate_center': 0}}; got {ax!r}."
-                    )
-                flat_in_axes.update({f"{name}.{key}": v for key, v in ax.items()})
-            else:
-                flat_in_axes[name] = ax
+        flat_in_axes = _flatten_in_axes(in_axes, entries)
 
         B, axes, fills = _resolve_batch_spec(
             entries,

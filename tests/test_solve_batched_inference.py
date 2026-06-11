@@ -11,7 +11,7 @@ tests: no problem build, no solver runs.
 import numpy as np
 import pytest
 
-from openscvx.problem import _resolve_batch_spec
+from openscvx.problem import _flatten_in_axes, _resolve_batch_spec
 
 # === Rank rule ===
 
@@ -253,6 +253,57 @@ def test_non_fill_entry_rejects_fill_forms():
     with pytest.raises(ValueError, match=r"'x_guess' has shape \(5,\)") as exc:
         _resolve_batch_spec({"x_guess": (np.zeros(5), (10, 3))})
     assert "fill" not in str(exc.value)
+
+
+# === in_axes prefix flattening ===
+
+
+_PREFIX_ENTRIES = {
+    "x_initial": (np.zeros((4, 3)), (3,)),
+    "x_guess": (None, (10, 3)),
+    "parameters.center": (np.zeros((4, 3)), (3,)),
+    "parameters.radius": (0.5, ()),
+    "overrides.ep_tr": (np.zeros(4), ()),
+}
+
+
+def test_flatten_none_means_infer():
+    assert _flatten_in_axes(None, _PREFIX_ENTRIES) == {}
+
+
+def test_flatten_bare_zero_batches_every_passed_input():
+    # x_guess was not passed (None) and must not be forced batched.
+    assert _flatten_in_axes(0, _PREFIX_ENTRIES) == {
+        "x_initial": 0,
+        "parameters.center": 0,
+        "parameters.radius": 0,
+        "overrides.ep_tr": 0,
+    }
+
+
+def test_flatten_subtree_prefix_applies_to_every_passed_key():
+    flat = _flatten_in_axes({"parameters": 0}, _PREFIX_ENTRIES)
+    assert flat == {"parameters.center": 0, "parameters.radius": 0}
+    flat = _flatten_in_axes({"parameters": None, "x_initial": 0}, _PREFIX_ENTRIES)
+    assert flat == {"parameters.center": None, "parameters.radius": None, "x_initial": 0}
+
+
+def test_flatten_per_key_dict_unchanged():
+    assert _flatten_in_axes({"parameters": {"center": 0}}, _PREFIX_ENTRIES) == {
+        "parameters.center": 0
+    }
+
+
+def test_flatten_rejects_non_dict_non_zero_top_level():
+    with pytest.raises(ValueError, match=r"in_axes must be 0.*a dict.*or None"):
+        _flatten_in_axes(1, _PREFIX_ENTRIES)
+
+
+def test_flatten_rejects_invalid_subtree_spec():
+    with pytest.raises(
+        ValueError, match=r"in_axes\['parameters'\] must be 0 or None.*per-key dict"
+    ):
+        _flatten_in_axes({"parameters": 1}, _PREFIX_ENTRIES)
 
 
 # === Teaching errors ===

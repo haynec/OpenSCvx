@@ -155,6 +155,27 @@ def test_solve_batched_mixed_shared_and_batched_parameters():
     jax.clear_caches()
 
 
+def test_solve_batched_in_axes_prefix_matches_inference():
+    pytest.importorskip("qpax")
+
+    prob = _build_brachistochrone_with_params("qpax", n=8, k_max=8)
+    prob.initialize()
+
+    # jax.vmap prefix semantics: in_axes={"parameters": 0} batches every
+    # passed parameter — same resolution the rank rule infers for these
+    # shapes, so the results must agree (and the batched closure is reused).
+    params = {
+        "gravity": jnp.array([[9.0], [10.5]]),  # (B, 1) vs declared (1,)
+        "gain": jnp.array([[0.9], [1.1]]),
+    }
+    inferred = prob.solve_batched(parameters=params)
+    prefixed = prob.solve_batched(parameters=params, in_axes={"parameters": 0})
+
+    np.testing.assert_allclose(np.asarray(prefixed.x), np.asarray(inferred.x), atol=1e-12, rtol=0)
+
+    jax.clear_caches()
+
+
 # === Hyperparameter sweeps ===
 
 

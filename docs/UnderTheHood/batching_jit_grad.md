@@ -101,15 +101,24 @@ results = problem.solve_batched(
 
 For the rare entry the rank rule cannot express — e.g. batching a declared
 rank-1 parameter element-wise — pass an explicit `in_axes` in `jax.vmap`'s
-vocabulary (`0` = batched along the leading axis, `None` = shared; partial
-specs fall back to the rank rule):
+vocabulary, including its prefix semantics (`0` = batched along the leading
+axis, `None` = shared; a prefix applies to everything below it; partial specs
+fall back to the rank rule):
 
 ```python
 results = problem.solve_batched(
     parameters={"weights": w},           # (B,) is also w's declared shape...
     in_axes={"parameters": {"weights": 0}},  # ...so say "batched" explicitly
 )
+
+results = problem.solve_batched(parameters=params, in_axes={"parameters": 0})
+# prefix: every passed parameter is batched, exactly like jax.vmap's
+# pytree-prefix in_axes; a bare in_axes=0 batches every passed input.
 ```
+
+One deliberate divergence from `jax.vmap`: the *default* is "infer by rank",
+not `0`-everything — an all-shared batched solve has no batch axis to find,
+and inference is what makes mixed shared/batched dicts ergonomic.
 
 ### Hyperparameter sweeps: the `overrides` dict
 
