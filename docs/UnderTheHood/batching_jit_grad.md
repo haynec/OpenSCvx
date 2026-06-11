@@ -150,8 +150,8 @@ kwarg's field. Construction-only keys of the constructor dict — `autotuner`,
   forces the per-element reading. All against one cached artifact:
 
 ```python
-B = 8  # batch size — an ordinary int used to build the arrays; the solver
-       # never receives it, it reads B off the leading axes
+B = 8  # batch size. Just an int for building the arrays below — there is no
+       # B argument; solve_batched infers it from the leading-axis lengths.
 sweep = problem.solve_batched(algorithm={"ep_tr": jnp.logspace(-6, -3, B)})
 weights = problem.solve_batched(algorithm={"lam_prox": jnp.array([0.5, 1.0, 4.0])})
 budgets = problem.solve_batched(max_iters=jnp.array([5, 10, 20]))  # per-element caps
