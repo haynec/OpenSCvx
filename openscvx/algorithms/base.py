@@ -39,13 +39,19 @@ if TYPE_CHECKING:
 
 @dataclass
 class CandidateIterate:
-    """Per-iteration candidate produced by the convex subproblem.
+    """Per-iteration candidate handed to the autotuner / history recorder.
 
-    Mutable on purpose: the discretizer / subproblem code fills fields
-    incrementally (``x``, ``u`` first, then ``V``/``W``/``x_prop``/etc.) before
-    handing the candidate to :py:meth:`AutotuningBase.update_weights`. Treat
-    this object as a structured-but-numpy input to ``update_weights``; the
-    autotuner does not mutate it.
+    Built at two sites, each populating a different subset of the fields:
+
+    * **In-trace autotuner input** (``scvx/iteration.py``): the fused SCP
+      iteration fills ``x`` / ``u`` / ``x_prop`` / ``x_prop_plus`` / ``J_lin``
+      and passes the candidate to :py:meth:`AutotuningBase.update_weights`.
+    * **Host-side history input** (``scvx/penalized_trust_region.py``): the SCP
+      loop rebuilds the candidate from the JAX diagnostics with ``V`` / ``W`` /
+      ``VC`` / ``TR`` / ``J_lin`` for :py:meth:`AlgorithmHistory.record_iteration`.
+
+    Mutable on purpose so each site can fill its subset; consumers treat it as a
+    structured numpy input and do not mutate it.
     """
 
     x: Optional[np.ndarray] = None
@@ -54,8 +60,6 @@ class CandidateIterate:
     W: Optional[np.ndarray] = None
     x_prop: Optional[np.ndarray] = None
     x_prop_plus: Optional[np.ndarray] = None
-    D_d: Optional[np.ndarray] = None
-    E_d: Optional[np.ndarray] = None
     VC: Optional[np.ndarray] = None
     TR: Optional[np.ndarray] = None
     J_lin: Optional[float] = None
@@ -290,13 +294,6 @@ class AutotuningBase(ABC):
     Class Attributes:
         COLUMNS: List of Column specs for autotuner-specific metrics to display.
             Subclasses override this to add their own columns.
-        JIT_UPDATE_WEIGHTS: Whether the SCP loop should wrap
-            :py:meth:`update_weights` in :func:`jax.jit`. True by default
-            (worthwhile for autotuners like :class:`AugmentedLagrangian` whose
-            body issues hundreds of small ``jnp`` ops). Subclasses with trivial
-            bodies (a handful of XLA ops) override to ``False`` so the SCP loop
-            calls ``update_weights`` directly — JAX's eager dispatch is cheaper
-            than the JIT'd closure's pytree-flatten overhead for those cases.
         hyper: The autotuner's declared hyperparameters — a
             :class:`HyperParams` instance carrying plain-Python defaults
             (the empty base when it declares none). Snapshotted onto
@@ -308,11 +305,6 @@ class AutotuningBase(ABC):
 
     COLUMNS: List[Column] = []
     hyper: HyperParams = HyperParams()
-    # Governs only the Python-loop ``Problem.solve()`` path. Once the SCP body
-    # lives inside ``lax.while_loop`` (see ``plans/batchable-problem.md``),
-    # ``update_weights`` is one node in the outer compiled graph and the inner
-    # JIT boundary disappears — the flag becomes a silent no-op on that path.
-    JIT_UPDATE_WEIGHTS: bool = True
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Contribute the autotuner's update rule to the ``solve_batched`` cache key.
@@ -562,37 +554,6 @@ class AlgorithmState:
     k_max: jnp.ndarray
     hyper: HyperParams
 
-    # Field order is the source of truth for tree_flatten / tree_unflatten;
-    # keep _FIELDS in sync with the dataclass field declarations above.
-    _FIELDS = (
-        "x",
-        "u",
-        "x_prop",
-        "x_prop_plus",
-        "lam_prox",
-        "lam_vc",
-        "lam_cost",
-        "lam_cost_init",
-        "lam_vb_nodal",
-        "lam_vb_cross",
-        "k",
-        "J_tr",
-        "J_vb",
-        "J_vc",
-        "J_nonlin",
-        "predicted_reduction",
-        "actual_reduction",
-        "acceptance_ratio",
-        "adaptive_state_code",
-        "x_init_pin",
-        "x_term_pin",
-        "ep_tr",
-        "ep_vb",
-        "ep_vc",
-        "k_max",
-        "hyper",
-    )
-
     def replace(self, **changes) -> "AlgorithmState":
         """Return a new state with ``changes`` applied (functional update)."""
         return dc_replace(self, **changes)
@@ -719,6 +680,11 @@ class AlgorithmState:
         )
 
 
+# Field order is the source of truth for tree_flatten / tree_unflatten; derive
+# it from the dataclass so it can never drift from the field declarations.
+AlgorithmState._FIELDS = tuple(f.name for f in dc_fields(AlgorithmState))
+
+
 # ``AlgorithmState`` is the in/out pytree of the exported ``solve_batched``
 # artifact, so ``jax.export`` must know how to (de)serialize its treedef on top
 # of the runtime pytree registration above — a separate registry. The auxdata is
@@ -744,9 +710,8 @@ class AlgorithmHistory:
 
     Mirrors the lists that previously lived directly on ``AlgorithmState``.
     Never appears on the JAX boundary; the SCP loop appends to it after each
-    iteration via :py:meth:`record_iteration`. Mostly diagnostic, but also
-    used by the convex subproblem solver to look up the most recent
-    discretization for linearization.
+    iteration via :py:meth:`record_iteration`. Purely diagnostic — the
+    subproblem solver consumes ``SubproblemData`` in-trace, not the history.
     """
 
     n_x: int
@@ -778,76 +743,10 @@ class AlgorithmHistory:
             N=settings.sim.n,
         )
 
-    # -- Discretization plumbing --------------------------------------------
-
-    def add_discretization(self, V: np.ndarray) -> None:
-        """Append a raw continuous-time discretization matrix."""
-        self.discretizations.append(
-            DiscretizationResult.from_V(V, n_x=self.n_x, n_u=self.n_u, N=self.N)
-        )
-
-    def add_impulsive_discretization(self, W: np.ndarray) -> None:
-        """Attach impulsive data to the most recently added discretization."""
-        if not self.discretizations:
-            raise ValueError(
-                "Cannot attach impulsive discretization before adding the base discretization."
-            )
-        last = self.discretizations[-1]
-        self.discretizations[-1] = DiscretizationResult.from_VW(
-            V=last.V,
-            W=W,
-            n_x=self.n_x,
-            n_u=self.n_u,
-            N=self.N,
-        )
-
-    # -- Discretization accessors -------------------------------------------
-    #
-    # Subproblem solvers ask for the *latest* (or i-th) linearization; the
-    # accessors below mirror the old ``state.A_d()`` / ``state.B_d()`` /
-    # ``state.x_prop()`` API.
-
     @property
     def V_history(self) -> List[np.ndarray]:
-        """Backward-compatible view of raw discretization matrices."""
+        """View of the raw discretization matrices recorded so far."""
         return [d.V for d in self.discretizations]
-
-    def x_prop(self, index: int = -1) -> Optional[np.ndarray]:
-        """Return the i-th propagated state trajectory."""
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].x_prop
-
-    def x_prop_plus(self, index: int = -1) -> Optional[np.ndarray]:
-        """Return the i-th impulsive output (or ``None`` if not present)."""
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].x_prop_plus
-
-    def A_d(self, index: int = -1) -> Optional[np.ndarray]:
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].A_d
-
-    def B_d(self, index: int = -1) -> Optional[np.ndarray]:
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].B_d
-
-    def C_d(self, index: int = -1) -> Optional[np.ndarray]:
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].C_d
-
-    def D_d(self, index: int = -1) -> Optional[np.ndarray]:
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].D_d
-
-    def E_d(self, index: int = -1) -> Optional[np.ndarray]:
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].E_d
 
     # -- Per-iteration recording -------------------------------------------
 
@@ -861,8 +760,9 @@ class AlgorithmHistory:
 
         Reproduces the old ``accept_solution`` / ``reject_solution`` behavior:
 
-        * **REJECT**: append only ``lam_prox`` (the bumped weight that drives
-          the next subproblem).
+        * **REJECT**: append ``lam_prox`` (the bumped weight that drives the
+          next subproblem), plus the predicted/actual/acceptance diagnostics
+          when ``record_diagnostics`` is set.
         * **INITIAL**: append every trajectory / weight history entry, but
           skip the predicted/actual/acceptance diagnostics (the autotuner
           didn't compute them on iter 1).

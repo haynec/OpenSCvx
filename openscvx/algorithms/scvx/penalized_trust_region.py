@@ -79,8 +79,7 @@ class PenalizedTrustRegion(Algorithm):
     # Base columns emitted by PTR algorithm (before autotuner columns)
     BASE_COLUMNS: List[Column] = [
         Column("iter", "Iter", 4, "{:4d}"),
-        Column("dis_time", "Dis (ms)", 8, "{:6.2f}", min_verbosity=Verbosity.STANDARD),
-        Column("subprop_time", "Solve (ms)", 10, "{:6.2f}", min_verbosity=Verbosity.STANDARD),
+        Column("subprop_time", "Step (ms)", 10, "{:6.2f}", min_verbosity=Verbosity.STANDARD),
         Column("cost", "Cost", 8, "{: .1e}"),
         Column("J_tr", "J_tr", 8, "{: .1e}", color_J_tr, Verbosity.STANDARD),
         Column("J_vb", "J_vb", 8, "{: .1e}", color_J_vb, Verbosity.STANDARD),
@@ -291,7 +290,6 @@ class PenalizedTrustRegion(Algorithm):
 
         emission_data = {
             "iter": iter_index,
-            "dis_time": 0.0,
             "subprop_time": step_time * 1000.0,
             "J_tr": scalars["J_tr"],
             "J_vb": scalars["J_vb"],

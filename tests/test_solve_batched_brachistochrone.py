@@ -299,8 +299,6 @@ class _ProxRampAutotuner(AutotuningBase):
     work with zero library edits.
     """
 
-    JIT_UPDATE_WEIGHTS = False
-
     def __init__(self, prox_scale: float = 1.0):
         self.hyper = _ProxRampHyper(prox_scale=prox_scale)
 

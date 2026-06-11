@@ -114,8 +114,10 @@ class AugmentedLagrangian(AutotuningBase):
             lam_vc_max: Maximum virtual control penalty weight. Defaults to 1e5.
             lam_prox_min: Minimum trust region (proximal) weight. Defaults to 1e-3.
             lam_prox_max: Maximum trust region (proximal) weight. Defaults to 1e4.
-            lam_cost_drop: Iteration after which cost relaxation applies (-1 = never).
-                Defaults to -1.
+            lam_cost_drop: Iteration after which cost relaxation applies
+                (``state.k > lam_cost_drop``). ``-1`` relaxes from the first
+                iteration; the default ``lam_cost_relax=1.0`` makes that a
+                no-op. Defaults to -1.
             lam_cost_relax: Factor applied to lam_cost after lam_cost_drop.
                 Defaults to 1.0.
         """
@@ -202,6 +204,9 @@ class AugmentedLagrangian(AutotuningBase):
             else:
                 lam_vb_new = lam_vb_new.at[:, idx].set(updated)
 
+        # Intentional: the virtual-buffer weights share the virtual-control cap
+        # ``lam_vc_max`` rather than a dedicated knob — one ceiling governs every
+        # penalty weight in this autotuner.
         return jnp.minimum(self.lam_vc_max, lam_vb_new)
 
     def _update_virtual_buffer_cross_weights(
@@ -226,6 +231,8 @@ class AugmentedLagrangian(AutotuningBase):
             updated = jnp.where(nu > self.ep, case1, case2)
             lam_vb_new = lam_vb_new.at[idx].set(updated)
 
+        # Intentional: shares the virtual-control cap ``lam_vc_max`` — see
+        # :py:meth:`_update_virtual_buffer_nodal_weights`.
         return jnp.minimum(self.lam_vc_max, lam_vb_new)
 
     # -----------------------------------------------------------------------

@@ -20,7 +20,12 @@ if TYPE_CHECKING:
 
 
 class RampProximalWeightHyper(HyperParams):
-    """Declared hyperparameters for :class:`RampProximalWeight`."""
+    """Declared hyperparameters for :class:`RampProximalWeight`.
+
+    ``lam_cost_drop`` is the iteration after which ``lam_cost`` relaxation
+    applies (``state.k > lam_cost_drop``): ``-1`` relaxes from the first
+    iteration, and the default ``lam_cost_relax=1.0`` makes that a no-op.
+    """
 
     lam_cost_drop: int = -1
 
@@ -31,11 +36,6 @@ class RampProximalWeight(AutotuningBase):
     ``update_weights`` is a pure functional update on the
     :class:`AlgorithmState` pytree; see the base-class contract.
     """
-
-    # The body is a handful of jnp ops — JAX's eager dispatch is cheaper than
-    # the pytree-flatten overhead of a JIT'd closure. Opt out of the SCP loop's
-    # JIT wrapping.
-    JIT_UPDATE_WEIGHTS: bool = False
 
     def __init__(
         self,

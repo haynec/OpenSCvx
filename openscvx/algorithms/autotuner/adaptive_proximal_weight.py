@@ -23,7 +23,12 @@ if TYPE_CHECKING:
 
 
 class AdaptiveProximalWeightHyper(HyperParams):
-    """Declared hyperparameters for :class:`AdaptiveProximalWeight`."""
+    """Declared hyperparameters for :class:`AdaptiveProximalWeight`.
+
+    ``lam_cost_drop`` is the iteration after which ``lam_cost`` relaxation
+    applies (``state.k > lam_cost_drop``): ``-1`` relaxes from the first
+    iteration, and the default ``lam_cost_relax=1.0`` makes that a no-op.
+    """
 
     lam_cost_drop: int = -1
 
