@@ -323,35 +323,30 @@ def make_scp_iteration(
     return iteration_fn
 
 
-def _converged(state: AlgorithmState, ep_tr: float, ep_vb: float, ep_vc: float) -> jnp.ndarray:
-    """Boolean SCP convergence test from the metrics on ``state``."""
-    return (state.J_tr < ep_tr) & (state.J_vb < ep_vb) & (state.J_vc < ep_vc)
+def _converged(state: AlgorithmState) -> jnp.ndarray:
+    """Boolean SCP convergence test from the metrics and thresholds on ``state``."""
+    return (state.J_tr < state.ep_tr) & (state.J_vb < state.ep_vb) & (state.J_vc < state.ep_vc)
 
 
 def make_solve_loop(
     iteration_fn: Callable[[AlgorithmState, dict], Tuple[AlgorithmState, IterationDiagnostics]],
-    ep_tr: float,
-    ep_vb: float,
-    ep_vc: float,
-    k_max: int,
 ) -> Callable[[AlgorithmState, dict], AlgorithmState]:
     """Wrap ``iteration_fn`` in a ``lax.while_loop`` keyed on convergence.
 
     The loop runs ``iteration_fn`` until either the SCP metrics fall below the
-    ``ep_*`` thresholds or the iteration counter ``state.k`` exceeds ``k_max`` —
-    matching the Python ``while`` loop in ``Problem.solve()``. The per-iteration
-    :class:`IterationDiagnostics` are projected away so the loop carry stays
-    ``state -> state`` (XLA dead-code-eliminates their host-only pieces). It
-    exists as a primitive for tests and the future JAX-pure ``.solve()`` path;
-    the public ``Problem.solve()`` continues to drive ``iteration_fn`` from
-    Python.
+    ``ep_*`` thresholds on ``state`` or the iteration counter ``state.k``
+    exceeds ``state.k_max`` — matching the Python ``while`` loop in
+    ``Problem.solve()``. Thresholds and cap are :class:`AlgorithmState` fields
+    (runtime inputs, not closure constants), so one built loop serves every
+    tolerance / ``max_iters`` setting and ``jax.vmap`` batches them per
+    element. The per-iteration :class:`IterationDiagnostics` are projected
+    away so the loop carry stays ``state -> state`` (XLA dead-code-eliminates
+    their host-only pieces). It exists as a primitive for tests and the future
+    JAX-pure ``.solve()`` path; the public ``Problem.solve()`` continues to
+    drive ``iteration_fn`` from Python.
 
     Args:
         iteration_fn: A body built by :func:`make_scp_iteration`.
-        ep_tr: Convergence threshold on ``J_tr`` (trust-region step).
-        ep_vb: Convergence threshold on ``J_vb`` (virtual buffer).
-        ep_vc: Convergence threshold on ``J_vc`` (virtual control).
-        k_max: Maximum number of SCP iterations.
 
     Returns:
         ``solve_loop(state, params) -> final_state``.
@@ -359,7 +354,7 @@ def make_solve_loop(
 
     def solve_loop(state: AlgorithmState, params: dict) -> AlgorithmState:
         def cond(state: AlgorithmState) -> jnp.ndarray:
-            return (state.k <= k_max) & jnp.logical_not(_converged(state, ep_tr, ep_vb, ep_vc))
+            return (state.k <= state.k_max) & jnp.logical_not(_converged(state))
 
         def body(state: AlgorithmState) -> AlgorithmState:
             # Under ``jax.vmap`` the ``lax.while_loop`` keeps running until
@@ -370,7 +365,7 @@ def make_solve_loop(
             # ``state`` for converged elements pins them to their first
             # post-convergence iterate, so a batched solve agrees with the
             # single-problem ``solve_jax`` on each element.
-            is_converged = _converged(state, ep_tr, ep_vb, ep_vc)
+            is_converged = _converged(state)
             next_state, _ = iteration_fn(state, params)
 
             def freeze(nxt, prev):

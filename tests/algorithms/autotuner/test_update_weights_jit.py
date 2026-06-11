@@ -17,12 +17,20 @@ from openscvx.algorithms import (
     AlgorithmState,
     AugmentedLagrangian,
     ConstantProximalWeight,
+    HyperParams,
     RampProximalWeight,
 )
 from openscvx.algorithms.base import CandidateIterate
 from openscvx.algorithms.weights import Weights
 from openscvx.config import Config, DevConfig, PropagationConfig, SimConfig
 from openscvx.lowered.jax_constraints import LoweredJaxConstraints
+
+
+class _Hyper(HyperParams):
+    """The one knob every autotuner under test reads from ``state.hyper``."""
+
+    lam_cost_drop: int = -1
+
 
 # -- Tiny problem fixture ---------------------------------------------------
 
@@ -75,7 +83,15 @@ def state(settings, weights):
     # Pre-populate x_prop / x_prop_plus so the autotuner's "previous iterate"
     # branch (k > 1) has finite values to compare against. The actual numbers
     # are arbitrary — we only check jit vs. bare equivalence.
-    base = AlgorithmState.from_settings(settings, weights)
+    base = AlgorithmState.from_settings(
+        settings,
+        weights,
+        ep_tr=1e-4,
+        ep_vb=1e-4,
+        ep_vc=1e-8,
+        k_max=200,
+        hyper=_Hyper(),
+    )
     return base.replace(
         x_prop=jnp.asarray(np.array([[0.1, 0.1], [0.9, 0.9]])),
         x_prop_plus=jnp.asarray(np.array([[0.0, 0.0], [0.1, 0.1], [0.9, 0.9]])),
@@ -102,16 +118,19 @@ def empty_constraints():
 
 
 def _states_match(a: AlgorithmState, b: AlgorithmState) -> None:
-    for name in AlgorithmState._FIELDS:
-        if name == "_FIELDS":
-            continue
-        np.testing.assert_allclose(
-            np.asarray(getattr(a, name)),
-            np.asarray(getattr(b, name)),
-            err_msg=f"field {name!r} diverged between jit'd and bare call",
+    # Leaf-wise over the pytree (the HyperParams-valued ``hyper`` field
+    # recurses); tree_map also asserts the two treedefs agree.
+    jax.tree_util.tree_map_with_path(
+        lambda path, leaf_a, leaf_b: np.testing.assert_allclose(
+            np.asarray(leaf_a),
+            np.asarray(leaf_b),
+            err_msg=f"leaf {jax.tree_util.keystr(path)} diverged between jit'd and bare call",
             rtol=1e-7,
             atol=1e-7,
-        )
+        ),
+        a,
+        b,
+    )
 
 
 def _candidate_to_dict(c: CandidateIterate) -> dict:

@@ -16,6 +16,7 @@ follow, along with two state containers used during the SCP iteration:
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from dataclasses import fields as dc_fields
 from dataclasses import replace as dc_replace
 from enum import IntEnum
 from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
@@ -167,6 +168,79 @@ def adaptive_state_code_to_str(code: Union[int, jnp.ndarray, np.ndarray]) -> str
 
 
 # ---------------------------------------------------------------------------
+# HyperParams — typed autotuner hyperparameter container
+# ---------------------------------------------------------------------------
+
+
+class HyperParams:
+    """Base for autotuner hyperparameter containers.
+
+    Subclassing is the entire integration. Declare each tunable knob as an
+    annotated field with its default — bare annotations, no ``@dataclass``
+    decorator — and the base class does the rest:
+
+    * applies the frozen-dataclass transform, so instances are immutable
+      value objects updated with :func:`dataclasses.replace`;
+    * registers the subclass as a JAX pytree (and for ``jax.export`` treedef
+      serialization), so instances ride :attr:`AlgorithmState.hyper` through
+      ``jit`` / ``vmap`` / the exported batched ``solve_batched`` artifact;
+    * wires dtype handling off the field annotations when
+      :meth:`AlgorithmState.from_settings` snapshots the instance onto the
+      state — ``int`` fields get the iteration counter's dtype, ``float``
+      fields the problem float dtype. Any other annotation is rejected at
+      class definition.
+
+    Example::
+
+        class MyHyper(HyperParams):
+            ramp: float = 2.0
+            drop: int = -1
+
+    The empty base is the "no declared hyperparameters" container: it
+    flattens to zero pytree leaves.
+    """
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # ``__init_subclass__`` runs before any decorator on the subclass
+        # could, so the transform must happen here — which is exactly what
+        # lets authors skip the dataclass and pytree mechanics entirely.
+        dataclass(frozen=True)(cls)
+        for fld in dc_fields(cls):
+            # fld.type is a string under postponed annotation evaluation
+            # (``from __future__ import annotations``); accept both forms.
+            if fld.type not in (int, float, "int", "float"):
+                raise TypeError(
+                    f"{cls.__name__}.{fld.name}: HyperParams fields must be "
+                    f"annotated int or float (got {fld.type!r}) — the "
+                    f"annotation decides the dtype the knob gets on "
+                    f"AlgorithmState.hyper."
+                )
+        jax.tree_util.register_dataclass(cls)
+        export.register_pytree_node_serialization(
+            cls,
+            serialized_name=f"{cls.__module__}.{cls.__qualname__}",
+            serialize_auxdata=lambda aux: b"",
+            deserialize_auxdata=lambda data: (),
+        )
+
+
+# The base itself is a zero-field frozen dataclass and a zero-leaf pytree, so
+# the shared ``HyperParams()`` default on ``AutotuningBase`` is a valid value
+# for ``AlgorithmState.hyper``. Auxdata of a ``register_dataclass`` node is
+# the (empty) tuple of meta-field values, hence ``()`` — not ``None`` — on
+# deserialize; same for the subclasses registered above.
+dataclass(frozen=True)(HyperParams)
+jax.tree_util.register_dataclass(HyperParams)
+export.register_pytree_node_serialization(
+    HyperParams,
+    serialized_name="openscvx.algorithms.base.HyperParams",
+    serialize_auxdata=lambda aux: b"",
+    deserialize_auxdata=lambda data: (),
+)
+
+
+# ---------------------------------------------------------------------------
 # Autotuning base class
 # ---------------------------------------------------------------------------
 
@@ -189,6 +263,30 @@ class AutotuningBase(ABC):
     converts that back to a human-readable label only on the Python-loop
     printing path.
 
+    **Declaring tunable hyperparameters.** A numeric knob a user might sweep
+    (a penalty ramp, a relaxation iteration) must not be read off ``self``
+    inside ``update_weights`` — a Python attribute is baked into the trace
+    and invisible to every override channel. Instead, declare it on a
+    :class:`HyperParams` subclass, assign an instance to ``self.hyper``, and
+    read it from ``state.hyper``::
+
+        class MyHyper(HyperParams):
+            ramp: float = 2.0
+
+        class MyAutotuner(AutotuningBase):
+            def __init__(self, ramp: float = 2.0):
+                self.hyper = MyHyper(ramp=ramp)
+
+            def update_weights(self, state, ...):
+                ...state.hyper.ramp...
+
+    The declaration is the registration: the field becomes a per-solve
+    override (``solve_jax(algorithm={"ramp": ...})``), a batchable sweep
+    target (``solve_batched(algorithm={"ramp": jnp.linspace(...)})``), and a
+    runtime input of the exported batched artifact — with zero core edits.
+    Structural choices that select code paths (flags, enums) stay ordinary
+    attributes; they are part of the traced program, not data.
+
     Class Attributes:
         COLUMNS: List of Column specs for autotuner-specific metrics to display.
             Subclasses override this to add their own columns.
@@ -199,9 +297,17 @@ class AutotuningBase(ABC):
             bodies (a handful of XLA ops) override to ``False`` so the SCP loop
             calls ``update_weights`` directly — JAX's eager dispatch is cheaper
             than the JIT'd closure's pytree-flatten overhead for those cases.
+        hyper: The autotuner's declared hyperparameters — a
+            :class:`HyperParams` instance carrying plain-Python defaults
+            (the empty base when it declares none). Snapshotted onto
+            ``AlgorithmState.hyper`` with array leaves (see
+            :meth:`AlgorithmState.from_settings`; ``int`` fields get ``k``'s
+            integer dtype, ``float`` fields the float dtype), which is what
+            ``update_weights`` reads at trace time.
     """
 
     COLUMNS: List[Column] = []
+    hyper: HyperParams = HyperParams()
     # Governs only the Python-loop ``Problem.solve()`` path. Once the SCP body
     # lives inside ``lax.while_loop`` (see ``plans/batchable-problem.md``),
     # ``update_weights`` is one node in the outer compiled graph and the inner
@@ -214,22 +320,21 @@ class AutotuningBase(ABC):
         The exported batched loop bakes in ``update_weights`` and every numeric
         parameter that steers it (penalty ramps, acceptance thresholds, weight
         clips). The default hashes the concrete class plus all instance
-        attributes — sufficient because autotuner parameters are plain scalars.
-        Folded in by the algorithm's ``_hash_into`` (e.g.
+        attributes — sufficient because autotuner parameters are plain
+        scalars. ``hyper`` is excluded: declared hyperparameters ride
+        ``AlgorithmState.hyper`` as runtime inputs, so one artifact serves
+        every setting of them (the same reasoning that keeps the ``ep_*``
+        thresholds out of the algorithm's hash). Folded in by the algorithm's
+        ``_hash_into`` (e.g.
         :meth:`~openscvx.algorithms.scvx.penalized_trust_region.PenalizedTrustRegion._hash_into`);
         mirrors the symbolic ``_hash_into`` protocol.
-
-        Caveat: the ``vars(self)`` sweep hashes *every* instance attribute, so a
-        subclass that stashes an iteration-count- or ``k_max``-derived field
-        would silently re-introduce the double-count that the algorithm's own
-        ``_hash_into`` deliberately avoids (the loop bound is keyed once, on the
-        assembler's resolved ``k_max``). Keep such fields out of the autotuner,
-        or override this method to exclude them.
         """
         from openscvx.utils.caching import hash_value_into
 
         hasher.update(type(self).__name__.encode())
         for name in sorted(vars(self)):
+            if name == "hyper":
+                continue
             hasher.update(name.encode())
             hash_value_into(hasher, getattr(self, name))
 
@@ -386,9 +491,10 @@ class AlgorithmState:
         lam_cost: Cost weight, shape ``(n_states,)``.
         lam_cost_init: Initial cost weight (``weights.lam_cost`` broadcast to
             ``(n_states,)``). Used by autotuners as the "reset" value during
-            early iterations and on the ``state.k <= lam_cost_drop`` branch.
-            Lives on the pytree (not closure-captured) so weight mutations
-            between solves propagate through the JIT'd update_weights.
+            early iterations and on the ``state.k <= hyper.lam_cost_drop``
+            branch. Lives on the pytree (not closure-captured) so weight
+            mutations between solves propagate through the JIT'd
+            update_weights.
         lam_vb_nodal: Nodal virtual-buffer weights, shape ``(N, n_nodal)``.
         lam_vb_cross: Cross-node virtual-buffer weights, shape ``(n_cross,)``.
         k: Iteration counter (starts at 1).
@@ -410,6 +516,23 @@ class AlgorithmState:
         x_term_pin: Terminal-state boundary condition, shape ``(n_states,)``.
             ``jnp.nan`` where the state is not pinned at tf (``final_type`` is
             not ``"Fix"``).
+        ep_tr: Convergence threshold on ``J_tr`` (scalar). Carried on the
+            pytree — like ``x_init_pin`` / ``lam_cost_init`` — so the SCP loop
+            reads it as a runtime input: per-solve overrides and ``jax.vmap``
+            sweeps need no retrace, and one exported ``solve_batched`` artifact
+            serves every tolerance setting.
+        ep_vb: Convergence threshold on ``J_vb`` (scalar).
+        ep_vc: Convergence threshold on ``J_vc`` (scalar).
+        k_max: SCP iteration cap (scalar, ``k``'s integer dtype). The loop
+            runs while ``k <= k_max``; a traced bound is valid inside
+            ``lax.while_loop``, so the cap is per-solve and batchable too.
+        hyper: Autotuner-declared hyperparameters — an instance of the
+            autotuner's :class:`HyperParams` subclass with scalar array
+            leaves (the empty ``HyperParams()`` when it declares none).
+            Seeded from :attr:`AutotuningBase.hyper`; ``update_weights``
+            reads its knobs here (e.g. ``state.hyper.lam_cost_drop``) so
+            each is a per-solve override and a batchable sweep target like
+            any other field.
     """
 
     x: jnp.ndarray
@@ -433,6 +556,11 @@ class AlgorithmState:
     adaptive_state_code: jnp.ndarray
     x_init_pin: jnp.ndarray
     x_term_pin: jnp.ndarray
+    ep_tr: jnp.ndarray
+    ep_vb: jnp.ndarray
+    ep_vc: jnp.ndarray
+    k_max: jnp.ndarray
+    hyper: HyperParams
 
     # Field order is the source of truth for tree_flatten / tree_unflatten;
     # keep _FIELDS in sync with the dataclass field declarations above.
@@ -458,6 +586,11 @@ class AlgorithmState:
         "adaptive_state_code",
         "x_init_pin",
         "x_term_pin",
+        "ep_tr",
+        "ep_vb",
+        "ep_vc",
+        "k_max",
+        "hyper",
     )
 
     def replace(self, **changes) -> "AlgorithmState":
@@ -477,6 +610,12 @@ class AlgorithmState:
         cls,
         settings: "Config",
         weights: "Weights",
+        *,
+        ep_tr: float,
+        ep_vb: float,
+        ep_vc: float,
+        k_max: int,
+        hyper: HyperParams,
     ) -> "AlgorithmState":
         """Construct the initial iterate from configuration.
 
@@ -484,7 +623,21 @@ class AlgorithmState:
         the diagnostic scalars to zero / :py:attr:`AdaptiveStateCode.INITIAL`.
         ``x_prop`` and ``x_prop_plus`` are zero-initialized; the SCP algorithm
         fills them at the first discretization step.
+
+        The SCP loop constants (``ep_tr`` / ``ep_vb`` / ``ep_vc`` / ``k_max``)
+        and the autotuner's declared hyperparameters (*hyper*, from
+        :attr:`AutotuningBase.hyper`) are snapshotted onto the pytree here —
+        the caller passes them off the algorithm and its autotuner (see
+        ``Problem._default_state``), and per-solve overrides land via
+        ``state.replace``.
         """
+        shadowed = sorted({fld.name for fld in dc_fields(hyper)} & set(cls._FIELDS))
+        if shadowed:
+            raise ValueError(
+                f"Autotuner hyperparameter(s) {shadowed} shadow AlgorithmState "
+                f"fields; rename the HyperParams fields so overrides stay "
+                f"unambiguous."
+            )
         n = settings.sim.n
         n_states = settings.sim.n_states
         n_controls = settings.sim.n_controls
@@ -507,6 +660,14 @@ class AlgorithmState:
 
         def put(arr):
             return jax.device_put(arr, device)
+
+        def hyper_leaf(fld):
+            # int knobs (e.g. lam_cost_drop) share k's dtype so comparisons
+            # against the iteration counter don't promote; floats follow the
+            # problem's float dtype. The annotation is the rule — validated
+            # when the HyperParams subclass is defined.
+            dtype = i if fld.type in (int, "int") else f
+            return put(jnp.asarray(getattr(hyper, fld.name), dtype=dtype))
 
         lam_vc_array = np.ones((n - 1, n_states)) * weights.lam_vc
         lam_prox_array = np.ones((n, n_total)) * weights.lam_prox
@@ -549,6 +710,12 @@ class AlgorithmState:
             adaptive_state_code=put(jnp.asarray(int(AdaptiveStateCode.INITIAL), dtype=i)),
             x_init_pin=put(jnp.asarray(x_init_pin, dtype=f)),
             x_term_pin=put(jnp.asarray(x_term_pin, dtype=f)),
+            ep_tr=put(jnp.asarray(ep_tr, dtype=f)),
+            ep_vb=put(jnp.asarray(ep_vb, dtype=f)),
+            ep_vc=put(jnp.asarray(ep_vc, dtype=f)),
+            # k_max shares k's dtype so `k <= k_max` compares without promotion.
+            k_max=put(jnp.asarray(k_max, dtype=i)),
+            hyper=dc_replace(hyper, **{fld.name: hyper_leaf(fld) for fld in dc_fields(hyper)}),
         )
 
 

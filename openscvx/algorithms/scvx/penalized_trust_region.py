@@ -33,6 +33,7 @@ from ..base import (
     adaptive_state_code_to_str,
 )
 from ..weights import Weights
+from .iteration import _converged
 
 if TYPE_CHECKING:
     import hashlib
@@ -175,24 +176,22 @@ class PenalizedTrustRegion(Algorithm):
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Contribute this algorithm's identity to the ``solve_batched`` cache key.
 
-        The exported batched loop bakes in the convergence thresholds, the
-        initial penalty weights, and the autotuner's update rule — none of which
-        the symbolic problem hash covers. Each piece is folded in next to where
-        it lives (weights via their fields, the autotuner via its own
-        ``_hash_into``), mirroring the symbolic ``_hash_into`` protocol so a new
-        field is hashed where it is added.
+        The exported batched loop bakes in the initial penalty weights and the
+        autotuner's update rule — none of which the symbolic problem hash
+        covers. Each piece is folded in next to where it lives (weights via
+        their fields, the autotuner via its own ``_hash_into``), mirroring the
+        symbolic ``_hash_into`` protocol so a new field is hashed where it is
+        added.
 
-        The iteration cap ``k_max`` is deliberately *not* folded in here: the
-        loop is built at a *resolved* bound (a ``solve_batched(max_iters=...)``
-        override supersedes ``self.k_max``), so the assembler stamps that
-        resolved value to avoid both a stale read and spurious invalidation when
-        ``self.k_max`` changes but the caller always overrides it.
+        The convergence thresholds and the iteration cap ``k_max`` are
+        deliberately *not* folded in here: they ride the
+        :class:`AlgorithmState` pytree as runtime inputs (``state.ep_tr`` /
+        ``state.k_max``), so one exported artifact serves every tolerance and
+        ``max_iters`` setting.
         """
         from openscvx.utils.caching import hash_value_into
 
         hasher.update(type(self).__name__.encode())
-        for value in (self.ep_tr, self.ep_vb, self.ep_vc):
-            hash_value_into(hasher, value)
         w = self.weights
         for value in (
             w.lam_prox,
@@ -320,12 +319,10 @@ class PenalizedTrustRegion(Algorithm):
 
         self._emitter(emission_data)
 
-        converged = (
-            (scalars["J_tr"] < self.ep_tr)
-            and (scalars["J_vb"] < self.ep_vb)
-            and (scalars["J_vc"] < self.ep_vc)
-        )
-        return next_state, converged
+        # Same convergence test the lax.while_loop path uses, reading the
+        # thresholds off the state pytree (synced from this algorithm's
+        # ep_* attributes by Problem._sync_scp_constants at solve() time).
+        return next_state, bool(_converged(next_state))
 
     def citation(self) -> List[str]:
         """Return BibTeX citations for the PTR algorithm."""

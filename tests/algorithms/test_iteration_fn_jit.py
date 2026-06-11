@@ -30,14 +30,20 @@ def test_jit_matches_bare():
 
     assert isinstance(jit_state, AlgorithmState)
     assert isinstance(jit_diag, IterationDiagnostics)
-    for field in AlgorithmState._FIELDS:
-        np.testing.assert_allclose(
-            np.asarray(getattr(jit_state, field)),
-            np.asarray(getattr(bare_state, field)),
+    # Leaf-wise over the pytree (the HyperParams-valued ``hyper`` field
+    # recurses); tree_map also asserts the two treedefs agree.
+    jax.tree_util.tree_map_with_path(
+        lambda path, jit_leaf, bare_leaf: np.testing.assert_allclose(
+            np.asarray(jit_leaf),
+            np.asarray(bare_leaf),
             atol=1e-8,
             rtol=1e-8,
             equal_nan=True,
-        )
+            err_msg=f"leaf {jax.tree_util.keystr(path)} diverged between jit'd and bare call",
+        ),
+        jit_state,
+        bare_state,
+    )
     for field in ("cost", "J_lin", "V", "W", "TR", "VC"):
         np.testing.assert_allclose(
             np.asarray(getattr(jit_diag, field)),

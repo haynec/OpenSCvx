@@ -60,7 +60,7 @@ that one difference is the whole point.
   no outer `vmap` rule (`call_exported` cannot be batched), so an exported
   artifact can never be re-vmapped, and every fresh process re-traces and
   re-compiles the entire loop.
-* `solve_batched(x0_stack, xf_stack)` — *the library* owns the axis. The vmap
+* `solve_batched(x_initial=x0_batch)` — *the library* owns the axis. The vmap
   is applied **inside** the method, before any export, so the whole loop lowers
   to ordinary batched XLA ops and serializes cleanly. Under
   `save_compiled=True` it is written to the solver cache on the first run and
@@ -74,8 +74,117 @@ problem.initialize()
 
 # First process: traces, exports, writes <cache>/compiled_solve_batched_<hash>.jax
 # Later processes: deserialize-and-.call, no compile.
-batched = problem.solve_batched(x0_stack, xf_stack, params)
+batched = problem.solve_batched(x_initial=x0_batch, parameters=params)
 # batched.x.shape == (B, N, n_states) — same pytree jax.vmap(solve_jax) returns.
+```
+
+### One rule: add a leading batch axis to whatever varies
+
+`solve_batched` takes exactly `solve_jax`'s arguments. Every batchable input
+has a *declared* (unbatched) shape the library knows — `(n_x,)` for the
+boundary pins, `(N, n_x)` / `(N, n_u)` for the trajectory guesses, the
+parameter's stored shape for each parameter, and `()` for the SCP
+hyperparameters. An argument that matches its declared shape is **shared** by
+every batch element; one with exactly one extra leading axis is **batched**
+along it. Rank against the declared shape decides — never the leading-axis
+value — so a shared `(B, n)` matrix parameter is never misread as batched.
+(`B` in these shape patterns is plain notation for the batch size, not
+syntax: it is never passed anywhere — like `jax.vmap`, the library reads it
+off the leading axis of whatever you batched and cross-checks that all
+batched inputs agree.)
+
+```python
+results = problem.solve_batched(
+    x_initial=x0_batch,                  # (B, n_x): rank = declared+1 -> batched
+    parameters={
+        "gate_center": centers,          # (B, 3) vs declared (3,)  -> batched
+        "gate_radius": 0.5,              # declared shape           -> shared
+    },
+)
+```
+
+For the rare entry the rank rule cannot express — e.g. batching a declared
+rank-1 parameter element-wise — pass an explicit `in_axes` in `jax.vmap`'s
+vocabulary, including its prefix semantics (`0` = batched along the leading
+axis, `None` = shared; a prefix applies to everything below it; partial specs
+fall back to the rank rule):
+
+```python
+results = problem.solve_batched(
+    parameters={"weights": w},           # (B,) is also w's declared shape...
+    in_axes={"parameters": {"weights": 0}},  # ...so say "batched" explicitly
+)
+
+results = problem.solve_batched(parameters=params, in_axes={"parameters": 0})
+# prefix: every passed parameter is batched, exactly like jax.vmap's
+# pytree-prefix in_axes; a bare in_axes=0 batches every passed input.
+```
+
+One deliberate divergence from `jax.vmap`: the *default* is "infer by rank",
+not `0`-everything — an all-shared batched solve has no batch axis to find,
+and inference is what makes mixed shared/batched dicts ergonomic.
+
+### Hyperparameter sweeps: the `algorithm` dict
+
+Solve-time mirrors construction-time: the `Problem` constructor configures
+the SCP algorithm with a dict (`algorithm={"ep_tr": 1e-5, "lam_prox": 1.0}`),
+and the solve methods take the same box with the same names as per-solve,
+batchable inputs. Every `AlgorithmState` field is a runtime input riding the
+state pytree, and the `algorithm` dict reaches any of them by name —
+convergence thresholds (`ep_tr` / `ep_vb` / `ep_vc`), penalty weights
+(`lam_prox` / `lam_vc` / `lam_cost`), the seed iterate, autotuner
+hyperparameters. There is no whitelist: the field declaration is the
+registration, and the `AlgorithmState` attribute docs are the reference.
+(`max_iters` survives as a named kwarg — sugar for `algorithm={"k_max":
+...}`; passing both raises, as does an entry that shadows any other named
+kwarg's field. Construction-only keys of the constructor dict — `autotuner`,
+`t_max` — raise pointing back at the constructor.)
+
+* On `solve_jax`, each value matches the field's shape, or is a scalar
+  broadcast to it: `solve_jax(algorithm={"ep_tr": 1e-6, "lam_prox": 2.0})`
+  retraces nothing.
+* On `solve_batched`, each value follows the rank rule against the field's
+  shape, plus two **fill** forms for array-shaped fields: a scalar (shared)
+  or a `(B,)` vector (one scalar per element, broadcast to the field shape).
+  Exact shapes win when both parse; `in_axes={"algorithm": {name: 0}}`
+  forces the per-element reading. All against one cached artifact:
+
+```python
+B = 8  # batch size. Just an int for building the arrays below — there is no
+       # B argument; solve_batched infers it from the leading-axis lengths.
+sweep = problem.solve_batched(algorithm={"ep_tr": jnp.logspace(-6, -3, B)})
+weights = problem.solve_batched(algorithm={"lam_prox": jnp.array([0.5, 1.0, 4.0])})
+budgets = problem.solve_batched(max_iters=jnp.array([5, 10, 20]))  # per-element caps
+```
+
+The batch runs until its slowest element converges or exhausts its own cap;
+finished elements are frozen, not re-iterated, so each element matches the
+corresponding single `solve_jax` run.
+
+**New autotuners batch for free.** An autotuner's tunable knobs follow the
+same derivation: declare them as fields on a `HyperParams` subclass — bare
+annotations, no decorator; subclassing applies the frozen-dataclass transform
+and the JAX pytree registration, and the annotation picks the dtype (`int`
+gets the iteration counter's, `float` the problem's) — assign an instance to
+`self.hyper`, and read `state.hyper.<field>` inside `update_weights` (see the
+`AutotuningBase` docstring). The declaration is the registration — each field
+immediately works as a `solve_jax` override, a `solve_batched` sweep target,
+and a runtime input of the exported artifact, with zero edits anywhere else:
+
+```python
+from openscvx.algorithms import AutotuningBase, HyperParams
+
+class MyHyper(HyperParams):
+    ramp: float = 2.0
+
+class MyAutotuner(AutotuningBase):
+    def __init__(self, ramp: float = 2.0):
+        self.hyper = MyHyper(ramp=ramp)
+
+    def update_weights(self, state, ...):
+        ...state.hyper.ramp...
+
+results = problem.solve_batched(algorithm={"ramp": jnp.linspace(1.5, 3.0, B)})
 ```
 
 Pick `solve_batched` when **cross-process cold-start dominates** — short-lived
@@ -111,15 +220,21 @@ object contributing through its own `_hash_into` (the same protocol the symbolic
 layer uses):
 
 * the convex backend class + its `solver_args`,
-* the algorithm + autotuner + convergence thresholds + initial weights,
+* the algorithm + autotuner + initial weights,
 * the discretizer scheme (class + hold type + ODE solver),
 * the state/control scaling matrices `inv_S_x` / `inv_S_u`,
-* the fixed batch size `B` (the artifact is exported at one `B`), and
+* the fixed batch size `B` (the artifact is exported at one `B`),
+* the per-parameter shared/batched split (baked into the `jax.vmap` program),
+  and
 * the JAX version (exported artifacts are not guaranteed to survive an
   incompatible jax bump).
 
-Change any of these — backend, a tolerance, `k_max`, a state bound — and you get
-a different cache path, so a stale artifact is never reused.
+Change any of these — backend, a penalty weight, a state bound, which
+parameters are batched — and you get a different cache path, so a stale
+artifact is never reused. Everything the `algorithm` dict can reach — convergence
+thresholds, `max_iters`, weights, autotuner hyperparameters — is deliberately
+*not* in the key: those are runtime inputs on the state pytree, so one
+artifact serves every setting of them.
 
 `examples/abstract/brachistochrone_batched.py` shows both paths side by side;
 re-running it is itself the cross-process demo.
@@ -158,10 +273,15 @@ problem.solve_jax(
     parameters=None,     # parameters dict for this solve; falls back to
                          #     ``self._parameters``
     *,
-    max_iters=None,      # SCP iteration cap; non-default rebuilds the
-                         #     cached ``lax.while_loop`` closure (one extra
-                         #     trace; subsequent calls at the same cap hit
-                         #     the cache)
+    x_guess=None,        # (N, n_x) state trajectory warm-start
+    u_guess=None,        # (N, n_u) control trajectory warm-start
+    max_iters=None,      # SCP iteration cap; sugar for algorithm={"k_max": ...};
+                         #     falls back to the configured k_max
+    algorithm=None,      # any AlgorithmState field by name (ep_tr, lam_prox,
+                         #     ...) — the constructor's algorithm-dict names;
+                         #     values match the field shape or fill it from a
+                         #     scalar. Runtime inputs on the state pytree — no
+                         #     value forces a retrace
 )
 ```
 

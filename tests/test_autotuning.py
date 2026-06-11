@@ -6,6 +6,9 @@ The autotuners now return a new :class:`AlgorithmState` pytree, so tests here
 assert on the *returned* state rather than mutation of an input.
 """
 
+import dataclasses
+
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -122,7 +125,15 @@ def weights():
 @pytest.fixture
 def algorithm_state(settings, weights):
     """Initial :class:`AlgorithmState` for the 3-node test problem."""
-    return AlgorithmState.from_settings(settings, weights)
+    return AlgorithmState.from_settings(
+        settings,
+        weights,
+        ep_tr=1e-4,
+        ep_vb=1e-4,
+        ep_vc=1e-8,
+        k_max=200,
+        hyper=AugmentedLagrangian().hyper,
+    )
 
 
 def _candidate_x_prop_plus(N: int = 3, n_x: int = 2) -> np.ndarray:
@@ -560,11 +571,16 @@ def test_update_scp_weights_initial_iteration(
 
 
 def test_update_scp_weights_cost_drop(settings, algorithm_state, empty_nodal_constraints, weights):
-    """Cost relaxation kicks in once ``state.k > lam_cost_drop``."""
+    """Cost relaxation kicks in once ``state.k > hyper.lam_cost_drop``."""
     autotuner = AugmentedLagrangian(lam_cost_drop=3, lam_cost_relax=0.8)
 
     # k=4 > lam_cost_drop=3, so lam_cost should be scaled by lam_cost_relax.
-    state = _seeded_state_for_k2(algorithm_state).replace(k=jnp.asarray(4, dtype=jnp.int32))
+    # The declared knob is read from state.hyper, so seed it from the
+    # autotuner's hyper container (in production from_settings does this).
+    state = _seeded_state_for_k2(algorithm_state).replace(
+        k=jnp.asarray(4, dtype=jnp.int32),
+        hyper=jax.tree_util.tree_map(jnp.asarray, autotuner.hyper),
+    )
     lam_cost_prev = np.asarray(state.lam_cost)
 
     candidate = CandidateIterate()
@@ -838,26 +854,30 @@ def test_algorithm_autotuner_configurable():
     algorithm = PenalizedTrustRegion()
     autotuner = algorithm.autotuner
     assert isinstance(autotuner, AugmentedLagrangian)
-    assert hasattr(autotuner, "rho_init")
-    assert hasattr(autotuner, "rho_max")
     assert hasattr(autotuner, "lam_prox_min")
     assert hasattr(autotuner, "lam_prox_max")
     assert hasattr(autotuner, "lam_vc_max")
-    assert hasattr(autotuner, "lam_cost_drop")
     assert hasattr(autotuner, "lam_cost_relax")
-    autotuner.rho_max = 1e7
-    assert autotuner.rho_max == 1e7
+    # Declared hyperparameters live on the frozen HyperParams container (and
+    # ride state.hyper); updates go through dataclasses.replace.
+    assert {f.name for f in dataclasses.fields(autotuner.hyper)} == {
+        "rho_init",
+        "rho_max",
+        "lam_cost_drop",
+    }
+    autotuner.hyper = dataclasses.replace(autotuner.hyper, rho_max=1e7)
+    assert autotuner.hyper.rho_max == 1e7
 
 
 def test_custom_autotuner_instance():
     """Custom autotuner instance can be passed to PenalizedTrustRegion."""
     custom_autotuner = AugmentedLagrangian()
-    custom_autotuner.rho_max = 1e7
+    custom_autotuner.hyper = dataclasses.replace(custom_autotuner.hyper, rho_max=1e7)
     custom_autotuner.lam_prox_max = 1e6
     custom_autotuner.lam_vc_max = 1e6
     algorithm = PenalizedTrustRegion(autotuner=custom_autotuner)
     assert algorithm.autotuner is custom_autotuner
-    assert algorithm.autotuner.rho_max == 1e7
+    assert algorithm.autotuner.hyper.rho_max == 1e7
     assert algorithm.autotuner.lam_prox_max == 1e6
     assert algorithm.autotuner.lam_vc_max == 1e6
 
@@ -868,14 +888,14 @@ def test_augmented_lagrangian_exported():
 
     # Should be able to import directly
     auto_tuner = ox.AugmentedLagrangian()
-    assert hasattr(auto_tuner, "rho_max")
+    assert hasattr(auto_tuner.hyper, "rho_max")
     assert hasattr(auto_tuner, "lam_prox_max")
     assert hasattr(auto_tuner, "lam_vc_max")
 
     # Should be able to modify parameters
-    auto_tuner.rho_max = 1e7
+    auto_tuner.hyper = dataclasses.replace(auto_tuner.hyper, rho_max=1e7)
     auto_tuner.lam_prox_max = 1e6
-    assert auto_tuner.rho_max == 1e7
+    assert auto_tuner.hyper.rho_max == 1e7
     assert auto_tuner.lam_prox_max == 1e6
 
 
@@ -1021,7 +1041,8 @@ def test_constant_proximal_weight_uses_relaxed_cost_after_cost_drop(
     """After cost_drop, ConstantProximalWeight scales lam_cost by lam_cost_relax."""
     autotuner = ConstantProximalWeight(lam_cost_drop=5, lam_cost_relax=0.9)
     state = algorithm_state.replace(
-        k=jnp.asarray(autotuner.lam_cost_drop + 1, dtype=jnp.int32),
+        k=jnp.asarray(autotuner.hyper.lam_cost_drop + 1, dtype=jnp.int32),
+        hyper=jax.tree_util.tree_map(jnp.asarray, autotuner.hyper),
     )
     initial_lam_cost = np.asarray(state.lam_cost)
 

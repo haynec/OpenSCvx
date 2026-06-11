@@ -19,12 +19,20 @@ from openscvx.utils.printing import (
     color_adaptive_state,
 )
 
-from ..base import AdaptiveStateCode, AutotuningBase
+from ..base import AdaptiveStateCode, AutotuningBase, HyperParams
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
     from ..base import AlgorithmState, CandidateIterate
+
+
+class AugmentedLagrangianHyper(HyperParams):
+    """Declared hyperparameters for :class:`AugmentedLagrangian`."""
+
+    rho_init: float = 1.0
+    rho_max: float = 1e2
+    lam_cost_drop: int = -1
 
 
 class AugmentedLagrangian(AutotuningBase):
@@ -80,7 +88,12 @@ class AugmentedLagrangian(AutotuningBase):
         """Initialize Augmented Lagrangian autotuning parameters.
 
         All parameters have defaults and can be modified after instantiation
-        via attribute access (e.g., ``autotuner.rho_max = 1e7``).
+        via attribute access (e.g., ``autotuner.lam_prox_max = 1e6``); the
+        declared hyperparameters (``rho_init`` / ``rho_max`` /
+        ``lam_cost_drop``) live on the frozen ``hyper`` container instead
+        (``autotuner.hyper = dataclasses.replace(autotuner.hyper,
+        rho_max=1e7)``) and are also per-solve overrides — see
+        :class:`AutotuningBase`.
 
         Args:
             rho_init: Initial penalty parameter for constraints. Defaults to 1.0.
@@ -106,8 +119,11 @@ class AugmentedLagrangian(AutotuningBase):
             lam_cost_relax: Factor applied to lam_cost after lam_cost_drop.
                 Defaults to 1.0.
         """
-        self.rho_init = rho_init
-        self.rho_max = rho_max
+        self.hyper = AugmentedLagrangianHyper(
+            rho_init=rho_init,
+            rho_max=rho_max,
+            lam_cost_drop=lam_cost_drop,
+        )
         self.gamma_1 = gamma_1
         self.gamma_2 = gamma_2
         self.eta_0 = eta_0
@@ -118,7 +134,6 @@ class AugmentedLagrangian(AutotuningBase):
         self.lam_vc_max = lam_vc_max
         self.lam_prox_min = lam_prox_min
         self.lam_prox_max = lam_prox_max
-        self.lam_cost_drop = lam_cost_drop
         self.lam_cost_relax = lam_cost_relax
 
     # -----------------------------------------------------------------------
@@ -244,12 +259,14 @@ class AugmentedLagrangian(AutotuningBase):
         )
         J_nonlin = nonlin_cost + nonlin_pen + nodal_pen
 
-        # Cost relaxation: when state.k > lam_cost_drop, scale state.lam_cost;
-        # otherwise reset to the algorithm's initial weight (carried on the
-        # pytree as state.lam_cost_init, broadcast at from_settings()). Scalar
+        # Cost relaxation: when state.k > hyper.lam_cost_drop, scale
+        # state.lam_cost; otherwise reset to the algorithm's initial weight
+        # (carried on the pytree as state.lam_cost_init, broadcast at
+        # from_settings()). Both constants ride the pytree so per-solve
+        # overrides and vmap sweeps reach the traced body. Scalar
         # lam_cost_relax preserves the user-specified per-state weight ratios.
         lam_cost_next = jnp.where(
-            state.k > self.lam_cost_drop,
+            state.k > state.hyper.lam_cost_drop,
             state.lam_cost * self.lam_cost_relax,
             state.lam_cost_init,
         )

@@ -29,11 +29,13 @@ def test_make_solve_loop_matches_python_solve():
     solve_k = int(prob.state.k)
 
     # lax.while_loop over the fused body, from the same fresh initial iterate.
+    # The convergence thresholds and iteration cap ride the state pytree
+    # (snapshotted from the algorithm at reset()), so the loop takes no
+    # constants.
     prob.reset()
     state0 = prob.state
     iteration_fn = build_iteration_fn(prob)
-    algo = prob.algorithm
-    solve_loop = make_solve_loop(iteration_fn, algo.ep_tr, algo.ep_vb, algo.ep_vc, algo.k_max)
+    solve_loop = make_solve_loop(iteration_fn)
     loop_state = solve_loop(state0, prob._parameters)
 
     assert int(loop_state.k) == solve_k

@@ -6,7 +6,7 @@ starting x-coordinate — and contrasts the two batching entry points:
 * ``jax.vmap(problem.solve_jax)`` — the caller owns the batch axis. Maximally
   idiomatic, composes with ``grad`` / ``scan``, but in-process JIT only: every
   fresh process re-traces and re-compiles the whole SCP loop.
-* ``problem.solve_batched(x0_stack, xf_stack)`` — the library owns the batch
+* ``problem.solve_batched(x_initial=...)`` — the library owns the batch
   axis, so the whole vmapped loop is a single function that ``jax.export`` can
   serialize. Under ``save_compiled=True`` it is written to the solver cache on
   the first run and deserialized on later runs, skipping that compile. Reach
@@ -140,16 +140,28 @@ if __name__ == "__main__":
     # The same batched solve, but ``solve_batched`` owns the vmap so the whole
     # loop is one exportable artifact. Under ``save_compiled=True`` it lands in
     # the solver cache on the first run; re-run this script (a fresh process) to
-    # see it deserialized instead of recompiled. ``xf`` is shared across the
-    # batch, so broadcast the default terminal pin to the same leading axis.
+    # see it deserialized instead of recompiled. One rule: ``x_initial`` is
+    # ``(B, n_x)`` — one extra leading axis — so it is batched; the terminal
+    # pin is omitted, so every element shares the default.
     export_problem = build_problem()
     export_problem.settings.sim.save_compiled = True
     export_problem.initialize()
 
-    x_term_stack = jnp.broadcast_to(export_problem.state.x_term_pin, x_initial_stack.shape)
-    batched = export_problem.solve_batched(x_initial_stack, x_term_stack)
+    batched = export_problem.solve_batched(x_initial=x_initial_stack)
 
     print(f"\nsolve_batched (save_compiled=True) over {x_initial_stack.shape[0]} ICs:")
     print(f"  result.x.shape:   {batched.x.shape}")
     print(f"  result.t_final:   {np.asarray(batched.t_final).reshape(-1)}")
     print(f"  result.converged: {np.asarray(batched.converged)}")
+
+    # Algorithm knobs batch by the same rule, through the `algorithm` dict —
+    # the same names as the Problem constructor's algorithm config. ep_tr is
+    # a scalar field, so a (B,) vector sweeps the convergence tolerance per
+    # element — same artifact, no recompile, since the knobs are runtime
+    # inputs on the state pytree. The batch size is never passed: it is read
+    # off the array's leading axis (4 tolerances -> B = 4).
+    sweep = export_problem.solve_batched(
+        algorithm={"ep_tr": jnp.logspace(-4, -1, 4), "ep_vc": 1e-7}
+    )
+    print(f"  ep_tr sweep t_final:   {np.asarray(sweep.t_final).reshape(-1)}")
+    print(f"  ep_tr sweep converged: {np.asarray(sweep.converged)}")
