@@ -1172,6 +1172,9 @@ class Problem:
         # if ``initialize()`` is invoked twice.
         self._solve_loop_fn = None
         self._solve_loop_k_max = None
+        self._solve_batched_fn = None
+        self._solve_batched_key = None
+        self._solve_batched_is_exported = False
         scp_phases = make_scp_iteration(
             dis_continuous=discretization_solver,
             dis_impulsive=discretization_solver_impulsive,
@@ -1189,6 +1192,24 @@ class Problem:
             complete_iteration=jax.jit(scp_phases.complete_iteration),
         )
         self._iteration_fn = timed_phases.iteration_fn
+        # Sibling body for :meth:`solve_batched`'s internal ``vmap``. Under
+        # ``save_compiled`` the inner solvers above are ``jax.export`` wrappers
+        # that can't be vmapped, so rebuild over plain-``jax.jit`` solvers; the
+        # whole vmapped loop is exported as one artifact instead. When
+        # ``save_compiled=False`` the inner solvers are already jit, so reuse
+        # ``_iteration_fn`` rather than recompile the dynamics (§3, Q3).
+        if self.settings.sim.save_compiled and not self.settings.dev.debug:
+            scp_phases_inner = make_scp_iteration(
+                dis_continuous=jax.jit(discretization_solver_raw),
+                dis_impulsive=jax.jit(discretization_solver_impulsive_raw),
+                jax_constraints=self._compiled_constraints,
+                solver_callback=self._solver.iteration_callback(),
+                autotuner=self._algorithm.autotuner,
+                settings=self.settings,
+            )
+            self._iteration_fn_jit_inner = jax.jit(scp_phases_inner.iteration_fn)
+        else:
+            self._iteration_fn_jit_inner = self._iteration_fn
         self._algorithm.initialize(
             self._iteration_fn,
             self.emitter_function,
