@@ -96,15 +96,15 @@ def empty_constraints():
 
 @pytest.fixture
 def candidate():
-    c = CandidateIterate()
-    c.x = jnp.asarray(np.array([[0.0, 0.0], [1.1, 1.1], [2.1, 2.1]]))
-    c.u = jnp.asarray(np.array([[0.1], [0.6], [1.1]]))
-    c.x_prop = jnp.asarray(np.array([[1.05, 1.05], [2.05, 2.05]]))
-    c.x_prop_plus = jnp.asarray(np.array([[0.05, 0.05], [1.05, 1.05], [2.05, 2.05]]))
     # Large linear objective forces predicted reduction < 0 -> the
     # acceptance-ratio tuners reject and scale lam_prox by gamma_1.
-    c.J_lin = jnp.asarray(1e6)
-    return c
+    return CandidateIterate(
+        x=jnp.asarray(np.array([[0.0, 0.0], [1.1, 1.1], [2.1, 2.1]])),
+        u=jnp.asarray(np.array([[0.1], [0.6], [1.1]])),
+        x_prop=jnp.asarray(np.array([[1.05, 1.05], [2.05, 2.05]])),
+        x_prop_plus=jnp.asarray(np.array([[0.05, 0.05], [1.05, 1.05], [2.05, 2.05]])),
+        J_lin=jnp.asarray(1e6),
+    )
 
 
 def _state(settings, weights, hyper, k):
@@ -301,16 +301,15 @@ def test_capability_flag_gates_acceptance_diagnostics(settings, weights, candida
     without a full solve.
     """
     next_state = _accepted_state(settings, weights, candidate)
-    # The acceptance-diagnostics routing is independent of the discretization
-    # matrices, so leave V / VC / TR / J_lin unset (None) — record_iteration
-    # skips those appends and we isolate the diagnostics gate.
-    cand = CandidateIterate()
+    # record_iteration reads the accepted iterate and the acceptance diagnostics
+    # off ``next_state``; the gate under test is independent of the host-side
+    # diagnostics arrays, so leave them unset and isolate the routing flag.
 
     # Flag False (the toy autotuner) -> step would pass record_diagnostics=False.
     flag = _NoMetricsAutotuner().COMPUTES_ACCEPTANCE_METRICS
     assert flag is False
     hist_off = _history(settings)
-    hist_off.record_iteration(next_state, cand, record_diagnostics=flag)
+    hist_off.record_iteration(next_state, record_diagnostics=flag)
     assert hist_off.acceptance_ratio == []
     assert hist_off.pred_reduction == []
     assert hist_off.actual_reduction == []
@@ -319,7 +318,7 @@ def test_capability_flag_gates_acceptance_diagnostics(settings, weights, candida
     default_flag = AugmentedLagrangian().COMPUTES_ACCEPTANCE_METRICS
     assert default_flag is True
     hist_on = _history(settings)
-    hist_on.record_iteration(next_state, cand, record_diagnostics=default_flag)
+    hist_on.record_iteration(next_state, record_diagnostics=default_flag)
     assert hist_on.acceptance_ratio == [0.5]
     assert hist_on.pred_reduction == [1.0]
     assert hist_on.actual_reduction == [0.5]

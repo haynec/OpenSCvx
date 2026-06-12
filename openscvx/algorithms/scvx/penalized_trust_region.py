@@ -26,7 +26,6 @@ from ..base import (
     Algorithm,
     AlgorithmHistory,
     AlgorithmState,
-    CandidateIterate,
     adaptive_state_code_to_str,
 )
 from ..weights import Weights
@@ -243,20 +242,15 @@ class PenalizedTrustRegion(Algorithm):
                 "Subproblem solve produced a non-finite iterate (NaN/Inf in the state)."
             )
 
-        # Recompose the host-side candidate from the JAX diagnostics for the
-        # history recorder: it reads the accepted iterate off ``next_state`` and
-        # the raw discretization / trust-region / virtual-control matrices off
-        # the candidate.
-        candidate = CandidateIterate()
-        candidate.V = np.asarray(diag.V)
-        candidate.W = np.asarray(diag.W)
-        candidate.VC = np.asarray(diag.VC)
-        candidate.TR = np.asarray(diag.TR)
-        candidate.J_lin = float(diag.J_lin)
-
         use_full_metrics = self.autotuner.COMPUTES_ACCEPTANCE_METRICS
         scalars, lam_prox_np = history.record_iteration(
-            next_state, candidate, record_diagnostics=use_full_metrics
+            next_state,
+            V=np.asarray(diag.V),
+            W=np.asarray(diag.W),
+            VC=np.asarray(diag.VC),
+            TR=np.asarray(diag.TR),
+            J_lin=float(diag.J_lin),
+            record_diagnostics=use_full_metrics,
         )
 
         emission_data = {

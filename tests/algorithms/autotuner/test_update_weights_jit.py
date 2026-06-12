@@ -98,13 +98,13 @@ def make_state(settings, weights):
 
 @pytest.fixture
 def candidate():
-    c = CandidateIterate()
-    c.x = jnp.asarray(np.array([[0.0, 0.0], [1.1, 1.1], [2.1, 2.1]]))
-    c.u = jnp.asarray(np.array([[0.1], [0.6], [1.1]]))
-    c.x_prop = jnp.asarray(np.array([[1.05, 1.05], [2.05, 2.05]]))
-    c.x_prop_plus = jnp.asarray(np.array([[0.05, 0.05], [1.05, 1.05], [2.05, 2.05]]))
-    c.J_lin = jnp.asarray(1.0)
-    return c
+    return CandidateIterate(
+        x=jnp.asarray(np.array([[0.0, 0.0], [1.1, 1.1], [2.1, 2.1]])),
+        u=jnp.asarray(np.array([[0.1], [0.6], [1.1]])),
+        x_prop=jnp.asarray(np.array([[1.05, 1.05], [2.05, 2.05]])),
+        x_prop_plus=jnp.asarray(np.array([[0.05, 0.05], [1.05, 1.05], [2.05, 2.05]])),
+        J_lin=jnp.asarray(1.0),
+    )
 
 
 @pytest.fixture
@@ -149,10 +149,7 @@ def _candidate_to_dict(c: CandidateIterate) -> dict:
 
 
 def _dict_to_candidate(d: dict) -> CandidateIterate:
-    c = CandidateIterate()
-    for name, value in d.items():
-        setattr(c, name, value)
-    return c
+    return CandidateIterate(**d)
 
 
 def _make_jit_target(autotuner, constraints, settings):

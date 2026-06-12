@@ -281,12 +281,13 @@ def make_scp_iteration(
         _, _, _, cand_x_prop, cand_x_prop_plus, _, _, V_cand, W_cand = _discretize(
             solution.x, solution.u, params
         )
-        candidate = CandidateIterate()
-        candidate.x = solution.x
-        candidate.u = solution.u
-        candidate.x_prop = cand_x_prop
-        candidate.x_prop_plus = cand_x_prop_plus
-        candidate.J_lin = solution.cost
+        candidate = CandidateIterate(
+            x=solution.x,
+            u=solution.u,
+            x_prop=cand_x_prop,
+            x_prop_plus=cand_x_prop_plus,
+            J_lin=solution.cost,
+        )
 
         # 6b. SCP convergence metrics (scaled trust region / virtual control /
         # virtual buffer), matching the legacy ``_subproblem`` reductions.

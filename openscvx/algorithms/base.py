@@ -37,32 +37,25 @@ if TYPE_CHECKING:
     from .weights import Weights
 
 
-@dataclass
+@dataclass(frozen=True)
 class CandidateIterate:
-    """Per-iteration candidate handed to the autotuner / history recorder.
+    """Subproblem candidate the fused iteration hands to the autotuner.
 
-    Built at two sites, each populating a different subset of the fields:
-
-    * **In-trace autotuner input** (``scvx/iteration.py``): the fused SCP
-      iteration fills ``x`` / ``u`` / ``x_prop`` / ``x_prop_plus`` / ``J_lin``
-      and passes the candidate to :py:meth:`AutotuningBase.update_weights`.
-    * **Host-side history input** (``scvx/penalized_trust_region.py``): the SCP
-      loop rebuilds the candidate from the JAX diagnostics with ``V`` / ``W`` /
-      ``VC`` / ``TR`` / ``J_lin`` for :py:meth:`AlgorithmHistory.record_iteration`.
-
-    Mutable on purpose so each site can fill its subset; consumers treat it as a
-    structured numpy input and do not mutate it.
+    Built once, in-trace, by the SCP iteration body
+    (``scvx/iteration.py``): it carries the just-solved subproblem trajectory
+    (``x`` / ``u``), its propagation (``x_prop`` / ``x_prop_plus``), and the
+    linearized cost (``J_lin``) into :py:meth:`AutotuningBase.update_weights`,
+    which copies the accepted fields onto the next :class:`AlgorithmState`. It
+    is the autotuner's input and nothing else — host-side history recording
+    takes its arrays through :py:meth:`AlgorithmHistory.record_iteration`'s
+    explicit keyword arguments rather than through this type.
     """
 
-    x: Optional[np.ndarray] = None
-    u: Optional[np.ndarray] = None
-    V: Optional[np.ndarray] = None
-    W: Optional[np.ndarray] = None
-    x_prop: Optional[np.ndarray] = None
-    x_prop_plus: Optional[np.ndarray] = None
-    VC: Optional[np.ndarray] = None
-    TR: Optional[np.ndarray] = None
-    J_lin: Optional[float] = None
+    x: jnp.ndarray
+    u: jnp.ndarray
+    x_prop: jnp.ndarray
+    x_prop_plus: jnp.ndarray
+    J_lin: jnp.ndarray
 
 
 @dataclass(frozen=True, slots=True)
@@ -824,10 +817,22 @@ class AlgorithmHistory:
     def record_iteration(
         self,
         state: AlgorithmState,
-        candidate: CandidateIterate,
+        *,
+        V: Optional[np.ndarray] = None,
+        W: Optional[np.ndarray] = None,
+        VC: Optional[np.ndarray] = None,
+        TR: Optional[np.ndarray] = None,
+        J_lin: Optional[float] = None,
         record_diagnostics: bool = True,
     ) -> Tuple[dict, np.ndarray]:
         """Append per-iteration data based on ``state.adaptive_state_code``.
+
+        The accepted iterate (``x`` / ``u`` / weights / convergence scalars) is
+        read off ``state``; the raw host-side diagnostics the SCP loop already
+        synced — discretization matrices (``V`` / ``W``), virtual control
+        (``VC``), trust region (``TR``), and the linearized cost (``J_lin``) —
+        come in as explicit keyword arrays so the generic history never has to
+        know the algorithm's diagnostics type.
 
         Reproduces the old ``accept_solution`` / ``reject_solution`` behavior:
 
@@ -926,12 +931,12 @@ class AlgorithmHistory:
         self.X.append(np.asarray(x_np))
         self.U.append(np.asarray(u_np))
 
-        if candidate.V is not None:
-            if candidate.W is not None:
+        if V is not None:
+            if W is not None:
                 self.discretizations.append(
                     DiscretizationResult.from_VW(
-                        candidate.V,
-                        candidate.W,
+                        V,
+                        W,
                         n_x=self.n_x,
                         n_u=self.n_u,
                         N=self.N,
@@ -940,16 +945,16 @@ class AlgorithmHistory:
             else:
                 self.discretizations.append(
                     DiscretizationResult.from_V(
-                        candidate.V,
+                        V,
                         n_x=self.n_x,
                         n_u=self.n_u,
                         N=self.N,
                     )
                 )
-        if candidate.VC is not None:
-            self.VC.append(np.asarray(candidate.VC))
-        if candidate.TR is not None:
-            self.TR.append(np.asarray(candidate.TR))
+        if VC is not None:
+            self.VC.append(np.asarray(VC))
+        if TR is not None:
+            self.TR.append(np.asarray(TR))
 
         self.lam_vc.append(np.asarray(lam_vc_np))
         self.lam_cost.append(np.asarray(lam_cost_np))
@@ -957,8 +962,8 @@ class AlgorithmHistory:
         self.lam_vb_cross.append(np.asarray(lam_vb_cross_np))
 
         self.J_nonlin.append(scalars["J_nonlin"])
-        if candidate.J_lin is not None:
-            self.J_lin.append(float(candidate.J_lin))
+        if J_lin is not None:
+            self.J_lin.append(float(J_lin))
 
         # Diagnostics: only meaningful for iterations after the initial one.
         if record_diagnostics and code is not AdaptiveStateCode.INITIAL:
