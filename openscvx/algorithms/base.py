@@ -1005,30 +1005,45 @@ class Algorithm(ABC):
     - :meth:`_hash_into` — contributes the algorithm's identity to the
       ``solve_batched`` export cache key.
 
-    Attributes:
-        weights: SCP weights used by the algorithm and autotuner.
-            Subclasses must set this in ``__init__``.
-        autotuner: The penalty-weight update rule (:class:`AutotuningBase`).
-            Subclasses must set this in ``__init__``.
-        k_max: Maximum number of SCP iterations.
-            Subclasses must set this in ``__init__``.
-        t_max: Optional wall-clock time limit in seconds. ``None`` means no
-            limit. Subclasses must set this in ``__init__``.
-        ep_tr: Trust-region convergence threshold.
-            Subclasses must set this in ``__init__``.
-        ep_vb: Virtual-buffer convergence threshold.
-            Subclasses must set this in ``__init__``.
-        ep_vc: Virtual-control convergence threshold.
-            Subclasses must set this in ``__init__``.
+    ``t_max`` is honored only on the Python ``solve()`` path; the JAX
+    ``lax.while_loop`` behind ``solve_jax`` / ``solve_batched`` terminates on
+    ``k_max`` and the convergence predicate alone (no wall-clock probe inside a
+    trace).
     """
 
-    weights: "Weights"
-    autotuner: "AutotuningBase"
-    k_max: int
-    t_max: Optional[float]
-    ep_tr: float
-    ep_vb: float
-    ep_vc: float
+    def __init__(
+        self,
+        weights: "Weights",
+        autotuner: "AutotuningBase",
+        k_max: int,
+        t_max: Optional[float],
+        ep_tr: float,
+        ep_vb: float,
+        ep_vc: float,
+    ):
+        """Record the SCP weights, autotuner, and convergence parameters.
+
+        Subclasses build the user-facing defaults (PTR owns them) and end their
+        own ``__init__`` with ``super().__init__(...)``; every parameter here is
+        required so the ABC is not a fourth place those defaults are declared.
+
+        Args:
+            weights: SCP weights used by the algorithm and autotuner.
+            autotuner: The penalty-weight update rule (:class:`AutotuningBase`).
+            k_max: Maximum number of SCP iterations.
+            t_max: Optional wall-clock time limit in seconds (``solve()`` only;
+                ``None`` means no limit).
+            ep_tr: Trust-region convergence threshold.
+            ep_vb: Virtual-buffer convergence threshold.
+            ep_vc: Virtual-control convergence threshold.
+        """
+        self.weights = weights
+        self.autotuner = autotuner
+        self.k_max = k_max
+        self.t_max = t_max
+        self.ep_tr = ep_tr
+        self.ep_vb = ep_vb
+        self.ep_vc = ep_vc
 
     @abstractmethod
     def build_iteration(
@@ -1069,13 +1084,7 @@ class Algorithm(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def initialize(
-        self,
-        iteration_fn: Callable,
-        emitter: callable,
-        jax_constraints: "LoweredJaxConstraints",
-        settings: "Config",
-    ) -> None:
+    def initialize(self, iteration_fn: Callable, emitter: Callable) -> None:
         """Store the fused SCP iteration body and per-iteration infrastructure.
 
         Args:
@@ -1084,8 +1093,6 @@ class Algorithm(ABC):
                 already wrapped in ``jax.jit`` by
                 :class:`~openscvx.problem.Problem`.
             emitter: Per-iteration diagnostics sink (printing queue / no-op).
-            jax_constraints: Lowered JAX constraints the body operates over.
-            settings: Problem configuration.
         """
         raise NotImplementedError
 
@@ -1122,6 +1129,25 @@ class Algorithm(ABC):
         each column's ``min_verbosity``.
         """
         raise NotImplementedError
+
+    def converged(self, state: AlgorithmState) -> jnp.ndarray:
+        """Boolean SCP convergence test from the metrics and thresholds on ``state``.
+
+        The default — every metric below its threshold — is algorithm-agnostic:
+        :class:`AlgorithmState` carries ``J_tr`` / ``J_vb`` / ``J_vc`` and the
+        ``ep_*`` tolerances generically, so it serves any SCP algorithm. Override
+        to change the convergence policy; the override is honored on all three
+        solve paths (``solve`` / ``solve_jax`` / ``solve_batched``), since
+        :meth:`step` and the ``lax.while_loop`` harness both route through it.
+
+        Must be JAX-traceable: it runs inside the ``lax.while_loop`` cond of
+        ``solve_jax`` / ``solve_batched`` (where it is ``jax.vmap``'d per batch
+        element) as well as on the Python ``solve()`` path. An override implies a
+        subclass, hence a distinct ``type(self).__name__`` that :meth:`_hash_into`
+        already folds into the ``solve_batched`` export cache key — so a changed
+        predicate invalidates stale batched artifacts without extra machinery.
+        """
+        return (state.J_tr < state.ep_tr) & (state.J_vb < state.ep_vb) & (state.J_vc < state.ep_vc)
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Contribute this algorithm's identity to the ``solve_batched`` cache key.

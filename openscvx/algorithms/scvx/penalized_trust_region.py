@@ -30,7 +30,7 @@ from ..base import (
     adaptive_state_code_to_str,
 )
 from ..weights import Weights
-from .iteration import _converged, make_scp_iteration
+from .iteration import make_scp_iteration
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
@@ -104,34 +104,29 @@ class PenalizedTrustRegion(Algorithm):
         # the fused JAX-pure SCP body; ``step()`` is a thin Python wrapper that
         # calls it, records history, and emits.
         self._iteration_fn: Callable | None = None
-        self._jax_constraints: "LoweredJaxConstraints" = None
-        self._emitter: callable = None
-
-        # Autotuner
-        self.autotuner: "AutotuningBase" = (
-            autotuner if autotuner is not None else AugmentedLagrangian()
-        )
+        self._emitter: Callable | None = None
 
         # Store states/controls for later re-resolution.
         self._states: List["State"] = states
         self._controls: List["Control"] = controls
 
-        # SCP weights (grouped dataclass, dict inputs expanded to arrays)
-        self.weights = Weights.build(
-            lam_prox=lam_prox,
-            lam_vc=lam_vc,
-            lam_cost=lam_cost,
-            lam_vb=lam_vb,
-            states=states,
-            controls=controls,
+        super().__init__(
+            # SCP weights (grouped dataclass, dict inputs expanded to arrays).
+            weights=Weights.build(
+                lam_prox=lam_prox,
+                lam_vc=lam_vc,
+                lam_cost=lam_cost,
+                lam_vb=lam_vb,
+                states=states,
+                controls=controls,
+            ),
+            autotuner=autotuner if autotuner is not None else AugmentedLagrangian(),
+            k_max=k_max,
+            t_max=t_max,
+            ep_tr=ep_tr,
+            ep_vb=ep_vb,
+            ep_vc=ep_vc,
         )
-
-        # SCP convergence parameters
-        self.k_max = k_max
-        self.t_max = t_max
-        self.ep_tr = ep_tr
-        self.ep_vb = ep_vb
-        self.ep_vc = ep_vc
 
     @property
     def lam_prox(self) -> Union[float, np.ndarray]:
@@ -193,13 +188,7 @@ class PenalizedTrustRegion(Algorithm):
         all_columns = self.BASE_COLUMNS + self.autotuner.COLUMNS + self.TAIL_COLUMNS
         return [col for col in all_columns if col.min_verbosity <= verbosity]
 
-    def initialize(
-        self,
-        iteration_fn: Callable,
-        emitter: callable,
-        jax_constraints: "LoweredJaxConstraints",
-        settings: Config,
-    ) -> None:
+    def initialize(self, iteration_fn: Callable, emitter: Callable) -> None:
         """Store the fused SCP iteration body and per-iteration infrastructure.
 
         ``iteration_fn`` is built and JIT-warmed by :meth:`Problem.initialize`;
@@ -210,7 +199,6 @@ class PenalizedTrustRegion(Algorithm):
         """
         self._iteration_fn = iteration_fn
         self._emitter = emitter
-        self._jax_constraints = jax_constraints
 
     def step(
         self,
@@ -303,7 +291,7 @@ class PenalizedTrustRegion(Algorithm):
         # Same convergence test the lax.while_loop path uses, reading the
         # thresholds off the state pytree (synced from this algorithm's
         # ep_* attributes by Problem._sync_scp_constants at solve() time).
-        return next_state, bool(_converged(next_state))
+        return next_state, bool(self.converged(next_state))
 
     def citation(self) -> List[str]:
         """Return BibTeX citations for the PTR algorithm."""

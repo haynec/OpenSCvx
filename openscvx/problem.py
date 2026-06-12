@@ -41,7 +41,7 @@ from openscvx.algorithms import (
     OptimizationResults,
     PenalizedTrustRegionConfig,
 )
-from openscvx.algorithms.scvx.iteration import make_solve_loop
+from openscvx.algorithms.loop import make_solve_loop
 from openscvx.config import (
     Config,
     DevConfig,
@@ -1197,12 +1197,7 @@ class Problem:
             )
         else:
             self._iteration_fn_jit_inner = self._iteration_fn
-        self._algorithm.initialize(
-            self._iteration_fn,
-            self.emitter_function,
-            self._compiled_constraints,
-            self.settings,
-        )
+        self._algorithm.initialize(self._iteration_fn, self.emitter_function)
 
         # Warm the JIT cache so the first ``.solve()`` doesn't pay the compile
         # cost. A single concrete call populates ``jax.jit``'s shape-keyed cache;
@@ -1551,7 +1546,9 @@ class Problem:
         retraces from on first use.
         """
         if self._solve_loop_fn is None:
-            self._solve_loop_fn = jax.jit(make_solve_loop(self._iteration_fn))
+            self._solve_loop_fn = jax.jit(
+                make_solve_loop(self._iteration_fn, self._algorithm.converged)
+            )
         return self._solve_loop_fn
 
     def _get_or_build_solve_batched(
@@ -1585,7 +1582,7 @@ class Problem:
         """
         key = (B, tuple(sorted(param_axes.items())))
         if self._solve_batched_fn is None or self._solve_batched_key != key:
-            loop = make_solve_loop(self._iteration_fn_jit_inner)
+            loop = make_solve_loop(self._iteration_fn_jit_inner, self._algorithm.converged)
             batched = jax.vmap(loop, in_axes=(0, param_axes))
             if self.settings.sim.save_compiled and not self.settings.dev.debug:
                 if not self._solver.exportable:

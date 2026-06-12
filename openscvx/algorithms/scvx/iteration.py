@@ -21,11 +21,11 @@ status) that the Python-loop ``step()`` records into ``AlgorithmHistory`` and
 emits, exactly as the legacy path did. Because state is a registered pytree, the
 body composes with ``jax.jit`` and ``jax.vmap``.
 
-:func:`make_solve_loop` wraps that body in a ``lax.while_loop`` keyed on the SCP
-convergence metrics, projecting the diagnostics away so the loop carry stays
-``state -> state``. It exists as a primitive for tests and for the JAX-pure
-``.solve()`` path in follow-up work; today's ``Problem.solve()`` still drives the
-body from a Python ``while`` loop, so behavior is unchanged.
+:func:`~openscvx.algorithms.loop.make_solve_loop` wraps that body in a
+``lax.while_loop`` for the JAX-pure ``solve_jax`` / ``solve_batched`` paths;
+``Problem.solve()`` instead drives the body from a Python ``while`` loop so it
+can record the :class:`IterationDiagnostics` into ``AlgorithmHistory`` each
+iteration.
 """
 
 from dataclasses import dataclass, fields
@@ -321,62 +321,3 @@ def make_scp_iteration(
         return next_state, diagnostics
 
     return iteration_fn
-
-
-def _converged(state: AlgorithmState) -> jnp.ndarray:
-    """Boolean SCP convergence test from the metrics and thresholds on ``state``."""
-    return (state.J_tr < state.ep_tr) & (state.J_vb < state.ep_vb) & (state.J_vc < state.ep_vc)
-
-
-def make_solve_loop(
-    iteration_fn: Callable[[AlgorithmState, dict], Tuple[AlgorithmState, IterationDiagnostics]],
-) -> Callable[[AlgorithmState, dict], AlgorithmState]:
-    """Wrap ``iteration_fn`` in a ``lax.while_loop`` keyed on convergence.
-
-    The loop runs ``iteration_fn`` until either the SCP metrics fall below the
-    ``ep_*`` thresholds on ``state`` or the iteration counter ``state.k``
-    exceeds ``state.k_max`` — matching the Python ``while`` loop in
-    ``Problem.solve()``. Thresholds and cap are :class:`AlgorithmState` fields
-    (runtime inputs, not closure constants), so one built loop serves every
-    tolerance / ``max_iters`` setting and ``jax.vmap`` batches them per
-    element. The per-iteration :class:`IterationDiagnostics` are projected
-    away so the loop carry stays ``state -> state`` (XLA dead-code-eliminates
-    their host-only pieces). It exists as a primitive for tests and the future
-    JAX-pure ``.solve()`` path; the public ``Problem.solve()`` continues to
-    drive ``iteration_fn`` from Python.
-
-    Args:
-        iteration_fn: A body built by :func:`make_scp_iteration`.
-
-    Returns:
-        ``solve_loop(state, params) -> final_state``.
-    """
-
-    def solve_loop(state: AlgorithmState, params: dict) -> AlgorithmState:
-        def cond(state: AlgorithmState) -> jnp.ndarray:
-            return (state.k <= state.k_max) & jnp.logical_not(_converged(state))
-
-        def body(state: AlgorithmState) -> AlgorithmState:
-            # Under ``jax.vmap`` the ``lax.while_loop`` keeps running until
-            # every batch element has converged; without a freeze, the body
-            # would keep mutating already-converged elements (their iterates
-            # drift through repeated subproblem solves, and the autotuner
-            # would keep advancing ``lam_prox`` / ``lam_cost``). Selecting
-            # ``state`` for converged elements pins them to their first
-            # post-convergence iterate, so a batched solve agrees with the
-            # single-problem ``solve_jax`` on each element.
-            is_converged = _converged(state)
-            next_state, _ = iteration_fn(state, params)
-
-            def freeze(nxt, prev):
-                # ``is_converged`` is scalar (single-problem) or shape ``(B,)``
-                # (vmap'd); reshape with trailing 1-axes so it broadcasts over
-                # each leaf's remaining dims.
-                mask_shape = is_converged.shape + (1,) * (nxt.ndim - is_converged.ndim)
-                return jnp.where(is_converged.reshape(mask_shape), prev, nxt)
-
-            return jax.tree.map(freeze, next_state, state)
-
-        return jax.lax.while_loop(cond, body, state)
-
-    return solve_loop
