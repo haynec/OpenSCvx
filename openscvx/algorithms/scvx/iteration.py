@@ -37,13 +37,13 @@ import numpy as np
 
 from openscvx.solvers.ptr_solver import SubproblemData, SubproblemSolution
 
-from ..base import AlgorithmState, CandidateIterate
+from ..state import AlgorithmState, CandidateIterate
 
 if TYPE_CHECKING:
     from openscvx.config import Config
     from openscvx.lowered import LoweredJaxConstraints
 
-    from ..base import AutotuningBase
+    from ..autotuner.base import AutotuningBase
 
 
 @jax.tree_util.register_pytree_node_class

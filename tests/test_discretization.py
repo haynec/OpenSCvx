@@ -337,7 +337,7 @@ def test_compact_v_matches_dense(rocket_settings, rocket_dynamics, dis_type):
     np.testing.assert_allclose(np.array(xp_sparse), np.array(xp_dense), atol=1e-4)
 
     # Verify that the dense-reconstructed Vmulti is compatible with from_V
-    from openscvx.algorithms.base import DiscretizationResult
+    from openscvx.algorithms.history import DiscretizationResult
 
     disc_result = DiscretizationResult.from_V(np.asarray(V_sparse), n_x=n_x, n_u=n_u, N=N)
     np.testing.assert_allclose(disc_result.A_d, np.array(A_dense), atol=1e-4)

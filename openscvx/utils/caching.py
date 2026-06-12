@@ -270,7 +270,7 @@ def load_or_export_solve_batched(
     granularity: the single artifact is the *entire* vmapped SCP loop exported
     at a fixed batch size, not a per-solver piece. On a cache hit the artifact
     is deserialized with no XLA compile; on a miss the loop is exported against
-    the sample batched :class:`~openscvx.algorithms.base.AlgorithmState` and
+    the sample batched :class:`~openscvx.algorithms.state.AlgorithmState` and
     parameters, serialized, and returned.
 
     Unlike the per-solver solvers — whose ``call_exported`` has no ``vmap`` rule
@@ -289,6 +289,14 @@ def load_or_export_solve_batched(
     Returns:
         A ``jax.export`` wrapper — call it via ``.call(state, params)``.
     """
+    # Only ``FileNotFoundError`` (a cache miss) falls back to re-export; any
+    # other failure propagates. In particular ``export.deserialize`` hard-errors
+    # on an artifact whose treedef references an unknown ``serialized_name`` — it
+    # does NOT silently re-export. So the pytree serialized names (the
+    # ``AlgorithmState`` / ``HyperParams`` registrations in
+    # ``openscvx/algorithms/state.py`` / ``hyperparams.py``) are stable IDs that
+    # must never change, or every cached batched artifact strands its owner with
+    # a load error.
     try:
         with open(cache_file, "rb") as f:
             wrapper = export.deserialize(f.read())

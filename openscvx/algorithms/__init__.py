@@ -48,15 +48,14 @@ from .autotuner import (
     RampProximalWeight,
     RampProximalWeightSpec,
 )
-from .base import (
+from .autotuner.base import AutotuningBase
+from .base import Algorithm
+from .history import AlgorithmHistory, DiscretizationResult
+from .hyperparams import HyperParams
+from .state import (
     AdaptiveStateCode,
-    Algorithm,
-    AlgorithmHistory,
     AlgorithmState,
-    AutotuningBase,
     CandidateIterate,
-    DiscretizationResult,
-    HyperParams,
     adaptive_state_code_to_str,
 )
 from .optimization_results import OptimizationResults

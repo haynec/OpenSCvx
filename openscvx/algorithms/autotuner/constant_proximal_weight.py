@@ -11,12 +11,13 @@ from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 
-from ..base import AdaptiveStateCode, AutotuningBase, LamCostRelaxHyper
+from ..state import AdaptiveStateCode
+from .base import AutotuningBase, LamCostRelaxHyper
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
-    from ..base import AlgorithmState, CandidateIterate
+    from ..state import AlgorithmState, CandidateIterate
 
 
 class ConstantProximalWeightHyper(LamCostRelaxHyper):

@@ -19,7 +19,7 @@ from openscvx.algorithms import (
     ConstantProximalWeight,
     RampProximalWeight,
 )
-from openscvx.algorithms.base import CandidateIterate
+from openscvx.algorithms.state import CandidateIterate
 from openscvx.algorithms.weights import Weights
 from openscvx.config import Config, DevConfig, PropagationConfig, SimConfig
 from openscvx.lowered.jax_constraints import LoweredJaxConstraints

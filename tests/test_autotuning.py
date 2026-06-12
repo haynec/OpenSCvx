@@ -22,11 +22,12 @@ from openscvx.algorithms import (
     PenalizedTrustRegionConfig,
     RampProximalWeight,
 )
-from openscvx.algorithms.base import (
-    AlgorithmState,
-    AutotuningBase,
-    CandidateIterate,
+from openscvx.algorithms.autotuner.base import AutotuningBase
+from openscvx.algorithms.penalty import (
+    calculate_cost_from_state,
+    calculate_nonlinear_penalty,
 )
+from openscvx.algorithms.state import AlgorithmState, CandidateIterate
 from openscvx.algorithms.weights import Weights
 from openscvx.config import (
     Config,
@@ -233,7 +234,7 @@ def test_calculate_cost_from_state_minimize_final(settings):
     settings.sim.x.final_type = ["None", "Minimize"]
     x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
 
-    cost = AutotuningBase.calculate_cost_from_state(x, settings)
+    cost = calculate_cost_from_state(x, settings)
 
     # Should add scaled final state value
     scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
@@ -246,7 +247,7 @@ def test_calculate_cost_from_state_maximize_final(settings):
     settings.sim.x.final_type = ["None", "Maximize"]
     x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
 
-    cost = AutotuningBase.calculate_cost_from_state(x, settings)
+    cost = calculate_cost_from_state(x, settings)
 
     # Should subtract scaled final state value
     scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
@@ -259,7 +260,7 @@ def test_calculate_cost_from_state_minimize_initial(settings):
     settings.sim.x.initial_type = ["Minimize", "None"]
     x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
 
-    cost = AutotuningBase.calculate_cost_from_state(x, settings)
+    cost = calculate_cost_from_state(x, settings)
 
     # Should add scaled initial state value
     scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
@@ -272,7 +273,7 @@ def test_calculate_cost_from_state_maximize_initial(settings):
     settings.sim.x.initial_type = ["Maximize", "None"]
     x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
 
-    cost = AutotuningBase.calculate_cost_from_state(x, settings)
+    cost = calculate_cost_from_state(x, settings)
 
     # Should subtract scaled initial state value
     scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
@@ -286,7 +287,7 @@ def test_calculate_cost_from_state_combined(settings):
     settings.sim.x.final_type = ["None", "Maximize"]
     x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
 
-    cost = AutotuningBase.calculate_cost_from_state(x, settings)
+    cost = calculate_cost_from_state(x, settings)
 
     scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
     expected = scaled_x[0, 0] - scaled_x[-1, 1]
@@ -299,7 +300,7 @@ def test_calculate_cost_from_state_no_cost(settings):
     settings.sim.x.final_type = ["None", "None"]
     x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
 
-    cost = AutotuningBase.calculate_cost_from_state(x, settings)
+    cost = calculate_cost_from_state(x, settings)
 
     assert cost == 0.0
 
@@ -310,7 +311,7 @@ def test_calculate_cost_from_state_per_state_weights(settings):
     x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
     lam_cost = np.array([2.0, 5.0])
 
-    cost = AutotuningBase.calculate_cost_from_state(x, settings, lam_cost=lam_cost)
+    cost = calculate_cost_from_state(x, settings, lam_cost=lam_cost)
 
     scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
     expected = 2.0 * scaled_x[-1, 0] + 5.0 * scaled_x[-1, 1]
@@ -323,7 +324,7 @@ def test_calculate_cost_from_state_per_state_weights_maximize(settings):
     x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
     lam_cost = np.array([3.0, 0.0])
 
-    cost = AutotuningBase.calculate_cost_from_state(x, settings, lam_cost=lam_cost)
+    cost = calculate_cost_from_state(x, settings, lam_cost=lam_cost)
 
     scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
     expected = -3.0 * scaled_x[-1, 0]
@@ -337,7 +338,7 @@ def test_calculate_cost_from_state_per_state_weights_mixed(settings):
     x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
     lam_cost = np.array([4.0, 7.0])
 
-    cost = AutotuningBase.calculate_cost_from_state(x, settings, lam_cost=lam_cost)
+    cost = calculate_cost_from_state(x, settings, lam_cost=lam_cost)
 
     scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
     expected = 4.0 * scaled_x[0, 0] - 7.0 * scaled_x[-1, 1]
@@ -350,7 +351,7 @@ def test_calculate_cost_from_state_per_state_zero_weight_ignores_cost(settings):
     x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
     lam_cost = np.array([0.0, 3.0])
 
-    cost = AutotuningBase.calculate_cost_from_state(x, settings, lam_cost=lam_cost)
+    cost = calculate_cost_from_state(x, settings, lam_cost=lam_cost)
 
     scaled_x = (settings.sim.inv_S_x @ (x.T - settings.sim.c_x[:, None])).T
     expected = 3.0 * scaled_x[-1, 1]
@@ -362,8 +363,8 @@ def test_calculate_cost_from_state_scalar_lam_cost_matches_default(settings):
     settings.sim.x.final_type = ["None", "Minimize"]
     x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
 
-    cost_default = AutotuningBase.calculate_cost_from_state(x, settings)
-    cost_scalar = AutotuningBase.calculate_cost_from_state(x, settings, lam_cost=1.0)
+    cost_default = calculate_cost_from_state(x, settings)
+    cost_scalar = calculate_cost_from_state(x, settings, lam_cost=1.0)
 
     assert cost_scalar == pytest.approx(cost_default, rel=1e-6)
 
@@ -382,7 +383,7 @@ def test_calculate_nonlinear_penalty_no_constraints(settings, empty_nodal_constr
     lam_cost = 1.0
     params = {}
 
-    nonlinear_cost, nonlinear_penalty, nodal_penalty = AutotuningBase.calculate_nonlinear_penalty(
+    nonlinear_cost, nonlinear_penalty, nodal_penalty = calculate_nonlinear_penalty(
         x_prop,
         x_bar,
         u_bar,
@@ -416,7 +417,7 @@ def test_calculate_nonlinear_penalty_with_nodal_violations(
     lam_cost = 1.0
     params = {}
 
-    nonlinear_cost, nonlinear_penalty, nodal_penalty = AutotuningBase.calculate_nonlinear_penalty(
+    nonlinear_cost, nonlinear_penalty, nodal_penalty = calculate_nonlinear_penalty(
         x_prop,
         x_bar,
         u_bar,
@@ -446,7 +447,7 @@ def test_calculate_nonlinear_penalty_with_cross_node_violations(settings, cross_
     lam_cost = 1.0
     params = {}
 
-    nonlinear_cost, nonlinear_penalty, nodal_penalty = AutotuningBase.calculate_nonlinear_penalty(
+    nonlinear_cost, nonlinear_penalty, nodal_penalty = calculate_nonlinear_penalty(
         x_prop,
         x_bar,
         u_bar,
@@ -491,7 +492,7 @@ def test_calculate_nonlinear_penalty_nodal_with_node_filter(settings):
     lam_cost = 1.0
     params = {}
 
-    nonlinear_cost, nonlinear_penalty, nodal_penalty = AutotuningBase.calculate_nonlinear_penalty(
+    nonlinear_cost, nonlinear_penalty, nodal_penalty = calculate_nonlinear_penalty(
         x_prop,
         x_bar,
         u_bar,
@@ -519,7 +520,7 @@ def test_calculate_nonlinear_penalty_virtual_control_component(settings, empty_n
     lam_cost = 1.0
     params = {}
 
-    nonlinear_cost, nonlinear_penalty, nodal_penalty = AutotuningBase.calculate_nonlinear_penalty(
+    nonlinear_cost, nonlinear_penalty, nodal_penalty = calculate_nonlinear_penalty(
         x_prop,
         x_bar,
         u_bar,
@@ -649,7 +650,7 @@ def test_augmented_lagrangian_accept_decrease(
 
     # Compute previous and candidate nonlinear objectives explicitly, then
     # choose J_lin so that rho > eta_2, guaranteeing "Accept Lower".
-    prev_cost, prev_penalty, prev_nodal = AutotuningBase.calculate_nonlinear_penalty(
+    prev_cost, prev_penalty, prev_nodal = calculate_nonlinear_penalty(
         state.x_prop_plus[1:],
         state.x,
         state.u,
@@ -663,7 +664,7 @@ def test_augmented_lagrangian_accept_decrease(
     )
     J_nonlin_prev = float(prev_cost + prev_penalty + prev_nodal)
 
-    cand_cost, cand_penalty, cand_nodal = AutotuningBase.calculate_nonlinear_penalty(
+    cand_cost, cand_penalty, cand_nodal = calculate_nonlinear_penalty(
         cand_x_prop_plus[1:],
         cand_x,
         cand_u,
@@ -763,7 +764,7 @@ def _build_rho_targeted_candidate(state, settings, nodal_constraints, rho_target
     cand_x_prop = np.asarray(state.x_prop)
     cand_x_prop_plus = _candidate_x_prop_plus()
 
-    prev_cost, prev_penalty, prev_nodal = AutotuningBase.calculate_nonlinear_penalty(
+    prev_cost, prev_penalty, prev_nodal = calculate_nonlinear_penalty(
         state.x_prop_plus[1:],
         state.x,
         state.u,
@@ -777,7 +778,7 @@ def _build_rho_targeted_candidate(state, settings, nodal_constraints, rho_target
     )
     J_nonlin_prev = float(prev_cost + prev_penalty + prev_nodal)
 
-    cand_cost, cand_penalty, cand_nodal = AutotuningBase.calculate_nonlinear_penalty(
+    cand_cost, cand_penalty, cand_nodal = calculate_nonlinear_penalty(
         cand_x_prop_plus[1:],
         cand_x,
         cand_u,
@@ -846,15 +847,8 @@ def test_augmented_lagrangian_base_class_methods(settings):
     """Test that base class methods work correctly."""
     # Static method returns a JAX scalar (0-d jnp array) under the new contract.
     x = np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]])
-    cost = AutotuningBase.calculate_cost_from_state(x, settings)
+    cost = calculate_cost_from_state(x, settings)
     assert jnp.asarray(cost).shape == ()
-
-    # Test that subclass can use base methods
-    auglag_autotuner = AugmentedLagrangian()
-
-    # Should have the same base methods
-    assert hasattr(auglag_autotuner, "calculate_cost_from_state")
-    assert hasattr(auglag_autotuner, "calculate_nonlinear_penalty")
 
 
 def test_algorithm_autotuner_default():

@@ -7,7 +7,8 @@ import jax.numpy as jnp
 import numpy as np
 
 if TYPE_CHECKING:
-    from openscvx.algorithms.base import AlgorithmHistory, AlgorithmState
+    from openscvx.algorithms.history import AlgorithmHistory
+    from openscvx.algorithms.state import AlgorithmState
     from openscvx.problem import Problem
 
 
@@ -68,7 +69,7 @@ class OptimizationResults:
 
         * :meth:`from_history` (``solve()``) populates the per-iteration
           ``X`` / ``U`` / ``*_history`` lists from the Python loop's
-          :class:`~openscvx.algorithms.base.AlgorithmHistory`.
+          :class:`~openscvx.algorithms.history.AlgorithmHistory`.
         * :meth:`from_final_state` (``solve_jax()``) wraps only the final
           iterate: ``X = [state.x]`` and ``U = [state.u]`` (single-element
           lists so ``result.x`` / ``result.u`` continue to return the final

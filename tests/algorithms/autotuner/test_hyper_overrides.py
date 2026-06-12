@@ -32,12 +32,12 @@ from openscvx.algorithms import (
     ConstantProximalWeight,
     RampProximalWeight,
 )
-from openscvx.algorithms.base import (
+from openscvx.algorithms.autotuner.base import AutotuningBase
+from openscvx.algorithms.hyperparams import HyperParams
+from openscvx.algorithms.state import (
     AdaptiveStateCode,
     AlgorithmState,
-    AutotuningBase,
     CandidateIterate,
-    HyperParams,
 )
 from openscvx.algorithms.weights import Weights
 from openscvx.config import Config, DevConfig, PropagationConfig, SimConfig
@@ -272,7 +272,7 @@ class _NoMetricsAutotuner(AutotuningBase):
 
 
 def _history(settings):
-    from openscvx.algorithms.base import AlgorithmHistory
+    from openscvx.algorithms.history import AlgorithmHistory
 
     return AlgorithmHistory.from_settings(settings)
 

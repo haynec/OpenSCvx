@@ -29,12 +29,14 @@ from openscvx.utils.printing import (
     color_adaptive_state,
 )
 
-from ..base import AdaptiveStateCode, AutotuningBase, LamCostRelaxHyper
+from ..penalty import calculate_nonlinear_penalty
+from ..state import AdaptiveStateCode
+from .base import AutotuningBase, LamCostRelaxHyper
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
-    from ..base import AlgorithmState, CandidateIterate
+    from ..state import AlgorithmState, CandidateIterate
 
 
 class AcceptanceRatioHyper(LamCostRelaxHyper):
@@ -118,7 +120,7 @@ class AcceptanceRatioAutotuner(AutotuningBase):
         Pure functional update — see class docstring.
         """
         candidate_x_prop = candidate.x_prop_plus[1:]
-        nonlin_cost, nonlin_pen, nodal_pen = self.calculate_nonlinear_penalty(
+        nonlin_cost, nonlin_pen, nodal_pen = calculate_nonlinear_penalty(
             candidate_x_prop,
             candidate.x,
             candidate.u,
@@ -151,7 +153,7 @@ class AcceptanceRatioAutotuner(AutotuningBase):
             # Recompute the previous iterate's J_nonlin from the pytree fields
             # (state.x/state.u were the *previous* accepted iterate).
             prev_x_prop = state.x_prop_plus[1:]
-            prev_cost, prev_pen, prev_nodal_pen = self.calculate_nonlinear_penalty(
+            prev_cost, prev_pen, prev_nodal_pen = calculate_nonlinear_penalty(
                 prev_x_prop,
                 state.x,
                 state.u,

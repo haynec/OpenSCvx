@@ -15,7 +15,7 @@ from typing import Callable, Tuple
 import jax
 import jax.numpy as jnp
 
-from .base import AlgorithmState
+from .state import AlgorithmState
 
 
 def make_solve_loop(

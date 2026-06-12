@@ -22,12 +22,9 @@ from openscvx.utils.printing import (
 )
 
 from ..autotuner.augmented_lagrangian import AugmentedLagrangian
-from ..base import (
-    Algorithm,
-    AlgorithmHistory,
-    AlgorithmState,
-    adaptive_state_code_to_str,
-)
+from ..base import Algorithm
+from ..history import AlgorithmHistory
+from ..state import AlgorithmState, adaptive_state_code_to_str
 from ..weights import Weights
 from .iteration import make_scp_iteration
 
@@ -36,7 +33,7 @@ if TYPE_CHECKING:
     from openscvx.symbolic.expr.control import Control
     from openscvx.symbolic.expr.state import State
 
-    from ..base import AutotuningBase
+    from ..autotuner.base import AutotuningBase
 
 
 class PenalizedTrustRegion(Algorithm):
