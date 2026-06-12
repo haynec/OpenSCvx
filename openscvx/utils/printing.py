@@ -1,7 +1,6 @@
 import queue
 import sys
 import time
-import warnings
 from dataclasses import dataclass, field
 from enum import IntEnum
 from importlib.metadata import PackageNotFoundError, version
@@ -16,8 +15,6 @@ if TYPE_CHECKING:
     from openscvx.config import Config
     from openscvx.discretization import Discretizer
     from openscvx.solvers import ConvexSolver
-
-warnings.filterwarnings("ignore")
 
 
 # Define colors for printing
@@ -389,8 +386,6 @@ def print_batch_results_summary(
 
 
 def intro():
-    # Silence syntax warnings
-    warnings.filterwarnings("ignore")
     # fmt: off
     ascii_art = rf"""
 

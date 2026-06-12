@@ -41,7 +41,7 @@ from openscvx.algorithms import (
     OptimizationResults,
     PenalizedTrustRegionConfig,
 )
-from openscvx.algorithms.scvx.iteration import make_scp_iteration, make_solve_loop
+from openscvx.algorithms.scvx.iteration import make_solve_loop
 from openscvx.config import (
     Config,
     DevConfig,
@@ -1171,12 +1171,11 @@ class Problem:
         self._solve_batched_key = None
         self._solve_batched_is_exported = False
         self._iteration_fn = jax.jit(
-            make_scp_iteration(
+            self._algorithm.build_iteration(
                 dis_continuous=discretization_solver,
                 dis_impulsive=discretization_solver_impulsive,
                 jax_constraints=self._compiled_constraints,
                 solver_callback=self._solver.iteration_callback(),
-                autotuner=self._algorithm.autotuner,
                 settings=self.settings,
             )
         )
@@ -1188,12 +1187,11 @@ class Problem:
         # ``_iteration_fn`` rather than recompile the dynamics (§3, Q3).
         if self.settings.sim.save_compiled and not self.settings.dev.debug:
             self._iteration_fn_jit_inner = jax.jit(
-                make_scp_iteration(
+                self._algorithm.build_iteration(
                     dis_continuous=jax.jit(discretization_solver_raw),
                     dis_impulsive=jax.jit(discretization_solver_impulsive_raw),
                     jax_constraints=self._compiled_constraints,
                     solver_callback=self._solver.iteration_callback(),
-                    autotuner=self._algorithm.autotuner,
                     settings=self.settings,
                 )
             )

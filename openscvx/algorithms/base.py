@@ -39,13 +39,19 @@ if TYPE_CHECKING:
 
 @dataclass
 class CandidateIterate:
-    """Per-iteration candidate produced by the convex subproblem.
+    """Per-iteration candidate handed to the autotuner / history recorder.
 
-    Mutable on purpose: the discretizer / subproblem code fills fields
-    incrementally (``x``, ``u`` first, then ``V``/``W``/``x_prop``/etc.) before
-    handing the candidate to :py:meth:`AutotuningBase.update_weights`. Treat
-    this object as a structured-but-numpy input to ``update_weights``; the
-    autotuner does not mutate it.
+    Built at two sites, each populating a different subset of the fields:
+
+    * **In-trace autotuner input** (``scvx/iteration.py``): the fused SCP
+      iteration fills ``x`` / ``u`` / ``x_prop`` / ``x_prop_plus`` / ``J_lin``
+      and passes the candidate to :py:meth:`AutotuningBase.update_weights`.
+    * **Host-side history input** (``scvx/penalized_trust_region.py``): the SCP
+      loop rebuilds the candidate from the JAX diagnostics with ``V`` / ``W`` /
+      ``VC`` / ``TR`` / ``J_lin`` for :py:meth:`AlgorithmHistory.record_iteration`.
+
+    Mutable on purpose so each site can fill its subset; consumers treat it as a
+    structured numpy input and do not mutate it.
     """
 
     x: Optional[np.ndarray] = None
@@ -54,8 +60,6 @@ class CandidateIterate:
     W: Optional[np.ndarray] = None
     x_prop: Optional[np.ndarray] = None
     x_prop_plus: Optional[np.ndarray] = None
-    D_d: Optional[np.ndarray] = None
-    E_d: Optional[np.ndarray] = None
     VC: Optional[np.ndarray] = None
     TR: Optional[np.ndarray] = None
     J_lin: Optional[float] = None
@@ -263,6 +267,14 @@ class AutotuningBase(ABC):
     converts that back to a human-readable label only on the Python-loop
     printing path.
 
+    **The returned state IS the next iterate.** The SCP loop discards
+    everything except what ``update_weights`` returns, so accepting the
+    subproblem's candidate means carrying its trajectory onto the returned
+    state — ``x`` / ``u`` / ``x_prop`` / ``x_prop_plus`` from ``candidate`` —
+    while rejecting means keeping the previous fields and adjusting only the
+    weights. An update that never copies the candidate produces a solver that
+    runs to ``k_max`` without the iterate ever moving, silently.
+
     **Declaring tunable hyperparameters.** A numeric knob a user might sweep
     (a penalty ramp, a relaxation iteration) must not be read off ``self``
     inside ``update_weights`` — a Python attribute is baked into the trace
@@ -277,26 +289,41 @@ class AutotuningBase(ABC):
             def __init__(self, ramp: float = 2.0):
                 self.hyper = MyHyper(ramp=ramp)
 
-            def update_weights(self, state, ...):
-                ...state.hyper.ramp...
+            def update_weights(self, state, candidate, *args):
+                return state.replace(
+                    # accept the candidate: it becomes the next iterate
+                    x=candidate.x,
+                    u=candidate.u,
+                    x_prop=candidate.x_prop,
+                    x_prop_plus=candidate.x_prop_plus,
+                    lam_prox=state.lam_prox * state.hyper.ramp,
+                    adaptive_state_code=...,
+                )
 
     The declaration is the registration: the field becomes a per-solve
     override (``solve_jax(algorithm={"ramp": ...})``), a batchable sweep
     target (``solve_batched(algorithm={"ramp": jnp.linspace(...)})``), and a
     runtime input of the exported batched artifact — with zero core edits.
-    Structural choices that select code paths (flags, enums) stay ordinary
-    attributes; they are part of the traced program, not data.
+    Every numeric knob of the built-in autotuners is declared this way, so the
+    only configuration left outside ``hyper`` is structural choices that select
+    code paths (class attributes like ``COMPUTES_ACCEPTANCE_METRICS``); they
+    are part of the traced program, not data. For ergonomics, declared knobs
+    are still readable and writable as bare attributes
+    (``autotuner.ramp = 3.0``): the proxy below routes the access into
+    ``hyper`` so a constructor — or a test — may keep assigning knobs by name.
+    Assign ``self.hyper`` *first* in ``__init__``; a knob assigned before
+    ``hyper`` exists lands as a plain instance attribute the proxy cannot see.
 
     Class Attributes:
         COLUMNS: List of Column specs for autotuner-specific metrics to display.
             Subclasses override this to add their own columns.
-        JIT_UPDATE_WEIGHTS: Whether the SCP loop should wrap
-            :py:meth:`update_weights` in :func:`jax.jit`. True by default
-            (worthwhile for autotuners like :class:`AugmentedLagrangian` whose
-            body issues hundreds of small ``jnp`` ops). Subclasses with trivial
-            bodies (a handful of XLA ops) override to ``False`` so the SCP loop
-            calls ``update_weights`` directly — JAX's eager dispatch is cheaper
-            than the JIT'd closure's pytree-flatten overhead for those cases.
+        COMPUTES_ACCEPTANCE_METRICS: Whether ``update_weights`` computes a
+            predicted/actual reduction and the resulting acceptance ratio. The
+            SCP loop records and prints those diagnostics only when this is
+            ``True`` (the default); tuners that never reject an iterate — e.g.
+            :class:`~openscvx.algorithms.autotuner.constant_proximal_weight.ConstantProximalWeight`
+            and :class:`~openscvx.algorithms.autotuner.ramp_proximal_weight.RampProximalWeight`
+            — set it ``False``.
         hyper: The autotuner's declared hyperparameters — a
             :class:`HyperParams` instance carrying plain-Python defaults
             (the empty base when it declares none). Snapshotted onto
@@ -307,12 +334,43 @@ class AutotuningBase(ABC):
     """
 
     COLUMNS: List[Column] = []
+    COMPUTES_ACCEPTANCE_METRICS: bool = True
     hyper: HyperParams = HyperParams()
-    # Governs only the Python-loop ``Problem.solve()`` path. Once the SCP body
-    # lives inside ``lax.while_loop`` (see ``plans/batchable-problem.md``),
-    # ``update_weights`` is one node in the outer compiled graph and the inner
-    # JIT boundary disappears — the flag becomes a silent no-op on that path.
-    JIT_UPDATE_WEIGHTS: bool = True
+
+    def __getattr__(self, name: str):
+        """Read a declared hyperparameter as a bare attribute.
+
+        Promoted knobs live on the frozen ``hyper`` container, but the
+        documented API and constructors still touch them by name
+        (``autotuner.lam_prox_max``). ``__getattr__`` fires only on failed
+        normal lookups, so real attributes (``COLUMNS``, ``hyper`` itself) are
+        unaffected; a name matching a ``hyper`` field resolves there.
+        """
+        hyper = self.__dict__.get("hyper")
+        if hyper is not None and name in {f.name for f in dc_fields(hyper)}:
+            return getattr(hyper, name)
+        raise AttributeError(f"{type(self).__name__!r} has no attribute {name!r}")
+
+    def __setattr__(self, name: str, value) -> None:
+        """Route a write to a declared hyperparameter into the frozen ``hyper``.
+
+        Without this, assigning a promoted knob as a bare attribute
+        (``autotuner.lam_prox_max = 1e6``) would silently shadow the ``hyper``
+        field and never reach the solve. A name matching a ``hyper`` field is
+        applied via :func:`dataclasses.replace`; every other attribute
+        (including ``hyper`` itself) is set normally, so constructors may keep
+        assigning knobs by name — they route into ``hyper``, provided
+        ``self.hyper`` was assigned first (see the class docstring).
+        """
+        hyper = self.__dict__.get("hyper")
+        if hyper is not None and name != "hyper" and name in {f.name for f in dc_fields(hyper)}:
+            # Clear any instance attribute shadowing the knob (left by an
+            # assignment made before ``hyper`` existed) so reads resolve
+            # through ``__getattr__`` to the value just written.
+            self.__dict__.pop(name, None)
+            super().__setattr__("hyper", dc_replace(hyper, **{name: value}))
+        else:
+            super().__setattr__(name, value)
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Contribute the autotuner's update rule to the ``solve_batched`` cache key.
@@ -324,10 +382,9 @@ class AutotuningBase(ABC):
         scalars. ``hyper`` is excluded: declared hyperparameters ride
         ``AlgorithmState.hyper`` as runtime inputs, so one artifact serves
         every setting of them (the same reasoning that keeps the ``ep_*``
-        thresholds out of the algorithm's hash). Folded in by the algorithm's
-        ``_hash_into`` (e.g.
-        :meth:`~openscvx.algorithms.scvx.penalized_trust_region.PenalizedTrustRegion._hash_into`);
-        mirrors the symbolic ``_hash_into`` protocol.
+        thresholds out of the algorithm's hash). Folded in by
+        :meth:`Algorithm._hash_into`; mirrors the symbolic ``_hash_into``
+        protocol.
         """
         from openscvx.utils.caching import hash_value_into
 
@@ -448,16 +505,21 @@ class AutotuningBase(ABC):
                 ``state.lam_cost_init``; autotuners read from there rather than
                 from the algorithm's ``Weights`` object so the JIT'd closure
                 stays cache-stable across weight mutations.
-            candidate: Subproblem result (read-only here).
+            candidate: Subproblem result (read-only here). On acceptance its
+                trajectory fields must be carried onto the returned state —
+                see the class docstring.
             nodal_constraints: Lowered JAX constraints.
             settings: Configuration object.
             params: Problem parameter dictionary.
 
         Returns:
-            The next-iterate :class:`AlgorithmState`. Its
-            :py:attr:`AlgorithmState.adaptive_state_code` encodes the
-            autotuner's decision; the SCP loop records that into history and
-            maps it to a printable label.
+            The next-iterate :class:`AlgorithmState` — the SCP loop uses
+            nothing else, so an accepting update carries
+            ``candidate.x / u / x_prop / x_prop_plus`` onto it, while a
+            rejecting update keeps the previous fields and adjusts only the
+            weights. Its :py:attr:`AlgorithmState.adaptive_state_code` encodes
+            the autotuner's decision; the SCP loop records that into history
+            and maps it to a printable label.
         """
 
 
@@ -562,37 +624,6 @@ class AlgorithmState:
     k_max: jnp.ndarray
     hyper: HyperParams
 
-    # Field order is the source of truth for tree_flatten / tree_unflatten;
-    # keep _FIELDS in sync with the dataclass field declarations above.
-    _FIELDS = (
-        "x",
-        "u",
-        "x_prop",
-        "x_prop_plus",
-        "lam_prox",
-        "lam_vc",
-        "lam_cost",
-        "lam_cost_init",
-        "lam_vb_nodal",
-        "lam_vb_cross",
-        "k",
-        "J_tr",
-        "J_vb",
-        "J_vc",
-        "J_nonlin",
-        "predicted_reduction",
-        "actual_reduction",
-        "acceptance_ratio",
-        "adaptive_state_code",
-        "x_init_pin",
-        "x_term_pin",
-        "ep_tr",
-        "ep_vb",
-        "ep_vc",
-        "k_max",
-        "hyper",
-    )
-
     def replace(self, **changes) -> "AlgorithmState":
         """Return a new state with ``changes`` applied (functional update)."""
         return dc_replace(self, **changes)
@@ -621,8 +652,9 @@ class AlgorithmState:
 
         Copies trajectory guesses, expands weights to dense arrays, and seeds
         the diagnostic scalars to zero / :py:attr:`AdaptiveStateCode.INITIAL`.
-        ``x_prop`` and ``x_prop_plus`` are zero-initialized; the SCP algorithm
-        fills them at the first discretization step.
+        ``x_prop`` and ``x_prop_plus`` are zero-initialized; the autotuner
+        fills them when it carries the first accepted candidate onto the
+        state (see :meth:`AutotuningBase.update_weights`).
 
         The SCP loop constants (``ep_tr`` / ``ep_vb`` / ``ep_vc`` / ``k_max``)
         and the autotuner's declared hyperparameters (*hyper*, from
@@ -719,6 +751,11 @@ class AlgorithmState:
         )
 
 
+# Field order is the source of truth for tree_flatten / tree_unflatten; derive
+# it from the dataclass so it can never drift from the field declarations.
+AlgorithmState._FIELDS = tuple(f.name for f in dc_fields(AlgorithmState))
+
+
 # ``AlgorithmState`` is the in/out pytree of the exported ``solve_batched``
 # artifact, so ``jax.export`` must know how to (de)serialize its treedef on top
 # of the runtime pytree registration above — a separate registry. The auxdata is
@@ -744,9 +781,8 @@ class AlgorithmHistory:
 
     Mirrors the lists that previously lived directly on ``AlgorithmState``.
     Never appears on the JAX boundary; the SCP loop appends to it after each
-    iteration via :py:meth:`record_iteration`. Mostly diagnostic, but also
-    used by the convex subproblem solver to look up the most recent
-    discretization for linearization.
+    iteration via :py:meth:`record_iteration`. Purely diagnostic — the
+    subproblem solver consumes ``SubproblemData`` in-trace, not the history.
     """
 
     n_x: int
@@ -778,76 +814,10 @@ class AlgorithmHistory:
             N=settings.sim.n,
         )
 
-    # -- Discretization plumbing --------------------------------------------
-
-    def add_discretization(self, V: np.ndarray) -> None:
-        """Append a raw continuous-time discretization matrix."""
-        self.discretizations.append(
-            DiscretizationResult.from_V(V, n_x=self.n_x, n_u=self.n_u, N=self.N)
-        )
-
-    def add_impulsive_discretization(self, W: np.ndarray) -> None:
-        """Attach impulsive data to the most recently added discretization."""
-        if not self.discretizations:
-            raise ValueError(
-                "Cannot attach impulsive discretization before adding the base discretization."
-            )
-        last = self.discretizations[-1]
-        self.discretizations[-1] = DiscretizationResult.from_VW(
-            V=last.V,
-            W=W,
-            n_x=self.n_x,
-            n_u=self.n_u,
-            N=self.N,
-        )
-
-    # -- Discretization accessors -------------------------------------------
-    #
-    # Subproblem solvers ask for the *latest* (or i-th) linearization; the
-    # accessors below mirror the old ``state.A_d()`` / ``state.B_d()`` /
-    # ``state.x_prop()`` API.
-
     @property
     def V_history(self) -> List[np.ndarray]:
-        """Backward-compatible view of raw discretization matrices."""
+        """View of the raw discretization matrices recorded so far."""
         return [d.V for d in self.discretizations]
-
-    def x_prop(self, index: int = -1) -> Optional[np.ndarray]:
-        """Return the i-th propagated state trajectory."""
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].x_prop
-
-    def x_prop_plus(self, index: int = -1) -> Optional[np.ndarray]:
-        """Return the i-th impulsive output (or ``None`` if not present)."""
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].x_prop_plus
-
-    def A_d(self, index: int = -1) -> Optional[np.ndarray]:
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].A_d
-
-    def B_d(self, index: int = -1) -> Optional[np.ndarray]:
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].B_d
-
-    def C_d(self, index: int = -1) -> Optional[np.ndarray]:
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].C_d
-
-    def D_d(self, index: int = -1) -> Optional[np.ndarray]:
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].D_d
-
-    def E_d(self, index: int = -1) -> Optional[np.ndarray]:
-        if not self.discretizations:
-            return None
-        return self.discretizations[index].E_d
 
     # -- Per-iteration recording -------------------------------------------
 
@@ -861,8 +831,9 @@ class AlgorithmHistory:
 
         Reproduces the old ``accept_solution`` / ``reject_solution`` behavior:
 
-        * **REJECT**: append only ``lam_prox`` (the bumped weight that drives
-          the next subproblem).
+        * **REJECT**: append ``lam_prox`` (the bumped weight that drives the
+          next subproblem), plus the predicted/actual/acceptance diagnostics
+          when ``record_diagnostics`` is set.
         * **INITIAL**: append every trajectory / weight history entry, but
           skip the predicted/actual/acceptance diagnostics (the autotuner
           didn't compute them on iter 1).
@@ -1006,8 +977,10 @@ class AlgorithmHistory:
 class Algorithm(ABC):
     """Abstract base class for successive convexification algorithms.
 
-    Subclasses implement :py:meth:`initialize` and :py:meth:`step`. ``step``
-    takes the current :class:`AlgorithmState` and a CPU-side
+    An ``Algorithm`` owns the SCP iteration end to end: it *builds* the
+    JAX-pure iteration body (:meth:`build_iteration`), *stores* it
+    (:meth:`initialize`), and *drives* it one step at a time (:meth:`step`).
+    ``step`` takes the current :class:`AlgorithmState` and a CPU-side
     :class:`AlgorithmHistory`, returns the next state plus a convergence flag,
     and appends to ``history`` for diagnostics.
 
@@ -1017,18 +990,83 @@ class Algorithm(ABC):
         :class:`AlgorithmHistory` (Python-side), threaded explicitly through
         ``step()``.
 
+    The surface :class:`~openscvx.problem.Problem` relies on, beyond the
+    abstract methods below:
+
+    - ``autotuner`` — the :class:`AutotuningBase` whose declared ``hyper``
+      fields :class:`~openscvx.problem.Problem` enumerates to build the
+      per-solve / batched override channel.
+    - ``ep_tr`` / ``ep_vb`` / ``ep_vc`` — convergence thresholds
+      :meth:`Problem._sync_scp_constants` snapshots onto
+      :class:`AlgorithmState` before each solve.
+    - :meth:`get_columns` — the iteration-table columns to print.
+    - ``weights.build_vb_arrays`` — called once in
+      :meth:`Problem.initialize` to size the virtual-buffer weight arrays.
+    - :meth:`_hash_into` — contributes the algorithm's identity to the
+      ``solve_batched`` export cache key.
+
     Attributes:
         weights: SCP weights used by the algorithm and autotuner.
+            Subclasses must set this in ``__init__``.
+        autotuner: The penalty-weight update rule (:class:`AutotuningBase`).
             Subclasses must set this in ``__init__``.
         k_max: Maximum number of SCP iterations.
             Subclasses must set this in ``__init__``.
         t_max: Optional wall-clock time limit in seconds. ``None`` means no
             limit. Subclasses must set this in ``__init__``.
+        ep_tr: Trust-region convergence threshold.
+            Subclasses must set this in ``__init__``.
+        ep_vb: Virtual-buffer convergence threshold.
+            Subclasses must set this in ``__init__``.
+        ep_vc: Virtual-control convergence threshold.
+            Subclasses must set this in ``__init__``.
     """
 
     weights: "Weights"
+    autotuner: "AutotuningBase"
     k_max: int
     t_max: Optional[float]
+    ep_tr: float
+    ep_vb: float
+    ep_vc: float
+
+    @abstractmethod
+    def build_iteration(
+        self,
+        dis_continuous: Callable,
+        dis_impulsive: Callable,
+        jax_constraints: "LoweredJaxConstraints",
+        solver_callback: Callable,
+        settings: "Config",
+    ) -> Callable:
+        """Build the JAX-pure SCP iteration body for this algorithm.
+
+        :class:`~openscvx.problem.Problem` assembles the discretization
+        solvers, lowered constraints, and convex-solver callback, then asks
+        the algorithm to fuse them into one step. The algorithm owns this
+        because the fusion is algorithm-specific (which autotuner runs, which
+        penalty terms are assembled); ``Problem`` stays algorithm-agnostic.
+
+        Args:
+            dis_continuous: Continuous-dynamics discretization solver,
+                ``(x, u, params) -> (A_d, B_d, C_d, x_prop, V)``.
+            dis_impulsive: Impulsive/discrete-dynamics discretization solver,
+                ``(x_nodes, u, params) -> (x_prop_plus, D_d, E_d, W)``.
+            jax_constraints: Lowered JAX constraints the body operates over.
+            solver_callback: The convex backend's ``iteration_callback``,
+                ``(state, SubproblemData) -> SubproblemSolution`` (see
+                :class:`~openscvx.solvers.ptr_solver.PTRSolver`).
+            settings: Problem configuration.
+
+        Returns:
+            The JAX-pure ``(state, params) -> (next_state, diagnostics)``
+            iteration body. It must advance ``state.k`` by one per call —
+            both ``Problem.solve()``'s Python loop and the ``lax.while_loop``
+            behind ``solve_jax`` terminate on ``k`` reaching ``k_max``.
+            :class:`~openscvx.problem.Problem` wraps the body in ``jax.jit``
+            and hands it back via :meth:`initialize`.
+        """
+        raise NotImplementedError
 
     @abstractmethod
     def initialize(
@@ -1042,8 +1080,9 @@ class Algorithm(ABC):
 
         Args:
             iteration_fn: The JAX-pure ``(state, params) -> (next_state,
-                diagnostics)`` body built by
-                :func:`~openscvx.algorithms.scvx.iteration.make_scp_iteration`.
+                diagnostics)`` body returned by :meth:`build_iteration`,
+                already wrapped in ``jax.jit`` by
+                :class:`~openscvx.problem.Problem`.
             emitter: Per-iteration diagnostics sink (printing queue / no-op).
             jax_constraints: Lowered JAX constraints the body operates over.
             settings: Problem configuration.
@@ -1072,6 +1111,50 @@ class Algorithm(ABC):
             satisfied.
         """
         raise NotImplementedError
+
+    @abstractmethod
+    def get_columns(self, verbosity: int) -> List[Column]:
+        """Return the iteration-table columns to print at ``verbosity``.
+
+        :class:`~openscvx.problem.Problem` calls this once per solve to lay
+        out the progress table. Implementations typically concatenate the
+        algorithm's own columns with the autotuner's ``COLUMNS`` and filter by
+        each column's ``min_verbosity``.
+        """
+        raise NotImplementedError
+
+    def _hash_into(self, hasher: "hashlib._Hash") -> None:
+        """Contribute this algorithm's identity to the ``solve_batched`` cache key.
+
+        The exported batched loop bakes in the initial penalty weights and the
+        autotuner's update rule — none of which the symbolic problem hash
+        covers. The default folds in the concrete class name, then the six
+        :class:`~openscvx.algorithms.weights.Weights` fields enumerated
+        below (a new ``Weights`` field must be added to that tuple), then the
+        autotuner via its own ``_hash_into`` — mirroring the symbolic
+        ``_hash_into`` protocol.
+
+        The convergence thresholds (``ep_tr`` / ``ep_vb`` / ``ep_vc``) and the
+        iteration cap ``k_max`` / time limit ``t_max`` are deliberately *not*
+        folded in here: they ride the :class:`AlgorithmState` pytree as runtime
+        inputs, so one exported artifact serves every tolerance and
+        ``max_iters`` setting. Override only if an algorithm's identity needs
+        something beyond ``weights`` + ``autotuner``.
+        """
+        from openscvx.utils.caching import hash_value_into
+
+        hasher.update(type(self).__name__.encode())
+        w = self.weights
+        for value in (
+            w.lam_prox,
+            w.lam_vc,
+            w.lam_cost,
+            w.lam_vb,
+            w.lam_vb_nodal,
+            w.lam_vb_cross,
+        ):
+            hash_value_into(hasher, value)
+        self.autotuner._hash_into(hasher)
 
     @abstractmethod
     def citation(self) -> List[str]:

@@ -858,21 +858,36 @@ def test_algorithm_autotuner_configurable():
     assert hasattr(autotuner, "lam_prox_max")
     assert hasattr(autotuner, "lam_vc_max")
     assert hasattr(autotuner, "lam_cost_relax")
-    # Declared hyperparameters live on the frozen HyperParams container (and
-    # ride state.hyper); updates go through dataclasses.replace.
+    # Every numeric knob is a declared hyperparameter living on the frozen
+    # HyperParams container (and riding state.hyper); updates go through
+    # dataclasses.replace.
     assert {f.name for f in dataclasses.fields(autotuner.hyper)} == {
+        "gamma_1",
+        "gamma_2",
+        "eta_0",
+        "eta_1",
+        "eta_2",
+        "lam_prox_min",
+        "lam_prox_max",
+        "lam_cost_drop",
+        "lam_cost_relax",
+        "ep",
+        "eta_lambda",
+        "lam_vc_max",
         "rho_init",
         "rho_max",
-        "lam_cost_drop",
     }
-    autotuner.hyper = dataclasses.replace(autotuner.hyper, rho_max=1e7)
+    # rho_max is a reserved-but-unused knob: setting it to a non-default value
+    # at construction warns. Pin that as behavior, then confirm the value lands.
+    with pytest.warns(UserWarning, match="reserved"):
+        autotuner = AugmentedLagrangian(rho_max=1e7)
     assert autotuner.hyper.rho_max == 1e7
 
 
 def test_custom_autotuner_instance():
     """Custom autotuner instance can be passed to PenalizedTrustRegion."""
-    custom_autotuner = AugmentedLagrangian()
-    custom_autotuner.hyper = dataclasses.replace(custom_autotuner.hyper, rho_max=1e7)
+    with pytest.warns(UserWarning, match="reserved"):
+        custom_autotuner = AugmentedLagrangian(rho_max=1e7)
     custom_autotuner.lam_prox_max = 1e6
     custom_autotuner.lam_vc_max = 1e6
     algorithm = PenalizedTrustRegion(autotuner=custom_autotuner)
@@ -892,8 +907,10 @@ def test_augmented_lagrangian_exported():
     assert hasattr(auto_tuner, "lam_prox_max")
     assert hasattr(auto_tuner, "lam_vc_max")
 
-    # Should be able to modify parameters
-    auto_tuner.hyper = dataclasses.replace(auto_tuner.hyper, rho_max=1e7)
+    # Should be able to modify parameters. Setting the reserved rho_max to a
+    # non-default value at construction warns; pin that.
+    with pytest.warns(UserWarning, match="reserved"):
+        auto_tuner = ox.AugmentedLagrangian(rho_max=1e7)
     auto_tuner.lam_prox_max = 1e6
     assert auto_tuner.hyper.rho_max == 1e7
     assert auto_tuner.lam_prox_max == 1e6
@@ -1077,7 +1094,11 @@ def test_ramp_proximal_weight_increases_until_max(
         candidate.x_prop_plus = _candidate_x_prop_plus()
         return candidate
 
-    state = algorithm_state  # lam_prox starts at 1.0
+    # The ramp knobs (ramp_factor / lam_prox_max) now ride state.hyper, so seed
+    # it from this autotuner's container rather than the fixture's AL default.
+    state = algorithm_state.replace(  # lam_prox starts at 1.0
+        hyper=jax.tree_util.tree_map(jnp.asarray, autotuner.hyper)
+    )
 
     # 1.0 -> 2.0, still below max
     state = autotuner.update_weights(

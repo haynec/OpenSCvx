@@ -37,6 +37,8 @@ from typing import Annotated, Any, Dict, List, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .autotuner import (
+    AcceptanceRatioAutotuner,
+    AcceptanceRatioHyper,
     AdaptiveProximalWeight,
     AdaptiveProximalWeightSpec,
     AugmentedLagrangian,
@@ -52,6 +54,7 @@ from .base import (
     AlgorithmHistory,
     AlgorithmState,
     AutotuningBase,
+    CandidateIterate,
     DiscretizationResult,
     HyperParams,
     adaptive_state_code_to_str,
@@ -138,6 +141,7 @@ __all__ = [
     "AlgorithmHistory",
     "AlgorithmState",
     "AdaptiveStateCode",
+    "CandidateIterate",
     "adaptive_state_code_to_str",
     "DiscretizationResult",
     "Weights",
@@ -147,6 +151,8 @@ __all__ = [
     "PenalizedTrustRegion",
     "AutotuningBase",
     "HyperParams",
+    "AcceptanceRatioAutotuner",
+    "AcceptanceRatioHyper",
     "AugmentedLagrangian",
     "AdaptiveProximalWeight",
     "ConstantProximalWeight",

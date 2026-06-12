@@ -20,9 +20,15 @@ if TYPE_CHECKING:
 
 
 class ConstantProximalWeightHyper(HyperParams):
-    """Declared hyperparameters for :class:`ConstantProximalWeight`."""
+    """Declared hyperparameters for :class:`ConstantProximalWeight`.
+
+    ``lam_cost_drop`` is the iteration after which ``lam_cost`` relaxation
+    applies (``state.k > lam_cost_drop``): ``-1`` relaxes from the first
+    iteration, and the default ``lam_cost_relax=1.0`` makes that a no-op.
+    """
 
     lam_cost_drop: int = -1
+    lam_cost_relax: float = 1.0
 
 
 class ConstantProximalWeight(AutotuningBase):
@@ -34,18 +40,17 @@ class ConstantProximalWeight(AutotuningBase):
     :class:`AlgorithmState` pytree; see the base-class contract.
     """
 
-    # The body is three jnp ops — JAX's eager dispatch is cheaper than the
-    # pytree-flatten overhead of a JIT'd closure. Opt out of the SCP loop's
-    # JIT wrapping.
-    JIT_UPDATE_WEIGHTS: bool = False
+    COMPUTES_ACCEPTANCE_METRICS = False
 
     def __init__(
         self,
         lam_cost_drop: int = -1,
         lam_cost_relax: float = 1.0,
     ):
-        self.hyper = ConstantProximalWeightHyper(lam_cost_drop=lam_cost_drop)
-        self.lam_cost_relax = lam_cost_relax
+        self.hyper = ConstantProximalWeightHyper(
+            lam_cost_drop=lam_cost_drop,
+            lam_cost_relax=lam_cost_relax,
+        )
 
     def update_weights(
         self,
@@ -61,7 +66,7 @@ class ConstantProximalWeight(AutotuningBase):
         """
         lam_cost_next = jnp.where(
             state.k > state.hyper.lam_cost_drop,
-            state.lam_cost * self.lam_cost_relax,
+            state.lam_cost * state.hyper.lam_cost_relax,
             state.lam_cost_init,
         )
 
