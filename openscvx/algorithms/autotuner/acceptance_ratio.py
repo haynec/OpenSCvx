@@ -29,7 +29,7 @@ from openscvx.utils.printing import (
     color_adaptive_state,
 )
 
-from ..base import AdaptiveStateCode, AutotuningBase, HyperParams
+from ..base import AdaptiveStateCode, AutotuningBase, LamCostRelaxHyper
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
@@ -37,12 +37,11 @@ if TYPE_CHECKING:
     from ..base import AlgorithmState, CandidateIterate
 
 
-class AcceptanceRatioHyper(HyperParams):
+class AcceptanceRatioHyper(LamCostRelaxHyper):
     """Knobs shared by every acceptance-ratio autotuner.
 
-    ``lam_cost_drop`` is the iteration after which ``lam_cost`` relaxation
-    applies (``state.k > lam_cost_drop``): ``-1`` relaxes from the first
-    iteration, and the default ``lam_cost_relax=1.0`` makes that a no-op.
+    Extends the shared :class:`LamCostRelaxHyper` ``lam_cost`` relaxation knobs
+    with the acceptance-ratio decision thresholds and the ``lam_prox`` clips.
     """
 
     gamma_1: float = 2.0
@@ -52,8 +51,6 @@ class AcceptanceRatioHyper(HyperParams):
     eta_2: float = 0.8
     lam_prox_min: float = 1e-3
     lam_prox_max: float = 1e4
-    lam_cost_drop: int = -1
-    lam_cost_relax: float = 1.0
 
 
 class AcceptanceRatioAutotuner(AutotuningBase):
@@ -135,17 +132,7 @@ class AcceptanceRatioAutotuner(AutotuningBase):
         )
         J_nonlin = nonlin_cost + nonlin_pen + nodal_pen
 
-        # Cost relaxation: when state.k > hyper.lam_cost_drop, scale
-        # state.lam_cost; otherwise reset to the algorithm's initial weight
-        # (carried on the pytree as state.lam_cost_init, broadcast at
-        # from_settings()). Both constants ride the pytree so per-solve
-        # overrides and vmap sweeps reach the traced body. Scalar
-        # lam_cost_relax preserves the user-specified per-state weight ratios.
-        lam_cost_next = jnp.where(
-            state.k > state.hyper.lam_cost_drop,
-            state.lam_cost * state.hyper.lam_cost_relax,
-            state.lam_cost_init,
-        )
+        lam_cost_next = self._relaxed_lam_cost(state)
 
         def first_iter(state):
             # Iter 1: accept unconditionally, leave weights at their init values,

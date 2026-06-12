@@ -237,6 +237,21 @@ export.register_pytree_node_serialization(
 )
 
 
+class LamCostRelaxHyper(HyperParams):
+    """``lam_cost`` relaxation knobs shared by every built-in autotuner.
+
+    Every autotuner relaxes ``lam_cost`` by the same rule (see
+    :meth:`AutotuningBase._relaxed_lam_cost`), so the two knobs that steer it
+    live here once instead of being re-declared per class. ``lam_cost_drop`` is
+    the iteration after which relaxation applies (``state.k > lam_cost_drop``):
+    ``-1`` relaxes from the first iteration, and the default
+    ``lam_cost_relax=1.0`` makes that a no-op.
+    """
+
+    lam_cost_drop: int = -1
+    lam_cost_relax: float = 1.0
+
+
 # ---------------------------------------------------------------------------
 # Autotuning base class
 # ---------------------------------------------------------------------------
@@ -372,12 +387,18 @@ class AutotuningBase(ABC):
         parameter that steers it (penalty ramps, acceptance thresholds, weight
         clips). The default hashes the concrete class plus all instance
         attributes — sufficient because autotuner parameters are plain
-        scalars. ``hyper`` is excluded: declared hyperparameters ride
-        ``AlgorithmState.hyper`` as runtime inputs, so one artifact serves
+        scalars. The ``hyper`` *values* are excluded: declared hyperparameters
+        ride ``AlgorithmState.hyper`` as runtime inputs, so one artifact serves
         every setting of them (the same reasoning that keeps the ``ep_*``
-        thresholds out of the algorithm's hash). Folded in by
-        :meth:`Algorithm._hash_into`; mirrors the symbolic ``_hash_into``
-        protocol.
+        thresholds out of the algorithm's hash). The ``hyper`` *schema* is
+        folded in, though: the ``hyper`` leaves map positionally onto the
+        exported artifact's avals, so a field reorder or addition silently
+        permutes runtime values against the wrong leaves. Hashing the field
+        names in declaration order turns such a change into a clean cache miss
+        and rebuild — this matters because :class:`LamCostRelaxHyper` moves
+        ``lam_cost_drop`` / ``lam_cost_relax`` to the *front* of the field
+        order. Folded in by :meth:`Algorithm._hash_into`; mirrors the symbolic
+        ``_hash_into`` protocol.
         """
         from openscvx.utils.caching import hash_value_into
 
@@ -387,6 +408,11 @@ class AutotuningBase(ABC):
                 continue
             hasher.update(name.encode())
             hash_value_into(hasher, getattr(self, name))
+        # Schema, not values: the hyper field order/names fix the exported
+        # artifact's leaf layout, so a reorder must invalidate cached artifacts
+        # rather than silently permute runtime values onto the wrong avals.
+        for fld in dc_fields(self.hyper):
+            hasher.update(fld.name.encode())
 
     @staticmethod
     def calculate_cost_from_state(
@@ -479,6 +505,25 @@ class AutotuningBase(ABC):
         x_diff = settings.sim.inv_S_x @ (x_bar[1:, :] - x_prop).T
 
         return cost, jnp.sum(lam_vc * jnp.abs(x_diff.T)), nodal_penalty
+
+    @staticmethod
+    def _relaxed_lam_cost(state: "AlgorithmState") -> jnp.ndarray:
+        """``lam_cost`` for the next iterate per the shared relaxation rule.
+
+        When ``state.k > state.hyper.lam_cost_drop``, scale ``state.lam_cost``
+        by ``state.hyper.lam_cost_relax``; otherwise reset to the algorithm's
+        initial weight (carried on the pytree as ``state.lam_cost_init``,
+        broadcast at :meth:`AlgorithmState.from_settings`). Both constants ride
+        the pytree so per-solve overrides and ``vmap`` sweeps reach the traced
+        body; the scalar ``lam_cost_relax`` preserves the user-specified
+        per-state weight ratios. Shared verbatim by every built-in autotuner
+        via the :class:`LamCostRelaxHyper` knobs.
+        """
+        return jnp.where(
+            state.k > state.hyper.lam_cost_drop,
+            state.lam_cost * state.hyper.lam_cost_relax,
+            state.lam_cost_init,
+        )
 
     @abstractmethod
     def update_weights(

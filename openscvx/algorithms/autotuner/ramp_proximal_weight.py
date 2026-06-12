@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 
-from ..base import AdaptiveStateCode, AutotuningBase, HyperParams
+from ..base import AdaptiveStateCode, AutotuningBase, LamCostRelaxHyper
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
@@ -19,18 +19,15 @@ if TYPE_CHECKING:
     from ..base import AlgorithmState, CandidateIterate
 
 
-class RampProximalWeightHyper(HyperParams):
+class RampProximalWeightHyper(LamCostRelaxHyper):
     """Declared hyperparameters for :class:`RampProximalWeight`.
 
-    ``lam_cost_drop`` is the iteration after which ``lam_cost`` relaxation
-    applies (``state.k > lam_cost_drop``): ``-1`` relaxes from the first
-    iteration, and the default ``lam_cost_relax=1.0`` makes that a no-op.
+    Extends the shared :class:`LamCostRelaxHyper` ``lam_cost`` relaxation knobs
+    with the ramp factor and the ``lam_prox`` ceiling.
     """
 
     ramp_factor: float = 1.0
     lam_prox_max: float = 1e3
-    lam_cost_drop: int = -1
-    lam_cost_relax: float = 1.0
 
 
 class RampProximalWeight(AutotuningBase):
@@ -68,11 +65,7 @@ class RampProximalWeight(AutotuningBase):
 
         Pure functional update — see class docstring.
         """
-        lam_cost_next = jnp.where(
-            state.k > state.hyper.lam_cost_drop,
-            state.lam_cost * state.hyper.lam_cost_relax,
-            state.lam_cost_init,
-        )
+        lam_cost_next = self._relaxed_lam_cost(state)
 
         was_at_max = jnp.all(state.lam_prox >= state.hyper.lam_prox_max)
         new_lam_prox = jnp.minimum(

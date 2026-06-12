@@ -11,7 +11,7 @@ from pydantic import BaseModel, ConfigDict
 
 from openscvx.config import Config
 
-from ..base import AdaptiveStateCode, AutotuningBase, HyperParams
+from ..base import AdaptiveStateCode, AutotuningBase, LamCostRelaxHyper
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
@@ -19,16 +19,12 @@ if TYPE_CHECKING:
     from ..base import AlgorithmState, CandidateIterate
 
 
-class ConstantProximalWeightHyper(HyperParams):
+class ConstantProximalWeightHyper(LamCostRelaxHyper):
     """Declared hyperparameters for :class:`ConstantProximalWeight`.
 
-    ``lam_cost_drop`` is the iteration after which ``lam_cost`` relaxation
-    applies (``state.k > lam_cost_drop``): ``-1`` relaxes from the first
-    iteration, and the default ``lam_cost_relax=1.0`` makes that a no-op.
+    The ``lam_cost`` relaxation knobs are this autotuner's only tunables, so it
+    declares no fields beyond the shared :class:`LamCostRelaxHyper` ones.
     """
-
-    lam_cost_drop: int = -1
-    lam_cost_relax: float = 1.0
 
 
 class ConstantProximalWeight(AutotuningBase):
@@ -64,11 +60,7 @@ class ConstantProximalWeight(AutotuningBase):
 
         Pure functional update — see class docstring.
         """
-        lam_cost_next = jnp.where(
-            state.k > state.hyper.lam_cost_drop,
-            state.lam_cost * state.hyper.lam_cost_relax,
-            state.lam_cost_init,
-        )
+        lam_cost_next = self._relaxed_lam_cost(state)
 
         return state.replace(
             x=candidate.x,
