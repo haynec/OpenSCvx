@@ -297,7 +297,7 @@ class AutotuningBase(ABC):
             def __init__(self, ramp: float = 2.0):
                 self.hyper = MyHyper(ramp=ramp)
 
-            def update_weights(self, state, candidate, *args):
+            def update_weights(self, state, candidate, nodal_constraints, settings, params):
                 return state.replace(
                     # accept the candidate: it becomes the next iterate
                     x=candidate.x,

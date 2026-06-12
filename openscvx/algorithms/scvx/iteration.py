@@ -114,8 +114,13 @@ def make_scp_iteration(
        :class:`IterationDiagnostics`.
 
     The current-iterate discretization (steps 1–2) is recomputed every call
-    rather than read from a carried ``state.x_prop``; see the plan's decision
-    log. The discretization solvers are built by the caller (``Problem``) and
+    rather than read from a carried ``state.x_prop``: the candidate is
+    re-discretized next iteration instead of carrying its discretization on
+    :class:`AlgorithmState`. This trades roughly 2× discretization work per
+    iteration for a smaller loop carry and a simpler accept/reject rule in the
+    autotuner — the next iterate is a pure function of ``state.x`` / ``state.u``,
+    so acceptance copies only the trajectory, never a discretization. The
+    discretization solvers are built by the caller (``Problem``) and
     captured here so the caching policy stays in its own layer; the constraint
     linearizers, per-backend solver callback, autotuner, and settings are
     likewise closure constants.
@@ -221,7 +226,16 @@ def make_scp_iteration(
         return nodal_g, nodal_grad_x, nodal_grad_u, cross_g, cross_grad_X, cross_grad_U
 
     def _candidate_cost(x: jnp.ndarray) -> jnp.ndarray:
-        """Boundary-weighted reduction objective at the candidate's terminal node."""
+        """Boundary-weighted reduction objective at the candidate's terminal node.
+
+        This is the unscaled, terminal-node *display* cost — the value the
+        emitter prints in the cost column. It deliberately differs from the
+        ``J_nonlin`` cost term computed by
+        :py:meth:`AutotuningBase.calculate_cost_from_state`, which scales by
+        ``inv_S_x`` / ``c_x`` and also folds in initial-node ``Minimize`` /
+        ``Maximize`` objectives. Convergence never reads this value, so the two
+        are allowed to drift.
+        """
         cost = jnp.asarray(0.0)
         for i, bc_type in enumerate(final_type):
             if bc_type == "Minimize":

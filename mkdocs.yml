@@ -199,3 +199,4 @@ nav:
       - 'UnderTheHood/vectorization_and_vmapping.md'
       - 'UnderTheHood/lowering_architecture.md'
       - 'UnderTheHood/batching_jit_grad.md'
+      - 'UnderTheHood/custom_algorithms_autotuners.md'
