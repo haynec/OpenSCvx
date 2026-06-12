@@ -4187,6 +4187,8 @@
       
         
       
+        
+      
     
     
     
@@ -4240,6 +4242,34 @@
 
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Reference/algorithms/autotuner/acceptance_ratio/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    acceptance_ratio
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
             
               
                 
@@ -10275,28 +10305,37 @@ kwarg's field. Construction-only keys of the constructor dict — <code>autotune
 <p>The batch runs until its slowest element converges or exhausts its own cap;
 finished elements are frozen, not re-iterated, so each element matches the
 corresponding single <code>solve_jax</code> run.</p>
-<p><strong>New autotuners batch for free.</strong> An autotuner's tunable knobs follow the
-same derivation: declare them as fields on a <code>HyperParams</code> subclass — bare
-annotations, no decorator; subclassing applies the frozen-dataclass transform
-and the JAX pytree registration, and the annotation picks the dtype (<code>int</code>
-gets the iteration counter's, <code>float</code> the problem's) — assign an instance to
-<code>self.hyper</code>, and read <code>state.hyper.&lt;field&gt;</code> inside <code>update_weights</code> (see the
-<code>AutotuningBase</code> docstring). The declaration is the registration — each field
-immediately works as a <code>solve_jax</code> override, a <code>solve_batched</code> sweep target,
-and a runtime input of the exported artifact, with zero edits anywhere else:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">openscvx.algorithms</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutotuningBase</span><span class="p">,</span> <span class="n">HyperParams</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">MyHyper</span><span class="p">(</span><span class="n">HyperParams</span><span class="p">):</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">ramp</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">MyAutotuner</span><span class="p">(</span><span class="n">AutotuningBase</span><span class="p">):</span>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ramp</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">):</span>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">hyper</span> <span class="o">=</span> <span class="n">MyHyper</span><span class="p">(</span><span class="n">ramp</span><span class="o">=</span><span class="n">ramp</span><span class="p">)</span>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="o">...</span><span class="p">):</span>
-</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>        <span class="o">...</span><span class="n">state</span><span class="o">.</span><span class="n">hyper</span><span class="o">.</span><span class="n">ramp</span><span class="o">...</span>
-</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a>
-</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">solve_batched</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;ramp&quot;</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="n">B</span><span class="p">)})</span>
+<p><strong>Every built-in autotuner knob batches for free.</strong> All numeric knobs of the
+built-in autotuners are declared hyperparameters — the trust-region factors
+(<code>gamma_1</code> / <code>gamma_2</code>), the acceptance thresholds (<code>eta_0</code> / <code>eta_1</code> /
+<code>eta_2</code>), the weight clips, the cost-relaxation schedule — so any of them is a
+<code>solve_jax</code> override and a <code>solve_batched</code> sweep target by name:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># sweep the trust-region growth factor across a batch, one cached artifact</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">solve_batched</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;gamma_1&quot;</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="n">B</span><span class="p">)})</span>
+</span></code></pre></div>
+<p><strong>New autotuners batch the same way.</strong> A custom autotuner's tunable knobs
+follow the same derivation: declare them as fields on a <code>HyperParams</code> subclass
+— bare annotations, no decorator; subclassing applies the frozen-dataclass
+transform and the JAX pytree registration, and the annotation picks the dtype
+(<code>int</code> gets the iteration counter's, <code>float</code> the problem's) — assign an
+instance to <code>self.hyper</code>, and read <code>state.hyper.&lt;field&gt;</code> inside
+<code>update_weights</code> (see the <code>AutotuningBase</code> docstring). The declaration is the
+registration — each field immediately works as a <code>solve_jax</code> override, a
+<code>solve_batched</code> sweep target, and a runtime input of the exported artifact,
+with zero edits anywhere else:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">openscvx.algorithms</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutotuningBase</span><span class="p">,</span> <span class="n">HyperParams</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">MyHyper</span><span class="p">(</span><span class="n">HyperParams</span><span class="p">):</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="n">ramp</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">MyAutotuner</span><span class="p">(</span><span class="n">AutotuningBase</span><span class="p">):</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ramp</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">):</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">hyper</span> <span class="o">=</span> <span class="n">MyHyper</span><span class="p">(</span><span class="n">ramp</span><span class="o">=</span><span class="n">ramp</span><span class="p">)</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">update_weights</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="o">...</span><span class="p">):</span>
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>        <span class="o">...</span><span class="n">state</span><span class="o">.</span><span class="n">hyper</span><span class="o">.</span><span class="n">ramp</span><span class="o">...</span>
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a><span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">solve_batched</span><span class="p">(</span><span class="n">algorithm</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;ramp&quot;</span><span class="p">:</span> <span class="n">jnp</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="n">B</span><span class="p">)})</span>
 </span></code></pre></div>
 <p>Pick <code>solve_batched</code> when <strong>cross-process cold-start dominates</strong> — short-lived
 processes (CI sweeps, notebook restarts, deployed workers) that otherwise pay
@@ -10365,25 +10404,25 @@ but built via
   (<code>if result.converged: ...</code>) work either way.</li>
 </ul>
 <h2 id="solve_jax-arguments"><code>solve_jax()</code> arguments<a class="headerlink" href="#solve_jax-arguments" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">problem</span><span class="o">.</span><span class="n">solve_jax</span><span class="p">(</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">x_initial</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>      <span class="c1"># boundary-condition pin (full unified state vector,</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>                         <span class="c1">#     ``jnp.nan`` at non-Fix entries — see</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>                         <span class="c1">#     ``AlgorithmState.from_settings``); falls back</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>                         <span class="c1">#     to the default from settings</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">x_final</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>        <span class="c1"># terminal pin, same conventions</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">parameters</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>     <span class="c1"># parameters dict for this solve; falls back to</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>                         <span class="c1">#     ``self._parameters``</span>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="o">*</span><span class="p">,</span>
-</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="n">x_guess</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>        <span class="c1"># (N, n_x) state trajectory warm-start</span>
-</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="n">u_guess</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>        <span class="c1"># (N, n_u) control trajectory warm-start</span>
-</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    <span class="n">max_iters</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>      <span class="c1"># SCP iteration cap; sugar for algorithm={&quot;k_max&quot;: ...};</span>
-</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>                         <span class="c1">#     falls back to the configured k_max</span>
-</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>    <span class="n">algorithm</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>      <span class="c1"># any AlgorithmState field by name (ep_tr, lam_prox,</span>
-</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>                         <span class="c1">#     ...) — the constructor&#39;s algorithm-dict names;</span>
-</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>                         <span class="c1">#     values match the field shape or fill it from a</span>
-</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>                         <span class="c1">#     scalar. Runtime inputs on the state pytree — no</span>
-</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>                         <span class="c1">#     value forces a retrace</span>
-</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">problem</span><span class="o">.</span><span class="n">solve_jax</span><span class="p">(</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="n">x_initial</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>      <span class="c1"># boundary-condition pin (full unified state vector,</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>                         <span class="c1">#     ``jnp.nan`` at non-Fix entries — see</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>                         <span class="c1">#     ``AlgorithmState.from_settings``); falls back</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>                         <span class="c1">#     to the default from settings</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">x_final</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>        <span class="c1"># terminal pin, same conventions</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">parameters</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>     <span class="c1"># parameters dict for this solve; falls back to</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>                         <span class="c1">#     ``self._parameters``</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>    <span class="n">x_guess</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>        <span class="c1"># (N, n_x) state trajectory warm-start</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="n">u_guess</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>        <span class="c1"># (N, n_u) control trajectory warm-start</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="n">max_iters</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>      <span class="c1"># SCP iteration cap; sugar for algorithm={&quot;k_max&quot;: ...};</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>                         <span class="c1">#     falls back to the configured k_max</span>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>    <span class="n">algorithm</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>      <span class="c1"># any AlgorithmState field by name (ep_tr, lam_prox,</span>
+</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>                         <span class="c1">#     ...) — the constructor&#39;s algorithm-dict names;</span>
+</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>                         <span class="c1">#     values match the field shape or fill it from a</span>
+</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>                         <span class="c1">#     scalar. Runtime inputs on the state pytree — no</span>
+</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a>                         <span class="c1">#     value forces a retrace</span>
+</span><span id="__span-7-19"><a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>Positional kwargs (rather than a single <code>inputs</code> pytree) keep
 <code>jax.vmap(problem.solve_jax, in_axes=(0, 0, None))</code> ergonomic;
