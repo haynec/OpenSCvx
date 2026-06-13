@@ -23,8 +23,10 @@ class HyperParams:
     annotated field with its default — bare annotations, no ``@dataclass``
     decorator — and the base class does the rest:
 
-    * applies the frozen-dataclass transform, so instances are immutable
-      value objects updated with :func:`dataclasses.replace`;
+    * applies the frozen, keyword-only dataclass transform, so instances are
+      immutable value objects constructed by knob name (mixin inheritance
+      reorders fields, so positional construction would be a silent
+      mis-binding) and updated with :func:`dataclasses.replace`;
     * registers the subclass as a JAX pytree (and for ``jax.export`` treedef
       serialization), so instances ride :attr:`AlgorithmState.hyper` through
       ``jit`` / ``vmap`` / the exported batched ``solve_batched`` artifact;
@@ -49,7 +51,11 @@ class HyperParams:
         # ``__init_subclass__`` runs before any decorator on the subclass
         # could, so the transform must happen here — which is exactly what
         # lets authors skip the dataclass and pytree mechanics entirely.
-        dataclass(frozen=True)(cls)
+        # ``kw_only`` because mixins (e.g. ``LamCostRelaxHyper``) put inherited
+        # fields ahead of a subclass's own: positional construction would bind
+        # silently to the wrong knobs, and keyword-only also frees field order
+        # from any inheritance constraint.
+        dataclass(frozen=True, kw_only=True)(cls)
         for fld in dc_fields(cls):
             # fld.type is a string under postponed annotation evaluation
             # (``from __future__ import annotations``); accept both forms.
@@ -74,7 +80,7 @@ class HyperParams:
 # for ``AlgorithmState.hyper``. Auxdata of a ``register_dataclass`` node is
 # the (empty) tuple of meta-field values, hence ``()`` — not ``None`` — on
 # deserialize; same for the subclasses registered above.
-dataclass(frozen=True)(HyperParams)
+dataclass(frozen=True, kw_only=True)(HyperParams)
 jax.tree_util.register_dataclass(HyperParams)
 export.register_pytree_node_serialization(
     HyperParams,

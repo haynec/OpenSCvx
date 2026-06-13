@@ -196,10 +196,15 @@ class Algorithm(ABC):
 
         Must be JAX-traceable: it runs inside the ``lax.while_loop`` cond of
         ``solve_jax`` / ``solve_batched`` (where it is ``jax.vmap``'d per batch
-        element) as well as on the Python ``solve()`` path. An override implies a
-        subclass, hence a distinct ``type(self).__name__`` that :meth:`_hash_into`
-        already folds into the ``solve_batched`` export cache key — so a changed
-        predicate invalidates stale batched artifacts without extra machinery.
+        element) as well as on the Python ``solve()`` path.
+
+        Under ``save_compiled``, the predicate is baked into the exported
+        ``solve_batched`` artifact, but the cache key sees only the algorithm's
+        class *name* (:meth:`_hash_into`): introducing an override — a new
+        subclass — is a clean cache miss, while *editing the body* of an
+        existing override is invisible to the key and silently loads the stale
+        artifact. Clear the solver cache (or rename the class) when iterating
+        on a predicate with ``save_compiled`` enabled.
         """
         return (state.J_tr < state.ep_tr) & (state.J_vb < state.ep_vb) & (state.J_vc < state.ep_vc)
 
@@ -208,11 +213,16 @@ class Algorithm(ABC):
 
         The exported batched loop bakes in the initial penalty weights and the
         autotuner's update rule — none of which the symbolic problem hash
-        covers. The default folds in the concrete class name, then the six
-        :class:`~openscvx.algorithms.weights.Weights` fields enumerated
-        below (a new ``Weights`` field must be added to that tuple), then the
-        autotuner via its own ``_hash_into`` — mirroring the symbolic
-        ``_hash_into`` protocol.
+        covers. The default folds in the concrete class name, then every
+        :class:`~openscvx.algorithms.weights.Weights` field (derived from the
+        dataclass, so a new field is hashed automatically), then the autotuner
+        via its own ``_hash_into`` — mirroring the symbolic ``_hash_into``
+        protocol. The :class:`~openscvx.algorithms.state.AlgorithmState` field
+        schema is folded in too: the state pytree is the artifact's input, its
+        leaves bind positionally to the exported avals, and many are
+        identically-shaped scalars — so a field reorder must be a clean cache
+        miss, never a silent permutation (the same guard the autotuner applies
+        to its ``hyper`` schema).
 
         The convergence thresholds (``ep_tr`` / ``ep_vb`` / ``ep_vc``) and the
         iteration cap ``k_max`` / time limit ``t_max`` are deliberately *not*
@@ -221,19 +231,21 @@ class Algorithm(ABC):
         ``max_iters`` setting. Override only if an algorithm's identity needs
         something beyond ``weights`` + ``autotuner``.
         """
+        from dataclasses import fields as dc_fields
+
         from openscvx.utils.caching import hash_value_into
 
+        from .state import AlgorithmState
+
         hasher.update(type(self).__name__.encode())
-        w = self.weights
-        for value in (
-            w.lam_prox,
-            w.lam_vc,
-            w.lam_cost,
-            w.lam_vb,
-            w.lam_vb_nodal,
-            w.lam_vb_cross,
-        ):
-            hash_value_into(hasher, value)
+        for fld in dc_fields(self.weights):
+            hash_value_into(hasher, getattr(self.weights, fld.name))
+        # Schema, not values: the AlgorithmState field order fixes the exported
+        # artifact's input-leaf layout, so a reorder must invalidate cached
+        # artifacts rather than silently permute runtime values onto the wrong
+        # avals (mirrors the hyper-schema fold in AutotuningBase._hash_into).
+        for name in AlgorithmState._FIELDS:
+            hasher.update(name.encode())
         self.autotuner._hash_into(hasher)
 
     @abstractmethod

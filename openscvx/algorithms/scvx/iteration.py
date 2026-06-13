@@ -231,10 +231,10 @@ def make_scp_iteration(
         This is the unscaled, terminal-node *display* cost — the value the
         emitter prints in the cost column. It deliberately differs from the
         ``J_nonlin`` cost term computed by
-        :py:meth:`AutotuningBase.calculate_cost_from_state`, which scales by
-        ``inv_S_x`` / ``c_x`` and also folds in initial-node ``Minimize`` /
-        ``Maximize`` objectives. Convergence never reads this value, so the two
-        are allowed to drift.
+        :func:`~openscvx.algorithms.penalty.calculate_cost_from_state`, which
+        scales by ``inv_S_x`` / ``c_x`` and also folds in initial-node
+        ``Minimize`` / ``Maximize`` objectives. Convergence never reads this
+        value, so the two are allowed to drift.
         """
         cost = jnp.asarray(0.0)
         for i, bc_type in enumerate(final_type):
