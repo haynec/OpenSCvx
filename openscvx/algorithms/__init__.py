@@ -54,14 +54,14 @@ from .autotuner.base import AutotuningBase
 from .base import Algorithm
 from .history import AlgorithmHistory, DiscretizationResult
 from .hyperparams import HyperParams
+from .optimization_results import OptimizationResults
+from .scvx import PenalizedTrustRegion
 from .state import (
     AdaptiveStateCode,
     AlgorithmState,
     CandidateIterate,
     adaptive_state_code_to_str,
 )
-from .optimization_results import OptimizationResults
-from .scvx import PenalizedTrustRegion
 from .weights import Weights
 
 # ---------------------------------------------------------------------------

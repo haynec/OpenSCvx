@@ -93,8 +93,7 @@ def test_defaults_agree(autotuner_cls, hyper_cls, spec_cls):
             f"declared hyperparameter {name!r}"
         )
         assert name in spec_defaults, (
-            f"{spec_cls.__name__} is missing a default for declared "
-            f"hyperparameter {name!r}"
+            f"{spec_cls.__name__} is missing a default for declared hyperparameter {name!r}"
         )
 
         assert hyper_default == init_defaults[name], (

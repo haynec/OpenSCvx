@@ -22,7 +22,6 @@ from openscvx.algorithms import (
     PenalizedTrustRegionConfig,
     RampProximalWeight,
 )
-from openscvx.algorithms.autotuner.base import AutotuningBase
 from openscvx.algorithms.penalty import (
     calculate_cost_from_state,
     calculate_nonlinear_penalty,
