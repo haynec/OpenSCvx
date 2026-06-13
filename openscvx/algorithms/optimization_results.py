@@ -6,10 +6,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from .scvx.iteration import _converged
-
 if TYPE_CHECKING:
-    from openscvx.algorithms.base import AlgorithmHistory, AlgorithmState
+    from openscvx.algorithms.history import AlgorithmHistory
+    from openscvx.algorithms.state import AlgorithmState
     from openscvx.problem import Problem
 
 
@@ -70,7 +69,7 @@ class OptimizationResults:
 
         * :meth:`from_history` (``solve()``) populates the per-iteration
           ``X`` / ``U`` / ``*_history`` lists from the Python loop's
-          :class:`~openscvx.algorithms.base.AlgorithmHistory`.
+          :class:`~openscvx.algorithms.history.AlgorithmHistory`.
         * :meth:`from_final_state` (``solve_jax()``) wraps only the final
           iterate: ``X = [state.x]`` and ``U = [state.u]`` (single-element
           lists so ``result.x`` / ``result.u`` continue to return the final
@@ -288,10 +287,11 @@ class OptimizationResults:
         # slice of the last node (vmap'd to ``(B, 1)``).
         t_final = state.x[..., -1, :][..., settings.sim.time_slice]
 
-        # Per-element thresholds ride the state pytree, so a batched solve
-        # with a tolerance sweep reports convergence against each element's
-        # own ep_* values.
-        converged = _converged(state)
+        # Convergence flag through the algorithm's own predicate, so this JAX
+        # results path agrees with ``solve()`` / the ``lax.while_loop``. The
+        # per-element thresholds ride the state pytree, so a batched solve with
+        # a tolerance sweep reports convergence against each element's ep_*.
+        converged = problem.algorithm.converged(state)
 
         return cls(
             converged=converged,

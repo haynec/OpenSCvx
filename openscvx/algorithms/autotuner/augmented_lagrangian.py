@@ -18,7 +18,7 @@ from .acceptance_ratio import AcceptanceRatioAutotuner, AcceptanceRatioHyper
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
 
-    from ..base import AlgorithmState, CandidateIterate
+    from ..state import AlgorithmState, CandidateIterate
 
 
 class AugmentedLagrangianHyper(AcceptanceRatioHyper):

@@ -5,9 +5,11 @@ for solving non-convex trajectory optimization problems through iterative convex
 approximation.
 
 All algorithms inherit from :class:`Algorithm`, enabling pluggable algorithm
-implementations and custom SCvx variants. Immutable components (solver,
-discretization_solver, jax_constraints, etc.) are stored during ``initialize()``;
-mutable configuration (params, settings) is passed per-step.
+implementations and custom SCvx variants. An algorithm builds its fused,
+JAX-pure iteration body (``build_iteration``), stores it along with the
+diagnostics emitter (``initialize``), drives it one step at a time on the
+Python path (``step``), and owns its convergence policy (``converged``) —
+honored identically by ``solve()``, ``solve_jax()``, and ``solve_batched()``.
 
 The iterate carry is split into two objects:
 
@@ -48,19 +50,18 @@ from .autotuner import (
     RampProximalWeight,
     RampProximalWeightSpec,
 )
-from .base import (
-    AdaptiveStateCode,
-    Algorithm,
-    AlgorithmHistory,
-    AlgorithmState,
-    AutotuningBase,
-    CandidateIterate,
-    DiscretizationResult,
-    HyperParams,
-    adaptive_state_code_to_str,
-)
+from .autotuner.base import AutotuningBase
+from .base import Algorithm
+from .history import AlgorithmHistory, DiscretizationResult
+from .hyperparams import HyperParams
 from .optimization_results import OptimizationResults
 from .scvx import PenalizedTrustRegion
+from .state import (
+    AdaptiveStateCode,
+    AlgorithmState,
+    CandidateIterate,
+    adaptive_state_code_to_str,
+)
 from .weights import Weights
 
 # ---------------------------------------------------------------------------
