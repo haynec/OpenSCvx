@@ -140,16 +140,31 @@ mass0 = 19050.864  # initial mass (kg)
 
 # CTCS enforces the path constraints in continuous time, and free per-node time
 # dilation (Time.uniform_time_grid defaults to False) lets the solver concentrate
-# nodes in the transonic dive — the converged grid is non-uniform (dt spans ~3x).
-# The floor on node count, though, is set by *dynamics* resolution, not the
-# constraints: the flight-path-angle timescale is only a few seconds, so below
-# ~50 nodes the solver "converges" only by leaning on virtual control, and the
-# propagated control no longer reaches the terminal altitude (N=20 flies to
-# ~14.7 km, not 20 km). N>=80 is propagation-consistent and node-converged
-# (t_f ~ 343 s) — always confirm with results.trajectory, not just the solver's
+# nodes where the dynamics move fastest — the converged grid is non-uniform.
+# The floor on node count is set by *dynamics* resolution, not the constraints:
+# the flight-path-angle timescale is only a few seconds, so below ~50 nodes the
+# solver "converges" only by leaning on virtual control, and the propagated
+# control no longer reaches the terminal altitude. N>=80 is propagation-consistent
+# (t_f ~ 337 s) — always confirm with results.trajectory, not just the solver's
 # constraint metric.
 n = 80  # number of nodes
-tf_guess = 300.0  # initial guess for the (free) final time (s)
+tf_guess = 324.0  # initial guess for the (free) final time (s)
+
+# ---------------------------------------------------------------------------
+# Initial guess — delay the climb
+# ---------------------------------------------------------------------------
+# Minimum time-to-climb is nonconvex with two basins. A naive linear-climb guess
+# converges to a *suboptimal* local minimum that climbs immediately and then
+# accelerates parked at altitude (t_f ~ 345 s). The global optimum (Bryson's
+# energy-maneuverability solution, reproduced by GPOPS-II) is qualitatively
+# different: it dashes at low altitude to build kinetic energy cheaply, then
+# zoom-climbs. Because SCvx is a local method, the guess only has to select the
+# right basin — it does *not* need the answer. One physical idea suffices: hold
+# near the floor for the first quarter of the trajectory, then climb. The rest of
+# the guess is trivially linear, and the solver discovers the full dash / zoom /
+# plateau / zoom structure on its own (t_f ~ 337 s, dash to ~350 m/s).
+dash_fraction = 0.25
+_climb = np.clip((np.linspace(0.0, 1.0, n) - dash_fraction) / (1.0 - dash_fraction), 0.0, 1.0)
 
 # ---------------------------------------------------------------------------
 # States
@@ -159,7 +174,7 @@ h.min = np.array([0.0])
 h.max = np.array([21031.2])
 h.initial = np.array([alt0])
 h.final = np.array([altf])
-h.guess = np.linspace(alt0, altf, n).reshape(-1, 1)
+h.guess = (altf * _climb).reshape(-1, 1)  # flat at the floor, then a linear climb
 
 v = ox.State("speed", shape=(1,))
 v.min = np.array([5.0])
@@ -173,11 +188,7 @@ gamma.min = np.array([np.deg2rad(-40.0)])
 gamma.max = np.array([np.deg2rad(40.0)])
 gamma.initial = np.array([fpa0])
 gamma.final = np.array([fpaf])
-# Interior guess climbs at a positive flight-path angle; endpoints are level.
-gamma_guess = np.full((n, 1), np.deg2rad(10.0))
-gamma_guess[0] = fpa0
-gamma_guess[-1] = fpaf
-gamma.guess = gamma_guess
+gamma.guess = np.zeros((n, 1))
 
 mass = ox.State("mass", shape=(1,))
 mass.min = np.array([22.0])
@@ -192,7 +203,7 @@ mass.guess = np.linspace(mass0, 0.85 * mass0, n).reshape(-1, 1)
 alpha = ox.Control("angle_of_attack", shape=(1,))
 alpha.min = np.array([np.deg2rad(-45.0)])
 alpha.max = np.array([np.deg2rad(45.0)])
-alpha.guess = np.linspace(np.deg2rad(20.0), np.deg2rad(-20.0), n).reshape(-1, 1)
+alpha.guess = np.zeros((n, 1))
 
 states = [h, v, gamma, mass]
 controls = [alpha]
