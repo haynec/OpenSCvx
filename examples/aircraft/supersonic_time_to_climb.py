@@ -138,31 +138,23 @@ speed0, speedf = 129.314, 295.092  # speed (m/s)
 fpa0, fpaf = 0.0, 0.0  # flight-path angle (rad)
 mass0 = 19050.864  # initial mass (kg)
 
-# CTCS enforces the path constraints in continuous time, and free per-node time
-# dilation (Time.uniform_time_grid defaults to False) lets the solver concentrate
-# nodes where the dynamics move fastest — the converged grid is non-uniform.
-# The floor on node count is set by *dynamics* resolution, not the constraints:
-# the flight-path-angle timescale is only a few seconds, so below ~50 nodes the
-# solver "converges" only by leaning on virtual control, and the propagated
-# control no longer reaches the terminal altitude. N>=80 is propagation-consistent
-# (t_f ~ 337 s) — always confirm with results.trajectory, not just the solver's
-# constraint metric.
+# Free per-node time dilation (Time.uniform_time_grid=False) concentrates nodes
+# where the dynamics move fastest, but the node-count floor is set by dynamics
+# resolution, not the CTCS constraints: below ~50 nodes the solve closes only via
+# virtual control and the propagated trajectory undershoots the terminal altitude.
+# N=80 is propagation-consistent (t_f ~ 337 s) — verify with results.trajectory.
 n = 80  # number of nodes
 tf_guess = 324.0  # initial guess for the (free) final time (s)
 
 # ---------------------------------------------------------------------------
 # Initial guess — delay the climb
 # ---------------------------------------------------------------------------
-# Minimum time-to-climb is nonconvex with two basins. A naive linear-climb guess
-# converges to a *suboptimal* local minimum that climbs immediately and then
-# accelerates parked at altitude (t_f ~ 345 s). The global optimum (Bryson's
-# energy-maneuverability solution, reproduced by GPOPS-II) is qualitatively
-# different: it dashes at low altitude to build kinetic energy cheaply, then
-# zoom-climbs. Because SCvx is a local method, the guess only has to select the
-# right basin — it does *not* need the answer. One physical idea suffices: hold
-# near the floor for the first quarter of the trajectory, then climb. The rest of
-# the guess is trivially linear, and the solver discovers the full dash / zoom /
-# plateau / zoom structure on its own (t_f ~ 337 s, dash to ~350 m/s).
+# Minimum time-to-climb is nonconvex: a naive linear-climb guess lands in a
+# suboptimal "climb, then accelerate at altitude" basin (t_f ~ 345 s), while the
+# global optimum dashes at low altitude to build kinetic energy, then zoom-climbs.
+# Since SCvx is local, the guess only has to pick that basin, not supply the
+# answer: holding near the floor for the first quarter and then climbing is
+# enough — the solver discovers the dash / zoom / plateau / zoom structure itself.
 dash_fraction = 0.25
 _climb = np.clip((np.linspace(0.0, 1.0, n) - dash_fraction) / (1.0 - dash_fraction), 0.0, 1.0)
 
@@ -263,6 +255,7 @@ problem = ox.Problem(
     constraints=constraints,
     N=n,
 )
+
 
 def plot_gpops_comparison(results):
     """Reproduce the four GPOPS-II diagnostic plots for this benchmark.
