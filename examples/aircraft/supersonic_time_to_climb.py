@@ -31,12 +31,16 @@ Tabulated data and interpolation
 The aircraft model is defined by lookup tables, and the choice of interpolant
 matters for SCP: the dynamics are linearized every iteration, so a C0 interpolant
 (``Linterp``) injects a piecewise-constant Jacobian with jumps at every
-breakpoint, which tends to chatter. We therefore use cubic splines (``Cinterp``,
-matching GPOPS's ``'spline'``) for every 1-D table:
+breakpoint, which tends to chatter. We use ``Cinterp`` (cubic spline) for the
+smooth, monotone atmosphere tables — density ``rho(h)`` and speed of sound
+``a(h)`` from the U.S. 1976 Standard Atmosphere, truncated to the climb envelope.
 
-- atmospheric density ``rho(h)`` and speed of sound ``a(h)`` — U.S. 1976
-  Standard Atmosphere, truncated to the climb envelope;
-- aerodynamic coefficients ``CD0(M)``, ``Clalpha(M)``, ``eta(M)``.
+For the aerodynamic coefficients ``CD0(M)``, ``Clalpha(M)``, ``eta(M)`` we use
+PCHIP (``Cinterp(..., method="pchip")``): those have a sharp transonic peak that a
+plain cubic overshoots non-physically (e.g. ``eta`` dipping ~30% below its
+tabulated floor), right in the dash's Mach band. PCHIP is shape-preserving — no
+overshoot — and matches the piecewise (flat below M=0.8, spline above) shape GPOPS
+uses for the same data.
 
 Engine thrust ``T(h, M)`` is a 2-D table, and the only 2-D primitive available is
 bilinear (``Bilerp``, C0). GPOPS used a 2-D spline here; bilinear is a faithful
@@ -142,9 +146,9 @@ mass0 = 19050.864  # initial mass (kg)
 # where the dynamics move fastest, but the node-count floor is set by dynamics
 # resolution, not the CTCS constraints: below ~50 nodes the solve closes only via
 # virtual control and the propagated trajectory undershoots the terminal altitude.
-# N=80 is propagation-consistent (t_f ~ 337 s) — verify with results.trajectory.
+# N=80 is propagation-consistent (t_f ~ 330 s) — verify with results.trajectory.
 n = 80  # number of nodes
-tf_guess = 324.0  # initial guess for the (free) final time (s)
+tf_guess = 300.0  # initial guess for the (free) final time (s)
 
 # ---------------------------------------------------------------------------
 # Initial guess — delay the climb
@@ -153,9 +157,9 @@ tf_guess = 324.0  # initial guess for the (free) final time (s)
 # suboptimal "climb, then accelerate at altitude" basin (t_f ~ 345 s), while the
 # global optimum dashes at low altitude to build kinetic energy, then zoom-climbs.
 # Since SCvx is local, the guess only has to pick that basin, not supply the
-# answer: holding near the floor for the first quarter and then climbing is
-# enough — the solver discovers the dash / zoom / plateau / zoom structure itself.
-dash_fraction = 0.25
+# answer: a short hold near the floor (dash_fraction) before climbing is enough —
+# the solver discovers the dash / zoom / plateau / zoom structure itself.
+dash_fraction = 0.1
 _climb = np.clip((np.linspace(0.0, 1.0, n) - dash_fraction) / (1.0 - dash_fraction), 0.0, 1.0)
 
 # ---------------------------------------------------------------------------
@@ -211,9 +215,12 @@ rho = ox.Cinterp(hs, alt_table, rho_table)
 sos = ox.Cinterp(hs, alt_table, sos_table)
 mach = vs / sos
 
-CD0 = ox.Cinterp(mach, mach_table, CD0_table)
-Clalpha = ox.Cinterp(mach, mach_table, Clalpha_table)
-eta = ox.Cinterp(mach, mach_table, eta_table)
+# PCHIP (shape-preserving) for the aero coefficients: their sharp transonic peak
+# makes a plain cubic overshoot non-physically (e.g. eta dipping ~30% below its
+# tabulated floor), right in the dash's Mach band.
+CD0 = ox.Cinterp(mach, mach_table, CD0_table, method="pchip")
+Clalpha = ox.Cinterp(mach, mach_table, Clalpha_table, method="pchip")
+eta = ox.Cinterp(mach, mach_table, eta_table, method="pchip")
 thrust = ox.Bilerp(hs, mach, thrust_alt, thrust_mach, thrust_grid)
 
 CL = Clalpha * a
@@ -254,6 +261,7 @@ problem = ox.Problem(
     time=time,
     constraints=constraints,
     N=n,
+    licq_max=1e-8,
 )
 
 
@@ -327,6 +335,6 @@ if __name__ == "__main__":
     print(f"Minimum time-to-climb: {final_time:.2f} s")
 
     plot_gpops_comparison(results).show()
-    plot_states(results).show()
-    plot_controls(results).show()
-    plot_scp_iterations(results).show()
+    # plot_states(results).show()
+    # plot_controls(results).show()
+    # plot_scp_iterations(results).show()
