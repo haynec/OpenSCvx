@@ -52,6 +52,8 @@ import os
 import sys
 
 import numpy as np
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
@@ -136,9 +138,16 @@ speed0, speedf = 129.314, 295.092  # speed (m/s)
 fpa0, fpaf = 0.0, 0.0  # flight-path angle (rad)
 mass0 = 19050.864  # initial mass (kg)
 
-# The transonic dive makes the dynamics swing hard over each segment; a dense
-# node grid keeps the per-segment linearization valid (N=40 stalls, N=80 closes
-# the shooting defects to ~1e-13 and is node-converged against N=120).
+# CTCS enforces the path constraints in continuous time, and free per-node time
+# dilation (Time.uniform_time_grid defaults to False) lets the solver concentrate
+# nodes in the transonic dive — the converged grid is non-uniform (dt spans ~3x).
+# The floor on node count, though, is set by *dynamics* resolution, not the
+# constraints: the flight-path-angle timescale is only a few seconds, so below
+# ~50 nodes the solver "converges" only by leaning on virtual control, and the
+# propagated control no longer reaches the terminal altitude (N=20 flies to
+# ~14.7 km, not 20 km). N>=80 is propagation-consistent and node-converged
+# (t_f ~ 343 s) — always confirm with results.trajectory, not just the solver's
+# constraint metric.
 n = 80  # number of nodes
 tf_guess = 300.0  # initial guess for the (free) final time (s)
 
@@ -244,6 +253,67 @@ problem = ox.Problem(
     N=n,
 )
 
+def plot_gpops_comparison(results):
+    """Reproduce the four GPOPS-II diagnostic plots for this benchmark.
+
+    Lays out altitude vs. time, the altitude-vs-speed energy path, flight-path
+    angle vs. time, and angle of attack vs. time. The high-resolution propagated
+    trajectory is drawn as a line with the discretization nodes overlaid.
+    """
+    nodes, traj = results.nodes, results.trajectory
+
+    def col(source, key):
+        return np.asarray(source[key]).flatten()
+
+    fig = make_subplots(
+        rows=2,
+        cols=2,
+        subplot_titles=(
+            "Altitude vs. Time",
+            "Altitude vs. Speed (energy path)",
+            "Flight-Path Angle vs. Time",
+            "Angle of Attack vs. Time",
+        ),
+    )
+
+    # (row, col, x, y) for each panel, in (trajectory, node) units.
+    panels = [
+        (1, 1, col(traj, "time"), col(traj, "altitude") / 1e3,
+         col(nodes, "time"), col(nodes, "altitude") / 1e3),
+        (1, 2, col(traj, "speed"), col(traj, "altitude") / 1e3,
+         col(nodes, "speed"), col(nodes, "altitude") / 1e3),
+        (2, 1, col(traj, "time"), np.rad2deg(col(traj, "flight_path_angle")),
+         col(nodes, "time"), np.rad2deg(col(nodes, "flight_path_angle"))),
+        (2, 2, col(traj, "time"), np.rad2deg(col(traj, "angle_of_attack")),
+         col(nodes, "time"), np.rad2deg(col(nodes, "angle_of_attack"))),
+    ]
+    for i, (r, c, xt, yt, xn, yn) in enumerate(panels):
+        first = i == 0
+        fig.add_trace(
+            go.Scatter(x=xt, y=yt, mode="lines", name="Propagated",
+                       line={"color": "#19d3f3", "width": 2},
+                       legendgroup="traj", showlegend=first),
+            row=r, col=c,
+        )
+        fig.add_trace(
+            go.Scatter(x=xn, y=yn, mode="markers", name="Nodes",
+                       marker={"color": "#ffa600", "size": 5},
+                       legendgroup="nodes", showlegend=first),
+            row=r, col=c,
+        )
+
+    fig.update_xaxes(title_text="Time [s]", row=1, col=1)
+    fig.update_yaxes(title_text="Altitude [km]", row=1, col=1)
+    fig.update_xaxes(title_text="Speed [m/s]", row=1, col=2)
+    fig.update_yaxes(title_text="Altitude [km]", row=1, col=2)
+    fig.update_xaxes(title_text="Time [s]", row=2, col=1)
+    fig.update_yaxes(title_text="Flight-path angle [deg]", row=2, col=1)
+    fig.update_xaxes(title_text="Time [s]", row=2, col=2)
+    fig.update_yaxes(title_text="Angle of attack [deg]", row=2, col=2)
+    fig.update_layout(title="Supersonic Minimum Time-to-Climb", template="plotly_dark")
+    return fig
+
+
 if __name__ == "__main__":
     problem.initialize()
     results = problem.solve()
@@ -252,6 +322,7 @@ if __name__ == "__main__":
     final_time = float(np.asarray(results.nodes["time"]).flatten()[-1])
     print(f"Minimum time-to-climb: {final_time:.2f} s")
 
+    plot_gpops_comparison(results).show()
     plot_states(results).show()
     plot_controls(results).show()
     plot_scp_iterations(results).show()
