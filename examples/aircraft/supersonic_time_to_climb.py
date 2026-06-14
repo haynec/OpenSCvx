@@ -146,7 +146,7 @@ mass0 = 19050.864  # initial mass (kg)
 # where the dynamics move fastest, but the node-count floor is set by dynamics
 # resolution, not the CTCS constraints: below ~50 nodes the solve closes only via
 # virtual control and the propagated trajectory undershoots the terminal altitude.
-# N=80 is propagation-consistent (t_f ~ 330 s) — verify with results.trajectory.
+# N=80 is propagation-consistent (t_f ~ 327 s) — verify with results.trajectory.
 n = 80  # number of nodes
 tf_guess = 300.0  # initial guess for the (free) final time (s)
 
@@ -254,6 +254,11 @@ time = ox.Time(
     max=800.0,
 )
 
+# A fixed proximal weight (ConstantProximalWeight) outperforms the adaptive
+# Augmented-Lagrangian default here: with no reject-driven trust-region shrinkage
+# it takes steady moderate steps into a cleaner, faster minimum (t_f ~ 327 s with
+# the floor sag essentially gone). lam_prox = 2e-2 is the sweet spot — looser
+# reintroduces the floor sag, tighter slows the climb.
 problem = ox.Problem(
     dynamics=dynamics,
     states=states,
@@ -262,6 +267,7 @@ problem = ox.Problem(
     constraints=constraints,
     N=n,
     licq_max=1e-8,
+    algorithm={"lam_prox": 2e-2, "autotuner": ox.ConstantProximalWeight()},
 )
 
 
