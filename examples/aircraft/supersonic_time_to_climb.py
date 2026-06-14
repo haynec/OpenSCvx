@@ -146,7 +146,7 @@ mass0 = 19050.864  # initial mass (kg)
 # where the dynamics move fastest, but the node-count floor is set by dynamics
 # resolution, not the CTCS constraints: below ~50 nodes the solve closes only via
 # virtual control and the propagated trajectory undershoots the terminal altitude.
-# N=80 is propagation-consistent (t_f ~ 327 s) — verify with results.trajectory.
+# N=80 is propagation-consistent (t_f ~ 325 s) — verify with results.trajectory.
 n = 80  # number of nodes
 tf_guess = 300.0  # initial guess for the (free) final time (s)
 
@@ -159,7 +159,7 @@ tf_guess = 300.0  # initial guess for the (free) final time (s)
 # Since SCvx is local, the guess only has to pick that basin, not supply the
 # answer: a short hold near the floor (dash_fraction) before climbing is enough —
 # the solver discovers the dash / zoom / plateau / zoom structure itself.
-dash_fraction = 0.1
+dash_fraction = 0.15
 _climb = np.clip((np.linspace(0.0, 1.0, n) - dash_fraction) / (1.0 - dash_fraction), 0.0, 1.0)
 
 # ---------------------------------------------------------------------------
