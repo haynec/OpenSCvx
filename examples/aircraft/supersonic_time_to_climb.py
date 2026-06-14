@@ -142,63 +142,41 @@ speed0, speedf = 129.314, 295.092  # speed (m/s)
 fpa0, fpaf = 0.0, 0.0  # flight-path angle (rad)
 mass0 = 19050.864  # initial mass (kg)
 
-# Free per-node time dilation (Time.uniform_time_grid=False) concentrates nodes
-# where the dynamics move fastest, but the node-count floor is set by dynamics
-# resolution, not the CTCS constraints: below ~50 nodes the solve closes only via
-# virtual control and the propagated trajectory undershoots the terminal altitude.
-# N=80 is propagation-consistent (t_f ~ 325 s) — verify with results.trajectory.
-n = 80  # number of nodes
-tf_guess = 300.0  # initial guess for the (free) final time (s)
+n = 80  # discretization nodes
+tf_guess = 300.0  # initial guess for the (free) final time
 
-# ---------------------------------------------------------------------------
-# Initial guess — delay the climb
-# ---------------------------------------------------------------------------
-# Minimum time-to-climb is nonconvex: a naive linear-climb guess lands in a
-# suboptimal "climb, then accelerate at altitude" basin (t_f ~ 345 s), while the
-# global optimum dashes at low altitude to build kinetic energy, then zoom-climbs.
-# Since SCvx is local, the guess only has to pick that basin, not supply the
-# answer: a short hold near the floor (dash_fraction) before climbing is enough —
-# the solver discovers the dash / zoom / plateau / zoom structure itself.
+# Hold near the altitude floor for the first dash_fraction of the horizon, then
+# climb: this steers the local solver into the energy-optimal "sea-level dash,
+# then zoom-climb" basin rather than the suboptimal "climb immediately" one.
 dash_fraction = 0.15
 _climb = np.clip((np.linspace(0.0, 1.0, n) - dash_fraction) / (1.0 - dash_fraction), 0.0, 1.0)
 
 # ---------------------------------------------------------------------------
-# States
+# States — guesses default to a linear initial->final interpolation when unset,
+# so only altitude (the dash hold) needs an explicit guess.
 # ---------------------------------------------------------------------------
 h = ox.State("altitude", shape=(1,))
-h.min = np.array([0.0])
-h.max = np.array([21031.2])
-h.initial = np.array([alt0])
-h.final = np.array([altf])
-h.guess = (altf * _climb).reshape(-1, 1)  # flat at the floor, then a linear climb
+h.min, h.max = [0.0], [21031.2]
+h.initial, h.final = [alt0], [altf]
+h.guess = (altf * _climb).reshape(-1, 1)
 
 v = ox.State("speed", shape=(1,))
-v.min = np.array([5.0])
-v.max = np.array([1000.0])
-v.initial = np.array([speed0])
-v.final = np.array([speedf])
-v.guess = np.linspace(speed0, speedf, n).reshape(-1, 1)
+v.min, v.max = [5.0], [1000.0]
+v.initial, v.final = [speed0], [speedf]
 
 gamma = ox.State("flight_path_angle", shape=(1,))
-gamma.min = np.array([np.deg2rad(-40.0)])
-gamma.max = np.array([np.deg2rad(40.0)])
-gamma.initial = np.array([fpa0])
-gamma.final = np.array([fpaf])
-gamma.guess = np.zeros((n, 1))
+gamma.min, gamma.max = [np.deg2rad(-40.0)], [np.deg2rad(40.0)]
+gamma.initial, gamma.final = [fpa0], [fpaf]
 
 mass = ox.State("mass", shape=(1,))
-mass.min = np.array([22.0])
-mass.max = np.array([20410.0])
-mass.initial = np.array([mass0])
-mass.final = [ox.Free(mass0)]  # final mass is free (fuel burned to climb)
-mass.guess = np.linspace(mass0, 0.85 * mass0, n).reshape(-1, 1)
+mass.min, mass.max = [22.0], [20410.0]
+mass.initial, mass.final = [mass0], [ox.Free(mass0)]  # final mass free (fuel burned)
 
 # ---------------------------------------------------------------------------
-# Control
+# Control (controls always need an explicit guess)
 # ---------------------------------------------------------------------------
 alpha = ox.Control("angle_of_attack", shape=(1,))
-alpha.min = np.array([np.deg2rad(-45.0)])
-alpha.max = np.array([np.deg2rad(45.0)])
+alpha.min, alpha.max = [np.deg2rad(-45.0)], [np.deg2rad(45.0)]
 alpha.guess = np.zeros((n, 1))
 
 states = [h, v, gamma, mass]
@@ -215,9 +193,8 @@ rho = ox.Cinterp(hs, alt_table, rho_table)
 sos = ox.Cinterp(hs, alt_table, sos_table)
 mach = vs / sos
 
-# PCHIP (shape-preserving) for the aero coefficients: their sharp transonic peak
-# makes a plain cubic overshoot non-physically (e.g. eta dipping ~30% below its
-# tabulated floor), right in the dash's Mach band.
+# PCHIP for the aero coefficients: a cubic overshoots their sharp transonic peak
+# (see the module docstring).
 CD0 = ox.Cinterp(mach, mach_table, CD0_table, method="pchip")
 Clalpha = ox.Cinterp(mach, mach_table, Clalpha_table, method="pchip")
 eta = ox.Cinterp(mach, mach_table, eta_table, method="pchip")
@@ -254,11 +231,8 @@ time = ox.Time(
     max=800.0,
 )
 
-# A fixed proximal weight (ConstantProximalWeight) outperforms the adaptive
-# Augmented-Lagrangian default here: with no reject-driven trust-region shrinkage
-# it takes steady moderate steps into a cleaner, faster minimum (t_f ~ 327 s with
-# the floor sag essentially gone). lam_prox = 2e-2 is the sweet spot — looser
-# reintroduces the floor sag, tighter slows the climb.
+# A fixed proximal weight converges cleaner and faster than the adaptive default
+# here; lam_prox = 2e-2 is the sweet spot for this problem.
 problem = ox.Problem(
     dynamics=dynamics,
     states=states,
