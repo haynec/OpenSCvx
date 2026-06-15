@@ -1,21 +1,17 @@
 """Minimum time-to-climb of a supersonic aircraft (Bryson's interceptor).
 
-This is the classic minimum time-to-climb problem for a supersonic aircraft,
-taken from
-
-    Bryson, A. E., Desai, M. N. and Hoffman, W. C., "Energy-State Approximation
-    in Performance Optimization of Supersonic Aircraft," Journal of Aircraft,
-    Vol. 6, No. 6, 1969, pp. 481-488.
-
-and reproduced as a benchmark in the GPOPS-II user's guide. The aircraft starts
-at sea level in level flight and must reach 20 km altitude at a prescribed speed
-and flight-path angle in minimum time. The optimal trajectory famously dives
-through the transonic region to trade altitude for kinetic energy before
-zoom-climbing — energy management, not a monotonic climb.
+The classic minimum time-to-climb benchmark from Bryson, Desai and Hoffman,
+*"Energy-State Approximation in Performance Optimization of Supersonic Aircraft,"*
+Journal of Aircraft, Vol. 6, No. 6, 1969, pp. 481-488, reproduced in the GPOPS-II
+user's guide. The aircraft starts at sea level in level flight and must reach
+20 km altitude at a prescribed speed and flight-path angle in minimum time. The
+optimal trajectory dashes near the ground to build kinetic energy, then
+zoom-climbs through the transonic region — energy management, not a monotonic
+climb.
 
 Point-mass dynamics over a spherical, non-rotating Earth (state ``[h, v, gamma,
 m]`` = altitude, speed, flight-path angle, mass; control ``alpha`` = angle of
-attack)::
+attack):
 
     h_dot     = v sin(gamma)
     v_dot     = (T cos(alpha) - D) / m - mu sin(gamma) / r^2
@@ -26,30 +22,19 @@ with ``r = Re + h``, dynamic pressure ``q = 0.5 rho v^2``, lift ``L = q S CL``
 and drag ``D = q S CD``, ``CL = Clalpha alpha`` and ``CD = CD0 + eta Clalpha
 alpha^2``. The objective is the free final time.
 
-Tabulated data and interpolation
----------------------------------
-The aircraft model is defined by lookup tables, and the choice of interpolant
-matters for SCP: the dynamics are linearized every iteration, so a C0 interpolant
-(``Linterp``) injects a piecewise-constant Jacobian with jumps at every
-breakpoint, which tends to chatter. We use ``Cinterp`` (cubic spline) for the
-smooth, monotone atmosphere tables — density ``rho(h)`` and speed of sound
-``a(h)`` from the U.S. 1976 Standard Atmosphere, truncated to the climb envelope.
+The model is defined by lookup tables, and the interpolant matters for SCP — the
+dynamics are re-linearized every iteration, so a C0 ``Linterp`` chatters:
 
-For the aerodynamic coefficients ``CD0(M)``, ``Clalpha(M)``, ``eta(M)`` we use
-PCHIP (``Cinterp(..., method="pchip")``): those have a sharp transonic peak that a
-plain cubic overshoots non-physically (e.g. ``eta`` dipping ~30% below its
-tabulated floor), right in the dash's Mach band. PCHIP is shape-preserving — no
-overshoot — and matches the piecewise (flat below M=0.8, spline above) shape GPOPS
-uses for the same data.
+- Atmosphere ``rho(h)``, ``a(h)`` (U.S. 1976 Standard Atmosphere): cubic
+  ``Cinterp``, since the tables are smooth and monotone.
+- Aerodynamics ``CD0(M)``, ``Clalpha(M)``, ``eta(M)``: PCHIP ``Cinterp``. These
+  have a sharp transonic peak that a cubic overshoots non-physically (e.g.
+  ``eta`` dipping ~30% below its tabulated floor), so the shape-preserving PCHIP
+  is used instead.
+- Engine thrust ``T(h, M)``: bilinear ``Bilerp`` (the only 2-D primitive) — a
+  faithful stand-in for the GPOPS 2-D spline.
 
-Engine thrust ``T(h, M)`` is a 2-D table, and the only 2-D primitive available is
-bilinear (``Bilerp``, C0). GPOPS used a 2-D spline here; bilinear is a faithful
-enough stand-in and converges with default settings. If the kinks across grid
-lines ever stall convergence, pre-fit a smooth surface offline and resample onto
-a finer grid — ``Bilerp`` stays the evaluator.
-
-States are kept in SI units; OpenSCvx auto-scales them from their min/max bounds,
-so the tables stay in natural units.
+States are kept in SI units; OpenSCvx auto-scales them from their min/max bounds.
 """
 
 import os
@@ -270,28 +255,66 @@ def plot_gpops_comparison(results):
 
     # (row, col, x, y) for each panel, in (trajectory, node) units.
     panels = [
-        (1, 1, col(traj, "time"), col(traj, "altitude") / 1e3,
-         col(nodes, "time"), col(nodes, "altitude") / 1e3),
-        (1, 2, col(traj, "speed"), col(traj, "altitude") / 1e3,
-         col(nodes, "speed"), col(nodes, "altitude") / 1e3),
-        (2, 1, col(traj, "time"), np.rad2deg(col(traj, "flight_path_angle")),
-         col(nodes, "time"), np.rad2deg(col(nodes, "flight_path_angle"))),
-        (2, 2, col(traj, "time"), np.rad2deg(col(traj, "angle_of_attack")),
-         col(nodes, "time"), np.rad2deg(col(nodes, "angle_of_attack"))),
+        (
+            1,
+            1,
+            col(traj, "time"),
+            col(traj, "altitude") / 1e3,
+            col(nodes, "time"),
+            col(nodes, "altitude") / 1e3,
+        ),
+        (
+            1,
+            2,
+            col(traj, "speed"),
+            col(traj, "altitude") / 1e3,
+            col(nodes, "speed"),
+            col(nodes, "altitude") / 1e3,
+        ),
+        (
+            2,
+            1,
+            col(traj, "time"),
+            np.rad2deg(col(traj, "flight_path_angle")),
+            col(nodes, "time"),
+            np.rad2deg(col(nodes, "flight_path_angle")),
+        ),
+        (
+            2,
+            2,
+            col(traj, "time"),
+            np.rad2deg(col(traj, "angle_of_attack")),
+            col(nodes, "time"),
+            np.rad2deg(col(nodes, "angle_of_attack")),
+        ),
     ]
     for i, (r, c, xt, yt, xn, yn) in enumerate(panels):
         first = i == 0
         fig.add_trace(
-            go.Scatter(x=xt, y=yt, mode="lines", name="Propagated",
-                       line={"color": "#19d3f3", "width": 2},
-                       legendgroup="traj", showlegend=first),
-            row=r, col=c,
+            go.Scatter(
+                x=xt,
+                y=yt,
+                mode="lines",
+                name="Propagated",
+                line={"color": "#19d3f3", "width": 2},
+                legendgroup="traj",
+                showlegend=first,
+            ),
+            row=r,
+            col=c,
         )
         fig.add_trace(
-            go.Scatter(x=xn, y=yn, mode="markers", name="Nodes",
-                       marker={"color": "#ffa600", "size": 5},
-                       legendgroup="nodes", showlegend=first),
-            row=r, col=c,
+            go.Scatter(
+                x=xn,
+                y=yn,
+                mode="markers",
+                name="Nodes",
+                marker={"color": "#ffa600", "size": 5},
+                legendgroup="nodes",
+                showlegend=first,
+            ),
+            row=r,
+            col=c,
         )
 
     fig.update_xaxes(title_text="Time [s]", row=1, col=1)
@@ -315,6 +338,6 @@ if __name__ == "__main__":
     print(f"Minimum time-to-climb: {final_time:.2f} s")
 
     plot_gpops_comparison(results).show()
-    # plot_states(results).show()
-    # plot_controls(results).show()
-    # plot_scp_iterations(results).show()
+    plot_states(results).show()
+    plot_controls(results).show()
+    plot_scp_iterations(results).show()
