@@ -223,13 +223,11 @@ problem = ox.Problem(
     algorithm={
         "lam_vb": 1e0,
         "lam_vc": 1e1,
-        # "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
+        "lam_prox": 1e1,
         "autotuner": ox.ConstantProximalWeight(),
     },
     float_dtype="float64",
 )
-
-problem.settings.prp.dt = 0.01
 
 # =============================================================================
 # Visualization

@@ -32,7 +32,7 @@ from openscvx import Problem
 from openscvx.utils import gen_vertices, rot
 
 n = 33  # Number of Nodes
-total_time = 30.0  # Total time for the simulation
+total_time = 40.0  # Total time for the simulation
 
 # Define state components
 position = ox.State("position", shape=(3,))  # 3D position [x, y, z]
@@ -241,8 +241,7 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={"lam_prox": 5e-2, "lam_vc": 1e0, "lam_cost": 2.5e-3, "ep_tr": 1e-5},
-    discretizer=ox.VectorizeDiscretizeLinearize(diffrax_kwargs={"atol": 1e-4}),
+    # algorithm={"lam_prox": 5e-2, "lam_vc": 1e0, "lam_cost": 2.5e-3, "ep_tr": 1e-5},
 )
 
 plotting_dict = {
