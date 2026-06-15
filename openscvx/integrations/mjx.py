@@ -28,26 +28,12 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
 
 import jax.numpy as jnp
 
+from openscvx.integrations._utils import _resolve_slice
 from openscvx.integrations.base import DynamicsAdapter
 
 if TYPE_CHECKING:
     from openscvx.symbolic.expr.control import Control
     from openscvx.symbolic.expr.state import State
-
-
-def _resolve_slice(arg, name: str) -> slice:
-    """Accept either a State/Control or a slice and return the slice."""
-    if hasattr(arg, "slice"):
-        sl = arg.slice
-        if sl is None:
-            raise ValueError(
-                f"{name} has no .slice yet — pass it after Problem construction has called "
-                "preprocessing, or pass an explicit slice."
-            )
-        return sl
-    if isinstance(arg, slice):
-        return arg
-    raise TypeError(f"{name} must be a State/Control or slice, got {type(arg).__name__}")
 
 
 def mjx_dynamics(

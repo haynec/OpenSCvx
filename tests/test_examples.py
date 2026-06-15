@@ -24,11 +24,9 @@ EXCLUDED_EXAMPLES = {
     "arm/7_dof_arm_collision.py",
     "drone/logo.py",
     "drone/openscvx_logo.py",
-    # Heavy MJX examples (keep cartpole + skydio below)
-    "mjx/double_cartpole_mjx.py",
-    "mjx/triple_cartpole_mjx.py",
+    "drone/obstacle_avoidance_vmap.py",
     "mjx/triple_cartpole_game.py",
-    "mjx/triple_cartpole_3d_mjx.py",
+    "rocket/ascent_launch_vehicle.py",
 }
 
 # MJX examples included in discovery only when mujoco.mjx is installed (others
@@ -37,6 +35,9 @@ _MJX_EXAMPLES_REQUIRE_MUJOCO = frozenset(
     {
         "mjx/cartpole_mjx.py",
         "mjx/skydio_x2_mjx.py",
+        "mjx/triple_cartpole_mjx.py",
+        "mjx/triple_cartpole_3d_mjx.py",
+        "mjx/double_cartpole_mjx.py",
     }
 )
 

@@ -133,20 +133,9 @@ problem = Problem(
         "lam_prox": 6e-3,
         "lam_vc": 1e1,
         "lam_cost": 1e-3,
-        # "ep_vc": 1e-6,
-        # "ep_tr": 1e-3,
     },
     float_dtype="float64",
     licq_max=1e-10,
-    solver={
-        "cvx_solver": "Mosek",
-        "solver_args": {
-            "canon_backend": "COO",
-            "enforce_dpp": True,
-            # "abstol": 1e-7,
-            # "reltol": 1e-10,
-        },
-    },
 )
 
 plotting_dict = {

@@ -77,7 +77,6 @@ def build_true_anomaly_transfer_guess(r_start, r_end, mu, n_nodes):
 
 
 def orbital_elements_2_cartesian_rv(orbital_elements, gravitational_parameter):
-
     semimajor, eccentricity, inclination, right_ascension, arg_periapsis, true_anomaly = (
         orbital_elements
     )
