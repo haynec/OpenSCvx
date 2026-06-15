@@ -51,7 +51,7 @@ Note:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Tuple
 
 import jax.numpy as jnp
 import numpy as np
@@ -83,7 +83,7 @@ def _desentinel(values: np.ndarray) -> np.ndarray:
     return np.where(np.abs(values) >= _FRAX_UNLIMITED, np.sign(values) * np.inf, values)
 
 
-def _bounds_from_robot(robot) -> tuple:
+def _bounds_from_robot(robot: Any) -> tuple:
     """Extract State/Control bounds from a ``frax.Robot``.
 
     Reads ``joint_lower_limits``, ``joint_upper_limits``,
@@ -119,7 +119,7 @@ def _bounds_from_robot(robot) -> tuple:
 
 
 def frax_dynamics(
-    robot,
+    robot: Any,
     *,
     q: "State | slice",
     qd: "State | slice",
@@ -265,7 +265,7 @@ class FraxDynamics(DynamicsAdapter):
         mapped to ``±inf`` on all of the above.
     """
 
-    def __init__(self, robot) -> None:
+    def __init__(self, robot: Any) -> None:
         from openscvx.symbolic.expr.control import Control
         from openscvx.symbolic.expr.state import State
 
