@@ -241,7 +241,9 @@ def make_scp_finalize(
     autotuner: "AutotuningBase",
     jax_constraints: "LoweredJaxConstraints",
     settings: "Config",
-) -> Callable[[AlgorithmState, SubproblemSolution, dict], Tuple[AlgorithmState, IterationDiagnostics]]:
+) -> Callable[
+    [AlgorithmState, SubproblemSolution, dict], Tuple[AlgorithmState, IterationDiagnostics]
+]:
     """Build the candidate-discretize / metrics / autotune phase of one SCP iteration.
 
     Returns ``finalize_fn(state, solution, params) -> (next_state, diagnostics)``
