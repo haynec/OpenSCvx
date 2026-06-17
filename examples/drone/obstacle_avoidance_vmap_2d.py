@@ -144,6 +144,7 @@ problem = Problem(
     constraints=constraints,
     N=n,
     float_dtype="float64",
+    algorithm={"lam_vc": 1e1},
 )
 
 
