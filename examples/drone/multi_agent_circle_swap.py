@@ -144,10 +144,8 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=n,
-    # float_dtype="float64",
     algorithm={"lam_prox": 2e0},
     discretizer=ox.LinearizeDiscretizeSparse(),
-    solver=ox.MoreauPTRSolver(),
 )
 
 
