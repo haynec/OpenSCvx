@@ -1,8 +1,9 @@
 """Read-side helpers for SCP multishot integration matrices ``V``.
 
-:class:`MultishotPropagation` complements :class:`~openscvx.algorithms.history.DiscretizationResult`,
-which unpacks the same packed layout for nodal linearization matrices. This module
-exposes the full substep state trajectories stored during multishot discretization.
+:class:`MultishotPropagation` complements
+:class:`~openscvx.algorithms.history.DiscretizationResult`, which unpacks the same
+packed layout for nodal linearization matrices. This module exposes the full
+substep state trajectories stored during multishot discretization.
 """
 
 from __future__ import annotations

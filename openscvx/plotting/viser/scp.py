@@ -233,15 +233,9 @@ def extract_propagation_positions(
     for V in discretization_history:
         n_segments = V.shape[0] // (n_x + n_x * n_x + 2 * n_x * n_u)
         placeholder_t = np.linspace(0.0, 1.0, n_segments + 1)
-        prop = unpack_multishot_V(
-            V, n_x=n_x, n_u=n_u, t_nodes=placeholder_t, states=()
-        )
-        iteration_segments = [
-            seg[:, position_slice] / scene_scale for seg in prop.segments()
-        ]
-        propagations.append(
-            [np.asarray(seg, dtype=np.float32) for seg in iteration_segments]
-        )
+        prop = unpack_multishot_V(V, n_x=n_x, n_u=n_u, t_nodes=placeholder_t, states=())
+        iteration_segments = [seg[:, position_slice] / scene_scale for seg in prop.segments()]
+        propagations.append([np.asarray(seg, dtype=np.float32) for seg in iteration_segments])
 
     return propagations
 

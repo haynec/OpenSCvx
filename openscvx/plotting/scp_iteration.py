@@ -107,9 +107,7 @@ def plot_scp_iterations(
         for V in V_history:
             n_segments = V.shape[0] // (n_x + n_x * n_x + 2 * n_x * n_u)
             placeholder_t = np.linspace(0.0, 1.0, n_segments + 1)
-            prop = unpack_multishot_V(
-                V, n_x=n_x, n_u=n_u, t_nodes=placeholder_t, states=()
-            )
+            prop = unpack_multishot_V(V, n_x=n_x, n_u=n_u, t_nodes=placeholder_t, states=())
             segs = prop.segments()
             X_prop_history.append(np.stack(segs, axis=1))
 

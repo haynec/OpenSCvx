@@ -1775,9 +1775,7 @@ def extract_multishoot_trajectory(
 
     n_segments = V_multi_shoot.shape[0] // (n_x + n_x * n_x + 2 * n_x * n_u)
     placeholder_t = np.linspace(0.0, 1.0, n_segments + 1)
-    prop = unpack_multishot_V(
-        V_multi_shoot, n_x=n_x, n_u=n_u, t_nodes=placeholder_t, states=()
-    )
+    prop = unpack_multishot_V(V_multi_shoot, n_x=n_x, n_u=n_u, t_nodes=placeholder_t, states=())
     positions, _ = prop.slice_states(position_slice)
     positions = positions.astype(np.float32)
     if velocity_slice is not None:
