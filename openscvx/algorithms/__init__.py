@@ -53,6 +53,7 @@ from .autotuner import (
 from .autotuner.base import AutotuningBase
 from .base import Algorithm
 from .history import AlgorithmHistory, DiscretizationResult
+from .multishot import MultishotPropagation, unpack_multishot_V
 from .hyperparams import HyperParams
 from .optimization_results import OptimizationResults
 from .scvx import PenalizedTrustRegion
@@ -145,6 +146,8 @@ __all__ = [
     "CandidateIterate",
     "adaptive_state_code_to_str",
     "DiscretizationResult",
+    "MultishotPropagation",
+    "unpack_multishot_V",
     "Weights",
     # Core results
     "OptimizationResults",

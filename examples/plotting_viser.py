@@ -1756,12 +1756,10 @@ def extract_multishoot_trajectory(
 ) -> tuple[np.ndarray, np.ndarray | None]:
     """Extract position and velocity trajectories from multi-shoot data.
 
-    The multi-shoot format stores propagation segments with state, STM, and
-    sensitivity data packed together. This function extracts the state
-    components from each segment.
+    Uses time-ordered chronological stitching with deduplicated segment boundaries.
 
     Args:
-        V_multi_shoot: Multi-shoot data array of shape (n_segments * segment_size, n_nodes)
+        V_multi_shoot: Multi-shoot data array of shape (n_segments * segment_size, n_substeps)
         n_x: Number of states
         n_u: Number of controls
         position_slice: Slice for extracting position from state (default: first 3)
@@ -1772,30 +1770,21 @@ def extract_multishoot_trajectory(
         Tuple of (positions, velocities) as float32 arrays.
         positions: Shape (n_total_points, 3)
         velocities: Shape (n_total_points, 3) or None if velocity_slice is None
-
-    Note:
-        The segment size is computed as: n_x + n_x² + 2*n_x*n_u
-        This accounts for: state (n_x) + STM (n_x²) + sensitivities (2*n_x*n_u)
     """
-    # Segment size: state + STM + control sensitivities
-    segment_size = n_x + n_x * n_x + 2 * n_x * n_u
+    from openscvx.algorithms.multishot import unpack_multishot_V
 
-    all_pos_segments = []
-    all_vel_segments = [] if velocity_slice is not None else None
-
-    for i_node in range(V_multi_shoot.shape[1]):
-        node_data = V_multi_shoot[:, i_node]
-        segments_for_node = node_data.reshape(-1, segment_size)
-        pos_segments = segments_for_node[:, position_slice]
-        all_pos_segments.append(pos_segments)
-
-        if velocity_slice is not None:
-            vel_segments = segments_for_node[:, velocity_slice]
-            all_vel_segments.append(vel_segments)
-
-    positions = np.vstack(all_pos_segments).astype(np.float32)
-    velocities = np.vstack(all_vel_segments).astype(np.float32) if all_vel_segments else None
-
+    n_segments = V_multi_shoot.shape[0] // (n_x + n_x * n_x + 2 * n_x * n_u)
+    placeholder_t = np.linspace(0.0, 1.0, n_segments + 1)
+    prop = unpack_multishot_V(
+        V_multi_shoot, n_x=n_x, n_u=n_u, t_nodes=placeholder_t, states=()
+    )
+    positions, _ = prop.slice_states(position_slice)
+    positions = positions.astype(np.float32)
+    if velocity_slice is not None:
+        velocities, _ = prop.slice_states(velocity_slice)
+        velocities = velocities.astype(np.float32)
+    else:
+        velocities = None
     return positions, velocities
 
 

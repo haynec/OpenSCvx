@@ -102,12 +102,16 @@ def plot_scp_iterations(
     V_history = result.discretization_history if result.discretization_history else []
     X_prop_history = []
     if V_history and show_propagation:
-        i4 = n_x + n_x * n_x + 2 * n_x * n_u
+        from openscvx.algorithms.multishot import unpack_multishot_V
+
         for V in V_history:
-            pos_traj = []
-            for i_multi in range(V.shape[1]):
-                pos_traj.append(V[:, i_multi].reshape(-1, i4)[:, :n_x])
-            X_prop_history.append(np.array(pos_traj))
+            n_segments = V.shape[0] // (n_x + n_x * n_x + 2 * n_x * n_u)
+            placeholder_t = np.linspace(0.0, 1.0, n_segments + 1)
+            prop = unpack_multishot_V(
+                V, n_x=n_x, n_u=n_u, t_nodes=placeholder_t, states=()
+            )
+            segs = prop.segments()
+            X_prop_history.append(np.stack(segs, axis=1))
 
     n_iterations = len(result.X)
     if X_prop_history:
