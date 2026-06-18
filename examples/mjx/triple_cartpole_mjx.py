@@ -37,7 +37,6 @@ except ImportError:
 import openscvx as ox
 from examples.plotting_viser import (
     create_snapshot_plotting_server,
-    extract_multishoot_trajectory,
 )
 from openscvx import Problem
 
@@ -175,55 +174,6 @@ def _foh_controls_at_times(
     return u_out
 
 
-def extract_multishoot_qpos_chronological(
-    V_multi_shoot: np.ndarray,
-    *,
-    n_x: int,
-    n_u: int,
-    n_q: int,
-    t_nodes: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
-    """Unpack propagated states from ``V`` in time order (SCP / realtime layout)."""
-    V_multi_shoot = np.asarray(V_multi_shoot, dtype=np.float64)
-    if V_multi_shoot.size == 0:
-        return None
-
-    segment_size = n_x + n_x * n_x + 2 * n_x * n_u
-    n_rows, n_sub = V_multi_shoot.shape
-    if segment_size <= 0 or n_rows % segment_size != 0 or n_sub < 1:
-        return None
-    n_seg = n_rows // segment_size
-
-    t_nodes = np.asarray(t_nodes, dtype=np.float64).ravel()
-    if t_nodes.size != n_seg + 1:
-        if t_nodes.size < 2:
-            return None
-        t_nodes = np.linspace(float(t_nodes[0]), float(t_nodes[-1]), n_seg + 1)
-
-    q_rows: list[np.ndarray] = []
-    qd_rows: list[np.ndarray] = []
-    t_rows: list[float] = []
-    for seg_idx in range(n_seg):
-        seg_start = seg_idx * segment_size
-        t0, t1 = float(t_nodes[seg_idx]), float(t_nodes[seg_idx + 1])
-        j0 = 0 if seg_idx == 0 else 1
-        for t_idx in range(j0, n_sub):
-            alpha = t_idx / (n_sub - 1) if n_sub > 1 else 0.0
-            state = np.asarray(
-                V_multi_shoot[seg_start : seg_start + n_x, t_idx], dtype=np.float64
-            ).ravel()
-            q_rows.append(state[:n_q])
-            qd_rows.append(state[n_q:n_x])
-            t_rows.append((1.0 - alpha) * t0 + alpha * t1)
-    if not q_rows:
-        return None
-
-    t_ms = np.asarray(t_rows, dtype=np.float64)
-    q_ms = np.stack(q_rows, axis=0)
-    qd_ms = np.stack(qd_rows, axis=0)
-    return q_ms, qd_ms, t_ms, t_nodes
-
-
 def segment_tip_paths_from_V(
     V_multi_shoot: np.ndarray,
     *,
@@ -277,23 +227,11 @@ def visualize(results) -> None:
     else:
         t_nodes = np.asarray(t_nodes).flatten()
 
-    _dh = getattr(results, "discretization_history", None) or []
-    V_multishot = np.asarray(_dh[-1], dtype=np.float64) if len(_dh) > 0 else None
-    ms_traj = (
-        extract_multishoot_qpos_chronological(
-            V_multishot,
-            n_x=n_x,
-            n_u=n_u,
-            n_q=n_q,
-            t_nodes=t_nodes,
-        )
-        if V_multishot is not None
-        else None
-    )
-
-    using_multishot = ms_traj is not None
+    prop = results.multishot_propagation(t_nodes=t_nodes)
+    using_multishot = prop is not None
     if using_multishot:
-        q_angle, _, t_play, t_nodes_ms = ms_traj
+        q_angle, t_play = prop.state("qpos")
+        t_nodes_ms = prop.t_nodes
         u_play = _foh_controls_at_times(t_play, u_nodes, t_nodes_ms)
         fk_multishot_anim = [fk_joints(q_angle[i]) for i in range(len(q_angle))]
         tip_pos = np.array([fk[4] for fk in fk_multishot_anim], dtype=np.float64)
@@ -301,12 +239,13 @@ def visualize(results) -> None:
             tip_vel = np.gradient(tip_pos, t_play, axis=0)
         else:
             tip_vel = np.zeros_like(tip_pos)
-        n_seg = V_multishot.shape[0] // (n_x + n_x * n_x + 2 * n_x * n_u)
+        V_multishot = prop.V
         print(
             f"[viser] Multi-shoot V: {len(t_play)} propagated samples "
-            f"({V_multishot.shape[1]} cols × {n_seg} segments)."
+            f"({prop.n_substeps} cols × {prop.n_segments} segments)."
         )
     else:
+        V_multishot = None
         print(
             "[viser] WARNING: could not decode discretization_history V; "
             "falling back to nodal linear interpolation."
@@ -363,13 +302,7 @@ def visualize(results) -> None:
     cart_multishot_segs = None
     tip_multishot_segs = None
     if using_multishot and V_multishot is not None:
-        all_qpos, _ = extract_multishoot_trajectory(
-            V_multishot,
-            n_x,
-            n_u,
-            position_slice=slice(0, n_q),
-            velocity_slice=None,
-        )
+        all_qpos, _ = prop.state("qpos")
         if len(all_qpos) > 0:
             tip_cloud = np.array(
                 [fk_joints(all_qpos[i])[4] for i in range(len(all_qpos))],
