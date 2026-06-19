@@ -27,7 +27,6 @@ if project_root not in sys.path:
 import openscvx as ox
 from examples.double_integrator._plotting import plot_moving_safe_zones
 from openscvx import Problem
-from openscvx.plotting import plot_controls, plot_states
 
 # Discretization
 N = 30
@@ -189,5 +188,3 @@ if __name__ == "__main__":
     results.update(plotting_data)
 
     plot_moving_safe_zones(results).show()
-    plot_states(results).show()
-    plot_controls(results).show()
