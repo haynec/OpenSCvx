@@ -29,7 +29,6 @@ Viser scene uses the same ENU frame as the model (x, y horizontal; z = altitude 
 import os
 import sys
 
-import diffrax as dfx
 import numpy as np
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -381,8 +380,6 @@ time = ox.Time(
     final=ox.Free(_t_f_guess),
     min=0.0,
     max=_t_f_guess * 2.0,
-    # time_dilation_min=_t_scp * 0.5,
-    # time_dilation_max=_t_scp * 10.0,
 )
 
 # ── Problem Assembly ───────────────────────────────────────────────────────────────────
@@ -396,12 +393,16 @@ problem = Problem(
     time=time,
     float_dtype="float64",
     algorithm={
-        "autotuner": ox.AugmentedLagrangian(eta_lambda=1E3),
+        "autotuner": ox.AugmentedLagrangian(eta_lambda=1E3, gamma_1=2.0, gamma_2=0.1),
+        # "lam_vc": 1E2,
+        # "lam_prox": 1E-1,
         "k_max": 1000,
+        "ep_tr": 5e-3,
+        "ep_vc": 1e-6,
     },
 )
 
-problem.settings.dev.debug = True
+# problem.settings.dev.debug = True
 
 # ── Viser display parameters ──────────────────────────────────────────────────
 # cSTC uses ENU inertial frame (x, y horizontal; z = altitude). Viser is Z-up,
@@ -559,16 +560,24 @@ def prepare_for_viser(result) -> None:
 
 
 def _los_body_to_sensor(de: float, pe: float) -> np.ndarray:
-    """Body-to-sensor rotation aligning sensor +Z with the LOS boresight in body frame."""
+    """Body-to-sensor DCM for los_elev/los_az spherical gimbal (neutral = identity).
+
+    Matches the model's ``los_B = [sin δ cos φ, sin δ sin φ, cos δ]`` with azimuth
+    about body +Z and elevation from body +Z. At δ=φ=0 the sensor frame equals the
+    body frame so pitch/roll track the gimbal controls without a hidden 90° offset.
+    """
     los_b = np.array(
         [np.sin(de) * np.cos(pe), np.sin(de) * np.sin(pe), np.cos(de)],
         dtype=np.float64,
     )
     los_b = los_b / (np.linalg.norm(los_b) + 1e-12)
-    # Sensor +Z axis in body coordinates is the third row of R_sb (see _sensor_pose_in_world).
-    ref = np.array([1.0, 0.0, 0.0]) if abs(los_b[2]) > 0.9 else np.array([0.0, 0.0, 1.0])
-    x = np.cross(ref, los_b)
-    x = x / np.linalg.norm(x)
+    az_axis = np.array([0.0, 0.0, 1.0])
+    x_raw = np.cross(az_axis, los_b)
+    x_norm = np.linalg.norm(x_raw)
+    if x_norm < 1e-9:
+        x = np.array([1.0, 0.0, 0.0])
+    else:
+        x = x_raw / x_norm
     y = np.cross(los_b, x)
     return np.stack([x, y, los_b], axis=0)
 
@@ -585,8 +594,12 @@ def add_cstc_los_viewcone(server, result):
     base_vertices = _generate_viewcone_vertices(
         half_angle, half_angle, VIEWCONE_SCALE, norm_type=2
     )
+    # Open along −Z so the frustum points at the landing pad (origin); sensor +Z is
+    # the model boresight and the gimbal frame is aligned at δ=φ=0 (see above).
+    base_vertices = base_vertices.copy()
+    base_vertices[1:, 2] *= -1.0
     n_base = len(base_vertices) - 1
-    faces = _generate_viewcone_faces(n_base)
+    faces = _generate_viewcone_faces(n_base)[:, ::-1]
     color = (80, 160, 255)
 
     R_sb_series = [_los_body_to_sensor(de, pe) for de, pe in zip(los_elev, los_az)]
