@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 import openscvx as ox
-from openscvx.algorithms.multishot import MultishotPropagation, unpack_multishot_V
+from openscvx.algorithms.history import MultishotPropagation, unpack_multishot_V
 from openscvx.algorithms.optimization_results import OptimizationResults
 
 

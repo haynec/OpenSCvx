@@ -224,7 +224,7 @@ def extract_propagation_positions(
         List of propagation trajectories per iteration.
         Each iteration contains a list of (n_substeps, 3) arrays, one per segment.
     """
-    from openscvx.algorithms.multishot import unpack_multishot_V
+    from openscvx.algorithms.history import unpack_multishot_V
 
     if not discretization_history:
         return []

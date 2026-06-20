@@ -7,8 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 
 if TYPE_CHECKING:
-    from openscvx.algorithms.history import AlgorithmHistory
-    from openscvx.algorithms.multishot import MultishotPropagation
+    from openscvx.algorithms.history import AlgorithmHistory, MultishotPropagation
     from openscvx.algorithms.state import AlgorithmState
     from openscvx.problem import Problem
 
@@ -193,7 +192,7 @@ class OptimizationResults:
 
         Attaches ``self._states`` so ``.state("q")`` works without passing slices manually.
         """
-        from openscvx.algorithms.multishot import unpack_multishot_V
+        from openscvx.algorithms.history import unpack_multishot_V
 
         dh = self.discretization_history
         if not dh:

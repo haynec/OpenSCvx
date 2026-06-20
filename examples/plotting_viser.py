@@ -1771,7 +1771,7 @@ def extract_multishoot_trajectory(
         positions: Shape (n_total_points, 3)
         velocities: Shape (n_total_points, 3) or None if velocity_slice is None
     """
-    from openscvx.algorithms.multishot import unpack_multishot_V
+    from openscvx.algorithms.history import unpack_multishot_V
 
     n_segments = V_multi_shoot.shape[0] // (n_x + n_x * n_x + 2 * n_x * n_u)
     placeholder_t = np.linspace(0.0, 1.0, n_segments + 1)
