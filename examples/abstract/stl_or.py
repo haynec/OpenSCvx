@@ -100,3 +100,87 @@ if __name__ == "__main__":
     plot_states(results).show()
     plot_controls(results).show()
     plot_virtual_control_heatmap(results).show()
+
+    print("\n--- PTR (STL Or) result ---")
+    print(f"final state x: {results.x[-1]}")
+    dist_a_ptr = float(((results.x[-1, :1] - x_a) ** 2).sum() ** 0.5)
+    dist_b_ptr = float(((results.x[-1, :1] - x_b) ** 2).sum() ** 0.5)
+    print(f"distance to goal a: {dist_a_ptr:.4f}  (radius {float(radius[0])})")
+    print(f"distance to goal b: {dist_b_ptr:.4f}  (radius {float(radius[0])})")
+    print(f"OR reached: {min(dist_a_ptr, dist_b_ptr) <= float(radius[0])}")
+
+    # ------------------------------------------------------------------
+    # ProxConvex run: same OR condition encoded as an SRComposite instead
+    # of the STL or constraint above.
+    #
+    # r_i(x, u, p) = Distance from final state to goal i minus
+    #                the reach radius squared.  Negative = inside the ball.
+    # s(R)         = OR(R) ≈ 0 iff some r_i ≤ 0 (at least one goal
+    #                reached).  Minimising s drives the trajectory to satisfy
+    #                at least one reach condition.
+    # ------------------------------------------------------------------
+
+    import cvxpy as cp
+    import jax.numpy as jnp
+
+    from openscvx.algorithms.scvx.prox_convex import ProxConvex, SRComposite
+    from openscvx.solvers.cvxpy_ptr_solver import CVXPyProxConvexSolver
+    from openscvx.symbolic.lowerers.jax.stl import OR
+
+    _x_a = np.array([-1.0])
+    _x_b = np.array([1.0])
+    _r = 0.1
+
+    def _norm2(v):
+        # cp.norm is the DCP atom CVXPy recognises; jnp.linalg.norm handles JAX arrays.
+        return cp.norm(v, 2) if isinstance(v, cp.Expression) else jnp.linalg.norm(v)
+
+    def _r0(x_traj, u_traj, p):
+        return _norm2(x_traj[-1][:1] - _x_a) - _r
+
+    def _r1(x_traj, u_traj, p):
+        return _norm2(x_traj[-1][:1] - _x_b) - _r
+
+    composite = SRComposite(
+        s=lambda R, p: OR(R),
+        r=[_r0, _r1],
+    )
+
+    # Box constraints only — the OR reach condition lives in the composite.
+    box_constraints = []
+    for _state in states:
+        box_constraints.extend(
+            [
+                ox.ctcs(_state <= _state.max),
+                ox.ctcs(_state.min <= _state),
+            ]
+        )
+
+    prox_problem = Problem(
+        dynamics=dynamics,
+        constraints=box_constraints,
+        states=states,
+        controls=controls,
+        N=N,
+        time=time,
+        algorithm=ProxConvex(
+            composite=composite, k_max=200, lam_vc=1e2, autotuner=ox.ConstantProximalWeight()
+        ),
+        solver=CVXPyProxConvexSolver(composite=composite),
+        float_dtype="float64",
+    )
+
+    prox_problem.initialize()
+    prox_results = prox_problem.solve()
+    prox_results = prox_problem.post_process()
+
+    print("\n--- ProxConvex result ---")
+    print(f"final state x: {prox_results.x[-1]}")
+    dist_a = float(((prox_results.x[-1, :1] - _x_a) ** 2).sum() ** 0.5)
+    dist_b = float(((prox_results.x[-1, :1] - _x_b) ** 2).sum() ** 0.5)
+    print(f"distance to goal a: {dist_a:.4f}  (radius {0.1})")
+    print(f"distance to goal b: {dist_b:.4f}  (radius {0.1})")
+    print(f"OR reached: {min(dist_a, dist_b) <= 0.1}")
+
+    plot_states(prox_results).show()
+    plot_controls(prox_results).show()

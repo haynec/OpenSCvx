@@ -35,7 +35,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from openscvx.solvers.ptr_solver import SubproblemData, SubproblemSolution
+from openscvx.solvers.ptr_solver import ProxConvexSubproblemData, SubproblemData, SubproblemSolution
 
 from ..state import AlgorithmState, CandidateIterate
 
@@ -322,6 +322,206 @@ def make_scp_iteration(
 
         # 6c. Autotuner: pure functional update producing the next iterate.
         next_state = autotuner.update_weights(state, candidate, jax_constraints, settings, params)
+        next_state = next_state.replace(k=state.k + 1)
+
+        diagnostics = IterationDiagnostics(
+            cost=_candidate_cost(solution.x),
+            status=solution.status_code,
+            J_lin=solution.cost,
+            V=V_cand,
+            W=W_cand,
+            TR=TR,
+            VC=VC,
+        )
+        return next_state, diagnostics
+
+    return iteration_fn
+
+
+def make_proxconvex_iteration(
+    composite,
+    dis_continuous: Callable,
+    dis_impulsive: Callable,
+    jax_constraints: "LoweredJaxConstraints",
+    solver_callback: Callable[[AlgorithmState, ProxConvexSubproblemData], "SubproblemSolution"],
+    autotuner: "AutotuningBase",
+    settings: "Config",
+) -> Callable[[AlgorithmState, dict], Tuple[AlgorithmState, IterationDiagnostics]]:
+    """Build one JAX-pure ProxConvex iteration body.
+
+    Mirrors :func:`make_scp_iteration` exactly, except it also evaluates
+    the SR composite (``composite.eval``) and packs a
+    :class:`~openscvx.solvers.ptr_solver.ProxConvexSubproblemData` so the
+    solver callback can branch on the sign of ``∇s(R(x_k))``.
+
+    Args:
+        composite: :class:`~openscvx.algorithms.scvx.prox_convex.SRComposite`
+            instance.  Its ``eval`` method is called inside the JAX trace.
+        dis_continuous, dis_impulsive, jax_constraints, solver_callback,
+            autotuner, settings: same as :func:`make_scp_iteration`.
+
+    Returns:
+        ``iteration_fn(state, params) -> (next_state, diagnostics)``.
+    """
+    N = settings.sim.n
+    n_x = settings.sim.n_states
+    n_u = settings.sim.n_controls
+    n_nodal = len(jax_constraints.nodal)
+
+    dis_continuous = dis_continuous.call if hasattr(dis_continuous, "call") else dis_continuous
+    dis_impulsive = dis_impulsive.call if hasattr(dis_impulsive, "call") else dis_impulsive
+
+    inv_S_x = jnp.asarray(settings.sim.inv_S_x)
+    inv_S_u = jnp.asarray(settings.sim.inv_S_u)
+    final_type = list(settings.sim.x.final_type)
+    init_fixed = jnp.asarray(np.asarray(settings.sim.x.initial_type) == "Fix")
+    x_initial = jnp.asarray(np.asarray(settings.sim.x.initial, dtype=float))
+
+    def _discretize(x: jnp.ndarray, u: jnp.ndarray, params: dict):
+        A_d, B_d, C_d, x_prop, V = dis_continuous(x, u, params)
+        x0_prior = jnp.where(init_fixed, x_initial, x[0])
+        x_nodes_prior = jnp.concatenate([x0_prior[None, :], x_prop], axis=0)
+        x_prop_plus, D_d, E_d, W = dis_impulsive(x_nodes_prior, u, params)
+        return A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, V, W
+
+    def _linearize_constraints(x: jnp.ndarray, u: jnp.ndarray, params: dict):
+        nodal_g = jnp.zeros((N, n_nodal))
+        nodal_grad_x = jnp.zeros((N, n_nodal, n_x))
+        nodal_grad_u = jnp.zeros((N, n_nodal, n_u))
+        for c_idx, constraint in enumerate(jax_constraints.nodal):
+            g = jnp.squeeze(jnp.asarray(constraint.func(x, u, 0, params)))
+            if g.ndim == 0:
+                g = jnp.broadcast_to(g, (N,))
+            elif g.ndim > 1:
+                g = g.reshape(g.shape[0], -1).sum(axis=1)
+            grad_x = jnp.asarray(constraint.grad_g_x(x, u, 0, params))
+            if grad_x.ndim == 1:
+                grad_x = jnp.broadcast_to(grad_x, (N, grad_x.shape[0]))
+            elif grad_x.ndim > 2:
+                grad_x = grad_x.reshape(grad_x.shape[0], -1)[:, :n_x]
+            grad_u = jnp.asarray(constraint.grad_g_u(x, u, 0, params))
+            if grad_u.ndim == 1:
+                grad_u = jnp.broadcast_to(grad_u, (N, grad_u.shape[0]))
+            elif grad_u.ndim > 2:
+                grad_u = grad_u.reshape(grad_u.shape[0], -1)[:, :n_u]
+            nodes = jnp.asarray(constraint.nodes) if constraint.nodes is not None else jnp.arange(N)
+            nodal_g = nodal_g.at[nodes, c_idx].set(g[nodes])
+            nodal_grad_x = nodal_grad_x.at[nodes, c_idx].set(grad_x[nodes])
+            nodal_grad_u = nodal_grad_u.at[nodes, c_idx].set(grad_u[nodes])
+
+        if jax_constraints.cross_node:
+            cross_g = jnp.stack(
+                [jnp.asarray(c.func(x, u, params)) for c in jax_constraints.cross_node]
+            )
+            cross_grad_X = jnp.stack(
+                [jnp.asarray(c.grad_g_X(x, u, params)) for c in jax_constraints.cross_node]
+            )
+            cross_grad_U = jnp.stack(
+                [jnp.asarray(c.grad_g_U(x, u, params)) for c in jax_constraints.cross_node]
+            )
+        else:
+            cross_g = jnp.zeros((0,))
+            cross_grad_X = jnp.zeros((0, N, n_x))
+            cross_grad_U = jnp.zeros((0, N, n_u))
+
+        return nodal_g, nodal_grad_x, nodal_grad_u, cross_g, cross_grad_X, cross_grad_U
+
+    def _candidate_cost(x: jnp.ndarray) -> jnp.ndarray:
+        cost = jnp.asarray(0.0)
+        for i, bc_type in enumerate(final_type):
+            if bc_type == "Minimize":
+                cost = cost + x[-1, i]
+            elif bc_type == "Maximize":
+                cost = cost - x[-1, i]
+        return cost
+
+    def iteration_fn(
+        state: AlgorithmState, params: dict
+    ) -> Tuple[AlgorithmState, IterationDiagnostics]:
+        A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, _, _ = _discretize(state.x, state.u, params)
+
+        (
+            nodal_g,
+            nodal_grad_x,
+            nodal_grad_u,
+            cross_g,
+            cross_grad_X,
+            cross_grad_U,
+        ) = _linearize_constraints(state.x, state.u, params)
+
+        # Evaluate the SR composite: R(x_k), ∇s(R), sign mask, ∇R.
+        R_val, ds_val, I_neg_mask, grad_R = composite.eval(state.x, state.u, params)
+
+        data = ProxConvexSubproblemData(
+            x_bar=state.x,
+            u_bar=state.u,
+            A_d=A_d,
+            B_d=B_d,
+            C_d=C_d,
+            x_prop=x_prop,
+            x_prop_plus=x_prop_plus,
+            D_d=D_d,
+            E_d=E_d,
+            nodal_g=nodal_g,
+            nodal_grad_x=nodal_grad_x,
+            nodal_grad_u=nodal_grad_u,
+            cross_g=cross_g,
+            cross_grad_X=cross_grad_X,
+            cross_grad_U=cross_grad_U,
+            lam_prox=state.lam_prox,
+            lam_cost=state.lam_cost,
+            lam_vc=state.lam_vc,
+            lam_vb_nodal=state.lam_vb_nodal,
+            lam_vb_cross=state.lam_vb_cross,
+            x_init=state.x_init_pin,
+            x_term=state.x_term_pin,
+            params=params,
+            R_val=R_val,
+            ds_val=ds_val,
+            I_neg_mask=I_neg_mask,
+            grad_R=grad_R,
+        )
+
+        solution = solver_callback(state, data)
+
+        _, _, _, cand_x_prop, cand_x_prop_plus, _, _, V_cand, W_cand = _discretize(
+            solution.x, solution.u, params
+        )
+        candidate = CandidateIterate(
+            x=solution.x,
+            u=solution.u,
+            x_prop=cand_x_prop,
+            x_prop_plus=cand_x_prop_plus,
+            J_lin=solution.cost,
+        )
+
+        tr_x = inv_S_x @ (solution.x - state.x).T
+        tr_u = inv_S_u @ (solution.u - state.u).T
+        TR = jnp.concatenate([tr_x, tr_u], axis=0)
+        VC = jnp.abs(inv_S_x @ solution.nu.T).T
+        J_tr = jnp.sum(TR**2)
+        J_vc = jnp.sum(VC)
+        J_vb = jnp.sum(jnp.maximum(0.0, solution.nu_vb)) + jnp.sum(
+            jnp.maximum(0.0, solution.nu_vb_cross)
+        )
+        state = state.replace(
+            J_tr=jnp.asarray(J_tr, dtype=state.J_tr.dtype),
+            J_vb=jnp.asarray(J_vb, dtype=state.J_vb.dtype),
+            J_vc=jnp.asarray(J_vc, dtype=state.J_vc.dtype),
+        )
+
+        def _sr_cost_fn(x, u, p):
+            R = jnp.stack([ri(x, u, p) for ri in composite.r])
+            return composite.s(R, p)
+
+        next_state = autotuner.update_weights(
+            state,
+            candidate,
+            jax_constraints,
+            settings,
+            params,
+            extra_cost_fn=_sr_cost_fn,
+        )
         next_state = next_state.replace(k=state.k + 1)
 
         diagnostics = IterationDiagnostics(

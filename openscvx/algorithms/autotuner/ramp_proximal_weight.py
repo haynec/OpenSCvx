@@ -61,6 +61,7 @@ class RampProximalWeight(AutotuningBase):
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
+        extra_cost_fn=None,
     ) -> "AlgorithmState":
         """Return the next-iterate state.
 

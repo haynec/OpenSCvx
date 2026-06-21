@@ -16,7 +16,7 @@ constant); :class:`AugmentedLagrangian` overrides it with the
 constraint-violation update.
 """
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 import jax
 import jax.numpy as jnp
@@ -114,10 +114,19 @@ class AcceptanceRatioAutotuner(AutotuningBase):
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
+        extra_cost_fn: Optional[Callable] = None,
     ) -> "AlgorithmState":
         """Return the next-iterate state per the acceptance-ratio rules.
 
         Pure functional update — see class docstring.
+
+        Args:
+            extra_cost_fn: Optional ``(x, u, params) -> scalar`` JAX callable
+                whose value is added to both ``J_nonlin`` (at the candidate
+                point) and ``prev_J_nonlin`` (at the previous accepted iterate).
+                Pass the SR composite ``s(R(x, u, params))`` here so the
+                acceptance ratio accounts for the full composite cost.  Default
+                ``None`` leaves the standard PTR behaviour unchanged.
         """
         candidate_x_prop = candidate.x_prop_plus[1:]
         nonlin_cost, nonlin_pen, nodal_pen = calculate_nonlinear_penalty(
@@ -132,7 +141,12 @@ class AcceptanceRatioAutotuner(AutotuningBase):
             params,
             settings,
         )
-        J_nonlin = nonlin_cost + nonlin_pen + nodal_pen
+        extra_cand = (
+            extra_cost_fn(candidate.x, candidate.u, params)
+            if extra_cost_fn is not None
+            else jnp.asarray(0.0)
+        )
+        J_nonlin = nonlin_cost + nonlin_pen + nodal_pen + extra_cand
 
         lam_cost_next = self._relaxed_lam_cost(state)
 
@@ -165,7 +179,12 @@ class AcceptanceRatioAutotuner(AutotuningBase):
                 params,
                 settings,
             )
-            prev_J_nonlin = prev_cost + prev_pen + prev_nodal_pen
+            extra_prev = (
+                extra_cost_fn(state.x, state.u, params)
+                if extra_cost_fn is not None
+                else jnp.asarray(0.0)
+            )
+            prev_J_nonlin = prev_cost + prev_pen + prev_nodal_pen + extra_prev
 
             actual = prev_J_nonlin - J_nonlin
             predicted = prev_J_nonlin - candidate.J_lin
