@@ -1406,10 +1406,8 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
                 sr_cost = sr_cost + ds_p * ri_expr
 
         # Hessian curvature term: 0.5 * ||L^T (x - x_bar)||²  where  H⁺ = L L^T.
-        # L = V diag(√λ⁺) is the square-root factor; L_p @ x_flat is DPP-compliant
-        # (param_matrix @ variable), unlike the earlier multiply-of-eigenvalues form.
-        # offset_p = L^T x_bar is precomputed on the CPU so only one param appears
-        # per product, satisfying CVXPy's DPP requirement.
+        # L = V diag(√λ⁺); offset = L^T x_bar is precomputed on the CPU so the
+        # CVXPy expression reduces to cp.sum_squares(param_matrix @ variable - param_vector).
         n_total = N * n_x
         L_hplus_p = cp.Parameter((n_total, n_total))
         offset_hplus_p = cp.Parameter(n_total)
@@ -1458,8 +1456,8 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
                 entry["ds_params"][i].value = max(0.0, ds_i)
 
         # Update the square-root factor L = V diag(√λ⁺) for Q_k = µ_k I + H⁺_k.
-        # Precomputing offset = L^T x_bar avoids a param×param product in the CVXPy
-        # expression, which would break DPP and force re-canonicalization every solve.
+        # offset = L^T x_bar is precomputed here so _build_sr_problem only needs a
+        # single param_matrix @ variable product (DPP-compliant).
         eigvals, eigvecs = np.linalg.eigh(H_plus_np)
         sqrt_eigvals = np.sqrt(np.maximum(0.0, eigvals))
         L = eigvecs @ np.diag(sqrt_eigvals)
