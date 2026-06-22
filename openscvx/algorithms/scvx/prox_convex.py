@@ -13,13 +13,15 @@ Usage::
     import jax.numpy as jnp
 
     composite = SRComposite(
-        s=lambda R, p: -OR(R, c=1e-4),   # JAX-only outer function
-        r=[r0_fn, r1_fn],                 # convex; duck-types to CVXPy
+        s=lambda R, p: OR(R),             # JAX-only outer function
+        r=[ox.linalg.Norm(x - x_a) - r,  # symbolic Expr objects
+           ox.linalg.Norm(x - x_b) - r],
+        nodes=N - 1,                      # node index (shared or per-r_i)
     )
     problem = Problem(
         ...,
         algorithm=ProxConvex(composite=composite),
-        solver=CVXPyProxConvexSolver(composite=composite),
+        solver=CVXPyProxConvexSolver(),   # composite forwarded by Problem.initialize()
     )
     problem.initialize()
     result = problem.solve()
@@ -66,19 +68,38 @@ class SRComposite:
     Attributes:
         s: ``s(R, params) -> scalar``.  JAX-only; never passed to CVXPy.
             GMSR functions (``AND``, ``OR``, ``IfThen_lite``, …) and any
-            composition thereof are natural choices — they are pure JAX and
-            differentiated via ``jax.grad`` without special handling.
-        r: List of ``r_i(x, u, params) -> scalar`` callables.  Each must:
-
-            * Duck-type to JAX arrays AND CVXPy Variables via plain Python
-              operators (``**``, ``+``, ``-``, ``.sum()``, …).
-            * Be DCP-convex when evaluated with CVXPy Variables.
-            * Have **params-independent DCP structure** — params may affect
-              numerical values but not the convexity graph.
+            composition thereof are natural choices.
+        r: List of symbolic :class:`~openscvx.symbolic.expr.Expr` objects,
+            one per component.  Each must be DCP-convex — the lowerer builds
+            both the JAX and CVXPy forms automatically.
+        nodes: Node index (or list of indices, one per ``r_i``) at which each
+            component is evaluated.  A single ``int`` is broadcast to all
+            components.
     """
 
     s: Callable
-    r: List[Callable]
+    r: List
+    nodes: Union[int, List[int]]
+
+    def __post_init__(self):
+        if isinstance(self.nodes, int):
+            self._nodes: List[int] = [self.nodes] * len(self.r)
+        else:
+            self._nodes = list(self.nodes)
+        self._r_jax_fns = None
+
+    def lower_jax(self) -> None:
+        """Lower symbolic ``r_i`` expressions to per-node JAX callables.
+
+        Must be called after :meth:`Problem.initialize` assigns ``_slice`` to
+        all :class:`~openscvx.symbolic.expr.state.State` objects.  Populates
+        ``self._r_jax_fns`` — a list of ``(x_node, u_node, node_idx, params)
+        -> scalar`` functions, one per component.
+        """
+        from openscvx.symbolic.lowerers.jax import JaxLowerer
+
+        lowerer = JaxLowerer()
+        self._r_jax_fns = [lowerer.lower(ri) for ri in self.r]
 
     def eval(
         self, x: jnp.ndarray, u: jnp.ndarray, params: dict
@@ -89,12 +110,20 @@ class SRComposite:
             R_val: shape ``(n_r,)``
             ds_val: shape ``(n_r,)`` — gradient of ``s`` w.r.t. ``R``
             I_neg_mask: shape ``(n_r,)`` bool — ``True`` where ``ds_val < 0``
-            grad_R: shape ``(n_r, N, n_x)`` — Jacobian of each ``r_i`` w.r.t. ``x``
+            grad_R: shape ``(n_r, N, n_x)`` — Jacobian of each ``r_i`` w.r.t. full trajectory
         """
-        R_val = jnp.stack([ri(x, u, params) for ri in self.r])
+        assert self._r_jax_fns is not None, "call lower_jax() before eval()"
+        R_val = jnp.stack(
+            [fn(x[n], u[n], n, params) for fn, n in zip(self._r_jax_fns, self._nodes)]
+        )
         ds_val = jax.grad(lambda R: self.s(R, params))(R_val)
         I_neg_mask = ds_val < 0
-        grad_R = jnp.stack([jax.jacrev(ri, argnums=0)(x, u, params) for ri in self.r])
+        grad_R = jnp.stack(
+            [
+                jax.jacrev(lambda x_: fn(x_[n], u[n], n, params))(x)
+                for fn, n in zip(self._r_jax_fns, self._nodes)
+            ]
+        )
         return R_val, ds_val, I_neg_mask, grad_R
 
 
@@ -105,42 +134,29 @@ def check_sr_composite(composite: "SRComposite", x_var, u_var, params: dict) -> 
 
     1. ``s(R, params)`` returns a scalar for a test ``R`` of shape ``(n_r,)``
        — required for ``jax.grad`` to succeed.
-    2. Each ``r_i(x_var, u_var, params)`` is DCP-compliant when called with
-       CVXPy Variables — required so exact channels can be embedded in the
+    2. Each ``r_i`` lowered via :class:`~openscvx.symbolic.lowerers.cvxpy.CvxpyLowerer`
+       is DCP-compliant — required so exact channels can be embedded in the
        subproblem as-is.
-
-    Args:
-        composite: The :class:`SRComposite` to validate.
-        x_var: ``x_nonscaled`` list from the solver (N CVXPy expressions of
-            shape ``(n_x,)`` each), or any CVXPy Variable-like sequence.
-        u_var: ``u_nonscaled`` list from the solver (N CVXPy expressions of
-            shape ``(n_u,)`` each).
-        params: Passed through to ``r_i`` for structural validation.
-            ``r_i`` must not require specific keys for its DCP structure
-            (``{}`` or any dict must work).
 
     Raises:
         ValueError: If ``s`` does not return a scalar, or if any ``r_i`` is
             not DCP-compliant.
     """
+    from openscvx.symbolic.lowerers.cvxpy import CvxpyLowerer
+
     n_r = len(composite.r)
     R_test = jnp.zeros(n_r)
     s_out = composite.s(R_test, params)
     if jnp.asarray(s_out).ndim != 0:
         raise ValueError(f"s(R, params) must return a scalar; got shape {jnp.asarray(s_out).shape}")
-    for i, ri in enumerate(composite.r):
+    for i, (r_expr, node) in enumerate(zip(composite.r, composite._nodes)):
         try:
-            expr = ri(x_var, u_var, params)
+            lowerer = CvxpyLowerer(variable_map={"x": x_var[node], "u": u_var[node]})
+            expr = lowerer.lower(r_expr)
         except Exception as exc:
-            raise ValueError(
-                f"r[{i}] raised an exception when called with CVXPy Variables: {exc}"
-            ) from exc
+            raise ValueError(f"r[{i}] failed CVXPy lowering at node {node}: {exc}") from exc
         if hasattr(expr, "is_dcp") and not expr.is_dcp():
-            raise ValueError(
-                f"r[{i}] is not DCP-compliant when evaluated with CVXPy Variables. "
-                "Rewrite using plain Python operators (**, +, -, .sum()) that work "
-                "for both JAX arrays and CVXPy Variables."
-            )
+            raise ValueError(f"r[{i}] is not DCP-compliant at node {node}.")
 
 
 class ProxConvex(Algorithm):
@@ -152,8 +168,8 @@ class ProxConvex(Algorithm):
     The scalar proximal metric ``Q_k = µ_k I`` is adapted by an
     acceptance-ratio test identical to Algorithm 1 of the paper.
 
-    Pair this algorithm with :class:`~openscvx.solvers.cvxpy_ptr_solver.CVXPyProxConvexSolver`
-    (pass both the same ``composite`` instance).
+    Pair this algorithm with :class:`~openscvx.solvers.cvxpy_ptr_solver.CVXPyProxConvexSolver`.
+    :meth:`Problem.initialize` forwards the composite to the solver automatically.
 
     Args:
         composite: :class:`SRComposite` encoding the ``s`` and ``r`` functions.
@@ -319,7 +335,7 @@ class ProxConvex(Algorithm):
             W=np.asarray(diag.W),
             VC=np.asarray(diag.VC),
             TR=np.asarray(diag.TR),
-            J_lin=float(diag.J_lin),
+            J_cvx=float(diag.J_cvx),
             record_diagnostics=use_full_metrics,
         )
 
@@ -342,7 +358,7 @@ class ProxConvex(Algorithm):
             emission_data.update(
                 {
                     "J_nonlin": scalars["J_nonlin"],
-                    "J_lin": float(diag.J_lin),
+                    "J_cvx": float(diag.J_cvx),
                     "pred_reduction": scalars["predicted_reduction"],
                     "actual_reduction": scalars["actual_reduction"],
                     "acceptance_ratio": scalars["acceptance_ratio"],

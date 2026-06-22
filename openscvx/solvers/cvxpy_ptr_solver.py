@@ -1314,13 +1314,17 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
             ``solver_args``, ``cvxpygen``, ``cvxpygen_override``).
     """
 
-    def __init__(self, composite, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self._composite = composite
+        self._composite = None
         # mask_key -> {'problem', 'ds_params', 'lin_coef_params', 'lin_bias_params'}
         self._sr_problem_cache: dict = {}
         self._cached_lowered = None
         self._cached_settings: Optional[Config] = None
+
+    def set_composite(self, composite) -> None:
+        """Receive the SR composite forwarded by :meth:`Problem.initialize`."""
+        self._composite = composite
 
     def initialize(self, lowered, settings: Config) -> None:
         """Build base PTR problem and validate the SR composite.
@@ -1390,9 +1394,15 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
                 sr_cost = sr_cost + channel_cost
             else:
                 # Exact channel: embed r_i directly as a CVXPy expression.
+                from openscvx.symbolic.lowerers.cvxpy import CvxpyLowerer
+
                 ds_p = cp.Parameter(nonneg=True)
                 ds_params[i] = ds_p
-                ri_expr = self._composite.r[i](x_nonscaled, u_nonscaled, params)
+                node = self._composite._nodes[i]
+                lowerer = CvxpyLowerer(
+                    variable_map={"x": x_nonscaled[node], "u": u_nonscaled[node]}
+                )
+                ri_expr = lowerer.lower(self._composite.r[i])
                 sr_cost = sr_cost + ds_p * ri_expr
 
         # Re-build the base PTR cost expression (no side effects; all

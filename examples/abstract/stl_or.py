@@ -120,9 +120,6 @@ if __name__ == "__main__":
     #                at least one reach condition.
     # ------------------------------------------------------------------
 
-    import cvxpy as cp
-    import jax.numpy as jnp
-
     from openscvx.algorithms.scvx.prox_convex import ProxConvex, SRComposite
     from openscvx.solvers.cvxpy_ptr_solver import CVXPyProxConvexSolver
     from openscvx.symbolic.lowerers.jax.stl import OR
@@ -131,19 +128,13 @@ if __name__ == "__main__":
     _x_b = np.array([1.0])
     _r = 0.1
 
-    def _norm2(v):
-        # cp.norm is the DCP atom CVXPy recognises; jnp.linalg.norm handles JAX arrays.
-        return cp.norm(v, 2) if isinstance(v, cp.Expression) else jnp.linalg.norm(v)
-
-    def _r0(x_traj, u_traj, p):
-        return _norm2(x_traj[-1][:1] - _x_a) - _r
-
-    def _r1(x_traj, u_traj, p):
-        return _norm2(x_traj[-1][:1] - _x_b) - _r
-
     composite = SRComposite(
         s=lambda R, p: OR(R),
-        r=[_r0, _r1],
+        r=[
+            ox.linalg.Norm(x - _x_a) - _r,
+            ox.linalg.Norm(x - _x_b) - _r,
+        ],
+        nodes=N - 1,
     )
 
     # Box constraints only — the OR reach condition lives in the composite.
@@ -164,9 +155,9 @@ if __name__ == "__main__":
         N=N,
         time=time,
         algorithm=ProxConvex(
-            composite=composite, k_max=200, lam_vc=1e2, autotuner=ox.ConstantProximalWeight()
+            composite=composite, k_max=200, lam_vc=1e2, autotuner=ox.AugmentedLagrangian()
         ),
-        solver=CVXPyProxConvexSolver(composite=composite),
+        solver=CVXPyProxConvexSolver(),
         float_dtype="float64",
     )
 

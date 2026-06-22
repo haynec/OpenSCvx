@@ -55,14 +55,14 @@ class IterationDiagnostics:
     Python-loop ``step()`` can populate :class:`AlgorithmHistory` and the
     emitter exactly as the legacy ``_subproblem`` did — the data they carry is
     not on the JAX-traceable state pytree (raw discretization matrices are
-    large and host-only; cost / status / ``J_lin`` come from the subproblem
+    large and host-only; cost / status / ``J_cvx`` come from the subproblem
     solve). :func:`make_solve_loop` projects them away.
 
     Attributes:
         cost: Boundary-weighted objective at the candidate (scalar) — the
             ``cost[-1]`` the emitter prints.
         status: Subproblem :class:`StatusCode` as ``int32``.
-        J_lin: Subproblem optimal (linearized) cost (scalar).
+        J_cvx: Subproblem optimal (linearized) cost (scalar).
         V: Raw continuous discretization matrix of the candidate.
         W: Raw impulsive discretization matrix of the candidate.
         TR: Scaled trust-region step matrix, shape ``(n_x + n_u, N)``.
@@ -71,7 +71,7 @@ class IterationDiagnostics:
 
     cost: jnp.ndarray
     status: jnp.ndarray
-    J_lin: jnp.ndarray
+    J_cvx: jnp.ndarray
     V: jnp.ndarray
     W: jnp.ndarray
     TR: jnp.ndarray
@@ -84,6 +84,85 @@ class IterationDiagnostics:
     @classmethod
     def tree_unflatten(cls, aux, children):
         return cls(*children)
+
+
+def _discretize(
+    x: jnp.ndarray,
+    u: jnp.ndarray,
+    params: dict,
+    dis_continuous,
+    dis_impulsive,
+    init_fixed: jnp.ndarray,
+    x_initial: jnp.ndarray,
+):
+    A_d, B_d, C_d, x_prop, V = dis_continuous(x, u, params)
+    x0_prior = jnp.where(init_fixed, x_initial, x[0])
+    x_nodes_prior = jnp.concatenate([x0_prior[None, :], x_prop], axis=0)
+    x_prop_plus, D_d, E_d, W = dis_impulsive(x_nodes_prior, u, params)
+    return A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, V, W
+
+
+def _linearize_constraints(
+    x: jnp.ndarray,
+    u: jnp.ndarray,
+    params: dict,
+    jax_constraints,
+    N: int,
+    n_nodal: int,
+    n_x: int,
+    n_u: int,
+):
+    nodal_g = jnp.zeros((N, n_nodal))
+    nodal_grad_x = jnp.zeros((N, n_nodal, n_x))
+    nodal_grad_u = jnp.zeros((N, n_nodal, n_u))
+    for c_idx, constraint in enumerate(jax_constraints.nodal):
+        g = jnp.squeeze(jnp.asarray(constraint.func(x, u, 0, params)))
+        if g.ndim == 0:
+            g = jnp.broadcast_to(g, (N,))
+        elif g.ndim > 1:
+            g = g.reshape(g.shape[0], -1).sum(axis=1)
+
+        grad_x = jnp.asarray(constraint.grad_g_x(x, u, 0, params))
+        if grad_x.ndim == 1:
+            grad_x = jnp.broadcast_to(grad_x, (N, grad_x.shape[0]))
+        elif grad_x.ndim > 2:
+            grad_x = grad_x.reshape(grad_x.shape[0], -1)[:, :n_x]
+
+        grad_u = jnp.asarray(constraint.grad_g_u(x, u, 0, params))
+        if grad_u.ndim == 1:
+            grad_u = jnp.broadcast_to(grad_u, (N, grad_u.shape[0]))
+        elif grad_u.ndim > 2:
+            grad_u = grad_u.reshape(grad_u.shape[0], -1)[:, :n_u]
+
+        nodes = jnp.asarray(constraint.nodes) if constraint.nodes is not None else jnp.arange(N)
+        nodal_g = nodal_g.at[nodes, c_idx].set(g[nodes])
+        nodal_grad_x = nodal_grad_x.at[nodes, c_idx].set(grad_x[nodes])
+        nodal_grad_u = nodal_grad_u.at[nodes, c_idx].set(grad_u[nodes])
+
+    if jax_constraints.cross_node:
+        cross_g = jnp.stack([jnp.asarray(c.func(x, u, params)) for c in jax_constraints.cross_node])
+        cross_grad_X = jnp.stack(
+            [jnp.asarray(c.grad_g_X(x, u, params)) for c in jax_constraints.cross_node]
+        )
+        cross_grad_U = jnp.stack(
+            [jnp.asarray(c.grad_g_U(x, u, params)) for c in jax_constraints.cross_node]
+        )
+    else:
+        cross_g = jnp.zeros((0,))
+        cross_grad_X = jnp.zeros((0, N, n_x))
+        cross_grad_U = jnp.zeros((0, N, n_u))
+
+    return nodal_g, nodal_grad_x, nodal_grad_u, cross_g, cross_grad_X, cross_grad_U
+
+
+def _candidate_cost(x: jnp.ndarray, final_type: list) -> jnp.ndarray:
+    cost = jnp.asarray(0.0)
+    for i, bc_type in enumerate(final_type):
+        if bc_type == "Minimize":
+            cost = cost + x[-1, i]
+        elif bc_type == "Maximize":
+            cost = cost - x[-1, i]
+    return cost
 
 
 def make_scp_iteration(
@@ -162,93 +241,13 @@ def make_scp_iteration(
     init_fixed = jnp.asarray(np.asarray(settings.sim.x.initial_type) == "Fix")
     x_initial = jnp.asarray(np.asarray(settings.sim.x.initial, dtype=float))
 
-    def _discretize(x: jnp.ndarray, u: jnp.ndarray, params: dict):
-        """Discretize ``(x, u)`` through both dynamics; return propagation pieces.
-
-        Returns ``(A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, V, W)`` — ``V``
-        / ``W`` are the raw multi-shot matrices the history recorder unpacks.
-        """
-        A_d, B_d, C_d, x_prop, V = dis_continuous(x, u, params)
-        x0_prior = jnp.where(init_fixed, x_initial, x[0])
-        x_nodes_prior = jnp.concatenate([x0_prior[None, :], x_prop], axis=0)
-        x_prop_plus, D_d, E_d, W = dis_impulsive(x_nodes_prior, u, params)
-        return A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, V, W
-
-    def _linearize_constraints(x: jnp.ndarray, u: jnp.ndarray, params: dict):
-        """Stack nodal / cross-node constraint values and gradients.
-
-        Nodal data is laid out ``(N, n_nodal[, ·])`` with zero-fill at nodes
-        outside each constraint's static ``nodes`` set — the backend assembly
-        closes over those node sets and skips the zeros.
-        """
-        nodal_g = jnp.zeros((N, n_nodal))
-        nodal_grad_x = jnp.zeros((N, n_nodal, n_x))
-        nodal_grad_u = jnp.zeros((N, n_nodal, n_u))
-        for c_idx, constraint in enumerate(jax_constraints.nodal):
-            g = jnp.squeeze(jnp.asarray(constraint.func(x, u, 0, params)))
-            if g.ndim == 0:
-                g = jnp.broadcast_to(g, (N,))
-            elif g.ndim > 1:
-                g = g.reshape(g.shape[0], -1).sum(axis=1)
-
-            grad_x = jnp.asarray(constraint.grad_g_x(x, u, 0, params))
-            if grad_x.ndim == 1:
-                grad_x = jnp.broadcast_to(grad_x, (N, grad_x.shape[0]))
-            elif grad_x.ndim > 2:
-                grad_x = grad_x.reshape(grad_x.shape[0], -1)[:, :n_x]
-
-            grad_u = jnp.asarray(constraint.grad_g_u(x, u, 0, params))
-            if grad_u.ndim == 1:
-                grad_u = jnp.broadcast_to(grad_u, (N, grad_u.shape[0]))
-            elif grad_u.ndim > 2:
-                grad_u = grad_u.reshape(grad_u.shape[0], -1)[:, :n_u]
-
-            nodes = jnp.asarray(constraint.nodes) if constraint.nodes is not None else jnp.arange(N)
-            nodal_g = nodal_g.at[nodes, c_idx].set(g[nodes])
-            nodal_grad_x = nodal_grad_x.at[nodes, c_idx].set(grad_x[nodes])
-            nodal_grad_u = nodal_grad_u.at[nodes, c_idx].set(grad_u[nodes])
-
-        if jax_constraints.cross_node:
-            cross_g = jnp.stack(
-                [jnp.asarray(c.func(x, u, params)) for c in jax_constraints.cross_node]
-            )
-            cross_grad_X = jnp.stack(
-                [jnp.asarray(c.grad_g_X(x, u, params)) for c in jax_constraints.cross_node]
-            )
-            cross_grad_U = jnp.stack(
-                [jnp.asarray(c.grad_g_U(x, u, params)) for c in jax_constraints.cross_node]
-            )
-        else:
-            cross_g = jnp.zeros((0,))
-            cross_grad_X = jnp.zeros((0, N, n_x))
-            cross_grad_U = jnp.zeros((0, N, n_u))
-
-        return nodal_g, nodal_grad_x, nodal_grad_u, cross_g, cross_grad_X, cross_grad_U
-
-    def _candidate_cost(x: jnp.ndarray) -> jnp.ndarray:
-        """Boundary-weighted reduction objective at the candidate's terminal node.
-
-        This is the unscaled, terminal-node *display* cost — the value the
-        emitter prints in the cost column. It deliberately differs from the
-        ``J_nonlin`` cost term computed by
-        :func:`~openscvx.algorithms.penalty.calculate_cost_from_state`, which
-        scales by ``inv_S_x`` / ``c_x`` and also folds in initial-node
-        ``Minimize`` / ``Maximize`` objectives. Convergence never reads this
-        value, so the two are allowed to drift.
-        """
-        cost = jnp.asarray(0.0)
-        for i, bc_type in enumerate(final_type):
-            if bc_type == "Minimize":
-                cost = cost + x[-1, i]
-            elif bc_type == "Maximize":
-                cost = cost - x[-1, i]
-        return cost
-
     def iteration_fn(
         state: AlgorithmState, params: dict
     ) -> Tuple[AlgorithmState, IterationDiagnostics]:
         # 1–2. Discretize the current iterate for the subproblem linearization.
-        A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, _, _ = _discretize(state.x, state.u, params)
+        A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, _, _ = _discretize(
+            state.x, state.u, params, dis_continuous, dis_impulsive, init_fixed, x_initial
+        )
 
         # 3. Linearize the constraints about the current iterate.
         (
@@ -258,7 +257,7 @@ def make_scp_iteration(
             cross_g,
             cross_grad_X,
             cross_grad_U,
-        ) = _linearize_constraints(state.x, state.u, params)
+        ) = _linearize_constraints(state.x, state.u, params, jax_constraints, N, n_nodal, n_x, n_u)
 
         # 4. Pack the subproblem inputs.
         data = SubproblemData(
@@ -293,14 +292,14 @@ def make_scp_iteration(
         # 6a. Discretize the candidate for the autotuner's propagation fields
         # and the history's raw discretization matrices.
         _, _, _, cand_x_prop, cand_x_prop_plus, _, _, V_cand, W_cand = _discretize(
-            solution.x, solution.u, params
+            solution.x, solution.u, params, dis_continuous, dis_impulsive, init_fixed, x_initial
         )
         candidate = CandidateIterate(
             x=solution.x,
             u=solution.u,
             x_prop=cand_x_prop,
             x_prop_plus=cand_x_prop_plus,
-            J_lin=solution.cost,
+            J_cvx=solution.cost,
         )
 
         # 6b. SCP convergence metrics (scaled trust region / virtual control /
@@ -325,9 +324,9 @@ def make_scp_iteration(
         next_state = next_state.replace(k=state.k + 1)
 
         diagnostics = IterationDiagnostics(
-            cost=_candidate_cost(solution.x),
+            cost=_candidate_cost(solution.x, final_type),
             status=solution.status_code,
-            J_lin=solution.cost,
+            J_cvx=solution.cost,
             V=V_cand,
             W=W_cand,
             TR=TR,
@@ -377,68 +376,12 @@ def make_proxconvex_iteration(
     init_fixed = jnp.asarray(np.asarray(settings.sim.x.initial_type) == "Fix")
     x_initial = jnp.asarray(np.asarray(settings.sim.x.initial, dtype=float))
 
-    def _discretize(x: jnp.ndarray, u: jnp.ndarray, params: dict):
-        A_d, B_d, C_d, x_prop, V = dis_continuous(x, u, params)
-        x0_prior = jnp.where(init_fixed, x_initial, x[0])
-        x_nodes_prior = jnp.concatenate([x0_prior[None, :], x_prop], axis=0)
-        x_prop_plus, D_d, E_d, W = dis_impulsive(x_nodes_prior, u, params)
-        return A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, V, W
-
-    def _linearize_constraints(x: jnp.ndarray, u: jnp.ndarray, params: dict):
-        nodal_g = jnp.zeros((N, n_nodal))
-        nodal_grad_x = jnp.zeros((N, n_nodal, n_x))
-        nodal_grad_u = jnp.zeros((N, n_nodal, n_u))
-        for c_idx, constraint in enumerate(jax_constraints.nodal):
-            g = jnp.squeeze(jnp.asarray(constraint.func(x, u, 0, params)))
-            if g.ndim == 0:
-                g = jnp.broadcast_to(g, (N,))
-            elif g.ndim > 1:
-                g = g.reshape(g.shape[0], -1).sum(axis=1)
-            grad_x = jnp.asarray(constraint.grad_g_x(x, u, 0, params))
-            if grad_x.ndim == 1:
-                grad_x = jnp.broadcast_to(grad_x, (N, grad_x.shape[0]))
-            elif grad_x.ndim > 2:
-                grad_x = grad_x.reshape(grad_x.shape[0], -1)[:, :n_x]
-            grad_u = jnp.asarray(constraint.grad_g_u(x, u, 0, params))
-            if grad_u.ndim == 1:
-                grad_u = jnp.broadcast_to(grad_u, (N, grad_u.shape[0]))
-            elif grad_u.ndim > 2:
-                grad_u = grad_u.reshape(grad_u.shape[0], -1)[:, :n_u]
-            nodes = jnp.asarray(constraint.nodes) if constraint.nodes is not None else jnp.arange(N)
-            nodal_g = nodal_g.at[nodes, c_idx].set(g[nodes])
-            nodal_grad_x = nodal_grad_x.at[nodes, c_idx].set(grad_x[nodes])
-            nodal_grad_u = nodal_grad_u.at[nodes, c_idx].set(grad_u[nodes])
-
-        if jax_constraints.cross_node:
-            cross_g = jnp.stack(
-                [jnp.asarray(c.func(x, u, params)) for c in jax_constraints.cross_node]
-            )
-            cross_grad_X = jnp.stack(
-                [jnp.asarray(c.grad_g_X(x, u, params)) for c in jax_constraints.cross_node]
-            )
-            cross_grad_U = jnp.stack(
-                [jnp.asarray(c.grad_g_U(x, u, params)) for c in jax_constraints.cross_node]
-            )
-        else:
-            cross_g = jnp.zeros((0,))
-            cross_grad_X = jnp.zeros((0, N, n_x))
-            cross_grad_U = jnp.zeros((0, N, n_u))
-
-        return nodal_g, nodal_grad_x, nodal_grad_u, cross_g, cross_grad_X, cross_grad_U
-
-    def _candidate_cost(x: jnp.ndarray) -> jnp.ndarray:
-        cost = jnp.asarray(0.0)
-        for i, bc_type in enumerate(final_type):
-            if bc_type == "Minimize":
-                cost = cost + x[-1, i]
-            elif bc_type == "Maximize":
-                cost = cost - x[-1, i]
-        return cost
-
     def iteration_fn(
         state: AlgorithmState, params: dict
     ) -> Tuple[AlgorithmState, IterationDiagnostics]:
-        A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, _, _ = _discretize(state.x, state.u, params)
+        A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, _, _ = _discretize(
+            state.x, state.u, params, dis_continuous, dis_impulsive, init_fixed, x_initial
+        )
 
         (
             nodal_g,
@@ -447,7 +390,7 @@ def make_proxconvex_iteration(
             cross_g,
             cross_grad_X,
             cross_grad_U,
-        ) = _linearize_constraints(state.x, state.u, params)
+        ) = _linearize_constraints(state.x, state.u, params, jax_constraints, N, n_nodal, n_x, n_u)
 
         # Evaluate the SR composite: R(x_k), ∇s(R), sign mask, ∇R.
         R_val, ds_val, I_neg_mask, grad_R = composite.eval(state.x, state.u, params)
@@ -485,14 +428,14 @@ def make_proxconvex_iteration(
         solution = solver_callback(state, data)
 
         _, _, _, cand_x_prop, cand_x_prop_plus, _, _, V_cand, W_cand = _discretize(
-            solution.x, solution.u, params
+            solution.x, solution.u, params, dis_continuous, dis_impulsive, init_fixed, x_initial
         )
         candidate = CandidateIterate(
             x=solution.x,
             u=solution.u,
             x_prop=cand_x_prop,
             x_prop_plus=cand_x_prop_plus,
-            J_lin=solution.cost,
+            J_cvx=solution.cost,
         )
 
         tr_x = inv_S_x @ (solution.x - state.x).T
@@ -510,24 +453,13 @@ def make_proxconvex_iteration(
             J_vc=jnp.asarray(J_vc, dtype=state.J_vc.dtype),
         )
 
-        def _sr_cost_fn(x, u, p):
-            R = jnp.stack([ri(x, u, p) for ri in composite.r])
-            return composite.s(R, p)
-
-        next_state = autotuner.update_weights(
-            state,
-            candidate,
-            jax_constraints,
-            settings,
-            params,
-            extra_cost_fn=_sr_cost_fn,
-        )
+        next_state = autotuner.update_weights(state, candidate, jax_constraints, settings, params)
         next_state = next_state.replace(k=state.k + 1)
 
         diagnostics = IterationDiagnostics(
-            cost=_candidate_cost(solution.x),
+            cost=_candidate_cost(solution.x, final_type),
             status=solution.status_code,
-            J_lin=solution.cost,
+            J_cvx=solution.cost,
             V=V_cand,
             W=W_cand,
             TR=TR,

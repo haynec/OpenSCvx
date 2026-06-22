@@ -16,7 +16,7 @@ constant); :class:`AugmentedLagrangian` overrides it with the
 constraint-violation update.
 """
 
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, List
 
 import jax
 import jax.numpy as jnp
@@ -73,7 +73,7 @@ class AcceptanceRatioAutotuner(AutotuningBase):
 
     COLUMNS: List[Column] = [
         Column("J_nonlin", "J_nonlin", 8, "{: .1e}", None, Verbosity.STANDARD),
-        Column("J_lin", "J_lin", 8, "{: .1e}", None, Verbosity.STANDARD),
+        Column("J_cvx", "J_cvx", 8, "{: .1e}", None, Verbosity.STANDARD),
         Column("pred_reduction", "pred_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL),
         Column("actual_reduction", "act_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL),
         Column(
@@ -114,19 +114,10 @@ class AcceptanceRatioAutotuner(AutotuningBase):
         nodal_constraints: "LoweredJaxConstraints",
         settings: Config,
         params: dict,
-        extra_cost_fn: Optional[Callable] = None,
     ) -> "AlgorithmState":
         """Return the next-iterate state per the acceptance-ratio rules.
 
         Pure functional update — see class docstring.
-
-        Args:
-            extra_cost_fn: Optional ``(x, u, params) -> scalar`` JAX callable
-                whose value is added to both ``J_nonlin`` (at the candidate
-                point) and ``prev_J_nonlin`` (at the previous accepted iterate).
-                Pass the SR composite ``s(R(x, u, params))`` here so the
-                acceptance ratio accounts for the full composite cost.  Default
-                ``None`` leaves the standard PTR behaviour unchanged.
         """
         candidate_x_prop = candidate.x_prop_plus[1:]
         nonlin_cost, nonlin_pen, nodal_pen = calculate_nonlinear_penalty(
@@ -141,12 +132,7 @@ class AcceptanceRatioAutotuner(AutotuningBase):
             params,
             settings,
         )
-        extra_cand = (
-            extra_cost_fn(candidate.x, candidate.u, params)
-            if extra_cost_fn is not None
-            else jnp.asarray(0.0)
-        )
-        J_nonlin = nonlin_cost + nonlin_pen + nodal_pen + extra_cand
+        J_nonlin = nonlin_cost + nonlin_pen + nodal_pen
 
         lam_cost_next = self._relaxed_lam_cost(state)
 
@@ -179,15 +165,10 @@ class AcceptanceRatioAutotuner(AutotuningBase):
                 params,
                 settings,
             )
-            extra_prev = (
-                extra_cost_fn(state.x, state.u, params)
-                if extra_cost_fn is not None
-                else jnp.asarray(0.0)
-            )
-            prev_J_nonlin = prev_cost + prev_pen + prev_nodal_pen + extra_prev
+            prev_J_nonlin = prev_cost + prev_pen + prev_nodal_pen
 
             actual = prev_J_nonlin - J_nonlin
-            predicted = prev_J_nonlin - candidate.J_lin
+            predicted = prev_J_nonlin - candidate.J_cvx
             # If predicted reduction is exactly zero, force the reject bucket
             # (rho = -inf) deterministically instead of raising.
             safe_pred = jnp.where(predicted == 0.0, 1.0, predicted)
