@@ -260,12 +260,15 @@ class ProxConvexSubproblemData(SubproblemData):
             ``ds_val[i] < 0`` (channel must be linearized).
         grad_R: Jacobian of each ``r_i`` w.r.t. the full state trajectory
             ``x``, shape ``(n_r, N, n_x)``.  Computed via ``jax.jacrev``.
+        H_plus: PSD-projected curvature block ``H⁺_k = Π_{S+}(H_{s,k})`` for
+            the proximal metric ``Q_k = µ_k I + H⁺_k``, shape ``(N*n_x, N*n_x)``.
     """
 
     R_val: jnp.ndarray
     ds_val: jnp.ndarray
     I_neg_mask: jnp.ndarray
     grad_R: jnp.ndarray
+    H_plus: jnp.ndarray
 
     def tree_flatten(self):
         children = tuple(getattr(self, f.name) for f in fields(self))

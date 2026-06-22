@@ -2,8 +2,10 @@
 
 Minimizes F(x) = g(x) + h(C(x)) + s(R(x)) by keeping convex ``r_i``
 components exact in the CVXPy subproblem when ∇_i s(R(x_k)) ≥ 0, and
-linearizing them when ∇_i s(R(x_k)) < 0.  The scalar proximal metric
-Q_k = µ_k I is adapted via an acceptance-ratio test.
+linearizing them when ∇_i s(R(x_k)) < 0.  The proximal metric
+Q_k = µ_k I + H⁺_k combines a scalar weight µ_k (adapted via an
+acceptance-ratio test) with the PSD-projected curvature block H⁺_k from
+s(R(x)) (outer pullback + inner compensation, Section 2.3.1).
 
 Usage::
 
@@ -126,6 +128,72 @@ class SRComposite:
         )
         return R_val, ds_val, I_neg_mask, grad_R
 
+    def compute_hessian(
+        self,
+        x: jnp.ndarray,
+        u: jnp.ndarray,
+        params: dict,
+        R_val: jnp.ndarray,
+        ds_val: jnp.ndarray,
+        I_neg_mask: jnp.ndarray,
+        grad_R: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Compute the PSD-projected curvature block H⁺_k for s(R(x)).
+
+        Implements Eq. (Section 2.3.1) of arXiv:2512.20602v1:
+
+            H_{s,k} = G_R^T ∇²s(R_k) G_R           [outer pullback]
+                    + Σ_{i∈I⁻_k} [∇s]_i ∇²r_i(x_k) [inner compensation]
+            H⁺_k = Π_{S+}(H_{s,k})
+
+        Args:
+            x: Current state trajectory, shape ``(N, n_x)``.
+            u: Current control trajectory, shape ``(N, n_u)``.
+            params: Problem parameters.
+            R_val: SR component values ``R(x_k)``, shape ``(n_r,)``.
+            ds_val: Outer gradient ``∇s(R_k)``, shape ``(n_r,)``.
+            I_neg_mask: Boolean mask; ``True`` where ``ds_val[i] < 0``,
+                shape ``(n_r,)``.
+            grad_R: Row-stacked Jacobian of R w.r.t. full trajectory x,
+                shape ``(n_r, N, n_x)``.
+
+        Returns:
+            ``H_plus``, shape ``(N*n_x, N*n_x)``, symmetric and PSD.
+        """
+        assert self._r_jax_fns is not None, "call lower_jax() before compute_hessian()"
+        N, n_x = x.shape
+        n_r = R_val.shape[0]
+        n_total = N * n_x
+
+        # Outer pullback: G_R^T H²s G_R  (n_total, n_total)
+        H2s = jax.hessian(lambda R: self.s(R, params))(R_val)  # (n_r, n_r)
+        G_R = grad_R.reshape(n_r, n_total)  # (n_r, n_total)
+        H_outer = G_R.T @ H2s @ G_R  # (n_total, n_total)
+
+        # Inner compensation: Σ_{i∈I⁻_k} [∇s]_i ∇²r_i(x[node_i])
+        # Each Hessian is (n_x, n_x) and sits at the block diagonal position
+        # corresponding to node_i.  Use jnp.where so the computation is always
+        # traced (no data-dependent branching) and the weight is zeroed out for
+        # channels that are NOT linearized (I_neg_mask[i] == False).
+        H_inner = jnp.zeros((n_total, n_total))
+        for i, (fn, node_idx) in enumerate(zip(self._r_jax_fns, self._nodes)):
+            H2r_i = jax.hessian(lambda xi, _fn=fn, _n=node_idx: _fn(xi, u[_n], _n, params))(
+                x[node_idx]
+            )  # (n_x, n_x)
+            weight = jnp.where(I_neg_mask[i], ds_val[i], 0.0)
+            contribution = weight * H2r_i  # (n_x, n_x)
+            s = node_idx * n_x
+            H_inner = H_inner.at[s : s + n_x, s : s + n_x].add(contribution)
+
+        # PSD projection via eigendecomposition of the symmetric sum.
+        # NaN entries (e.g. from ||r_i||=0 singularities) are zeroed out — this
+        # conservatively drops the second-order correction for ill-defined channels
+        # and falls back to the isotropic µ_k I metric for those directions.
+        H_s = jnp.nan_to_num(H_outer + H_inner, nan=0.0)
+        eigenvalues, eigenvectors = jnp.linalg.eigh(H_s)
+        H_plus = eigenvectors @ jnp.diag(jnp.maximum(0.0, eigenvalues)) @ eigenvectors.T
+        return H_plus
+
 
 def check_sr_composite(composite: "SRComposite", x_var, u_var, params: dict) -> None:
     """Validate an :class:`SRComposite` at initialize-time.
@@ -165,8 +233,10 @@ class ProxConvex(Algorithm):
     Minimizes F(x) = g(x) + h(C(x)) + s(R(x)).  The ``s∘R`` term is an
     :class:`SRComposite`: each ``r_i`` is kept exact in the CVXPy subproblem
     when ``∇_i s(R(x_k)) ≥ 0``, and linearized when ``∇_i s(R(x_k)) < 0``.
-    The scalar proximal metric ``Q_k = µ_k I`` is adapted by an
-    acceptance-ratio test identical to Algorithm 1 of the paper.
+    The proximal metric ``Q_k = µ_k I + H⁺_k`` combines the scalar weight
+    ``µ_k`` (adapted by an acceptance-ratio test, Algorithm 1 of the paper)
+    with the PSD-projected curvature block
+    ``H⁺_k = Π_{S+}(H_{s,k})`` from ``s(R(x))`` (Section 2.3.1).
 
     Pair this algorithm with :class:`~openscvx.solvers.cvxpy_ptr_solver.CVXPyProxConvexSolver`.
     :meth:`Problem.initialize` forwards the composite to the solver automatically.
