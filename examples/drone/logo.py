@@ -388,7 +388,7 @@ if __name__ == "__main__":
 
     results.update_plotting_data(**plotting_dict)
 
-    # Define the plane the logo actually lies in (from three points on the logo)
+    # Define the plane the logo actually lies in
     p0 = np.asarray(get_kp_pose(0.0))
     p1 = np.asarray(get_kp_pose(0.33))
     p2 = np.asarray(get_kp_pose(0.67))
