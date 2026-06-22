@@ -1405,9 +1405,26 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
                 ri_expr = lowerer.lower(self._composite.r[i])
                 sr_cost = sr_cost + ds_p * ri_expr
 
+        # Hessian curvature term: 0.5 * ||L^T (x - x_bar)||²  where  H⁺ = L L^T.
+        # L = V diag(√λ⁺); offset = L^T x_bar is precomputed on the CPU so the
+        # CVXPy expression reduces to cp.sum_squares(param_matrix @ variable - param_vector).
+        if self._composite.use_hessian is False:
+            L_hplus_p = None
+            offset_hplus_p = None
+            hess_cost = cp.Constant(0)
+        else:
+            n_total = N * n_x
+            L_hplus_p = cp.Parameter((n_total, n_total))
+            offset_hplus_p = cp.Parameter(n_total)
+            x_flat = cp.hstack([x_nonscaled[k] for k in range(N)])
+            hess_cost = 0.5 * cp.sum_squares(L_hplus_p.T @ x_flat - offset_hplus_p)
+            # Zero initialisation → first iteration behaves as Q_k = µ_k I.
+            L_hplus_p.value = np.zeros((n_total, n_total))
+            offset_hplus_p.value = np.zeros(n_total)
+
         # Re-build the base PTR cost expression (no side effects; all
         # Parameter references are shared with _ocp_vars).
-        total_cost = CVXPyPTRSolver.cost(self, settings, lowered) + sr_cost
+        total_cost = CVXPyPTRSolver.cost(self, settings, lowered) + sr_cost + hess_cost
         problem = cp.Problem(cp.Minimize(total_cost), self.constraints(settings, lowered))
 
         return {
@@ -1415,6 +1432,8 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
             "ds_params": ds_params,
             "lin_coef_params": lin_coef_params,
             "lin_bias_params": lin_bias_params,
+            "L_hplus": L_hplus_p,
+            "offset_hplus": offset_hplus_p,
         }
 
     def _update_sr_params(
@@ -1425,6 +1444,7 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
         R_val_np: np.ndarray,
         grad_R_np: np.ndarray,
         x_bar_np: np.ndarray,
+        H_plus_np: np.ndarray,
     ) -> None:
         """Push current-iterate SR values into the cached problem's Parameters."""
         n_r = len(self._composite.r)
@@ -1439,6 +1459,18 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
                 entry["lin_bias_params"][i].value = bias
             else:
                 entry["ds_params"][i].value = max(0.0, ds_i)
+
+        # Update the square-root factor L = V diag(√λ⁺) for Q_k = µ_k I + H⁺_k.
+        # offset = L^T x_bar is precomputed here so _build_sr_problem only needs a
+        # single param_matrix @ variable product (DPP-compliant).
+        if entry["L_hplus"] is None:
+            return
+        eigvals, eigvecs = np.linalg.eigh(H_plus_np)
+        sqrt_eigvals = np.sqrt(np.maximum(0.0, eigvals))
+        L = eigvecs @ np.diag(sqrt_eigvals)
+        x_bar_flat = x_bar_np.reshape(-1)
+        entry["L_hplus"].value = L
+        entry["offset_hplus"].value = L.T @ x_bar_flat
 
     def _solve_sr_problem(self, problem: cp.Problem) -> None:
         """Solve a cached SR problem with the standard DPP fallback."""
@@ -1588,6 +1620,7 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
                 R_val_np=np.asarray(data.R_val),
                 grad_R_np=np.asarray(data.grad_R),
                 x_bar_np=np.asarray(data.x_bar),
+                H_plus_np=np.asarray(data.H_plus),
             )
 
             try:
