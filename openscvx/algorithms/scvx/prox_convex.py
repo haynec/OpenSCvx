@@ -164,18 +164,17 @@ class SRComposite:
                 shape ``(n_r, N, n_x)``.
 
         Returns:
-            ``H_plus``, shape ``(N*n_x, N*n_x)``, symmetric and PSD; the zero
-            block when ``use_hessian`` is ``False`` (``Q_k = µ_k I``).
+            ``H_plus``, shape ``(N*n_x, N*n_x)``, symmetric and PSD; a scalar
+            ``0.0`` placeholder when ``use_hessian`` is ``False`` (``Q_k = µ_k
+            I``).
         """
         assert self._r_jax_fns is not None, "call lower_jax() before compute_hessian()"
         N, n_x = x.shape
         n_r = R_val.shape[0]
         n_total = N * n_x
 
-        # Curvature disabled (Q_k = µ_k I). Only an explicit False disables;
-        # an unresolved None behaves as enabled.
         if self.use_hessian is False:
-            return jnp.zeros((n_total, n_total))
+            return jnp.zeros(())
 
         # Outer pullback: G_R^T H²s G_R  (n_total, n_total)
         H2s = jax.hessian(lambda R: self.s(R, params))(R_val)  # (n_r, n_r)

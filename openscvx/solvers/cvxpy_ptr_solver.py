@@ -1408,14 +1408,19 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
         # Hessian curvature term: 0.5 * ||L^T (x - x_bar)||²  where  H⁺ = L L^T.
         # L = V diag(√λ⁺); offset = L^T x_bar is precomputed on the CPU so the
         # CVXPy expression reduces to cp.sum_squares(param_matrix @ variable - param_vector).
-        n_total = N * n_x
-        L_hplus_p = cp.Parameter((n_total, n_total))
-        offset_hplus_p = cp.Parameter(n_total)
-        x_flat = cp.hstack([x_nonscaled[k] for k in range(N)])
-        hess_cost = 0.5 * cp.sum_squares(L_hplus_p.T @ x_flat - offset_hplus_p)
-        # Zero initialisation → first iteration behaves as Q_k = µ_k I.
-        L_hplus_p.value = np.zeros((n_total, n_total))
-        offset_hplus_p.value = np.zeros(n_total)
+        if self._composite.use_hessian is False:
+            L_hplus_p = None
+            offset_hplus_p = None
+            hess_cost = cp.Constant(0)
+        else:
+            n_total = N * n_x
+            L_hplus_p = cp.Parameter((n_total, n_total))
+            offset_hplus_p = cp.Parameter(n_total)
+            x_flat = cp.hstack([x_nonscaled[k] for k in range(N)])
+            hess_cost = 0.5 * cp.sum_squares(L_hplus_p.T @ x_flat - offset_hplus_p)
+            # Zero initialisation → first iteration behaves as Q_k = µ_k I.
+            L_hplus_p.value = np.zeros((n_total, n_total))
+            offset_hplus_p.value = np.zeros(n_total)
 
         # Re-build the base PTR cost expression (no side effects; all
         # Parameter references are shared with _ocp_vars).
@@ -1458,6 +1463,8 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
         # Update the square-root factor L = V diag(√λ⁺) for Q_k = µ_k I + H⁺_k.
         # offset = L^T x_bar is precomputed here so _build_sr_problem only needs a
         # single param_matrix @ variable product (DPP-compliant).
+        if entry["L_hplus"] is None:
+            return
         eigvals, eigvecs = np.linalg.eigh(H_plus_np)
         sqrt_eigvals = np.sqrt(np.maximum(0.0, eigvals))
         L = eigvecs @ np.diag(sqrt_eigvals)
