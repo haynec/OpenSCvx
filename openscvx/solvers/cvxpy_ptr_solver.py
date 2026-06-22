@@ -21,6 +21,7 @@ import numpy as np
 from openscvx.config import Config
 
 from .ptr_solver import (
+    ProxConvexSubproblemData,
     PTRSolver,
     PTRSolveResult,
     StatusCode,
@@ -1287,5 +1288,337 @@ class CVXPyPTRSolver(PTRSolver):
   pages={42--60},
   year={2018},
   publisher={Taylor \& Francis}
+}""",
+        ]
+
+
+class CVXPyProxConvexSolver(CVXPyPTRSolver):
+    """CVXPy solver for :class:`~openscvx.algorithms.scvx.prox_convex.ProxConvex`.
+
+    Extends :class:`CVXPyPTRSolver` with sign-based branching on the SR
+    composite: for each component ``r_i`` of the composite,
+
+    * ``∇_i s ≥ 0`` (exact channel): embed ``r_i(x, u, params)`` directly
+      as a CVXPy expression — the convex structure is preserved in the
+      subproblem.
+    * ``∇_i s < 0`` (linearized channel): replace ``r_i`` with its first-order
+      Taylor approximation around ``x_k``.
+
+    The problem structure changes only when the sign mask ``I_neg_mask``
+    changes, so a ``dict[tuple[bool,...], cp.Problem]`` cache is maintained.
+    With a monotone-increasing ``s`` the mask is all-False every iteration,
+    so a single problem is built once and reused with only Parameter updates.
+
+    Args:
+        composite: :class:`~openscvx.algorithms.scvx.prox_convex.SRComposite`
+            instance (the *same* object passed to
+            :class:`~openscvx.algorithms.scvx.prox_convex.ProxConvex`).
+        **kwargs: Forwarded to :class:`CVXPyPTRSolver` (``cvx_solver``,
+            ``solver_args``, ``cvxpygen``, ``cvxpygen_override``).
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self._composite = None
+        # mask_key -> {'problem', 'ds_params', 'lin_coef_params', 'lin_bias_params'}
+        self._sr_problem_cache: dict = {}
+        self._cached_lowered = None
+        self._cached_settings: Optional[Config] = None
+
+    def set_composite(self, composite) -> None:
+        """Receive the SR composite forwarded by :meth:`Problem.initialize`."""
+        self._composite = composite
+
+    def initialize(self, lowered, settings: Config) -> None:
+        """Build base PTR problem and validate the SR composite.
+
+        Calls :meth:`CVXPyPTRSolver.initialize` for standard PTR
+        infrastructure, then runs
+        :func:`~openscvx.algorithms.scvx.prox_convex.check_sr_composite`
+        against the freshly created CVXPy Variables to catch DCP / scalar
+        violations early.  Per-mask SR problems are built lazily inside
+        :meth:`iteration_callback` on first encounter of each sign-mask
+        pattern.
+        """
+        from openscvx.algorithms.scvx.prox_convex import check_sr_composite
+
+        super().initialize(lowered, settings)
+        self._cached_lowered = lowered
+        self._cached_settings = settings
+
+        if self._composite is not None:
+            check_sr_composite(
+                self._composite,
+                self._ocp_vars.x_nonscaled,
+                self._ocp_vars.u_nonscaled,
+                {},
+            )
+
+    def _build_sr_problem(self, mask_key: tuple, params: dict) -> dict:
+        """Build and cache a ``cp.Problem`` for the given sign-mask pattern.
+
+        For linearized channels (``mask_key[i] = True``):
+            ``Cost += bias_param_i + Σ_k coef_param_i[k] @ x_nonscaled[k]``
+
+        For exact channels (``mask_key[i] = False``):
+            ``Cost += ds_param_i * r_i(x_nonscaled, u_nonscaled, params)``
+
+        All cached problems share ``self._ocp_vars`` Parameters, so the
+        standard PTR update methods propagate to every cached problem.
+
+        Returns:
+            dict with keys ``'problem'``, ``'ds_params'``,
+            ``'lin_coef_params'``, ``'lin_bias_params'``.
+        """
+        lowered = self._cached_lowered
+        settings = self._cached_settings
+        N = settings.sim.n
+        n_x = settings.sim.n_states
+        n_r = len(self._composite.r)
+        x_nonscaled = self._ocp_vars.x_nonscaled
+        u_nonscaled = self._ocp_vars.u_nonscaled
+
+        ds_params: List[Optional[cp.Parameter]] = [None] * n_r
+        lin_coef_params: List[Optional[List]] = [None] * n_r
+        lin_bias_params: List[Optional[cp.Parameter]] = [None] * n_r
+
+        sr_cost = cp.Constant(0)
+
+        for i in range(n_r):
+            if mask_key[i]:
+                # Linearized channel: affine approximation via Parameters.
+                node_coefs = [cp.Parameter(n_x) for _ in range(N)]
+                bias_p = cp.Parameter()
+                lin_coef_params[i] = node_coefs
+                lin_bias_params[i] = bias_p
+                channel_cost = bias_p
+                for k in range(N):
+                    channel_cost = channel_cost + cp.sum(cp.multiply(node_coefs[k], x_nonscaled[k]))
+                sr_cost = sr_cost + channel_cost
+            else:
+                # Exact channel: embed r_i directly as a CVXPy expression.
+                from openscvx.symbolic.lowerers.cvxpy import CvxpyLowerer
+
+                ds_p = cp.Parameter(nonneg=True)
+                ds_params[i] = ds_p
+                node = self._composite._nodes[i]
+                lowerer = CvxpyLowerer(
+                    variable_map={"x": x_nonscaled[node], "u": u_nonscaled[node]}
+                )
+                ri_expr = lowerer.lower(self._composite.r[i])
+                sr_cost = sr_cost + ds_p * ri_expr
+
+        # Re-build the base PTR cost expression (no side effects; all
+        # Parameter references are shared with _ocp_vars).
+        total_cost = CVXPyPTRSolver.cost(self, settings, lowered) + sr_cost
+        problem = cp.Problem(cp.Minimize(total_cost), self.constraints(settings, lowered))
+
+        return {
+            "problem": problem,
+            "ds_params": ds_params,
+            "lin_coef_params": lin_coef_params,
+            "lin_bias_params": lin_bias_params,
+        }
+
+    def _update_sr_params(
+        self,
+        entry: dict,
+        mask_key: tuple,
+        ds_val_np: np.ndarray,
+        R_val_np: np.ndarray,
+        grad_R_np: np.ndarray,
+        x_bar_np: np.ndarray,
+    ) -> None:
+        """Push current-iterate SR values into the cached problem's Parameters."""
+        n_r = len(self._composite.r)
+        for i in range(n_r):
+            ds_i = float(ds_val_np[i])
+            if mask_key[i]:
+                for k, coef_p in enumerate(entry["lin_coef_params"][i]):
+                    coef_p.value = ds_i * np.asarray(grad_R_np[i, k])
+                bias = ds_i * float(R_val_np[i]) - ds_i * float(
+                    np.sum(np.asarray(grad_R_np[i]) * x_bar_np)
+                )
+                entry["lin_bias_params"][i].value = bias
+            else:
+                entry["ds_params"][i].value = max(0.0, ds_i)
+
+    def _solve_sr_problem(self, problem: cp.Problem) -> None:
+        """Solve a cached SR problem with the standard DPP fallback."""
+        solver = self.cvx_solver
+        solver_args = dict(self.solver_args)
+        try:
+            problem.solve(solver=solver, **solver_args)
+        except cp.error.DPPError:
+            fallback = dict(solver_args)
+            fallback.pop("enforce_dpp", None)
+            fallback["ignore_dpp"] = True
+            problem.solve(solver=solver, **fallback)
+
+    def iteration_callback(self):
+        """JAX-pure ``(state, ProxConvexSubproblemData) -> SubproblemSolution``.
+
+        Overrides :meth:`CVXPyPTRSolver.iteration_callback` to accept
+        :class:`~openscvx.solvers.ptr_solver.ProxConvexSubproblemData`.
+
+        Standard PTR update methods are called first (they update the shared
+        Parameters all cached problems reference), then the SR Parameters are
+        updated and the active cached problem is solved.
+        """
+        if self._problem is None or self._settings is None or self._jax_constraints is None:
+            raise RuntimeError(
+                "CVXPyProxConvexSolver.iteration_callback() requires initialize() "
+                "to have been called first."
+            )
+
+        settings = self._settings
+        jax_constraints = self._jax_constraints
+        n_x = settings.sim.n_states
+        n_u = settings.sim.n_controls
+        N = settings.sim.n
+        n_nodal = len(jax_constraints.nodal)
+        n_cross = len(jax_constraints.cross_node)
+        slice_imp = settings.sim.u.slice_impulsive
+        has_impulsive = bool(slice_imp.stop > slice_imp.start)
+        f = jnp.float64 if jax.config.read("jax_enable_x64") else jnp.float32
+
+        result_struct = SubproblemSolution(
+            x=jax.ShapeDtypeStruct((N, n_x), f),
+            u=jax.ShapeDtypeStruct((N, n_u), f),
+            nu=jax.ShapeDtypeStruct((N - 1, n_x), f),
+            nu_vb=jax.ShapeDtypeStruct((N, n_nodal), f),
+            nu_vb_cross=jax.ShapeDtypeStruct((n_cross,), f),
+            cost=jax.ShapeDtypeStruct((), f),
+            status_code=jax.ShapeDtypeStruct((), jnp.int32),
+        )
+
+        def _make_infeasible():
+            return SubproblemSolution(
+                x=jnp.zeros((N, n_x), dtype=f),
+                u=jnp.zeros((N, n_u), dtype=f),
+                nu=jnp.zeros((N - 1, n_x), dtype=f),
+                nu_vb=jnp.zeros((N, n_nodal), dtype=f),
+                nu_vb_cross=jnp.zeros((n_cross,), dtype=f),
+                cost=jnp.asarray(0.0, dtype=f),
+                status_code=jnp.asarray(int(StatusCode.INFEASIBLE), dtype=jnp.int32),
+            )
+
+        def _unpack(problem: cp.Problem) -> SubproblemSolution:
+            S_x = self._ocp_vars.S_x
+            c_x = self._ocp_vars.c_x
+            S_u = self._ocp_vars.S_u
+            c_u = self._ocp_vars.c_u
+            x_scaled = problem.var_dict["x"].value
+            u_scaled = problem.var_dict["u"].value
+            x_sol = (S_x @ x_scaled.T + np.expand_dims(c_x, 1)).T
+            u_sol = (S_u @ u_scaled.T + np.expand_dims(c_u, 1)).T
+            nu_sol = problem.var_dict["nu"].value
+            nu_vb_list = [v.value for v in self._ocp_vars.nu_vb]
+            nu_vb_cross_list = [v.value for v in self._ocp_vars.nu_vb_cross]
+            raw_status = problem.status or "unknown"
+            code = (
+                StatusCode.OPTIMAL
+                if raw_status
+                in (
+                    "optimal_inaccurate",
+                    "solved",
+                    "1 (for description visit https://qoco-org.github.io/qoco/)",
+                )
+                else status_str_to_code(raw_status)
+            )
+            return SubproblemSolution(
+                x=jnp.asarray(x_sol, dtype=f),
+                u=jnp.asarray(u_sol, dtype=f),
+                nu=jnp.asarray(nu_sol, dtype=f),
+                nu_vb=(
+                    jnp.zeros((N, 0), dtype=f)
+                    if n_nodal == 0
+                    else jnp.asarray(
+                        np.stack([np.asarray(a) for a in nu_vb_list], axis=-1), dtype=f
+                    )
+                ),
+                nu_vb_cross=jnp.asarray(
+                    np.asarray(nu_vb_cross_list, dtype=float).reshape(n_cross), dtype=f
+                ),
+                cost=jnp.asarray(problem.value, dtype=f),
+                status_code=jnp.asarray(int(code), dtype=jnp.int32),
+            )
+
+        def host_solve(data: ProxConvexSubproblemData) -> SubproblemSolution:
+            # Standard PTR updates — propagate to all cached problems via
+            # shared _ocp_vars Parameters.
+            x_prop_plus = np.asarray(data.x_prop_plus) if has_impulsive else None
+            D_d = np.asarray(data.D_d) if has_impulsive else None
+            E_d = np.asarray(data.E_d) if has_impulsive else None
+            self.update_dynamics_linearization(
+                x_bar=np.asarray(data.x_bar),
+                u_bar=np.asarray(data.u_bar),
+                A_d=np.asarray(data.A_d),
+                B_d=np.asarray(data.B_d),
+                C_d=np.asarray(data.C_d),
+                x_prop=np.asarray(data.x_prop),
+                x_prop_plus=x_prop_plus,
+                D_d=D_d,
+                E_d=E_d,
+            )
+            self.update_constraint_linearizations(
+                nodal=_unstack_nodal(data, jax_constraints) or None,
+                cross_node=_unstack_cross(data, jax_constraints) or None,
+            )
+            self.update_penalties(
+                lam_prox=np.asarray(data.lam_prox),
+                lam_cost=np.asarray(data.lam_cost),
+                lam_vc=np.asarray(data.lam_vc),
+                lam_vb_nodal=np.asarray(data.lam_vb_nodal),
+                lam_vb_cross=np.asarray(data.lam_vb_cross),
+            )
+            self.update_proximal_terms()
+            self.update_boundary_conditions(
+                x_init=_unmask_bc(data.x_init),
+                x_term=_unmask_bc(data.x_term),
+            )
+
+            # SR composite: get or build cached problem, then update SR params.
+            I_neg_mask_np = np.asarray(data.I_neg_mask)
+            mask_key = tuple(bool(b) for b in I_neg_mask_np)
+            if mask_key not in self._sr_problem_cache:
+                self._sr_problem_cache[mask_key] = self._build_sr_problem(mask_key, data.params)
+            entry = self._sr_problem_cache[mask_key]
+            self._update_sr_params(
+                entry,
+                mask_key,
+                ds_val_np=np.asarray(data.ds_val),
+                R_val_np=np.asarray(data.R_val),
+                grad_R_np=np.asarray(data.grad_R),
+                x_bar_np=np.asarray(data.x_bar),
+            )
+
+            try:
+                self._solve_sr_problem(entry["problem"])
+            except cp.error.SolverError:
+                return _make_infeasible()
+
+            return _unpack(entry["problem"])
+
+        def step(state, data: ProxConvexSubproblemData) -> SubproblemSolution:
+            del state
+            return jax.pure_callback(
+                host_solve,
+                result_struct,
+                data,
+                vmap_method="sequential",
+            )
+
+        return step
+
+    def citation(self) -> List[str]:
+        return super().citation() + [
+            r"""@misc{uzun2025proxconvex,
+  title={A Proximal Method for Composite Optimization with Smooth and Convex Components},
+  author={Uzun, Samet and Luo, Dayou and A{\c{c}}{\i}kme{\c{s}}e, Beh{\c{c}}et and Aravkin, Aleksandr Y.},
+  year={2025},
+  eprint={2512.20602},
+  archivePrefix={arXiv},
+  primaryClass={math.OC}
 }""",
         ]

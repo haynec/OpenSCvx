@@ -242,6 +242,40 @@ class SubproblemSolution:
         return cls(*children)
 
 
+@jax.tree_util.register_pytree_node_class
+@dataclass(frozen=True)
+class ProxConvexSubproblemData(SubproblemData):
+    """Extends SubproblemData with SR composite evaluation for ProxConvex.
+
+    Carries the per-iteration SR data that ``make_proxconvex_iteration``
+    computes before handing the subproblem to the solver.  The base
+    :class:`SubproblemData` fields are inherited unchanged; the four new
+    fields feed ``CVXPyProxConvexSolver``'s sign-based branching logic.
+
+    Attributes:
+        R_val: SR component values at the current iterate, shape ``(n_r,)``.
+        ds_val: Gradient of ``s`` w.r.t. ``R`` at the current iterate,
+            shape ``(n_r,)``.  Computed via ``jax.grad``.
+        I_neg_mask: Boolean mask, shape ``(n_r,)``; ``True`` where
+            ``ds_val[i] < 0`` (channel must be linearized).
+        grad_R: Jacobian of each ``r_i`` w.r.t. the full state trajectory
+            ``x``, shape ``(n_r, N, n_x)``.  Computed via ``jax.jacrev``.
+    """
+
+    R_val: jnp.ndarray
+    ds_val: jnp.ndarray
+    I_neg_mask: jnp.ndarray
+    grad_R: jnp.ndarray
+
+    def tree_flatten(self):
+        children = tuple(getattr(self, f.name) for f in fields(self))
+        return children, None
+
+    @classmethod
+    def tree_unflatten(cls, aux, children):
+        return cls(*children)
+
+
 @dataclass
 class PTRSolveResult:
     """Result from solving a PTR convex subproblem.

@@ -1065,6 +1065,23 @@ class Problem:
             ctcs=self._lowered.jax_constraints.ctcs,  # CTCS aren't JIT-compiled here
         )
 
+        if hasattr(self._algorithm, "_composite"):
+            composite = self._algorithm._composite
+            composite.lower_jax()
+            self._compiled_constraints.cost_terms.append(
+                lambda x, u, p: composite.s(
+                    jnp.stack(
+                        [
+                            fn(x[n], u[n], n, p)
+                            for fn, n in zip(composite._r_jax_fns, composite._nodes)
+                        ]
+                    ),
+                    p,
+                )
+            )
+            if hasattr(self._solver, "set_composite"):
+                self._solver.set_composite(composite)
+
         # Generate discretization solvers via the discretizer (handles Jacobians
         # + vmapping). These are locals: they're captured by the fused
         # ``iteration_fn`` closure below, not stored on the problem.

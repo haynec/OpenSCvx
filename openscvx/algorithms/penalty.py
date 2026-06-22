@@ -106,6 +106,8 @@ def calculate_nonlinear_penalty(
         nodal_penalty = nodal_penalty + w * jnp.sum(viol)
 
     cost = calculate_cost_from_state(x_bar, settings, lam_cost)
+    for cost_fn in nodal_constraints.cost_terms:
+        cost = cost + cost_fn(x_bar, u_bar, params)
     x_diff = settings.sim.inv_S_x @ (x_bar[1:, :] - x_prop).T
 
     return cost, jnp.sum(lam_vc * jnp.abs(x_diff.T)), nodal_penalty

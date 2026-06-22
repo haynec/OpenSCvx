@@ -139,3 +139,4 @@ class LoweredJaxConstraints:
     nodal: list[LoweredNodalConstraint] = field(default_factory=list)
     cross_node: list[LoweredCrossNodeConstraint] = field(default_factory=list)
     ctcs: list["CTCS"] = field(default_factory=list)
+    cost_terms: List[Callable] = field(default_factory=list)

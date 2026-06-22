@@ -73,7 +73,7 @@ class AcceptanceRatioAutotuner(AutotuningBase):
 
     COLUMNS: List[Column] = [
         Column("J_nonlin", "J_nonlin", 8, "{: .1e}", None, Verbosity.STANDARD),
-        Column("J_lin", "J_lin", 8, "{: .1e}", None, Verbosity.STANDARD),
+        Column("J_cvx", "J_cvx", 8, "{: .1e}", None, Verbosity.STANDARD),
         Column("pred_reduction", "pred_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL),
         Column("actual_reduction", "act_red", 9, "{: .1e}", min_verbosity=Verbosity.FULL),
         Column(
@@ -168,7 +168,7 @@ class AcceptanceRatioAutotuner(AutotuningBase):
             prev_J_nonlin = prev_cost + prev_pen + prev_nodal_pen
 
             actual = prev_J_nonlin - J_nonlin
-            predicted = prev_J_nonlin - candidate.J_lin
+            predicted = prev_J_nonlin - candidate.J_cvx
             # If predicted reduction is exactly zero, force the reject bucket
             # (rho = -inf) deterministically instead of raising.
             safe_pred = jnp.where(predicted == 0.0, 1.0, predicted)

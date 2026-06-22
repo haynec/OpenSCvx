@@ -53,7 +53,7 @@ import warnings
 from typing import Any
 
 from .base import ConvexSolver, PTRSolverSpec
-from .cvxpy_ptr_solver import CVXPyPTRSolver
+from .cvxpy_ptr_solver import CVXPyProxConvexSolver, CVXPyPTRSolver
 from .ptr_solver import PTRSolver, PTRSolveResult
 
 
@@ -95,6 +95,7 @@ __all__ = [
     "PTRSolveResult",
     # PTR backends
     "CVXPyPTRSolver",
+    "CVXPyProxConvexSolver",
     "QPAXPTRSolver",
     "MoreauPTRSolver",
     # Config
