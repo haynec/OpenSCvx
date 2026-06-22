@@ -404,6 +404,11 @@ def make_proxconvex_iteration(
         # Evaluate the SR composite: R(x_k), ∇s(R), sign mask, ∇R.
         R_val, ds_val, I_neg_mask, grad_R = composite.eval(state.x, state.u, params)
 
+        # Curvature augmentation: H⁺_k = Π_{S+}(H_{s,k}) for Q_k = µ_k I + H⁺_k.
+        H_plus = composite.compute_hessian(
+            state.x, state.u, params, R_val, ds_val, I_neg_mask, grad_R
+        )
+
         data = ProxConvexSubproblemData(
             x_bar=state.x,
             u_bar=state.u,
@@ -432,6 +437,7 @@ def make_proxconvex_iteration(
             ds_val=ds_val,
             I_neg_mask=I_neg_mask,
             grad_R=grad_R,
+            H_plus=H_plus,
         )
 
         solution = solver_callback(state, data)
