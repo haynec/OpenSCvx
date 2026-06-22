@@ -110,6 +110,8 @@ def create_animated_plotting_server(
     viewcone_scale: float = 10.0,
     viewcone_ring_only: bool = False,
     target_radius: float = 1.0,
+    waypoint_positions: list[np.ndarray] | None = None,
+    waypoint_colors: list[tuple[int, int, int]] | None = None,
     show_control_plot: str | None = None,
     show_control_norm_plot: str | None = None,
     trail_point_size: float = 0.15,
@@ -147,6 +149,7 @@ def create_animated_plotting_server(
             - alpha_x, alpha_y: Sensor cone half-angle parameters (optional)
             - norm_type: Norm type for viewcone constraint (optional, default 2)
             - init_poses: List of viewplanning target positions (optional)
+            - waypoint_positions: Static task waypoints (optional)
             - obstacles_centers, obstacles_radii, obstacles_axes: Ellipsoid obstacles (optional)
         loop_animation: If True, loop animation when it reaches the end
         position_key: Key for position data in trajectory dict (default: "position")
@@ -169,6 +172,9 @@ def create_animated_plotting_server(
         viewcone_scale: Size/depth of viewcone mesh
         viewcone_ring_only: If True, render viewcone as a base-ring outline only
         target_radius: Radius of target marker spheres
+        waypoint_positions: Static task waypoints (e.g. zigzag nodes). Falls back to
+            ``results["waypoint_positions"]`` when omitted.
+        waypoint_colors: Per-waypoint RGB colors for ``waypoint_positions``.
         show_control_plot: If provided with a control name, displays component plot
             showing each control component vs time with animated markers
         show_control_norm_plot: If provided with a control name, displays norm plot
@@ -546,6 +552,24 @@ def create_animated_plotting_server(
         for _, update in target_results:
             if update is not None:
                 update_callbacks.append(update)
+
+    waypoints = (
+        waypoint_positions if waypoint_positions is not None else results.get("waypoint_positions")
+    )
+    if waypoints is not None:
+        scaled_waypoints = [np.asarray(p, dtype=np.float64) / scene_scale for p in waypoints]
+        wp_colors = (
+            list(waypoint_colors)
+            if waypoint_colors is not None
+            else results.get("waypoint_colors")
+        )
+        add_target_markers(
+            server,
+            scaled_waypoints,
+            radius=target_radius / scene_scale,
+            colors=wp_colors,
+            show_trails=False,
+        )
 
     # Add "logo" moving subject (single moving target + optional drone->target vector)
     if moving_subject and get_kp_pose is not None and total_time is not None:
