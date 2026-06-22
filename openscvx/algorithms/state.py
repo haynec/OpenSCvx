@@ -43,7 +43,7 @@ class CandidateIterate:
     Built once, in-trace, by the SCP iteration body
     (``scvx/iteration.py``): it carries the just-solved subproblem trajectory
     (``x`` / ``u``), its propagation (``x_prop`` / ``x_prop_plus``), and the
-    linearized cost (``J_lin``) into :py:meth:`AutotuningBase.update_weights`,
+    convex subproblem cost (``J_cvx``) into :py:meth:`AutotuningBase.update_weights`,
     which copies the accepted fields onto the next :class:`AlgorithmState`. It
     is the autotuner's input and nothing else — host-side history recording
     takes its arrays through :py:meth:`AlgorithmHistory.record_iteration`'s
@@ -54,7 +54,7 @@ class CandidateIterate:
     u: jnp.ndarray
     x_prop: jnp.ndarray
     x_prop_plus: jnp.ndarray
-    J_lin: jnp.ndarray
+    J_cvx: jnp.ndarray
 
 
 # ---------------------------------------------------------------------------

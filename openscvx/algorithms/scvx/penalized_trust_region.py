@@ -246,7 +246,7 @@ class PenalizedTrustRegion(Algorithm):
             W=np.asarray(diag.W),
             VC=np.asarray(diag.VC),
             TR=np.asarray(diag.TR),
-            J_lin=float(diag.J_lin),
+            J_cvx=float(diag.J_cvx),
             record_diagnostics=use_full_metrics,
         )
 
@@ -270,7 +270,7 @@ class PenalizedTrustRegion(Algorithm):
             emission_data.update(
                 {
                     "J_nonlin": scalars["J_nonlin"],
-                    "J_lin": float(diag.J_lin),
+                    "J_cvx": float(diag.J_cvx),
                     "pred_reduction": scalars["predicted_reduction"],
                     "actual_reduction": scalars["actual_reduction"],
                     "acceptance_ratio": scalars["acceptance_ratio"],

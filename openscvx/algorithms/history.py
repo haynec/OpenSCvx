@@ -121,7 +121,7 @@ class AlgorithmHistory:
     lam_vb_nodal: List[np.ndarray] = field(default_factory=list)
     lam_vb_cross: List[np.ndarray] = field(default_factory=list)
     J_nonlin: List[float] = field(default_factory=list)
-    J_lin: List[float] = field(default_factory=list)
+    J_cvx: List[float] = field(default_factory=list)
     pred_reduction: List[float] = field(default_factory=list)
     actual_reduction: List[float] = field(default_factory=list)
     acceptance_ratio: List[float] = field(default_factory=list)
@@ -151,7 +151,7 @@ class AlgorithmHistory:
         W: Optional[np.ndarray] = None,
         VC: Optional[np.ndarray] = None,
         TR: Optional[np.ndarray] = None,
-        J_lin: Optional[float] = None,
+        J_cvx: Optional[float] = None,
         record_diagnostics: bool = True,
     ) -> Tuple[dict, np.ndarray]:
         """Append per-iteration data based on ``state.adaptive_state_code``.
@@ -159,7 +159,7 @@ class AlgorithmHistory:
         The accepted iterate (``x`` / ``u`` / weights / convergence scalars) is
         read off ``state``; the raw host-side diagnostics the SCP loop already
         synced — discretization matrices (``V`` / ``W``), virtual control
-        (``VC``), trust region (``TR``), and the linearized cost (``J_lin``) —
+        (``VC``), trust region (``TR``), and the linearized cost (``J_cvx``) —
         come in as explicit keyword arrays so the generic history never has to
         know the algorithm's diagnostics type.
 
@@ -291,8 +291,8 @@ class AlgorithmHistory:
         self.lam_vb_cross.append(np.asarray(lam_vb_cross_np))
 
         self.J_nonlin.append(scalars["J_nonlin"])
-        if J_lin is not None:
-            self.J_lin.append(float(J_lin))
+        if J_cvx is not None:
+            self.J_cvx.append(float(J_cvx))
 
         # Diagnostics: only meaningful for iterations after the initial one.
         if record_diagnostics and code is not AdaptiveStateCode.INITIAL:
