@@ -97,21 +97,21 @@ else:
 
 # ── Initial guess ────────────────────────────────────────────────────────────
 t_guess = np.linspace(0.0, TF, N)
-# velocity.guess = np.linspace(0.25, -0.1, N).reshape(-1, 1)
-# position.guess = np.column_stack(
-#     [
-#         position.initial[0]
-#         + np.cumsum(velocity.guess[:, 0] * np.gradient(t_guess))
-#     ]
-# )
-# stage_cost.guess = np.cumsum(
-#     (
-#         Q_Q * position.guess[:, 0] ** 2
-#         + Q_V * velocity.guess[:, 0] ** 2
-#         + R_U * force.guess[:, 0] ** 2
-#     )
-#     * np.gradient(t_guess)
-# ).reshape(-1, 1)
+velocity.guess = np.linspace(0.25, -0.1, N).reshape(-1, 1)
+position.guess = np.column_stack(
+    [
+        position.initial[0]
+        + np.cumsum(velocity.guess[:, 0] * np.gradient(t_guess))
+    ]
+)
+stage_cost.guess = np.cumsum(
+    (
+        Q_Q * position.guess[:, 0] ** 2
+        + Q_V * velocity.guess[:, 0] ** 2
+        + R_U * force.guess[:, 0] ** 2
+    )
+    * np.gradient(t_guess)
+).reshape(-1, 1)
 
 time = ox.Time(
     initial=0.0,

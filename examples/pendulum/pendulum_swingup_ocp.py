@@ -46,6 +46,8 @@ Q_V1 = 1e-2
 Q_DTHETA = 1e-2
 R_F = 1e-2
 
+
+
 # Physical constants (acados pendulum_model.py)
 M = 1.0
 M_POLE = 0.1
@@ -57,13 +59,13 @@ cart_pos = ox.State("cart_pos", shape=(1,))
 cart_pos.min = np.array([-5.0])
 cart_pos.max = np.array([5.0])
 cart_pos.initial = np.array([0.0])
-cart_pos.final = [ox.Free(0.0)]
+cart_pos.final = [0.0]
 
 theta = ox.State("theta", shape=(1,))
 theta.min = np.array([-2.0 * np.pi])
 theta.max = np.array([2.0 * np.pi])
-theta.initial = np.array([np.pi])
-theta.final = [ox.Free(0.0)]
+theta.initial = [np.pi]
+theta.final = [0.0]
 
 cart_vel = ox.State("cart_vel", shape=(1,))
 cart_vel.min = np.array([-20.0])
@@ -79,7 +81,8 @@ theta_dot.final = [ox.Free(0.0)]
 
 stage_cost = ox.State("stage_cost", shape=(1,))
 stage_cost.min = np.array([0.0])
-stage_cost.max = np.array([1e6])
+stage_cost.max = np.array([4e4])
+stage_cost.scaling_max = [1e4]
 stage_cost.initial = np.array([0.0])
 stage_cost.final = [ox.Minimize(0.0)]
 
@@ -132,24 +135,26 @@ t_guess = np.linspace(0.0, TF, N)
 theta.guess = np.where(t_guess < 0.35 * TF, np.pi, np.linspace(np.pi, 0.0, N)).reshape(
     -1, 1
 )
-cart_pos.guess = np.zeros((N, 1))
-cart_vel.guess = np.linspace(0.0, 0.5, N).reshape(-1, 1)
-theta_dot.guess = np.linspace(0.0, 2.0, N).reshape(-1, 1)
-force.guess = np.where(
-    t_guess < 0.5 * TF,
-    np.full(N, 0.75 * F_MAX),
-    np.full(N, -0.75 * F_MAX),
-).reshape(-1, 1)
-stage_cost.guess = np.cumsum(
-    (
-        Q_X1 * cart_pos.guess[:, 0] ** 2
-        + Q_THETA * theta.guess[:, 0] ** 2
-        + Q_V1 * cart_vel.guess[:, 0] ** 2
-        + Q_DTHETA * theta_dot.guess[:, 0] ** 2
-        + R_F * force.guess[:, 0] ** 2
-    )
-    * np.gradient(t_guess)
-).reshape(-1, 1)
+# cart_pos.guess = np.zeros((N, 1))
+# cart_vel.guess = np.linspace(0.0, 0.5, N).reshape(-1, 1)
+# theta_dot.guess = np.linspace(0.0, 2.0, N).reshape(-1, 1)
+# force.guess = np.where(
+#     t_guess < 0.5 * TF,
+#     np.full(N, 0.75 * F_MAX),
+#     np.full(N, -0.75 * F_MAX),
+# ).reshape(-1, 1)
+force.guess = np.zeros((N, 1))
+
+# stage_cost.guess = np.cumsum(
+#     (
+#         Q_X1 * cart_pos.guess[:, 0] ** 2
+#         + Q_THETA * theta.guess[:, 0] ** 2
+#         + Q_V1 * cart_vel.guess[:, 0] ** 2
+#         + Q_DTHETA * theta_dot.guess[:, 0] ** 2
+#         + R_F * force.guess[:, 0] ** 2
+#     )
+#     * np.gradient(t_guess)
+# ).reshape(-1, 1)
 
 time = ox.Time(
     initial=0.0,
@@ -159,6 +164,8 @@ time = ox.Time(
     uniform_time_grid=True,
 )
 
+import diffrax as dfx 
+
 problem = Problem(
     dynamics=dynamics,
     states=states,
@@ -166,22 +173,26 @@ problem = Problem(
     time=time,
     constraints=constraints,
     N=N,
-    float_dtype="float64",
     algorithm={
-        # "lam_cost": 6e-1,
-        # "lam_prox": 1e-1,
-        # "lam_vc": 1e0,
-        # "k_max": 80,
-        # "ep_tr": 1e-6,
-        # "autotuner": ox.ConstantProximalWeight(),
+        "lam_prox": 1e-1,
+        "lam_vc": 1e1,
+        "lam_cost": 2e0,
+        "autotuner": ox.ConstantProximalWeight(),
     },
-    discretizer={
-        "dis_type": "ZOH",
-        "ode_solver": "Tsit5",
-        "diffrax_kwargs": {"atol": 1e-10, "rtol": 1e-10},
-    },
+    discretizer = ox.DiscretizeLinearizeVectorize(dis_type="ZOH", ode_solver="Euler", diffrax_kwargs = {"stepsize_controller": dfx.StepTo(np.linspace(0.0, 1 / (N - 1), 2))},),
+    solver = {
+        "cvx_solver": "PIQP",
+        "solver_args": {"canon_backend": "COO", "enforce_dpp": True},
+    }
+    # solver = {
+    #     "cvx_solver": "qocogen",
+    #     "solver_args": {},
+    #     "cvxpygen": True,
+    # }
 )
 
+
+problem.settings.dev.printing = False
 plotting_dict = {"tf": TF}
 
 # States to visualize (exclude integrated cost from phase-style plots if desired)
@@ -407,6 +418,7 @@ def _show_plot(fig):
 if __name__ == "__main__":
     problem.initialize()
     results = problem.solve()
+    problem.post_process()
     # Do not post_process: that integrates a single continuous open-loop trajectory.
     # For this example we inspect SCP multishot propagation from discretization_history.
     results.update(plotting_dict)
