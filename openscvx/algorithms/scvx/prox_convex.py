@@ -77,11 +77,17 @@ class SRComposite:
         nodes: Node index (or list of indices, one per ``r_i``) at which each
             component is evaluated.  A single ``int`` is broadcast to all
             components.
+        use_hessian: Override for the curvature block ``H⁺_k``. ``None``
+            (default) inherits ``ProxConvex(hessian_composite=...)``; an
+            explicit ``True``/``False`` overrides it. ``False`` drops ``H⁺_k``
+            (``Q_k = µ_k I``), needed when ``s`` or an inner ``r_i`` is not
+            ``C²``.
     """
 
     s: Callable
     r: List
     nodes: Union[int, List[int]]
+    use_hessian: Optional[bool] = None
 
     def __post_init__(self):
         if isinstance(self.nodes, int):
@@ -158,12 +164,18 @@ class SRComposite:
                 shape ``(n_r, N, n_x)``.
 
         Returns:
-            ``H_plus``, shape ``(N*n_x, N*n_x)``, symmetric and PSD.
+            ``H_plus``, shape ``(N*n_x, N*n_x)``, symmetric and PSD; the zero
+            block when ``use_hessian`` is ``False`` (``Q_k = µ_k I``).
         """
         assert self._r_jax_fns is not None, "call lower_jax() before compute_hessian()"
         N, n_x = x.shape
         n_r = R_val.shape[0]
         n_total = N * n_x
+
+        # Curvature disabled (Q_k = µ_k I). Only an explicit False disables;
+        # an unresolved None behaves as enabled.
+        if self.use_hessian is False:
+            return jnp.zeros((n_total, n_total))
 
         # Outer pullback: G_R^T H²s G_R  (n_total, n_total)
         H2s = jax.hessian(lambda R: self.s(R, params))(R_val)  # (n_r, n_r)
@@ -236,13 +248,19 @@ class ProxConvex(Algorithm):
     The proximal metric ``Q_k = µ_k I + H⁺_k`` combines the scalar weight
     ``µ_k`` (adapted by an acceptance-ratio test, Algorithm 1 of the paper)
     with the PSD-projected curvature block
-    ``H⁺_k = Π_{S+}(H_{s,k})`` from ``s(R(x))`` (Section 2.3.1).
+    ``H⁺_k = Π_{S+}(H_{s,k})`` from ``s(R(x))`` (Section 2.3.1).  Disable
+    ``H⁺_k`` (``Q_k = µ_k I``) via ``hessian_composite`` when the curvature
+    is unavailable (e.g. a non-``C²`` inner function).
 
     Pair this algorithm with :class:`~openscvx.solvers.cvxpy_ptr_solver.CVXPyProxConvexSolver`.
     :meth:`Problem.initialize` forwards the composite to the solver automatically.
 
     Args:
         composite: :class:`SRComposite` encoding the ``s`` and ``r`` functions.
+        hessian_composite: Default for the curvature block ``H⁺_k``
+            (``Q_k = µ_k I + H⁺_k``), default ``True``. Applied to ``composite``
+            unless it sets ``use_hessian`` explicitly. ``False`` gives
+            ``Q_k = µ_k I`` (e.g. for a non-``C²`` inner function).
         autotuner: Weight-update rule.  Defaults to
             :class:`~openscvx.algorithms.autotuner.adaptive_proximal_weight.AdaptiveProximalWeight`
             configured with the ``alpha_1 / alpha_2 / nu_inc / nu_dec`` knobs
@@ -283,6 +301,7 @@ class ProxConvex(Algorithm):
     def __init__(
         self,
         composite: SRComposite,
+        hessian_composite: bool = True,
         autotuner: "AutotuningBase" = None,
         k_max: int = 200,
         t_max: Optional[float] = None,
@@ -302,6 +321,10 @@ class ProxConvex(Algorithm):
         states: List["State"] = None,
         controls: List["Control"] = None,
     ):
+        # Composite override wins; else inherit the algorithm default.
+        if composite.use_hessian is None:
+            composite.use_hessian = hessian_composite
+
         self._composite = composite
         self._iteration_fn: Optional[Callable] = None
         self._emitter: Optional[Callable] = None
