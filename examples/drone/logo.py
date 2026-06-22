@@ -433,7 +433,7 @@ if __name__ == "__main__":
         plot_controls,
         plot_states,
         plot_trust_region_heatmap,
-        plot_virtual_control_heatmap
+        plot_virtual_control_heatmap,
     )
 
     plot_states(results).show()
