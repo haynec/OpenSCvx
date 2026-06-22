@@ -771,6 +771,18 @@ def _compute_los_angle(pos_arr: np.ndarray, q_arr: np.ndarray,
     return ang
 
 
+def _save_plotly_figure(fig, basename: str) -> None:
+    """Save a Plotly figure as HTML and, when kaleido is available, PNG/PDF."""
+    fig.write_html(f"{basename}.html")
+    print(f"  Saved {basename}.html")
+    try:
+        fig.write_image(f"{basename}.png", scale=2)
+        fig.write_image(f"{basename}.pdf")
+        print(f"  Saved {basename}.{{png,pdf}}")
+    except Exception as exc:
+        print(f"  Skipped PNG/PDF for {basename} ({exc}); install kaleido for static export.")
+
+
 def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc") -> tuple:
     """Generate state/control panel and 3-D trajectory plots matching CT-cSTC notebook.
 
@@ -780,18 +792,16 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc") -
 
     Args:
         result: OptimizationResults from problem.post_process() — must have t_full set.
-        show:   Whether to call plt.show() after creating figures.
-        save_prefix: Base name for saved PDF/PNG files.  Pass '' to skip saving.
+        show:   Whether to open interactive Plotly figures in the browser.
+        save_prefix: Base name for saved HTML/PNG/PDF files.  Pass '' to skip saving.
 
     Returns:
-        (fig_panel, fig_3d)
+        (fig_panel, fig_3d) — plotly.graph_objects.Figure instances
     """
-    import matplotlib as mpl
-    import matplotlib.pyplot as plt
-    from mpl_toolkits.mplot3d.art3d import Line3DCollection
+    import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
 
-    mpl.rcParams['figure.dpi'] = 120
-    mpl.rcParams.update({'legend.fontsize': 11})
+    from openscvx.plotting.publication import show_plotly_with_latin_modern
 
     # ── Dense propagated trajectory (scaled) ──────────────────────────────────
     traj   = result.trajectory
@@ -861,192 +871,303 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc") -
     t_end = t_nodes[-1]
 
     # ── Colour palette (matches notebook) ────────────────────────────────────
-    c_up   = 'green'
-    c_low  = 'purple'
-    c_node = 'black'
-    c_plt  = 'blue'
-    c_h1   = 'red'
-    c_h2   = 'orange'
-    c_aft  = 'lightseagreen'
-    c_spd  = 'burlywood'
-    sc     = 20.0          # scatter point size
-    y_fs   = 10.75
-    x_fs   = 14
+    c_up   = "green"
+    c_low  = "purple"
+    c_node = "black"
+    c_plt  = "blue"
+    c_h1   = "red"
+    c_h2   = "orange"
+    c_aft  = "lightseagreen"
+    c_spd  = "burlywood"
+
+    legend_seen: set[str] = set()
+
+    def _show(name: str) -> bool:
+        if name in legend_seen:
+            return False
+        legend_seen.add(name)
+        return True
+
+    def _seg(fig, x0, x1, y, *, row, col, color, dash="dash", name=None):
+        fig.add_trace(
+            go.Scatter(
+                x=[x0, x1],
+                y=[y, y],
+                mode="lines",
+                line={"color": color, "dash": dash, "width": 1.5},
+                name=name,
+                showlegend=_show(name) if name else False,
+                legendgroup=name,
+            ),
+            row=row,
+            col=col,
+        )
+
+    def _line(fig, x, y, *, row, col, color, name=None, width=2):
+        fig.add_trace(
+            go.Scatter(
+                x=x,
+                y=y,
+                mode="lines",
+                line={"color": color, "width": width},
+                name=name,
+                showlegend=_show(name) if name else False,
+                legendgroup=name,
+            ),
+            row=row,
+            col=col,
+        )
+
+    def _nodes(fig, x, y, *, row, col, name="Node point"):
+        fig.add_trace(
+            go.Scatter(
+                x=x,
+                y=y,
+                mode="markers",
+                marker={"color": c_node, "size": 7},
+                name=name,
+                showlegend=_show(name),
+                legendgroup=name,
+            ),
+            row=row,
+            col=col,
+        )
+
+    def _vline(fig, x, *, row, col, color):
+        fig.add_vline(
+            x=x,
+            line={"color": color, "dash": "dash", "width": 1.5},
+            row=row,
+            col=col,
+        )
 
     # ── Figure 1: 9-panel state/control plot ─────────────────────────────────
-    fig, axs = plt.subplots(
-        4, 3,
-        gridspec_kw={'height_ratios': [0.2, 2, 2, 2]},
-        figsize=(11, 6.5),
+    fig_panel = make_subplots(
+        rows=3,
+        cols=3,
+        vertical_spacing=0.10,
+        horizontal_spacing=0.08,
     )
-    for ax in axs[0, :]:
-        ax.remove()
 
-    ax0 = axs[1, 0]   # Thrust
-    ax1 = axs[1, 1]   # Speed
-    ax5 = axs[1, 2]   # Tilt
-    ax2 = axs[2, 0]   # Gimbal deflection
-    ax3 = axs[2, 1]   # Angular velocity
-    ax9 = axs[2, 2]   # Glideslope
-    ax6 = axs[3, 0]   # LOS boresight angle
-    ax8 = axs[3, 1]   # Mass
-    ax7 = axs[3, 2]   # LOS view angle
-
-    # ── Thrust ────────────────────────────────────────────────────────────────
+    # ── Thrust (row 1, col 1) ───────────────────────────────────────────────
     T_kN   = T_N   * 1e-3
     T_n_kN = T_n_N * 1e-3
-    ax0.plot([0, t_aft], [T_MAX * 1e-3,     T_MAX * 1e-3],     c=c_up,  ls='--', label='Upper bound')
-    ax0.plot([0, t_aft], [T_MIN * 1e-3,     T_MIN * 1e-3],     c=c_low, ls='--', label='Lower bound')
-    ax0.plot([t_aft, t_end], [T_MAX_AFT * 1e-3, T_MAX_AFT * 1e-3], c=c_up,  ls='--')
-    ax0.plot([t_aft, t_end], [T_MIN_AFT * 1e-3, T_MIN_AFT * 1e-3], c=c_low, ls='--')
-    ax0.axvline(x=t_aft, c=c_aft, ls='--')
-    ax0.plot(t_full, T_kN, c='red', label='Control input')
-    ax0.scatter(t_nodes, T_n_kN, s=sc, c=c_node, label='Node point', zorder=5)
-    ax0.set_xlim(0, t_end)
-    ax0.set_ylabel('Thrust, $T$ [kN]', fontsize=y_fs, labelpad=2)
+    _seg(fig_panel, 0, t_aft, T_MAX * 1e-3, row=1, col=1, color=c_up, name="Upper bound")
+    _seg(fig_panel, 0, t_aft, T_MIN * 1e-3, row=1, col=1, color=c_low, name="Lower bound")
+    _seg(fig_panel, t_aft, t_end, T_MAX_AFT * 1e-3, row=1, col=1, color=c_up)
+    _seg(fig_panel, t_aft, t_end, T_MIN_AFT * 1e-3, row=1, col=1, color=c_low)
+    _vline(fig_panel, t_aft, row=1, col=1, color=c_aft)
+    _line(fig_panel, t_full, T_kN, row=1, col=1, color="red", name="Control input")
+    _nodes(fig_panel, t_nodes, T_n_kN, row=1, col=1)
+    fig_panel.update_yaxes(title_text="Thrust, T [kN]", row=1, col=1)
 
-    # ── Speed ─────────────────────────────────────────────────────────────────
-    ax1.plot(t_full, speed, c=c_plt, label='State')
-    ax1.scatter(t_nodes, speed_n, s=sc, c=c_node, label='Node point', zorder=5)
-    ax1.axhline(y=SPD_STC_TRIG, c=c_spd, ls='--', label='$v^{\\mathrm{trig}}$')
-    ax1.axvline(x=t_h1,  c=c_h1,  ls='--')
-    ax1.axvline(x=t_aft, c=c_aft, ls='--')
-    ax1.plot([t_h1, t_end], [V_STC_CONS, V_STC_CONS], c=c_up, ls='--', label='STC bound')
-    ax1.set_xlim(0, t_end)
-    ax1.set_ylim(0, speed.max() + 5)
-    ax1.set_ylabel(r'Speed, $\|v\|_2$ [m s$^{-1}$]', fontsize=y_fs, labelpad=7)
+    # ── Speed (row 1, col 2) ────────────────────────────────────────────────
+    _line(fig_panel, t_full, speed, row=1, col=2, color=c_plt, name="State")
+    _nodes(fig_panel, t_nodes, speed_n, row=1, col=2)
+    _seg(fig_panel, 0, t_end, SPD_STC_TRIG, row=1, col=2, color=c_spd, name="$v^{\\mathrm{trig}}$")
+    _vline(fig_panel, t_h1, row=1, col=2, color=c_h1)
+    _vline(fig_panel, t_aft, row=1, col=2, color=c_aft)
+    _seg(fig_panel, t_h1, t_end, V_STC_CONS, row=1, col=2, color=c_up, name="STC bound")
+    fig_panel.update_yaxes(
+        title_text="Speed, ||v||₂ [m s⁻¹]",
+        range=[0, speed.max() + 5],
+        row=1,
+        col=2,
+    )
 
-    # ── Tilt ──────────────────────────────────────────────────────────────────
-    ax5.plot(t_full, tilt_deg, c=c_plt)
-    ax5.scatter(t_nodes, tilt_deg_n, s=sc, c=c_node, zorder=5)
-    ax5.plot([0,    t_h1], [THETA_MAX_DEG, THETA_MAX_DEG], c=c_up, ls='--')
-    ax5.plot([t_h1, t_end], [THETA_STC_DEG, THETA_STC_DEG], c=c_up, ls='--')
-    ax5.axvline(x=t_h1, c=c_h1, ls='--')
-    ax5.set_xlim(0, t_end)
-    ax5.set_ylabel(r'Tilt angle, $\theta$ [deg]', fontsize=y_fs, labelpad=4)
+    # ── Tilt (row 1, col 3) ─────────────────────────────────────────────────
+    _line(fig_panel, t_full, tilt_deg, row=1, col=3, color=c_plt)
+    _nodes(fig_panel, t_nodes, tilt_deg_n, row=1, col=3)
+    _seg(fig_panel, 0, t_h1, THETA_MAX_DEG, row=1, col=3, color=c_up)
+    _seg(fig_panel, t_h1, t_end, THETA_STC_DEG, row=1, col=3, color=c_up)
+    _vline(fig_panel, t_h1, row=1, col=3, color=c_h1)
+    fig_panel.update_yaxes(title_text="Tilt angle, θ [deg]", row=1, col=3)
 
-    # ── Engine gimbal deflection ───────────────────────────────────────────────
+    # ── Engine gimbal deflection (row 2, col 1) ─────────────────────────────
     d_e_deg   = np.degrees(d_e)
     d_e_deg_n = np.degrees(d_e_n)
-    ax2.plot(t_full, d_e_deg, c='red')
-    ax2.scatter(t_nodes, d_e_deg_n, s=sc, c=c_node, zorder=5)
-    ax2.plot([0,    t_h1], [ DELTA_ENGINE_MAX_DEG,  DELTA_ENGINE_MAX_DEG], c=c_up,  ls='--')
-    ax2.plot([0,    t_h1], [-DELTA_ENGINE_MAX_DEG, -DELTA_ENGINE_MAX_DEG], c=c_low, ls='--')
-    ax2.plot([t_h1, t_end], [ DELTA_STC_DEG,  DELTA_STC_DEG], c=c_up,  ls='--')
-    ax2.plot([t_h1, t_end], [-DELTA_STC_DEG, -DELTA_STC_DEG], c=c_low, ls='--')
-    ax2.axvline(x=t_h1, c=c_h1, ls='--')
-    ax2.set_xlim(0, t_end)
-    ax2.set_ylabel(r'Engine gimbal, $\delta^e$ [deg]', fontsize=y_fs, labelpad=2)
+    _line(fig_panel, t_full, d_e_deg, row=2, col=1, color="red")
+    _nodes(fig_panel, t_nodes, d_e_deg_n, row=2, col=1)
+    _seg(fig_panel, 0, t_h1,  DELTA_ENGINE_MAX_DEG, row=2, col=1, color=c_up)
+    _seg(fig_panel, 0, t_h1, -DELTA_ENGINE_MAX_DEG, row=2, col=1, color=c_low)
+    _seg(fig_panel, t_h1, t_end,  DELTA_STC_DEG, row=2, col=1, color=c_up)
+    _seg(fig_panel, t_h1, t_end, -DELTA_STC_DEG, row=2, col=1, color=c_low)
+    _vline(fig_panel, t_h1, row=2, col=1, color=c_h1)
+    fig_panel.update_yaxes(title_text="Engine gimbal, δᵉ [deg]", row=2, col=1)
 
-    # ── Angular velocity ───────────────────────────────────────────────────────
-    ax3.plot(t_full, omega_dps, c=c_plt)
-    ax3.scatter(t_nodes, omega_dps_n, s=sc, c=c_node, zorder=5)
-    ax3.plot([0,    t_h1], [np.degrees(W_B_MAX_RAD_S),   np.degrees(W_B_MAX_RAD_S)],   c=c_up, ls='--')
-    ax3.plot([t_h1, t_end], [np.degrees(OMEGA_STC_RAD_S), np.degrees(OMEGA_STC_RAD_S)], c=c_up, ls='--')
-    ax3.axvline(x=t_h1, c=c_h1, ls='--')
-    ax3.set_xlim(0, t_end)
-    ax3.set_ylabel(r'Angular velocity, $\omega_\mathcal{B}$ [deg s$^{-1}$]', fontsize=y_fs, labelpad=7)
+    # ── Angular velocity (row 2, col 2) ─────────────────────────────────────
+    _line(fig_panel, t_full, omega_dps, row=2, col=2, color=c_plt)
+    _nodes(fig_panel, t_nodes, omega_dps_n, row=2, col=2)
+    _seg(
+        fig_panel,
+        0,
+        t_h1,
+        np.degrees(W_B_MAX_RAD_S),
+        row=2,
+        col=2,
+        color=c_up,
+    )
+    _seg(
+        fig_panel,
+        t_h1,
+        t_end,
+        np.degrees(OMEGA_STC_RAD_S),
+        row=2,
+        col=2,
+        color=c_up,
+    )
+    _vline(fig_panel, t_h1, row=2, col=2, color=c_h1)
+    fig_panel.update_yaxes(title_text="Angular velocity, ω_B [deg s⁻¹]", row=2, col=2)
 
-    # ── Glideslope: 90 − elevation_from_horizontal ────────────────────────────
-    gs_bound_pre = 90.0 - GS_MAX_DEG    # = 35°  (always-on bound)
-    gs_bound_stc = 90.0 - GS_STC_DEG   # ≈ 11.8° (tight STC bound)
-    ax9.plot(t_full[:-1], gs_deg[:-1], c=c_plt)
-    ax9.scatter(t_nodes[:-1], gs_deg_n[:-1], s=sc, c=c_node, zorder=5)
-    ax9.plot([0,    t_h1], [gs_bound_pre, gs_bound_pre], c=c_up, ls='--')
-    ax9.plot([t_h1, t_end], [gs_bound_stc, gs_bound_stc], c=c_up, ls='--')
-    ax9.axvline(x=t_h1, c=c_h1, ls='--')
-    ax9.set_xlim(0, t_end)
-    ax9.set_ylim(0, max(gs_bound_pre, gs_deg[:-1].max()) + 5)
-    ax9.set_ylabel(r'Glideslope, $\gamma$ [deg]', fontsize=y_fs)
+    # ── Glideslope (row 2, col 3) ─────────────────────────────────────────────
+    gs_bound_pre = 90.0 - GS_MAX_DEG
+    gs_bound_stc = 90.0 - GS_STC_DEG
+    _line(fig_panel, t_full[:-1], gs_deg[:-1], row=2, col=3, color=c_plt)
+    _nodes(fig_panel, t_nodes[:-1], gs_deg_n[:-1], row=2, col=3)
+    _seg(fig_panel, 0, t_h1, gs_bound_pre, row=2, col=3, color=c_up)
+    _seg(fig_panel, t_h1, t_end, gs_bound_stc, row=2, col=3, color=c_up)
+    _vline(fig_panel, t_h1, row=2, col=3, color=c_h1)
+    fig_panel.update_yaxes(
+        title_text="Glideslope, γ [deg]",
+        range=[0, max(gs_bound_pre, gs_deg[:-1].max()) + 5],
+        row=2,
+        col=3,
+    )
 
-    # ── LOS boresight elevation angle ─────────────────────────────────────────
+    # ── LOS boresight elevation angle (row 3, col 1) ────────────────────────
     d_b_deg   = np.degrees(d_b)
     d_b_deg_n = np.degrees(d_b_n)
-    ax6.plot(t_full, d_b_deg, c='red')
-    ax6.scatter(t_nodes, d_b_deg_n, s=sc, c=c_node, zorder=5)
-    ax6.plot([t_h2, t_end], [DELTA_BORESIGHT_MAX_DEG, DELTA_BORESIGHT_MAX_DEG], c=c_up, ls='--')
-    ax6.axvline(x=t_h2, c=c_h2, ls='--')
-    ax6.set_xlim(0, t_end)
-    ax6.set_xlabel('Time [s]', fontsize=x_fs)
-    ax6.set_ylabel(r'Boresight deflection, $\delta^b$ [deg]', fontsize=y_fs, labelpad=2)
+    _line(fig_panel, t_full, d_b_deg, row=3, col=1, color="red")
+    _nodes(fig_panel, t_nodes, d_b_deg_n, row=3, col=1)
+    _seg(
+        fig_panel,
+        t_h2,
+        t_end,
+        DELTA_BORESIGHT_MAX_DEG,
+        row=3,
+        col=1,
+        color=c_up,
+    )
+    _vline(fig_panel, t_h2, row=3, col=1, color=c_h2)
+    fig_panel.update_xaxes(title_text="Time [s]", row=3, col=1)
+    fig_panel.update_yaxes(title_text="Boresight deflection, δᵇ [deg]", row=3, col=1)
 
-    # ── Mass ──────────────────────────────────────────────────────────────────
-    ax8.plot(t_full, m / 1e3, c=c_plt)
-    ax8.scatter(t_nodes, m_n / 1e3, s=sc, c=c_node, zorder=5)
-    ax8.axhline(y=M_DRY / 1e3, c=c_low, ls='--')
-    ax8.set_xlim(0, t_end)
-    ax8.set_xlabel('Time [s]', fontsize=x_fs)
-    ax8.set_ylabel(r'Mass, $m$ [$10^3$ kg]', fontsize=y_fs, labelpad=2)
+    # ── Mass (row 3, col 2) ─────────────────────────────────────────────────
+    _line(fig_panel, t_full, m / 1e3, row=3, col=2, color=c_plt)
+    _nodes(fig_panel, t_nodes, m_n / 1e3, row=3, col=2)
+    fig_panel.add_hline(
+        y=M_DRY / 1e3,
+        line={"color": c_low, "dash": "dash", "width": 1.5},
+        row=3,
+        col=2,
+    )
+    fig_panel.update_xaxes(title_text="Time [s]", row=3, col=2)
+    fig_panel.update_yaxes(title_text="Mass, m [10³ kg]", row=3, col=2)
 
-    # ── LOS view angle ────────────────────────────────────────────────────────
-    ax7.plot(t_full, los_ang, c=c_plt)
-    ax7.scatter(t_nodes, los_ang_n, s=sc, c=c_node, zorder=5)
-    ax7.plot([t_h2, t_end], [LOS_STC_DEG, LOS_STC_DEG], c=c_up, ls='--')
-    ax7.axvline(x=t_h2, c=c_h2, ls='--')
-    ax7.set_xlim(0, t_end)
-    ax7.set_xlabel('Time [s]', fontsize=x_fs)
-    ax7.set_ylabel(r'LOS angle, $\psi$ [deg]', fontsize=y_fs, labelpad=4)
+    # ── LOS view angle (row 3, col 3) ───────────────────────────────────────
+    _line(fig_panel, t_full, los_ang, row=3, col=3, color=c_plt)
+    _nodes(fig_panel, t_nodes, los_ang_n, row=3, col=3)
+    _seg(fig_panel, t_h2, t_end, LOS_STC_DEG, row=3, col=3, color=c_up)
+    _vline(fig_panel, t_h2, row=3, col=3, color=c_h2)
+    fig_panel.update_xaxes(title_text="Time [s]", row=3, col=3)
+    fig_panel.update_yaxes(title_text="LOS angle, ψ [deg]", row=3, col=3)
 
-    # ── Unified legend (deduplicated) ─────────────────────────────────────────
-    all_handles: list = []
-    all_labels:  list = []
-    seen: set = set()
-    for ax in fig.axes:
-        for h, l in zip(*ax.get_legend_handles_labels()):
-            if l not in seen:
-                all_handles.append(h)
-                all_labels.append(l)
-                seen.add(l)
-    if all_handles:
-        fig.legend(all_handles, all_labels, loc="upper left", ncols=5, mode="expand", fontsize=10)
+    for row in range(1, 4):
+        for col in range(1, 4):
+            fig_panel.update_xaxes(range=[0, t_end], row=row, col=col)
 
-    fig.tight_layout(rect=[0, 0, 1, 0.90])
+    fig_panel.update_layout(
+        template="plotly_white",
+        width=1100,
+        height=650,
+        margin={"t": 80, "b": 40, "l": 50, "r": 30},
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "left",
+            "x": 0,
+            "font": {"size": 10},
+        },
+    )
 
     if save_prefix:
-        fig.savefig(f"{save_prefix}_states_controls.pdf", bbox_inches='tight', dpi=150)
-        fig.savefig(f"{save_prefix}_states_controls.png", bbox_inches='tight', dpi=150)
-        print(f"  Saved {save_prefix}_states_controls.{{pdf,png}}")
+        _save_plotly_figure(fig_panel, f"{save_prefix}_states_controls")
 
     # ── Figure 2: 3-D trajectory coloured by speed ────────────────────────────
-    fig3 = plt.figure(figsize=(9, 8))
-    ax3d = fig3.add_subplot(111, projection='3d', computed_zorder=False)
-
-    norm = plt.Normalize(speed.min(), speed.max())
-    pts  = pos[:, np.newaxis, :]
-    segs = np.concatenate([pts[:-1], pts[1:]], axis=1)
-    lc   = Line3DCollection(segs, cmap=plt.cm.rainbow, norm=norm, linewidth=2, zorder=2)
-    lc.set_array(speed[:-1])
-    ax3d.add_collection3d(lc)
-
-    ax3d.scatter(pos_n[:, 0], pos_n[:, 1], pos_n[:, 2],
-                 c='black', s=25, zorder=5, label='Node')
-    ax3d.scatter([0.0], [0.0], [0.0],
-                 c='lime', s=150, marker='*', zorder=10, label='Landing pad')
+    fig_3d = go.Figure()
+    fig_3d.add_trace(
+        go.Scatter3d(
+            x=pos[:, 0],
+            y=pos[:, 1],
+            z=pos[:, 2],
+            mode="lines",
+            customdata=speed,
+            line={
+                "color": speed,
+                "colorscale": "Rainbow",
+                "cmin": float(speed.min()),
+                "cmax": float(speed.max()),
+                "width": 4,
+                "colorbar": {"title": "Speed [m/s]"},
+            },
+            showlegend=False,
+            hovertemplate=(
+                "Crossrange: %{x:.1f} m<br>"
+                "Downrange: %{y:.1f} m<br>"
+                "Altitude: %{z:.1f} m<br>"
+                "Speed: %{customdata:.1f} m/s<extra></extra>"
+            ),
+        )
+    )
+    fig_3d.add_trace(
+        go.Scatter3d(
+            x=pos_n[:, 0],
+            y=pos_n[:, 1],
+            z=pos_n[:, 2],
+            mode="markers",
+            marker={"color": "black", "size": 4},
+            name="Node",
+        )
+    )
+    fig_3d.add_trace(
+        go.Scatter3d(
+            x=[0.0],
+            y=[0.0],
+            z=[0.0],
+            mode="markers",
+            marker={"color": "lime", "size": 10, "symbol": "diamond"},
+            name="Landing pad",
+        )
+    )
 
     all_xyz = np.vstack([pos, pos_n])
     pad = 30.0
-    ax3d.set_xlim(all_xyz[:, 0].min() - pad, all_xyz[:, 0].max() + pad)
-    ax3d.set_ylim(all_xyz[:, 1].min() - pad, all_xyz[:, 1].max() + pad)
-    ax3d.set_zlim(0, all_xyz[:, 2].max() + 30)
-
-    cbar = fig3.colorbar(lc, ax=ax3d, pad=0.03, shrink=0.70, aspect=50, orientation='vertical')
-    cbar.set_label('Speed [m/s]', fontsize=12)
-
-    ax3d.set_xlabel('Crossrange [m]', fontsize=12)
-    ax3d.set_ylabel('Downrange [m]',  fontsize=12)
-    ax3d.set_zlabel('Altitude [m]',   fontsize=12)
-    ax3d.legend(prop={'size': 10}, loc='upper left')
-    ax3d.set_title('6-DoF PDG Trajectory (cSTC)', fontsize=13)
+    fig_3d.update_layout(
+        template="plotly_white",
+        title={"text": "6-DoF PDG Trajectory (cSTC)", "x": 0.5},
+        width=900,
+        height=800,
+        scene={
+            "xaxis_title": "Crossrange [m]",
+            "yaxis_title": "Downrange [m]",
+            "zaxis_title": "Altitude [m]",
+            "xaxis": {"range": [all_xyz[:, 0].min() - pad, all_xyz[:, 0].max() + pad]},
+            "yaxis": {"range": [all_xyz[:, 1].min() - pad, all_xyz[:, 1].max() + pad]},
+            "zaxis": {"range": [0, all_xyz[:, 2].max() + 30]},
+            "aspectmode": "data",
+        },
+        legend={"x": 0.02, "y": 0.98},
+    )
 
     if save_prefix:
-        fig3.savefig(f"{save_prefix}_trajectory_3d.pdf", bbox_inches='tight', dpi=150)
-        fig3.savefig(f"{save_prefix}_trajectory_3d.png", bbox_inches='tight', dpi=150)
-        print(f"  Saved {save_prefix}_trajectory_3d.{{pdf,png}}")
+        _save_plotly_figure(fig_3d, f"{save_prefix}_trajectory_3d")
 
     if show:
-        plt.show()
+        show_plotly_with_latin_modern(fig_panel)
+        show_plotly_with_latin_modern(fig_3d)
 
-    return fig, fig3
+    return fig_panel, fig_3d
 
 
 if __name__ == "__main__":
@@ -1067,7 +1188,7 @@ if __name__ == "__main__":
     print(f"  Fuel used (kg):       {M_WET - m[-1, 0]:.1f}")
 
     print("\n── Generating plots ─────────────────────────────────────────────")
-    plot_cstc_results(result, show=False, save_prefix="cstc")
+    plot_cstc_results(result, show=True)
 
     prepare_for_viser(result)
     launch_viser_servers(result)
