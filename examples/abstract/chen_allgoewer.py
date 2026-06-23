@@ -192,12 +192,12 @@ def build_problem(*, solve_feasibility: bool = True) -> tuple[Problem, ox.State,
     algorithm: dict = {
         "lam_prox": 1e0,
         "lam_vc": 1e1,
-        "autotuner": ox.ConstantProximalWeight(),
+        "autotuner": ox.RampProximalWeight(ramp_factor=1.04, lam_prox_max=1e3),
     }
     if solve_feasibility:
         algorithm["lam_cost"] = 0e0
     else:
-        algorithm["lam_cost"] = 2e0
+        algorithm["lam_cost"] = 0e0
 
     problem = Problem(
         dynamics=dynamics,
