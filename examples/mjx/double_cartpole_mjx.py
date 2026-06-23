@@ -212,44 +212,6 @@ def simulate_mujoco(results) -> dict:
     return {"time": rec_t, "qpos": rec_q, "qvel": rec_qd}
 
 
-def qpos_from_V_multishot(
-    V: np.ndarray,
-    *,
-    n_q: int,
-    n_v: int,
-    n_u: int,
-    t_nodes: np.ndarray,
-) -> tuple[np.ndarray | None, np.ndarray | None]:
-    """Unpack generalized coordinates from the SCP multi-shoot matrix ``V``."""
-    if V.size == 0:
-        return None, None
-    n_x = n_q + n_v
-    i4 = n_x + n_x * n_x + 2 * n_x * n_u
-    n_rows, n_sub = V.shape
-    if i4 <= 0 or n_rows % i4 != 0 or n_sub < 1:
-        return None, None
-    n_seg = n_rows // i4
-    if n_seg != len(t_nodes) - 1:
-        return None, None
-
-    q_rows: list[np.ndarray] = []
-    t_rows: list[float] = []
-    for seg in range(n_seg):
-        t0 = float(t_nodes[seg])
-        t1 = float(t_nodes[seg + 1])
-        j0 = 0 if seg == 0 else 1
-        for j in range(j0, n_sub):
-            alpha = j / (n_sub - 1) if n_sub > 1 else 0.0
-            t_s = (1.0 - alpha) * t0 + alpha * t1
-            row0 = seg * i4
-            x_vec = np.asarray(V[row0 : row0 + n_x, j], dtype=np.float64).ravel()
-            q_rows.append(x_vec[:n_q])
-            t_rows.append(t_s)
-    if not q_rows:
-        return None, None
-    return np.stack(q_rows, axis=0), np.asarray(t_rows, dtype=np.float64)
-
-
 def visualize(results, sim: dict | None = None) -> None:
     """Animate the double-link cartpole in a Viser 3D scene.
 
@@ -288,21 +250,9 @@ def visualize(results, sim: dict | None = None) -> None:
     fk_nodes = [fk_joints(q_nodes[i]) for i in range(len(q_nodes))]
 
     # Multi-shoot integrated trajectory from ``V``
-    _dh = getattr(results, "discretization_history", None) or []
-    V_multishot = _dh[-1] if len(_dh) > 0 else None
-    q_ms_v, t_ms_v = (
-        qpos_from_V_multishot(
-            np.asarray(V_multishot, dtype=np.float64),
-            n_q=n_q,
-            n_v=n_v,
-            n_u=n_u,
-            t_nodes=t_nodes,
-        )
-        if V_multishot is not None
-        else (None, None)
-    )
-
-    if q_ms_v is not None and t_ms_v is not None:
+    prop = results.multishot_propagation(t_nodes=t_nodes)
+    if prop is not None:
+        q_ms_v, t_ms_v = prop.state("qpos")
         fk_multishot_anim = [fk_joints(q_ms_v[i]) for i in range(len(q_ms_v))]
         t_multishot_lookup = t_ms_v
     else:

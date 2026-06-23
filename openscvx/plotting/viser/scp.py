@@ -209,8 +209,8 @@ def extract_propagation_positions(
 
     The discretization history contains the multi-shot integration results.
     Each V matrix has shape (flattened_size, n_timesteps) where:
-    - flattened_size = (N-1) * i4
-    - i4 = n_x + n_x*n_x + 2*n_x*n_u (state + STM + control influence matrices)
+    - flattened_size = (N-1) * segment_size
+    - segment_size = n_x + n_x*n_x + 2*n_x*n_u (state + STM + control influence matrices)
     - n_timesteps = number of integration substeps
 
     Args:
@@ -224,35 +224,18 @@ def extract_propagation_positions(
         List of propagation trajectories per iteration.
         Each iteration contains a list of (n_substeps, 3) arrays, one per segment.
     """
+    from openscvx.algorithms.history import unpack_multishot_V
+
     if not discretization_history:
         return []
 
-    i4 = n_x + n_x * n_x + 2 * n_x * n_u
     propagations = []
-
     for V in discretization_history:
-        # V shape: (flattened_size, n_timesteps)
-        n_timesteps = V.shape[1]
-        n_segments = V.shape[0] // i4  # N-1 segments
-
-        iteration_segments = []
-        for seg_idx in range(n_segments):
-            # Extract this segment's data across all timesteps
-            seg_start = seg_idx * i4
-            seg_end = seg_start + i4
-
-            # For each timestep, extract the position from the state
-            segment_positions = []
-            for t_idx in range(n_timesteps):
-                # Get full state at this segment and timestep
-                state = V[seg_start:seg_end, t_idx][:n_x]
-                # Extract position components
-                pos = state[position_slice] / scene_scale
-                segment_positions.append(pos)
-
-            iteration_segments.append(np.array(segment_positions, dtype=np.float32))
-
-        propagations.append(iteration_segments)
+        n_segments = V.shape[0] // (n_x + n_x * n_x + 2 * n_x * n_u)
+        placeholder_t = np.linspace(0.0, 1.0, n_segments + 1)
+        prop = unpack_multishot_V(V, n_x=n_x, n_u=n_u, t_nodes=placeholder_t, states=())
+        iteration_segments = [seg[:, position_slice] / scene_scale for seg in prop.segments()]
+        propagations.append([np.asarray(seg, dtype=np.float32) for seg in iteration_segments])
 
     return propagations
 

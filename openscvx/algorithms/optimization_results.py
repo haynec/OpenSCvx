@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 
 if TYPE_CHECKING:
-    from openscvx.algorithms.history import AlgorithmHistory
+    from openscvx.algorithms.history import AlgorithmHistory, MultishotPropagation
     from openscvx.algorithms.state import AlgorithmState
     from openscvx.problem import Problem
 
@@ -179,6 +179,36 @@ class OptimizationResults:
             Control trajectory array, shape (N, n_controls)
         """
         return self.U[-1]
+
+    def multishot_propagation(
+        self,
+        iteration: int = -1,
+        *,
+        t_nodes: Optional[np.ndarray] = None,
+    ) -> Optional["MultishotPropagation"]:
+        """Return unpacked multishot data for SCP iteration ``iteration`` (default: final).
+
+        Returns ``None`` when ``discretization_history`` is empty (e.g. ``solve_jax``).
+
+        Attaches ``self._states`` so ``.state("q")`` works without passing slices manually.
+        """
+        from openscvx.algorithms.history import unpack_multishot_V
+
+        dh = self.discretization_history
+        if not dh:
+            return None
+        V = np.asarray(dh[iteration], dtype=np.float64)
+        n_x, n_u = self.x.shape[1], self.u.shape[1]
+        if t_nodes is None:
+            t_nodes_raw = self.nodes.get("time")
+            if t_nodes_raw is None:
+                t_final = float(self.t_final)
+                t_nodes = np.linspace(0.0, t_final, self.x.shape[0])
+            else:
+                t_nodes = np.asarray(t_nodes_raw, dtype=np.float64).ravel()
+        return unpack_multishot_V(
+            V, n_x=n_x, n_u=n_u, t_nodes=t_nodes, states=tuple(self._states or ())
+        )
 
     # Post-processing results (added by propagate_trajectory_results)
     t_full: Optional[np.ndarray] = field(default=None, metadata={"npz": "optional_array"})
