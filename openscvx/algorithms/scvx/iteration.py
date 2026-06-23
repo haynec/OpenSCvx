@@ -155,6 +155,73 @@ def _linearize_constraints(
     return nodal_g, nodal_grad_x, nodal_grad_u, cross_g, cross_grad_X, cross_grad_U
 
 
+def _constraint_curvature(
+    x: jnp.ndarray,
+    u: jnp.ndarray,
+    params: dict,
+    jax_constraints,
+    lam_vb_nodal: jnp.ndarray,
+    lam_vb_cross: jnp.ndarray,
+    N: int,
+    n_x: int,
+    n_u: int,
+) -> jnp.ndarray:
+    """Curvature of the nonconvex-constraint penalties ``Σ_i y_i ∇²g_i``.
+
+    The ``h(C(x,u))`` exact-penalty term includes ``Σ_i w_i max(0, g_i(x,u))``
+    over the nonconvex constraints (penalty.py).  Its inner-only curvature weights
+    each constraint Hessian by the hinge subgradient ``y_i = w_i · 𝟙[g_i > 0]`` —
+    the minimum-norm selection (``0`` at the kink ``g_i = 0``).  The Hessian is
+    taken over the **full** stacked ``[x, u]`` variable: nodal constraints add
+    per-node ``∇²_xx / ∇²_uu / ∂²/∂x∂u`` blocks; cross-node constraints add their
+    full trajectory blocks.  Returns the **unprojected** ``(D, D)`` matrix with
+    ``D = N*n_x + N*n_u`` ordered ``[x.flatten(); u.flatten()]``.
+    """
+    Nx = N * n_x
+    Nu = N * n_u
+    D = Nx + Nu
+    H = jnp.zeros((D, D))
+
+    for c_idx, constraint in enumerate(jax_constraints.nodal):
+        if constraint.hess_g_xx is None:
+            continue
+        g = jnp.asarray(constraint.func(x, u, 0, params)).reshape(N, -1)  # (N, m)
+        m = g.shape[1]
+        h_xx = jnp.asarray(constraint.hess_g_xx(x, u, 0, params)).reshape(N, m, n_x, n_x)
+        h_uu = jnp.asarray(constraint.hess_g_uu(x, u, 0, params)).reshape(N, m, n_u, n_u)
+        h_xu = jnp.asarray(constraint.hess_g_xu(x, u, 0, params)).reshape(N, m, n_x, n_u)
+        # Hinge subgradient per (node, component), with the per-node penalty weight.
+        y = lam_vb_nodal[:, c_idx][:, None] * (g > 0)  # (N, m)
+        if constraint.nodes is not None:
+            mask = jnp.zeros((N, 1)).at[jnp.asarray(constraint.nodes)].set(1.0)
+            y = y * mask
+        b_xx = jnp.einsum("nm,nmab->nab", y, h_xx)  # (N, n_x, n_x)
+        b_uu = jnp.einsum("nm,nmab->nab", y, h_uu)  # (N, n_u, n_u)
+        b_xu = jnp.einsum("nm,nmab->nab", y, h_xu)  # (N, n_x, n_u)
+        for n in range(N):
+            xs = n * n_x
+            us = Nx + n * n_u
+            H = H.at[xs : xs + n_x, xs : xs + n_x].add(b_xx[n])
+            H = H.at[us : us + n_u, us : us + n_u].add(b_uu[n])
+            H = H.at[xs : xs + n_x, us : us + n_u].add(b_xu[n])
+            H = H.at[us : us + n_u, xs : xs + n_x].add(b_xu[n].T)
+
+    for c_idx, constraint in enumerate(jax_constraints.cross_node):
+        if getattr(constraint, "hess_g_XX", None) is None:
+            continue
+        g = jnp.asarray(constraint.func(x, u, params))  # scalar
+        y = lam_vb_cross[c_idx] * (g > 0)
+        h_XX = jnp.asarray(constraint.hess_g_XX(x, u, params)).reshape(Nx, Nx)
+        h_UU = jnp.asarray(constraint.hess_g_UU(x, u, params)).reshape(Nu, Nu)
+        h_XU = jnp.asarray(constraint.hess_g_XU(x, u, params)).reshape(Nx, Nu)
+        H = H.at[:Nx, :Nx].add(y * h_XX)
+        H = H.at[Nx:, Nx:].add(y * h_UU)
+        H = H.at[:Nx, Nx:].add(y * h_XU)
+        H = H.at[Nx:, :Nx].add(y * h_XU.T)
+
+    return H
+
+
 def _candidate_cost(x: jnp.ndarray, final_type: list) -> jnp.ndarray:
     cost = jnp.asarray(0.0)
     for i, bc_type in enumerate(final_type):
@@ -345,6 +412,8 @@ def make_proxconvex_iteration(
     solver_callback: Callable[[AlgorithmState, ProxConvexSubproblemData], "SubproblemSolution"],
     autotuner: "AutotuningBase",
     settings: "Config",
+    dis_hessian: Callable = None,
+    use_hessian_constraints: bool = False,
 ) -> Callable[[AlgorithmState, dict], Tuple[AlgorithmState, IterationDiagnostics]]:
     """Build one JAX-pure ProxConvex iteration body.
 
@@ -362,13 +431,24 @@ def make_proxconvex_iteration(
     Returns:
         ``iteration_fn(state, params) -> (next_state, diagnostics)``.
     """
+    from .prox_convex import project_psd
+
     N = settings.sim.n
     n_x = settings.sim.n_states
     n_u = settings.sim.n_controls
     n_nodal = len(jax_constraints.nodal)
+    # Full [x, u] proximal-metric dimension, ordered [x.flatten(); u.flatten()].
+    D = N * (n_x + n_u)
 
     dis_continuous = dis_continuous.call if hasattr(dis_continuous, "call") else dis_continuous
     dis_impulsive = dis_impulsive.call if hasattr(dis_impulsive, "call") else dis_impulsive
+    if dis_hessian is not None and hasattr(dis_hessian, "call"):
+        dis_hessian = dis_hessian.call
+
+    # Static gate: the curvature block is built iff the s(R) block or the h(C)
+    # (dynamics + nonconvex-constraint) block is active.  Mirrors the solver's
+    # ``hess_cost`` gate so the iteration and subproblem agree on H⁺_k presence.
+    any_hessian = (composite.use_hessian is not False) or use_hessian_constraints
 
     inv_S_x = jnp.asarray(settings.sim.inv_S_x)
     inv_S_u = jnp.asarray(settings.sim.inv_S_u)
@@ -395,10 +475,42 @@ def make_proxconvex_iteration(
         # Evaluate the SR composite: R(x_k), ∇s(R), sign mask, ∇R.
         R_val, ds_val, I_neg_mask, grad_R = composite.eval(state.x, state.u, params)
 
-        # Curvature augmentation: H⁺_k = Π_{S+}(H_{s,k}) for Q_k = µ_k I + H⁺_k.
-        H_plus = composite.compute_hessian(
+        # Curvature augmentation: H⁺_k = Π_{S+}(H_{C,k} + H_{s,k}) for the
+        # proximal metric Q_k = µ_k I + H⁺_k.  The s(R) block H_{s,k} and the
+        # h(C) block H_{C,k} (dynamics defects + nonconvex constraints) are
+        # summed and PSD-projected **once** (unified projection).
+        H_s_raw = composite.compute_hessian_s_raw(
             state.x, state.u, params, R_val, ds_val, I_neg_mask, grad_R
         )
+
+        H_c_raw = jnp.zeros((D, D))
+        if use_hessian_constraints:
+            # Dynamics-defect curvature Σ_j y_j ∇²C_j over [x, u], with the L1
+            # virtual-control subgradient on the propagated state C = x_prop:
+            #   y[k] = − inv_S_xᵀ (lam_vc[k] ⊙ sign(inv_S_x (x_bar[k+1] − x_prop[k]))).
+            if dis_hessian is not None:
+                d_scaled = (inv_S_x @ (state.x[1:] - x_prop).T).T  # (N-1, n_x)
+                sub = state.lam_vc * jnp.sign(d_scaled)  # (N-1, n_x), broadcast lam_vc
+                w_vc = -(inv_S_x.T @ sub.T).T  # (N-1, n_x)
+                H_c_raw = H_c_raw + dis_hessian(state.x, state.u, w_vc, params)
+            # Nonconvex-constraint curvature Σ_i y_i ∇²g_i over [x, u].
+            H_c_raw = H_c_raw + _constraint_curvature(
+                state.x,
+                state.u,
+                params,
+                jax_constraints,
+                state.lam_vb_nodal,
+                state.lam_vb_cross,
+                N,
+                n_x,
+                n_u,
+            )
+
+        if any_hessian:
+            H_plus = project_psd(H_s_raw + H_c_raw)
+        else:
+            # Sentinel: no curvature → solver keeps Q_k = µ_k I (no hess_cost).
+            H_plus = jnp.zeros(())
 
         data = ProxConvexSubproblemData(
             x_bar=state.x,

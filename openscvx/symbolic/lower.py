@@ -627,6 +627,19 @@ def _lower_jax_constraints(
                 func=jax.vmap(fn, in_axes=(0, 0, None, None)),
                 grad_g_x=jax.vmap(jacfwd(fn, argnums=0), in_axes=(0, 0, None, None)),
                 grad_g_u=jax.vmap(jacfwd(fn, argnums=1), in_axes=(0, 0, None, None)),
+                # Per-node Hessian blocks for the ProxConvex h(C) curvature over the
+                # full [x, u] proximal metric; only evaluated when
+                # use_hessian_constraints is on.  ``hess_g_xu`` is laid out as
+                # ``∂²g/∂x∂u`` (state-rows, control-cols) via jacfwd(·,1)∘jacfwd(·,0).
+                hess_g_xx=jax.vmap(
+                    jacfwd(jacfwd(fn, argnums=0), argnums=0), in_axes=(0, 0, None, None)
+                ),
+                hess_g_uu=jax.vmap(
+                    jacfwd(jacfwd(fn, argnums=1), argnums=1), in_axes=(0, 0, None, None)
+                ),
+                hess_g_xu=jax.vmap(
+                    jacfwd(jacfwd(fn, argnums=0), argnums=1), in_axes=(0, 0, None, None)
+                ),
                 nodes=constraints.nodal[i].nodes,
             )
             lowered_nodal.append(constraint)
@@ -644,6 +657,13 @@ def _lower_jax_constraints(
             func=constraint_fn,
             grad_g_X=grad_g_X,
             grad_g_U=grad_g_U,
+            # Trajectory-level Hessian blocks for the ProxConvex h(C) curvature over
+            # the full [X, U] proximal metric; only evaluated when
+            # use_hessian_constraints is on.  ``hess_g_XU`` is ``∂²g/∂X∂U``
+            # (state-rows, control-cols) via jacfwd(·,1)∘jacfwd(·,0).
+            hess_g_XX=jacfwd(jacfwd(constraint_fn, argnums=0), argnums=0),
+            hess_g_UU=jacfwd(jacfwd(constraint_fn, argnums=1), argnums=1),
+            hess_g_XU=jacfwd(jacfwd(constraint_fn, argnums=0), argnums=1),
         )
         lowered_cross_node.append(cross_node_lowered)
 

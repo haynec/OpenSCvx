@@ -204,6 +204,30 @@ class Discretizer(ABC):
         """
         raise NotImplementedError
 
+    def get_hessian_solver(self, dynamics: "Dynamics", settings: "Config") -> Optional[callable]:
+        """Create a second-order (Hessian-contraction) discretization solver.
+
+        Optional hook used by :class:`~openscvx.algorithms.scvx.prox_convex.ProxConvex`
+        to build the ``h(C(x))`` curvature block ``H_{C,k} = Σ_j y_j ∇²C_j(x_k)``
+        (the "dynamics Hessian"; Uzun et al. arXiv:2512.20602v1, Sec. 2.3.1).
+        Returns ``None`` by default — discretizers that cannot supply
+        second-order sensitivities simply omit the dynamics curvature block and
+        the proximal metric falls back to ``Q_k = µ_k I + H_{s,k}``.
+
+        Args:
+            dynamics: System dynamics object (only ``dynamics.f`` is used).
+            settings: Problem configuration.
+
+        Returns:
+            ``None``, or a callable
+            ``(x, u, w_vc, params) -> H_dyn`` where ``w_vc`` are per-segment
+            penalty-subgradient weights of shape ``(N-1, n_x)`` and ``H_dyn`` is
+            the **unprojected** block-diagonal state Hessian of shape
+            ``(N*n_x, N*n_x)`` with each ``(n_x, n_x)`` block
+            ``∇²_{xx} ( w_vc[k] · propagate(x_k, …) )`` placed at segment ``k``.
+        """
+        return None
+
     @abstractmethod
     def citation(self) -> List[str]:
         """Return BibTeX citations for this discretization method.

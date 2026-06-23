@@ -18,6 +18,71 @@ if TYPE_CHECKING:
     from openscvx.lowered import Dynamics
 
 
+def _segment_hessian_assembler(single_shot: callable, N: int, n_x: int, n_u: int) -> callable:
+    """Build the dynamics-curvature solver from a single-segment propagator.
+
+    Given ``single_shot(x_k, u_cur_k, u_next_k, node, params) -> (n_x,)`` (the
+    nonlinear propagation of one trajectory segment), returns a callable
+    ``(x, u, w_vc, params) -> H_dyn`` that assembles the unprojected dynamics
+    curvature ``H_{C,k} = Σ_j y_j ∇²C_j`` for :class:`ProxConvex` over the
+    **full** ``[x, u]`` proximal metric (dimension ``D = N*n_x + N*n_u``,
+    ordered ``[x.flatten(); u.flatten()]``).
+
+    Each segment defect ``C_k = propagate(x_k, u_k, u_{k+1})`` depends on the
+    node state ``x_k`` and the two bracketing controls ``u_k`` (cur) and
+    ``u_{k+1}`` (next, for FOH).  The per-segment block is the forward-over-
+    forward Hessian of ``w_vc[k] · C_k`` w.r.t. the stacked segment variable
+    ``v = [x_k, u_k, u_{k+1}]``; its nine sub-blocks are scattered into the
+    global ``(D, D)`` matrix at the corresponding state/control regions and
+    **accumulated** (segment ``k``'s ``u_{k+1}`` block overlaps segment
+    ``k+1``'s ``u_k`` block).  Nested ``jax.jacfwd`` keeps the computation in
+    forward mode, matching the ``diffrax.ForwardMode()`` adjoint used for the
+    first-order Jacobians.  NaNs are zeroed so affected directions fall back to
+    ``µ_k I``.
+    """
+    nodes = jnp.arange(0, N - 1)
+    Nx = N * n_x
+    Nu = N * n_u
+    D = Nx + Nu
+    # Slices into the stacked segment variable v = [x_k, u_k, u_{k+1}].
+    sx = slice(0, n_x)
+    su = slice(n_x, n_x + n_u)
+    sn = slice(n_x + n_u, n_x + 2 * n_u)
+
+    def seg_hessian(x_k, u_cur_k, u_next_k, node, w_k, params):
+        def g(v):
+            return jnp.dot(w_k, single_shot(v[sx], v[su], v[sn], node, params))
+
+        v0 = jnp.concatenate([x_k, u_cur_k, u_next_k])
+        return jax.jacfwd(jax.jacfwd(g))(v0)  # (n_x+2*n_u, n_x+2*n_u)
+
+    seg_hessian_vmapped = jax.vmap(seg_hessian, in_axes=(0, 0, 0, 0, 0, None))
+
+    def hessian_solver(x, u, w_vc, params):
+        blocks = jnp.nan_to_num(
+            seg_hessian_vmapped(x[:-1], u[:-1], u[1:], nodes, w_vc, params), nan=0.0
+        )  # (N-1, n_x+2*n_u, n_x+2*n_u)
+        H = jnp.zeros((D, D))
+        for k in range(N - 1):
+            blk = blocks[k]
+            # Global slices for x_k, u_k, u_{k+1}.
+            gx = slice(k * n_x, (k + 1) * n_x)
+            gu = slice(Nx + k * n_u, Nx + (k + 1) * n_u)
+            gn = slice(Nx + (k + 1) * n_u, Nx + (k + 2) * n_u)
+            H = H.at[gx, gx].add(blk[sx, sx])
+            H = H.at[gx, gu].add(blk[sx, su])
+            H = H.at[gu, gx].add(blk[su, sx])
+            H = H.at[gx, gn].add(blk[sx, sn])
+            H = H.at[gn, gx].add(blk[sn, sx])
+            H = H.at[gu, gu].add(blk[su, su])
+            H = H.at[gu, gn].add(blk[su, sn])
+            H = H.at[gn, gu].add(blk[sn, su])
+            H = H.at[gn, gn].add(blk[sn, sn])
+        return H
+
+    return hessian_solver
+
+
 class VectorizeDiscretizeLinearize(Discretizer):
     """Discretization via differentiating through the integrator for all segments simultaneously.
 
@@ -224,6 +289,52 @@ class VectorizeDiscretizeLinearize(Discretizer):
 
         return solver
 
+    def get_hessian_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
+        """Build the ``h(C(x))`` dynamics-curvature solver (see base class).
+
+        Integrates one segment at a time (rather than the coupled multi-segment
+        ODE used by :meth:`get_solver`) so the per-segment state Hessian can be
+        formed by ``jax.vmap`` over nodes instead of differentiating a single
+        ``(N-1)·n_x``-dimensional propagation twice.
+        """
+        N = settings.sim.n
+        n_x = settings.sim.n_states
+        n_u = settings.sim.n_controls
+        u_foh_mask = getattr(settings.sim.u, "foh_mask", None)
+        foh_mask = _resolve_foh_mask(self.dis_type, n_u, u_foh_mask)
+
+        single_state_dot = dynamics.f
+
+        def single_dxdt(tau, x, u_cur, u_next, node, params):
+            beta = tau * N * foh_mask
+            u = u_cur + beta * (u_next - u_cur)
+            return single_state_dot(x, u, node, params)
+
+        def single_shot(x, u_cur, u_next, node, params):
+            if self.custom_integrator:
+                rk45_kwargs = self._resolve_rk45_kwargs(is_not_compiled=settings.dev.debug)
+                sol = solve_ivp_rk45(
+                    single_dxdt,
+                    1.0 / (N - 1),
+                    x,
+                    args=(u_cur, u_next, node, params),
+                    **rk45_kwargs,
+                )
+            else:
+                diffrax_kwargs = self._resolve_diffrax_kwargs()
+                sol = solve_ivp_diffrax(
+                    single_dxdt,
+                    1.0 / (N - 1),
+                    x,
+                    args=(u_cur, u_next, node, params),
+                    **diffrax_kwargs,
+                )
+            # The integrators return the saved time series ``(T, n_x)``; the
+            # propagated node state C(x_k) is the final sample.
+            return sol[-1]
+
+        return _segment_hessian_assembler(single_shot, N, n_x, n_u)
+
     def citation(self) -> List[str]:
         """Return BibTeX citations for the vectorize-then-discretize-then-linearize method.
 
@@ -426,6 +537,50 @@ class DiscretizeLinearizeVectorize(Discretizer):
             return A_d[-1], B_d[-1], C_d[-1], x_prop[-1], V_multi
 
         return solver
+
+    def get_hessian_solver(self, dynamics: "Dynamics", settings: "Config") -> callable:
+        """Build the ``h(C(x))`` dynamics-curvature solver (see base class).
+
+        Reuses this discretizer's single-segment integrator, contracting the
+        per-segment propagation against the penalty-subgradient weights and
+        differentiating twice (forward-over-forward) w.r.t. the segment state.
+        """
+        N = settings.sim.n
+        n_x = settings.sim.n_states
+        n_u = settings.sim.n_controls
+        u_foh_mask = getattr(settings.sim.u, "foh_mask", None)
+        foh_mask = _resolve_foh_mask(self.dis_type, n_u, u_foh_mask)
+
+        single_state_dot = dynamics.f
+
+        def single_dxdt(tau, x, u_cur, u_next, node, params):
+            beta = tau * N * foh_mask
+            u = u_cur + beta * (u_next - u_cur)
+            return single_state_dot(x, u, node, params)
+
+        def single_shot(x, u_cur, u_next, node, params):
+            if self.custom_integrator:
+                rk45_kwargs = self._resolve_rk45_kwargs(is_not_compiled=settings.dev.debug)
+                sol = solve_ivp_rk45(
+                    single_dxdt,
+                    1.0 / (N - 1),
+                    x,
+                    args=(u_cur, u_next, node, params),
+                    **rk45_kwargs,
+                )
+            else:
+                diffrax_kwargs = self._resolve_diffrax_kwargs(n_segments=N - 1)
+                sol = solve_ivp_diffrax(
+                    single_dxdt,
+                    1.0 / (N - 1),
+                    x,
+                    args=(u_cur, u_next, node, params),
+                    **diffrax_kwargs,
+                )
+            # Final sample of the saved time series ``(T, n_x)`` = C(x_k).
+            return sol[-1]
+
+        return _segment_hessian_assembler(single_shot, N, n_x, n_u)
 
     def citation(self) -> List[str]:
         """Return BibTeX citations for the discretize-then-linearize-then-vectorize method.

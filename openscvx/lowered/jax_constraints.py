@@ -43,6 +43,15 @@ class LoweredNodalConstraint:
     grad_g_x: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
     grad_g_u: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
     nodes: Optional[List[int]] = None
+    #: Per-node Hessian blocks ``∇²_xx g`` ``(N,[m],n_x,n_x)``, ``∇²_uu g``
+    #: ``(N,[m],n_u,n_u)``, and the mixed ``∂²g/∂x∂u`` ``(N,[m],n_x,n_u)``
+    #: (state-rows, control-cols).  Used by
+    #: :class:`~openscvx.algorithms.scvx.prox_convex.ProxConvex` to build the
+    #: ``h(C(x,u))`` curvature over the full ``[x,u]`` proximal metric.  ``None``
+    #: until lowering computes them.
+    hess_g_xx: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
+    hess_g_uu: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
+    hess_g_xu: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
 
 
 @dataclass
@@ -110,6 +119,14 @@ class LoweredCrossNodeConstraint:
     func: Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]
     grad_g_X: Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]
     grad_g_U: Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]
+    #: Full trajectory-level Hessian blocks ``∇²_XX g`` ``(N,n_x,N,n_x)``,
+    #: ``∇²_UU g`` ``(N,n_u,N,n_u)``, and the mixed ``∂²g/∂X∂U``
+    #: ``(N,n_x,N,n_u)`` (state-rows, control-cols) for the ``h(C(x,u))``
+    #: curvature over the full ``[X,U]`` proximal metric.  ``None`` until
+    #: lowering computes them.
+    hess_g_XX: Optional[Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]] = None
+    hess_g_UU: Optional[Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]] = None
+    hess_g_XU: Optional[Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]] = None
 
 
 @dataclass
