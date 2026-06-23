@@ -191,7 +191,7 @@ def build_problem(*, solve_feasibility: bool = True) -> tuple[Problem, ox.State,
 
     algorithm: dict = {
         "lam_prox": 1e0,
-        "lam_vc": 4e0,
+        "lam_vc": 1e1,
         "autotuner": ox.ConstantProximalWeight(),
     }
     if solve_feasibility:
@@ -206,14 +206,20 @@ def build_problem(*, solve_feasibility: bool = True) -> tuple[Problem, ox.State,
         time=time,
         constraints=constraints,
         N=N,
-        float_dtype="float64",
+        # float_dtype="float64",
         algorithm=algorithm,
-        discretizer={
-            "dis_type": "ZOH",
-            "ode_solver": "Tsit5",
-            "diffrax_kwargs": {"atol": 1e-10, "rtol": 1e-10},
-        },
+        discretizer = ox.LinearizeDiscretizeSparse(dis_type="ZOH"),
+        # solver = {
+        #     "cvx_solver": "PIQP",
+        #     "solver_args": {"canon_backend": "COO", "enforce_dpp": True},
+        # }
+        solver = {
+            "cvx_solver": "qocogen",
+            "solver_args": {},
+            "cvxpygen": True,
+        }
     )
+    problem.settings.dev.printing = False
     return problem, x1, x2, control
 
 
