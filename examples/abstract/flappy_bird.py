@@ -193,34 +193,17 @@ plotting_dict = {
 
 def _extract_multishot_position_segments(results) -> list[np.ndarray]:
     """Extract per-segment propagated states from SCP discretization history."""
-    v_history = getattr(results, "discretization_history", None) or []
-    if not v_history:
+    prop = results.multishot_propagation()
+    if prop is None:
         return []
-
-    position_slice = None
-    for state in results._states:
+    pos_slice = None
+    for state in prop.states:
         if state.name == "position":
-            position_slice = state._slice
+            pos_slice = state._slice
             break
-    if position_slice is None:
+    if pos_slice is None:
         return []
-
-    n_x = results.x.shape[1]
-    n_u = results.u.shape[1]
-    i4 = n_x + n_x * n_x + 2 * n_x * n_u
-
-    v = np.asarray(v_history[-1])
-    n_segments = v.shape[0] // i4
-    segments = []
-    for seg_idx in range(n_segments):
-        seg_start = seg_idx * i4
-        seg_end = seg_start + i4
-        seg_positions = []
-        for t_idx in range(v.shape[1]):
-            state = v[seg_start:seg_end, t_idx][:n_x]
-            seg_positions.append(state[position_slice])
-        segments.append(np.asarray(seg_positions))
-    return segments
+    return [seg[:, pos_slice] for seg in prop.segments()]
 
 
 def _build_singleshot_propagated_trajectory(
