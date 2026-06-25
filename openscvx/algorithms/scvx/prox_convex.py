@@ -336,7 +336,7 @@ class ProxConvex(Algorithm):
     def __init__(
         self,
         composite: SRComposite,
-        hessian_composite: bool = True,
+        hessian_composite: bool = False,
         autotuner: "AutotuningBase" = None,
         k_max: int = 200,
         t_max: Optional[float] = None,

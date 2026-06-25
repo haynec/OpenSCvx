@@ -1314,7 +1314,7 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
             ``solver_args``, ``cvxpygen``, ``cvxpygen_override``).
     """
 
-    def __init__(self, use_hessian_constraints: bool = True, **kwargs):
+    def __init__(self, use_hessian_constraints: bool = False, **kwargs):
         super().__init__(**kwargs)
         self._composite = None
         # Single source of truth for the h(C(x)) curvature block H_{C,k}
