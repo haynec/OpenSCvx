@@ -6,7 +6,7 @@ of non-differentiable operations. All functions are element-wise and preserve th
 shape of their inputs.
 
 Function Categories:
-    - **Trigonometric:** `Sin`, `Cos`, `Tan` - Standard trigonometric functions
+    - **Trigonometric:** `Sin`, `Cos`, `Tan`, `Tanh` - Standard trigonometric functions
     - **Inverse Trigonometric:** `Asin`, `Acos`, `Atan`, `Atan2` - Inverse trig functions
     - **Exponential and Roots:** `Exp`, `Log`, `Sqrt`, `Square` - Exponential, logarithm, square
         root, and squaring operations
@@ -177,6 +177,52 @@ class Tan(Expr):
 
     def __repr__(self) -> str:
         return f"(tan({self.operand!r}))"
+
+
+class Tanh(Expr):
+    """Element-wise hyperbolic tangent function for symbolic expressions.
+
+    Computes the hyperbolic tangent of each element in the operand. Preserves
+    the shape of the input expression.
+
+    Attributes:
+        operand: Expression to apply hyperbolic tangent function to
+
+    Example:
+        Define a Tanh expression::
+
+            x = Variable("x", shape=(1,))
+            tanh_x = Tanh(x)
+
+    Note:
+        Tanh is only supported for JAX lowering. CVXPy lowering will raise
+        NotImplementedError since hyperbolic tangent is not DCP-compliant.
+    """
+
+    def __init__(self, operand: Union[Expr, float, int, np.ndarray]):
+        """Initialize a hyperbolic tangent operation.
+
+        Args:
+            operand: Expression to apply hyperbolic tangent function to
+        """
+        self.operand = operand
+
+    def children(self):
+        return [self.operand]
+
+    def canonicalize(self) -> "Expr":
+        operand = self.operand.canonicalize()
+        return Tanh(operand)
+
+    def check_shape(self) -> Tuple[int, ...]:
+        """Tanh preserves the shape of its operand."""
+        return self.operand.check_shape()
+
+    def sparsity(self, n_x: int, n_u: int):
+        return self.operand.sparsity(n_x, n_u)
+
+    def __repr__(self) -> str:
+        return f"(tanh({self.operand!r}))"
 
 
 class Asin(Expr):

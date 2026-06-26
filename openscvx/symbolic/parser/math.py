@@ -1,6 +1,6 @@
 """Parser handlers for mathematical functions.
 
-Handlers: Sin, Cos, Tan, Asin, Acos, Atan, Atan2, Sqrt, Square, Exp, Log, Abs,
+Handlers: Sin, Cos, Tan, Tanh, Asin, Acos, Atan, Atan2, Sqrt, Square, Exp, Log, Abs,
           Max, Min, PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Cinterp,
           Bilerp
 """
@@ -28,6 +28,7 @@ from openscvx.symbolic.expr.math import (
     Sqrt,
     Square,
     Tan,
+    Tanh,
 )
 from openscvx.symbolic.parser._registry import function
 
@@ -58,6 +59,13 @@ def _parse_tan(args, kwargs):
     if len(args) != 1:
         raise ValueError("Tan() takes exactly 1 argument")
     return Tan(args[0])
+
+
+@function("Tanh")
+def _parse_tanh(args, kwargs):
+    if len(args) != 1:
+        raise ValueError("Tanh() takes exactly 1 argument")
+    return Tanh(args[0])
 
 
 @function("Asin")

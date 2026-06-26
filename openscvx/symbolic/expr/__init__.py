@@ -42,7 +42,7 @@ Module Organization:
         in trajectory problems, and `Control` for control inputs.
 
     Mathematical Functions (math.py):
-        Trigonometric functions (`Sin`, `Cos`, `Tan`, `Asin`, `Acos`, `Atan`,
+        Trigonometric functions (`Sin`, `Cos`, `Tan`, `Tanh`, `Asin`, `Acos`, `Atan`,
         `Atan2`), exponential functions (`Exp`, `Log`, `Sqrt`, `Square`), and
         nonlinear functions (`PositivePart`, `Huber`, `SmoothReLU`, `Max`).
 
@@ -145,6 +145,7 @@ from .math import (
     Sqrt,
     Square,
     Tan,
+    Tanh,
 )
 
 # Parameter
@@ -207,6 +208,7 @@ __all__ = [
     "Sin",
     "Cos",
     "Tan",
+    "Tanh",
     "Asin",
     "Acos",
     "Atan",
