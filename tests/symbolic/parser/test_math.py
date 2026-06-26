@@ -1,7 +1,7 @@
 """Tests for parser math function handlers.
 
 This module tests parsing of mathematical functions:
-Sin, Cos, Tan, Asin, Acos, Atan, Atan2, Sqrt, Square, Exp, Log, Abs, Max, Min,
+Sin, Cos, Tan, Tanh, Asin, Acos, Atan, Atan2, Sqrt, Square, Exp, Log, Abs, Max, Min,
 PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Bilerp
 """
 
@@ -31,6 +31,7 @@ from openscvx.symbolic.expr import (
     Square,
     State,
     Tan,
+    Tanh,
 )
 from openscvx.symbolic.parser import ExprParser
 
@@ -64,6 +65,11 @@ def test_parse_cos():
 def test_parse_tan():
     expr = _parser().parse("Tan(x)")
     assert isinstance(expr, Tan)
+
+
+def test_parse_tanh():
+    expr = _parser().parse("Tanh(x)")
+    assert isinstance(expr, Tanh)
 
 
 def test_parse_asin():
