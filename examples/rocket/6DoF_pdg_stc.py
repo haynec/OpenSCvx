@@ -1,20 +1,36 @@
 """
-6-DoF Powered Descent Guidance with Compound State-Triggered Constraints (cSTC)
+6-DoF Powered Descent Guidance with *true* Compound State-Triggered Constraints (cSTC)
 
-Adapts the problem from CT-cSTC/CT-cSTC.ipynb using OpenSCvx's symbolic framework.
-The cSTC structure — tighter operational limits that activate once state thresholds
-are crossed — is encoded via continuous-time constraint satisfaction (CTCS) enforced
-over trajectory-phase sub-intervals:
+Port of CT-cSTC/CT-cSTC.ipynb into OpenSCvx's symbolic framework.
 
-    (tight_constraint).over((k_start, N-1))
-x
-where k_start is computed from the trigger threshold applied to the linear
-initialization trajectory (N=15 nodes, IC → TC straight line).
+Unlike ``6DoF_pdg_cstc.py`` (which approximates the triggers with fixed node
+intervals computed from the linear initialization, ``.over((k_start, N-1))``),
+this example encodes the *actual* state-triggered constraints exactly as the
+notebook does: each compound STC is a product of smooth trigger indicators and
+constraint penalties that is integrated over the trajectory and driven to zero.
 
-Trigger thresholds and resulting node intervals (from notebook cell 16):
-    alt < 100 m  → nodes (12, 14): gimbal, tilt, ω, speed, tight glideslope
-    alt < 200 m  → nodes  (9, 14): LOS boresight cone
-    v < 35 m/s AND tilt < 60°  → nodes (5, 14): single-engine thrust limits
+How the STCs are encoded
+------------------------
+OpenSCvx's CTCS mechanism turns a constraint ``g(x, u) <= 0`` into the penalty
+``Square(PositivePart(g))`` which is integrated into an augmented state that is
+driven to zero (continuous-time constraint satisfaction).  We exploit this:
+
+    g  :=  relu(trigger_1) * ... * relu(trigger_M) * relu(constraint)   ( >= 0 )
+
+so that ``Square(PositivePart(g)) = relu(trigger_1)^2 * ... * relu(constraint)^2``.
+
+This is exactly the notebook's compound penalty (notebook cell 39, state ``x[14]``):
+the constraint only contributes a penalty when *every* trigger is active AND the
+constraint is violated.  An ``OR`` over triggers is encoded as a *sum* of such
+product terms (matching ``spd_stc_trig_i + theta_stc_trig_i`` in the notebook).
+
+Compound state-triggered constraints (notebook cell 16 / cell 39)
+-----------------------------------------------------------------
+    h < 100 m                       → tight gimbal, tilt, glideslope
+    h < 110 m  (alpha-tightened)    → tight angular-rate and speed
+    h < 200 m  (220 m alpha) & h>2  → LOS boresight cone toward the pad
+    ||v|| < 35 m/s  AND  tilt < 60° → single-engine thrust limits
+    ||v|| > 35 m/s  OR   tilt > 60° → three-engine thrust limits
 
 Reference: CT-cSTC/CT-cSTC.ipynb
 
@@ -50,7 +66,7 @@ from openscvx.plotting.viser.animated import (
     _sensor_pose_in_world,
 )
 
-# ── Physical parameters (notebook cell 16) ───────────────────────────────────
+# ── Physical parameters (notebook cell 16 / cell 33) ──────────────────────────
 G0  = 9.806    # m/s²
 ISP = 330.0    # s
 M_WET = 100_000.0   # kg
@@ -82,8 +98,20 @@ DELTA_BORESIGHT_MAX_DEG = 20.0
 
 # State constraint limits
 THETA_MAX_DEG   = 90.0              # max tilt from vertical
-W_B_MAX_RAD_S   = np.pi/2  # max angular rate
+W_B_MAX_RAD_S   = np.pi/2          # max angular rate
 GS_MAX_DEG      = 90.0 - 35.0      # glideslope cone half-angle from horizontal = 55°
+
+# cSTC trigger thresholds (notebook cell 16)
+ALT_TRIGGER_H1_M = 100.0   # h < 100 m  → tight gimbal / tilt / glideslope
+ALT_TRIGGER_H2_M = 200.0   # h < 200 m  → LOS boresight cone
+ALT_DONE_M       = 2.0     # h > 2 m    → finalizer (disable cone near touchdown)
+SPD_STC_TRIG     = 35.0    # m/s        → speed trigger for single/multi-engine
+THETA_STC_TRIG   = 60.0    # deg        → tilt trigger for single/multi-engine
+
+# Trigger alpha-tightening factors (notebook cell 16/33)
+_ALPHA_ALT       = 1.1     # altitude trigger tightening
+_ALPHA_ALT_LOS   = 1.1
+_ALPHA_T_MIN     = 1.02
 
 # cSTC constraint alpha-scaling factors (notebook cell 16)
 _ALPHA_SPD   = 0.95
@@ -119,7 +147,23 @@ C_AERO_DIAG = np.array([0.4068, 0.4068, 0.0522])
 R_CM = np.array([ 0.0,  0.0, -14.0])
 R_CP = np.array([ 0.0,  0.0,   3.0])
 
-# ── Scaling (notebook cell 18) ────────────────────────────────────────────────
+# ── STC penalty weights ───────────────────────────────────────────────────────
+# Applied *inside* the CTCS argument; because CTCS squares the argument the
+# effective penalty weight is W**2.  The relative magnitudes mirror the
+# notebook's hand-tuned emphasis (notebook cell 33 ``w_stc_*``), with the
+# geometric line-of-sight / glideslope and the engine-count selection getting
+# the strongest pull (these are the hardest to enforce).  The outer
+# constraint-violation weight (``lam_vc``, ramped by the AugmentedLagrangian
+# autotuner) plays the role of the notebook's ``w_con_dyn``.
+W_GIMBAL = 60.0
+W_TILT   = 120.0
+W_OMEGA  = 60.0
+W_SPD    = 120.0
+W_GS     = 250.0
+W_LOS    = 400.0
+W_THR    = 400.0
+
+# ── Scaling (notebook cell 18 / cell 37) ──────────────────────────────────────
 R_SCALE = np.linalg.norm(R_I_INIT)   # ≈ 574.46 m
 M_SCALE = M_WET
 
@@ -132,7 +176,7 @@ _J_B_inv_s = J_B_INV_DIAG * R_SCALE**2
 _rho_s     = RHO_AIR / (M_SCALE * R_SCALE) * R_SCALE**2   # = RHO_AIR * R_SCALE / M_SCALE
 
 _T_max_s     = T_MAX     / (M_SCALE * R_SCALE)
-_T_min_s     = T_MIN     / (M_SCALE * R_SCALE)  # noqa: F841
+_T_min_s     = T_MIN     / (M_SCALE * R_SCALE)
 _T_max_aft_s = T_MAX_AFT / (M_SCALE * R_SCALE)
 _T_min_aft_s = T_MIN_AFT / (M_SCALE * R_SCALE)
 
@@ -147,28 +191,30 @@ _v_stc_s   = V_STC_CONS / R_SCALE
 # ── Precomputed constraint thresholds ─────────────────────────────────────────
 def _tilt_sq_bound(theta_deg: float) -> float:
     """Squared quaternion tilt bound: ||[q_x, q_y]||² ≤ (1-cos θ)/2."""
-    return (1.0 - np.cos(np.pi/180 * (theta_deg))) / 2.0
+    return (1.0 - np.cos(np.pi/180 * theta_deg)) / 2.0
 
 
-_tilt_sq_max    = _tilt_sq_bound(THETA_MAX_DEG)   # 0.5
-_tilt_sq_stc    = _tilt_sq_bound(THETA_STC_DEG)
-_tan_gs_max     = np.tan(np.pi/180 * (GS_MAX_DEG))
-_tan_gs_stc     = np.tan(np.pi/180 * (GS_STC_DEG))
-_cos_psi_stc    = np.cos(np.pi/180 * (LOS_STC_DEG))
-_delta_stc_rad  = np.pi/180 * (DELTA_STC_DEG)
+_tilt_sq_max    = _tilt_sq_bound(THETA_MAX_DEG)    # 0.5
+_tilt_sq_stc    = _tilt_sq_bound(THETA_STC_DEG)    # tight tilt (≈4.6°)
+_tilt_sq_trig   = _tilt_sq_bound(THETA_STC_TRIG)   # tilt trigger (60° → 0.25)
+_tan_gs_max     = np.tan(np.pi/180 * GS_MAX_DEG)
+_tan_gs_stc     = np.tan(np.pi/180 * GS_STC_DEG)
+_cos_psi_stc    = np.cos(np.pi/180 * LOS_STC_DEG)
+_delta_stc_rad  = np.pi/180 * DELTA_STC_DEG
 _omega_sq_stc   = OMEGA_STC_RAD_S**2
 
-# ── cSTC trigger node intervals (from linear initialization) ──────────────────
-# h_k = 500·(1 − k/14) m,  v_k = 50 − 45k/14 m/s,  θ_k = 90·(1 − k/14)°
-# k_h1 = 12 : h_12 ≈ 71 m < 100 m  (h_11 ≈ 107 m)
-# k_h2 =  9 : h_9 ≈ 179 m < 200 m  (h_8  ≈ 214 m)
-# k_aft =  5 : v_5 ≈ 33.9 m/s < 35  AND  θ_5 ≈ 57.9° < 60°
+# Scaled altitude / speed trigger thresholds
+_alt_h1_s     = ALT_TRIGGER_H1_M / R_SCALE
+_alt_h1a_s    = _ALPHA_ALT * ALT_TRIGGER_H1_M / R_SCALE
+_alt_h2a_s    = _ALPHA_ALT_LOS * ALT_TRIGGER_H2_M / R_SCALE
+_alt_done_s   = ALT_DONE_M / R_SCALE
+_spd_trig_s   = SPD_STC_TRIG / R_SCALE
+
+# Visualization-only nominal trigger nodes (overwritten by actual crossings)
 N     = 15
 K_H1  = 12
 K_H2  =  9
 K_AFT =  5
-ALT_TRIGGER_H1_M = 100.0   # h < 100 m → tight terminal phase (nodes K_H1…N-1)
-ALT_TRIGGER_H2_M = 200.0   # h < 200 m → LOS boresight phase (nodes K_H2…N-1)
 
 # ── States ────────────────────────────────────────────────────────────────────
 mass = ox.State("mass", shape=(1,))
@@ -231,7 +277,7 @@ los_az.max   = [ np.pi]
 los_az.min   = [-np.pi]
 los_az.guess = np.zeros((N, 1))
 
-# ── State & Control ───────────────────────────────────────────────────────────────────
+# ── State & Control ───────────────────────────────────────────────────────────
 states   = [mass, position, velocity, attitude, angular_velocity]
 controls = [thrust_mag, gimbal_elev, gimbal_az, los_elev, los_az]
 
@@ -239,7 +285,7 @@ controls = [thrust_mag, gimbal_elev, gimbal_az, los_elev, los_az]
 # OpenSCvx convention: attitude = [q_x, q_y, q_z, q_w]
 q1, q2, q3, q4 = attitude[0], attitude[1], attitude[2], attitude[3]
 
-# CBI: inertial→body DCM  (CBI.T is body→inertial, same convention as 6DoF_pdg.py)
+# CBI: inertial→body DCM  (CBI.T is body→inertial)
 CBI = ox.Block(
     [
         [q4**2 + q1**2 - q2**2 - q3**2, 2*(q1*q2 - q4*q3), 2*(q4*q2 + q1*q3)],
@@ -305,8 +351,9 @@ dynamics = {
 # Tilt: ||[q_x, q_y]||²  (matches notebook's ||[x[8], x[9]]||² in [w,x,y,z] ordering)
 tilt_sq   = attitude[0]**2 + attitude[1]**2
 r_xy_norm = ox.linalg.Norm(position[0:2])
-v_sq      = ox.linalg.Norm(velocity)**2
+speed     = ox.linalg.Norm(velocity)
 omega_sq  = ox.linalg.Norm(angular_velocity)**2
+z_alt     = position[2]
 
 # LOS boresight in inertial frame via body→inertial rotation
 db = los_elev[0]
@@ -317,71 +364,100 @@ los_B = ox.Concat(
     ox.Cos(db),
 )
 los_I = CBI.T @ los_B   # unit-norm boresight in inertial frame
+r_dot_los = (position[0] * los_I[0]
+             + position[1] * los_I[1]
+             + position[2] * los_I[2])
+
+
+# ── State-triggered-constraint helper ─────────────────────────────────────────
+def relu(expr):
+    """Smooth-free positive part (max(expr, 0)); same primitive CTCS uses."""
+    return ox.Max(expr, 0)
+
+
+def stc(*factors, weight: float = 1.0):
+    """Compound state-triggered constraint as a single CTCS term.
+
+    ``factors`` are the relu(trigger)/relu(constraint) expressions whose product
+    forms the penalty.  Because the product is non-negative, the CTCS penalty
+    ``Square(PositivePart(weight * prod))`` evaluates to
+    ``weight^2 * prod_i relu(factor_i)^2`` — the notebook's compound STC penalty.
+    All such terms share one augmented state (nodes=None), exactly mirroring the
+    notebook's single CTCS accumulator (state x[14]).
+    """
+    prod = factors[0]
+    for f in factors[1:]:
+        prod = prod * f
+    return ox.ctcs((weight * prod) <= 0)
+
+
+# ── Trigger indicators (relu, > 0 when active) ────────────────────────────────
+T_alt100 = relu(_alt_h1_s  - z_alt)            # h < 100 m
+T_alt110 = relu(_alt_h1a_s - z_alt)            # h < 110 m (alpha-tightened)
+T_alt220 = relu(_alt_h2a_s - z_alt)            # h < 220 m (LOS, alpha)
+T_altgt2 = relu(z_alt - _alt_done_s)           # h >   2 m (finalizer)
+T_vlt35  = relu(_spd_trig_s - speed)           # ||v|| < 35 m/s
+T_vgt35  = relu(speed - _spd_trig_s)           # ||v|| > 35 m/s
+T_tlt60  = relu(_tilt_sq_trig - tilt_sq)       # tilt < 60°
+T_tgt60  = relu(tilt_sq - _tilt_sq_trig)       # tilt > 60°
+
+# ── Constraint violations (relu, > 0 when violated) ───────────────────────────
+C_gimbal_p = relu( de - _delta_stc_rad)                 # δ_e ≤ +1°
+C_gimbal_n = relu(-de - _delta_stc_rad)                 # δ_e ≥ −1°
+C_gs_stc   = relu(r_xy_norm * _tan_gs_stc - z_alt)      # tight glideslope
+C_omega    = relu(omega_sq - _omega_sq_stc)             # tight angular rate
+C_tilt     = relu(tilt_sq - _tilt_sq_stc)               # tight tilt
+C_spd      = relu(speed - _v_stc_s)                     # tight speed
+C_los      = relu(ox.linalg.Norm(position) * _cos_psi_stc - r_dot_los)  # LOS cone
+C_Tmin_f   = relu(_T_min_aft_s - T)                     # single-engine min
+C_Tmax_f   = relu(T - _T_max_aft_s)                     # single-engine max
+C_Tmin_i   = relu(_ALPHA_T_MIN * _T_min_s - T)          # three-engine min
+C_Tmax_i   = relu(T - _T_max_s)                         # three-engine max
 
 # ── Constraints ───────────────────────────────────────────────────────────────
 constraints = []
 
 # Boundary conditions (convex equality constraints)
-constraints.append((position        == _r_init_s).convex().at([0]))
-constraints.append((attitude        == Q_INIT).convex().at([0]))
-constraints.append((velocity        == _v_init_s).convex().at([0]))
+constraints.append((position         == _r_init_s).convex().at([0]))
+constraints.append((attitude         == Q_INIT).convex().at([0]))
+constraints.append((velocity         == _v_init_s).convex().at([0]))
 constraints.append((angular_velocity == W_INIT).convex().at([0]))
-constraints.append((position        == R_I_FINAL).convex().at([N - 1]))
-constraints.append((velocity        == _v_final_s).convex().at([N - 1]))
-constraints.append((attitude        == Q_FINAL).convex().at([N - 1]))
+constraints.append((position         == R_I_FINAL).convex().at([N - 1]))
+constraints.append((velocity         == _v_final_s).convex().at([N - 1]))
+constraints.append((attitude         == Q_FINAL).convex().at([N - 1]))
 constraints.append((angular_velocity == W_FINAL).convex().at([N - 1]))
 
 # ── Always-on CTCS (entire trajectory) ────────────────────────────────────────
-# Tilt angle: ||[q_x, q_y]||² ≤ (1−cos θ_max)/2
-constraints.append(ox.ctcs(tilt_sq - _tilt_sq_max <= 0))
+constraints.append(ox.ctcs(tilt_sq - _tilt_sq_max <= 0))                 # tilt ≤ 90°
+constraints.append(ox.ctcs(omega_sq - W_B_MAX_RAD_S**2 <= 0))            # angular rate
+constraints.append(ox.ctcs(r_xy_norm * _tan_gs_max - z_alt <= 0))        # glideslope 55°
+constraints.append(ox.ctcs(_m_dry_s - mass[0] <= 0))                     # dry-mass floor
 
-# Angular rate
-constraints.append(ox.ctcs(omega_sq - W_B_MAX_RAD_S**2 <= 0))
+# ── Compound state-triggered constraints (notebook cell 39) ───────────────────
+# h < 100 m → tight gimbal deflection (|δ_e| ≤ 1°)
+constraints.append(stc(T_alt100, C_gimbal_p, weight=W_GIMBAL))
+constraints.append(stc(T_alt100, C_gimbal_n, weight=W_GIMBAL))
+# h < 100 m AND h > 2 m → tight glideslope cone
+constraints.append(stc(T_alt100, T_altgt2, C_gs_stc, weight=W_GS))
+# h < 100 m → tight tilt
+constraints.append(stc(T_alt100, C_tilt, weight=W_TILT))
+# h < 110 m → tight angular rate and tight speed
+constraints.append(stc(T_alt110, C_omega, weight=W_OMEGA))
+constraints.append(stc(T_alt110, C_spd,   weight=W_SPD))
+# h < 220 m AND h > 2 m → LOS boresight cone toward the landing pad
+constraints.append(stc(T_alt220, T_altgt2, C_los, weight=W_LOS))
 
-# Glideslope cone: ||r_xy|| · tan(γ_max) ≤ z
-constraints.append(ox.ctcs(r_xy_norm * _tan_gs_max - position[2] <= 0))
-
-# Minimum dry mass
-constraints.append(ox.ctcs(_m_dry_s - mass[0] <= 0))
-
-# ── Phase 1: h < 100 m — tight constraints (nodes 12–14) ─────────────────────
-# Scaled altitude trigger constraints
-constraints.append((position[2] == ALT_TRIGGER_H1_M / R_SCALE).convex().at(K_H1))
-
-constraints.append(ox.ctcs(gimbal_elev[0] - _delta_stc_rad <= 0, penalty="squared_relu").over((K_H1, N - 1)))
-constraints.append(ox.ctcs(-gimbal_elev[0] - _delta_stc_rad <= 0, penalty="squared_relu").over((K_H1, N - 1)))
-constraints.append(ox.ctcs(tilt_sq - _tilt_sq_stc <= 0, penalty="squared_relu").over((K_H1, N - 1)))
-constraints.append(ox.ctcs(omega_sq - _omega_sq_stc <= 0, penalty="squared_relu").over((K_H1, N - 1)))
-constraints.append(ox.ctcs(ox.linalg.Norm(velocity) <= _v_stc_s, penalty="squared_relu").over((K_H1, N - 1)))
-# constraints.append(ox.ctcs(v_sq - _v_stc_s**2 <= 0, penalty="squared_relu").over((K_H1, N - 1)))
-constraints.append(ox.ctcs(r_xy_norm * _tan_gs_stc - position[2] <= 0, penalty="squared_relu").over((K_H1, N - 1)))
-constraints.append((thrust_mag[0] <= _T_max_s).at(np.arange(0, K_AFT)).convex())
-constraints.append((thrust_mag[0] >= _T_min_s).at(np.arange(0, K_AFT)).convex())
-
-
-
-# ── Phase 2: h < 200 m — LOS boresight (nodes 9–14) ─────────────────────────
-# Scaled altitude trigger constraints
-_v_stc_s_for = 40.0 / R_SCALE
-constraints.append(ox.ctcs(ox.linalg.Norm(velocity) <= _v_stc_s_for, penalty="squared_relu").over((K_H2, K_H1)))
-constraints.append((position[2] == ALT_TRIGGER_H2_M / R_SCALE).convex().at(K_H2))
-
-# Angle between position vector and LOS ≤ ψ_stc:
-#   r_I · los_I ≥ ||r_I|| · cos(ψ_stc)  →  ||r_I|| · cos_psi − r·los ≤ 0
-r_dot_los = (position[0] * los_I[0]
-             + position[1] * los_I[1]
-             + position[2] * los_I[2])
-constraints.append(
-    ox.ctcs(ox.linalg.Norm(position) * _cos_psi_stc - r_dot_los <= 0, penalty="squared_relu").over((K_H2, N - 1))
-)
-
-# ── Aft phase: slow + upright — single-engine limit (nodes 5–14) ─────────────
-constraints.append((thrust_mag[0] <= _T_max_aft_s).at(np.arange(K_AFT, N - 1)).convex())
-constraints.append((thrust_mag[0] >= _T_min_aft_s).at(np.arange(K_AFT, N - 1)).convex())
+# ||v|| < 35 m/s AND tilt < 60° → single-engine thrust limits
+constraints.append(stc(T_vlt35, T_tlt60, C_Tmax_f, weight=W_THR))
+constraints.append(stc(T_vlt35, T_tlt60, C_Tmin_f, weight=W_THR))
+# ||v|| > 35 m/s OR tilt > 60° → three-engine thrust limits (OR = sum of products)
+constraints.append(stc(T_vgt35, C_Tmax_i, weight=W_THR))
+constraints.append(stc(T_vgt35, C_Tmin_i, weight=W_THR))
+constraints.append(stc(T_tgt60, C_Tmax_i, weight=W_THR))
+constraints.append(stc(T_tgt60, C_Tmin_i, weight=W_THR))
 
 # ── Time (free final time with per-segment dilation) ─────────────────────────
 _t_f_guess = 21.0
-_t_scp     = _t_f_guess / (N - 1)   # ≈ 1.5 s per segment
 
 time = ox.Time(
     initial=0.0,
@@ -390,8 +466,7 @@ time = ox.Time(
     max=_t_f_guess * 2.0,
 )
 
-# ── Problem Assembly ───────────────────────────────────────────────────────────────────
-
+# ── Problem Assembly ──────────────────────────────────────────────────────────
 problem = Problem(
     N=N,
     states=states,
@@ -401,21 +476,24 @@ problem = Problem(
     time=time,
     float_dtype="float64",
     algorithm={
-        # "autotuner": ox.AugmentedLagrangian(eta_lambda=1E3, gamma_1=2.0, gamma_2=0.1),
-        # "lam_vc": 1E2,
-        # "lam_prox": 1E-1,
-        "k_max": 1000,
+        # A high *constant* constraint-violation weight (lam_vc) plays the role
+        # of the notebook's w_con_dyn, driving the integrated STC penalty to
+        # zero.  PTR (the default acceptance-ratio loop) keeps the SCP stable;
+        # the adaptive AugmentedLagrangian was found to overshoot and diverge.
+        "lam_vc": 2e0,
+        "lam_cost": 1e-2,
+        "k_max": 800,
+        "autotuner": ox.ConstantProximalWeight(),
     },
 )
 
 # ── Viser display parameters ──────────────────────────────────────────────────
 # cSTC uses ENU inertial frame (x, y horizontal; z = altitude). Viser is Z-up,
-# so positions map directly without the (z, y, x) swap used by the toy 6DoF_pdg
-# example where altitude lives on model x.
-SCENE_SCALE = 10.0          # 1 viser unit = 100 m
+# so positions map directly without any axis permutation.
+SCENE_SCALE = 10.0          # 1 viser unit = 10 m
 PLUME_SCALE = 8.0
 ATTITUDE_AXES_LENGTH = 2.0
-VIEWCONE_SCALE = 4.0          # viser units (~40 m at SCENE_SCALE=10)
+VIEWCONE_SCALE = 4.0
 _VISER_UP_AXIS = (0.0, 0.0, 1.0)
 GS_HALFANGLE_DEG = 90.0 - GS_MAX_DEG
 GS_STC_HALFANGLE_DEG = 90.0 - GS_STC_DEG
@@ -469,20 +547,10 @@ def add_cstc_altitude_triggers(
     radius = max(xy_extent * 1.25, 2.0)
 
     triggers = [
-        (
-            ALT_TRIGGER_H2_M,
-            (80, 160, 255),
-            K_H2,
-            "LOS boresight cone",
-        ),
-        (
-            ALT_TRIGGER_H1_M,
-            (255, 80, 80),
-            K_H1,
-            "tight gimbal / tilt / ω / speed / GS",
-        ),
+        (ALT_TRIGGER_H2_M, (80, 160, 255), "h < 200 m → LOS boresight cone"),
+        (ALT_TRIGGER_H1_M, (255, 80, 80),  "h < 100 m → tight gimbal/tilt/ω/speed/GS"),
     ]
-    for alt_m, color, k_start, description in triggers:
+    for alt_m, color, description in triggers:
         z = alt_m / scene_scale_m
         center = np.array([0.0, 0.0, z], dtype=np.float32)
         verts, faces = _horizontal_disc_mesh(center, radius)
@@ -508,11 +576,10 @@ def add_cstc_altitude_triggers(
 
         server.scene.add_label(
             f"/cstc_triggers/alt_{int(alt_m)}_label",
-            text=f"h < {int(alt_m)} m → k≥{k_start}: {description}",
+            text=description,
             position=(radius * 0.85, 0.0, z + 0.05),
         )
 
-        # Vertical guide from landing pad to the trigger plane (shows altitude level)
         server.scene.add_line_segments(
             f"/cstc_triggers/alt_{int(alt_m)}_stem",
             points=np.array([[[-radius * 0.95, 0.0, 0.0], [-radius * 0.95, 0.0, z]]], dtype=np.float32),
@@ -564,12 +631,7 @@ def prepare_for_viser(result) -> None:
 
 
 def _los_body_to_sensor(de: float, pe: float) -> np.ndarray:
-    """Body-to-sensor DCM for los_elev/los_az spherical gimbal (neutral = identity).
-
-    Matches the model's ``los_B = [sin δ cos φ, sin δ sin φ, cos δ]`` with azimuth
-    about body +Z and elevation from body +Z. At δ=φ=0 the sensor frame equals the
-    body frame so pitch/roll track the gimbal controls without a hidden 90° offset.
-    """
+    """Body-to-sensor DCM for los_elev/los_az spherical gimbal (neutral = identity)."""
     los_b = np.array(
         [np.sin(de) * np.cos(pe), np.sin(de) * np.sin(pe), np.cos(de)],
         dtype=np.float64,
@@ -598,8 +660,6 @@ def add_cstc_los_viewcone(server, result):
     base_vertices = _generate_viewcone_vertices(
         half_angle, half_angle, VIEWCONE_SCALE, norm_type=2
     )
-    # Open along −Z so the frustum points at the landing pad (origin); sensor +Z is
-    # the model boresight and the gimbal frame is aligned at δ=φ=0 (see above).
     base_vertices = base_vertices.copy()
     base_vertices[1:, 2] *= -1.0
     n_base = len(base_vertices) - 1
@@ -634,10 +694,31 @@ def add_cstc_los_viewcone(server, result):
     return frame, update
 
 
+def _node_trigger_indices(nodes) -> tuple[int, int, int]:
+    """Compute the (k_h1, k_h2, k_aft) node indices where triggers first activate."""
+    pos_m = np.asarray(nodes["position"]) * R_SCALE
+    vel_ms = np.asarray(nodes["velocity"]) * R_SCALE
+    q = np.asarray(nodes["attitude"])
+    alt = pos_m[:, 2]
+    spd = np.linalg.norm(vel_ms, axis=1)
+    tilt_deg = np.degrees(np.arccos(np.clip(1 - 2 * (q[:, 0] ** 2 + q[:, 1] ** 2), -1.0, 1.0)))
+
+    def _first(mask, fallback):
+        idx = np.argmax(mask) if mask.any() else None
+        return int(idx) if idx is not None else fallback
+
+    k_h1 = _first(alt < ALT_TRIGGER_H1_M, K_H1)
+    k_h2 = _first(alt < ALT_TRIGGER_H2_M, K_H2)
+    k_aft = _first((spd < SPD_STC_TRIG) & (tilt_deg < THETA_STC_TRIG), K_AFT)
+    return k_h1, k_h2, k_aft
+
+
 def launch_viser_servers(result) -> None:
     """Create trajectory, SCP convergence, and snapshot viser servers."""
     pos = np.asarray(result.trajectory["position"])
     initial_alt_vis = float(np.max(pos[:, 2])) * 1.15
+
+    k_h1, k_h2, k_aft = _node_trigger_indices(result.nodes)
 
     handle = create_animated_plotting_server(
         result,
@@ -692,10 +773,11 @@ def launch_viser_servers(result) -> None:
     )
 
     for k, color in [
-        (K_AFT, (255, 210, 50)),
-        (K_H2, (80, 160, 255)),
-        (K_H1, (255, 80, 80)),
+        (k_aft, (255, 210, 50)),
+        (k_h2, (80, 160, 255)),
+        (k_h1, (255, 80, 80)),
     ]:
+        k = int(np.clip(k, 0, len(pos) - 1))
         traj_server.scene.add_icosphere(
             f"/phase_markers/k{k}",
             radius=0.14,
@@ -707,10 +789,10 @@ def launch_viser_servers(result) -> None:
         traj_server.gui.add_markdown(
             f"**Phase structure (N={N} nodes)**\n\n"
             f"**Altitude triggers** (horizontal discs):\n"
-            f"- 🔵 h < {int(ALT_TRIGGER_H2_M)} m → k≥{K_H2}: LOS boresight viewcone  \n"
-            f"- 🔴 h < {int(ALT_TRIGGER_H1_M)} m → k≥{K_H1}: tight terminal  \n\n"
-            f"**Other trigger** (node marker only):\n"
-            f"- 🟡 k={K_AFT}: single-engine thrust (v & tilt, not altitude)  \n"
+            f"- 🔵 h < {int(ALT_TRIGGER_H2_M)} m → k≈{k_h2}: LOS boresight viewcone  \n"
+            f"- 🔴 h < {int(ALT_TRIGGER_H1_M)} m → k≈{k_h1}: tight terminal  \n\n"
+            f"**Speed ∧ tilt trigger** (node marker only):\n"
+            f"- 🟡 k≈{k_aft}: single-engine thrust (||v||<35 ∧ θ<60°)  \n"
         )
 
     scp_server = create_scp_animated_plotting_server(
@@ -736,9 +818,6 @@ def launch_viser_servers(result) -> None:
     add_cstc_altitude_triggers(snap_server, pos, scene_scale_m=SCENE_SCALE)
 
     traj_server.sleep_forever()
-
-
-SPD_STC_TRIG = 35.0  # m/s — speed trigger threshold for the AFT phase (notebook cell 16)
 
 
 def _cbi_transpose(q_xyzw: np.ndarray) -> np.ndarray:
@@ -783,20 +862,12 @@ def _save_plotly_figure(fig, basename: str) -> None:
         print(f"  Skipped PNG/PDF for {basename} ({exc}); install kaleido for static export.")
 
 
-def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc") -> tuple:
+def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc_stc") -> tuple:
     """Generate state/control panel and 3-D trajectory plots matching CT-cSTC notebook.
 
-    Produces two figures:
-      1. 9-panel state/control history (rl_oth equivalent)
-      2. 3-D trajectory coloured by speed       (rl_pos equivalent)
-
-    Args:
-        result: OptimizationResults from problem.post_process() — must have t_full set.
-        show:   Whether to open interactive Plotly figures in the browser.
-        save_prefix: Base name for saved HTML/PNG/PDF files.  Pass '' to skip saving.
-
-    Returns:
-        (fig_panel, fig_3d) — plotly.graph_objects.Figure instances
+    Trigger times are computed from where the actual trajectory first crosses each
+    trigger threshold, so the tightened bounds (drawn after the trigger) reflect
+    the *real* state-triggered behaviour rather than fixed node intervals.
     """
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
@@ -805,80 +876,85 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc") -
 
     # ── Dense propagated trajectory (scaled) ──────────────────────────────────
     traj   = result.trajectory
-    pos_s  = np.asarray(traj["position"])                    # (T, 3)
-    vel_s  = np.asarray(traj["velocity"])                    # (T, 3)
-    m_s    = np.asarray(traj["mass"]).flatten()              # (T,)
-    q      = np.asarray(traj["attitude"])                    # (T, 4) xyzw
-    w      = np.asarray(traj["angular_velocity"])            # (T, 3) rad/s
-    T_s    = np.asarray(traj["thrust_mag"]).flatten()        # (T,) scaled
-    d_e    = np.asarray(traj["gimbal_elev"]).flatten()       # (T,) rad
-    d_b    = np.asarray(traj["los_elev"]).flatten()          # (T,) rad
-    phi_b  = np.asarray(traj["los_az"]).flatten()            # (T,) rad
-    t_full = np.asarray(traj["time"]).flatten()              # (T,) s
+    pos_s  = np.asarray(traj["position"])
+    vel_s  = np.asarray(traj["velocity"])
+    m_s    = np.asarray(traj["mass"]).flatten()
+    q      = np.asarray(traj["attitude"])
+    w      = np.asarray(traj["angular_velocity"])
+    T_s    = np.asarray(traj["thrust_mag"]).flatten()
+    d_e    = np.asarray(traj["gimbal_elev"]).flatten()
+    d_b    = np.asarray(traj["los_elev"]).flatten()
+    phi_b  = np.asarray(traj["los_az"]).flatten()
+    t_full = np.asarray(traj["time"]).flatten()
 
     # ── Node-level data (for scatter) ─────────────────────────────────────────
     nodes   = result.nodes
-    pos_n_s = np.asarray(nodes["position"])                  # (N, 3)
-    vel_n_s = np.asarray(nodes["velocity"])                  # (N, 3)
-    m_n_s   = np.asarray(nodes["mass"]).flatten()            # (N,)
-    q_n     = np.asarray(nodes["attitude"])                  # (N, 4)
-    w_n     = np.asarray(nodes["angular_velocity"])          # (N, 3)
-    T_n_s   = np.asarray(nodes["thrust_mag"]).flatten()      # (N,)
-    d_e_n   = np.asarray(nodes["gimbal_elev"]).flatten()     # (N,)
-    d_b_n   = np.asarray(nodes["los_elev"]).flatten()        # (N,)
-    phi_b_n = np.asarray(nodes["los_az"]).flatten()          # (N,)
+    pos_n_s = np.asarray(nodes["position"])
+    vel_n_s = np.asarray(nodes["velocity"])
+    m_n_s   = np.asarray(nodes["mass"]).flatten()
+    q_n     = np.asarray(nodes["attitude"])
+    w_n     = np.asarray(nodes["angular_velocity"])
+    T_n_s   = np.asarray(nodes["thrust_mag"]).flatten()
+    d_e_n   = np.asarray(nodes["gimbal_elev"]).flatten()
+    d_b_n   = np.asarray(nodes["los_elev"]).flatten()
+    phi_b_n = np.asarray(nodes["los_az"]).flatten()
 
-    t_nodes = np.asarray(nodes["time"]).flatten()            # (N,) s
-    t_final = float(t_nodes[-1])
+    t_nodes = np.asarray(nodes["time"]).flatten()
 
     # ── Unscale to physical units ─────────────────────────────────────────────
-    pos   = pos_s   * R_SCALE                                # (T, 3) m
-    vel   = vel_s   * R_SCALE                                # (T, 3) m/s
-    m     = m_s     * M_SCALE                                # (T,) kg
-    T_N   = T_s     * M_SCALE * R_SCALE                     # (T,) N
+    pos   = pos_s   * R_SCALE
+    vel   = vel_s   * R_SCALE
+    m     = m_s     * M_SCALE
+    T_N   = T_s     * M_SCALE * R_SCALE
 
-    pos_n = pos_n_s * R_SCALE                                # (N, 3) m
-    vel_n = vel_n_s * R_SCALE                                # (N, 3) m/s
-    m_n   = m_n_s   * M_SCALE                                # (N,) kg
-    T_n_N = T_n_s   * M_SCALE * R_SCALE                     # (N,) N
+    pos_n = pos_n_s * R_SCALE
+    vel_n = vel_n_s * R_SCALE
+    m_n   = m_n_s   * M_SCALE
+    T_n_N = T_n_s   * M_SCALE * R_SCALE
 
     # ── Derived quantities ────────────────────────────────────────────────────
-    speed   = np.linalg.norm(vel,   axis=1)
+    speed_d   = np.linalg.norm(vel,   axis=1)
     speed_n = np.linalg.norm(vel_n, axis=1)
 
-    # Tilt (deg): from quaternion [qx, qy, qz, qw] → θ = arccos(1 − 2(qx²+qy²))
     tilt_deg   = np.degrees(np.arccos(np.clip(1 - 2*(q[:,0]**2   + q[:,1]**2),   -1.0, 1.0)))
     tilt_deg_n = np.degrees(np.arccos(np.clip(1 - 2*(q_n[:,0]**2 + q_n[:,1]**2), -1.0, 1.0)))
 
-    # Angular velocity magnitude (deg/s)
     omega_dps   = np.degrees(np.linalg.norm(w,   axis=1))
     omega_dps_n = np.degrees(np.linalg.norm(w_n, axis=1))
 
-    # Glideslope (deg): 90 − arctan2(z, r_xy) — angle from vertical
     r_xy   = np.linalg.norm(pos[:,   :2], axis=1)
     r_xy_n = np.linalg.norm(pos_n[:, :2], axis=1)
     gs_deg   = 90.0 - np.degrees(np.arctan2(pos[:,   2], r_xy   + 1e-8))
     gs_deg_n = 90.0 - np.degrees(np.arctan2(pos_n[:, 2], r_xy_n + 1e-8))
 
-    # LOS angle (deg)
     los_ang   = _compute_los_angle(pos,   q,   d_b,   phi_b)
     los_ang_n = _compute_los_angle(pos_n, q_n, d_b_n, phi_b_n)
 
-    # ── Trigger times (from cSTC node indices) ────────────────────────────────
-    t_h1  = t_nodes[K_H1]    # tight terminal phase starts
-    t_h2  = t_nodes[K_H2]    # LOS boresight constraint starts
-    t_aft = t_nodes[K_AFT]   # single-engine AFT phase starts
-    t_end = t_nodes[-1]
+    # ── Trigger times from actual trajectory crossings ────────────────────────
+    alt_d = pos[:, 2]
+
+    def _first_time(mask):
+        if mask.any():
+            return float(t_full[int(np.argmax(mask))])
+        return float(t_full[-1])
+
+    t_h1  = _first_time(alt_d < ALT_TRIGGER_H1_M)
+    t_h2  = _first_time(alt_d < ALT_TRIGGER_H2_M)
+    t_aft = _first_time((speed_d < SPD_STC_TRIG) & (tilt_deg < THETA_STC_TRIG))
+    t_end = float(t_nodes[-1])
+
+    print(f"  Trigger times:  h<100m @ {t_h1:.2f}s   h<200m @ {t_h2:.2f}s   "
+          f"(v<35 & θ<60) @ {t_aft:.2f}s")
 
     # ── Colour palette (matches notebook) ────────────────────────────────────
-    c_up   = "green"
-    c_low  = "purple"
     c_node = "black"
     c_plt  = "blue"
     c_h1   = "red"
     c_h2   = "orange"
     c_aft  = "lightseagreen"
     c_spd  = "burlywood"
+    c_up   = "green"
+    c_low  = "purple"
 
     legend_seen: set[str] = set()
 
@@ -891,63 +967,38 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc") -
     def _seg(fig, x0, x1, y, *, row, col, color, dash="dash", name=None):
         fig.add_trace(
             go.Scatter(
-                x=[x0, x1],
-                y=[y, y],
-                mode="lines",
+                x=[x0, x1], y=[y, y], mode="lines",
                 line={"color": color, "dash": dash, "width": 1.5},
-                name=name,
-                showlegend=_show(name) if name else False,
-                legendgroup=name,
+                name=name, showlegend=_show(name) if name else False, legendgroup=name,
             ),
-            row=row,
-            col=col,
+            row=row, col=col,
         )
 
     def _line(fig, x, y, *, row, col, color, name=None, width=2):
         fig.add_trace(
             go.Scatter(
-                x=x,
-                y=y,
-                mode="lines",
+                x=x, y=y, mode="lines",
                 line={"color": color, "width": width},
-                name=name,
-                showlegend=_show(name) if name else False,
-                legendgroup=name,
+                name=name, showlegend=_show(name) if name else False, legendgroup=name,
             ),
-            row=row,
-            col=col,
+            row=row, col=col,
         )
 
     def _nodes(fig, x, y, *, row, col, name="Node point"):
         fig.add_trace(
             go.Scatter(
-                x=x,
-                y=y,
-                mode="markers",
+                x=x, y=y, mode="markers",
                 marker={"color": c_node, "size": 7},
-                name=name,
-                showlegend=_show(name),
-                legendgroup=name,
+                name=name, showlegend=_show(name), legendgroup=name,
             ),
-            row=row,
-            col=col,
+            row=row, col=col,
         )
 
     def _vline(fig, x, *, row, col, color):
-        fig.add_vline(
-            x=x,
-            line={"color": color, "dash": "dash", "width": 1.5},
-            row=row,
-            col=col,
-        )
+        fig.add_vline(x=x, line={"color": color, "dash": "dash", "width": 1.5}, row=row, col=col)
 
     # ── Figure 1: 9-panel state/control plot ─────────────────────────────────
-    fig_panel = make_subplots(
-        rows=3,
-        cols=3,
-        vertical_spacing=0.10,
-        horizontal_spacing=0.08,
-    )
+    fig_panel = make_subplots(rows=3, cols=3, vertical_spacing=0.10, horizontal_spacing=0.08)
 
     # ── Thrust (row 1, col 1) ───────────────────────────────────────────────
     T_kN   = T_N   * 1e-3
@@ -962,24 +1013,20 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc") -
     fig_panel.update_yaxes(title_text="Thrust, T [kN]", row=1, col=1)
 
     # ── Speed (row 1, col 2) ────────────────────────────────────────────────
-    _line(fig_panel, t_full, speed, row=1, col=2, color=c_plt, name="State")
+    _line(fig_panel, t_full, speed_d, row=1, col=2, color=c_plt, name="State")
     _nodes(fig_panel, t_nodes, speed_n, row=1, col=2)
     _seg(fig_panel, 0, t_end, SPD_STC_TRIG, row=1, col=2, color=c_spd, name="$v^{\\mathrm{trig}}$")
     _vline(fig_panel, t_h1, row=1, col=2, color=c_h1)
     _vline(fig_panel, t_aft, row=1, col=2, color=c_aft)
     _seg(fig_panel, t_h1, t_end, V_STC_CONS, row=1, col=2, color=c_up, name="STC bound")
-    fig_panel.update_yaxes(
-        title_text="Speed, ||v||₂ [m s⁻¹]",
-        range=[0, speed.max() + 5],
-        row=1,
-        col=2,
-    )
+    fig_panel.update_yaxes(title_text="Speed, ||v||₂ [m s⁻¹]", range=[0, speed_d.max() + 5], row=1, col=2)
 
     # ── Tilt (row 1, col 3) ─────────────────────────────────────────────────
     _line(fig_panel, t_full, tilt_deg, row=1, col=3, color=c_plt)
     _nodes(fig_panel, t_nodes, tilt_deg_n, row=1, col=3)
     _seg(fig_panel, 0, t_h1, THETA_MAX_DEG, row=1, col=3, color=c_up)
     _seg(fig_panel, t_h1, t_end, THETA_STC_DEG, row=1, col=3, color=c_up)
+    _seg(fig_panel, 0, t_end, THETA_STC_TRIG, row=1, col=3, color=c_spd, name="$\\theta^{\\mathrm{trig}}$")
     _vline(fig_panel, t_h1, row=1, col=3, color=c_h1)
     fig_panel.update_yaxes(title_text="Tilt angle, θ [deg]", row=1, col=3)
 
@@ -998,24 +1045,8 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc") -
     # ── Angular velocity (row 2, col 2) ─────────────────────────────────────
     _line(fig_panel, t_full, omega_dps, row=2, col=2, color=c_plt)
     _nodes(fig_panel, t_nodes, omega_dps_n, row=2, col=2)
-    _seg(
-        fig_panel,
-        0,
-        t_h1,
-        np.degrees(W_B_MAX_RAD_S),
-        row=2,
-        col=2,
-        color=c_up,
-    )
-    _seg(
-        fig_panel,
-        t_h1,
-        t_end,
-        np.degrees(OMEGA_STC_RAD_S),
-        row=2,
-        col=2,
-        color=c_up,
-    )
+    _seg(fig_panel, 0, t_h1, np.degrees(W_B_MAX_RAD_S), row=2, col=2, color=c_up)
+    _seg(fig_panel, t_h1, t_end, np.degrees(OMEGA_STC_RAD_S), row=2, col=2, color=c_up)
     _vline(fig_panel, t_h1, row=2, col=2, color=c_h1)
     fig_panel.update_yaxes(title_text="Angular velocity, ω_B [deg s⁻¹]", row=2, col=2)
 
@@ -1029,9 +1060,7 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc") -
     _vline(fig_panel, t_h1, row=2, col=3, color=c_h1)
     fig_panel.update_yaxes(
         title_text="Glideslope, γ [deg]",
-        range=[0, max(gs_bound_pre, gs_deg[:-1].max()) + 5],
-        row=2,
-        col=3,
+        range=[0, max(gs_bound_pre, gs_deg[:-1].max()) + 5], row=2, col=3,
     )
 
     # ── LOS boresight elevation angle (row 3, col 1) ────────────────────────
@@ -1039,15 +1068,7 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc") -
     d_b_deg_n = np.degrees(d_b_n)
     _line(fig_panel, t_full, d_b_deg, row=3, col=1, color="red")
     _nodes(fig_panel, t_nodes, d_b_deg_n, row=3, col=1)
-    _seg(
-        fig_panel,
-        t_h2,
-        t_end,
-        DELTA_BORESIGHT_MAX_DEG,
-        row=3,
-        col=1,
-        color=c_up,
-    )
+    _seg(fig_panel, t_h2, t_end, DELTA_BORESIGHT_MAX_DEG, row=3, col=1, color=c_up)
     _vline(fig_panel, t_h2, row=3, col=1, color=c_h2)
     fig_panel.update_xaxes(title_text="Time [s]", row=3, col=1)
     fig_panel.update_yaxes(title_text="Boresight deflection, δᵇ [deg]", row=3, col=1)
@@ -1055,12 +1076,7 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc") -
     # ── Mass (row 3, col 2) ─────────────────────────────────────────────────
     _line(fig_panel, t_full, m / 1e3, row=3, col=2, color=c_plt)
     _nodes(fig_panel, t_nodes, m_n / 1e3, row=3, col=2)
-    fig_panel.add_hline(
-        y=M_DRY / 1e3,
-        line={"color": c_low, "dash": "dash", "width": 1.5},
-        row=3,
-        col=2,
-    )
+    fig_panel.add_hline(y=M_DRY / 1e3, line={"color": c_low, "dash": "dash", "width": 1.5}, row=3, col=2)
     fig_panel.update_xaxes(title_text="Time [s]", row=3, col=2)
     fig_panel.update_yaxes(title_text="Mass, m [10³ kg]", row=3, col=2)
 
@@ -1077,18 +1093,10 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc") -
             fig_panel.update_xaxes(range=[0, t_end], row=row, col=col)
 
     fig_panel.update_layout(
-        template="plotly_white",
-        width=1100,
-        height=650,
+        template="plotly_white", width=1100, height=650,
         margin={"t": 80, "b": 40, "l": 50, "r": 30},
-        legend={
-            "orientation": "h",
-            "yanchor": "bottom",
-            "y": 1.02,
-            "xanchor": "left",
-            "x": 0,
-            "font": {"size": 10},
-        },
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02,
+                "xanchor": "left", "x": 0, "font": {"size": 10}},
     )
 
     if save_prefix:
@@ -1098,60 +1106,32 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc") -
     fig_3d = go.Figure()
     fig_3d.add_trace(
         go.Scatter3d(
-            x=pos[:, 0],
-            y=pos[:, 1],
-            z=pos[:, 2],
-            mode="lines",
-            customdata=speed,
-            line={
-                "color": speed,
-                "colorscale": "Rainbow",
-                "cmin": float(speed.min()),
-                "cmax": float(speed.max()),
-                "width": 4,
-                "colorbar": {"title": "Speed [m/s]"},
-            },
+            x=pos[:, 0], y=pos[:, 1], z=pos[:, 2], mode="lines",
+            customdata=speed_d,
+            line={"color": speed_d, "colorscale": "Rainbow",
+                  "cmin": float(speed_d.min()), "cmax": float(speed_d.max()),
+                  "width": 4, "colorbar": {"title": "Speed [m/s]"}},
             showlegend=False,
-            hovertemplate=(
-                "Crossrange: %{x:.1f} m<br>"
-                "Downrange: %{y:.1f} m<br>"
-                "Altitude: %{z:.1f} m<br>"
-                "Speed: %{customdata:.1f} m/s<extra></extra>"
-            ),
+            hovertemplate=("Crossrange: %{x:.1f} m<br>Downrange: %{y:.1f} m<br>"
+                           "Altitude: %{z:.1f} m<br>Speed: %{customdata:.1f} m/s<extra></extra>"),
         )
     )
     fig_3d.add_trace(
-        go.Scatter3d(
-            x=pos_n[:, 0],
-            y=pos_n[:, 1],
-            z=pos_n[:, 2],
-            mode="markers",
-            marker={"color": "black", "size": 4},
-            name="Node",
-        )
+        go.Scatter3d(x=pos_n[:, 0], y=pos_n[:, 1], z=pos_n[:, 2], mode="markers",
+                     marker={"color": "black", "size": 4}, name="Node")
     )
     fig_3d.add_trace(
-        go.Scatter3d(
-            x=[0.0],
-            y=[0.0],
-            z=[0.0],
-            mode="markers",
-            marker={"color": "lime", "size": 10, "symbol": "diamond"},
-            name="Landing pad",
-        )
+        go.Scatter3d(x=[0.0], y=[0.0], z=[0.0], mode="markers",
+                     marker={"color": "lime", "size": 10, "symbol": "diamond"}, name="Landing pad")
     )
 
     all_xyz = np.vstack([pos, pos_n])
     pad = 30.0
     fig_3d.update_layout(
-        template="plotly_white",
-        title={"text": "6-DoF PDG Trajectory (cSTC)", "x": 0.5},
-        width=900,
-        height=800,
+        template="plotly_white", title={"text": "6-DoF PDG Trajectory (true cSTC)", "x": 0.5},
+        width=900, height=800,
         scene={
-            "xaxis_title": "Crossrange [m]",
-            "yaxis_title": "Downrange [m]",
-            "zaxis_title": "Altitude [m]",
+            "xaxis_title": "Crossrange [m]", "yaxis_title": "Downrange [m]", "zaxis_title": "Altitude [m]",
             "xaxis": {"range": [all_xyz[:, 0].min() - pad, all_xyz[:, 0].max() + pad]},
             "yaxis": {"range": [all_xyz[:, 1].min() - pad, all_xyz[:, 1].max() + pad]},
             "zaxis": {"range": [0, all_xyz[:, 2].max() + 30]},
