@@ -13,10 +13,10 @@ sys.path.append(grandparent_dir)
 
 import openscvx as ox
 
-from openscvx.plotting import plot_states, plot_controls, plot_trust_region_heatmap, plot_virtual_control_heatmap, plot_scp_iterations, plot_scp_convergence_histories
+from openscvx.plotting import plot_states, plot_controls, plot_scp_convergence_histories
 
 # Number of discretization nodes
-n = 100
+n = 30
 
 # Physical constants from Betts reference
 # Earth radius (m)
@@ -199,18 +199,11 @@ problem = ox.Problem(
     time=time,
     constraints=constraints,
     N=n,
-    # discretizer=ox.LinearizeDiscretizeSparse(),
-    algorithm={'autotuner': ox.AugmentedLagrangian()},
+    algorithm={'autotuner': ox.AugmentedLagrangian(), 'lam_vc':2e0, 'lam_prox': 5e-1, 'lam_cost':5e-1},
     float_dtype="float64",
 )
 
-# Set solver parameters (max-normalized to lam_vc = 1; same 1 : 1 : 3 ratios as before).
-problem.algorithm.lam_cost = 5e-1  # Must be non-zero for Maximize objective to work
-problem.algorithm.lam_prox = 3e-1
-problem.algorithm.lam_vc = 1.2e0
-
-problem.algorithm.ep_tr = 2e-6
-
+problem.algorithm.ep_vc = 1e-3
 problem.algorithm.k_max = 500
 
 plotting_dict = {
