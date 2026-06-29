@@ -559,9 +559,7 @@ def create_animated_plotting_server(
     if waypoints is not None:
         scaled_waypoints = [np.asarray(p, dtype=np.float64) / scene_scale for p in waypoints]
         wp_colors = (
-            list(waypoint_colors)
-            if waypoint_colors is not None
-            else results.get("waypoint_colors")
+            list(waypoint_colors) if waypoint_colors is not None else results.get("waypoint_colors")
         )
         add_target_markers(
             server,

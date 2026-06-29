@@ -2,6 +2,7 @@ import os
 import sys
 
 import jax
+
 # use float64
 jax.config.update("jax_enable_x64", True)
 
@@ -12,8 +13,7 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 import openscvx as ox
-
-from openscvx.plotting import plot_states, plot_controls, plot_scp_convergence_histories
+from openscvx.plotting import plot_controls, plot_scp_convergence_histories, plot_states
 
 # Number of discretization nodes
 n = 30
@@ -74,7 +74,9 @@ phi = ox.State("phi", shape=(1,))
 phi.max = np.array([70.0 * np.pi / 180])  # rad (70 deg)
 phi.min = np.array([-70.0 * np.pi / 180])  # rad (-70 deg)
 phi.initial = np.array([lat0])  # 0 deg
-phi.final = [ox.Maximize(lat0 + 10.0 * np.pi / 180)]  # Maximize final latitude (reference guess: lat0+10 deg)
+phi.final = [
+    ox.Maximize(lat0 + 10.0 * np.pi / 180)
+]  # Maximize final latitude (reference guess: lat0+10 deg)
 phi.guess = np.linspace(lat0, lat0 + 10.0 * np.pi / 180, n).reshape(-1, 1)
 phi.scaling_max = np.array([35.0 * np.pi / 180])
 phi.scaling_min = np.array([0.0 * np.pi / 180])
@@ -138,12 +140,14 @@ m = ox.Parameter("m", value=mass)  # kg
 r = h + R_earth
 
 # Compute gravitational acceleration: g = μ / r^2
-g = mu_earth / (r ** 2)  # m/s^2
+g = mu_earth / (r**2)  # m/s^2
 
 # Aerodynamic model (matching Betts reference exactly)
 # Lift and drag coefficients
 CL = cl[0] + cl[1] * alpha[0]  # Linear lift coefficient: CL = cl0 + cl1*α
-CD = cd[0] + cd[1] * alpha[0] + cd[2] * alpha[0] ** 2  # Quadratic drag coefficient: CD = cd0 + cd1*α + cd2*α²
+CD = (
+    cd[0] + cd[1] * alpha[0] + cd[2] * alpha[0] ** 2
+)  # Quadratic drag coefficient: CD = cd0 + cd1*α + cd2*α²
 
 # Atmospheric density: ρ = ρ0 * exp(-altitude/H)
 # Note: altitude = h - R_earth = r - R_earth, where r = h (since h is already r = altitude + R_earth)
@@ -151,7 +155,7 @@ altitude = h  # Height above Earth surface
 rho = rho0 * ox.Exp(-altitude / H)  # kg/m^3
 
 # Dynamic pressure: q = 0.5 * ρ * v²
-q = 0.5 * rho * v ** 2  # Pa
+q = 0.5 * rho * v**2  # Pa
 
 # Lift and drag forces (normalized by mass): L = q*S*CL/m, D = q*S*CD/m
 # These are accelerations (m/s^2), matching the MATLAB code
@@ -166,8 +170,11 @@ dynamics = {
     "theta": (v * ox.Cos(gamma) * ox.Sin(psi)) / (r * ox.Cos(phi)),
     "phi": (v * ox.Cos(gamma) * ox.Cos(psi)) / r,
     "v": -D - g * ox.Sin(gamma),
-    "gamma": (L * ox.Cos(sigma) - ox.Cos(gamma) * (g - v ** 2 / r)) / v,
-    "psi": (L * ox.Sin(sigma) / ox.Cos(gamma) + v ** 2 * ox.Cos(gamma) * ox.Sin(psi) * ox.Tan(phi) / r) / v,
+    "gamma": (L * ox.Cos(sigma) - ox.Cos(gamma) * (g - v**2 / r)) / v,
+    "psi": (
+        L * ox.Sin(sigma) / ox.Cos(gamma) + v**2 * ox.Cos(gamma) * ox.Sin(psi) * ox.Tan(phi) / r
+    )
+    / v,
 }
 
 # Generate box constraints for all states
@@ -199,7 +206,12 @@ problem = ox.Problem(
     time=time,
     constraints=constraints,
     N=n,
-    algorithm={'autotuner': ox.AugmentedLagrangian(), 'lam_vc':2e0, 'lam_prox': 5e-1, 'lam_cost':5e-1},
+    algorithm={
+        "autotuner": ox.AugmentedLagrangian(),
+        "lam_vc": 2e0,
+        "lam_prox": 5e-1,
+        "lam_cost": 5e-1,
+    },
     float_dtype="float64",
 )
 
@@ -225,5 +237,3 @@ if __name__ == "__main__":
 
     plot_states(results).show()
     plot_controls(results).show()
-
-    

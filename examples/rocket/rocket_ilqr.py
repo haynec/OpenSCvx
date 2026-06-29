@@ -39,7 +39,7 @@ from openscvx.plotting import plot_controls, plot_states
 # ── Problem parameters (match lqrax ilqr_example.ipynb) ──────────────────────
 # DT = 0.02
 TF = 6.0
-N = 10 #int(TF / DT) + 1  # 301 nodes (300 intervals); notebook uses dt=0.02
+N = 10  # int(TF / DT) + 1  # 301 nodes (300 intervals); notebook uses dt=0.02
 
 M = 1.0
 I_BODY = 5.0
@@ -86,7 +86,7 @@ vy.initial = np.array([X0[3]])
 vy.final = [0.0]
 
 theta = ox.State("theta", shape=(1,))
-theta.min = np.array([- np.pi])
+theta.min = np.array([-np.pi])
 theta.max = np.array([np.pi])
 theta.initial = np.array([X0[4]])
 theta.final = [0.0]
@@ -195,6 +195,7 @@ problem = Problem(
 problem.settings.dev.printing = True
 problem.settings.prp.dt = 0.02
 
+
 def _trajectory_arrays(results: OptimizationResults) -> tuple[np.ndarray, np.ndarray]:
     """Stack ``[x, y, vx, vy, theta, omega]`` and ``[T, tau]`` for animation."""
     traj = results.trajectory
@@ -251,10 +252,10 @@ def animate_rocket_trajectory(
     ax.axis("off")
     ax.plot(0.0, 0.0, marker="x", markersize=15, color="b")
 
-    rocket_body_line, = ax.plot([], [], "k-", lw=2)
-    orientation_line, = ax.plot([], [], "k-", lw=5)
-    left_thrust_line, = ax.plot([], [], color="orange", lw=4)
-    right_thrust_line, = ax.plot([], [], color="orange", lw=4)
+    (rocket_body_line,) = ax.plot([], [], "k-", lw=2)
+    (orientation_line,) = ax.plot([], [], "k-", lw=5)
+    (left_thrust_line,) = ax.plot([], [], color="orange", lw=4)
+    (right_thrust_line,) = ax.plot([], [], color="orange", lw=4)
 
     def init():
         rocket_body_line.set_data([], [])
@@ -365,10 +366,7 @@ if __name__ == "__main__":
         f"  x(T) = {nodes['x'][-1, 0]:.4f}, y(T) = {nodes['y'][-1, 0]:.4f}, "
         f"vx(T) = {nodes['vx'][-1, 0]:.4f}, vy(T) = {nodes['vy'][-1, 0]:.4f}"
     )
-    print(
-        f"  theta(T) = {nodes['theta'][-1, 0]:.4f}, "
-        f"omega(T) = {nodes['omega'][-1, 0]:.4f}"
-    )
+    print(f"  theta(T) = {nodes['theta'][-1, 0]:.4f}, omega(T) = {nodes['omega'][-1, 0]:.4f}")
     print(f"  stage_cost(T) = {nodes['stage_cost'][-1, 0]:.4f}")
     print(f"  converged: {results.converged}")
 

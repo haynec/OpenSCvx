@@ -53,7 +53,7 @@ HOVER_PER_ROTOR = MASS * (-GRAVITY[2]) / 4.0
 # ── Horizon (aligator: dt = 0.01, Tf = 1.8) ───────────────────────────────────
 DT = 0.01
 TF = 1.8
-N = 5 #int(TF / DT) + 1  # 181 nodes
+N = 5  # int(TF / DT) + 1  # 181 nodes
 
 # ── Targets (aligator x_tar1, x_tar2, x_tar3) ────────────────────────────────
 X_TAR1 = np.array([0.9, 0.8, 1.0])
@@ -213,9 +213,7 @@ def build_problem(
     if not term_cstr:
         # Soft terminal cost boost (aligator wterm *= 12 when term_cstr is False).
         terminal_pos_cost = (
-            TERMINAL_COST_SCALE
-            * W_POS_PHASE2
-            * ox.Sum((position - ox.Constant(x_target)) ** 2)
+            TERMINAL_COST_SCALE * W_POS_PHASE2 * ox.Sum((position - ox.Constant(x_target)) ** 2)
         )
         dynamics["stage_cost"] = dynamics["stage_cost"] + ox.Cond(
             None,
@@ -313,7 +311,9 @@ if __name__ == "__main__":
 
     nodes = results.nodes
     print(f"nsteps = {N - 1}, dt = {DT:.3f} s, tf = {TF:.1f} s")
-    print(f"Final position: {nodes['position'][-1]} (target {plotting['x_tar3' if args.obstacles else 'x_tar2']})")
+    print(
+        f"Final position: {nodes['position'][-1]} (target {plotting['x_tar3' if args.obstacles else 'x_tar2']})"
+    )
     print(f"Integrated cost: {nodes['stage_cost'][-1, 0]:.6f}")
 
     try:

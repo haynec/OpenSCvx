@@ -47,9 +47,10 @@ if project_root not in sys.path:
 # Track loader lives alongside this file
 sys.path.insert(0, current_dir)
 
+from tracks.readDataFcn import getTrack
+
 import openscvx as ox
 from openscvx.plotting import plot_controls, plot_states
-from tracks.readDataFcn import getTrack
 
 # ── Track data ─────────────────────────────────────────────────────────────────
 sref_data, _, _, _, kapparef_data = getTrack("LMS_Track.txt")
@@ -64,26 +65,26 @@ s_interp = np.concatenate([[sref_data[0] - _pad_lo], sref_data, [pathlength + _p
 kappa_interp = np.concatenate([[kapparef_data[0]], kapparef_data, [kapparef_data[-1]]])
 
 # ── Vehicle parameters (Kloeser et al. 2020, Table I) ─────────────────────────
-m = 0.043    # vehicle mass [kg]
-C1 = 0.5     # front-axle normalised position
-C2 = 15.5    # lateral slip-force parameter [1/m]
-Cm1 = 0.28   # drive-force coefficient 1 [N]
-Cm2 = 0.05   # drive-force coefficient 2 [N·s/m]
+m = 0.043  # vehicle mass [kg]
+C1 = 0.5  # front-axle normalised position
+C2 = 15.5  # lateral slip-force parameter [1/m]
+Cm1 = 0.28  # drive-force coefficient 1 [N]
+Cm2 = 0.05  # drive-force coefficient 2 [N·s/m]
 Cr0 = 0.011  # rolling-resistance constant [N]
 Cr2 = 0.006  # rolling-resistance quadratic [N·s²/m²]
 
 # ── Discretisation ─────────────────────────────────────────────────────────────
-N = 80         # shooting nodes
+N = 80  # shooting nodes
 T_guess = 6.0  # initial guess for lap time [s]
 
 # ── States ─────────────────────────────────────────────────────────────────────
-S_INIT = 0.0   # matches acados model.x0[0]: 2 m warm-up before the start line
+S_INIT = 0.0  # matches acados model.x0[0]: 2 m warm-up before the start line
 
 s = ox.State("s", shape=(1,))
 s.min = [S_INIT - 0.1]
 s.max = [pathlength + 0.1]
 s.initial = [S_INIT]
-s.final = [pathlength]   # must complete exactly one lap
+s.final = [pathlength]  # must complete exactly one lap
 s.guess = np.linspace(S_INIT, pathlength, N).reshape(-1, 1)
 
 n = ox.State("n", shape=(1,))
@@ -102,7 +103,7 @@ alpha.guess = np.zeros((N, 1))
 
 v = ox.State("v", shape=(1,))
 v.min = [0.0]
-v.max = [6.0]   # generous upper bound; typical racing speed ~ 1–3 m/s
+v.max = [6.0]  # generous upper bound; typical racing speed ~ 1–3 m/s
 v.initial = [ox.Free(0.0)]
 v.final = [ox.Free(0.0)]
 # Trapezoidal speed guess: ramp up then hold
@@ -151,9 +152,11 @@ kappa = ox.Cinterp(s[0], s_interp, kappa_interp, method="pchip")
 
 # Longitudinal tyre force [N]
 #   Fxd = (Cm1 - Cm2·v)·D - Cr2·v² - Cr0·tanh(5v)
-Fxd = (ox.Constant(Cm1) - ox.Constant(Cm2) * v[0]) * D_throt[0] \
-      - ox.Constant(Cr2) * v[0] ** 2 \
-      - ox.Constant(Cr0) * ox.Tanh(ox.Constant(5.0) * v[0])
+Fxd = (
+    (ox.Constant(Cm1) - ox.Constant(Cm2) * v[0]) * D_throt[0]
+    - ox.Constant(Cr2) * v[0] ** 2
+    - ox.Constant(Cr0) * ox.Tanh(ox.Constant(5.0) * v[0])
+)
 
 # Effective slip angle at front tyre
 slip_angle = alpha[0] + ox.Constant(C1) * delta[0]
@@ -162,11 +165,11 @@ slip_angle = alpha[0] + ox.Constant(C1) * delta[0]
 sdot = (v[0] * ox.Cos(slip_angle)) / (ox.Constant(1.0) - kappa * n[0])
 
 dynamics = {
-    "s":     sdot,
-    "n":     v[0] * ox.Sin(slip_angle),
+    "s": sdot,
+    "n": v[0] * ox.Sin(slip_angle),
     "alpha": v[0] * ox.Constant(C2) * delta[0] - kappa * sdot,
-    "v":     (Fxd / ox.Constant(m)) * ox.Cos(ox.Constant(C1) * delta[0]),
-    "D":     derD[0],
+    "v": (Fxd / ox.Constant(m)) * ox.Cos(ox.Constant(C1) * delta[0]),
+    "D": derD[0],
     "delta": derDelta[0],
 }
 
@@ -187,26 +190,31 @@ constraints: list = []
 
 # Path constraints on all other states
 for state in [s, alpha, v, D_throt, delta]:
-    constraints.extend([
-        ox.ctcs(state <= state.max, penalty="huber"),
-        ox.ctcs(state.min <= state, penalty="huber"),
-    ])
+    constraints.extend(
+        [
+            ox.ctcs(state <= state.max, penalty="huber"),
+            ox.ctcs(state.min <= state, penalty="huber"),
+        ]
+    )
 
 # Nonlinear acceleration constraints (prevent tyre saturation)
 #   a_lat  = C2·v²·δ + Fxd·sin(C1·δ) / m  ∈ [-4, 4] m/s²
 #   a_long = Fxd / m                        ∈ [-4, 4] m/s²
-a_lat  = ox.Constant(C2) * v[0] ** 2 * delta[0] \
-         + Fxd * ox.Sin(ox.Constant(C1) * delta[0]) / ox.Constant(m)
+a_lat = ox.Constant(C2) * v[0] ** 2 * delta[0] + Fxd * ox.Sin(
+    ox.Constant(C1) * delta[0]
+) / ox.Constant(m)
 a_long = Fxd / ox.Constant(m)
 
-A_MAX = 4.0   # [m/s²]
+A_MAX = 4.0  # [m/s²]
 
-constraints.extend([
-    ox.ctcs(a_lat  <=  A_MAX, penalty="huber"),
-    ox.ctcs(-A_MAX <= a_lat,  penalty="huber"),
-    ox.ctcs(a_long <=  A_MAX, penalty="huber"),
-    ox.ctcs(-A_MAX <= a_long, penalty="huber"),
-])
+constraints.extend(
+    [
+        ox.ctcs(a_lat <= A_MAX, penalty="huber"),
+        ox.ctcs(-A_MAX <= a_lat, penalty="huber"),
+        ox.ctcs(a_long <= A_MAX, penalty="huber"),
+        ox.ctcs(-A_MAX <= a_long, penalty="huber"),
+    ]
+)
 
 # ── Problem ────────────────────────────────────────────────────────────────────
 problem = ox.Problem(
@@ -243,24 +251,24 @@ def plot_race_results(results) -> None:
     from time2spatial import transformProj2Orig
 
     traj = results.trajectory
-    t = results.t_full                  # (n_times,)  dense time vector
+    t = results.t_full  # (n_times,)  dense time vector
 
-    s_sol     = traj["s"][:, 0]
-    n_sol     = traj["n"][:, 0]
+    s_sol = traj["s"][:, 0]
+    n_sol = traj["n"][:, 0]
     alpha_sol = traj["alpha"][:, 0]
-    v_sol     = traj["v"][:, 0]
-    D_sol     = traj["D"][:, 0]
+    v_sol = traj["v"][:, 0]
+    D_sol = traj["D"][:, 0]
     delta_sol = traj["delta"][:, 0]
     # ── Plot 1: track projection coloured by speed ────────────────────────────
     # Trim warm-up region (s < 0) to match the acados plotting convention.
     lap_start = np.searchsorted(s_sol, 0.0)
-    s_sol     = s_sol[lap_start:]
-    n_sol     = n_sol[lap_start:]
+    s_sol = s_sol[lap_start:]
+    n_sol = n_sol[lap_start:]
     alpha_sol = alpha_sol[lap_start:]
-    v_sol     = v_sol[lap_start:]
-    D_sol     = D_sol[lap_start:]
+    v_sol = v_sol[lap_start:]
+    D_sol = D_sol[lap_start:]
     delta_sol = delta_sol[lap_start:]
-    t         = t[lap_start:]
+    t = t[lap_start:]
 
     # Convert path-parametric (s, n) → Cartesian (x, y) via track geometry
     cart_x, cart_y, _, _ = transformProj2Orig(s_sol, n_sol, alpha_sol, v_sol, "LMS_Track.txt")
@@ -276,19 +284,35 @@ def plot_race_results(results) -> None:
     fig2 = go.Figure()
 
     # Centreline
-    fig2.add_trace(go.Scatter(
-        x=xref_d, y=yref_d, mode="lines",
-        line=dict(color="black", dash="dash", width=1), name="centreline",
-    ))
+    fig2.add_trace(
+        go.Scatter(
+            x=xref_d,
+            y=yref_d,
+            mode="lines",
+            line=dict(color="black", dash="dash", width=1),
+            name="centreline",
+        )
+    )
     # Left / right boundaries
-    fig2.add_trace(go.Scatter(
-        x=xbl, y=ybl, mode="lines",
-        line=dict(color="black", width=1.5), name="boundary", showlegend=False,
-    ))
-    fig2.add_trace(go.Scatter(
-        x=xbr, y=ybr, mode="lines",
-        line=dict(color="black", width=1.5), showlegend=False,
-    ))
+    fig2.add_trace(
+        go.Scatter(
+            x=xbl,
+            y=ybl,
+            mode="lines",
+            line=dict(color="black", width=1.5),
+            name="boundary",
+            showlegend=False,
+        )
+    )
+    fig2.add_trace(
+        go.Scatter(
+            x=xbr,
+            y=ybr,
+            mode="lines",
+            line=dict(color="black", width=1.5),
+            showlegend=False,
+        )
+    )
 
     # ── Multishot segments ────────────────────────────────────────────────────
     # Each SCP shooting interval is integrated independently; plotting them as
@@ -298,35 +322,49 @@ def plot_race_results(results) -> None:
     if ms is not None:
         first_ms_seg = True
         for seg_idx in range(ms.n_segments):
-            seg_states = ms.segment_states(seg_idx)   # (n_substeps, n_x)
+            seg_states = ms.segment_states(seg_idx)  # (n_substeps, n_x)
             # columns follow Problem state order: [s, n, alpha, v, D, delta, ...]
-            seg_s     = seg_states[:, 0]
-            seg_n     = seg_states[:, 1]
+            seg_s = seg_states[:, 0]
+            seg_n = seg_states[:, 1]
             seg_alpha = seg_states[:, 2]
-            seg_v     = seg_states[:, 3]
+            seg_v = seg_states[:, 3]
             mx, my, _, _ = transformProj2Orig(seg_s, seg_n, seg_alpha, seg_v, "LMS_Track.txt")
-            fig2.add_trace(go.Scatter(
-                x=mx, y=my, mode="lines",
-                line=dict(color="rgba(100,100,100,0.35)", width=1),
-                name="multishot segments" if first_ms_seg else None,
-                showlegend=first_ms_seg,
-                legendgroup="multishot",
-            ))
+            fig2.add_trace(
+                go.Scatter(
+                    x=mx,
+                    y=my,
+                    mode="lines",
+                    line=dict(color="rgba(100,100,100,0.35)", width=1),
+                    name="multishot segments" if first_ms_seg else None,
+                    showlegend=first_ms_seg,
+                    legendgroup="multishot",
+                )
+            )
             first_ms_seg = False
 
     # Single-shot propagation coloured by speed (on top)
-    fig2.add_trace(go.Scatter(
-        x=cart_x, y=cart_y, mode="markers",
-        marker=dict(color=v_sol, colorscale="Rainbow", size=4,
-                    colorbar=dict(title="v [m/s]"), showscale=True),
-        name="single-shot (post_process)",
-    ))
+    fig2.add_trace(
+        go.Scatter(
+            x=cart_x,
+            y=cart_y,
+            mode="markers",
+            marker=dict(
+                color=v_sol,
+                colorscale="Rainbow",
+                size=4,
+                colorbar=dict(title="v [m/s]"),
+                showscale=True,
+            ),
+            name="single-shot (post_process)",
+        )
+    )
 
     # Arc-length distance markers
     for i in range(int(sref_d[-1]) + 1):
         k = int(np.argmin(np.abs(sref_d - i)))
-        fig2.add_annotation(x=xref_d[k], y=yref_d[k], text=f"{i}m",
-                            showarrow=False, font=dict(size=10))
+        fig2.add_annotation(
+            x=xref_d[k], y=yref_d[k], text=f"{i}m", showarrow=False, font=dict(size=10)
+        )
 
     fig2.update_layout(
         title=f"OpenSCvx — track projection  (T = {t[-1]:.2f} s)",
@@ -338,11 +376,11 @@ def plot_race_results(results) -> None:
 
     # ── Plot 3: lateral & longitudinal acceleration vs bounds ──────────────────
     Fxd_sol = (Cm1 - Cm2 * v_sol) * D_sol - Cr2 * v_sol**2 - Cr0 * np.tanh(5.0 * v_sol)
-    a_lat_sol  = C2 * v_sol**2 * delta_sol + Fxd_sol * np.sin(C1 * delta_sol) / m
+    a_lat_sol = C2 * v_sol**2 * delta_sol + Fxd_sol * np.sin(C1 * delta_sol) / m
     a_long_sol = Fxd_sol / m
 
     fig3 = go.Figure()
-    fig3.add_trace(go.Scatter(x=t, y=a_lat_sol,  name="a_lat",  line=dict(color="blue")))
+    fig3.add_trace(go.Scatter(x=t, y=a_lat_sol, name="a_lat", line=dict(color="blue")))
     fig3.add_trace(go.Scatter(x=t, y=a_long_sol, name="a_long", line=dict(color="orange")))
     for sign, show in [(1, True), (-1, False)]:
         fig3.add_hline(
@@ -365,7 +403,7 @@ if __name__ == "__main__":
     results = problem.post_process()
 
     nodes = results.nodes
-    print(f"\n=== Race Car Results ===")
+    print("\n=== Race Car Results ===")
     print(f"  Lap time     : {nodes['time'][-1, 0]:.3f} s")
     print(f"  Final s      : {nodes['s'][-1, 0]:.4f} m  (target {pathlength:.4f} m)")
     print(f"  Max speed    : {nodes['v'].max():.3f} m/s")

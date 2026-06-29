@@ -91,18 +91,13 @@ if SOFTEN_V:
         ox.ctcs(velocity[0] <= 0.0, penalty="smooth_relu").over((PHASE1_START, N - 1))
     )
 else:
-    constraints.append(
-        (velocity[0] <= 0.0).convex().at(list(range(PHASE1_START, N)))
-    )
+    constraints.append((velocity[0] <= 0.0).convex().at(list(range(PHASE1_START, N))))
 
 # ── Initial guess ────────────────────────────────────────────────────────────
 t_guess = np.linspace(0.0, TF, N)
 velocity.guess = np.linspace(0.25, -0.1, N).reshape(-1, 1)
 position.guess = np.column_stack(
-    [
-        position.initial[0]
-        + np.cumsum(velocity.guess[:, 0] * np.gradient(t_guess))
-    ]
+    [position.initial[0] + np.cumsum(velocity.guess[:, 0] * np.gradient(t_guess))]
 )
 stage_cost.guess = np.cumsum(
     (
@@ -133,12 +128,7 @@ problem = Problem(
         "lam_cost": 6e-1,
         # "autotuner": ox.ConstantProximalWeight(),
     },
-    solver = {
-        "cvx_solver": "qocogen",
-        "cvxpygen": True,
-        "solver_args": {
-        }
-    }
+    solver={"cvx_solver": "qocogen", "cvxpygen": True, "solver_args": {}},
 )
 
 plotting_dict = {
@@ -159,10 +149,7 @@ if __name__ == "__main__":
     print(f"Integrated stage cost: {nodes['stage_cost'][-1, 0]:.4f}")
 
     phase1_v = nodes["velocity"][PHASE1_START:, 0]
-    print(
-        f"Phase-1 velocity max: {phase1_v.max():.4e} "
-        f"(should be <= 0, soften={SOFTEN_V})"
-    )
+    print(f"Phase-1 velocity max: {phase1_v.max():.4e} (should be <= 0, soften={SOFTEN_V})")
 
     plot_states(results).show()
     plot_controls(results).show()

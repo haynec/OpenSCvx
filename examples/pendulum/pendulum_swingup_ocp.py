@@ -47,7 +47,6 @@ Q_DTHETA = 1e-2
 R_F = 1e-2
 
 
-
 # Physical constants (acados pendulum_model.py)
 M = 1.0
 M_POLE = 0.1
@@ -132,9 +131,7 @@ constraints.extend([ox.ctcs(force <= force.max), ox.ctcs(force.min <= force)])
 
 # ── Initial guess (swing-up pump heuristic) ────────────────────────────────────
 t_guess = np.linspace(0.0, TF, N)
-theta.guess = np.where(t_guess < 0.35 * TF, np.pi, np.linspace(np.pi, 0.0, N)).reshape(
-    -1, 1
-)
+theta.guess = np.where(t_guess < 0.35 * TF, np.pi, np.linspace(np.pi, 0.0, N)).reshape(-1, 1)
 # cart_pos.guess = np.zeros((N, 1))
 # cart_vel.guess = np.linspace(0.0, 0.5, N).reshape(-1, 1)
 # theta_dot.guess = np.linspace(0.0, 2.0, N).reshape(-1, 1)
@@ -164,7 +161,7 @@ time = ox.Time(
     uniform_time_grid=True,
 )
 
-import diffrax as dfx 
+import diffrax as dfx
 
 problem = Problem(
     dynamics=dynamics,
@@ -179,11 +176,15 @@ problem = Problem(
         "lam_cost": 2e0,
         "autotuner": ox.ConstantProximalWeight(),
     },
-    discretizer = ox.DiscretizeLinearizeVectorize(dis_type="ZOH", ode_solver="Euler", diffrax_kwargs = {"stepsize_controller": dfx.StepTo(np.linspace(0.0, 1 / (N - 1), 2))},),
-    solver = {
+    discretizer=ox.DiscretizeLinearizeVectorize(
+        dis_type="ZOH",
+        ode_solver="Euler",
+        diffrax_kwargs={"stepsize_controller": dfx.StepTo(np.linspace(0.0, 1 / (N - 1), 2))},
+    ),
+    solver={
         "cvx_solver": "PIQP",
         "solver_args": {"canon_backend": "COO", "enforce_dpp": True},
-    }
+    },
     # solver = {
     #     "cvx_solver": "qocogen",
     #     "solver_args": {},
@@ -245,9 +246,7 @@ def plot_multishot_propagation(results) -> go.Figure:
     """Plot SCP multishot propagation and nodes only (no post-process trajectory)."""
     segments = _extract_multishot_segments(results)
     if not segments:
-        raise ValueError(
-            "No discretization_history on results; multishot propagation unavailable."
-        )
+        raise ValueError("No discretization_history on results; multishot propagation unavailable.")
 
     state_names = [n for n in PLOT_STATE_NAMES if n in results.nodes]
     n_cols = min(4, len(state_names))
@@ -257,7 +256,9 @@ def plot_multishot_propagation(results) -> go.Figure:
         cols=n_cols,
         subplot_titles=state_names,
     )
-    fig.update_layout(title_text="Multishot propagation (SCP discretization)", template="plotly_dark")
+    fig.update_layout(
+        title_text="Multishot propagation (SCP discretization)", template="plotly_dark"
+    )
 
     t_nodes = np.asarray(results.nodes["time"], dtype=np.float64).flatten()
 

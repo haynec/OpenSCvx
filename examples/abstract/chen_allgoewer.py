@@ -78,9 +78,7 @@ def _load_initial_guess(n: int) -> tuple[np.ndarray, np.ndarray] | None:
         # acados stores one control per shooting interval; pad for OpenSCvx nodes.
         u_init = np.pad(u_init, ((0, 0), (0, 1)), mode="edge")
     elif u_init.shape != (1, n):
-        raise ValueError(
-            f"Expected U_init shape (1, {n}) or (1, {n - 1}); got {u_init.shape}."
-        )
+        raise ValueError(f"Expected U_init shape (1, {n}) or (1, {n - 1}); got {u_init.shape}.")
     return x_init, u_init
 
 
@@ -110,7 +108,9 @@ def _apply_initial_guess(
     control.guess = u_init[0, :].reshape(-1, 1)
 
 
-def build_problem(*, solve_feasibility: bool = True) -> tuple[Problem, ox.State, ox.State, ox.Control]:
+def build_problem(
+    *, solve_feasibility: bool = True
+) -> tuple[Problem, ox.State, ox.State, ox.Control]:
     u_max = U_MAX_FEAS if solve_feasibility else U_MAX_SOFT
 
     x1 = ox.State("x1", shape=(1,))
@@ -133,12 +133,8 @@ def build_problem(*, solve_feasibility: bool = True) -> tuple[Problem, ox.State,
     controls = [control]
 
     dynamics: dict = {
-        "x1": x2[0]
-        + control[0]
-        * (ox.Constant(MU) + ox.Constant(ONE_MINUS_MU) * x2[0]),
-        "x2": x1[0]
-        + control[0]
-        * (ox.Constant(MU) - ox.Constant(4.0 * ONE_MINUS_MU) * x2[0]),
+        "x1": x2[0] + control[0] * (ox.Constant(MU) + ox.Constant(ONE_MINUS_MU) * x2[0]),
+        "x2": x1[0] + control[0] * (ox.Constant(MU) - ox.Constant(4.0 * ONE_MINUS_MU) * x2[0]),
     }
 
     if not solve_feasibility:
@@ -208,16 +204,16 @@ def build_problem(*, solve_feasibility: bool = True) -> tuple[Problem, ox.State,
         N=N,
         # float_dtype="float64",
         algorithm=algorithm,
-        discretizer = ox.LinearizeDiscretizeSparse(dis_type="ZOH"),
+        discretizer=ox.LinearizeDiscretizeSparse(dis_type="ZOH"),
         # solver = {
         #     "cvx_solver": "PIQP",
         #     "solver_args": {"canon_backend": "COO", "enforce_dpp": True},
         # }
-        solver = {
+        solver={
             "cvx_solver": "qocogen",
             "solver_args": {},
             "cvxpygen": True,
-        }
+        },
     )
     problem.settings.dev.printing = False
     return problem, x1, x2, control

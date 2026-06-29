@@ -28,21 +28,20 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 
 import openscvx as ox
-from openscvx import Problem
-from openscvx.algorithms.optimization_results import OptimizationResults
-
 from examples.multi_agent.ilqgames_three_agent import (
     BICYCLE_GOAL,
     BICYCLE_WHEELBASE,
     DIFFDRIVE_GOAL,
-    N,
     POINT_GOAL,
     TF,
+    N,
     _show_plot,
     _trajectory_arrays,
     animate_ilqgames_three_agent,
     plot_ilqgames_three_agent,
 )
+from openscvx import Problem
+from openscvx.algorithms.optimization_results import OptimizationResults
 
 # ── Cost weights (match lqrax ilqgames_example.ipynb) ────────────────────────
 COLLISION_WEIGHT = 10.0
@@ -158,15 +157,9 @@ def build_problem() -> Problem:
     pt_nav = _sq_dist2(pt_pos[0], pt_pos[1], POINT_GOAL[0], POINT_GOAL[1])
     bc_nav = _sq_dist2(bc_pos[0], bc_pos[1], BICYCLE_GOAL[0], BICYCLE_GOAL[1])
 
-    dd_ctrl = ox.Constant(CTRL_WEIGHT) * (
-        dd_v[0] ** 2 + ox.Constant(0.01) * dd_omega[0] ** 2
-    )
-    pt_ctrl = ox.Constant(CTRL_WEIGHT) * (
-        pt_ax[0] ** 2 + ox.Constant(0.5) * pt_ay[0] ** 2
-    )
-    bc_ctrl = ox.Constant(CTRL_WEIGHT) * (
-        bc_v[0] ** 2 + ox.Constant(0.01) * bc_delta[0] ** 2
-    )
+    dd_ctrl = ox.Constant(CTRL_WEIGHT) * (dd_v[0] ** 2 + ox.Constant(0.01) * dd_omega[0] ** 2)
+    pt_ctrl = ox.Constant(CTRL_WEIGHT) * (pt_ax[0] ** 2 + ox.Constant(0.5) * pt_ay[0] ** 2)
+    bc_ctrl = ox.Constant(CTRL_WEIGHT) * (bc_v[0] ** 2 + ox.Constant(0.01) * bc_delta[0] ** 2)
 
     collision = (
         _collision_penalty(dd_pos[0], dd_pos[1], pt_pos[0], pt_pos[1])
@@ -186,9 +179,7 @@ def build_problem() -> Problem:
             bc_v[0] * ox.Cos(bc_theta[0]),
             bc_v[0] * ox.Sin(bc_theta[0]),
         ),
-        "bicycle_theta": bc_v[0]
-        * ox.Tan(bc_delta[0])
-        / ox.Constant(BICYCLE_WHEELBASE),
+        "bicycle_theta": bc_v[0] * ox.Tan(bc_delta[0]) / ox.Constant(BICYCLE_WHEELBASE),
         "stage_cost": dd_nav + pt_nav + bc_nav + collision + dd_ctrl + pt_ctrl + bc_ctrl,
     }
 
@@ -201,9 +192,7 @@ def build_problem() -> Problem:
     # ── Initial guess (notebook warm start) ────────────────────────────────
     t_vals = np.linspace(0.0, 1.0, N)
 
-    dd_pos.guess = (
-        (1.0 - t_vals)[:, None] * dd_pos.initial + t_vals[:, None] * DIFFDRIVE_GOAL
-    )
+    dd_pos.guess = (1.0 - t_vals)[:, None] * dd_pos.initial + t_vals[:, None] * DIFFDRIVE_GOAL
     dd_theta.guess = np.zeros((N, 1))
     dd_v.guess = np.full((N, 1), 0.8)
     dd_omega.guess = np.zeros((N, 1))
@@ -391,15 +380,9 @@ def evaluate_lqrax_reference_costs(
         + COLLISION_WEIGHT * np.exp(-COLLISION_GAIN * np.sum((bc_xy - pt_xy) ** 2, axis=1))
     )
 
-    dd_ctrl = np.sum(
-        CTRL_WEIGHT * np.sum((dd_u * np.array([1.0, 0.01])) ** 2, axis=1)
-    )
-    pt_ctrl = np.sum(
-        CTRL_WEIGHT * np.sum((pt_u * np.array([1.0, 0.5])) ** 2, axis=1)
-    )
-    bc_ctrl = np.sum(
-        CTRL_WEIGHT * np.sum((bc_u * np.array([1.0, 0.01])) ** 2, axis=1)
-    )
+    dd_ctrl = np.sum(CTRL_WEIGHT * np.sum((dd_u * np.array([1.0, 0.01])) ** 2, axis=1))
+    pt_ctrl = np.sum(CTRL_WEIGHT * np.sum((pt_u * np.array([1.0, 0.5])) ** 2, axis=1))
+    bc_ctrl = np.sum(CTRL_WEIGHT * np.sum((bc_u * np.array([1.0, 0.01])) ** 2, axis=1))
 
     scale = dt
     return LqraxReferenceCosts(

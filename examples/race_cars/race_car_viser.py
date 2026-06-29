@@ -94,8 +94,10 @@ def _add_lms_track_scene(
 
     if len(xref) >= 2:
         centre_segments = np.stack(
-            [np.column_stack([xref[:-1], yref[:-1], np.zeros(len(xref) - 1)]),
-             np.column_stack([xref[1:], yref[1:], np.zeros(len(xref) - 1)])],
+            [
+                np.column_stack([xref[:-1], yref[:-1], np.zeros(len(xref) - 1)]),
+                np.column_stack([xref[1:], yref[1:], np.zeros(len(xref) - 1)]),
+            ],
             axis=1,
         ).astype(np.float32)
         server.scene.add_line_segments(
@@ -107,8 +109,10 @@ def _add_lms_track_scene(
 
     def _boundary_segments(xb: np.ndarray, yb: np.ndarray) -> np.ndarray:
         return np.stack(
-            [np.column_stack([xb[:-1], yb[:-1], np.full(len(xb) - 1, 0.004)]),
-             np.column_stack([xb[1:], yb[1:], np.full(len(xb) - 1, 0.004)])],
+            [
+                np.column_stack([xb[:-1], yb[:-1], np.full(len(xb) - 1, 0.004)]),
+                np.column_stack([xb[1:], yb[1:], np.full(len(xb) - 1, 0.004)]),
+            ],
             axis=1,
         ).astype(np.float32)
 
@@ -360,7 +364,10 @@ def _attach_chase_camera(
             client.camera.look_at = tuple(float(x) for x in look_at)
 
     cam_pos, cam_wxyz, look_at = _chase_camera_pose(
-        pos[0], float(psi[0]), look_ahead=look_ahead, chase_distance=chase_distance,
+        pos[0],
+        float(psi[0]),
+        look_ahead=look_ahead,
+        chase_distance=chase_distance,
         vertical_offset=vertical_offset,
     )
     server.initial_camera.position = tuple(float(x) for x in cam_pos)
@@ -415,11 +422,16 @@ def _create_race_car_viser_server(
             if t_sim is None:
                 raise ValueError("t_sim is required when simX is provided")
             data = extract_race_trajectory_from_sim(
-                simX, t_sim, track_file=track_file, trim_warmup=trim_warmup,
+                simX,
+                t_sim,
+                track_file=track_file,
+                trim_warmup=trim_warmup,
             )
         elif results is not None:
             data = extract_race_trajectory(
-                results, track_file=track_file, trim_warmup=trim_warmup,
+                results,
+                track_file=track_file,
+                trim_warmup=trim_warmup,
             )
         else:
             raise ValueError("Provide results, or simX and t_sim, or pre-built data")
@@ -552,9 +564,7 @@ def _create_race_car_viser_server(
     )
     with server.gui.add_folder(title):
         hud["markdown"] = server.gui.add_markdown(
-            f"**Lap time:** {t_arr[-1]:.3f} s  \n"
-            f"**Max speed:** {speed.max():.2f} m/s  \n"
-            f"{cam_note}"
+            f"**Lap time:** {t_arr[-1]:.3f} s  \n**Max speed:** {speed.max():.2f} m/s  \n{cam_note}"
         )
 
     mode = "chase-cam" if chase_camera else "overview"
