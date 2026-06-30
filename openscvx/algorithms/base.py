@@ -184,6 +184,22 @@ class Algorithm(ABC):
         """
         raise NotImplementedError
 
+    def warmup(self, state: "AlgorithmState", params: dict) -> None:
+        """Warm any additional JIT caches needed by :meth:`step`.
+
+        Called by :class:`~openscvx.problem.Problem` immediately after it warms
+        the fused ``_iteration_fn`` cache. The default is a no-op; override to
+        warm callables that :meth:`step` uses beyond the fused body (e.g. the
+        split-half ``_prepare_fn`` / ``_finalize_fn`` in
+        :class:`~openscvx.algorithms.scvx.penalized_trust_region.PenalizedTrustRegion`).
+
+        Args:
+            state: A concrete :class:`AlgorithmState` with the same shape as
+                the real initial iterate — sufficient to populate JAX's
+                shape-keyed JIT cache.
+            params: The problem's runtime parameter dict.
+        """
+
     def converged(self, state: "AlgorithmState") -> jnp.ndarray:
         """Boolean SCP convergence test from the metrics and thresholds on ``state``.
 

@@ -27,6 +27,8 @@ EXCLUDED_EXAMPLES = {
     "drone/obstacle_avoidance_vmap.py",
     "mjx/triple_cartpole_game.py",
     "rocket/ascent_launch_vehicle.py",
+    "frax/panda_frax_viewplanning.py",
+    "frax/panda_frax_pick_place.py",
 }
 
 # MJX examples included in discovery only when mujoco.mjx is installed (others

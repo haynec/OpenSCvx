@@ -1209,6 +1209,7 @@ class Problem:
         # they never benefit from.
         warmup_state = self._default_state()
         jax.block_until_ready(self._iteration_fn(warmup_state, self._parameters))
+        self._algorithm.warmup(warmup_state, self._parameters)
         print("✓ SCvx Subproblem Solver initialized")
 
         # Get columns from algorithm (now that autotuner is set) and start print thread

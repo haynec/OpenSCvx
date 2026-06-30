@@ -26,7 +26,7 @@ from ..base import Algorithm
 from ..history import AlgorithmHistory
 from ..state import AlgorithmState, adaptive_state_code_to_str
 from ..weights import Weights
-from .iteration import make_scp_iteration
+from .iteration import make_scp_finalize, make_scp_iteration, make_scp_prepare
 
 if TYPE_CHECKING:
     from openscvx.lowered import LoweredJaxConstraints
@@ -68,7 +68,8 @@ class PenalizedTrustRegion(Algorithm):
     # Base columns emitted by PTR algorithm (before autotuner columns)
     BASE_COLUMNS: List[Column] = [
         Column("iter", "Iter", 4, "{:4d}"),
-        Column("subprop_time", "Step (ms)", 10, "{:6.2f}", min_verbosity=Verbosity.STANDARD),
+        Column("t_dis", "Dis (ms)", 9, "{:6.2f}", min_verbosity=Verbosity.STANDARD),
+        Column("t_cvx", "Cvx (ms)", 9, "{:6.2f}", min_verbosity=Verbosity.STANDARD),
         Column("cost", "Cost", 8, "{: .1e}"),
         Column("J_tr", "J_tr", 8, "{: .1e}", color_J_tr, Verbosity.STANDARD),
         Column("J_vb", "J_vb", 8, "{: .1e}", color_J_vb, Verbosity.STANDARD),
@@ -97,10 +98,14 @@ class PenalizedTrustRegion(Algorithm):
     ):
         """Initialize PTR with algorithm parameters and optional autotuner."""
         # Compiled infrastructure (set by initialize()). ``_iteration_fn`` is
-        # the fused JAX-pure SCP body; ``step()`` is a thin Python wrapper that
-        # calls it, records history, and emits.
+        # the fused JAX-pure SCP body used by ``solve_jax`` / ``solve_batched``.
+        # ``_prepare_fn`` / ``_finalize_fn`` / ``_solver_callback`` are the
+        # split-half equivalents used by ``step()`` for per-phase timing.
         self._iteration_fn: Callable | None = None
         self._emitter: Callable | None = None
+        self._prepare_fn: Callable | None = None
+        self._finalize_fn: Callable | None = None
+        self._solver_callback: Callable | None = None
 
         # Store states/controls for later re-resolution.
         self._states: List["State"] = states
@@ -169,7 +174,23 @@ class PenalizedTrustRegion(Algorithm):
         Thin wrapper around
         :func:`~openscvx.algorithms.scvx.iteration.make_scp_iteration`,
         threading this algorithm's :attr:`autotuner` into the fused body.
+
+        As a side effect, also builds and JIT-wraps the two split-half
+        callables used by :meth:`step` for per-phase timing:
+        ``_prepare_fn`` (discretize + linearize + pack) and ``_finalize_fn``
+        (candidate discretize + metrics + autotune), plus stores
+        ``_solver_callback`` directly so :meth:`step` can time the solve
+        phase in isolation.
         """
+        self._prepare_fn = jax.jit(
+            make_scp_prepare(dis_continuous, dis_impulsive, jax_constraints, settings)
+        )
+        self._finalize_fn = jax.jit(
+            make_scp_finalize(
+                dis_continuous, dis_impulsive, self.autotuner, jax_constraints, settings
+            )
+        )
+        self._solver_callback = solver_callback
         return make_scp_iteration(
             dis_continuous=dis_continuous,
             dis_impulsive=dis_impulsive,
@@ -196,6 +217,23 @@ class PenalizedTrustRegion(Algorithm):
         self._iteration_fn = iteration_fn
         self._emitter = emitter
 
+    def warmup(self, state: AlgorithmState, params: dict) -> None:
+        """Warm the split-half JIT caches used by :meth:`step`.
+
+        :class:`~openscvx.problem.Problem` calls this immediately after it warms
+        the fused ``_iteration_fn``. Running the full prepare → solve → finalize
+        sequence once here prevents the first real ``step()`` call from paying
+        the XLA compile cost of the discretization solver, which can take
+        several seconds.
+        """
+        if self._prepare_fn is None or self._solver_callback is None or self._finalize_fn is None:
+            return
+        data = self._prepare_fn(state, params)
+        jax.block_until_ready(data)
+        solution = self._solver_callback(state, data)
+        jax.block_until_ready(solution)
+        jax.block_until_ready(self._finalize_fn(state, solution, params))
+
     def step(
         self,
         state: AlgorithmState,
@@ -209,7 +247,7 @@ class PenalizedTrustRegion(Algorithm):
         diagnostics it returns into ``history``, emits progress, and reports
         convergence from the metrics on the next state.
         """
-        if self._iteration_fn is None:
+        if self._prepare_fn is None or self._solver_callback is None or self._finalize_fn is None:
             raise RuntimeError(
                 "PenalizedTrustRegion.step() called before initialize(). "
                 "Call initialize() first to set up the iteration body."
@@ -218,9 +256,17 @@ class PenalizedTrustRegion(Algorithm):
         iter_index = int(state.k)
 
         t0 = time.time()
-        next_state, diag = self._iteration_fn(state, params)
+        data = self._prepare_fn(state, params)
+        jax.block_until_ready(data)
+        t_dis = (time.time() - t0) * 1000.0
+
+        t0 = time.time()
+        solution = self._solver_callback(state, data)
+        jax.block_until_ready(solution)
+        t_cvx = (time.time() - t0) * 1000.0
+
+        next_state, diag = self._finalize_fn(state, solution, params)
         jax.block_until_ready((next_state, diag))
-        step_time = time.time() - t0
 
         # Fail loudly on a bad subproblem solve before it becomes the next
         # linearization point. Two gates: a non-OPTIMAL status from the backend
@@ -252,7 +298,8 @@ class PenalizedTrustRegion(Algorithm):
 
         emission_data = {
             "iter": iter_index,
-            "subprop_time": step_time * 1000.0,
+            "t_dis": t_dis,
+            "t_cvx": t_cvx,
             "J_tr": scalars["J_tr"],
             "J_vb": scalars["J_vb"],
             "J_vc": scalars["J_vc"],

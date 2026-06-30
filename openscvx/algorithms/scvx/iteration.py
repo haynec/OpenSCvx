@@ -26,6 +26,19 @@ body composes with ``jax.jit`` and ``jax.vmap``.
 ``Problem.solve()`` instead drives the body from a Python ``while`` loop so it
 can record the :class:`IterationDiagnostics` into ``AlgorithmHistory`` each
 iteration.
+
+For the Python ``solve()`` path, the two natural halves of each iteration are
+also exposed as standalone factories:
+
+- :func:`make_scp_prepare` — steps 1–4: discretize the current iterate,
+  linearize constraints, and pack a :class:`~openscvx.solvers.ptr_solver.SubproblemData`.
+- :func:`make_scp_finalize` — steps 6a–6c: discretize the candidate, compute
+  SCP convergence metrics, and fold through the autotuner.
+
+:func:`make_scp_iteration` is a thin combiner around them; its public signature
+and semantics are unchanged. The split-half callables are used by
+:meth:`PenalizedTrustRegion.step` to record separate discretization and convex-
+solve wall-clock times per iteration.
 """
 
 from dataclasses import dataclass, fields
@@ -86,88 +99,52 @@ class IterationDiagnostics:
         return cls(*children)
 
 
-def make_scp_iteration(
+def make_scp_prepare(
     dis_continuous: Callable,
     dis_impulsive: Callable,
     jax_constraints: "LoweredJaxConstraints",
-    solver_callback: Callable[[AlgorithmState, SubproblemData], SubproblemSolution],
-    autotuner: "AutotuningBase",
     settings: "Config",
-) -> Callable[[AlgorithmState, dict], Tuple[AlgorithmState, IterationDiagnostics]]:
-    """Build one JAX-pure SCP iteration body.
+) -> Callable[[AlgorithmState, dict], SubproblemData]:
+    """Build the discretize-linearize-pack phase of one SCP iteration.
 
-    The returned ``iteration_fn(state, params)`` performs a single SCP step and
-    returns ``(next_state, diagnostics)``. It is the fused mirror of the legacy
-    discretize → linearize → solve → autotune pipeline:
+    Returns ``prepare_fn(state, params) -> SubproblemData`` covering steps 1–4
+    of the full iteration:
 
-    1. Discretize the continuous dynamics about the current iterate
-       (``state.x`` / ``state.u``) → ``A_d, B_d, C_d, x_prop``.
-    2. Discretize the impulsive/discrete dynamics about the propagated nodes →
+    1. Discretize the current iterate through continuous dynamics →
+       ``A_d, B_d, C_d, x_prop``.
+    2. Discretize the impulsive dynamics about the propagated nodes →
        ``x_prop_plus, D_d, E_d``.
     3. Evaluate every nodal / cross-node constraint and its gradients.
     4. Pack the linearization, penalty weights, and boundary pins into a
-       :class:`SubproblemData`.
-    5. Hand it to ``solver_callback`` (the backend's ``iteration_callback``),
-       which returns a :class:`SubproblemSolution`.
-    6. Compute the ``J_tr / J_vb / J_vc`` metrics and fold the candidate through
-       the autotuner to produce the next state, alongside an
-       :class:`IterationDiagnostics`.
+       :class:`~openscvx.solvers.ptr_solver.SubproblemData`.
 
-    The current-iterate discretization (steps 1–2) is recomputed every call
-    rather than read from a carried ``state.x_prop``: the candidate is
-    re-discretized next iteration instead of carrying its discretization on
-    :class:`AlgorithmState`. This trades roughly 2× discretization work per
-    iteration for a smaller loop carry and a simpler accept/reject rule in the
-    autotuner — the next iterate is a pure function of ``state.x`` / ``state.u``,
-    so acceptance copies only the trajectory, never a discretization. The
-    discretization solvers are built by the caller (``Problem``) and
-    captured here so the caching policy stays in its own layer; the constraint
-    linearizers, per-backend solver callback, autotuner, and settings are
-    likewise closure constants.
+    The returned callable is JIT-able and forms the first of two pieces in the
+    split-timing API used by :meth:`PenalizedTrustRegion.step`. The fused
+    :func:`make_scp_iteration` delegates to this factory internally.
 
     Args:
         dis_continuous: Continuous discretization solver,
-            ``(x, u, params) -> (A_d, B_d, C_d, x_prop, V)``. A ``jax.jit``
-            callable (vmappable) or a ``jax.export`` wrapper (``.call``).
+            ``(x, u, params) -> (A_d, B_d, C_d, x_prop, V)``.
         dis_impulsive: Impulsive discretization solver,
             ``(x_nodes, u, params) -> (x_prop_plus, D_d, E_d, W)``.
         jax_constraints: Lowered nodal / cross-node JAX constraints.
-        solver_callback: ``(state, SubproblemData) -> SubproblemSolution`` from
-            the convex backend's :meth:`iteration_callback`.
-        autotuner: Weight-update strategy applied to the candidate.
-        settings: Problem configuration (scaling matrices, boundary types).
+        settings: Problem configuration.
 
     Returns:
-        ``iteration_fn(state, params) -> (next_state, diagnostics)``.
+        ``prepare_fn(state, params) -> SubproblemData``.
     """
     N = settings.sim.n
     n_x = settings.sim.n_states
     n_u = settings.sim.n_controls
     n_nodal = len(jax_constraints.nodal)
 
-    # Accept either a bare ``jax.jit`` callable or a ``jax.export`` wrapper.
     dis_continuous = dis_continuous.call if hasattr(dis_continuous, "call") else dis_continuous
     dis_impulsive = dis_impulsive.call if hasattr(dis_impulsive, "call") else dis_impulsive
 
-    # Scaling matrices for the SCP convergence / diagnostic metrics (static).
-    inv_S_x = jnp.asarray(settings.sim.inv_S_x)
-    inv_S_u = jnp.asarray(settings.sim.inv_S_u)
-
-    # Boundary types drive the candidate cost reduction (static, host-side).
-    final_type = list(settings.sim.x.final_type)
-
-    # Node-0 prior recovery: fixed initial entries come from the boundary
-    # condition, free entries from the iterate. The impulsive discretization
-    # linearizes about the propagated nodes prefixed with this prior.
     init_fixed = jnp.asarray(np.asarray(settings.sim.x.initial_type) == "Fix")
     x_initial = jnp.asarray(np.asarray(settings.sim.x.initial, dtype=float))
 
     def _discretize(x: jnp.ndarray, u: jnp.ndarray, params: dict):
-        """Discretize ``(x, u)`` through both dynamics; return propagation pieces.
-
-        Returns ``(A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, V, W)`` — ``V``
-        / ``W`` are the raw multi-shot matrices the history recorder unpacks.
-        """
         A_d, B_d, C_d, x_prop, V = dis_continuous(x, u, params)
         x0_prior = jnp.where(init_fixed, x_initial, x[0])
         x_nodes_prior = jnp.concatenate([x0_prior[None, :], x_prop], axis=0)
@@ -175,12 +152,6 @@ def make_scp_iteration(
         return A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, V, W
 
     def _linearize_constraints(x: jnp.ndarray, u: jnp.ndarray, params: dict):
-        """Stack nodal / cross-node constraint values and gradients.
-
-        Nodal data is laid out ``(N, n_nodal[, ·])`` with zero-fill at nodes
-        outside each constraint's static ``nodes`` set — the backend assembly
-        closes over those node sets and skips the zeros.
-        """
         nodal_g = jnp.zeros((N, n_nodal))
         nodal_grad_x = jnp.zeros((N, n_nodal, n_x))
         nodal_grad_u = jnp.zeros((N, n_nodal, n_u))
@@ -225,32 +196,8 @@ def make_scp_iteration(
 
         return nodal_g, nodal_grad_x, nodal_grad_u, cross_g, cross_grad_X, cross_grad_U
 
-    def _candidate_cost(x: jnp.ndarray) -> jnp.ndarray:
-        """Boundary-weighted reduction objective at the candidate's terminal node.
-
-        This is the unscaled, terminal-node *display* cost — the value the
-        emitter prints in the cost column. It deliberately differs from the
-        ``J_nonlin`` cost term computed by
-        :func:`~openscvx.algorithms.penalty.calculate_cost_from_state`, which
-        scales by ``inv_S_x`` / ``c_x`` and also folds in initial-node
-        ``Minimize`` / ``Maximize`` objectives. Convergence never reads this
-        value, so the two are allowed to drift.
-        """
-        cost = jnp.asarray(0.0)
-        for i, bc_type in enumerate(final_type):
-            if bc_type == "Minimize":
-                cost = cost + x[-1, i]
-            elif bc_type == "Maximize":
-                cost = cost - x[-1, i]
-        return cost
-
-    def iteration_fn(
-        state: AlgorithmState, params: dict
-    ) -> Tuple[AlgorithmState, IterationDiagnostics]:
-        # 1–2. Discretize the current iterate for the subproblem linearization.
+    def prepare_fn(state: AlgorithmState, params: dict) -> SubproblemData:
         A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, _, _ = _discretize(state.x, state.u, params)
-
-        # 3. Linearize the constraints about the current iterate.
         (
             nodal_g,
             nodal_grad_x,
@@ -259,9 +206,7 @@ def make_scp_iteration(
             cross_grad_X,
             cross_grad_U,
         ) = _linearize_constraints(state.x, state.u, params)
-
-        # 4. Pack the subproblem inputs.
-        data = SubproblemData(
+        return SubproblemData(
             x_bar=state.x,
             u_bar=state.u,
             A_d=A_d,
@@ -287,9 +232,79 @@ def make_scp_iteration(
             params=params,
         )
 
-        # 5. Solve the convex subproblem.
-        solution = solver_callback(state, data)
+    return prepare_fn
 
+
+def make_scp_finalize(
+    dis_continuous: Callable,
+    dis_impulsive: Callable,
+    autotuner: "AutotuningBase",
+    jax_constraints: "LoweredJaxConstraints",
+    settings: "Config",
+) -> Callable[
+    [AlgorithmState, SubproblemSolution, dict], Tuple[AlgorithmState, IterationDiagnostics]
+]:
+    """Build the candidate-discretize / metrics / autotune phase of one SCP iteration.
+
+    Returns ``finalize_fn(state, solution, params) -> (next_state, diagnostics)``
+    covering steps 6a–6c of the full iteration:
+
+    6a. Discretize the candidate ``(solution.x, solution.u)`` for the
+        autotuner's propagation fields and the history's raw matrices.
+    6b. Compute the scaled trust-region (``TR``), virtual-control (``VC``),
+        and virtual-buffer (``VB``) convergence metrics.
+    6c. Fold the candidate through the autotuner to produce the next
+        :class:`AlgorithmState`, alongside an :class:`IterationDiagnostics`.
+
+    The returned callable is JIT-able and forms the second of two pieces in the
+    split-timing API used by :meth:`PenalizedTrustRegion.step`. The fused
+    :func:`make_scp_iteration` delegates to this factory internally.
+
+    Args:
+        dis_continuous: Continuous discretization solver,
+            ``(x, u, params) -> (A_d, B_d, C_d, x_prop, V)``.
+        dis_impulsive: Impulsive discretization solver,
+            ``(x_nodes, u, params) -> (x_prop_plus, D_d, E_d, W)``.
+        autotuner: Weight-update strategy applied to the candidate.
+        jax_constraints: Lowered nodal / cross-node JAX constraints (forwarded
+            to the autotuner's ``update_weights``).
+        settings: Problem configuration (scaling matrices, boundary types).
+
+    Returns:
+        ``finalize_fn(state, solution, params) -> (next_state, diagnostics)``.
+    """
+    dis_continuous = dis_continuous.call if hasattr(dis_continuous, "call") else dis_continuous
+    dis_impulsive = dis_impulsive.call if hasattr(dis_impulsive, "call") else dis_impulsive
+
+    inv_S_x = jnp.asarray(settings.sim.inv_S_x)
+    inv_S_u = jnp.asarray(settings.sim.inv_S_u)
+
+    final_type = list(settings.sim.x.final_type)
+
+    init_fixed = jnp.asarray(np.asarray(settings.sim.x.initial_type) == "Fix")
+    x_initial = jnp.asarray(np.asarray(settings.sim.x.initial, dtype=float))
+
+    def _discretize(x: jnp.ndarray, u: jnp.ndarray, params: dict):
+        A_d, B_d, C_d, x_prop, V = dis_continuous(x, u, params)
+        x0_prior = jnp.where(init_fixed, x_initial, x[0])
+        x_nodes_prior = jnp.concatenate([x0_prior[None, :], x_prop], axis=0)
+        x_prop_plus, D_d, E_d, W = dis_impulsive(x_nodes_prior, u, params)
+        return A_d, B_d, C_d, x_prop, x_prop_plus, D_d, E_d, V, W
+
+    def _candidate_cost(x: jnp.ndarray) -> jnp.ndarray:
+        cost = jnp.asarray(0.0)
+        for i, bc_type in enumerate(final_type):
+            if bc_type == "Minimize":
+                cost = cost + x[-1, i]
+            elif bc_type == "Maximize":
+                cost = cost - x[-1, i]
+        return cost
+
+    def finalize_fn(
+        state: AlgorithmState,
+        solution: SubproblemSolution,
+        params: dict,
+    ) -> Tuple[AlgorithmState, IterationDiagnostics]:
         # 6a. Discretize the candidate for the autotuner's propagation fields
         # and the history's raw discretization matrices.
         _, _, _, cand_x_prop, cand_x_prop_plus, _, _, V_cand, W_cand = _discretize(
@@ -334,5 +349,83 @@ def make_scp_iteration(
             VC=VC,
         )
         return next_state, diagnostics
+
+    return finalize_fn
+
+
+def make_scp_iteration(
+    dis_continuous: Callable,
+    dis_impulsive: Callable,
+    jax_constraints: "LoweredJaxConstraints",
+    solver_callback: Callable[[AlgorithmState, SubproblemData], SubproblemSolution],
+    autotuner: "AutotuningBase",
+    settings: "Config",
+) -> Callable[[AlgorithmState, dict], Tuple[AlgorithmState, IterationDiagnostics]]:
+    """Build one JAX-pure SCP iteration body.
+
+    The returned ``iteration_fn(state, params)`` performs a single SCP step and
+    returns ``(next_state, diagnostics)``. It is the fused mirror of the legacy
+    discretize → linearize → solve → autotune pipeline:
+
+    1. Discretize the continuous dynamics about the current iterate
+       (``state.x`` / ``state.u``) → ``A_d, B_d, C_d, x_prop``.
+    2. Discretize the impulsive/discrete dynamics about the propagated nodes →
+       ``x_prop_plus, D_d, E_d``.
+    3. Evaluate every nodal / cross-node constraint and its gradients.
+    4. Pack the linearization, penalty weights, and boundary pins into a
+       :class:`SubproblemData`.
+    5. Hand it to ``solver_callback`` (the backend's ``iteration_callback``),
+       which returns a :class:`SubproblemSolution`.
+    6. Compute the ``J_tr / J_vb / J_vc`` metrics and fold the candidate through
+       the autotuner to produce the next state, alongside an
+       :class:`IterationDiagnostics`.
+
+    This function is a thin combiner around :func:`make_scp_prepare` (steps 1–4)
+    and :func:`make_scp_finalize` (steps 6a–6c). The two sub-factories are also
+    exposed directly for the split-timing API in :meth:`PenalizedTrustRegion.step`.
+
+    The current-iterate discretization (steps 1–2) is recomputed every call
+    rather than read from a carried ``state.x_prop``: the candidate is
+    re-discretized next iteration instead of carrying its discretization on
+    :class:`AlgorithmState`. This trades roughly 2× discretization work per
+    iteration for a smaller loop carry and a simpler accept/reject rule in the
+    autotuner — the next iterate is a pure function of ``state.x`` / ``state.u``,
+    so acceptance copies only the trajectory, never a discretization. The
+    discretization solvers are built by the caller (``Problem``) and
+    captured here so the caching policy stays in its own layer; the constraint
+    linearizers, per-backend solver callback, autotuner, and settings are
+    likewise closure constants.
+
+    Args:
+        dis_continuous: Continuous discretization solver,
+            ``(x, u, params) -> (A_d, B_d, C_d, x_prop, V)``. A ``jax.jit``
+            callable (vmappable) or a ``jax.export`` wrapper (``.call``).
+        dis_impulsive: Impulsive discretization solver,
+            ``(x_nodes, u, params) -> (x_prop_plus, D_d, E_d, W)``.
+        jax_constraints: Lowered nodal / cross-node JAX constraints.
+        solver_callback: ``(state, SubproblemData) -> SubproblemSolution`` from
+            the convex backend's :meth:`iteration_callback`.
+        autotuner: Weight-update strategy applied to the candidate.
+        settings: Problem configuration (scaling matrices, boundary types).
+
+    Returns:
+        ``iteration_fn(state, params) -> (next_state, diagnostics)``.
+    """
+    prepare_fn = make_scp_prepare(dis_continuous, dis_impulsive, jax_constraints, settings)
+    finalize_fn = make_scp_finalize(
+        dis_continuous, dis_impulsive, autotuner, jax_constraints, settings
+    )
+
+    def iteration_fn(
+        state: AlgorithmState, params: dict
+    ) -> Tuple[AlgorithmState, IterationDiagnostics]:
+        # Steps 1–4: discretize, linearize constraints, pack SubproblemData.
+        data = prepare_fn(state, params)
+
+        # Step 5: solve the convex subproblem.
+        solution = solver_callback(state, data)
+
+        # Steps 6a–6c: candidate discretization, metrics, autotune.
+        return finalize_fn(state, solution, params)
 
     return iteration_fn
