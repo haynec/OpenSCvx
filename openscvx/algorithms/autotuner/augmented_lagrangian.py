@@ -206,7 +206,7 @@ class AugmentedLagrangian(AcceptanceRatioAutotuner):
 
         for idx, constraint in enumerate(nodal_constraints.nodal):
             g = constraint.func(candidate.x, candidate.u, 0, params)
-            nu = jnp.maximum(0.0, g)
+            nu = jnp.abs(g) if constraint.is_equality else jnp.maximum(0.0, g)
 
             if constraint.nodes is not None:
                 nodes_array = jnp.asarray(constraint.nodes)
@@ -245,7 +245,7 @@ class AugmentedLagrangian(AcceptanceRatioAutotuner):
 
         for idx, constraint in enumerate(nodal_constraints.cross_node):
             g = constraint.func(candidate.x, candidate.u, params)
-            nu = jnp.sum(jnp.maximum(0.0, g))
+            nu = jnp.sum(jnp.abs(g) if constraint.is_equality else jnp.maximum(0.0, g))
             current = state.lam_vb_cross[idx]
             case1 = current + nu * scale
             case2 = current + (nu**2) / state.hyper.ep * scale
