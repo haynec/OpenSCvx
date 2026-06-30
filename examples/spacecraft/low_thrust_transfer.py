@@ -133,7 +133,7 @@ ecc_f = 0.73550320568829  # sqrt(f_f² + g_f²)
 chi_f = 0.61761258786099  # sqrt(h_f² + k_f²)
 
 # ── Problem size and free-time guess (time in TU) ─────────────────────────────
-N = 50  # discretization nodes
+N = 75  # discretization nodes
 tf_guess = 90000.0 / TU  # Section 5.3
 tf_min = 50000.0 / TU
 tf_max = 100000.0 / TU
@@ -422,6 +422,7 @@ dynamics = {
 # written as matched inequalities (≤ and ≥), while affine equalities are kept hard.
 constraints = []
 
+
 # Path constraint: thrust direction has unit norm, ‖u‖ = 1 (Eq. 15). ‖u‖ ≤ 1 is
 # convex (enforced continuously); ‖u‖ ≥ 1 is non-convex (nodal, virtual buffer).
 unorm = _norm3((ur, ut, uh))
@@ -430,24 +431,13 @@ constraints.append(ox.ctcs(unorm <= 1.0))
 # Terminal (event) constraints at the final node, Eq. (17).
 fN, gN, hN, kN = f_el[0], g_el[0], h_el[0], k_el[0]
 nodal_eqs = [
+    (fN**2 + gN**2, ecc_f**2),  # final eccentricity
     (hN**2 + kN**2, chi_f**2),  # final tan(i/2)
+    (fN * hN + gN * kN, 0.0),
 ]
-
 for expr, val in nodal_eqs:
-    constraints.append(ox.NodalConstraint(expr <= val, nodes=[N - 1]))
-    constraints.append(ox.NodalConstraint(expr >= val, nodes=[N - 1]))
-
-# Benchmark nonlinear terminal-orientation constraints:
-#   fN**2 + gN**2 = ecc_f**2
-#   fN * hN + gN * kN = 0
-#   gN * hN - kN * fN <= 0
-#
-# With hN**2 + kN**2 = chi_f**2, these are equivalent to the affine relations
-# below. This keeps the final argument of perigee condition hard in each convex
-# subproblem instead of enforcing a bilinear equality through virtual buffers.
-ecc_to_chi = ecc_f / chi_f
-constraints.append(ox.NodalConstraint((fN - ecc_to_chi * kN == 0.0).convex(), nodes=[N - 1]))
-constraints.append(ox.NodalConstraint((gN + ecc_to_chi * hN == 0.0).convex(), nodes=[N - 1]))
+    constraints.append(ox.NodalConstraint(expr == val, nodes=[N - 1]))
+constraints.append(ox.NodalConstraint(gN * hN - kN * fN <= 0.0, nodes=[N - 1]))
 
 # ── Time (free final time) ────────────────────────────────────────────────────
 time = ox.Time(
@@ -475,11 +465,11 @@ problem = Problem(
     algorithm={
         "autotuner": ox.AugmentedLagrangian(),
         "k_max": 200,
-        "lam_prox": 1e-1,
+        "lam_prox": 1e0,
         "lam_vc": 1e2,
-        "lam_vb": 1e0,
+        "lam_vb": 1e1,
     },
-    solver={"cvx_solver": "MOSEK", "solver_args": {}},
+    solver={"cvx_solver": "QOCO", "solver_args": {}},
 )
 
 
