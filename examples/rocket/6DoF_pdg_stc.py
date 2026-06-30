@@ -3,11 +3,9 @@
 
 Port of CT-cSTC/CT-cSTC.ipynb into OpenSCvx's symbolic framework.
 
-Unlike ``6DoF_pdg_cstc.py`` (which approximates the triggers with fixed node
-intervals computed from the linear initialization, ``.over((k_start, N-1))``),
-this example encodes the *actual* state-triggered constraints exactly as the
-notebook does: each compound STC is a product of smooth trigger indicators and
-constraint penalties that is integrated over the trajectory and driven to zero.
+This example encodes state-triggered constraints exactly as the notebook does:
+each compound STC is a product of smooth trigger indicators and constraint
+penalties that is integrated over the trajectory and driven to zero.
 
 How the STCs are encoded
 ------------------------
@@ -81,7 +79,9 @@ Q_INIT  = np.array([np.sin(np.pi / 4), 0.0, 0.0, np.cos(np.pi / 4)])
 W_INIT  = np.zeros(3)   # rad/s
 
 # Terminal conditions
-R_I_FINAL = np.zeros(3)                      # m
+R_I_FINAL = np.array([0.0, 0.0, 0.001])      # m — touchdown target (slightly above pad)
+GS_LOS_APEX_OFFSET_M = 0.001                 # m — GS / LoS cone apex sits below touchdown
+R_I_APEX = R_I_FINAL - np.array([0.0, 0.0, GS_LOS_APEX_OFFSET_M])  # cone vertex (pad)
 V_I_FINAL = np.array([0.0, 0.0, -5.0])       # m/s (gentle touchdown)
 Q_FINAL   = np.array([0.0, 0.0, 0.0, 1.0])   # upright
 W_FINAL   = np.zeros(3)
@@ -181,6 +181,8 @@ _T_max_aft_s = T_MAX_AFT / (M_SCALE * R_SCALE)
 _T_min_aft_s = T_MIN_AFT / (M_SCALE * R_SCALE)
 
 _r_init_s  = R_I_INIT / R_SCALE
+_r_final_s = R_I_FINAL / R_SCALE
+_r_apex_s  = R_I_APEX / R_SCALE
 _v_init_s  = V_I_INIT / R_SCALE
 _v_final_s = V_I_FINAL / R_SCALE
 _m_wet_s   = M_WET / M_SCALE   # 1.0
@@ -210,11 +212,8 @@ _alt_h2a_s    = _ALPHA_ALT_LOS * ALT_TRIGGER_H2_M / R_SCALE
 _alt_done_s   = ALT_DONE_M / R_SCALE
 _spd_trig_s   = SPD_STC_TRIG / R_SCALE
 
-# Visualization-only nominal trigger nodes (overwritten by actual crossings)
-N     = 15
-K_H1  = 12
-K_H2  =  9
-K_AFT =  5
+# ── Discretization ────────────────────────────────────────────────────────────
+N = 15
 
 # ── States ────────────────────────────────────────────────────────────────────
 mass = ox.State("mass", shape=(1,))
@@ -229,7 +228,7 @@ position.min = [-1.5, -1.5,  0.0]   # z ≥ 0 (above ground)
 position.initial = [ox.Free(float(_r_init_s[0])),
                     ox.Free(float(_r_init_s[1])),
                     ox.Free(float(_r_init_s[2]))]
-position.final   = [0.0, 0.0, 0.0]
+position.final   = [float(_r_final_s[0]), float(_r_final_s[1]), float(_r_final_s[2])]
 
 velocity = ox.State("velocity", shape=(3,))
 _v_box = 150.0 / R_SCALE
@@ -273,8 +272,8 @@ los_elev.min   = [-np.radians(DELTA_BORESIGHT_MAX_DEG)]
 los_elev.guess = np.full((N, 1), np.radians(DELTA_BORESIGHT_MAX_DEG) * 0.5)
 
 los_az = ox.Control("los_az", shape=(1,))
-los_az.max   = [ np.pi]
-los_az.min   = [-np.pi]
+los_az.max   = [ np.radians(DELTA_BORESIGHT_MAX_DEG)]
+los_az.min   = [-np.radians(DELTA_BORESIGHT_MAX_DEG)]
 los_az.guess = np.zeros((N, 1))
 
 # ── State & Control ───────────────────────────────────────────────────────────
@@ -350,10 +349,16 @@ dynamics = {
 # ── Shared sub-expressions for constraints ────────────────────────────────────
 # Tilt: ||[q_x, q_y]||²  (matches notebook's ||[x[8], x[9]]||² in [w,x,y,z] ordering)
 tilt_sq   = attitude[0]**2 + attitude[1]**2
-r_xy_norm = ox.linalg.Norm(position[0:2])
 speed     = ox.linalg.Norm(velocity)
 omega_sq  = ox.linalg.Norm(angular_velocity)**2
-z_alt     = position[2]
+z_alt     = position[2]   # height above pad (z = 0); triggers use absolute altitude
+
+# Position relative to GS / LoS cone apex (below touchdown, not at touchdown)
+pos_rel_x = position[0] - float(_r_apex_s[0])
+pos_rel_y = position[1] - float(_r_apex_s[1])
+pos_rel_z = position[2] - float(_r_apex_s[2])
+r_xy_norm = ox.linalg.Norm(ox.Concat(pos_rel_x, pos_rel_y))
+r_los_norm = ox.linalg.Norm(ox.Concat(pos_rel_x, pos_rel_y, pos_rel_z))
 
 # LOS boresight in inertial frame via body→inertial rotation
 db = los_elev[0]
@@ -364,9 +369,9 @@ los_B = ox.Concat(
     ox.Cos(db),
 )
 los_I = CBI.T @ los_B   # unit-norm boresight in inertial frame
-r_dot_los = (position[0] * los_I[0]
-             + position[1] * los_I[1]
-             + position[2] * los_I[2])
+r_dot_los = (pos_rel_x * los_I[0]
+             + pos_rel_y * los_I[1]
+             + pos_rel_z * los_I[2])
 
 
 # ── State-triggered-constraint helper ─────────────────────────────────────────
@@ -388,7 +393,7 @@ def stc(*factors, weight: float = 1.0):
     prod = factors[0]
     for f in factors[1:]:
         prod = prod * f
-    return ox.ctcs((weight * prod) <= 0)
+    return ox.ctcs((weight * prod) <= 0, penalty="huber")
 
 
 # ── Trigger indicators (relu, > 0 when active) ────────────────────────────────
@@ -404,11 +409,11 @@ T_tgt60  = relu(tilt_sq - _tilt_sq_trig)       # tilt > 60°
 # ── Constraint violations (relu, > 0 when violated) ───────────────────────────
 C_gimbal_p = relu( de - _delta_stc_rad)                 # δ_e ≤ +1°
 C_gimbal_n = relu(-de - _delta_stc_rad)                 # δ_e ≥ −1°
-C_gs_stc   = relu(r_xy_norm * _tan_gs_stc - z_alt)      # tight glideslope
+C_gs_stc   = relu(r_xy_norm * _tan_gs_stc - pos_rel_z)  # tight glideslope (apex at R_I_APEX)
 C_omega    = relu(omega_sq - _omega_sq_stc)             # tight angular rate
 C_tilt     = relu(tilt_sq - _tilt_sq_stc)               # tight tilt
 C_spd      = relu(speed - _v_stc_s)                     # tight speed
-C_los      = relu(ox.linalg.Norm(position) * _cos_psi_stc - r_dot_los)  # LOS cone
+C_los      = relu(r_los_norm * _cos_psi_stc - r_dot_los)                # LOS cone (toward R_I_APEX)
 C_Tmin_f   = relu(_T_min_aft_s - T)                     # single-engine min
 C_Tmax_f   = relu(T - _T_max_aft_s)                     # single-engine max
 C_Tmin_i   = relu(_ALPHA_T_MIN * _T_min_s - T)          # three-engine min
@@ -422,16 +427,16 @@ constraints.append((position         == _r_init_s).convex().at([0]))
 constraints.append((attitude         == Q_INIT).convex().at([0]))
 constraints.append((velocity         == _v_init_s).convex().at([0]))
 constraints.append((angular_velocity == W_INIT).convex().at([0]))
-constraints.append((position         == R_I_FINAL).convex().at([N - 1]))
+constraints.append((position         == _r_final_s).convex().at([N - 1]))
 constraints.append((velocity         == _v_final_s).convex().at([N - 1]))
 constraints.append((attitude         == Q_FINAL).convex().at([N - 1]))
 constraints.append((angular_velocity == W_FINAL).convex().at([N - 1]))
 
 # ── Always-on CTCS (entire trajectory) ────────────────────────────────────────
-constraints.append(ox.ctcs(tilt_sq - _tilt_sq_max <= 0))                 # tilt ≤ 90°
-constraints.append(ox.ctcs(omega_sq - W_B_MAX_RAD_S**2 <= 0))            # angular rate
-constraints.append(ox.ctcs(r_xy_norm * _tan_gs_max - z_alt <= 0))        # glideslope 55°
-constraints.append(ox.ctcs(_m_dry_s - mass[0] <= 0))                     # dry-mass floor
+constraints.append(ox.ctcs(tilt_sq - _tilt_sq_max <= 0, penalty="huber"))                 # tilt ≤ 90°
+constraints.append(ox.ctcs(omega_sq - W_B_MAX_RAD_S**2 <= 0, penalty="huber"))            # angular rate
+constraints.append(ox.ctcs(r_xy_norm * _tan_gs_max - pos_rel_z <= 0, penalty="huber"))    # glideslope 55°
+constraints.append(ox.ctcs(_m_dry_s - mass[0] <= 0, penalty="huber"))                     # dry-mass floor
 
 # ── Compound state-triggered constraints (notebook cell 39) ───────────────────
 # h < 100 m → tight gimbal deflection (|δ_e| ≤ 1°)
@@ -444,7 +449,7 @@ constraints.append(stc(T_alt100, C_tilt, weight=W_TILT))
 # h < 110 m → tight angular rate and tight speed
 constraints.append(stc(T_alt110, C_omega, weight=W_OMEGA))
 constraints.append(stc(T_alt110, C_spd,   weight=W_SPD))
-# h < 220 m AND h > 2 m → LOS boresight cone toward the landing pad
+# h < 220 m AND h > 2 m → LOS boresight cone toward R_I_APEX (below touchdown)
 constraints.append(stc(T_alt220, T_altgt2, C_los, weight=W_LOS))
 
 # ||v|| < 35 m/s AND tilt < 60° → single-engine thrust limits
@@ -463,7 +468,7 @@ time = ox.Time(
     initial=0.0,
     final=ox.Free(_t_f_guess),
     min=0.0,
-    max=_t_f_guess * 2.0,
+    max=_t_f_guess * 1.5,
 )
 
 # ── Problem Assembly ──────────────────────────────────────────────────────────
@@ -475,17 +480,26 @@ problem = Problem(
     constraints=constraints,
     time=time,
     float_dtype="float64",
+    # licq_max = 1e-6,
     algorithm={
         # A high *constant* constraint-violation weight (lam_vc) plays the role
         # of the notebook's w_con_dyn, driving the integrated STC penalty to
         # zero.  PTR (the default acceptance-ratio loop) keeps the SCP stable;
         # the adaptive AugmentedLagrangian was found to overshoot and diverge.
-        "lam_vc": 2e0,
+        "lam_vc": 4E0,
         "lam_cost": 1e-2,
         "k_max": 800,
         "autotuner": ox.ConstantProximalWeight(),
+        # "autotuner": ox.AugmentedLagrangian(ep=1E-1, eta_lambda=1e3),
+    },
+    discretizer={
+        "diffrax_kwargs": {"atol": 1e-10, "rtol": 1e-10},
     },
 )
+
+# Prop tolerances
+problem.settings.prp.atol = 1e-12
+problem.settings.prp.rtol = 1e-12
 
 # ── Viser display parameters ──────────────────────────────────────────────────
 # cSTC uses ENU inertial frame (x, y horizontal; z = altitude). Viser is Z-up,
@@ -694,8 +708,15 @@ def add_cstc_los_viewcone(server, result):
     return frame, update
 
 
-def _node_trigger_indices(nodes) -> tuple[int, int, int]:
-    """Compute the (k_h1, k_h2, k_aft) node indices where triggers first activate."""
+def _first_node_index(mask: np.ndarray) -> int | None:
+    """Index of the first True entry, or None if the trigger never activates."""
+    if not mask.any():
+        return None
+    return int(np.argmax(mask))
+
+
+def _node_trigger_indices(nodes) -> tuple[int | None, int | None, int | None]:
+    """Node indices where altitude / thrust STC triggers first activate."""
     pos_m = np.asarray(nodes["position"]) * R_SCALE
     vel_ms = np.asarray(nodes["velocity"]) * R_SCALE
     q = np.asarray(nodes["attitude"])
@@ -703,13 +724,9 @@ def _node_trigger_indices(nodes) -> tuple[int, int, int]:
     spd = np.linalg.norm(vel_ms, axis=1)
     tilt_deg = np.degrees(np.arccos(np.clip(1 - 2 * (q[:, 0] ** 2 + q[:, 1] ** 2), -1.0, 1.0)))
 
-    def _first(mask, fallback):
-        idx = np.argmax(mask) if mask.any() else None
-        return int(idx) if idx is not None else fallback
-
-    k_h1 = _first(alt < ALT_TRIGGER_H1_M, K_H1)
-    k_h2 = _first(alt < ALT_TRIGGER_H2_M, K_H2)
-    k_aft = _first((spd < SPD_STC_TRIG) & (tilt_deg < THETA_STC_TRIG), K_AFT)
+    k_h1 = _first_node_index(alt < ALT_TRIGGER_H1_M)
+    k_h2 = _first_node_index(alt < ALT_TRIGGER_H2_M)
+    k_aft = _first_node_index((spd < SPD_STC_TRIG) & (tilt_deg < THETA_STC_TRIG))
     return k_h1, k_h2, k_aft
 
 
@@ -744,9 +761,11 @@ def launch_viser_servers(result) -> None:
     add_animation_controls(handle.server, handle.traj_time, callbacks, loop=True)
     traj_server = handle.server
 
+    apex_vis = tuple((R_I_APEX / SCENE_SCALE).tolist())
+    touchdown_vis = tuple((R_I_FINAL / SCENE_SCALE).tolist())
     add_glideslope_cone(
         traj_server,
-        apex=(0.0, 0.0, 0.0),
+        apex=apex_vis,
         height=initial_alt_vis,
         glideslope_angle_deg=GS_HALFANGLE_DEG,
         axis=_VISER_UP_AXIS,
@@ -755,7 +774,7 @@ def launch_viser_servers(result) -> None:
     )
     add_glideslope_cone(
         traj_server,
-        apex=(0.0, 0.0, 0.0),
+        apex=apex_vis,
         height=ALT_TRIGGER_H1_M / SCENE_SCALE,
         glideslope_angle_deg=GS_STC_HALFANGLE_DEG,
         axis=_VISER_UP_AXIS,
@@ -766,10 +785,16 @@ def launch_viser_servers(result) -> None:
     add_cstc_altitude_triggers(traj_server, pos, scene_scale_m=SCENE_SCALE)
 
     traj_server.scene.add_icosphere(
+        "/cone_apex",
+        radius=0.08,
+        color=(255, 220, 80),
+        position=apex_vis,
+    )
+    traj_server.scene.add_icosphere(
         "/landing_pad",
         radius=0.12,
         color=(50, 255, 80),
-        position=(0.0, 0.0, 0.0),
+        position=touchdown_vis,
     )
 
     for k, color in [
@@ -777,6 +802,8 @@ def launch_viser_servers(result) -> None:
         (k_h2, (80, 160, 255)),
         (k_h1, (255, 80, 80)),
     ]:
+        if k is None:
+            continue
         k = int(np.clip(k, 0, len(pos) - 1))
         traj_server.scene.add_icosphere(
             f"/phase_markers/k{k}",
@@ -785,14 +812,17 @@ def launch_viser_servers(result) -> None:
             position=tuple(float(v) for v in pos[k]),
         )
 
+    def _node_label(k: int | None) -> str:
+        return f"k={k}" if k is not None else "not crossed at nodes"
+
     with traj_server.gui.add_folder("cSTC Phase Boundaries"):
         traj_server.gui.add_markdown(
             f"**Phase structure (N={N} nodes)**\n\n"
             f"**Altitude triggers** (horizontal discs):\n"
-            f"- 🔵 h < {int(ALT_TRIGGER_H2_M)} m → k≈{k_h2}: LOS boresight viewcone  \n"
-            f"- 🔴 h < {int(ALT_TRIGGER_H1_M)} m → k≈{k_h1}: tight terminal  \n\n"
+            f"- 🔵 h < {int(ALT_TRIGGER_H2_M)} m → {_node_label(k_h2)}: LOS boresight viewcone  \n"
+            f"- 🔴 h < {int(ALT_TRIGGER_H1_M)} m → {_node_label(k_h1)}: tight terminal  \n\n"
             f"**Speed ∧ tilt trigger** (node marker only):\n"
-            f"- 🟡 k≈{k_aft}: single-engine thrust (||v||<35 ∧ θ<60°)  \n"
+            f"- 🟡 {_node_label(k_aft)}: single-engine thrust (||v||<35 ∧ θ<60°)  \n"
         )
 
     scp_server = create_scp_animated_plotting_server(
@@ -831,10 +861,12 @@ def _cbi_transpose(q_xyzw: np.ndarray) -> np.ndarray:
 
 
 def _compute_los_angle(pos_arr: np.ndarray, q_arr: np.ndarray,
-                       d_b_arr: np.ndarray, phi_b_arr: np.ndarray) -> np.ndarray:
-    """Angle (deg) between the position vector and the LOS boresight in inertial frame."""
+                       d_b_arr: np.ndarray, phi_b_arr: np.ndarray,
+                       apex: np.ndarray | None = None) -> np.ndarray:
+    """Angle (deg) between the apex-relative position and the LOS boresight."""
     nk  = pos_arr.shape[0]
     ang = np.zeros(nk)
+    apex = np.zeros(3) if apex is None else np.asarray(apex, dtype=np.float64)
     for k in range(nk):
         los_b = np.array([
             np.sin(d_b_arr[k]) * np.cos(phi_b_arr[k]),
@@ -842,7 +874,7 @@ def _compute_los_angle(pos_arr: np.ndarray, q_arr: np.ndarray,
             np.cos(d_b_arr[k]),
         ])
         los_i = _cbi_transpose(q_arr[k]) @ los_b
-        r_k   = pos_arr[k]
+        r_k   = pos_arr[k] - apex
         r_n   = np.linalg.norm(r_k)
         if r_n > 1e-8:
             cos_val = np.dot(r_k, los_i) / (r_n * (np.linalg.norm(los_i) + 1e-12))
@@ -922,13 +954,15 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc_stc
     omega_dps   = np.degrees(np.linalg.norm(w,   axis=1))
     omega_dps_n = np.degrees(np.linalg.norm(w_n, axis=1))
 
-    r_xy   = np.linalg.norm(pos[:,   :2], axis=1)
-    r_xy_n = np.linalg.norm(pos_n[:, :2], axis=1)
-    gs_deg   = 90.0 - np.degrees(np.arctan2(pos[:,   2], r_xy   + 1e-8))
-    gs_deg_n = 90.0 - np.degrees(np.arctan2(pos_n[:, 2], r_xy_n + 1e-8))
+    pos_rel   = pos   - R_I_APEX
+    pos_rel_n = pos_n - R_I_APEX
+    r_xy   = np.linalg.norm(pos_rel[:,   :2], axis=1)
+    r_xy_n = np.linalg.norm(pos_rel_n[:, :2], axis=1)
+    gs_deg   = 90.0 - np.degrees(np.arctan2(pos_rel[:,   2], r_xy   + 1e-8))
+    gs_deg_n = 90.0 - np.degrees(np.arctan2(pos_rel_n[:, 2], r_xy_n + 1e-8))
 
-    los_ang   = _compute_los_angle(pos,   q,   d_b,   phi_b)
-    los_ang_n = _compute_los_angle(pos_n, q_n, d_b_n, phi_b_n)
+    los_ang   = _compute_los_angle(pos,   q,   d_b,   phi_b,   apex=R_I_APEX)
+    los_ang_n = _compute_los_angle(pos_n, q_n, d_b_n, phi_b_n, apex=R_I_APEX)
 
     # ── Trigger times from actual trajectory crossings ────────────────────────
     alt_d = pos[:, 2]
