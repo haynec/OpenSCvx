@@ -435,6 +435,31 @@ def test_calculate_nonlinear_penalty_with_nodal_violations(
     assert nonlinear_penalty >= 0.0
 
 
+def test_calculate_nonlinear_penalty_equality_is_two_sided(settings):
+    """Equality nodal constraints penalize |g| (two-sided), inequalities use max(0, g)."""
+
+    def nodal_func(x, u, node, params):
+        return x[:, 0] - 1.5  # negative residual at x=0 (satisfied as inequality)
+
+    x_prop = np.array([[0.0, 0.0], [0.0, 0.0]])
+    x_bar = np.zeros((3, 2))
+    u_bar = np.zeros((3, 1))
+    args = (np.array([1.0, 1.0]), np.full((3, 1), 1.0), np.full(1, 1.0), 1.0)
+
+    eq = LoweredJaxConstraints(
+        nodal=[LoweredNodalConstraint(func=nodal_func, nodes=None, is_equality=True)],
+    )
+    ineq = LoweredJaxConstraints(
+        nodal=[LoweredNodalConstraint(func=nodal_func, nodes=None, is_equality=False)],
+    )
+
+    _, _, eq_pen = calculate_nonlinear_penalty(x_prop, x_bar, u_bar, *args, eq, {}, settings)
+    _, _, ineq_pen = calculate_nonlinear_penalty(x_prop, x_bar, u_bar, *args, ineq, {}, settings)
+
+    assert eq_pen > 0.0  # |−1.5| penalized
+    assert ineq_pen == 0.0  # max(0, −1.5) == 0
+
+
 def test_calculate_nonlinear_penalty_with_cross_node_violations(settings, cross_node_constraints):
     """Test penalty calculation with cross-node constraint violations."""
     x_prop = np.array([[0.5, 0.5], [1.5, 1.5]])

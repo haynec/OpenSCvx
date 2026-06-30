@@ -536,6 +536,77 @@ def test_backend_float32_raises():
     jax.clear_caches()
 
 
+def test_nodal_equality_waypoint():
+    """Soft L1-penalized nodal equality drives an off-path waypoint to target."""
+    import jax.numpy as jnp
+
+    import openscvx as ox
+    from openscvx import Problem
+
+    n = 12
+    g = 9.81
+    mid = n // 2
+    # Natural (unconstrained) node-mid position is ~(2.62, 6.69); this is a
+    # deliberate off-path deviation the soft equality must pull the iterate to.
+    waypoint = np.array([3.0, 6.4])
+
+    position = ox.State("position", shape=(2,))
+    position.max = np.array([10.0, 10.0])
+    position.min = np.array([0.0, 0.0])
+    position.initial = np.array([0.0, 10.0])
+    position.final = [10.0, 5.0]
+
+    velocity = ox.State("velocity", shape=(1,))
+    velocity.max = np.array([15.0])
+    velocity.min = np.array([0.0])
+    velocity.initial = np.array([0.0])
+    velocity.final = [("free", 10.0)]
+
+    theta = ox.Control("theta", shape=(1,))
+    theta.max = np.array([179.0 * jnp.pi / 180])
+    theta.min = np.array([0.0])
+    theta.guess = np.linspace(5 * jnp.pi / 180, 100.5 * jnp.pi / 180, n).reshape(-1, 1)
+
+    states = [position, velocity]
+    dynamics = {
+        "position": ox.Concat(velocity[0] * ox.Sin(theta[0]), -velocity[0] * ox.Cos(theta[0])),
+        "velocity": g * ox.Cos(theta[0]),
+    }
+
+    constraint_exprs = []
+    for state in states:
+        constraint_exprs.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
+    constraint_exprs.append((position == waypoint).at([mid]).weight(1e3))
+
+    time = ox.Time(initial=0.0, final=("minimize", 2.0), min=0.0, max=2.0, uniform_time_grid=True)
+
+    problem = Problem(
+        dynamics=dynamics,
+        states=states,
+        controls=[theta],
+        time=time,
+        constraints=constraint_exprs,
+        N=n,
+        licq_max=1e-8,
+        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0, "k_max": 200},
+    )
+    problem.settings.prp.dt = 0.01
+    problem.solver.solver_args = {"abstol": 1e-8, "reltol": 1e-10}
+    problem.settings.sim.save_compiled = False
+    if hasattr(problem.settings, "dev"):
+        problem.settings.dev.printing = False
+
+    problem.initialize()
+    problem.solve()
+    result = problem.post_process()
+
+    assert result["converged"], "Soft-equality problem failed to converge"
+    err = np.linalg.norm(result.nodes["position"][mid] - waypoint)
+    assert err < 1e-4, f"Waypoint not satisfied at node {mid}: err={err:.4f}"
+
+    jax.clear_caches()
+
+
 @pytest.mark.parametrize("constraint_type", ["ctcs", "nodal", "convex", "over", "at"])
 def test_constraint_types(constraint_type):
     """
