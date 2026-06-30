@@ -37,12 +37,19 @@ class LoweredNodalConstraint:
 
         nodes (Optional[List[int]]): List of node indices where this constraint applies.
             Set after lowering from NodalConstraint.
+
+        is_equality (bool): True if the source constraint was an ``Equality``
+            (``g == 0``), False for an ``Inequality`` (``g <= 0``). Controls the
+            virtual-buffer penalty shape downstream: equalities are penalized
+            two-sided (``|nu_vb|``), inequalities one-sided (``pos(nu_vb)``).
+            Defaults to False, preserving the inequality behavior.
     """
 
     func: Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
     grad_g_x: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
     grad_g_u: Optional[Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]] = None
     nodes: Optional[List[int]] = None
+    is_equality: bool = False
 
 
 @dataclass
@@ -110,6 +117,7 @@ class LoweredCrossNodeConstraint:
     func: Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]
     grad_g_X: Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]
     grad_g_U: Callable[[jnp.ndarray, jnp.ndarray, dict], jnp.ndarray]
+    is_equality: bool = False
 
 
 @dataclass
