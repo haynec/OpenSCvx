@@ -830,8 +830,8 @@ def _build_let_problem_bundle(float_dtype: str = LET_FLOAT_DTYPE) -> dict:
     }
     algorithm = {
         "lam_prox": 5e-2,
-        "lam_vc": 3e1,
-        "lam_vb": 2e-1,
+        "lam_vc": 5e1,
+        "lam_vb": 1e1,
         "lam_cost": 0.5,
         "ep_tr": 1e-8,
         "ep_vc": 1e-6,
@@ -839,35 +839,40 @@ def _build_let_problem_bundle(float_dtype: str = LET_FLOAT_DTYPE) -> dict:
     }
 
     constraints = []
-    # Enforce final distance from Earth in normalized Sun-Earth rotating frame.
+    # # Enforce final distance from Earth in normalized Sun-Earth rotating frame.
     final_radius_target = d_earth_moon / r_ref
-    eps_radius = 1e-4
+    # eps_radius = 1e-4
+    # constraints += [
+    #     (ox.linalg.Norm(position - pos_earth_rot) <= final_radius_target)
+    #     .at([n_nodes - 1])
+    #     .convex(),
+    # ]
+    # constraints += [
+    #     (ox.linalg.Norm(position - pos_earth_rot) >= (1 + eps_radius) * final_radius_target).at(
+    #         [n_nodes - 1]
+    #     ),
+    # ]
     constraints += [
-        (ox.linalg.Norm(position - pos_earth_rot) <= final_radius_target)
-        .at([n_nodes - 1])
-        .convex(),
-    ]
-    constraints += [
-        (ox.linalg.Norm(position - pos_earth_rot) >= (1 + eps_radius) * final_radius_target).at(
-            [n_nodes - 1]
-        ),
-    ]
-
-    # Final orbit tangency: radius and velocity orthogonal at terminal node.
-    constraints += [
-        (ox.Sum((position - pos_earth_rot) * velocity) >= 0.0).at([n_nodes - 1]),
-    ]
-    constraints += [
-        (ox.Sum((position - pos_earth_rot) * velocity) <= 0.0).at([n_nodes - 1]),
+        (ox.linalg.Norm(position - pos_earth_rot) == final_radius_target).at([n_nodes - 1])
     ]
 
-    # Final speed magnitude: velocity should match the moon one
-    constraints += [
-        (ox.linalg.Norm(velocity) - v_moon >= 0.0).at([n_nodes - 1]),
-    ]
-    constraints += [
-        (ox.linalg.Norm(velocity) - v_moon <= 0.0).at([n_nodes - 1]).convex(),
-    ]
+    # # Final orbit tangency: radius and velocity orthogonal at terminal node.
+    # constraints += [
+    #     (ox.Sum((position - pos_earth_rot) * velocity) >= 0.0).at([n_nodes - 1]),
+    # ]
+    # constraints += [
+    #     (ox.Sum((position - pos_earth_rot) * velocity) <= 0.0).at([n_nodes - 1]),
+    # ]
+    constraints += [(ox.Sum((position - pos_earth_rot) * velocity) == 0.0).at([n_nodes - 1])]
+
+    # # Final speed magnitude: velocity should match the moon one
+    # constraints += [
+    #     (ox.linalg.Norm(velocity) - v_moon >= 0.0).at([n_nodes - 1]),
+    # ]
+    # constraints += [
+    #     (ox.linalg.Norm(velocity) - v_moon <= 0.0).at([n_nodes - 1]).convex(),
+    # ]
+    constraints += [(ox.linalg.Norm(velocity) - v_moon == 0.0).at([n_nodes - 1])]
 
     problem = Problem(
         dynamics=dynamics,
