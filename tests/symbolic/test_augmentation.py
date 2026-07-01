@@ -1442,28 +1442,21 @@ def test_regular_convex_constraint_without_node_reference_accepted():
 # =============================================================================
 
 
-def test_nonconvex_cross_node_equality_rejected():
-    """Test that non-convex cross-node equality constraints are rejected with helpful error."""
+def test_nonconvex_cross_node_equality_accepted():
+    """Non-convex cross-node equalities are accepted as soft L1-penalized constraints."""
     n_nodes = 10
     velocity = State("vel", shape=(3,))
 
-    # Create a non-convex cross-node equality (periodic boundary condition without .convex())
     cross_node_equality = velocity.at(0) == velocity.at(9)
-
-    # Verify it's an Equality and not marked convex
     assert isinstance(cross_node_equality, Equality)
     assert not cross_node_equality.is_convex
 
-    # Should raise a helpful error
     constraint_set = ConstraintSet(unsorted=[cross_node_equality])
-    with pytest.raises(ValueError) as exc_info:
-        separate_constraints(constraint_set, n_nodes=n_nodes)
+    result = separate_constraints(constraint_set, n_nodes=n_nodes)
 
-    # Check error message is helpful
-    msg = str(exc_info.value)
-    assert "Non-convex equality constraint" in msg
-    assert ".convex()" in msg
-    assert "cross-node" in msg
+    # Routed into the non-convex cross-node list (penalized), not the convex list
+    assert len(result.cross_node) == 1
+    assert len(result.cross_node_convex) == 0
 
 
 def test_convex_cross_node_equality_accepted():
@@ -1486,28 +1479,21 @@ def test_convex_cross_node_equality_accepted():
     assert len(result.cross_node) == 0
 
 
-def test_nonconvex_nodal_equality_rejected():
-    """Test that non-convex nodal equality constraints are rejected with helpful error."""
+def test_nonconvex_nodal_equality_accepted():
+    """Non-convex nodal equalities are accepted as soft L1-penalized constraints."""
     n_nodes = 10
     position = State("pos", shape=(3,))
 
-    # Create a non-convex nodal equality (without .convex())
     nodal_equality = (position == np.zeros(3)).at([0, 5, 9])
-
-    # Verify it's an Equality and not marked convex
     assert isinstance(nodal_equality.constraint, Equality)
     assert not nodal_equality.constraint.is_convex
 
-    # Should raise a helpful error
     constraint_set = ConstraintSet(unsorted=[nodal_equality])
-    with pytest.raises(ValueError) as exc_info:
-        separate_constraints(constraint_set, n_nodes=n_nodes)
+    result = separate_constraints(constraint_set, n_nodes=n_nodes)
 
-    # Check error message is helpful
-    msg = str(exc_info.value)
-    assert "Non-convex equality constraint" in msg
-    assert ".convex()" in msg
-    assert "nodal" in msg
+    # Routed into the non-convex nodal list (penalized), not the convex list
+    assert len(result.nodal) == 1
+    assert len(result.nodal_convex) == 0
 
 
 def test_ctcs_equality_rejected():

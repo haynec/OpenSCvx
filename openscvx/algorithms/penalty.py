@@ -96,12 +96,14 @@ def calculate_nonlinear_penalty(
         else:
             g_filtered = g
             w = lam_vb_nodal[:, idx]
-        nodal_penalty = nodal_penalty + jnp.sum(w * jnp.maximum(0.0, g_filtered))
+        viol = jnp.abs(g_filtered) if constraint.is_equality else jnp.maximum(0.0, g_filtered)
+        nodal_penalty = nodal_penalty + jnp.sum(w * viol)
 
     for idx, constraint in enumerate(nodal_constraints.cross_node):
         w = lam_vb_cross[idx]
         g = constraint.func(x_bar, u_bar, params)
-        nodal_penalty = nodal_penalty + w * jnp.sum(jnp.maximum(0.0, g))
+        viol = jnp.abs(g) if constraint.is_equality else jnp.maximum(0.0, g)
+        nodal_penalty = nodal_penalty + w * jnp.sum(viol)
 
     cost = calculate_cost_from_state(x_bar, settings, lam_cost)
     x_diff = settings.sim.inv_S_x @ (x_bar[1:, :] - x_prop).T

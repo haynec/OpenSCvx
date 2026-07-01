@@ -145,6 +145,11 @@ def make_scp_iteration(
     n_u = settings.sim.n_controls
     n_nodal = len(jax_constraints.nodal)
 
+    # Equality columns measure violation two-sided (|nu_vb|); inequalities use
+    # the positive part. Built once at trace time as static boolean masks.
+    nodal_eq_mask = jnp.asarray([c.is_equality for c in jax_constraints.nodal], dtype=bool)
+    cross_eq_mask = jnp.asarray([c.is_equality for c in jax_constraints.cross_node], dtype=bool)
+
     # Accept either a bare ``jax.jit`` callable or a ``jax.export`` wrapper.
     dis_continuous = dis_continuous.call if hasattr(dis_continuous, "call") else dis_continuous
     dis_impulsive = dis_impulsive.call if hasattr(dis_impulsive, "call") else dis_impulsive
@@ -311,9 +316,13 @@ def make_scp_iteration(
         VC = jnp.abs(inv_S_x @ solution.nu.T).T
         J_tr = jnp.sum(TR**2)
         J_vc = jnp.sum(VC)
-        J_vb = jnp.sum(jnp.maximum(0.0, solution.nu_vb)) + jnp.sum(
-            jnp.maximum(0.0, solution.nu_vb_cross)
+        nodal_vb = jnp.where(
+            nodal_eq_mask, jnp.abs(solution.nu_vb), jnp.maximum(0.0, solution.nu_vb)
         )
+        cross_vb = jnp.where(
+            cross_eq_mask, jnp.abs(solution.nu_vb_cross), jnp.maximum(0.0, solution.nu_vb_cross)
+        )
+        J_vb = jnp.sum(nodal_vb) + jnp.sum(cross_vb)
         state = state.replace(
             J_tr=jnp.asarray(J_tr, dtype=state.J_tr.dtype),
             J_vb=jnp.asarray(J_vb, dtype=state.J_vb.dtype),

@@ -490,6 +490,12 @@ class MoreauPTRSolver(PTRSolver):
         self._c_u_j = jnp.asarray(self._c_u, dtype=f)
         self._jax_dtype = f
 
+        if any(c.is_equality for c in jax_constraints.nodal):
+            raise NotImplementedError(
+                "MoreauPTRSolver does not support L1-penalized equality "
+                "constraints. Use CVXPyPTRSolver."
+            )
+
         self.layout = _ConicLayout(N=N, n_x=n_x, n_u=n_u, n_nodal=len(jax_constraints.nodal))
         self._jax_constraints = jax_constraints
         self._x_unified = x_unified
