@@ -579,6 +579,25 @@ class Problem:
             self._discretizer = spec.build()
 
         # Resolve solver: instance → use directly, dict/None → validate & build
+        if byof is not None and byof.convex_costs:
+            from openscvx.solvers.cvxpy_ptr_solver import CVXPyPTRSolver
+
+            if isinstance(solver, ConvexSolver):
+                if not isinstance(solver, CVXPyPTRSolver):
+                    raise NotImplementedError(
+                        f"{type(solver).__name__} does not support byof convex_costs "
+                        f"({len(byof.convex_costs)} defined). Use solver={{'backend': 'cvxpy'}} "
+                        "or openscvx.CVXPyPTRSolver."
+                    )
+            else:
+                backend = resolve_solver_config(solver or {}).backend
+                if backend != "cvxpy":
+                    raise NotImplementedError(
+                        f"solver backend '{backend}' does not support byof convex_costs "
+                        f"({len(byof.convex_costs)} defined). Use solver={{'backend': 'cvxpy'}} "
+                        "or openscvx.CVXPyPTRSolver."
+                    )
+
         if isinstance(solver, ConvexSolver):
             self._solver = solver
         else:

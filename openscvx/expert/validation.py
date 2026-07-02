@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 from openscvx.expert.byof import ByofSpec
 
-__all__ = ["validate_byof"]
+__all__ = ["validate_byof", "validate_byof_convex_costs"]
 
 
 def validate_byof(
@@ -383,3 +383,53 @@ def validate_byof(
                         f"byof ctcs_constraints[{i}]['over'] end ({end}) exceeds "
                         f"trajectory length ({N})"
                     )
+
+    validate_byof_convex_costs(byof, N, parameters)
+
+
+def validate_byof_convex_costs(
+    byof: ByofSpec,
+    N: int | None,
+    _parameters: dict | None,
+) -> None:
+    """Validate BYOF convex cost function signatures."""
+    if not byof.convex_costs:
+        return
+
+    for i, cost_spec in enumerate(byof.convex_costs):
+        fn = cost_spec.cost_fn
+        if not callable(fn):
+            raise TypeError(
+                f"byof convex_costs[{i}]['cost_fn'] must be callable, got {type(fn)}"
+            )
+
+        sig = inspect.signature(fn)
+        n_params = len(sig.parameters)
+        if n_params == 1:
+            if cost_spec.nodes is not None:
+                raise ValueError(
+                    f"byof convex_costs[{i}]['nodes'] is only valid for nodal "
+                    f"(5-argument) cost_fn, not trajectory-wide (ocp_vars) costs"
+                )
+        elif n_params == 5:
+            if cost_spec.nodes is not None:
+                nodes = cost_spec.nodes
+                if len(nodes) == 0:
+                    raise ValueError(f"byof convex_costs[{i}]['nodes'] cannot be empty")
+                if N is not None:
+                    for node in nodes:
+                        normalized_node = node if node >= 0 else N + node
+                        if not (0 <= normalized_node < N):
+                            raise ValueError(
+                                f"byof convex_costs[{i}]['nodes'] contains invalid "
+                                f"index {node} (normalized: {normalized_node}). Valid "
+                                f"range is [0, {N}) or negative indices [-{N}, -1]."
+                            )
+        else:
+            raise ValueError(
+                f"byof convex_costs[{i}]['cost_fn'] must have signature "
+                f"cost_fn(ocp_vars) or cost_fn(x, u, node, params, ocp_vars), "
+                f"got {n_params} parameters: {list(sig.parameters.keys())}"
+            )
+
+        # params dict is accepted but not exercised — ocp_vars is unavailable here.

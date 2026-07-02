@@ -507,6 +507,16 @@ class CVXPyPTRSolver(PTRSolver):
                 cost += lam_vb_cross[idx_cross] * pen(nu_vb_cross[idx_cross])
                 idx_cross += 1
 
+        if lowered.byof_convex_costs:
+            from openscvx.expert.convex_costs import assemble_byof_convex_costs
+
+            cost += assemble_byof_convex_costs(
+                lowered.byof_convex_costs,
+                ocp_vars,
+                settings,
+                lowered.parameter_values,
+            )
+
         return cost
 
     def constraints(

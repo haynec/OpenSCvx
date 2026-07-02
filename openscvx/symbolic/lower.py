@@ -855,4 +855,6 @@ def lower_symbolic_problem(
         x_prop_unified=x_prop_unified,
         cvxpy_params=cvxpy_params,
         algebraic_prop=algebraic_prop_lowered,
+        byof_convex_costs=list(byof.convex_costs) if byof is not None else [],
+        parameter_values=dict(problem.parameters),
     )

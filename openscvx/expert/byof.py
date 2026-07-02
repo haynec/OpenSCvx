@@ -50,6 +50,18 @@ Function Signatures:
         - residual: Scalar constraint residual
         - Returns: Non-negative penalty value
 
+    - convex_costs (CVXPyPTRSolver only): DCP-compliant CVXPy objective terms.
+        All exposed state/control quantities are **unscaled** (physical units).
+
+        Trajectory-wide: ``(ocp_vars) -> cp.Expression``
+            Use ``ocp_vars.x_nonscaled``, ``ocp_vars.u_nonscaled``,
+            ``ocp_vars.x_bar``, ``ocp_vars.u_bar``, and other ``CVXPyVariables``
+            fields.
+
+        Nodal: ``(x, u, node, params, ocp_vars) -> cp.Expression``
+            ``x`` and ``u`` are unscaled at ``node``; ``ocp_vars`` is always passed.
+            Optional ``nodes`` list restricts evaluation (default: all nodes).
+
 Example:
     Basic usage mixing symbolic and byof::
 
@@ -102,10 +114,19 @@ from openscvx.symbolic.expr.parameter import Parameter
 
 if TYPE_CHECKING:
     from jax import Array as JaxArray
+
+    from openscvx.lowered.cvxpy_variables import CVXPyVariables
 else:
     JaxArray = Any
+    CVXPyVariables = Any
 
-__all__ = ["ByofSpec", "CtcsConstraintSpec", "NodalConstraintSpec", "PenaltyFunction"]
+__all__ = [
+    "ByofSpec",
+    "ConvexCostSpec",
+    "CtcsConstraintSpec",
+    "NodalConstraintSpec",
+    "PenaltyFunction",
+]
 
 
 # Type aliases for clarity
@@ -114,6 +135,37 @@ NodalConstraintFunction = Callable[[JaxArray, JaxArray, int, dict], JaxArray]
 CrossNodalConstraintFunction = Callable[[JaxArray, JaxArray, dict], JaxArray]
 CtcsConstraintFunction = Callable[[JaxArray, JaxArray, int, dict], float]
 PenaltyFunction = Union[Literal["square", "l1", "huber"], Callable[[float], float]]
+TrajectoryConvexCostFunction = Callable[[CVXPyVariables], Any]
+NodalConvexCostFunction = Callable[..., Any]
+
+
+class ConvexCostSpec(BaseModel):
+    """Specification for a user-provided convex subproblem cost term.
+
+    Requires :class:`openscvx.solvers.cvxpy_ptr_solver.CVXPyPTRSolver`.
+    Functions must be DCP-compliant; violations are caught at problem
+    construction via ``enforce_dpp=True``.
+
+    Attributes:
+        cost_fn: Callable returning a CVXPy expression to **add** to the objective.
+
+            Trajectory-wide (1 argument): ``(ocp_vars) -> cp.Expression``.
+            Use unscaled fields only (``x_nonscaled``, ``u_nonscaled``, ``x_bar``,
+            ``u_bar``, etc.).
+
+            Nodal (5 arguments): ``(x, u, node, params, ocp_vars) -> cp.Expression``.
+            ``x`` and ``u`` are unscaled decision variables at ``node``;
+            ``ocp_vars`` provides access to all SCP subproblem variables.
+
+        nodes: Node indices where a nodal cost is evaluated. Applies only to
+            5-argument ``cost_fn``. Defaults to all nodes. Negative indices
+            supported (e.g. ``-1`` for the last node).
+    """
+
+    cost_fn: Union[TrajectoryConvexCostFunction, NodalConvexCostFunction]
+    nodes: Optional[List[int]] = None
+
+    model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
 
 class NodalConstraintSpec(BaseModel):
@@ -292,6 +344,8 @@ class ByofSpec(BaseModel):
         ctcs_constraints: Continuous-time constraint satisfaction via dynamics augmentation.
             Each adds an augmented state accumulating violation penalties.
             See :class:`CtcsConstraintSpec` for details.
+        convex_costs: CVXPy convex objective terms (``CVXPyPTRSolver`` only).
+            See :class:`ConvexCostSpec` for signatures. Unscaled state/control only.
 
     Example:
         Custom dynamics and constraints::
@@ -355,5 +409,6 @@ class ByofSpec(BaseModel):
     nodal_constraints: List[NodalConstraintSpec] = []
     cross_nodal_constraints: List[CrossNodalConstraintFunction] = []
     ctcs_constraints: List[CtcsConstraintSpec] = []
+    convex_costs: List[ConvexCostSpec] = []
 
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)

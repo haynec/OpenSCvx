@@ -704,3 +704,87 @@ def test_problem_accepts_valid_byof():
 
     # Note: Full end-to-end integration testing is covered by test_brachistochrone.py::test_byof
     # This test just verifies the validation layer accepts valid byof specifications
+
+
+def test_valid_convex_cost_signatures(simple_states):
+    """Trajectory and nodal convex cost signatures are accepted."""
+    import cvxpy as cp
+
+    from openscvx.expert import validate_byof
+
+    validate_byof(
+        {
+            "convex_costs": [
+                {"cost_fn": lambda ocp_vars: cp.sum_squares(ocp_vars.x_nonscaled[0])},
+                {
+                    "cost_fn": lambda x, u, node, params, ocp_vars: cp.sum_squares(x),
+                    "nodes": [0, -1],
+                },
+            ]
+        },
+        simple_states,
+        n_x=3,
+        n_u=1,
+        N=50,
+    )
+
+
+def test_convex_cost_rejects_four_arg_nodal(simple_states):
+    from openscvx.expert import validate_byof
+
+    with pytest.raises(ValueError, match="4 parameters"):
+        validate_byof(
+            {
+                "convex_costs": [
+                    {"cost_fn": lambda x, u, node, params: x[0]},
+                ]
+            },
+            simple_states,
+            n_x=3,
+            n_u=1,
+            N=50,
+        )
+
+
+def test_convex_cost_rejects_nodes_on_trajectory_cost(simple_states):
+    import cvxpy as cp
+
+    from openscvx.expert import validate_byof
+
+    with pytest.raises(ValueError, match="nodes.*trajectory-wide"):
+        validate_byof(
+            {
+                "convex_costs": [
+                    {
+                        "cost_fn": lambda ocp_vars: cp.sum_squares(ocp_vars.x_nonscaled[0]),
+                        "nodes": [0],
+                    }
+                ]
+            },
+            simple_states,
+            n_x=3,
+            n_u=1,
+            N=50,
+        )
+
+
+def test_convex_cost_rejects_invalid_node_index(simple_states):
+    import cvxpy as cp
+
+    from openscvx.expert import validate_byof
+
+    with pytest.raises(ValueError, match="invalid index"):
+        validate_byof(
+            {
+                "convex_costs": [
+                    {
+                        "cost_fn": lambda x, u, node, params, ocp_vars: cp.sum_squares(x),
+                        "nodes": [99],
+                    }
+                ]
+            },
+            simple_states,
+            n_x=3,
+            n_u=1,
+            N=50,
+        )

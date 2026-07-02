@@ -6,6 +6,7 @@ and are willing to bypass higher-level abstractions.
 
 from openscvx.expert.byof import (
     ByofSpec,
+    ConvexCostSpec,
     CtcsConstraintSpec,
     NodalConstraintSpec,
     PenaltyFunction,
@@ -15,6 +16,7 @@ from openscvx.expert.validation import validate_byof
 
 __all__ = [
     "ByofSpec",
+    "ConvexCostSpec",
     "CtcsConstraintSpec",
     "NodalConstraintSpec",
     "PenaltyFunction",

@@ -1,7 +1,7 @@
 """LoweredProblem dataclass - container for all lowering outputs."""
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from openscvx.lowered.cvxpy_constraints import LoweredCvxpyConstraints
 from openscvx.lowered.dynamics import Dynamics
@@ -10,6 +10,8 @@ from openscvx.lowered.unified import UnifiedControl, UnifiedState
 
 if TYPE_CHECKING:
     import cvxpy as cp
+
+    from openscvx.expert.byof import ConvexCostSpec
 
 
 @dataclass
@@ -69,3 +71,7 @@ class LoweredProblem:
 
     # Algebraic outputs (vmapped JAX functions for propagation)
     algebraic_prop: Optional[Dict[str, Callable]] = field(default_factory=dict)
+
+    # BYOF convex costs (CVXPyPTRSolver only)
+    byof_convex_costs: List["ConvexCostSpec"] = field(default_factory=list)
+    parameter_values: Dict[str, Any] = field(default_factory=dict)
