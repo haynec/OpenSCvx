@@ -50,8 +50,8 @@ import openscvx as ox
 from openscvx import Problem
 
 # ── Grid / domain parameters ──────────────────────────────────────────────────
-GRID_COLS = 40
-GRID_ROWS = 40
+GRID_COLS = 80
+GRID_ROWS = 80
 CELL_W    = 1.0          # cell width  [m]
 CELL_H    = 1.0          # cell height [m]
 WALL_T    = 0.10         # wall thickness (centred on grid edge) [m]
@@ -65,8 +65,8 @@ GOAL      = np.array([(GRID_COLS - 0.5) * CELL_W,
 
 # ── SCP parameters ────────────────────────────────────────────────────────────
 N       = 800     # SCP discretisation nodes
-T_MAX   = 1000.0   # upper bound on flight time [s]
-T_GUESS = 1000.0   # assumed time for velocity finite-differencing [s]
+T_MAX   = 5000.0   # upper bound on flight time [s]
+T_GUESS = 5000.0   # assumed time for velocity finite-differencing [s]
 V_MAX   = 8.0     # speed limit   [m/s]
 F_MAX   = 5.0     # force limit   [m/s²]
 MASS    = 1.0
@@ -330,38 +330,53 @@ def _descend_path(dist: np.ndarray, start_rc, goal_rc) -> list[tuple[int, int]]:
     return cells
 
 
-def _shortcut(path: np.ndarray, clearance: float = SHORTCUT_CLEAR) -> np.ndarray:
-    """Greedy line-of-sight shortcutting via the exact analytical slab test.
-
-    Repeatedly connects the current waypoint to the furthest later waypoint
-    reachable by a collision-free straight segment, collapsing the staircase
-    produced by 4-connected grid descent into a clean polyline.
-    """
+def _shortcut_with_history(
+    path: np.ndarray,
+    clearance: float = SHORTCUT_CLEAR,
+) -> tuple[np.ndarray, list[np.ndarray]]:
+    """Like ``_shortcut`` but also returns intermediate polylines for animation."""
     smoothed = [path[0]]
+    stages: list[np.ndarray] = [np.array([path[0]])]
     i = 0
     while i < len(path) - 1:
         j = len(path) - 1
         while j > i + 1 and _segment_collides(path[i], path[j], clearance):
             j -= 1
         smoothed.append(path[j])
+        stages.append(np.array(smoothed))
         i = j
-    return np.array(smoothed)
+    return np.array(smoothed), stages
 
 
-def wavefront_plan(start: np.ndarray, goal: np.ndarray) -> np.ndarray:
+def wavefront_solve(
+    start: np.ndarray,
+    goal: np.ndarray,
+    *,
+    record_history: bool = False,
+    history_stride: int = 12,
+) -> np.ndarray | tuple[np.ndarray, dict]:
     """Plan a collision-free path with the JAX wavefront + shortcutting.
+
+    When ``record_history`` is True, also returns a dict of intermediate states
+    for viser animation (dist-field snapshots, descent steps, shortcut stages).
 
     Args:
         start: physical start position (2,).
         goal:  physical goal position  (2,).
+        record_history: capture intermediate planner states for animation.
+        history_stride: record one dist-field snapshot every this many sweeps.
 
     Returns:
-        (K, 2) ordered collision-free waypoints from ``start`` to ``goal``.
+        plan_path — (K, 2) ordered collision-free waypoints.
+        If ``record_history``, also returns a dict with keys
+        ``dist_frames``, ``free``, ``lo``, ``res``, ``start_rc``, ``goal_rc``,
+        ``descent_stages``, ``shortcut_stages``, ``raw_path``.
     """
     lo, hi = DOMAIN_LO, DOMAIN_HI
     occ = _build_occupancy(lo, hi, PLAN_RES, PLAN_CLEARANCE)
     ny, nx = occ.shape
     free = jnp.asarray(~occ)
+    free_np = np.asarray(~occ)
 
     def _rc(p):
         col = min(max(int((p[0] - lo[0]) * PLAN_RES), 0), nx - 1)
@@ -374,26 +389,72 @@ def wavefront_plan(start: np.ndarray, goal: np.ndarray) -> np.ndarray:
     dist0 = np.full((ny, nx), _BFS_INF, dtype=np.int32)
     dist0[goal_rc[0], goal_rc[1]] = 0
 
-    dist, n_iter = _wavefront(free, jnp.asarray(dist0), start_rc, nx * ny)
-    dist = np.asarray(dist)
+    dist_frames: list[np.ndarray] = []
+    if record_history:
+        dist_np = dist0.copy()
+        dist_frames.append(dist_np.copy())
+        sweep = 0
+        max_iters = nx * ny
+        while dist_np[start_rc[0], start_rc[1]] >= _BFS_INF and sweep < max_iters:
+            dist_np = np.asarray(_relax(jnp.asarray(dist_np), free))
+            sweep += 1
+            if sweep % history_stride == 0 or dist_np[start_rc[0], start_rc[1]] < _BFS_INF:
+                dist_frames.append(dist_np.copy())
+        n_iter = sweep
+        dist = dist_np
+    else:
+        dist_j, n_iter = _wavefront(free, jnp.asarray(dist0), start_rc, nx * ny)
+        dist = np.asarray(dist_j)
+
     if dist[start_rc[0], start_rc[1]] >= _BFS_INF:
         raise RuntimeError("Wavefront planner failed to reach the start cell.")
 
     cells = _descend_path(dist, start_rc, goal_rc)
 
-    # Cell indices → physical cell centres, bookended by the exact start/goal.
     pts = np.array([
         [lo[0] + (c + 0.5) / PLAN_RES, lo[1] + (r + 0.5) / PLAN_RES]
         for r, c in cells
     ])
-    path = np.vstack([start.copy(), pts, goal.copy()])
-
-    # Drop consecutive duplicates, then line-of-sight shortcut.
-    deduped = [path[0]]
-    for wp in path[1:]:
+    raw_path = np.vstack([start.copy(), pts, goal.copy()])
+    deduped = [raw_path[0]]
+    for wp in raw_path[1:]:
         if np.linalg.norm(wp - deduped[-1]) > 1e-9:
             deduped.append(wp)
-    return _shortcut(np.array(deduped))
+    raw_path = np.array(deduped)
+
+    if record_history:
+        plan_path, shortcut_stages = _shortcut_with_history(raw_path)
+        descent_stages = [
+            np.vstack([
+                start,
+                np.array([
+                    [lo[0] + (c + 0.5) / PLAN_RES, lo[1] + (r + 0.5) / PLAN_RES]
+                    for r, c in cells[:k]
+                ]),
+            ])
+            for k in range(1, len(cells) + 1)
+        ]
+        descent_stages[-1] = np.vstack([descent_stages[-1], goal.reshape(1, 2)])
+        history = {
+            "dist_frames": dist_frames,
+            "free": free_np,
+            "lo": lo.copy(),
+            "res": PLAN_RES,
+            "start_rc": start_rc,
+            "goal_rc": goal_rc,
+            "n_sweeps": int(n_iter),
+            "descent_stages": descent_stages,
+            "shortcut_stages": shortcut_stages,
+            "raw_path": raw_path,
+        }
+        return plan_path, history
+
+    return _shortcut_with_history(raw_path)[0]
+
+
+def wavefront_plan(start: np.ndarray, goal: np.ndarray) -> np.ndarray:
+    """Backward-compatible wrapper around :func:`wavefront_solve`."""
+    return wavefront_solve(start, goal)  # type: ignore[return-value]
 
 
 def path_to_guess(
@@ -479,7 +540,7 @@ def path_to_guess(
 # consecutive segment is verified collision-free (with clearance).
 print("Planning (JAX wavefront) …")
 _t0 = time.time()
-plan_path = wavefront_plan(START, GOAL)
+plan_path, wf_history = wavefront_solve(START, GOAL, record_history=True)
 _t_plan = time.time() - _t0
 path_len = float(np.sum(np.linalg.norm(np.diff(plan_path, axis=0), axis=1)))
 print(f"  Wavefront path: {len(plan_path)} waypoints, "
@@ -572,18 +633,225 @@ problem = Problem(
         "lam_vc": 1e1,
         "lam_prox": 1e0,
         # "autotuner": ox.RampProximalWeight(ramp_factor=1.04, lam_prox_max=1e3),
-        # "autotuner": ox.ConstantProximalWeight(),
-        # "k_max": 20,
+        "autotuner": ox.ConstantProximalWeight(),
+        "k_max": 20,
     },
 )
 
 
-# ── Visualisation (viser) ─────────────────────────────────────────────────────
+# ── Visualisation ───────────────────────────────────────────────────────────────
 
-_WALL_H  = 0.5    # visual height of wall boxes
-_PATH_Y  = 0.08   # height of BFS guide path above floor
-_TRAJ_Y  = 0.15   # height of SCP trajectory above floor
-_MARKER_R = 0.4   # radius of start/goal spheres
+_WALL_H     = 0.5     # visual height of wall boxes
+_GUESS_Y    = 0.06    # initial-guess polyline height above floor
+_PLAN_Y     = 0.10    # planner guide path height
+_TRAJ_Y     = 0.15    # SCP trajectory height
+_WF_FIELD_Y = 0.04    # wavefront reached-cell cloud height
+_WF_PATH_Y  = 0.12    # wavefront animation path height
+_MARKER_R   = 0.4     # radius of start/goal spheres
+
+
+def _maze_xy_to_viser(xy: np.ndarray, height: float) -> np.ndarray:
+    """Maze (x, y) → viser (x, up=Y, z)."""
+    xy = np.asarray(xy, dtype=np.float32)
+    if xy.ndim == 1:
+        return np.array([xy[0], height, xy[1]], dtype=np.float32)
+    return np.column_stack([
+        xy[:, 0],
+        np.full(len(xy), height, dtype=np.float32),
+        xy[:, 1],
+    ])
+
+
+def _path_line_segments(xy: np.ndarray, height: float) -> np.ndarray:
+    """Polyline (K, 2) → viser line_segments array (K-1, 2, 3)."""
+    pts3 = _maze_xy_to_viser(xy, height)
+    if len(pts3) < 2:
+        return np.zeros((1, 2, 3), dtype=np.float32)
+    return np.stack([pts3[:-1], pts3[1:]], axis=1)
+
+
+def _uniform_segment_colors(n_segs: int, rgb: tuple[int, int, int]) -> np.ndarray:
+    """viser line_segments colours: (N, 2, 3) uint8."""
+    c = np.array(rgb, dtype=np.uint8)
+    return np.tile(c, (n_segs, 2, 1))
+
+
+def _dist_field_cloud(
+    dist: np.ndarray,
+    free: np.ndarray,
+    lo: np.ndarray,
+    res: int,
+    height: float = _WF_FIELD_Y,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Reached planning cells as a coloured point cloud for viser."""
+    reached = free & (dist < _BFS_INF)
+    rows, cols = np.where(reached)
+    if len(rows) == 0:
+        return np.zeros((1, 3), dtype=np.float32), np.zeros((1, 3), dtype=np.uint8)
+
+    xs = lo[0] + (cols + 0.5) / res
+    zs = lo[1] + (rows + 0.5) / res
+    pts = np.column_stack([
+        xs.astype(np.float32),
+        np.full(len(xs), height, dtype=np.float32),
+        zs.astype(np.float32),
+    ])
+    d = dist[reached].astype(np.float64)
+    d_norm = 1.0 - (d / max(float(d.max()), 1.0))          # 1 at goal, 0 at frontier
+    rgba = plt.cm.plasma(d_norm)
+    colors = (rgba[:, :3] * 255.0).astype(np.uint8)
+    return pts, colors
+
+
+def _add_maze_scene(server: viser.ViserServer) -> None:
+    """Floor + extruded walls shared by both viser viewers."""
+    lo, hi = DOMAIN_LO, DOMAIN_HI
+    floor_v = np.array([
+        [lo[0], 0, lo[1]], [hi[0], 0, lo[1]],
+        [hi[0], 0, hi[1]], [lo[0], 0, hi[1]],
+    ], dtype=np.float32)
+    floor_f = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.uint32)
+    server.scene.add_mesh_simple(
+        "/floor", floor_v, floor_f, color=(230, 220, 200), side="double"
+    )
+    w_verts, w_faces = _walls_mesh()
+    server.scene.add_mesh_simple(
+        "/walls", w_verts, w_faces, color=(75, 75, 85),
+        flat_shading=True, side="double",
+    )
+    server.scene.add_icosphere(
+        "/start", radius=_MARKER_R, color=(30, 200, 80),
+        position=(float(START[0]), _GUESS_Y + _MARKER_R, float(START[1])),
+    )
+    server.scene.add_icosphere(
+        "/goal", radius=_MARKER_R, color=(220, 50, 50),
+        position=(float(GOAL[0]), _GUESS_Y + _MARKER_R, float(GOAL[1])),
+    )
+
+
+def animate_wavefront_viser(
+    wf_history: dict,
+    plan_path: np.ndarray,
+    guess_path: np.ndarray,
+    *,
+    port: int = 8081,
+) -> viser.ViserServer:
+    """Viser animation of the JAX wavefront planner building the initial guess.
+
+    Phases (press Play in the Animation folder):
+      1. Cost-to-go wavefront floods outward from the goal.
+      2. Steepest-descent path is traced from start → goal on the field.
+      3. Line-of-sight shortcutting collapses the staircase into a clean polyline.
+      4. Vertex-preserving resampling reveals the dense SCP initial guess.
+
+    Runs on ``port`` (default 8081) so it can coexist with the results viewer.
+    """
+    from openscvx.plotting.viser.animated import add_animation_controls
+
+    server = viser.ViserServer(port=port)
+    server.scene.set_up_direction("+y")
+    print(f"  Wavefront animation → http://localhost:{port}")
+
+    _add_maze_scene(server)
+
+    # Build a composite frame list: (phase_name, payload)
+    frames: list[tuple[str, object]] = []
+    for dist in wf_history["dist_frames"]:
+        frames.append(("wavefront", dist))
+    descent = wf_history["descent_stages"]
+    stride = max(1, len(descent) // 80)
+    for stage in descent[::stride]:
+        if not any(s[0] == "descent" and np.array_equal(s[1], stage) for s in frames):
+            frames.append(("descent", stage))
+    if descent:
+        frames.append(("descent", descent[-1]))
+    for stage in wf_history["shortcut_stages"]:
+        frames.append(("shortcut", stage))
+    frames.append(("guess", guess_path))
+
+    lo      = wf_history["lo"]
+    free    = wf_history["free"]
+    res     = wf_history["res"]
+
+    field_cloud = server.scene.add_point_cloud(
+        "/wavefront/reached",
+        points=np.zeros((1, 3), dtype=np.float32),
+        colors=np.zeros((1, 3), dtype=np.uint8),
+        point_size=0.045,
+    )
+    path_line = server.scene.add_line_segments(
+        "/wavefront/path",
+        points=np.zeros((1, 2, 3), dtype=np.float32),
+        colors=np.array([30, 100, 220], dtype=np.uint8),
+        line_width=3.0,
+    )
+    guess_line = server.scene.add_line_segments(
+        "/wavefront/guess",
+        points=_path_line_segments(guess_path, _GUESS_Y),
+        colors=_uniform_segment_colors(len(guess_path) - 1, (255, 180, 40)),
+        line_width=2.0,
+    )
+    guess_line.visible = False
+
+    phase_md = server.gui.add_markdown("Phase: (press Play)")
+
+    def _update(frame_idx: int) -> None:
+        phase, payload = frames[frame_idx]
+        if phase == "wavefront":
+            pts, cols = _dist_field_cloud(payload, free, lo, res)
+            field_cloud.points = pts
+            field_cloud.colors = cols
+            path_line.points = np.zeros((1, 2, 3), dtype=np.float32)
+            guess_line.visible = False
+            phase_md.content = (
+                f"**Phase 1 — wavefront flood**  \n"
+                f"Sweep snapshot {frame_idx + 1}/{len(wf_history['dist_frames'])}  "
+                f"(total sweeps: {wf_history['n_sweeps']})"
+            )
+        elif phase in ("descent", "shortcut"):
+            dist_final = wf_history["dist_frames"][-1]
+            pts, cols = _dist_field_cloud(dist_final, free, lo, res)
+            field_cloud.points = pts
+            field_cloud.colors = cols
+            segs = _path_line_segments(np.asarray(payload), _WF_PATH_Y)
+            path_line.points = segs
+            path_line.colors = _uniform_segment_colors(
+                len(segs), (30, 100, 220) if phase == "descent" else (80, 200, 120)
+            )
+            guess_line.visible = False
+            n_wp = len(payload)
+            label = "steepest descent" if phase == "descent" else "line-of-sight shortcut"
+            phase_md.content = f"**Phase {'2' if phase == 'descent' else '3'} — {label}**  \n{n_wp} waypoints"
+        else:  # guess
+            dist_final = wf_history["dist_frames"][-1]
+            pts, cols = _dist_field_cloud(dist_final, free, lo, res, height=_WF_FIELD_Y * 0.6)
+            field_cloud.points = pts
+            field_cloud.colors = (cols.astype(np.float32) * 0.35).astype(np.uint8)
+            segs = _path_line_segments(plan_path, _WF_PATH_Y)
+            path_line.points = segs
+            path_line.colors = _uniform_segment_colors(len(segs), (30, 100, 220))
+            guess_line.visible = True
+            phase_md.content = (
+                f"**Phase 4 — SCP initial guess**  \n"
+                f"{len(guess_path)} nodes (vertex-preserving resample of {len(plan_path)}-pt plan)"
+            )
+
+    n_frames = len(frames)
+    t_arr = np.linspace(0.0, float(n_frames - 1), n_frames)
+    add_animation_controls(server, t_arr, [_update], loop=True,
+                           folder_name="Wavefront Animation")
+
+    scene_center = np.array([
+        0.5 * (DOMAIN_LO[0] + DOMAIN_HI[0]),
+        2.0,
+        0.5 * (DOMAIN_LO[1] + DOMAIN_HI[1]),
+    ], dtype=np.float32)
+    server.initial_camera.position = tuple(scene_center + np.array([0.0, 35.0, 35.0]))
+    server.initial_camera.look_at = tuple(scene_center)
+    server.initial_camera.up = (0.0, 1.0, 0.0)
+
+    _update(0)
+    return server
 
 
 def _walls_mesh(wall_h: float = _WALL_H) -> tuple[np.ndarray, np.ndarray]:
@@ -617,6 +885,7 @@ def _walls_mesh(wall_h: float = _WALL_H) -> tuple[np.ndarray, np.ndarray]:
 
 def plot_results_mpl(
     plan_path: np.ndarray,
+    guess_path: np.ndarray,
     results,
     save_path: str | None = None,
     show: bool = True,
@@ -663,6 +932,12 @@ def plot_results_mpl(
     ]
     ax_maze.add_collection(
         PatchCollection(rects, facecolor=(0.28, 0.28, 0.32), edgecolor="none")
+    )
+
+    # ── SCP initial guess (dense orange polyline) ─────────────────────────────
+    ax_maze.plot(
+        guess_path[:, 0], guess_path[:, 1], "-", color="#ffb428",
+        lw=1.2, label=f"initial guess ({len(guess_path)} nodes)", zorder=3,
     )
 
     # ── Planner guide path (dashed blue) ──────────────────────────────────────
@@ -719,72 +994,80 @@ def plot_results_mpl(
     return save_path
 
 
-def plot_results(plan_path: np.ndarray, results) -> None:
-    """Open an interactive viser scene with the maze, planner guide path, and
-    SCP trajectory.  Blocks until Ctrl-C.
+def plot_results(
+    plan_path: np.ndarray,
+    guess_path: np.ndarray,
+    results,
+    *,
+    port: int = 8080,
+) -> viser.ViserServer:
+    """Interactive viser scene: maze, initial guess, planner guide, SCP trajectory.
+
+    The initial guess is drawn as a dense polyline (``line_segments``) so every
+    corner is preserved.  Catmull-Rom splines smooth corners and make the guess
+    look sparse / wall-cutting — which is why matplotlib (straight segments)
+    looked correct while the old viser view did not.
 
     Coordinate convention: maze (x, y) maps to viser (x, Y=height, z).
     """
-    server = viser.ViserServer()
-    print(f"  Viser viewer → open http://localhost:8080 in your browser")
+    server = viser.ViserServer(port=port)
+    server.scene.set_up_direction("+y")
+    print(f"  Results viewer → http://localhost:{port}")
     print("  Press Ctrl-C to exit.")
 
-    # ── Floor ─────────────────────────────────────────────────────────────────
-    lo, hi = DOMAIN_LO, DOMAIN_HI
-    floor_v = np.array([
-        [lo[0], 0, lo[1]], [hi[0], 0, lo[1]],
-        [hi[0], 0, hi[1]], [lo[0], 0, hi[1]],
-    ], dtype=np.float32)
-    floor_f = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.uint32)
-    server.scene.add_mesh_simple(
-        "floor", floor_v, floor_f, color=(230, 220, 200), side="double"
+    _add_maze_scene(server)
+
+    # ── SCP initial guess (dense polyline — matches matplotlib) ─────────────
+    guess_segs = _path_line_segments(guess_path, _GUESS_Y)
+    server.scene.add_line_segments(
+        "/initial_guess",
+        guess_segs,
+        _uniform_segment_colors(len(guess_segs), (255, 180, 40)),
+        line_width=2.5,
     )
 
-    # ── Walls ─────────────────────────────────────────────────────────────────
-    w_verts, w_faces = _walls_mesh()
-    server.scene.add_mesh_simple(
-        "walls", w_verts, w_faces, color=(75, 75, 85),
-        flat_shading=True, side="double",
-    )
-
-    # ── Planner guide path ──────────────────────────────────────────────────
-    plan_3d = np.column_stack([
-        plan_path[:, 0],
-        np.full(len(plan_path), _PATH_Y),
-        plan_path[:, 1],
-    ]).astype(np.float32)
-    server.scene.add_spline_catmull_rom(
-        "plan_path", plan_3d, color=(30, 100, 220), line_width=3,
+    # ── Planner guide path (shortcut polyline, dashed look via thinner blue) ──
+    plan_segs = _path_line_segments(plan_path, _PLAN_Y)
+    server.scene.add_line_segments(
+        "/plan_path",
+        plan_segs,
+        _uniform_segment_colors(len(plan_segs), (30, 100, 220)),
+        line_width=2.0,
     )
 
     # ── SCP trajectory ────────────────────────────────────────────────────────
     pos_traj = np.asarray(results.trajectory["position"], dtype=np.float32)
-    traj_3d = np.column_stack([
-        pos_traj[:, 0],
-        np.full(len(pos_traj), _TRAJ_Y),
-        pos_traj[:, 1],
-    ]).astype(np.float32)
-    # line_segments expects (N, 2, 3) pairs and (N, 3) uint8 colours
-    segs   = np.stack([traj_3d[:-1], traj_3d[1:]], axis=1)
-    # viser requires colors shape (N, 2, 3) — one colour per segment endpoint
-    colors = np.full((len(segs), 2, 3), [210, 50, 50], dtype=np.uint8)
-    server.scene.add_line_segments("scp_trajectory", segs, colors, line_width=4)
+    traj_segs = _path_line_segments(pos_traj, _TRAJ_Y)
+    server.scene.add_line_segments(
+        "/scp_trajectory",
+        traj_segs,
+        _uniform_segment_colors(len(traj_segs), (210, 50, 50)),
+        line_width=4.0,
+    )
 
-    # ── Start / goal markers ──────────────────────────────────────────────────
-    server.scene.add_icosphere(
-        "start", radius=_MARKER_R, color=(30, 200, 80),
-        position=(float(START[0]), _PATH_Y + _MARKER_R, float(START[1])),
-    )
-    server.scene.add_icosphere(
-        "goal", radius=_MARKER_R, color=(220, 50, 50),
-        position=(float(GOAL[0]), _PATH_Y + _MARKER_R, float(GOAL[1])),
-    )
+    scene_center = np.array([
+        0.5 * (DOMAIN_LO[0] + DOMAIN_HI[0]),
+        2.0,
+        0.5 * (DOMAIN_LO[1] + DOMAIN_HI[1]),
+    ], dtype=np.float32)
+    server.initial_camera.position = tuple(scene_center + np.array([0.0, 35.0, 35.0]))
+    server.initial_camera.look_at = tuple(scene_center)
+    server.initial_camera.up = (0.0, 1.0, 0.0)
+
+    with server.gui.add_folder("Legend"):
+        server.gui.add_markdown(
+            f"**Orange** — SCP initial guess ({len(guess_path)} nodes)  \n"
+            f"**Blue** — planner shortcut ({len(plan_path)} waypoints)  \n"
+            f"**Red** — SCP solution  \n"
+            f"Wavefront animation: port 8081"
+        )
 
     try:
         while True:
             time.sleep(0.05)
     except KeyboardInterrupt:
         pass
+    return server
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -804,5 +1087,10 @@ if __name__ == "__main__":
         pass
 
     print("Plotting …")
-    plot_results_mpl(plan_path, results)   # static matplotlib figure (blocks until closed)
-    plot_results(plan_path, results)       # interactive viser scene
+    plot_results_mpl(plan_path, pos_guess, results)   # static matplotlib figure (blocks until closed)
+
+    # Two viser viewers on different ports (both stay alive until Ctrl-C):
+    #   :8081 — wavefront planner animation (press Play)
+    #   :8080 — results scene with dense initial-guess polyline
+    animate_wavefront_viser(wf_history, plan_path, pos_guess, port=8081)
+    plot_results(plan_path, pos_guess, results, port=8080)
