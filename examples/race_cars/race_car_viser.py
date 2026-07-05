@@ -57,8 +57,14 @@ def _add_lms_track_scene(
     *,
     track_file: str = "LMS_Track.txt",
     lane_width: float = 0.12,
+    distance_marker_step: float | str | None = "auto",
 ) -> None:
-    """Static LMS track: asphalt strip, kerbs, centreline, start/finish."""
+    """Static LMS track: asphalt strip, kerbs, centreline, start/finish.
+
+    ``distance_marker_step`` spaces the "x m" labels along the centreline:
+    a number is the spacing in metres, ``"auto"`` picks roughly nine per lap,
+    and ``None`` hides the markers entirely.
+    """
     sref, xref, yref, psiref, _ = getTrack(track_file)
     dist = float(lane_width)
     x_left = xref - dist * np.sin(psiref)
@@ -147,15 +153,19 @@ def _add_lms_track_scene(
         position=tuple(p0 + np.array([0.0, 0.0, 0.035])),
     )
 
-    # Distance markers roughly every ninth of a lap, whatever the track length.
-    label_step = max(1, int(round(sref[-1] / 9.0)))
-    for i in range(0, int(sref[-1]) + 1, label_step):
-        k = int(np.argmin(np.abs(sref - i)))
-        server.scene.add_label(
-            f"/track/distance/{i}",
-            text=f"{i} m",
-            position=(float(xref[k]), float(yref[k]), 0.05),
-        )
+    if distance_marker_step is not None:
+        if distance_marker_step == "auto":
+            # Roughly every ninth of a lap, whatever the track length.
+            step = max(1.0, round(sref[-1] / 9.0))
+        else:
+            step = float(distance_marker_step)
+        for si in np.arange(0.0, sref[-1], step):
+            k = int(np.argmin(np.abs(sref - si)))
+            server.scene.add_label(
+                f"/track/distance/{k}",
+                text=f"{si:g} m",
+                position=(float(xref[k]), float(yref[k]), 0.05),
+            )
 
 
 def _yaw_wxyz(yaw: float) -> np.ndarray:
@@ -406,6 +416,7 @@ def _create_race_car_viser_server(
     lane_width: float = 0.12,
     loop_animation: bool = True,
     trim_warmup: bool = True,
+    distance_marker_step: float | str | None = "auto",
     chase_camera: bool = False,
     chase_look_ahead: float = 0.10,
     chase_distance: float = 0.16,
@@ -456,7 +467,12 @@ def _create_race_car_viser_server(
     server = viser.ViserServer()
     server.gui.configure_theme(dark_mode=True, titlebar_content=None)
 
-    _add_lms_track_scene(server, track_file=track_file, lane_width=lane_width)
+    _add_lms_track_scene(
+        server,
+        track_file=track_file,
+        lane_width=lane_width,
+        distance_marker_step=distance_marker_step,
+    )
 
     if len(pos) >= 2:
         ghost_segments = np.stack([pos[:-1], pos[1:]], axis=1)
@@ -589,6 +605,7 @@ def create_race_car_viser_server(
     lane_width: float = 0.12,
     loop_animation: bool = True,
     trim_warmup: bool = True,
+    distance_marker_step: float | str | None = "auto",
     title: str = "Race Car",
 ) -> "viser.ViserServer":
     """Interactive 3D lap replay: track mesh, speed-coloured trail, and posed car."""
@@ -600,6 +617,7 @@ def create_race_car_viser_server(
         lane_width=lane_width,
         loop_animation=loop_animation,
         trim_warmup=trim_warmup,
+        distance_marker_step=distance_marker_step,
         chase_camera=False,
         title=title,
     )
@@ -654,6 +672,7 @@ def create_race_car_comparison_viser_server(
     lane_width: float = 0.12,
     loop_animation: bool = True,
     trim_warmup: bool = True,
+    distance_marker_step: float | str | None = "auto",
     title: str = "Race Comparison",
 ) -> "viser.ViserServer":
     """Replay several laps side by side on one track with a shared clock.
@@ -667,6 +686,8 @@ def create_race_car_comparison_viser_server(
         results_list: Post-processed ``OptimizationResults``, one per car.
         labels: Display name per car (default ``car 0``, ``car 1``, ...).
         colors: Body RGB per car (defaults cycle a small palette).
+        distance_marker_step: Metres between "x m" track labels; ``"auto"``
+            picks ~9 per lap, ``None`` hides them.
     """
     import viser
     import viser.transforms as vtf
@@ -688,7 +709,12 @@ def create_race_car_comparison_viser_server(
     server = viser.ViserServer()
     server.gui.configure_theme(dark_mode=True, titlebar_content=None)
 
-    _add_lms_track_scene(server, track_file=track_file, lane_width=lane_width)
+    _add_lms_track_scene(
+        server,
+        track_file=track_file,
+        lane_width=lane_width,
+        distance_marker_step=distance_marker_step,
+    )
 
     cars = []
     for lap, label, color in zip(laps, labels, colors):
@@ -778,6 +804,7 @@ def create_race_car_chase_viser_server(
     lane_width: float = 0.12,
     loop_animation: bool = True,
     trim_warmup: bool = True,
+    distance_marker_step: float | str | None = "auto",
     look_ahead: float = 0.10,
     chase_distance: float = 0.16,
     vertical_offset: float = 0.09,
@@ -792,6 +819,7 @@ def create_race_car_chase_viser_server(
         lane_width=lane_width,
         loop_animation=loop_animation,
         trim_warmup=trim_warmup,
+        distance_marker_step=distance_marker_step,
         chase_camera=True,
         chase_look_ahead=look_ahead,
         chase_distance=chase_distance,

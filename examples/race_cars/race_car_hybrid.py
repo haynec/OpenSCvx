@@ -538,13 +538,16 @@ if __name__ == "__main__":
     comparison_server = create_race_car_comparison_viser_server(
         [results, results_ice, results_full_ice],
         labels=["hybrid", "MGU-K failure", "full-power ICE"],
+        colors=[(150, 70, 200), (90, 140, 235), (220, 35, 45)],
         track_file=TRACK_FILE,
         lane_width=n.max[0],
+        distance_marker_step=None,  # clean look — set "auto" to bring markers back
     )
     chase_server = create_race_car_chase_viser_server(
         results,
         track_file=TRACK_FILE,
         lane_width=n.max[0],
+        distance_marker_step=None,
         title="Hybrid",
     )
     print("Comparison overview and hybrid chase camera are on separate Viser ports.")
