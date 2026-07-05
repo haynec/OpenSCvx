@@ -144,7 +144,7 @@ n.guess = np.zeros((N, 1))
 alpha = ox.State("alpha", shape=(1,))
 alpha.min = [-np.pi / 2]
 alpha.max = [np.pi / 2]
-alpha.initial = [0.0]
+alpha.initial = [0.0]  # start is on a straight; freeing this settles at 0 anyway
 alpha.final = [ox.Free(0.0)]
 alpha.guess = np.zeros((N, 1))
 
@@ -153,10 +153,9 @@ v.min = [0.0]
 v.max = [6.0]
 v.initial = [ox.Free(0.0)]
 v.final = [ox.Free(0.0)]
-# Trapezoidal speed guess: ramp up then hold
-_tau = np.linspace(0.0, 1.0, N)
-_v_profile = np.where(_tau < 0.2, _tau / 0.2 * 2.0, 2.0)
-v.guess = _v_profile.reshape(-1, 1)
+# Flat speed guess: v(0) is free, and a guess that ramps from zero anchors
+# the SCP to a near-standing start instead of a flying one.
+v.guess = 2.0 * np.ones((N, 1))
 
 # Combustion throttle / friction brake. Negative D is friction braking, which
 # carries only the combustion share of the envelope — full-strength braking
@@ -164,7 +163,7 @@ v.guess = _v_profile.reshape(-1, 1)
 D_throt = ox.State("D", shape=(1,))
 D_throt.min = [-1.0]
 D_throt.max = [1.0]
-D_throt.initial = [0.0]
+D_throt.initial = [ox.Free(0.9)]  # flying lap: cross the line on the throttle
 D_throt.final = [ox.Free(0.0)]
 # Guess near full throttle. The SCP trust region anchors solutions to the
 # guess, and a mid-range throttle guess quietly caps the converged throttle
