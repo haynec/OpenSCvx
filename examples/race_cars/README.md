@@ -5,8 +5,10 @@ A video of the experiments can be found on youtube: https://www.youtube.com/watc
 `race_car_hybrid.py` extends the minimum-lap-time problem with a hybrid
 power unit patterned on the 2026 Formula 1 regulations — a ~55/45
 combustion/electric power split, a battery, and a per-lap recovery cap, all
-scaled to the RC car by dimensionless ratios (see the module docstring). The
-lap is charge-sustaining, so every joule deployed must first be harvested
-under braking; on this tight kart track the solution is harvest-limited
-rather than cap-limited, mirroring the real 2026 concern that recovering the
-full per-lap allowance is hard on most circuits.
+scaled to the RC car by dimensionless ratios (see the module docstring).
+It races a 4x-scaled LMS track (`tracks/LMS_Track_x4.txt`) whose straights
+push the car into its power-limited regime, and replaces the box acceleration
+bounds with a friction ellipse so deployment and harvesting compete with
+cornering for tyre grip. The lap is charge-sustaining, so every joule
+deployed must first be harvested under braking; the per-lap recovery cap
+actively binds at the optimum.

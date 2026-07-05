@@ -16,6 +16,20 @@ a power limit — so the hybrid split divides that envelope rather than
 modelling discrete gears (which would introduce integer modes SCvx cannot
 handle, without changing the energy strategy).
 
+The car races the LMS kart track uniformly scaled 4x (``LMS_Track_x4.txt``).
+On the original track the corner-speed profile varies too gently to demand
+real braking, so energy strategy degenerates; the longer straights of the
+scaled track push the car into its power-limited regime (above ~1.7 m/s the
+full envelope cannot reach A_MAX) and end in genuine braking zones, which is
+what makes deployment worth optimizing. The power unit stays sized from the
+car's ~6 s lap of the *unscaled* track — the car does not grow with the
+track — so here the per-lap recovery cap actively binds.
+
+Tyre grip is a friction ellipse, a_lat² + a_long² ≤ A_MAX², rather than the
+independent box bounds of the baseline example: corner-exit deployment and
+trail-brake harvesting now compete with lateral grip for the same tyre, as
+they do in a real car.
+
 Scaled to the RC car by matching the dimensionless ratios that shape the
 strategy rather than the raw SI figures:
 
@@ -66,8 +80,11 @@ import openscvx as ox
 from openscvx.plotting import plot_controls, plot_states
 
 # ── Track data ─────────────────────────────────────────────────────────────────
-sref_data, _, _, _, kapparef_data = getTrack("LMS_Track.txt")
-pathlength = float(sref_data[-1])  # ≈ 8.71 m
+# LMS kart track scaled 4x: long enough that the car becomes power-limited on
+# the straights and must genuinely brake for the corners.
+TRACK_FILE = "LMS_Track_x4.txt"
+sref_data, _, _, _, kapparef_data = getTrack(TRACK_FILE)
+pathlength = float(sref_data[-1])  # ≈ 34.84 m
 
 # Pad slightly beyond [0, pathlength] so Cinterp never extrapolates at the
 # boundary nodes when s is at exactly 0 or pathlength.
@@ -89,17 +106,19 @@ ICE_SHARE = 0.55  # combustion share of the drive-force envelope
 ELEC_SHARE = 0.45  # electric (MGU-K) share of the drive-force envelope
 ETA_BATT = 0.90  # battery round-trip efficiency, charged on the harvest side
 
-T_LAP_REF = 6.0  # reference lap time for scaling [s]
+# The power unit belongs to the car, not the track: it is sized from the
+# car's ~6 s lap of the unscaled kart track and stays fixed on the 4x track.
+T_LAP_KART = 6.0  # power-unit sizing reference: lap of the unscaled track [s]
 P_PEAK = Cm1**2 / (4.0 * Cm2)  # peak envelope wheel power ≈ 0.39 W
 P_ELEC_PEAK = ELEC_SHARE * P_PEAK  # peak MGU-K wheel power ≈ 0.18 W
 
-E_BATT_MAX = 0.13 * T_LAP_REF * P_ELEC_PEAK  # ≈ 0.14 J — the scaled 4 MJ store
+E_BATT_MAX = 0.13 * T_LAP_KART * P_ELEC_PEAK  # ≈ 0.14 J — the scaled 4 MJ store
 R_LAP_MAX = 2.0 * E_BATT_MAX  # ≈ 0.27 J — the scaled 8 MJ/lap recovery cap
 E_INIT = 0.5 * E_BATT_MAX  # start (and finish) half-charged
 
 # ── Discretisation ─────────────────────────────────────────────────────────────
 N = 80  # shooting nodes
-T_guess = 7.0  # initial guess for lap time [s] (slower than the pure-ICE car)
+T_guess = 20.0  # initial guess for lap time [s]
 
 # ── States ─────────────────────────────────────────────────────────────────────
 S_INIT = 0.0
@@ -132,7 +151,7 @@ v.initial = [ox.Free(0.0)]
 v.final = [ox.Free(0.0)]
 # Trapezoidal speed guess: ramp up then hold
 _tau = np.linspace(0.0, 1.0, N)
-_v_profile = np.where(_tau < 0.2, _tau / 0.2 * 1.5, 1.5)
+_v_profile = np.where(_tau < 0.2, _tau / 0.2 * 2.0, 2.0)
 v.guess = _v_profile.reshape(-1, 1)
 
 # Combustion throttle / friction brake. Negative D is friction braking, which
@@ -143,7 +162,10 @@ D_throt.min = [-1.0]
 D_throt.max = [1.0]
 D_throt.initial = [0.0]
 D_throt.final = [ox.Free(0.0)]
-D_throt.guess = 0.5 * np.ones((N, 1))
+# Guess near full throttle. The SCP trust region anchors solutions to the
+# guess, and a mid-range throttle guess quietly caps the converged throttle
+# (and lap time) well below optimal.
+D_throt.guess = 0.9 * np.ones((N, 1))
 
 delta = ox.State("delta", shape=(1,))
 delta.min = [-0.40]
@@ -194,7 +216,7 @@ time = ox.Time(
     initial=0.0,
     final=ox.Minimize(T_guess),
     min=0.0,
-    max=15.0,
+    max=60.0,
     guess=np.linspace(0.0, T_guess, N).reshape(-1, 1),
 )
 
@@ -254,7 +276,8 @@ for state in [s, alpha, v, D_throt, delta, E_batt, E_rec]:
         ]
     )
 
-# Nonlinear acceleration constraints (prevent tyre saturation)
+# Friction ellipse: lateral and longitudinal grip share one tyre, so
+# corner-exit deployment and trail-brake harvesting compete with cornering.
 a_lat = ox.Constant(C2) * v[0] ** 2 * delta[0] + Fxd * ox.Sin(
     ox.Constant(C1) * delta[0]
 ) / ox.Constant(m)
@@ -262,14 +285,7 @@ a_long = Fxd / ox.Constant(m)
 
 A_MAX = 4.0  # [m/s²]
 
-constraints.extend(
-    [
-        ox.ctcs(a_lat <= A_MAX, penalty="huber"),
-        ox.ctcs(-A_MAX <= a_lat, penalty="huber"),
-        ox.ctcs(a_long <= A_MAX, penalty="huber"),
-        ox.ctcs(-A_MAX <= a_long, penalty="huber"),
-    ]
-)
+constraints.append(ox.ctcs(a_lat**2 + a_long**2 <= A_MAX**2, penalty="huber"))
 
 # ── Problem ────────────────────────────────────────────────────────────────────
 problem = ox.Problem(
@@ -330,9 +346,9 @@ def plot_race_results(results) -> None:
     P_elec_sol = ELEC_SHARE * F_env_sol * (deploy_sol - regen_sol) * v_sol
 
     # ── Plot 1: track projection coloured by MGU-K power ──────────────────────
-    cart_x, cart_y, _, _ = transformProj2Orig(s_sol, n_sol, alpha_sol, v_sol, "LMS_Track.txt")
+    cart_x, cart_y, _, _ = transformProj2Orig(s_sol, n_sol, alpha_sol, v_sol, TRACK_FILE)
 
-    sref_d, xref_d, yref_d, psiref_d, _ = getTrack("LMS_Track.txt")
+    sref_d, xref_d, yref_d, psiref_d, _ = getTrack(TRACK_FILE)
     dist = 0.12
     xbl = xref_d - dist * np.sin(psiref_d)
     ybl = yref_d + dist * np.cos(psiref_d)
@@ -375,7 +391,7 @@ def plot_race_results(results) -> None:
             name="single-shot (post_process)",
         )
     )
-    for i in range(int(sref_d[-1]) + 1):
+    for i in range(0, int(sref_d[-1]) + 1, 4):
         k = int(np.argmin(np.abs(sref_d - i)))
         fig1.add_annotation(
             x=xref_d[k], y=yref_d[k], text=f"{i}m", showarrow=False, font=dict(size=10)
@@ -410,7 +426,7 @@ def plot_race_results(results) -> None:
     )
     fig2.show()
 
-    # ── Plot 3: lateral & longitudinal acceleration vs bounds ──────────────────
+    # ── Plot 3: g-g diagram against the friction ellipse ──────────────────────
     Fxd_sol = (
         ICE_SHARE * F_env_sol * D_sol
         + ELEC_SHARE * F_env_sol * (deploy_sol - regen_sol)
@@ -420,20 +436,37 @@ def plot_race_results(results) -> None:
     a_lat_sol = C2 * v_sol**2 * delta_sol + Fxd_sol * np.sin(C1 * delta_sol) / m
     a_long_sol = Fxd_sol / m
 
+    theta = np.linspace(0.0, 2.0 * np.pi, 200)
     fig3 = go.Figure()
-    fig3.add_trace(go.Scatter(x=t, y=a_lat_sol, name="a_lat", line=dict(color="blue")))
-    fig3.add_trace(go.Scatter(x=t, y=a_long_sol, name="a_long", line=dict(color="orange")))
-    for sign, show in [(1, True), (-1, False)]:
-        fig3.add_hline(
-            y=sign * A_MAX,
+    fig3.add_trace(
+        go.Scatter(
+            x=A_MAX * np.cos(theta),
+            y=A_MAX * np.sin(theta),
+            mode="lines",
             line=dict(color="black", dash="dash", width=1),
-            annotation_text="±bound" if show else None,
+            name="friction ellipse",
         )
+    )
+    fig3.add_trace(
+        go.Scatter(
+            x=a_lat_sol,
+            y=a_long_sol,
+            mode="markers",
+            marker=dict(
+                color=v_sol,
+                colorscale="Rainbow",
+                size=4,
+                colorbar=dict(title="v [m/s]"),
+                showscale=True,
+            ),
+            name="trajectory",
+        )
+    )
     fig3.update_layout(
-        title="OpenSCvx — lateral & longitudinal acceleration",
-        xaxis_title="t [s]",
-        yaxis_title="acceleration [m/s²]",
-        height=400,
+        title="OpenSCvx — g-g diagram",
+        xaxis=dict(title="a_lat [m/s²]", scaleanchor="y"),
+        yaxis=dict(title="a_long [m/s²]"),
+        height=600,
     )
     fig3.show()
 
@@ -463,12 +496,12 @@ if __name__ == "__main__":
 
     overview_server = create_race_car_viser_server(
         results,
-        track_file="LMS_Track.txt",
+        track_file=TRACK_FILE,
         lane_width=n.max[0],
     )
     chase_server = create_race_car_chase_viser_server(
         results,
-        track_file="LMS_Track.txt",
+        track_file=TRACK_FILE,
         lane_width=n.max[0],
     )
     print("Overview camera and chase camera are on separate Viser ports (two browser tabs).")
