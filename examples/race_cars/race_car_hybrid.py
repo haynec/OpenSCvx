@@ -40,7 +40,7 @@ strategy rather than the raw SI figures:
   * lap recovery cap / battery capacity:     8 MJ / 4 MJ = 2
 
 Additional states  x += [E, R]
-  E     battery energy [J], 0 ≤ E ≤ E_BATT_MAX, charge-sustaining boundary
+  E     battery energy [J], 0 ≤ E ≤ E_BATT_MAX, free at both ends
   R     cumulative energy recovered this lap [J], R(T) ≤ R_LAP_MAX
 
 Additional controls  u += [deploy, regen]
@@ -108,6 +108,7 @@ Cm1 = 0.28  # drive-force coefficient 1 [N]
 Cm2 = 0.05  # drive-force coefficient 2 [N·s/m]
 Cr0 = 0.011  # rolling-resistance constant [N]
 Cr2 = 0.006  # rolling-resistance quadratic [N·s²/m²]
+A_MAX = 4.0  # tyre grip limit — friction-ellipse radius [m/s²]
 
 # ── Hybrid power unit (F1 2026 ratios, RC-car scale) ──────────────────────────
 ICE_SHARE = 0.55  # combustion share of the drive-force envelope
@@ -157,8 +158,7 @@ v.min = [0.0]
 v.max = [6.0]
 v.initial = [ox.Free(0.0)]
 v.final = [ox.Free(0.0)]
-# Flat speed guess: v(0) is free, and a guess that ramps from zero anchors
-# the SCP to a near-standing start instead of a flying one.
+# Flat guess at racing speed — this is a flying lap, not a standing start.
 v.guess = 2.0 * np.ones((N, 1))
 
 # Combustion throttle / friction brake. Negative D is friction braking, which
@@ -169,9 +169,6 @@ D_throt.min = [-1.0]
 D_throt.max = [1.0]
 D_throt.initial = [ox.Free(0.9)]  # flying lap: cross the line on the throttle
 D_throt.final = [ox.Free(0.0)]
-# Guess near full throttle. The SCP trust region anchors solutions to the
-# guess, and a mid-range throttle guess quietly caps the converged throttle
-# (and lap time) well below optimal.
 D_throt.guess = 0.9 * np.ones((N, 1))
 
 delta = ox.State("delta", shape=(1,))
@@ -184,12 +181,9 @@ delta.guess = np.zeros((N, 1))
 E_batt = ox.State("E", shape=(1,))
 E_batt.min = [0.0]
 E_batt.max = [E_BATT_MAX]
-# Qualifying lap: boundary state of charge is free at both ends — the
-# optimizer chooses how full to start and may run the battery dry at the
-# flag. Guessing a drain from near-full to empty keeps the guess consistent
-# with that strategy (a constant guess anchors the SCP to charge-holding),
-# and guessing below capacity keeps E(0) off the E ≤ E_BATT_MAX bound, which
-# the CTCS penalty would otherwise fight from the first iteration.
+# Qualifying lap: state of charge is free at both ends — the optimizer picks
+# its starting charge and may cross the flag empty. The guess drains from
+# near-full (just off the capacity bound) to empty to match.
 E_batt.initial = [ox.Free(E_START_GUESS)]
 E_batt.final = [ox.Free(0.0)]
 E_batt.guess = np.linspace(E_START_GUESS, 0.0, N).reshape(-1, 1)
@@ -212,13 +206,11 @@ derDelta.min = [-2.0]
 derDelta.max = [2.0]
 derDelta.guess = np.zeros((N, 1))
 
-# MGU-K deployment and harvesting. Direct (unrated) controls — the electric
-# machine responds far faster than the SCP time grid resolves — held FOH so
-# power ramps piecewise-linearly instead of stepping. They stay separate
-# because the battery sees them asymmetrically (harvest pays the round-trip
-# efficiency, and only harvest counts against the recovery cap R); a single
-# signed control would put max(k, 0) kinks in the dynamics, which linearize
-# poorly. Overlap is self-penalizing: running both burns energy through η.
+# MGU-K deployment and harvesting, held FOH so power ramps rather than
+# steps. They stay separate controls because the battery sees them
+# asymmetrically — harvest pays the round-trip efficiency and counts against
+# the recovery cap — whereas a single signed control would put max(·, 0)
+# kinks in the dynamics. Overlap is self-penalizing through η.
 deploy = ox.Control("deploy", shape=(1,), parameterization="FOH")
 deploy.min = [0.0]
 deploy.max = [1.0]
@@ -310,8 +302,6 @@ a_lat = ox.Constant(C2) * v[0] ** 2 * delta[0] + Fxd * ox.Sin(
     ox.Constant(C1) * delta[0]
 ) / ox.Constant(m)
 a_long = Fxd / ox.Constant(m)
-
-A_MAX = 4.0  # [m/s²]
 
 constraints.append(ox.ctcs(a_lat**2 + a_long**2 <= A_MAX**2, penalty="huber"))
 
