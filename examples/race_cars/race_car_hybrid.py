@@ -144,7 +144,7 @@ n.guess = np.zeros((N, 1))
 alpha = ox.State("alpha", shape=(1,))
 alpha.min = [-np.pi / 2]
 alpha.max = [np.pi / 2]
-alpha.initial = [0.0]  # start is on a straight; freeing this settles at 0 anyway
+alpha.initial = [ox.Free(0.0)]  # flying lap: heading unconstrained at the line
 alpha.final = [ox.Free(0.0)]
 alpha.guess = np.zeros((N, 1))
 
