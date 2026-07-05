@@ -1414,9 +1414,7 @@ class Problem:
         profiling.profiling_end(pr, "solve")
 
         # Snapshot state, history, and parameters for post_process() / plotting
-        # reuse. Results record what happened: the parameter snapshot is what
-        # post_process() propagates with, so mutating ``self.parameters``
-        # afterwards only seeds the next solve.
+        # reuse.
         self._solution = self._state
         self._solution_history = copy.deepcopy(self._history)
         self._solution_parameters = {
@@ -1977,10 +1975,8 @@ class Problem:
         jax.block_until_ready(final_states)
         self.timing_solve = time.time() - t_0_solve
         results = OptimizationResults.from_final_state(final_states, problem=self)
-        # Record what was solved, post-broadcast: every value carries the
-        # leading (B,) axis (shared values replicated, explicit non-zero
-        # in_axes moved to the front), so post_process_batched() propagates
-        # element ``b`` with its own values.
+        # Record the as-used parameter values with a leading (B,) axis on
+        # every leaf, so post_process_batched() can index element b directly.
         results.parameters = {
             name: np.array(np.moveaxis(np.asarray(value), param_axes[name], 0))
             if param_axes[name] is not None
@@ -1995,11 +1991,9 @@ class Problem:
         Integrates the converged SCP solution through the nonlinear dynamics to
         produce x_full, u_full, and t_full. Call after solve() for final results.
 
-        Results record what happened: propagation uses the parameter values
-        recorded at solve time (``results.parameters``), not the Problem's
-        current values — mutating ``self.parameters`` between :meth:`solve`
-        and here only seeds the next solve. Results without a recorded
-        snapshot fall back to ``self.parameters``.
+        Propagation uses the parameter values recorded at solve time
+        (``results.parameters``), so mutating ``self.parameters`` between
+        :meth:`solve` and here only seeds the next solve.
 
         Returns:
             OptimizationResults with propagated trajectory fields
@@ -2020,17 +2014,11 @@ class Problem:
             int(self._solution.k) <= self._algorithm.k_max,
         )
 
-        # Propagate with the parameter values recorded at solve time; fall
-        # back to the Problem's current values for solutions that lack the
-        # snapshot.
-        parameters = (
-            self._solution_parameters if self._solution_parameters is not None else self._parameters
-        )
-        result.parameters = parameters
+        result.parameters = self._solution_parameters
 
         t_0_post = time.time()
         result = propagate_trajectory_results(
-            parameters,
+            self._solution_parameters,
             self.settings,
             result,
             self._propagation_solver,
@@ -2070,12 +2058,11 @@ class Problem:
         - ``results.cost``    — ``(B,)``
         - ``results.ctcs_violation`` — ``(B, ...)`` or ``None``
 
-        Propagation runs sequentially over the batch in a Python loop.
-        Results record what happened: element ``b`` propagates with its own
-        parameter values from the snapshot :meth:`solve_batched` recorded on
-        ``results.parameters`` (post-broadcast, so batched and shared values
-        alike carry a leading ``(B,)`` axis). Results without the snapshot
-        fall back to ``self.parameters``.
+        Propagation runs sequentially over the batch in a Python loop; each
+        element propagates with its own parameter values from the snapshot
+        :meth:`solve_batched` recorded on ``results.parameters``. Results
+        without a snapshot (e.g. loaded from an older save) fall back to
+        ``self.parameters``.
 
         Args:
             results: Batched :class:`~openscvx.algorithms.OptimizationResults`
@@ -2119,8 +2106,8 @@ class Problem:
         costs: List[float] = []
         ctcs_violations = []
 
-        # Per-element parameter values from the recorded snapshot, merged over
-        # the Problem's dict (empty snapshot = plain fallback, back-compat).
+        # Empty for results saved before the snapshot existed — those fall
+        # back to the Problem's current values, the pre-snapshot behaviour.
         snapshot = getattr(results, "parameters", None) or {}
 
         t_0_post = time.time()
