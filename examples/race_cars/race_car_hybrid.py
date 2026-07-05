@@ -52,9 +52,12 @@ regen the electric share (45 %), so braking at full strength harvests energy
 are in F1. Deploying and harvesting simultaneously only burns energy through
 the round-trip efficiency, so the optimizer never does both.
 
-Running the example solves the lap twice — once as the hybrid and once with
-the MGU-K switched off via the ``mgu_k`` parameter — and races both solutions
-on one Viser track to show what the electric system is worth.
+Running the example solves the lap three times via the ``mgu_k`` and
+``ice_share`` parameters — the hybrid, an MGU-K failure lap (electric off),
+and an unrestricted ICE lap with the full envelope — and races all three on
+one Viser track. The failure lap shows what the electric system is worth to
+this car; the unrestricted lap shows what the energy regulations cost, since
+with free fuel an equal-peak-power pure ICE strictly dominates the hybrid.
 
 Objective: free final time T, minimise T subject to s(T) = pathlength.
 """
@@ -227,14 +230,19 @@ time = ox.Time(
 # Curvature κ(s) via PCHIP spline (smooth, monotone-preserving between knots)
 kappa = ox.Cinterp(s[0], s_interp, kappa_interp, method="pchip")
 
-# MGU-K on/off switch. Solving once at 1.0 and once at 0.0 yields the hybrid
-# lap and an ICE-only reference lap from the same compiled problem (note the
-# ICE car also loses the electric share of its braking).
+# Power-unit switches. Re-solving the same compiled problem at different
+# values yields the three cars raced in the Viser comparison:
+#   (ice_share=0.55, mgu_k=1)  hybrid
+#   (ice_share=0.55, mgu_k=0)  MGU-K failure — loses electric drive *and* the
+#                              electric share of its braking
+#   (ice_share=1.0,  mgu_k=0)  unrestricted ICE with the full envelope — what
+#                              the energy regulations cost in lap time
 mgu_k = ox.Parameter("mgu_k", shape=(), value=1.0)
+ice_share = ox.Parameter("ice_share", shape=(), value=ICE_SHARE)
 
 # Drive-force envelope, split between the combustion engine and the MGU-K
 F_env = ox.Constant(Cm1) - ox.Constant(Cm2) * v[0]
-F_ice = ox.Constant(ICE_SHARE) * F_env * D_throt[0]
+F_ice = ice_share * F_env * D_throt[0]
 F_elec = mgu_k * ox.Constant(ELEC_SHARE) * F_env * (deploy[0] - regen[0])
 
 # Longitudinal tyre force [N]
@@ -496,15 +504,27 @@ if __name__ == "__main__":
     )
     print(f"  Converged    : {results.converged}")
 
-    # ICE-only reference lap: switch the MGU-K off and re-solve the same problem.
+    # MGU-K failure lap: same car, electric switched off.
     problem.parameters["mgu_k"] = 0.0
     problem.initialize()
     results_ice = problem.solve()
     results_ice = problem.post_process()
 
+    # Unrestricted ICE lap: the full envelope through the combustion path
+    # alone — no battery bookkeeping, so this is what the energy regulations
+    # cost in lap time.
+    problem.parameters["ice_share"] = 1.0
+    problem.initialize()
+    results_full_ice = problem.solve()
+    results_full_ice = problem.post_process()
+
     lap_hybrid = nodes["time"][-1, 0]
     lap_ice = results_ice.nodes["time"][-1, 0]
-    print(f"  ICE-only lap : {lap_ice:.3f} s  (hybrid ahead by {lap_ice - lap_hybrid:.3f} s)")
+    lap_full_ice = results_full_ice.nodes["time"][-1, 0]
+    print(f"  MGU-K failure lap: {lap_ice:.3f} s  ({lap_ice - lap_hybrid:+.3f} s vs hybrid)")
+    print(
+        f"  Full-power ICE   : {lap_full_ice:.3f} s  ({lap_full_ice - lap_hybrid:+.3f} s vs hybrid)"
+    )
 
     plot_states(results).show()
     plot_controls(results).show()
@@ -516,8 +536,8 @@ if __name__ == "__main__":
     )
 
     comparison_server = create_race_car_comparison_viser_server(
-        [results, results_ice],
-        labels=["hybrid", "ICE only"],
+        [results, results_ice, results_full_ice],
+        labels=["hybrid", "MGU-K failure", "full-power ICE"],
         track_file=TRACK_FILE,
         lane_width=n.max[0],
     )
