@@ -9,8 +9,9 @@ scaled to the RC car by dimensionless ratios (see the module docstring).
 It races a 4x-scaled LMS track (`tracks/LMS_Track_x4.txt`) whose straights
 push the car into its power-limited regime, and replaces the box acceleration
 bounds with a friction ellipse so deployment and harvesting compete with
-cornering for tyre grip. The lap is charge-sustaining, so every joule
-deployed must first be harvested under braking; the per-lap recovery cap
-actively binds at the optimum. The example also re-solves the lap with the
-MGU-K switched off and races both cars on one Viser track, making the
-electric system's lap-time worth directly visible.
+cornering for tyre grip. The lap is a qualifying lap — boundary state of
+charge is free at both ends — and the per-lap recovery cap actively binds
+at the optimum. The example also re-solves the lap with the MGU-K switched
+off and with an unrestricted full-envelope ICE, racing all three cars on
+one Viser track to make the electric system's lap-time worth directly
+visible.

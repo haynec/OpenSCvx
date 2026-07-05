@@ -7,8 +7,9 @@ with a hybrid power unit patterned on the 2026 Formula 1 regulations:
     (2026 caps the MGU-K at 350 kW against ~400 kW of combustion power).
   * The battery stores 4 MJ and recovery is limited to ~8 MJ per lap,
     harvested exclusively from the driven axle under braking.
-  * The lap is charge-sustaining — E(T) = E(0) — so every joule deployed
-    must first be harvested and the lap is infinitely repeatable.
+  * The lap is a qualifying lap: state of charge is free at both ends, so
+    the car may start full and cross the flag empty. The recovery cap still
+    limits how much braking energy can top the battery up along the way.
 
 No gearbox is needed: the Kloeser drive force (Cm1 - Cm2·v)·D is already a
 driveline *envelope* — wheel force after gearing, falling off with speed like
@@ -121,7 +122,7 @@ P_ELEC_PEAK = ELEC_SHARE * P_PEAK  # peak MGU-K wheel power ≈ 0.18 W
 
 E_BATT_MAX = 0.13 * T_LAP_KART * P_ELEC_PEAK  # ≈ 0.14 J — the scaled 4 MJ store
 R_LAP_MAX = 2.0 * E_BATT_MAX  # ≈ 0.27 J — the scaled 8 MJ/lap recovery cap
-E_INIT = 0.5 * E_BATT_MAX  # start (and finish) half-charged
+E_START_GUESS = 0.9 * E_BATT_MAX  # quali lap: guess a near-full start, drained by the flag
 
 # ── Discretisation ─────────────────────────────────────────────────────────────
 N = 80  # shooting nodes
@@ -183,9 +184,15 @@ delta.guess = np.zeros((N, 1))
 E_batt = ox.State("E", shape=(1,))
 E_batt.min = [0.0]
 E_batt.max = [E_BATT_MAX]
-E_batt.initial = [E_INIT]
-E_batt.final = [E_INIT]  # charge-sustaining: the lap must be repeatable
-E_batt.guess = E_INIT * np.ones((N, 1))
+# Qualifying lap: boundary state of charge is free at both ends — the
+# optimizer chooses how full to start and may run the battery dry at the
+# flag. Guessing a drain from near-full to empty keeps the guess consistent
+# with that strategy (a constant guess anchors the SCP to charge-holding),
+# and guessing below capacity keeps E(0) off the E ≤ E_BATT_MAX bound, which
+# the CTCS penalty would otherwise fight from the first iteration.
+E_batt.initial = [ox.Free(E_START_GUESS)]
+E_batt.final = [ox.Free(0.0)]
+E_batt.guess = np.linspace(E_START_GUESS, 0.0, N).reshape(-1, 1)
 
 E_rec = ox.State("R", shape=(1,))
 E_rec.min = [0.0]
@@ -205,14 +212,19 @@ derDelta.min = [-2.0]
 derDelta.max = [2.0]
 derDelta.guess = np.zeros((N, 1))
 
-# MGU-K deployment and harvesting. Direct (unrated) controls: the electric
-# machine responds far faster than the SCP time grid resolves.
-deploy = ox.Control("deploy", shape=(1,), parameterization="ZOH")
+# MGU-K deployment and harvesting. Direct (unrated) controls — the electric
+# machine responds far faster than the SCP time grid resolves — held FOH so
+# power ramps piecewise-linearly instead of stepping. They stay separate
+# because the battery sees them asymmetrically (harvest pays the round-trip
+# efficiency, and only harvest counts against the recovery cap R); a single
+# signed control would put max(k, 0) kinks in the dynamics, which linearize
+# poorly. Overlap is self-penalizing: running both burns energy through η.
+deploy = ox.Control("deploy", shape=(1,), parameterization="FOH")
 deploy.min = [0.0]
 deploy.max = [1.0]
 deploy.guess = 0.3 * np.ones((N, 1))
 
-regen = ox.Control("regen", shape=(1,), parameterization="ZOH")
+regen = ox.Control("regen", shape=(1,), parameterization="FOH")
 regen.min = [0.0]
 regen.max = [1.0]
 regen.guess = 0.1 * np.ones((N, 1))
