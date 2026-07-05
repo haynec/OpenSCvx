@@ -147,7 +147,9 @@ def _add_lms_track_scene(
         position=tuple(p0 + np.array([0.0, 0.0, 0.035])),
     )
 
-    for i in range(int(sref[-1]) + 1):
+    # Distance markers roughly every ninth of a lap, whatever the track length.
+    label_step = max(1, int(round(sref[-1] / 9.0)))
+    for i in range(0, int(sref[-1]) + 1, label_step):
         k = int(np.argmin(np.abs(sref - i)))
         server.scene.add_label(
             f"/track/distance/{i}",
