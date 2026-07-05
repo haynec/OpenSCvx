@@ -1978,11 +1978,12 @@ class Problem:
         self.timing_solve = time.time() - t_0_solve
         results = OptimizationResults.from_final_state(final_states, problem=self)
         # Record what was solved, post-broadcast: every value carries the
-        # leading (B,) axis (shared values replicated), so
-        # post_process_batched() propagates element ``b`` with its own values.
+        # leading (B,) axis (shared values replicated, explicit non-zero
+        # in_axes moved to the front), so post_process_batched() propagates
+        # element ``b`` with its own values.
         results.parameters = {
-            name: np.array(value)
-            if param_axes[name] == 0
+            name: np.array(np.moveaxis(np.asarray(value), param_axes[name], 0))
+            if param_axes[name] is not None
             else np.broadcast_to(np.asarray(value), (B,) + np.shape(value)).copy()
             for name, value in params_for_solve.items()
         }
