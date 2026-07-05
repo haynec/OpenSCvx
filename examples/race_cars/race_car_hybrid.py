@@ -52,6 +52,10 @@ regen the electric share (45 %), so braking at full strength harvests energy
 are in F1. Deploying and harvesting simultaneously only burns energy through
 the round-trip efficiency, so the optimizer never does both.
 
+Running the example solves the lap twice — once as the hybrid and once with
+the MGU-K switched off via the ``mgu_k`` parameter — and races both solutions
+on one Viser track to show what the electric system is worth.
+
 Objective: free final time T, minimise T subject to s(T) = pathlength.
 """
 
@@ -224,10 +228,15 @@ time = ox.Time(
 # Curvature κ(s) via PCHIP spline (smooth, monotone-preserving between knots)
 kappa = ox.Cinterp(s[0], s_interp, kappa_interp, method="pchip")
 
+# MGU-K on/off switch. Solving once at 1.0 and once at 0.0 yields the hybrid
+# lap and an ICE-only reference lap from the same compiled problem (note the
+# ICE car also loses the electric share of its braking).
+mgu_k = ox.Parameter("mgu_k", shape=(), value=1.0)
+
 # Drive-force envelope, split between the combustion engine and the MGU-K
 F_env = ox.Constant(Cm1) - ox.Constant(Cm2) * v[0]
 F_ice = ox.Constant(ICE_SHARE) * F_env * D_throt[0]
-F_elec = ox.Constant(ELEC_SHARE) * F_env * (deploy[0] - regen[0])
+F_elec = mgu_k * ox.Constant(ELEC_SHARE) * F_env * (deploy[0] - regen[0])
 
 # Longitudinal tyre force [N]
 Fxd = (
@@ -239,8 +248,8 @@ Fxd = (
 
 # Battery power flows: deployment drains at wheel power, harvesting charges
 # through the round-trip efficiency.
-P_deploy = ox.Constant(ELEC_SHARE) * F_env * deploy[0] * v[0]
-P_harvest = ox.Constant(ETA_BATT) * ox.Constant(ELEC_SHARE) * F_env * regen[0] * v[0]
+P_deploy = mgu_k * ox.Constant(ELEC_SHARE) * F_env * deploy[0] * v[0]
+P_harvest = mgu_k * ox.Constant(ETA_BATT) * ox.Constant(ELEC_SHARE) * F_env * regen[0] * v[0]
 
 # Effective slip angle at front tyre
 slip_angle = alpha[0] + ox.Constant(C1) * delta[0]
@@ -488,14 +497,28 @@ if __name__ == "__main__":
     )
     print(f"  Converged    : {results.converged}")
 
+    # ICE-only reference lap: switch the MGU-K off and re-solve the same problem.
+    problem.parameters["mgu_k"] = 0.0
+    problem.initialize()
+    results_ice = problem.solve()
+    results_ice = problem.post_process()
+
+    lap_hybrid = nodes["time"][-1, 0]
+    lap_ice = results_ice.nodes["time"][-1, 0]
+    print(f"  ICE-only lap : {lap_ice:.3f} s  (hybrid ahead by {lap_ice - lap_hybrid:.3f} s)")
+
     plot_states(results).show()
     plot_controls(results).show()
     plot_race_results(results)
 
-    from race_car_viser import create_race_car_chase_viser_server, create_race_car_viser_server
+    from race_car_viser import (
+        create_race_car_chase_viser_server,
+        create_race_car_comparison_viser_server,
+    )
 
-    overview_server = create_race_car_viser_server(
-        results,
+    comparison_server = create_race_car_comparison_viser_server(
+        [results, results_ice],
+        labels=["hybrid", "ICE only"],
         track_file=TRACK_FILE,
         lane_width=n.max[0],
     )
@@ -503,6 +526,7 @@ if __name__ == "__main__":
         results,
         track_file=TRACK_FILE,
         lane_width=n.max[0],
+        title="Hybrid",
     )
-    print("Overview camera and chase camera are on separate Viser ports (two browser tabs).")
+    print("Comparison overview and hybrid chase camera are on separate Viser ports.")
     chase_server.sleep_forever()

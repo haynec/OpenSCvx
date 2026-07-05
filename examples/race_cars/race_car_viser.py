@@ -132,7 +132,6 @@ def _add_lms_track_scene(
     # Start / finish line at s ≈ 0
     k0 = int(np.argmin(np.abs(sref)))
     psi0 = float(psiref[k0])
-    nx, ny = -np.sin(psi0), np.cos(psi0)
     half_w = dist
     p0 = np.array([xref[k0], yref[k0], 0.006], dtype=np.float64)
     server.scene.add_box(
@@ -163,7 +162,11 @@ def _yaw_wxyz(yaw: float) -> np.ndarray:
     return np.asarray(vtf.SO3.from_z_radians(float(yaw)).wxyz, dtype=np.float64)
 
 
-def _add_race_car(server: "viser.ViserServer", base_path: str = "/car") -> dict:
+def _add_race_car(
+    server: "viser.ViserServer",
+    base_path: str = "/car",
+    body_color: tuple[int, int, int] = (220, 35, 45),
+) -> dict:
     """Low-poly 1:43-scale race car built from boxes (body frame: +x forward, +z up)."""
     frame = server.scene.add_frame(
         base_path,
@@ -175,7 +178,7 @@ def _add_race_car(server: "viser.ViserServer", base_path: str = "/car") -> dict:
         f"{base_path}/body",
         dimensions=(0.068, 0.034, 0.016),
         position=(0.0, 0.0, 0.008),
-        color=(220, 35, 45),
+        color=body_color,
     )
     server.scene.add_box(
         f"{base_path}/cockpit",
@@ -598,6 +601,170 @@ def create_race_car_viser_server(
         chase_camera=False,
         title=title,
     )
+
+
+def _resample_to_common_time(
+    datas: list[dict[str, np.ndarray]],
+) -> tuple[np.ndarray, list[dict[str, np.ndarray]]]:
+    """Resample scene arrays onto one clock spanning the slowest lap.
+
+    Each lap is shifted to start at t = 0 and linearly interpolated; past its
+    own finish a car simply holds the final sample (parked at the line), so
+    the time gap between cars stays visible until the animation ends.
+    """
+    laps = []
+    for d in datas:
+        t = d["t"] - d["t"][0]
+        psi = np.unwrap(d["psi"])
+        laps.append((t, psi, d))
+
+    t_end = max(float(t[-1]) for t, _, _ in laps)
+    n_frames = max(len(t) for t, _, _ in laps)
+    t_common = np.linspace(0.0, t_end, n_frames)
+
+    resampled = []
+    for t, psi, d in laps:
+
+        def interp(sig: np.ndarray, t: np.ndarray = t) -> np.ndarray:
+            return np.interp(t_common, t, sig)  # clamps past t[-1]
+
+        resampled.append(
+            {
+                "t": t_common,
+                "lap_time": float(t[-1]),
+                "pos": np.column_stack([interp(d["pos"][:, k]) for k in range(3)]).astype(
+                    np.float32
+                ),
+                "psi": interp(psi),
+                "speed": interp(d["speed"]),
+                "delta": interp(d["delta"]),
+            }
+        )
+    return t_common, resampled
+
+
+def create_race_car_comparison_viser_server(
+    results_list,
+    labels: list[str] | None = None,
+    *,
+    colors: list[tuple[int, int, int]] | None = None,
+    track_file: str = "LMS_Track.txt",
+    lane_width: float = 0.12,
+    loop_animation: bool = True,
+    trim_warmup: bool = True,
+    title: str = "Race Comparison",
+) -> "viser.ViserServer":
+    """Replay several laps side by side on one track with a shared clock.
+
+    All cars launch together at the start line; each holds at the finish once
+    its own lap is done, so the winning margin is visible on screen. Intended
+    for A/B comparisons such as the hybrid vs ICE-only laps of
+    ``race_car_hybrid.py``.
+
+    Args:
+        results_list: Post-processed ``OptimizationResults``, one per car.
+        labels: Display name per car (default ``car 0``, ``car 1``, ...).
+        colors: Body RGB per car (defaults cycle a small palette).
+    """
+    import viser
+    import viser.transforms as vtf
+
+    from openscvx.plotting.viser import add_animation_controls
+
+    if labels is None:
+        labels = [f"car {i}" for i in range(len(results_list))]
+    if colors is None:
+        palette = [(220, 35, 45), (90, 140, 235), (240, 190, 50), (120, 200, 120)]
+        colors = [palette[i % len(palette)] for i in range(len(results_list))]
+
+    datas = [
+        extract_race_trajectory(results, track_file=track_file, trim_warmup=trim_warmup)
+        for results in results_list
+    ]
+    t_common, laps = _resample_to_common_time(datas)
+
+    server = viser.ViserServer()
+    server.gui.configure_theme(dark_mode=True, titlebar_content=None)
+
+    _add_lms_track_scene(server, track_file=track_file, lane_width=lane_width)
+
+    cars = []
+    for lap, label, color in zip(laps, labels, colors):
+        slug = label.replace(" ", "_").replace("/", "_")
+        pos = lap["pos"]
+
+        ghost_segments = np.stack([pos[:-1], pos[1:]], axis=1)
+        server.scene.add_line_segments(
+            f"/trajectory/{slug}/ghost",
+            points=ghost_segments,
+            colors=np.array([int(0.45 * c) for c in color], dtype=np.uint8),
+            line_width=2.0,
+        )
+        trace_line = server.scene.add_line_segments(
+            f"/trajectory/{slug}/trace",
+            points=np.zeros((1, 2, 3), dtype=np.float32),
+            colors=np.array(color, dtype=np.uint8),
+            line_width=4.0,
+        )
+        handles = _add_race_car(server, base_path=f"/cars/{slug}", body_color=color)
+        cars.append({"lap": lap, "label": label, "trace": trace_line, **handles})
+
+    hud = {"markdown": None}
+
+    def update_frame(frame_idx: int) -> None:
+        status_lines = []
+        for car in cars:
+            lap = car["lap"]
+            p = lap["pos"][frame_idx]
+            rot = vtf.SO3.from_z_radians(float(lap["psi"][frame_idx]))
+            car["frame"].position = tuple(float(x) for x in p)
+            car["frame"].wxyz = rot.wxyz
+
+            steer_rot = vtf.SO3.from_z_radians(float(lap["delta"][frame_idx]))
+            car["wheels"]["fl"].wxyz = tuple(float(x) for x in steer_rot.wxyz)
+            car["wheels"]["fr"].wxyz = tuple(float(x) for x in steer_rot.wxyz)
+
+            idx = min(frame_idx + 1, len(lap["pos"]))
+            if idx >= 2:
+                car["trace"].points = np.stack(
+                    [lap["pos"][: idx - 1], lap["pos"][1:idx]], axis=1
+                ).astype(np.float32)
+
+            finished = t_common[frame_idx] >= lap["lap_time"]
+            state = "FINISHED" if finished else f"{lap['speed'][frame_idx]:.2f} m/s"
+            status_lines.append(f"**{car['label']}:** {lap['lap_time']:.3f} s — {state}")
+
+        if hud["markdown"] is not None:
+            hud["markdown"].content = f"**t:** {t_common[frame_idx]:.3f} s  \n" + "  \n".join(
+                status_lines
+            )
+
+    centre = np.mean(np.concatenate([lap["pos"] for lap in laps]), axis=0)
+    span_xy = (
+        float(np.ptp(np.concatenate([lap["pos"] for lap in laps])[:, :2], axis=0).max()) + 1e-6
+    )
+    server.initial_camera.position = tuple(
+        centre + np.array([-0.55 * span_xy, -0.75 * span_xy, 0.95 * span_xy])
+    )
+    server.initial_camera.look_at = tuple(float(x) for x in centre)
+    server.initial_camera.up = (0.0, 0.0, 1.0)
+
+    add_animation_controls(server, t_common, [update_frame], loop=loop_animation)
+    update_frame(0)
+
+    lap_times = sorted((lap["lap_time"], label) for lap, label in zip(laps, labels))
+    gap_note = "  \n".join(
+        f"**{label}:** {lt:.3f} s ({f'+{lt - lap_times[0][0]:.3f} s' if i else 'fastest'})"
+        for i, (lt, label) in enumerate(lap_times)
+    )
+    with server.gui.add_folder(title):
+        hud["markdown"] = server.gui.add_markdown(gap_note)
+
+    print(
+        "Viser race comparison ready — open the URL above. "
+        "Press Play in the Animation folder to race the laps."
+    )
+    return server
 
 
 def create_race_car_chase_viser_server(
