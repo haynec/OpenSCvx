@@ -672,6 +672,7 @@ class Problem:
         # Final solution state (saved after successful solve)
         self._solution: Optional[AlgorithmState] = None
         self._solution_history: Optional[AlgorithmHistory] = None
+        self._solution_parameters: Optional[Dict[str, np.ndarray]] = None
 
         # SCP algorithm (resolved from `algorithm` parameter above)
 
@@ -1287,6 +1288,7 @@ class Problem:
         # Reset solution
         self._solution = None
         self._solution_history = None
+        self._solution_parameters = None
 
         # Reset timing
         self.timing_solve = None
@@ -1355,7 +1357,10 @@ class Problem:
 
         Returns:
             OptimizationResults with trajectory and convergence info
-                (call post_process() for full propagation)
+                (call post_process() for full propagation). The parameter
+                values used for the solve are recorded on
+                ``results.parameters``; :meth:`post_process` propagates
+                with them.
         """
         # Sync parameters, boundary conditions, and SCP constants before solving
         self._sync_parameters()
@@ -1408,16 +1413,24 @@ class Problem:
 
         profiling.profiling_end(pr, "solve")
 
-        # Snapshot state + history for post_process() / plotting reuse.
+        # Snapshot state, history, and parameters for post_process() / plotting
+        # reuse. Results record what happened: the parameter snapshot is what
+        # post_process() propagates with, so mutating ``self.parameters``
+        # afterwards only seeds the next solve.
         self._solution = self._state
         self._solution_history = copy.deepcopy(self._history)
+        self._solution_parameters = {
+            name: np.array(value) for name, value in self._parameters.items()
+        }
 
         timed_out = t_max is not None and self.timing_solve >= t_max
-        return self._format_result(
+        result = self._format_result(
             self._state,
             self._history,
             int(self._state.k) <= k_max and not timed_out,
         )
+        result.parameters = self._solution_parameters
+        return result
 
     def _default_state(self) -> AlgorithmState:
         """Fresh :class:`AlgorithmState` from settings and the algorithm's SCP constants.
@@ -1665,6 +1678,11 @@ class Problem:
             parameters: Problem parameters dict for the current solve. Use
                 this rather than mutating ``self.parameters`` if the
                 parameters are traced. ``None`` reuses ``self._parameters``.
+                Unlike :meth:`solve` / :meth:`solve_batched`, the merged
+                values are *not* recorded on the returned results — under a
+                caller's ``jit`` / ``vmap`` they are tracers, which must not
+                leak into the pytree's aux — so callers that post-process
+                manage parameter bookkeeping themselves.
             x_guess: Initial state trajectory guess, shape ``(N, n_states)``.
                 Replaces ``state.x``; ``None`` uses the default from
                 settings (``State.guess`` at ``initialize()``).
@@ -1846,7 +1864,12 @@ class Problem:
 
         Returns:
             :class:`OptimizationResults` pytree with a leading ``B`` axis on
-            every leaf and empty per-iteration histories.
+            every leaf and empty per-iteration histories. The merged
+            parameter values used for the solve are recorded on
+            ``results.parameters``, post-broadcast — every value carries the
+            leading ``(B,)`` axis, shared values replicated — and
+            :meth:`post_process_batched` propagates each element with its
+            own values.
         """
         if self._iteration_fn_jit_inner is None:
             raise ValueError(
@@ -1953,13 +1976,29 @@ class Problem:
             final_states = batched_solve(states, params_for_solve)
         jax.block_until_ready(final_states)
         self.timing_solve = time.time() - t_0_solve
-        return OptimizationResults.from_final_state(final_states, problem=self)
+        results = OptimizationResults.from_final_state(final_states, problem=self)
+        # Record what was solved, post-broadcast: every value carries the
+        # leading (B,) axis (shared values replicated), so
+        # post_process_batched() propagates element ``b`` with its own values.
+        results.parameters = {
+            name: np.array(value)
+            if param_axes[name] == 0
+            else np.broadcast_to(np.asarray(value), (B,) + np.shape(value)).copy()
+            for name, value in params_for_solve.items()
+        }
+        return results
 
     def post_process(self) -> OptimizationResults:
         """Propagate solution through full nonlinear dynamics for high-fidelity trajectory.
 
         Integrates the converged SCP solution through the nonlinear dynamics to
         produce x_full, u_full, and t_full. Call after solve() for final results.
+
+        Results record what happened: propagation uses the parameter values
+        recorded at solve time (``results.parameters``), not the Problem's
+        current values — mutating ``self.parameters`` between :meth:`solve`
+        and here only seeds the next solve. Results without a recorded
+        snapshot fall back to ``self.parameters``.
 
         Returns:
             OptimizationResults with propagated trajectory fields
@@ -1980,9 +2019,17 @@ class Problem:
             int(self._solution.k) <= self._algorithm.k_max,
         )
 
+        # Propagate with the parameter values recorded at solve time; fall
+        # back to the Problem's current values for solutions that lack the
+        # snapshot.
+        parameters = (
+            self._solution_parameters if self._solution_parameters is not None else self._parameters
+        )
+        result.parameters = parameters
+
         t_0_post = time.time()
         result = propagate_trajectory_results(
-            self._parameters,
+            parameters,
             self.settings,
             result,
             self._propagation_solver,
@@ -2022,9 +2069,12 @@ class Problem:
         - ``results.cost``    — ``(B,)``
         - ``results.ctcs_violation`` — ``(B, ...)`` or ``None``
 
-        Propagation runs sequentially over the batch in a Python loop;
-        all elements share ``self._parameters`` for any parameter values not
-        embedded in the trajectory state vector.
+        Propagation runs sequentially over the batch in a Python loop.
+        Results record what happened: element ``b`` propagates with its own
+        parameter values from the snapshot :meth:`solve_batched` recorded on
+        ``results.parameters`` (post-broadcast, so batched and shared values
+        alike carry a leading ``(B,)`` axis). Results without the snapshot
+        fall back to ``self.parameters``.
 
         Args:
             results: Batched :class:`~openscvx.algorithms.OptimizationResults`
@@ -2068,11 +2118,15 @@ class Problem:
         costs: List[float] = []
         ctcs_violations = []
 
+        # Per-element parameter values from the recorded snapshot, merged over
+        # the Problem's dict (empty snapshot = plain fallback, back-compat).
+        snapshot = getattr(results, "parameters", None) or {}
+
         t_0_post = time.time()
         for b in range(B):
             single = _make_single_result(results, b)
             prop = propagate_trajectory_results(
-                self._parameters,
+                dict(self._parameters, **{k: np.asarray(v)[b] for k, v in snapshot.items()}),
                 self.settings,
                 single,
                 self._propagation_solver,
