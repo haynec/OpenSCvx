@@ -56,10 +56,11 @@ the round-trip efficiency, so the optimizer never does both.
 Running the example solves all three power-unit variants in one batched
 solve (``solve_batched`` over the ``mgu_k`` and ``ice_share`` parameters) —
 the hybrid, an MGU-K failure lap (electric off), and an unrestricted ICE lap
-with the full envelope — and races them on one Viser track. The failure lap
-shows what the electric system is worth to this car; the unrestricted lap
-shows what the energy regulations cost, since with free fuel an
-equal-peak-power pure ICE strictly dominates the hybrid.
+with the full envelope — then polishes with a few warm-start continuation
+rounds and races the cars on one Viser track. The failure lap shows what the
+electric system is worth to this car; the unrestricted lap shows what the
+energy regulations cost, since with free fuel an equal-peak-power pure ICE
+strictly dominates the hybrid.
 
 Objective: free final time T, minimise T subject to s(T) = pathlength.
 """
@@ -322,7 +323,11 @@ problem = ox.Problem(
     float_dtype="float64",
     licq_max=1e-12,
     algorithm={
-        "lam_cost": 1e-1,
+        # lam_prox/lam_cost from a 4x4 log-grid swept in one solve_batched call
+        # over algorithm hyperparameters: this pair is the fastest converged
+        # config; pushing lam_cost/lam_prox much past ~10 stops converging.
+        "lam_prox": 3e-1,
+        "lam_cost": 3e0,
         "lam_vc": 1e2,
         "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
     },
@@ -517,12 +522,24 @@ if __name__ == "__main__":
 
     # All three cars in one batched solve: element b of each parameter array
     # is one car — hybrid, MGU-K failure, unrestricted ICE.
-    results = problem.solve_batched(
-        parameters={
-            "mgu_k": np.array([1.0, 0.0, 0.0]),
-            "ice_share": np.array([ICE_SHARE, ICE_SHARE, 1.0]),
-        }
-    )
+    cars = {
+        "mgu_k": np.array([1.0, 0.0, 0.0]),
+        "ice_share": np.array([ICE_SHARE, ICE_SHARE, 1.0]),
+    }
+    results = problem.solve_batched(parameters=cars)
+
+    # Warm-start continuation: SCP anchors each solve to its guess, so a single
+    # solve stops well short of the optimum on this problem. Re-anchoring at
+    # the previous solution resumes the descent — a few rounds recover over a
+    # second of lap time per car and keep the physical ordering of the three
+    # cars intact; returns diminish quickly beyond this.
+    for _ in range(4):
+        results = problem.solve_batched(
+            parameters=cars,
+            x_guess=np.asarray(results.x),
+            u_guess=np.asarray(results.u),
+        )
+
     results = problem.post_process_batched(results)
 
     hybrid, ice, full_ice = (batch_element(results, b) for b in range(3))
