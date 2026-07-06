@@ -63,7 +63,11 @@ from openscvx.lowered.jax_constraints import (
     LoweredJaxConstraints,
     LoweredNodalConstraint,
 )
-from openscvx.propagation import get_propagation_solver, propagate_trajectory_results
+from openscvx.propagation import (
+    get_propagation_solver,
+    propagate_trajectory_results,
+    s_to_t,
+)
 from openscvx.solvers import ConvexSolver, resolve_solver_config
 from openscvx.symbolic.builder import preprocess_symbolic_problem
 from openscvx.symbolic.expr import CTCS, Constraint
@@ -2074,7 +2078,12 @@ class Problem:
                 ``ceil(T_max / settings.prp.dt) + 1`` where ``T_max`` is the
                 longest terminal time across the batch.  All ``B`` elements are
                 interpolated to the **same** ``n_times`` so the output arrays
-                have uniform shape.
+                have uniform shape.  The requested (or default) value is capped
+                so no single segment of any element receives more dense samples
+                than the propagation solver's compiled per-segment capacity
+                (``settings.prp.max_tau_len``); the cap binds on the largest
+                segment-duration fraction across the batch, so trajectories with
+                near-uniform segments are left untouched.
 
         Returns:
             The same ``results`` object with ``t_full``, ``x_full``, ``u_full``,
@@ -2095,10 +2104,24 @@ class Problem:
             n_times = max(int(np.ceil(T_max / self.settings.prp.dt)) + 1, 2)
 
         # The propagation solver is compiled with a per-segment tau capacity of
-        # ``max_tau_len``.  A uniform ``linspace`` grid sized from the batch
-        # ``T_max`` can place more output times into one normalized segment than
-        # that capacity when shorter trajectories are padded to the same count.
-        n_times = min(n_times, self.settings.prp.max_tau_len)
+        # ``max_tau_len`` — the *per-segment* buffer width, not a total-point
+        # budget.  A uniform ``linspace`` grid over an element's real time span
+        # drops about ``(n_times - 1) * seg_dur / span`` points into each
+        # segment, so the binding quantity is the largest segment-duration
+        # fraction across the batch, not the total point count.  Bound
+        # ``n_times`` so the busiest segment of any element — plus the endpoint
+        # sample ``simulate_nonlinear_time`` appends — stays within
+        # ``max_tau_len``:
+        #     (n_times - 1) * frac_max + 2 <= max_tau_len.
+        u_batch = np.asarray(results.U[-1])  # (B, N, n_u)
+        frac_max = 0.0
+        for b in range(B):
+            t_b = np.asarray(
+                s_to_t(x_batch[b], u_batch[b], self.settings, self._discretizer)
+            ).reshape(-1)
+            frac_max = max(frac_max, float(np.diff(t_b).max() / (t_b[-1] - t_b[0])))
+        per_segment_bound = max(int((self.settings.prp.max_tau_len - 2) / frac_max) + 1, 2)
+        n_times = min(n_times, per_segment_bound)
 
         t_fulls: List[np.ndarray] = []
         x_fulls: List[np.ndarray] = []
