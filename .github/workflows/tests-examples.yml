@@ -35,8 +35,10 @@ jobs:
 
     - name: Install dependencies
       run: |
-        # Install the package with every extra the examples exercise
-        uv pip install --system -e ".[test,cvxpygen,qpax,mjx,lie,frax,stl]"
+        # Install the package with every extra the examples exercise.
+        # cvxpygen omitted: its extra is unsatisfiable while cvxpy is pinned <1.9
+        # (cvxpygen>=1.0.0 needs cvxpy>=1.9); its tests skip until that resolves.
+        uv pip install --system -e ".[test,qpax,mjx,lie,frax,stl]"
 
     - name: Run examples sweep
       run: |

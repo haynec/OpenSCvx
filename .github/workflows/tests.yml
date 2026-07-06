@@ -120,7 +120,9 @@ jobs:
 
     - name: Install dependencies
       run: |
-        uv pip install --system -e ".[test,qpax,cvxpygen,mjx,lie]"
+        # cvxpygen omitted: its extra is unsatisfiable while cvxpy is pinned <1.9
+        # (cvxpygen>=1.0.0 needs cvxpy>=1.9); its tests skip until that resolves.
+        uv pip install --system -e ".[test,qpax,mjx,lie]"
 
     - name: Run extras tests
       run: |
