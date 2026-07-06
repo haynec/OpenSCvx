@@ -64,11 +64,8 @@ frax = [
 ]
 test = [
     "pytest",
-    "scipy",
-    "jaxlie",
-    "svgpathtools",
     "pytest-xdist",
-    "frax>=0.0.4",
+    "scipy",
 ]
 
 [tool.setuptools.packages.find]
