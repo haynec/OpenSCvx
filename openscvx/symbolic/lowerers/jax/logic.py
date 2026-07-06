@@ -8,6 +8,7 @@ from jax.lax import cond
 
 # Expression types to handle — uncomment as you paste visitors:
 from openscvx.symbolic.expr.logic import All, Any, Cond
+from openscvx.symbolic.lowerers.jax._lowerer import pause_memo, resume_memo
 from openscvx.symbolic.lowerers.jax._registry import visitor  # noqa: F401
 
 # Module-level default dtype for conditional branches
@@ -189,11 +190,20 @@ def _visit_cond(lowerer, node: Cond):
         def _false_branch(_):
             return jnp.asarray(false_fn(x, u, node_arg, params), dtype=default_dtype)
 
-        return cond(
-            pred_bool,
-            _true_branch,
-            _false_branch,
-            operand=None,
-        )
+        # lax.cond traces each branch separately, but both branch closures see
+        # the same captured (x, u, node, params). Pause the memo so shared
+        # subexpressions are recomputed inside each branch: a value cached in
+        # one trace is not valid in another.
+        pause_memo()
+        try:
+            result = cond(
+                pred_bool,
+                _true_branch,
+                _false_branch,
+                operand=None,
+            )
+        finally:
+            resume_memo()
+        return result
 
     return cond_fn

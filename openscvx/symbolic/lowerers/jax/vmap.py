@@ -8,6 +8,7 @@ import jax.numpy as jnp
 
 # Expression types to handle — uncomment as you paste visitors:
 from openscvx.symbolic.expr.vmap import Vmap, _Placeholder
+from openscvx.symbolic.lowerers.jax._lowerer import pause_memo, resume_memo
 from openscvx.symbolic.lowerers.jax._registry import visitor  # noqa: F401
 
 
@@ -129,9 +130,14 @@ def _visit_vmap(lowerer, node: Vmap):
                     new_params[key] = v
                 return inner_fn(x, u, node_idx, new_params)
 
-            # vmap over all batch arguments along the same axis
+            # Nested sub-trace reusing captured (x, u, node_idx): pause
+            # value-memo so no cached tracer crosses the trace boundary.
             in_axes = tuple(axis for _ in range(num_batches))
-            return jax.vmap(inner, in_axes=in_axes)(*data_arrays)
+            pause_memo()
+            try:
+                return jax.vmap(inner, in_axes=in_axes)(*data_arrays)
+            finally:
+                resume_memo()
 
     else:
         # All Constants: bake all data into closure at lowering time
@@ -145,8 +151,12 @@ def _visit_vmap(lowerer, node: Vmap):
                     new_params[key] = v
                 return inner_fn(x, u, node_idx, new_params)
 
-            # vmap over all batch arguments along the same axis
+            # Nested sub-trace: pause value-memo (see runtime branch above).
             in_axes = tuple(axis for _ in range(num_batches))
-            return jax.vmap(inner, in_axes=in_axes)(*baked_data)
+            pause_memo()
+            try:
+                return jax.vmap(inner, in_axes=in_axes)(*baked_data)
+            finally:
+                resume_memo()
 
     return vmapped_fn
