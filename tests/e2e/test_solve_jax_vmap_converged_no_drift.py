@@ -90,9 +90,7 @@ def _build_problem(backend: str, n: int = 30, k_max: int = 40):
     return prob
 
 
-@pytest.mark.parametrize(
-    "backend", ["cvxpy", pytest.param("qpax", marks=pytest.mark.qpax)]
-)
+@pytest.mark.parametrize("backend", ["cvxpy", pytest.param("qpax", marks=pytest.mark.qpax)])
 def test_vmap_no_drift_after_convergence(backend):
     prob = _build_problem(backend)
     prob.initialize()

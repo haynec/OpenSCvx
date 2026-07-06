@@ -18,9 +18,7 @@ import pytest
 from tests.solvers._iteration_callback_helpers import build_brachistochrone
 
 
-@pytest.mark.parametrize(
-    "backend", ["cvxpy", pytest.param("qpax", marks=pytest.mark.qpax)]
-)
+@pytest.mark.parametrize("backend", ["cvxpy", pytest.param("qpax", marks=pytest.mark.qpax)])
 def test_solve_jax_matches_solve(backend):
     prob = build_brachistochrone(backend, n=8, k_max=20)
     prob.initialize()
