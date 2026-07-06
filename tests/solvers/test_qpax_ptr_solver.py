@@ -16,13 +16,12 @@ here focus on the API contract and the assembly machinery.
 import numpy as np
 import pytest
 
-# qpax is an optional dependency — skip the whole module if it's missing.
-pytest.importorskip("qpax")
-
 import openscvx as ox
 from openscvx import Problem
 from openscvx.solvers import PTRSolver, PTRSolveResult, QPAXPTRSolver
 from tests.solvers._iteration_callback_helpers import populate_numpy_stash
+
+pytestmark = pytest.mark.qpax
 
 # ============================================================================
 # Helpers

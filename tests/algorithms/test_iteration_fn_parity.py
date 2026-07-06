@@ -25,10 +25,11 @@ from tests.algorithms._iteration_helpers import build_iteration_fn
 from tests.solvers._iteration_callback_helpers import build_brachistochrone
 
 
-@pytest.mark.parametrize("backend, primal_atol", [("qpax", 1e-6), ("cvxpy", 1e-8)])
+@pytest.mark.parametrize(
+    "backend, primal_atol",
+    [pytest.param("qpax", 1e-6, marks=pytest.mark.qpax), ("cvxpy", 1e-8)],
+)
 def test_iteration_fn_matches_production_step(backend, primal_atol):
-    if backend == "qpax":
-        pytest.importorskip("qpax")
     prob = build_brachistochrone(backend, n=4, k_max=1)
     prob.initialize()
 
@@ -66,7 +67,10 @@ def test_iteration_fn_matches_production_step(backend, primal_atol):
     )
 
 
-@pytest.mark.parametrize("backend, primal_atol", [("qpax", 1e-6), ("cvxpy", 1e-8)])
+@pytest.mark.parametrize(
+    "backend, primal_atol",
+    [pytest.param("qpax", 1e-6, marks=pytest.mark.qpax), ("cvxpy", 1e-8)],
+)
 def test_build_iteration_matches_direct_factory(backend, primal_atol):
     """``Algorithm.build_iteration`` produces the same body as the bare factory.
 
@@ -77,8 +81,6 @@ def test_build_iteration_matches_direct_factory(backend, primal_atol):
     construction path. Build both ways from one problem and assert the outputs
     agree on a shared initial iterate.
     """
-    if backend == "qpax":
-        pytest.importorskip("qpax")
     prob = build_brachistochrone(backend, n=4, k_max=1)
     prob.initialize()
     state0 = prob.state

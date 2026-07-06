@@ -107,8 +107,8 @@ def test_multishot_propagation_on_results_with_history():
     assert q_traj.shape[0] == t.shape[0]
 
 
+@pytest.mark.qpax
 def test_brachistochrone_multishot_roundtrip():
-    pytest.importorskip("qpax")
     from tests.test_brachistochrone import _make_brachistochrone_problem
 
     problem = _make_brachistochrone_problem({"backend": "qpax", "verbose": False})

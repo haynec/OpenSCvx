@@ -10,12 +10,12 @@ import jax
 import numpy as np
 import pytest
 
-pytest.importorskip("qpax")
-
 from openscvx.algorithms import AlgorithmState
 from openscvx.algorithms.scvx.iteration import IterationDiagnostics
 from tests.algorithms._iteration_helpers import build_iteration_fn
 from tests.solvers._iteration_callback_helpers import build_brachistochrone
+
+pytestmark = pytest.mark.qpax
 
 
 def test_jit_matches_bare():

@@ -22,11 +22,9 @@ from scipy import sparse as sp
 import openscvx as ox
 from openscvx import Problem
 from openscvx.solvers import MoreauPTRSolver, PTRSolver, PTRSolveResult
-from tests._marks import requires_moreau
 from tests.solvers._iteration_callback_helpers import populate_numpy_stash
 
-# Skip the whole module when moreau is absent or unlicensed.
-pytestmark = requires_moreau
+pytestmark = [pytest.mark.e2e, pytest.mark.moreau]
 
 # ============================================================================
 # Helpers

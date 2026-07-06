@@ -29,8 +29,8 @@ def _guess_stack(prob, shifts=(0.0, 0.3, -0.3, 0.6)):
     return jnp.stack([base_x.at[0, 0].set(base_x[0, 0] + s) for s in shifts])
 
 
+@pytest.mark.qpax
 def test_export_roundtrip_matches_and_skips_recompile(monkeypatch, tmp_path):
-    pytest.importorskip("qpax")
     monkeypatch.setenv("OPENSCVX_CACHE_DIR", str(tmp_path))
 
     # Baseline: the in-process (``save_compiled=False``) batched solve, which
@@ -80,9 +80,8 @@ def test_export_roundtrip_matches_and_skips_recompile(monkeypatch, tmp_path):
     jax.clear_caches()
 
 
+@pytest.mark.qpax
 def test_cache_key_invalidates_on_artifact_changing_state(tmp_path):
-    pytest.importorskip("qpax")
-
     prob = build_brachistochrone("qpax", n=8, k_max=20)
     prob.initialize()
 

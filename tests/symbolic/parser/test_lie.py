@@ -4,33 +4,25 @@ This module tests parsing of Lie algebra operations:
 AdjointDual, Adjoint, SE3Adjoint, SE3AdjointDual,
 SO3Exp, SO3Log, SE3Exp, SE3Log
 
-Note: These tests are skipped if jaxlie is not installed.
+Note: These tests require jaxlie (skipped when it is not installed).
 """
 
 import pytest
 
 from openscvx.symbolic.expr import State
-
-try:
-    from openscvx.symbolic.expr.lie import (
-        Adjoint,
-        AdjointDual,
-        SE3Adjoint,
-        SE3AdjointDual,
-        SE3Exp,
-        SE3Log,
-        SO3Exp,
-        SO3Log,
-    )
-    from openscvx.symbolic.parser import lie as _lie_module  # noqa: F401
-
-    HAS_LIE = True
-except ImportError:
-    HAS_LIE = False
-
+from openscvx.symbolic.expr.lie import (
+    Adjoint,
+    AdjointDual,
+    SE3Adjoint,
+    SE3AdjointDual,
+    SE3Exp,
+    SE3Log,
+    SO3Exp,
+    SO3Log,
+)
 from openscvx.symbolic.parser import ExprParser
 
-pytestmark = pytest.mark.skipif(not HAS_LIE, reason="jaxlie not installed")
+pytestmark = pytest.mark.lie
 
 
 # =============================================================================
