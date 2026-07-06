@@ -53,18 +53,20 @@ regen the electric share (45 %), so braking at full strength harvests energy
 are in F1. Deploying and harvesting simultaneously only burns energy through
 the round-trip efficiency, so the optimizer never does both.
 
-Running the example solves the lap three times via the ``mgu_k`` and
-``ice_share`` parameters — the hybrid, an MGU-K failure lap (electric off),
-and an unrestricted ICE lap with the full envelope — and races all three on
-one Viser track. The failure lap shows what the electric system is worth to
-this car; the unrestricted lap shows what the energy regulations cost, since
-with free fuel an equal-peak-power pure ICE strictly dominates the hybrid.
+Running the example solves all three power-unit variants in one batched
+solve (``solve_batched`` over the ``mgu_k`` and ``ice_share`` parameters) —
+the hybrid, an MGU-K failure lap (electric off), and an unrestricted ICE lap
+with the full envelope — and races them on one Viser track. The failure lap
+shows what the electric system is worth to this car; the unrestricted lap
+shows what the energy regulations cost, since with free fuel an
+equal-peak-power pure ICE strictly dominates the hybrid.
 
 Objective: free final time T, minimise T subject to s(T) = pathlength.
 """
 
 from __future__ import annotations
 
+import copy
 import os
 import sys
 
@@ -234,8 +236,8 @@ time = ox.Time(
 # Curvature κ(s) via PCHIP spline (smooth, monotone-preserving between knots)
 kappa = ox.Cinterp(s[0], s_interp, kappa_interp, method="pchip")
 
-# Power-unit switches. Re-solving the same compiled problem at different
-# values yields the three cars raced in the Viser comparison:
+# Power-unit switches. One batched solve over these parameters yields the
+# three cars raced in the Viser comparison:
 #   (ice_share=0.55, mgu_k=1)  hybrid
 #   (ice_share=0.55, mgu_k=0)  MGU-K failure — loses electric drive *and* the
 #                              electric share of its braking
@@ -327,6 +329,23 @@ problem = ox.Problem(
 
 problem.settings.prp.atol = 1e-10
 problem.settings.prp.rtol = 1e-10
+
+
+def batch_element(results, b: int):
+    """Unbatched view of car ``b`` from post-processed batched results.
+
+    ``solve_batched`` stacks every array with a leading batch axis; the
+    plotting helpers and Viser servers consume one car at a time.
+    """
+    car = copy.copy(results)
+    car.converged = bool(np.asarray(results.converged).reshape(-1)[b])
+    car.t_final = float(np.asarray(results.t_final).reshape(-1)[b])
+    car.nodes = {k: np.asarray(v)[b] for k, v in results.nodes.items()}
+    car.trajectory = {k: np.asarray(v)[b] for k, v in results.trajectory.items()}
+    car.t_full = np.asarray(results.t_full)[b]
+    car.x_full = np.asarray(results.x_full)[b]
+    car.u_full = np.asarray(results.u_full)[b]
+    return car
 
 
 def plot_race_results(results) -> None:
@@ -491,10 +510,20 @@ def plot_race_results(results) -> None:
 
 if __name__ == "__main__":
     problem.initialize()
-    results = problem.solve()
-    results = problem.post_process()
 
-    nodes = results.nodes
+    # All three cars in one batched solve: element b of each parameter array
+    # is one car — hybrid, MGU-K failure, unrestricted ICE.
+    results = problem.solve_batched(
+        parameters={
+            "mgu_k": np.array([1.0, 0.0, 0.0]),
+            "ice_share": np.array([ICE_SHARE, ICE_SHARE, 1.0]),
+        }
+    )
+    results = problem.post_process_batched(results)
+
+    hybrid, ice, full_ice = (batch_element(results, b) for b in range(3))
+
+    nodes = hybrid.nodes
     print("\n=== F1 2026 Energy Race Car Results ===")
     print(f"  Lap time     : {nodes['time'][-1, 0]:.3f} s")
     print(f"  Final s      : {nodes['s'][-1, 0]:.4f} m  (target {pathlength:.4f} m)")
@@ -504,33 +533,19 @@ if __name__ == "__main__":
         f"  Battery swing: {nodes['E'].min():.4f} – {nodes['E'].max():.4f} J"
         f"  (capacity {E_BATT_MAX:.4f} J)"
     )
-    print(f"  Converged    : {results.converged}")
-
-    # MGU-K failure lap: same car, electric switched off.
-    problem.parameters["mgu_k"] = 0.0
-    problem.initialize()
-    results_ice = problem.solve()
-    results_ice = problem.post_process()
-
-    # Unrestricted ICE lap: the full envelope through the combustion path
-    # alone — no battery bookkeeping, so this is what the energy regulations
-    # cost in lap time.
-    problem.parameters["ice_share"] = 1.0
-    problem.initialize()
-    results_full_ice = problem.solve()
-    results_full_ice = problem.post_process()
+    print(f"  Converged    : {hybrid.converged}")
 
     lap_hybrid = nodes["time"][-1, 0]
-    lap_ice = results_ice.nodes["time"][-1, 0]
-    lap_full_ice = results_full_ice.nodes["time"][-1, 0]
+    lap_ice = ice.nodes["time"][-1, 0]
+    lap_full_ice = full_ice.nodes["time"][-1, 0]
     print(f"  MGU-K failure lap: {lap_ice:.3f} s  ({lap_ice - lap_hybrid:+.3f} s vs hybrid)")
     print(
         f"  Full-power ICE   : {lap_full_ice:.3f} s  ({lap_full_ice - lap_hybrid:+.3f} s vs hybrid)"
     )
 
-    plot_states(results).show()
-    plot_controls(results).show()
-    plot_race_results(results)
+    plot_states(hybrid).show()
+    plot_controls(hybrid).show()
+    plot_race_results(hybrid)
 
     from race_car_viser import (
         create_race_car_chase_viser_server,
@@ -538,7 +553,7 @@ if __name__ == "__main__":
     )
 
     comparison_server = create_race_car_comparison_viser_server(
-        [results, results_ice, results_full_ice],
+        [hybrid, ice, full_ice],
         labels=["hybrid", "MGU-K failure", "full-power ICE"],
         colors=[(150, 70, 200), (90, 140, 235), (220, 35, 45)],
         track_file=TRACK_FILE,
@@ -546,7 +561,7 @@ if __name__ == "__main__":
         distance_marker_step=None,  # clean look — set "auto" to bring markers back
     )
     chase_server = create_race_car_chase_viser_server(
-        results,
+        hybrid,
         track_file=TRACK_FILE,
         lane_width=n.max[0],
         distance_marker_step=None,
