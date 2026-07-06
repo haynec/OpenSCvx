@@ -50,6 +50,14 @@ class OptimizationResults:
             Added by propagate_trajectory_results.
         ctcs_violation (Optional[np.ndarray]): Continuous-time constraint violations.
             Added by propagate_trajectory_results.
+        parameters (dict[str, np.ndarray]): Parameter values the solve used, recorded
+            by :meth:`~openscvx.problem.Problem.solve` and
+            :meth:`~openscvx.problem.Problem.solve_batched` (batched solves store every
+            value with a leading ``(B,)`` axis, shared values replicated). Results
+            record what happened: post-processing propagates with these values, and
+            the Problem's parameter dict only seeds the next solve. Empty when no
+            snapshot was recorded (e.g. ``solve_jax``, whose callers manage
+            parameters themselves).
         plotting_data (dict[str, Any]): Flexible storage for plotting and application data.
 
     !!! note "JAX pytree registration"
@@ -59,8 +67,9 @@ class OptimizationResults:
         ``converged``, ``t_final``, ``nodes``, ``trajectory``, ``X``, ``U``,
         and every ``*_history`` field — the data the user actually consumes.
         Post-process fields (``t_full``, ``x_full``, ``u_full``, ``cost``,
-        ``ctcs_violation``), ``plotting_data``, and the internal ``_states`` /
-        ``_controls`` metadata are stashed in the treedef's *aux* instead, so
+        ``ctcs_violation``), ``parameters``, ``plotting_data``, and the
+        internal ``_states`` / ``_controls`` metadata are stashed in the
+        treedef's *aux* instead, so
         a batched ``solve_jax`` doesn't force callers to handle ``None``
         leaves and ``post_process()`` outputs stay outside the vmap surface
         (post-process per element after the batched solve).
@@ -217,6 +226,10 @@ class OptimizationResults:
     cost: Optional[float] = field(default=None, metadata={"npz": "optional_scalar"})
     ctcs_violation: Optional[np.ndarray] = field(default=None, metadata={"npz": "optional_array"})
 
+    # Parameter values the solve used (recorded by Problem.solve() /
+    # Problem.solve_batched(); empty when nothing was recorded)
+    parameters: dict[str, np.ndarray] = field(default_factory=dict, metadata={"npz": "dict"})
+
     # Additional plotting/application data (added by user)
     plotting_data: dict[str, Any] = field(default_factory=dict, metadata={"npz": "dict"})
 
@@ -245,6 +258,7 @@ class OptimizationResults:
             self.u_full,
             self.cost,
             self.ctcs_violation,
+            self.parameters,
             self.plotting_data,
         )
         return children, aux
@@ -260,6 +274,7 @@ class OptimizationResults:
             u_full,
             cost,
             ctcs_violation,
+            parameters,
             plotting_data,
         ) = aux
         return cls(
@@ -271,6 +286,7 @@ class OptimizationResults:
             u_full=u_full,
             cost=cost,
             ctcs_violation=ctcs_violation,
+            parameters=parameters,
             plotting_data=plotting_data,
         )
 

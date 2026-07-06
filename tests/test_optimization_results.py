@@ -1,5 +1,6 @@
 """Tests for OptimizationResults save/load round-trip."""
 
+import jax
 import numpy as np
 import pytest
 
@@ -184,3 +185,29 @@ def test_plotting_data_skips_non_array(tmp_path):
     loaded = OptimizationResults.load(path)
     np.testing.assert_array_equal(loaded.plotting_data["good"], np.array([1, 2, 3]))
     assert "bad_func" not in loaded.plotting_data
+
+
+def test_save_load_roundtrip_parameters(tmp_path):
+    """The recorded parameter snapshot survives a save/load round-trip."""
+    original = _make_result()
+    original.parameters = {"gain": np.array([2.0]), "center": np.array([1.0, 2.0, 3.0])}
+    path = tmp_path / "with_parameters.npz"
+    original.save(path)
+
+    loaded = OptimizationResults.load(path)
+    assert set(loaded.parameters) == set(original.parameters)
+    for key, value in original.parameters.items():
+        np.testing.assert_array_equal(loaded.parameters[key], value)
+
+
+def test_parameters_snapshot_is_pytree_aux_not_child():
+    """The parameter snapshot rides the treedef's aux, leaving the children unchanged."""
+    result = _make_result()
+    n_leaves = len(jax.tree_util.tree_leaves(result))
+
+    result.parameters = {"gain": np.array([2.0])}
+    leaves, treedef = jax.tree_util.tree_flatten(result)
+    assert len(leaves) == n_leaves  # no new pytree children
+
+    restored = jax.tree_util.tree_unflatten(treedef, leaves)
+    np.testing.assert_array_equal(restored.parameters["gain"], np.array([2.0]))
