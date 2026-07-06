@@ -154,5 +154,12 @@ ignore-names = [
 
 [tool.pytest.ini_options]
 markers = [
-    "integration: expensive integration tests that solve full examples",
+    "e2e: end-to-end tests that run the full SCP pipeline (auto-applied to tests/e2e/)",
+    "examples: sweep that solves every problem in examples/ (weekly CI)",
+    "extras: umbrella for optional-dependency tests; derived in conftest, never applied by hand",
+    "mjx: requires mujoco + mujoco-mjx (openscvx[mjx])",
+    "qpax: requires qpax (openscvx[qpax])",
+    "cvxpygen: requires cvxpygen + qocogen (openscvx[cvxpygen])",
+    "lie: requires jaxlie (openscvx[lie])",
+    "moreau: requires a licensed moreau install (openscvx[moreau])",
 ]
