@@ -3,8 +3,8 @@
 <img src="figures/openscvx_logo.svg" width="1200"/>
 <p align="center">
     <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/lint.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/lint.yml/badge.svg"/></a>
-    <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-unit.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-unit.yml/badge.svg"/></a>
-    <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-integration.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-integration.yml/badge.svg"/></a>
+    <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests.yml/badge.svg"/></a>
+    <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-examples.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-examples.yml/badge.svg"/></a>
     <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/nightly.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/nightly.yml/badge.svg"/></a>
     <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/release.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/release.yml/badge.svg?event=release"/></a>
 </p>
