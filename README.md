@@ -211,11 +211,11 @@ OpenSCvx integrates with several optional third-party packages. Each installs as
 | --- | --- | --- | --- |
 | [MuJoCo MJX](https://mujoco.readthedocs.io/en/stable/mjx.html) | `mjx` | MJX dynamics adapter (`openscvx.integrations`) | [![mjx](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-mjx.yml/badge.svg?branch=main)](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-mjx.yml) |
 | [jaxlie](https://github.com/brentyi/jaxlie) | `lie` | SO(3)/SE(3) Lie-group operations and IK initialization | [![jaxlie](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-lie.yml/badge.svg?branch=main)](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-lie.yml) |
-| [qpax](https://github.com/qpax-solver/qpax) | `qpax` | JAX-native QP solver backend | under repair ([#550](https://github.com/OpenSCvx/OpenSCvx/issues/550)) |
-| [CVXPYGen](https://github.com/cvxgrp/cvxpygen) | `cvxpygen` | Generated C solver code for the convex subproblem | blocked on cvxpy pin ([#551](https://github.com/OpenSCvx/OpenSCvx/issues/551)) |
-| [moreau](https://pypi.org/project/moreau/) | `moreau` | Licensed QP solver backend | requires a license key; not tested in CI |
-| [stljax](https://github.com/UW-CTRL/stljax) | `stl` | Signal Temporal Logic robustness bridge | no dedicated CI yet |
-| [frax](https://github.com/danielpmorton/frax) | `frax` | Robot dynamics for the manipulator examples | exercised by the weekly examples sweep |
+| [qpax](https://github.com/qpax-solver/qpax) | `qpax` | JAX-native QP solver backend | [![qpax](https://img.shields.io/badge/qpax-under%20repair-orange)](https://github.com/OpenSCvx/OpenSCvx/issues/550) |
+| [CVXPYGen](https://github.com/cvxgrp/cvxpygen) | `cvxpygen` | Generated C solver code for the convex subproblem | [![cvxpygen](https://img.shields.io/badge/cvxpygen-blocked%20on%20cvxpy%20pin-orange)](https://github.com/OpenSCvx/OpenSCvx/issues/551) |
+| [moreau](https://pypi.org/project/moreau/) | `moreau` | Licensed QP solver backend | ![moreau](https://img.shields.io/badge/moreau-license%20required-lightgrey) |
+| [stljax](https://github.com/UW-CTRL/stljax) | `stl` | Signal Temporal Logic robustness bridge | ![stljax](https://img.shields.io/badge/stljax-no%20tests%20yet-lightgrey) |
+| [frax](https://github.com/danielpmorton/frax) | `frax` | Robot dynamics for the manipulator examples | [![frax](https://img.shields.io/badge/frax-weekly%20examples%20sweep-blue)](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-examples.yml) |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
