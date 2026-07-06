@@ -1,4 +1,4 @@
-name: 🧪 Integration Tests
+name: 🧪 Examples Sweep
 
 on:
   release:
@@ -8,10 +8,10 @@ on:
     - cron: '0 0 * * 0'  # Weekly on Sunday at midnight UTC
 
 jobs:
-  integration-tests:
-    name: Integration Tests
+  examples:
+    name: Examples Sweep
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30  # Integration tests can be slow
+    timeout-minutes: 30  # Solving every example is slow
 
     strategy:
       fail-fast: false  # Continue testing other examples even if one fails
@@ -35,18 +35,21 @@ jobs:
 
     - name: Install dependencies
       run: |
-        # Install package with optional cvxpygen and test packages
-        uv pip install --system -e ".[cvxpygen, test]"
+        # Install the package with every extra the examples exercise.
+        # cvxpygen omitted: its extra is unsatisfiable while cvxpy is pinned <1.9
+        # (cvxpygen>=1.0.0 needs cvxpy>=1.9, #551); its tests skip until that resolves.
+        # qpax omitted until its solves are stable on Linux runners (#550).
+        uv pip install --system -e ".[test,mjx,lie,frax,stl]"
 
-    - name: Run integration tests
+    - name: Run examples sweep
       run: |
-        pytest -v -m integration --durations=10 -n auto
+        pytest -v -m examples --durations=10 -n auto
 
     - name: Upload test results on failure
       if: failure()
       uses: actions/upload-artifact@v4
       with:
-        name: integration-test-results-py${{ matrix.python-version }}-${{ matrix.os }}
+        name: examples-test-results-py${{ matrix.python-version }}-${{ matrix.os }}
         path: |
           .pytest_cache/
           test-results/

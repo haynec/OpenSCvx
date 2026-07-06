@@ -12,26 +12,23 @@ Two layers of verification:
   **single-iterate** call the warm_start is None either way, so the two
   paths solve identical conic programs and should agree to PDIP tolerance.
 
-These tests gate on ``_MOREAU_OK`` because Moreau is an optional dependency
-with a license requirement; the gate keeps the suite green on machines
-without a license while still exercising on CI / dev hosts that have one.
+These tests carry the ``moreau`` marker because Moreau is an optional
+dependency with a license requirement; the marker keeps the suite green on
+machines without a license while still exercising on CI / dev hosts that
+have one.
 """
 
 import numpy as np
 import pytest
 
-from tests._marks import _MOREAU_OK, requires_moreau
+from openscvx.solvers.ptr_solver import StatusCode, SubproblemSolution
+from tests.solvers._iteration_callback_helpers import (
+    build_brachistochrone,
+    populate_numpy_stash,
+    subproblem_data_from_numpy_stash,
+)
 
-pytestmark = requires_moreau
-
-# Imports below are only reached when _MOREAU_OK is True.
-if _MOREAU_OK:
-    from openscvx.solvers.ptr_solver import StatusCode, SubproblemSolution
-    from tests.solvers._iteration_callback_helpers import (
-        build_brachistochrone,
-        populate_numpy_stash,
-        subproblem_data_from_numpy_stash,
-    )
+pytestmark = [pytest.mark.e2e, pytest.mark.moreau]
 
 
 # ============================================================================

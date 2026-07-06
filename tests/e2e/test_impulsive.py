@@ -16,7 +16,6 @@ import jax
 import numpy as np
 import pytest
 
-from tests._marks import _MOREAU_OK
 from tests.hohmann_analytical import compute_hohmann_delta_v_and_mass
 
 # Problem configuration (match Weber's LEO → GEO example)
@@ -131,15 +130,17 @@ def _build_hohmann_problem(backend: str):
     return problem
 
 
-@pytest.mark.parametrize("backend", ["cvxpy", "qpax", "moreau"])
+@pytest.mark.parametrize(
+    "backend",
+    [
+        "cvxpy",
+        pytest.param("qpax", marks=pytest.mark.qpax),
+        pytest.param("moreau", marks=pytest.mark.moreau),
+    ],
+)
 def test_hohmann_transfer(backend):
     """Check that optimized impulsive Δv matches analytical Hohmann Δv,
     independently for each PTR backend."""
-    if backend == "qpax":
-        pytest.importorskip("qpax")
-    if backend == "moreau" and not _MOREAU_OK:
-        pytest.skip("moreau not installed or license key not found (pip install openscvx[moreau])")
-
     problem = _build_hohmann_problem(backend)
 
     if hasattr(problem.settings, "dev"):

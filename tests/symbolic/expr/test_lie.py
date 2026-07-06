@@ -130,15 +130,6 @@ def se3_adjoint_dual_ref(T: jnp.ndarray) -> jnp.ndarray:
     return jnp.vstack([top_row, bottom_row])
 
 
-# Check if jaxlie is available for conditional test execution
-try:
-    import jaxlie
-
-    _JAXLIE_AVAILABLE = True
-except ImportError:
-    _JAXLIE_AVAILABLE = False
-
-
 # =============================================================================
 # AdjointDual
 # =============================================================================
@@ -860,7 +851,7 @@ def test_se3_adjoint_power_pairing():
 # --- SO3Exp: Creation & Tree Structure ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_so3_exp_creation_and_properties():
     """Test that SO3Exp can be created and has correct properties."""
     from openscvx.symbolic.expr import SO3Exp
@@ -875,7 +866,7 @@ def test_so3_exp_creation_and_properties():
 # --- SO3Exp: Shape Checking ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_so3_exp_shape_inference():
     """Test that SO3Exp infers shape (3, 3) from 3D input."""
     from openscvx.symbolic.expr import SO3Exp
@@ -886,7 +877,7 @@ def test_so3_exp_shape_inference():
     assert so3_exp.check_shape() == (3, 3)
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_so3_exp_shape_validation():
     """Test that SO3Exp raises error for non-3D input."""
     from openscvx.symbolic.expr import SO3Exp
@@ -901,9 +892,11 @@ def test_so3_exp_shape_validation():
 # --- SO3Exp: JAX Lowering ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_so3_exp_jax_lowering():
     """Test SO3Exp lowering to JAX against jaxlie directly."""
+    import jaxlie
+
     from openscvx.symbolic.expr import SO3Exp
 
     test_cases = [
@@ -931,7 +924,7 @@ def test_so3_exp_jax_lowering():
 # --- SO3Exp: Mathematical Properties ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_so3_exp_rotation_properties():
     """Test that SO3Exp produces valid rotation matrices."""
     from openscvx.symbolic.expr import SO3Exp
@@ -959,7 +952,7 @@ def test_so3_exp_rotation_properties():
 # --- SO3Log: Creation & Tree Structure ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_so3_log_creation_and_properties():
     """Test that SO3Log can be created and has correct properties."""
     from openscvx.symbolic.expr import SO3Log
@@ -974,7 +967,7 @@ def test_so3_log_creation_and_properties():
 # --- SO3Log: Shape Checking ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_so3_log_shape_inference():
     """Test that SO3Log infers shape (3,) from 3x3 input."""
     from openscvx.symbolic.expr import SO3Log
@@ -985,7 +978,7 @@ def test_so3_log_shape_inference():
     assert so3_log.check_shape() == (3,)
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_so3_log_shape_validation():
     """Test that SO3Log raises error for non-3x3 input."""
     from openscvx.symbolic.expr import SO3Log
@@ -1000,7 +993,7 @@ def test_so3_log_shape_validation():
 # --- SO3Log: Mathematical Properties ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_so3_exp_log_roundtrip():
     """Test that SO3Log(SO3Exp(omega)) ≈ omega."""
     from openscvx.symbolic.expr import SO3Exp, SO3Log
@@ -1029,7 +1022,7 @@ def test_so3_exp_log_roundtrip():
 # --- SE3Exp: Creation & Tree Structure ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_se3_exp_creation_and_properties():
     """Test that SE3Exp can be created and has correct properties."""
     from openscvx.symbolic.expr import SE3Exp
@@ -1044,7 +1037,7 @@ def test_se3_exp_creation_and_properties():
 # --- SE3Exp: Shape Checking ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_se3_exp_shape_inference():
     """Test that SE3Exp infers shape (4, 4) from 6D input."""
     from openscvx.symbolic.expr import SE3Exp
@@ -1055,7 +1048,7 @@ def test_se3_exp_shape_inference():
     assert se3_exp.check_shape() == (4, 4)
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_se3_exp_shape_validation():
     """Test that SE3Exp raises error for non-6D input."""
     from openscvx.symbolic.expr import SE3Exp
@@ -1070,9 +1063,11 @@ def test_se3_exp_shape_validation():
 # --- SE3Exp: JAX Lowering ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_se3_exp_jax_lowering():
     """Test SE3Exp lowering to JAX against jaxlie directly."""
+    import jaxlie
+
     from openscvx.symbolic.expr import SE3Exp
 
     test_cases = [
@@ -1100,7 +1095,7 @@ def test_se3_exp_jax_lowering():
 # --- SE3Exp: Mathematical Properties ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_se3_exp_homogeneous_matrix_structure():
     """Test that SE3Exp produces valid homogeneous transformation matrices."""
     from openscvx.symbolic.expr import SE3Exp
@@ -1125,7 +1120,7 @@ def test_se3_exp_homogeneous_matrix_structure():
     assert jnp.allclose(jnp.linalg.det(R), 1.0, atol=1e-5)
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_product_of_exponentials_forward_kinematics():
     """Test using SE3Exp for Product of Exponentials forward kinematics.
 
@@ -1181,7 +1176,7 @@ def test_product_of_exponentials_forward_kinematics():
 # --- SE3Log: Creation & Tree Structure ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_se3_log_creation_and_properties():
     """Test that SE3Log can be created and has correct properties."""
     from openscvx.symbolic.expr import SE3Log
@@ -1196,7 +1191,7 @@ def test_se3_log_creation_and_properties():
 # --- SE3Log: Shape Checking ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_se3_log_shape_inference():
     """Test that SE3Log infers shape (6,) from 4x4 input."""
     from openscvx.symbolic.expr import SE3Log
@@ -1207,7 +1202,7 @@ def test_se3_log_shape_inference():
     assert se3_log.check_shape() == (6,)
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_se3_log_shape_validation():
     """Test that SE3Log raises error for non-4x4 input."""
     from openscvx.symbolic.expr import SE3Log
@@ -1222,7 +1217,7 @@ def test_se3_log_shape_validation():
 # --- SE3Log: Mathematical Properties ---
 
 
-@pytest.mark.skipif(not _JAXLIE_AVAILABLE, reason="jaxlie not installed")
+@pytest.mark.lie
 def test_se3_exp_log_roundtrip():
     """Test that SE3Log(SE3Exp(twist)) ≈ twist."""
     from openscvx.symbolic.expr import SE3Exp, SE3Log

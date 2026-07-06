@@ -11,11 +11,11 @@ per-iteration ``jax.jit``'d body the Python loop drives.
 import numpy as np
 import pytest
 
-pytest.importorskip("qpax")
-
 from openscvx.algorithms.loop import make_solve_loop
 from tests.algorithms._iteration_helpers import build_iteration_fn
 from tests.solvers._iteration_callback_helpers import build_brachistochrone
+
+pytestmark = [pytest.mark.e2e, pytest.mark.qpax]
 
 
 def test_make_solve_loop_matches_python_solve():

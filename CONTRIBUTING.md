@@ -149,18 +149,19 @@ See the `[tool.ruff]` section in `pyproject.toml` for our configuration.
 
 OpenSCvx uses `pytest` for automated testing. Tests run automatically via GitHub Actions:
 
-- **[tests-unit.yml](.github/workflows/tests-unit.yml)**: Runs on every PR - fast unit tests including the brachistochrone benchmark
-- **[tests-integration.yml](.github/workflows/tests-integration.yml)**: Runs weekly - full example problems as a smoke test
+- **[tests.yml](.github/workflows/tests.yml)**: Runs on every PR - a fast `unit` job, then gated `e2e` (full SCP solves) and `extras` (optional-dependency tests) jobs
+- **[tests-examples.yml](.github/workflows/tests-examples.yml)**: Runs weekly - solves every example problem as a smoke test
 
 ##### Running Tests Locally
 
 For faster feedback during development, run tests locally:
 
 ```bash
-pytest tests/                              # All unit tests
-pytest tests/test_brachistochrone.py -v    # Just the brachistochrone benchmark
-pytest -v -m "not integration"             # Skip expensive integration tests
-pytest -v -m integration                   # Only integration tests (runs test_examples.py)
+pytest -m "not e2e and not examples and not extras"    # Fast unit tests
+pytest -m "e2e and not extras"                         # Full SCP-solve tests
+pytest -m extras                                       # Optional-dependency tests
+pytest -m examples                                     # Solve every example (slow)
+pytest tests/e2e/test_brachistochrone.py -v            # Just the brachistochrone benchmark
 ```
 
 ##### Brachistochrone Problem

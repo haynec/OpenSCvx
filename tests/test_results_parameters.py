@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tests.test_solve_batched_brachistochrone import _build_brachistochrone_with_params
+from tests.e2e.test_solve_batched_brachistochrone import _build_brachistochrone_with_params
 
 # === solve() -> post_process() ===
 
@@ -44,9 +44,8 @@ def test_post_process_propagates_with_solved_parameters():
 # === solve_batched() -> post_process_batched() ===
 
 
+@pytest.mark.qpax
 def test_post_process_batched_propagates_each_element_with_its_own_parameters():
-    pytest.importorskip("qpax")
-
     prob = _build_brachistochrone_with_params("qpax", n=8, k_max=5)
     prob.initialize()
 
@@ -72,9 +71,8 @@ def test_post_process_batched_propagates_each_element_with_its_own_parameters():
     jax.clear_caches()
 
 
+@pytest.mark.qpax
 def test_post_process_batched_without_snapshot_falls_back_to_problem_parameters():
-    pytest.importorskip("qpax")
-
     prob = _build_brachistochrone_with_params("qpax", n=8, k_max=5)
     prob.initialize()
 

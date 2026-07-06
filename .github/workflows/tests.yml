@@ -1,0 +1,140 @@
+name: 🧪 Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  unit:
+    if: ${{ !github.event.pull_request.draft }}
+    name: Unit Tests (Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15  # Unit tests should be fast
+
+    strategy:
+      fail-fast: false  # Continue testing other versions even if one fails
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.11', '3.12', '3.13', '3.14']
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+
+    - name: Install dependencies
+      run: |
+        uv pip install --system -e ".[test]"
+
+    - name: Run unit tests
+      run: |
+        pytest -v -m "not e2e and not examples and not extras" --durations=10 --tb=short -n auto
+
+    - name: Upload test results on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: unit-test-results-py${{ matrix.python-version }}-${{ matrix.os }}
+        path: |
+          .pytest_cache/
+          test-results/
+        retention-days: 7
+
+  e2e:
+    needs: unit
+    name: E2E Tests (Python ${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false  # Continue testing other versions even if one fails
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ['3.11', '3.12', '3.13', '3.14']
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+
+    - name: Install dependencies
+      run: |
+        uv pip install --system -e ".[test]"
+
+    - name: Run e2e tests
+      run: |
+        pytest -v -m "e2e and not extras" --durations=10 --tb=short -n auto
+
+    - name: Upload test results on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: e2e-test-results-py${{ matrix.python-version }}-${{ matrix.os }}
+        path: |
+          .pytest_cache/
+          test-results/
+        retention-days: 7
+
+  extras:
+    needs: unit
+    name: Extras Tests (Python 3.13, ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+
+    - name: Install dependencies
+      run: |
+        # cvxpygen omitted: its extra is unsatisfiable while cvxpy is pinned <1.9
+        # (cvxpygen>=1.0.0 needs cvxpy>=1.9, #551); its tests skip until that resolves.
+        # qpax omitted until its solves are stable on Linux runners (#550).
+        uv pip install --system -e ".[test,mjx,lie]"
+
+    - name: Run extras tests
+      run: |
+        pytest -v -m "extras and not examples" --durations=10 --tb=short -n auto
+
+    - name: Upload test results on failure
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: extras-test-results
+        path: |
+          .pytest_cache/
+          test-results/
+        retention-days: 7
