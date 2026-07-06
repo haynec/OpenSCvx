@@ -203,6 +203,22 @@ This repo has the following features:
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+## Third-Party Integrations
+
+OpenSCvx integrates with several optional third-party packages. Each installs as a pip extra (`pip install openscvx[<extra>]`); without it, the library and its tests degrade gracefully — the corresponding tests simply skip. Integrations with a badge are tested against `main` on every push and re-checked weekly against the latest upstream releases.
+
+| Integration | Extra | Provides | Status |
+| --- | --- | --- | --- |
+| [MuJoCo MJX](https://mujoco.readthedocs.io/en/stable/mjx.html) | `mjx` | MJX dynamics adapter (`openscvx.integrations`) | [![mjx](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-mjx.yml/badge.svg?branch=main)](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-mjx.yml) |
+| [jaxlie](https://github.com/brentyi/jaxlie) | `lie` | SO(3)/SE(3) Lie-group operations and IK initialization | [![jaxlie](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-lie.yml/badge.svg?branch=main)](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-lie.yml) |
+| [qpax](https://github.com/qpax-solver/qpax) | `qpax` | JAX-native QP solver backend | under repair ([#550](https://github.com/OpenSCvx/OpenSCvx/issues/550)) |
+| [CVXPYGen](https://github.com/cvxgrp/cvxpygen) | `cvxpygen` | Generated C solver code for the convex subproblem | blocked on cvxpy pin ([#551](https://github.com/OpenSCvx/OpenSCvx/issues/551)) |
+| [moreau](https://pypi.org/project/moreau/) | `moreau` | Licensed QP solver backend | requires a license key; not tested in CI |
+| [stljax](https://github.com/UW-CTRL/stljax) | `stl` | Signal Temporal Logic robustness bridge | no dedicated CI yet |
+| [frax](https://github.com/danielpmorton/frax) | `frax` | Robot dynamics for the manipulator examples | exercised by the weekly examples sweep |
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 ## Acknowledgements
 
 This work was supported by a NASA Space Technology Graduate Research Opportunity and the Office of Naval Research under grant N00014-17-1-2433. The authors would like to acknowledge Natalia Pavlasek, Fabio Spada, Samuel Buckner, Abhi Kamath, Govind Chari, and Purnanand Elango as well as the other Autonomous Controls Laboratory members, for their many helpful discussions and support throughout this work.
