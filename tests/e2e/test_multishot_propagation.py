@@ -111,13 +111,13 @@ def test_multishot_propagation_on_results_with_history():
 def test_brachistochrone_multishot_roundtrip():
     from tests.e2e.test_brachistochrone import _make_brachistochrone_problem
 
-    problem = _make_brachistochrone_problem({"backend": "qpax", "verbose": False})
+    problem = _make_brachistochrone_problem({"backend": "qpax"})
     problem.settings.prp.inter_sample = 4
-    problem.settings.algorithm.k_max = 2
     if hasattr(problem.settings, "dev"):
         problem.settings.dev.printing = False
-    result = problem.solve()
-    result = problem.post_process(result)
+    problem.initialize()
+    result = problem.solve(max_iters=2)
+    result = problem.post_process()
 
     prop = result.multishot_propagation()
     assert prop is not None
