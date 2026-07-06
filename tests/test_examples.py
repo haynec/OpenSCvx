@@ -29,8 +29,8 @@ EXCLUDED_EXAMPLES = {
     "rocket/ascent_launch_vehicle.py",
 }
 
-# Examples that require mujoco.mjx; their params carry the ``mjx`` marker so
-# they skip cleanly when mujoco is not installed.
+# Examples that require an optional dependency; their params carry the matching
+# marker so they skip cleanly when the package is not installed.
 _MJX_EXAMPLES = frozenset(
     {
         "mjx/cartpole_mjx.py",
@@ -40,6 +40,7 @@ _MJX_EXAMPLES = frozenset(
         "mjx/double_cartpole_mjx.py",
     }
 )
+_QPAX_EXAMPLES = frozenset({"abstract/brachistochrone_batched.py"})
 
 # Timing bounds for specific examples (in seconds)
 # Format: "relative/path/to/example.py": {"init": max_init, "solve": max_solve, "post": max_post}
@@ -89,7 +90,11 @@ def discover_example_paths() -> list:
         rel = py_file.relative_to(EXAMPLES_DIR)
         if _excluded(rel):
             continue
-        marks = [pytest.mark.mjx] if rel.as_posix() in _MJX_EXAMPLES else []
+        marks = []
+        if rel.as_posix() in _MJX_EXAMPLES:
+            marks.append(pytest.mark.mjx)
+        if rel.as_posix() in _QPAX_EXAMPLES:
+            marks.append(pytest.mark.qpax)
         params.append(
             pytest.param(py_file, id=str(rel.with_suffix("")).replace("/", "_"), marks=marks)
         )
