@@ -490,18 +490,21 @@ class CVXPyPTRSolver(PTRSolver):
         # Virtual Control Slack
         cost += sum(cp.sum(lam_vc[i - 1] * cp.abs(nu[i - 1])) for i in range(1, settings.sim.n))
 
-        # Virtual buffer penalty for nodal constraints (per-node weighting)
+        # Virtual buffer penalty for nodal constraints (per-node weighting).
+        # Equalities penalize |nu_vb|, inequalities penalize pos(nu_vb).
         idx_ncvx = 0
         if jax_constraints.nodal:
             for constraint in jax_constraints.nodal:
-                cost += lam_vb_nodal[:, idx_ncvx] @ cp.pos(nu_vb[idx_ncvx])
+                pen = cp.abs if constraint.is_equality else cp.pos
+                cost += lam_vb_nodal[:, idx_ncvx] @ pen(nu_vb[idx_ncvx])
                 idx_ncvx += 1
 
         # Virtual slack penalty for cross-node constraints
         idx_cross = 0
         if jax_constraints.cross_node:
             for constraint in jax_constraints.cross_node:
-                cost += lam_vb_cross[idx_cross] * cp.pos(nu_vb_cross[idx_cross])
+                pen = cp.abs if constraint.is_equality else cp.pos
+                cost += lam_vb_cross[idx_cross] * pen(nu_vb_cross[idx_cross])
                 idx_cross += 1
 
         return cost

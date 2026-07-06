@@ -73,7 +73,7 @@ from openscvx.lowered import (
     LoweredProblem,
 )
 from openscvx.symbolic.constraint_set import ConstraintSet
-from openscvx.symbolic.expr import Expr, NodeReference, traverse
+from openscvx.symbolic.expr import Equality, Expr, NodeReference, traverse
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.unified import unify_controls, unify_states
 
@@ -628,6 +628,7 @@ def _lower_jax_constraints(
                 grad_g_x=jax.vmap(jacfwd(fn, argnums=0), in_axes=(0, 0, None, None)),
                 grad_g_u=jax.vmap(jacfwd(fn, argnums=1), in_axes=(0, 0, None, None)),
                 nodes=constraints.nodal[i].nodes,
+                is_equality=isinstance(constraints.nodal[i].constraint, Equality),
             )
             lowered_nodal.append(constraint)
 
@@ -644,6 +645,7 @@ def _lower_jax_constraints(
             func=constraint_fn,
             grad_g_X=grad_g_X,
             grad_g_U=grad_g_U,
+            is_equality=isinstance(cross_node_constraint.constraint, Equality),
         )
         lowered_cross_node.append(cross_node_lowered)
 

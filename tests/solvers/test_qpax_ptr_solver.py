@@ -231,6 +231,46 @@ def test_qpax_rejects_user_convex_constraints():
         )
 
 
+def test_qpax_rejects_nodal_equality():
+    """L1-penalized nodal equalities need a two-sided slack penalty, which the
+    QPAX one-sided positive-part reformulation can't express; lowering must
+    raise ``NotImplementedError`` naming CVXPyPTRSolver."""
+    n = 5
+    pos = ox.State("pos", shape=(2,))
+    pos.min = np.array([-10.0, -10.0])
+    pos.max = np.array([10.0, 10.0])
+    pos.initial = np.array([0.0, 0.0])
+    pos.final = np.array([3.0, 3.0])
+    vel = ox.State("vel", shape=(2,))
+    vel.min = np.array([-5.0, -5.0])
+    vel.max = np.array([5.0, 5.0])
+    vel.initial = np.array([0.0, 0.0])
+    vel.final = [("free", 0.0), ("free", 0.0)]
+    u = ox.Control("u", shape=(2,))
+    u.min = np.array([-3.0, -3.0])
+    u.max = np.array([3.0, 3.0])
+    u.guess = np.zeros((n, 2))
+    dyn = {"pos": vel, "vel": u}
+    time = ox.Time(initial=0.0, final=("minimize", 2.0), min=0.0, max=10.0)
+
+    eq_constraint = (pos == np.array([1.0, 1.0])).at([2])
+
+    with pytest.raises(
+        NotImplementedError,
+        match=r"QPAXPTRSolver does not support L1-penalized equality",
+    ):
+        Problem(
+            dynamics=dyn,
+            states=[pos, vel],
+            controls=[u],
+            time=time,
+            constraints=[eq_constraint],
+            N=n,
+            float_dtype="float64",
+            solver={"backend": "qpax"},
+        )
+
+
 # ============================================================================
 # Round-trip parity with CVXPyPTRSolver
 # ============================================================================
