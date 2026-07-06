@@ -308,6 +308,10 @@ a_long = Fxd / ox.Constant(m)
 constraints.append(ox.ctcs(a_lat**2 + a_long**2 <= A_MAX**2, penalty="huber"))
 
 # ── Problem ────────────────────────────────────────────────────────────────────
+# Any convex backend handles the batched three-car solve below: the default
+# (CVXPy) runs the subproblems sequentially under the hood, while a JAX-native
+# backend — e.g. solver={"backend": "qpax"} — vectorizes all three cars'
+# subproblems into a single XLA program.
 problem = ox.Problem(
     dynamics=dynamics,
     states=states,
