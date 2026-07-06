@@ -23,6 +23,9 @@ import cvxpy as cp
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
+
+pytestmark = pytest.mark.e2e
 
 
 def _jax_float():

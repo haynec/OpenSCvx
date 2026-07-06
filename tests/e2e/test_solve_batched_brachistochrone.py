@@ -7,7 +7,7 @@ spellings of the same batched solve, so over a stack of boundary pins or
 parameter values each batch element must agree with the corresponding
 ``solve_jax`` result. CVXPy runs the ``B`` solves sequentially (host CVXPy
 isn't thread-safe); QPAX runs them in parallel under vmap. Parallels
-``tests/test_solve_jax_vmap_brachistochrone.py``.
+``tests/e2e/test_solve_jax_vmap_brachistochrone.py``.
 """
 
 import jax

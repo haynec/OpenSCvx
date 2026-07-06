@@ -24,6 +24,8 @@ from openscvx.discretization import get_impulsive_discretization_solver
 from tests.algorithms._iteration_helpers import build_iteration_fn
 from tests.solvers._iteration_callback_helpers import build_brachistochrone
 
+pytestmark = pytest.mark.e2e
+
 
 @pytest.mark.parametrize(
     "backend, primal_atol",

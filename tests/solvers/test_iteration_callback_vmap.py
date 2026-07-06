@@ -28,6 +28,8 @@ from tests.solvers._iteration_callback_helpers import (
     subproblem_data_from_numpy_stash,
 )
 
+pytestmark = pytest.mark.e2e
+
 
 def _make_batch(data: SubproblemData, scales) -> SubproblemData:
     """Stack ``data`` ``B`` times, perturbing ``lam_prox`` by ``scales[b]``.

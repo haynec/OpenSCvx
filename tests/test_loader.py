@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from openscvx import Problem
 from openscvx.loader import ProblemSpec, load_dict, load_json, load_yaml
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
-from tests.test_brachistochrone import (
+from tests.e2e.test_brachistochrone import (
     _assert_brachistochrone_accuracy,
     _print_comparison_metrics,
 )
@@ -173,6 +173,7 @@ _LOADERS = {
 }
 
 
+@pytest.mark.e2e
 @pytest.mark.parametrize("fmt", ["yaml", "json"])
 def test_load_file(fmt):
     """Load brachistochrone from a config file, solve, and validate against analytical."""
@@ -192,6 +193,7 @@ def test_load_file(fmt):
 # =============================================================================
 
 
+@pytest.mark.e2e
 @pytest.mark.parametrize("constraint_type", ["ctcs", "nodal", "convex", "at", "over"])
 def test_constraint_types(constraint_type):
     """Test YAML-style constraint strings with different constraint types."""
@@ -253,6 +255,7 @@ def test_constraint_types(constraint_type):
 # =============================================================================
 
 
+@pytest.mark.e2e
 def test_propagation():
     """Test YAML-style problem with propagation states and algebraic outputs."""
     data = _base_dict()
@@ -333,6 +336,7 @@ def test_propagation():
 # =============================================================================
 
 
+@pytest.mark.e2e
 @pytest.mark.parametrize("feasible", [True, False])
 def test_cross_nodal(feasible):
     """Test YAML-style cross-node rate limit constraint."""

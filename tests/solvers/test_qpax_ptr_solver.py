@@ -8,7 +8,7 @@ Covers:
   * Round-trip parity vs ``CVXPyPTRSolver`` on the same problem: same final
     trajectory and same final cost to within a loose tolerance.
 
-The brachistochrone parametrized-backend test in ``tests/test_brachistochrone.py``
+The brachistochrone parametrized-backend test in ``tests/e2e/test_brachistochrone.py``
 exercises QPAX on a richer (nonlinear, CTCS) problem; the unit-style tests
 here focus on the API contract and the assembly machinery.
 """
@@ -21,7 +21,7 @@ from openscvx import Problem
 from openscvx.solvers import PTRSolver, PTRSolveResult, QPAXPTRSolver
 from tests.solvers._iteration_callback_helpers import populate_numpy_stash
 
-pytestmark = pytest.mark.qpax
+pytestmark = [pytest.mark.e2e, pytest.mark.qpax]
 
 # ============================================================================
 # Helpers
@@ -361,7 +361,7 @@ def test_qpax_solve_raises_on_nonconvergence(monkeypatch):
     float32 ill-conditioning) the backend must raise rather than unpack a
     NaN-filled primal. Without the guard the next SCP linearization point
     is NaN-poisoned and every subsequent iteration produces garbage. The
-    end-to-end coverage in ``tests/test_brachistochrone.py::test_backend_float32_raises``
+    end-to-end coverage in ``tests/e2e/test_brachistochrone.py::test_backend_float32_raises``
     exercises the same path through the SCvx loop; this unit test pins the
     behavior at the solver boundary directly."""
     import jax.numpy as jnp

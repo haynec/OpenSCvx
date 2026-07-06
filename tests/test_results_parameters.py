@@ -15,7 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tests.test_solve_batched_brachistochrone import _build_brachistochrone_with_params
+from tests.e2e.test_solve_batched_brachistochrone import _build_brachistochrone_with_params
 
 # === solve() -> post_process() ===
 

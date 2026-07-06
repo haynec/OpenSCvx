@@ -26,7 +26,7 @@ from tests.solvers._iteration_callback_helpers import (
     subproblem_data_from_numpy_stash,
 )
 
-pytestmark = pytest.mark.qpax
+pytestmark = [pytest.mark.e2e, pytest.mark.qpax]
 
 # ============================================================================
 # Assembly parity (Phase 2)

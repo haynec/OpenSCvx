@@ -12,6 +12,7 @@ exercises the real PTR pipeline).
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from openscvx.solvers.ptr_solver import (
     StatusCode,
@@ -19,6 +20,8 @@ from openscvx.solvers.ptr_solver import (
     SubproblemSolution,
 )
 from tests.solvers._iteration_callback_helpers import build_brachistochrone
+
+pytestmark = pytest.mark.e2e
 
 # ============================================================================
 # Fixtures

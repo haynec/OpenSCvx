@@ -109,7 +109,7 @@ def test_multishot_propagation_on_results_with_history():
 
 @pytest.mark.qpax
 def test_brachistochrone_multishot_roundtrip():
-    from tests.test_brachistochrone import _make_brachistochrone_problem
+    from tests.e2e.test_brachistochrone import _make_brachistochrone_problem
 
     problem = _make_brachistochrone_problem({"backend": "qpax", "verbose": False})
     problem.settings.prp.inter_sample = 4

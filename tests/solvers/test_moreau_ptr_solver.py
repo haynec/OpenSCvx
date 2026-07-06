@@ -10,7 +10,7 @@ Covers:
   * End-to-end ``solve()`` returns a :class:`PTRSolveResult`.
   * Round-trip parity vs ``CVXPyPTRSolver`` on a small double-integrator.
 
-The brachistochrone parametrized-backend test in ``tests/test_brachistochrone.py``
+The brachistochrone parametrized-backend test in ``tests/e2e/test_brachistochrone.py``
 exercises Moreau on a richer nonlinear CTCS problem; the unit-style tests here
 focus on the API contract and the assembly machinery.
 """

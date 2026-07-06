@@ -58,7 +58,7 @@ $$
 t_f^* = \sqrt{\frac{r}{g}} \phi_f
 $$
 
-Because of these advantageous properties the Brachistochrone problem is extensively leveraged as a [unit test](https://github.com/OpenSCvx/OpenSCvx/blob/main/tests/test_brachistochrone.py).
+Because of these advantageous properties the Brachistochrone problem is extensively leveraged as a [unit test](https://github.com/OpenSCvx/OpenSCvx/blob/main/tests/e2e/test_brachistochrone.py).
 We would highly recommend that anyone setting out to develop some kind of optimization software do the same.
 It may not be necessary _nor_ sufficient, but a lot of things have to be working properly to solve Brachistochrone problem.
 
