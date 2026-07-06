@@ -1,0 +1,16 @@
+name: qpax
+
+# Badge workflow: health of the qpax integration. Currently failing (#550) —
+# cron + dispatch only while broken, so merges to main don't carry a guaranteed
+# red check; add a push trigger alongside the extras-job install once fixed.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Monday, offset from the Sunday examples sweep
+  workflow_dispatch:
+
+jobs:
+  qpax:
+    uses: ./.github/workflows/_extra.yml
+    with:
+      extra: qpax
