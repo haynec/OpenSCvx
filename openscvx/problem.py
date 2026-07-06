@@ -23,6 +23,7 @@ import os
 import queue
 import threading
 import time
+import warnings
 from dataclasses import fields as dc_fields
 from dataclasses import replace as dc_replace
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -2062,7 +2063,7 @@ class Problem:
         element propagates with its own parameter values from the snapshot
         :meth:`solve_batched` recorded on ``results.parameters``. Results
         without a snapshot (e.g. loaded from an older save) fall back to
-        ``self.parameters``.
+        ``self.parameters`` with a warning.
 
         Args:
             results: Batched :class:`~openscvx.algorithms.OptimizationResults`
@@ -2109,6 +2110,14 @@ class Problem:
         # Empty for results saved before the snapshot existed — those fall
         # back to the Problem's current values, the pre-snapshot behaviour.
         snapshot = getattr(results, "parameters", None) or {}
+        if not snapshot and self._parameters:
+            warnings.warn(
+                "results carry no record of the parameter values they were solved "
+                "with; propagating every element with the Problem's current "
+                "parameters, which may differ from the solved values.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         t_0_post = time.time()
         for b in range(B):

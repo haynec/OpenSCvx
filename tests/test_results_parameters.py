@@ -81,7 +81,8 @@ def test_post_process_batched_without_snapshot_falls_back_to_problem_parameters(
     results = prob.solve_batched(parameters={"gain": jnp.array([[0.0], [1.0]])})
     del results.parameters  # a results object that predates the snapshot
 
-    results = prob.post_process_batched(results)
+    with pytest.warns(UserWarning, match="no record of the parameter values"):
+        results = prob.post_process_batched(results)
     position = np.asarray(results.trajectory["position"])
 
     # Every element falls back to the Problem's own gain of 1.0: even the
