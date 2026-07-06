@@ -7,9 +7,11 @@ with a hybrid power unit patterned on the 2026 Formula 1 regulations:
     (2026 caps the MGU-K at 350 kW against ~400 kW of combustion power).
   * The battery stores 4 MJ and recovery is limited to ~8 MJ per lap,
     harvested exclusively from the driven axle under braking.
-  * The lap is a qualifying lap: state of charge is free at both ends, so
-    the car may start full and cross the flag empty. The recovery cap still
-    limits how much braking energy can top the battery up along the way.
+  * The lap is a flying qualifying lap: the driving states (n, α, v, D, δ)
+    are periodic — the car crosses the start line in the same state it
+    carries over the flag — while the state of charge is free at both ends,
+    so it may start full and finish empty. The recovery cap still limits how
+    much braking energy can top the battery up along the way.
 
 No gearbox is needed: the Kloeser drive force (Cm1 - Cm2·v)·D is already a
 driveline *envelope* — wheel force after gearing, falling off with speed like
@@ -132,6 +134,13 @@ E_START_GUESS = 0.9 * E_BATT_MAX  # quali lap: guess a near-full start, drained 
 N = 80  # shooting nodes
 T_guess = 20.0  # initial guess for lap time [s]
 
+# Tie the start-line state to the finish-line state (n, α, v, D, δ). The start
+# line *is* the finish line on a flying lap, so without this the free boundary
+# is a loophole: an unconstrained v(0) lets the optimizer cross the line at a
+# speed the car could never regain — free kinetic energy worth more than the
+# battery. The battery itself stays non-periodic: a qualifying lap spends it.
+PERIODIC_LAP = True
+
 # ── States ─────────────────────────────────────────────────────────────────────
 S_INIT = 0.0
 
@@ -177,7 +186,7 @@ D_throt.guess = 0.9 * np.ones((N, 1))
 delta = ox.State("delta", shape=(1,))
 delta.min = [-0.40]
 delta.max = [0.40]
-delta.initial = [0.0]
+delta.initial = [ox.Free(0.0)] if PERIODIC_LAP else [0.0]
 delta.final = [ox.Free(0.0)]
 delta.guess = np.zeros((N, 1))
 
@@ -298,6 +307,11 @@ for state in [s, alpha, v, D_throt, delta, E_batt, E_rec]:
             ox.ctcs(state.min <= state, penalty="huber"),
         ]
     )
+
+# Flying-lap periodicity: convex cross-node equalities pin each driving state
+# at the start line to its value at the flag.
+if PERIODIC_LAP:
+    constraints.extend((x.at(0) == x.at(N - 1)).convex() for x in [n, alpha, v, D_throt, delta])
 
 # Friction ellipse: lateral and longitudinal grip share one tyre, so
 # corner-exit deployment and trail-brake harvesting compete with cornering.
