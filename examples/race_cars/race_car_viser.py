@@ -675,6 +675,8 @@ def create_race_car_comparison_viser_server(
     loop_animation: bool = True,
     trim_warmup: bool = True,
     distance_marker_step: float | str | None = "auto",
+    trail_fade_s: float | None = 6.0,
+    plot_panels: list[dict] | None = None,
     title: str = "Race Comparison",
 ) -> "viser.ViserServer":
     """Replay several laps side by side on one track with a shared clock.
@@ -694,6 +696,14 @@ def create_race_car_comparison_viser_server(
         colors: Body RGB per car (defaults cycle a small palette).
         distance_marker_step: Metres between "x m" track labels; ``"auto"``
             picks ~9 per lap, ``None`` hides them.
+        trail_fade_s: Bright trail behind each car fades out over this many
+            seconds of playback (the faint full ghost stays). ``None`` keeps
+            the whole trail at full strength.
+        plot_panels: Optional live plots for the GUI sidebar: dicts with a
+            Plotly ``"figure"``, an ``"update"`` callable taking the current
+            playback time in seconds (mutate the figure's marker traces), and
+            an optional ``"aspect"`` ratio. Updates are throttled — Plotly
+            panels re-serialize on every assignment.
     """
     import viser
     import viser.transforms as vtf
@@ -753,9 +763,17 @@ def create_race_car_comparison_viser_server(
             line_width=4.0,
         )
         handles = _add_race_car(server, base_path=f"/cars/{slug}", body_color=color)
-        cars.append({"lap": lap, "label": label, "trace": trace_line, **handles})
+        cars.append({"lap": lap, "label": label, "trace": trace_line, "color": color, **handles})
 
     hud = {"markdown": None}
+
+    # Bright trail fade: keep only the last ``trail_fade_s`` seconds of trail,
+    # blending each segment from the canvas background up to the car colour —
+    # the faint ghost above keeps the full history without the clutter.
+    fade_frames = None
+    if trail_fade_s is not None and len(t_common) > 1:
+        fade_frames = max(2, int(round(trail_fade_s / float(t_common[1] - t_common[0]))))
+    _canvas_bg = np.array([16.0, 17.0, 19.0])
 
     def update_frame(frame_idx: int) -> None:
         status_lines = []
@@ -772,9 +790,13 @@ def create_race_car_comparison_viser_server(
 
             idx = min(frame_idx + 1, len(lap["pos"]))
             if idx >= 2:
-                car["trace"].points = np.stack(
-                    [lap["pos"][: idx - 1], lap["pos"][1:idx]], axis=1
-                ).astype(np.float32)
+                lo = 0 if fade_frames is None else max(0, idx - fade_frames)
+                seg = np.stack([lap["pos"][lo : idx - 1], lap["pos"][lo + 1 : idx]], axis=1)
+                car["trace"].points = seg.astype(np.float32)
+                if fade_frames is not None:
+                    w = np.linspace(0.0, 1.0, len(seg) + 1)[1:, None] ** 1.5
+                    shade = _canvas_bg * (1.0 - w) + np.asarray(car["color"], dtype=float) * w
+                    car["trace"].colors = np.repeat(shade.astype(np.uint8)[:, None, :], 2, axis=1)
 
             finished = t_common[frame_idx] >= lap["lap_time"]
             state = "FINISHED" if finished else f"{lap['speed'][frame_idx]:.2f} m/s"
@@ -784,6 +806,26 @@ def create_race_car_comparison_viser_server(
             hud["markdown"].content = f"**t:** {t_common[frame_idx]:.3f} s  \n" + "  \n".join(
                 status_lines
             )
+
+    # Live GUI plots: each panel owns its figure; we hand it the playback time
+    # and push the mutated figure to the client, rate-limited because every
+    # push re-serializes the whole figure.
+    panel_handles = []
+    for panel in plot_panels or []:
+        handle = server.gui.add_plotly(
+            figure=panel["figure"], aspect=float(panel.get("aspect", 1.6))
+        )
+        panel_handles.append((panel, handle))
+    _panel_clock = {"last_t": -np.inf}
+
+    def update_panels(frame_idx: int) -> None:
+        t = float(t_common[frame_idx])
+        if abs(t - _panel_clock["last_t"]) < 0.15:
+            return
+        _panel_clock["last_t"] = t
+        for panel, handle in panel_handles:
+            panel["update"](t)
+            handle.figure = panel["figure"]
 
     centre = np.mean(np.concatenate([lap["pos"] for lap in laps]), axis=0)
     span_xy = (
@@ -795,7 +837,8 @@ def create_race_car_comparison_viser_server(
     server.initial_camera.look_at = tuple(float(x) for x in centre)
     server.initial_camera.up = (0.0, 0.0, 1.0)
 
-    add_animation_controls(server, t_common, [update_frame], loop=loop_animation)
+    callbacks = [update_frame] + ([update_panels] if panel_handles else [])
+    add_animation_controls(server, t_common, callbacks, loop=loop_animation)
     update_frame(0)
 
     lap_times = sorted((lap["lap_time"], label) for lap, label in zip(laps, labels))

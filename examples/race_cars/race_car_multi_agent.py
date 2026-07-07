@@ -53,6 +53,7 @@ from __future__ import annotations
 import os
 import sys
 import time as _time
+from dataclasses import dataclass
 
 import jax
 
@@ -81,7 +82,7 @@ AGENTS = [
     dict(
         name="down on power",
         color=(220, 35, 45),
-        power_scale=0.9,
+        power_scale=0.7,
         mass_scale=1.0,
         battery_scale=1.0,
     ),
@@ -114,7 +115,7 @@ K = len(AGENTS)
 # published plan together — while counting laps and resetting the per-lap
 # recovery budget. Solver scaling, weights, and the curvature spline are
 # therefore all independent of race length.
-M_LAPS = 2
+M_LAPS = 1
 
 # ── Track data ─────────────────────────────────────────────────────────────────
 # 4x LMS kart track, as in race_car_hybrid.py: long enough that the cars are
@@ -188,7 +189,7 @@ SEP_LAT = 0.05  # semi-axis across the track [m]
 # ── MPC horizon ────────────────────────────────────────────────────────────────
 # Two seconds reaches through an entire braking zone and out the other side,
 # which is what lets a car weigh harvesting now against deploying later.
-N_MPC = 21  # horizon nodes
+N_MPC = 41  # horizon nodes
 HORIZON_TF = 2.0  # [s] prediction horizon
 DT_MPC = HORIZON_TF / (N_MPC - 1)  # time between consecutive nodes = one race step [s]
 RACE_TIME_MAX = 15.0 + 20.0 * M_LAPS  # [s] give up if the field has not finished by then
@@ -485,17 +486,43 @@ def opponent_view(pred: np.ndarray) -> np.ndarray:
     return np.stack([np.delete(pred, i, axis=0).T for i in range(K)])
 
 
+def accelerations(x: np.ndarray, u: np.ndarray, spec: dict) -> tuple[np.ndarray, np.ndarray]:
+    """(a_lat, a_long) [m/s²] along one car's dense log slice.
+
+    Mirrors the symbolic tyre-force model with the car's spec parameters, so
+    the returned points live on the same friction ellipse the solver saw.
+    """
+    v, D, delta = x[:, COL["v"]], x[:, COL["D"]], x[:, COL["delta"]]
+    deploy, regen = u[:, 2], u[:, 3]
+    F_env = spec["power_scale"] * (Cm1 - Cm2 * v)
+    Fxd = (
+        ICE_SHARE * F_env * D
+        + ELEC_SHARE * F_env * (deploy - regen)
+        - Cr2 * v**2
+        - Cr0 * np.tanh(5.0 * v)
+    )
+    m_car = m * spec["mass_scale"]
+    a_lat = C2 * v**2 * delta + Fxd * np.sin(C1 * delta) / m_car
+    a_long = Fxd / m_car
+    return a_lat, a_long
+
+
 # ── Plotly visualisation ───────────────────────────────────────────────────────
 
 
-def plot_race(sim: np.ndarray, t_sim: np.ndarray) -> None:
-    """Track projection per car, pairwise separation vs the limit, speed and
-    battery histories — all from the closed-loop log ``sim`` (T, K, 8)."""
+def plot_race(log: RaceLog) -> None:
+    """Track projection, separation, speed/battery striplines, and g-g diagrams.
+
+    Everything is drawn from the dense propagated log; the striplines run
+    against race distance in laps rather than time, so the same corner lines
+    up vertically across cars and laps.
+    """
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
     from time2spatial import transformProj2Orig
 
     css = [f"rgb{spec['color']}" for spec in AGENTS]
+    laps_x = log.dense_x[:, :, COL["s"]] / pathlength  # (K, Td) race distance in laps
 
     # ── Track projection ───────────────────────────────────────────────────────
     sref_d, xref_d, yref_d, psiref_d, _ = getTrack(TRACK_FILE)
@@ -520,12 +547,9 @@ def plot_race(sim: np.ndarray, t_sim: np.ndarray) -> None:
             )
         )
     for i, spec in enumerate(AGENTS):
+        x_i = log.dense_x[i]
         cart_x, cart_y, _, _ = transformProj2Orig(
-            sim[:, i, COL["s"]],
-            sim[:, i, COL["n"]],
-            sim[:, i, COL["alpha"]],
-            sim[:, i, COL["v"]],
-            TRACK_FILE,
+            x_i[:, COL["s"]], x_i[:, COL["n"]], x_i[:, COL["alpha"]], x_i[:, COL["v"]], TRACK_FILE
         )
         fig1.add_trace(
             go.Scatter(
@@ -547,46 +571,55 @@ def plot_race(sim: np.ndarray, t_sim: np.ndarray) -> None:
             )
         )
     fig1.update_layout(
-        title=f"Multi-agent race — closed-loop trajectories  ({len(sim)} steps)",
+        title=f"Multi-agent race — propagated closed-loop trajectories  ({len(log.sim)} steps)",
         xaxis=dict(title="x [m]", scaleanchor="y"),
         yaxis=dict(title="y [m]"),
         height=600,
     )
     fig1.show()
 
-    # ── Pairwise separation vs the ellipse limit ───────────────────────────────
+    # ── Pairwise separation vs the ellipse limit, against race distance ───────
     fig2 = go.Figure()
     for i in range(K):
         for j in range(i + 1, K):
-            ds = sim[:, i, COL["s"]] - sim[:, j, COL["s"]]
+            ds = log.dense_x[i, :, COL["s"]] - log.dense_x[j, :, COL["s"]]
             ds = (pathlength / np.pi) * np.sin(np.pi * ds / pathlength)  # lap-periodic gap
-            gap = np.sqrt(
-                (ds / SEP_LONG) ** 2 + ((sim[:, i, COL["n"]] - sim[:, j, COL["n"]]) / SEP_LAT) ** 2
-            )
+            dn = log.dense_x[i, :, COL["n"]] - log.dense_x[j, :, COL["n"]]
+            gap = np.sqrt((ds / SEP_LONG) ** 2 + (dn / SEP_LAT) ** 2)
             fig2.add_trace(
-                go.Scatter(x=t_sim, y=gap, name=f"{AGENTS[i]['name']} ↔ {AGENTS[j]['name']}")
+                go.Scatter(
+                    x=0.5 * (laps_x[i] + laps_x[j]),
+                    y=gap,
+                    name=f"{AGENTS[i]['name']} ↔ {AGENTS[j]['name']}",
+                )
             )
     fig2.add_hline(y=1.0, line=dict(color="black", dash="dash", width=1), annotation_text="contact")
     fig2.update_layout(
         title="Separation (ellipse metric — below 1 is contact)",
-        xaxis_title="t [s]",
+        xaxis_title="race distance [laps]",
         yaxis_title="normalised gap",
+        yaxis_type="log",
         height=400,
     )
     fig2.show()
 
-    # ── Speed and battery ──────────────────────────────────────────────────────
+    # ── Speed and battery striplines against race distance ────────────────────
     fig3 = make_subplots(rows=2, cols=1, shared_xaxes=True, subplot_titles=["v [m/s]", "E [J]"])
     for i, spec in enumerate(AGENTS):
         fig3.add_trace(
-            go.Scatter(x=t_sim, y=sim[:, i, COL["v"]], line=dict(color=css[i]), name=spec["name"]),
+            go.Scatter(
+                x=laps_x[i],
+                y=log.dense_x[i, :, COL["v"]],
+                line=dict(color=css[i]),
+                name=spec["name"],
+            ),
             row=1,
             col=1,
         )
         fig3.add_trace(
             go.Scatter(
-                x=t_sim,
-                y=sim[:, i, COL["E"]],
+                x=laps_x[i],
+                y=log.dense_x[i, :, COL["E"]],
                 line=dict(color=css[i]),
                 name=spec["name"],
                 showlegend=False,
@@ -600,21 +633,190 @@ def plot_race(sim: np.ndarray, t_sim: np.ndarray) -> None:
             row=2,
             col=1,
         )
-    fig3.update_xaxes(title_text="t [s]", row=2, col=1)
+    for lap in range(1, M_LAPS):
+        fig3.add_vline(x=float(lap), line=dict(color="black", dash="dot", width=1))
+    fig3.update_xaxes(title_text="race distance [laps]", row=2, col=1)
     fig3.update_layout(title="Speed and battery state of charge", height=600)
     fig3.show()
+
+    # ── g-g diagrams: one traction circle per car ──────────────────────────────
+    n_cols = 2
+    n_rows = (K + n_cols - 1) // n_cols
+    fig4 = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[spec["name"] for spec in AGENTS])
+    theta = np.linspace(0.0, 2.0 * np.pi, 120)
+    for i, spec in enumerate(AGENTS):
+        row, col = divmod(i, n_cols)
+        a_lat, a_long = accelerations(log.dense_x[i], log.dense_u[i], spec)
+        fig4.add_trace(
+            go.Scatter(
+                x=A_MAX * np.cos(theta),
+                y=A_MAX * np.sin(theta),
+                mode="lines",
+                line=dict(color="black", dash="dash", width=1),
+                showlegend=False,
+            ),
+            row=row + 1,
+            col=col + 1,
+        )
+        fig4.add_trace(
+            go.Scatter(
+                x=a_lat[::3],
+                y=a_long[::3],
+                mode="markers",
+                marker=dict(color=css[i], size=3, opacity=0.4),
+                showlegend=False,
+            ),
+            row=row + 1,
+            col=col + 1,
+        )
+        fig4.update_xaxes(title_text="a_lat [m/s²]", row=row + 1, col=col + 1)
+        fig4.update_yaxes(
+            title_text="a_long [m/s²]", scaleanchor=f"x{i + 1}", row=row + 1, col=col + 1
+        )
+    fig4.update_layout(title="g-g diagrams vs the friction ellipse", height=450 * n_rows)
+    fig4.show()
+
+
+def build_viser_panels(log: RaceLog) -> list[dict]:
+    """Live plot panels for the race replay: speed, battery, and g-g.
+
+    Each panel is a compact Plotly figure whose last ``K`` traces are
+    one-point markers, plus an ``update(t)`` closure that moves those markers
+    to the cars' state at race time ``t``. The striplines run against race
+    distance in laps; every car's series is trimmed at its own flag crossing
+    so its marker parks with the car.
+    """
+    import plotly.graph_objects as go
+
+    css = [f"rgb{spec['color']}" for spec in AGENTS]
+    end = [crossing_index(log.dense_x[i, :, COL["s"]]) for i in range(K)]
+    t_car = [log.dense_t[: end[i]] for i in range(K)]
+    lap_car = [log.dense_x[i, : end[i], COL["s"]] / pathlength for i in range(K)]
+
+    def compact(fig: go.Figure, title: str, xaxis: str, yaxis: str) -> go.Figure:
+        fig.update_layout(
+            title=dict(text=title, font=dict(size=13)),
+            xaxis_title=xaxis,
+            yaxis_title=yaxis,
+            margin=dict(l=45, r=10, t=30, b=35),
+            font=dict(size=10),
+            showlegend=False,
+        )
+        return fig
+
+    def stripline_panel(signal: list[np.ndarray], title: str, yaxis: str) -> dict:
+        fig = go.Figure()
+        for i in range(K):
+            stride = max(1, len(t_car[i]) // 500)
+            fig.add_trace(
+                go.Scatter(
+                    x=lap_car[i][::stride],
+                    y=signal[i][::stride],
+                    mode="lines",
+                    line=dict(color=css[i], width=1.5),
+                )
+            )
+        for i in range(K):
+            fig.add_trace(
+                go.Scatter(
+                    x=lap_car[i][:1],
+                    y=signal[i][:1],
+                    mode="markers",
+                    marker=dict(color=css[i], size=10, line=dict(color="white", width=1)),
+                )
+            )
+        compact(fig, title, "race distance [laps]", yaxis)
+
+        def update(t: float) -> None:
+            for i in range(K):
+                fig.data[K + i].x = (float(np.interp(t, t_car[i], lap_car[i])),)
+                fig.data[K + i].y = (float(np.interp(t, t_car[i], signal[i])),)
+
+        return {"figure": fig, "update": update, "aspect": 1.9}
+
+    v_car = [log.dense_x[i, : end[i], COL["v"]] for i in range(K)]
+    e_car = [log.dense_x[i, : end[i], COL["E"]] for i in range(K)]
+    gg_car = [
+        accelerations(log.dense_x[i, : end[i]], log.dense_u[i, : end[i]], spec)
+        for i, spec in enumerate(AGENTS)
+    ]
+
+    # g-g panel: friction circle, a faint cloud per car, and one live dot each.
+    theta = np.linspace(0.0, 2.0 * np.pi, 90)
+    gg_fig = go.Figure()
+    gg_fig.add_trace(
+        go.Scatter(
+            x=A_MAX * np.cos(theta),
+            y=A_MAX * np.sin(theta),
+            mode="lines",
+            line=dict(color="gray", dash="dash", width=1),
+        )
+    )
+    for i in range(K):
+        a_lat, a_long = gg_car[i]
+        stride = max(1, len(a_lat) // 200)
+        gg_fig.add_trace(
+            go.Scatter(
+                x=a_lat[::stride],
+                y=a_long[::stride],
+                mode="markers",
+                marker=dict(color=css[i], size=3, opacity=0.2),
+            )
+        )
+    for i in range(K):
+        gg_fig.add_trace(
+            go.Scatter(
+                x=gg_car[i][0][:1],
+                y=gg_car[i][1][:1],
+                mode="markers",
+                marker=dict(color=css[i], size=10, line=dict(color="white", width=1)),
+            )
+        )
+    compact(gg_fig, "g-g vs friction ellipse", "a_lat [m/s²]", "a_long [m/s²]")
+    gg_fig.update_yaxes(scaleanchor="x")
+
+    def update_gg(t: float) -> None:
+        for i in range(K):
+            gg_fig.data[1 + K + i].x = (float(np.interp(t, t_car[i], gg_car[i][0])),)
+            gg_fig.data[1 + K + i].y = (float(np.interp(t, t_car[i], gg_car[i][1])),)
+
+    return [
+        stripline_panel(v_car, "speed", "v [m/s]"),
+        stripline_panel(e_car, "battery", "E [J]"),
+        {"figure": gg_fig, "update": update_gg, "aspect": 1.0},
+    ]
 
 
 # ── Race loop ──────────────────────────────────────────────────────────────────
 
 
-def run_race(max_steps: int = MAX_STEPS) -> tuple[np.ndarray, np.ndarray, list]:
-    """Race the roster to the flag; returns ``(sim, t_sim, finish_time)``.
+@dataclass
+class RaceLog:
+    """Closed-loop record of one race.
 
-    ``sim`` is the closed-loop log, shape ``(T, K, len(DRIVER_STATES))``;
-    ``finish_time`` holds each car's flag-crossing time (``None`` if the time
-    cap expired first). One ``solve_batched`` call advances the whole field by
-    one node (``DT_MPC``) per iteration.
+    ``sim`` samples the driver states at the MPC rate (``T`` steps of
+    ``DT_MPC``) and is what the race logic consumes — finish detection,
+    classification, audits. ``dense_*`` stitch each step's *propagated*
+    executed interval together (``post_process_batched`` under the hood), so
+    playback and plots see the continuous trajectories the cars actually
+    drove, not the node samples. ``s`` entries in both logs are cumulative
+    race distance.
+    """
+
+    sim: np.ndarray  # (T, K, len(DRIVER_STATES)) at the MPC rate
+    t_sim: np.ndarray  # (T,)
+    finish_time: list  # per car; None if the time cap expired first
+    dense_t: np.ndarray  # (Td,)
+    dense_x: np.ndarray  # (K, Td, len(DRIVER_STATES))
+    dense_u: np.ndarray  # (K, Td, 4)  [derD, derDelta, deploy, regen]
+
+
+def run_race(max_steps: int = MAX_STEPS) -> RaceLog:
+    """Race the roster to the flag and return the :class:`RaceLog`.
+
+    One ``solve_batched`` call advances the whole field by one node
+    (``DT_MPC``) per iteration; each step's executed interval is propagated
+    densely for the log.
     """
     x0 = initial_pins()
     x_guess, u_guess = cold_start_guesses()
@@ -628,6 +830,9 @@ def run_race(max_steps: int = MAX_STEPS) -> tuple[np.ndarray, np.ndarray, list]:
     }
 
     sim_rows: list[np.ndarray] = []
+    dense_t: list[np.ndarray] = []
+    dense_x: list[np.ndarray] = []
+    dense_u: list[np.ndarray] = []
     finish_time: list = [None] * K
     laps = np.zeros(K)  # completed line crossings per car
     t_now = 0.0
@@ -648,6 +853,17 @@ def run_race(max_steps: int = MAX_STEPS) -> tuple[np.ndarray, np.ndarray, list]:
             max_iters=SCP_ITERS_PER_STEP,
         )
         solve_ms.append((_time.perf_counter() - tic) * 1e3)
+
+        # Propagate the horizon and keep the executed interval [0, DT_MPC):
+        # stitched across steps this is the continuous closed-loop trajectory.
+        post = problem.post_process_batched(results)
+        t_prop = np.asarray(post.t_full)[0]  # horizon clock, shared by all cars
+        keep = t_prop < DT_MPC - 1e-9
+        seg_x = np.asarray(post.x_full)[:, keep, : len(DRIVER_STATES)].copy()
+        seg_x[:, :, COL["s"]] += laps[:, None] * pathlength
+        dense_t.append(t_now + t_prop[keep])
+        dense_x.append(seg_x)
+        dense_u.append(np.asarray(post.u_full)[:, keep, :4])
 
         nodes = {name: np.asarray(results.nodes[name]) for name in DRIVER_STATES}
         row = np.stack([nodes[name][:, 0, 0] for name in DRIVER_STATES], axis=1)  # (K, n)
@@ -698,7 +914,14 @@ def run_race(max_steps: int = MAX_STEPS) -> tuple[np.ndarray, np.ndarray, list]:
         t_now += DT_MPC
 
     print(f"mean solve {np.mean(solve_ms):.0f} ms, max {np.max(solve_ms):.0f} ms")
-    return np.stack(sim_rows), np.arange(len(sim_rows)) * DT_MPC, finish_time
+    return RaceLog(
+        sim=np.stack(sim_rows),
+        t_sim=np.arange(len(sim_rows)) * DT_MPC,
+        finish_time=finish_time,
+        dense_t=np.concatenate(dense_t),
+        dense_x=np.concatenate(dense_x, axis=1),
+        dense_u=np.concatenate(dense_u, axis=1),
+    )
 
 
 def lap_of(s_cum: float) -> int:
@@ -706,13 +929,14 @@ def lap_of(s_cum: float) -> int:
     return int(min(max(s_cum, 0.0) // pathlength + 1, M_LAPS))
 
 
-def crossing_index(sim: np.ndarray, i: int) -> int:
-    """Number of log rows up to and including car ``i``'s flag crossing."""
-    return min(int(np.searchsorted(sim[:, i, COL["s"]], RACE_DISTANCE)) + 1, len(sim))
+def crossing_index(s_cum: np.ndarray) -> int:
+    """Number of samples of a cumulative-distance log up to the flag crossing."""
+    return min(int(np.searchsorted(s_cum, RACE_DISTANCE)) + 1, len(s_cum))
 
 
-def print_classification(sim: np.ndarray, finish_time: list) -> list[int]:
+def print_classification(log: RaceLog) -> list[int]:
     """Print the final order and per-car energy summary; returns the order."""
+    sim, finish_time = log.sim, log.finish_time
     order = sorted(range(K), key=lambda i: np.inf if finish_time[i] is None else finish_time[i])
     print("\n=== Race classification ===")
     for place, i in enumerate(order, start=1):
@@ -720,10 +944,11 @@ def print_classification(sim: np.ndarray, finish_time: list) -> list[int]:
         if finish_time[i] is None:
             print(f"  P{place}  {spec['name']:<20s}  DNF (time cap)")
             continue
-        at_flag = sim[crossing_index(sim, i) - 1, i]
+        cross = crossing_index(sim[:, i, COL["s"]])
+        at_flag = sim[cross - 1, i]
         # R saws per lap (reset at each line crossing); the race total is the
         # final value plus everything the resets discarded.
-        rec = sim[: crossing_index(sim, i), i, COL["R"]]
+        rec = sim[:cross, i, COL["R"]]
         recovered = rec[-1] - np.diff(rec)[np.diff(rec) < 0.0].sum()
         gap = "" if place == 1 else f"  +{finish_time[i] - finish_time[order[0]]:.3f} s"
         print(f"  P{place}  {spec['name']:<20s}  {finish_time[i]:7.3f} s{gap}")
@@ -737,23 +962,23 @@ def print_classification(sim: np.ndarray, finish_time: list) -> list[int]:
 # ── Main: run the race ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
     problem.initialize()
-    sim, t_sim, finish_time = run_race()
-    order = print_classification(sim, finish_time)
+    log = run_race()
+    order = print_classification(log)
 
     if os.environ.get("OPENSCVX_NO_PLOT") is None:
-        plot_race(sim, t_sim)
+        plot_race(log)
 
         from race_car_viser import (
             create_race_car_chase_viser_server,
             create_race_car_comparison_viser_server,
         )
 
-        # Trim each car's log at its own flag crossing so the replay parks it
-        # at the line and the finishing gaps stay visible.
-        cross = [crossing_index(sim, i) for i in range(K)]
+        # Trim each car's dense log at its own flag crossing so the replay
+        # parks it at the line and the finishing gaps stay visible.
+        cross = [crossing_index(log.dense_x[i, :, COL["s"]]) for i in range(K)]
         comparison_server = create_race_car_comparison_viser_server(
-            simX_list=[sim[: cross[i], i, :6] for i in range(K)],
-            t_sim_list=[t_sim[: cross[i]] for i in range(K)],
+            simX_list=[log.dense_x[i, : cross[i], :6] for i in range(K)],
+            t_sim_list=[log.dense_t[: cross[i]] for i in range(K)],
             labels=[spec["name"] for spec in AGENTS],
             colors=[spec["color"] for spec in AGENTS],
             track_file=TRACK_FILE,
@@ -761,11 +986,12 @@ if __name__ == "__main__":
             trim_warmup=False,
             distance_marker_step=None,
             title="Multi-agent race",
+            plot_panels=build_viser_panels(log),
         )
         winner = order[0]
         chase_server = create_race_car_chase_viser_server(
-            simX=sim[: cross[winner], winner, :6],
-            t_sim=t_sim[: cross[winner]],
+            simX=log.dense_x[winner, : cross[winner], :6],
+            t_sim=log.dense_t[: cross[winner]],
             track_file=TRACK_FILE,
             lane_width=LANE_HALF_WIDTH,
             trim_warmup=False,
