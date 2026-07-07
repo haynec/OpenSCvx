@@ -41,8 +41,9 @@ obstacle. The ``AGENTS`` roster is the single scaling knob — add an entry
 and the grid, the batch, the avoidance constraints, and the plots all grow
 with it. Spec differences are runtime parameters, so tweaking the field
 (a down-on-power engine, an oversize battery, ballast) never recompiles.
-The default roster puts a car that is 10% down on power on pole and a
-healthy one behind it: the chaser must find a way past on track.
+The default roster puts a car that is 10% down on power on pole, a healthy
+reference car behind it, an overweight car in row two, and a second
+reference car charging from the back: every pass has to happen on track.
 
 Run headless (no Plotly/Viser) with ``OPENSCVX_NO_PLOT=1``.
 """
@@ -87,6 +88,20 @@ AGENTS = [
     dict(
         name="reference spec",
         color=(90, 140, 235),
+        power_scale=1.0,
+        mass_scale=1.0,
+        battery_scale=1.0,
+    ),
+    dict(
+        name="overweight",
+        color=(240, 190, 50),
+        power_scale=1.0,
+        mass_scale=1.15,
+        battery_scale=1.0,
+    ),
+    dict(
+        name="reference P4",
+        color=(120, 200, 120),
         power_scale=1.0,
         mass_scale=1.0,
         battery_scale=1.0,
@@ -160,11 +175,15 @@ R_LAP_MAX = 2.0 * E_BATT_MAX  # per-lap recovery cap [J] (a regulation: same for
 E_CAP_TOP = E_BATT_MAX * max(spec["battery_scale"] for spec in AGENTS)
 
 # ── Separation ellipse (track coordinates) ─────────────────────────────────────
-# Longer than it is wide, like the safe zone around a real car, and deliberately
-# tight — about a car length nose-to-tail and a car width of daylight — so cars
-# can race in close company rather than orbiting each other at a distance.
-SEP_LONG = 0.15  # semi-axis along the track [m]
-SEP_LAT = 0.06  # semi-axis across the track [m]
+# Longer than it is wide, like the safe zone around a real car, and about as
+# tight as the bodywork allows: the 1:43 body is ~0.07 x 0.03 m, so these
+# centre-to-centre semi-axes leave roughly half a body of daylight in each
+# direction. Cars race nose-to-gearbox and wheel-to-wheel. The daylight is
+# also the robustness margin: each car avoids the plan its opponent published
+# one step earlier, so in a hard scrap the realized gap can sag a few percent
+# into the bubble — half a body absorbs that without bodywork contact.
+SEP_LONG = 0.10  # semi-axis along the track [m]
+SEP_LAT = 0.05  # semi-axis across the track [m]
 
 # ── MPC horizon ────────────────────────────────────────────────────────────────
 # Two seconds reaches through an entire braking zone and out the other side,
@@ -365,8 +384,10 @@ constraints.append(ox.ctcs(a_lat**2 + a_long**2 <= A_MAX**2, penalty="huber"))
 # too — no gap for a car to slip through at a node boundary. The ``W_SEP``
 # scaling makes contact far dearer than any progress the reward could buy;
 # without it, driving through an opponent costs less than lifting, and the
-# solver ghost-passes.
-W_SEP = 1e3
+# solver ghost-passes. It also sets how crisply the soft huber penalty holds
+# the boundary — the bubble is barely half a body wide, so the few-percent
+# sag a lighter weight allows is already wheel-banging.
+W_SEP = 4e3
 
 if K > 1:
     hat = ox.Max(1.0 - ox.Abs(time[0] / DT_MPC - np.arange(N_MPC, dtype=float)), 0.0)
@@ -409,6 +430,7 @@ problem = ox.Problem(
         "lam_cost": {"s": 4e1},
         "autotuner": ox.ConstantProximalWeight(),
     },
+    solver=ox.MoreauPTRSolver(),
 )
 problem.settings.dev.printing = False
 
