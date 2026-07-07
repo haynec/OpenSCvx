@@ -20,14 +20,15 @@ MPC: at every step each car re-plans against the plans its opponents
 published on the previous step (shifted one node so the horizons stay
 aligned), keeping an elliptical clearance in track coordinates
 
-    ((s - s_j) / SEP_LONG)² + ((n - n_j) / SEP_LAT)² ≥ 1
+    ((s - s_j(t)) / SEP_LONG)² + ((n - n_j(t)) / SEP_LAT)² ≥ 1
 
-from every opponent j at every horizon node. All cars share one fixed,
-uniform horizon time grid, so node k of every plan refers to the same wall
-clock and node-wise separation is meaningful. The Frenet model makes the
-constraint this simple — "gap along the track, gap across it" is exactly
-the (s, n) state, with none of the reference-path bookkeeping an MPCC
-formulation needs (compare ``examples/mpc/double_integrator_drone_racing.py``).
+from every opponent j, enforced continuously in time (CTCS). All cars share
+one fixed, uniform horizon clock, so an opponent's forecast — known at the
+horizon nodes — interpolates to a trajectory s_j(t), n_j(t) the constraint
+can evaluate between nodes too. The Frenet model makes the constraint this
+simple — "gap along the track, gap across it" is exactly the (s, n) state,
+with none of the reference-path bookkeeping an MPCC formulation needs
+(compare ``examples/mpc/double_integrator_drone_racing.py``).
 
 The race is a standing start from an F1-style grid: cars staggered by
 ``GRID_ROW_GAP`` down the track, alternating left and right of the
@@ -101,7 +102,7 @@ LANE_HALF_WIDTH = 0.24
 
 # Overrun past the flag: finished cars keep driving until the last car crosses,
 # and every horizon looks this far beyond its own position.
-S_OVERRUN = 6.0
+S_OVERRUN = 8.0
 
 # ── Grid (F1 standing start) ───────────────────────────────────────────────────
 GRID_ROW_GAP = 0.5  # longitudinal stagger between consecutive grid slots [m]
@@ -151,8 +152,10 @@ SEP_LONG = 0.35  # semi-axis along the track [m]
 SEP_LAT = 0.12  # semi-axis across the track [m]
 
 # ── MPC horizon ────────────────────────────────────────────────────────────────
-N_MPC = 15  # horizon nodes
-HORIZON_TF = 1.0  # [s] prediction horizon — covers braking from top speed
+# Two seconds reaches through an entire braking zone and out the other side,
+# which is what lets a car weigh harvesting now against deploying later.
+N_MPC = 21  # horizon nodes
+HORIZON_TF = 2.0  # [s] prediction horizon
 DT_MPC = HORIZON_TF / (N_MPC - 1)  # time between consecutive nodes = one race step [s]
 RACE_TIME_MAX = 40.0  # [s] give up if the field has not finished by then
 MAX_STEPS = int(np.ceil(RACE_TIME_MAX / DT_MPC))
@@ -340,18 +343,23 @@ a_long = Fxd / m_car
 
 constraints.append(ox.ctcs(a_lat**2 + a_long**2 <= A_MAX**2, penalty="huber"))
 
-# Opponent separation: at horizon node k, stay outside every opponent's ellipse,
-# evaluated against their forecast position at that same node. Node 0 is the
-# pinned current state, so the constraint starts at node 1. The heavy
-# ``.weight`` makes the linearization's virtual buffer far dearer than any
-# progress the reward could buy — without it, driving through an opponent
-# costs less than lifting, and the solver ghost-passes.
+# Opponent separation, continuous in time. The forecasts are only known at
+# the horizon nodes, but every car shares the same uniform clock, so hat
+# weights in the time state turn each opponent's forecast into a
+# piecewise-linear trajectory the CTCS penalty can evaluate *between* nodes
+# too — no gap for a car to slip through at a node boundary. The ``W_SEP``
+# scaling makes contact far dearer than any progress the reward could buy;
+# without it, driving through an opponent costs less than lifting, and the
+# solver ghost-passes.
 W_SEP = 1e3
 
 if K > 1:
-    for k in range(1, N_MPC):
-        gap = ((s[0] - opp_s[k]) / SEP_LONG) ** 2 + ((n[0] - opp_n[k]) / SEP_LAT) ** 2
-        constraints.append((1.0 <= gap).at([k]).weight(W_SEP))
+    hat = ox.Max(1.0 - ox.Abs(time[0] / DT_MPC - np.arange(N_MPC, dtype=float)), 0.0)
+    for j in range(K - 1):
+        opp_s_t = ox.Sum(hat * opp_s[:, j])
+        opp_n_t = ox.Sum(hat * opp_n[:, j])
+        gap = ((s[0] - opp_s_t) / SEP_LONG) ** 2 + ((n[0] - opp_n_t) / SEP_LAT) ** 2
+        constraints.append(ox.ctcs(W_SEP * (1.0 - gap) <= 0.0, penalty="huber"))
 
 # ── Problem ────────────────────────────────────────────────────────────────────
 # One car's horizon problem; the race batches it over the roster. The default
