@@ -664,9 +664,11 @@ def _resample_to_common_time(
 
 
 def create_race_car_comparison_viser_server(
-    results_list,
+    results_list=None,
     labels: list[str] | None = None,
     *,
+    simX_list: list[np.ndarray] | None = None,
+    t_sim_list: list[np.ndarray] | None = None,
     colors: list[tuple[int, int, int]] | None = None,
     track_file: str = "LMS_Track.txt",
     lane_width: float = 0.12,
@@ -680,11 +682,15 @@ def create_race_car_comparison_viser_server(
     All cars launch together at the start line; each holds at the finish once
     its own lap is done, so the winning margin is visible on screen. Intended
     for A/B comparisons such as the hybrid vs ICE-only laps of
-    ``race_car_hybrid.py``.
+    ``race_car_hybrid.py``, or multi-car MPC races via ``simX_list``.
 
     Args:
         results_list: Post-processed ``OptimizationResults``, one per car.
         labels: Display name per car (default ``car 0``, ``car 1``, ...).
+        simX_list: Alternative to ``results_list``: closed-loop MPC logs, one
+            ``(N, 6)`` array per car with columns ``[s, n, α, v, D, δ]`` (same
+            layout as :func:`extract_race_trajectory_from_sim`).
+        t_sim_list: Time vector per car; required with ``simX_list``.
         colors: Body RGB per car (defaults cycle a small palette).
         distance_marker_step: Metres between "x m" track labels; ``"auto"``
             picks ~9 per lap, ``None`` hides them.
@@ -694,16 +700,28 @@ def create_race_car_comparison_viser_server(
 
     from openscvx.plotting.viser import add_animation_controls
 
+    if simX_list is not None:
+        if t_sim_list is None:
+            raise ValueError("t_sim_list is required when simX_list is provided")
+        datas = [
+            extract_race_trajectory_from_sim(
+                simX, t_sim, track_file=track_file, trim_warmup=trim_warmup
+            )
+            for simX, t_sim in zip(simX_list, t_sim_list)
+        ]
+    elif results_list is not None:
+        datas = [
+            extract_race_trajectory(results, track_file=track_file, trim_warmup=trim_warmup)
+            for results in results_list
+        ]
+    else:
+        raise ValueError("Provide results_list, or simX_list and t_sim_list")
+
     if labels is None:
-        labels = [f"car {i}" for i in range(len(results_list))]
+        labels = [f"car {i}" for i in range(len(datas))]
     if colors is None:
         palette = [(220, 35, 45), (90, 140, 235), (240, 190, 50), (120, 200, 120)]
-        colors = [palette[i % len(palette)] for i in range(len(results_list))]
-
-    datas = [
-        extract_race_trajectory(results, track_file=track_file, trim_warmup=trim_warmup)
-        for results in results_list
-    ]
+        colors = [palette[i % len(palette)] for i in range(len(datas))]
     t_common, laps = _resample_to_common_time(datas)
 
     server = viser.ViserServer()
