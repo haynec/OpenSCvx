@@ -16,7 +16,7 @@ import openscvx as ox
 from openscvx.plotting import plot_controls, plot_scp_convergence_histories, plot_states
 
 # Number of discretization nodes
-n = 30
+n = 200
 
 # Physical constants from Betts reference
 # Earth radius (m)
@@ -78,7 +78,7 @@ phi.final = [
     ox.Maximize(lat0 + 10.0 * np.pi / 180)
 ]  # Maximize final latitude (reference guess: lat0+10 deg)
 phi.guess = np.linspace(lat0, lat0 + 10.0 * np.pi / 180, n).reshape(-1, 1)
-phi.scaling_max = np.array([35.0 * np.pi / 180])
+phi.scaling_max = np.array([15.0 * np.pi / 180])
 phi.scaling_min = np.array([0.0 * np.pi / 180])
 
 # v: velocity magnitude (m/s)
@@ -207,15 +207,14 @@ problem = ox.Problem(
     constraints=constraints,
     N=n,
     algorithm={
-        "autotuner": ox.AugmentedLagrangian(),
+        "autotuner": ox.AugmentedLagrangian(eta_lambda=1E2),
         "lam_vc": 2e0,
         "lam_prox": 5e-1,
-        "lam_cost": 5e-1,
+        "lam_cost": 9e-1,
     },
     float_dtype="float64",
 )
 
-problem.algorithm.ep_vc = 1e-3
 problem.algorithm.k_max = 500
 
 plotting_dict = {
