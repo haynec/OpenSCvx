@@ -82,7 +82,7 @@ AGENTS = [
     dict(
         name="down on power",
         color=(220, 35, 45),
-        power_scale=0.9,
+        power_scale=0.8,
         mass_scale=1.0,
         battery_scale=1.0,
     ),
@@ -97,15 +97,15 @@ AGENTS = [
         name="overweight",
         color=(240, 190, 50),
         power_scale=1.0,
-        mass_scale=1.15,
+        mass_scale=1.25,
         battery_scale=1.0,
     ),
     dict(
         name="reference P4",
         color=(120, 200, 120),
-        power_scale=1.0,
-        mass_scale=1.0,
-        battery_scale=1.0,
+        power_scale=1.1,
+        mass_scale=0.9,
+        battery_scale=1.1,
     ),
 ]
 K = len(AGENTS)
@@ -115,7 +115,7 @@ K = len(AGENTS)
 # published plan together — while counting laps and resetting the per-lap
 # recovery budget. Solver scaling, weights, and the curvature spline are
 # therefore all independent of race length.
-M_LAPS = 1
+M_LAPS = 3
 
 # ── Track data ─────────────────────────────────────────────────────────────────
 # 4x LMS kart track, as in race_car_hybrid.py: long enough that the cars are
@@ -440,8 +440,12 @@ problem = ox.Problem(
         # active set flutters there by ~1 cm no matter how many iterations run
         # (J_vc and J_vb sit at machine precision throughout). ep_tr sits just
         # above that structural jitter floor; the applied node-0 controls are
-        # stable well before it.
-        "ep_tr": 1e-2,
+        # stable well before it. The floor grows with the car's pace — a spec
+        # sweep (power 0.7–1.25, mass to 1.6, battery to 0.25) showed the
+        # reference car converging 95%+ at 1e-2 but a +25% power car only 86%
+        # — so size the tolerance for the hottest spec in the roster; no other
+        # weight needed retuning across the whole spread.
+        "ep_tr": 3e-2,
     },
     # The default integration atol (1e-3) is coarser than the battery states
     # (~0.1 J), and that linearization noise lands right at the ep_tr floor:
@@ -822,6 +826,7 @@ class RaceLog:
     dense_t: np.ndarray  # (Td,)
     dense_x: np.ndarray  # (K, Td, len(DRIVER_STATES))
     dense_u: np.ndarray  # (K, Td, 4)  [derD, derDelta, deploy, regen]
+    converged: np.ndarray  # (T, K) bool — per car, per MPC step
 
 
 def run_race(max_steps: int = MAX_STEPS) -> RaceLog:
@@ -942,6 +947,7 @@ def run_race(max_steps: int = MAX_STEPS) -> RaceLog:
         dense_t=np.concatenate(dense_t),
         dense_x=np.concatenate(dense_x, axis=1),
         dense_u=np.concatenate(dense_u, axis=1),
+        converged=np.stack(conv_flags),
     )
 
 
