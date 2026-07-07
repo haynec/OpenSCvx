@@ -129,10 +129,6 @@ RACE_DISTANCE = M_LAPS * pathlength
 # side instead of the single-file 0.12 m of the one-car examples.
 LANE_HALF_WIDTH = 0.24
 
-# Overrun past the flag: finished cars keep driving until the last car crosses,
-# and every horizon looks this far beyond its own position.
-S_OVERRUN = 8.0
-
 # ── Grid (F1 standing start) ───────────────────────────────────────────────────
 GRID_ROW_GAP = 0.5  # longitudinal stagger between consecutive grid slots [m]
 
@@ -187,13 +183,22 @@ SEP_LONG = 0.10  # semi-axis along the track [m]
 SEP_LAT = 0.05  # semi-axis across the track [m]
 
 # ── MPC horizon ────────────────────────────────────────────────────────────────
-# Two seconds reaches through an entire braking zone and out the other side,
-# which is what lets a car weigh harvesting now against deploying later.
-N_MPC = 21  # horizon nodes
-HORIZON_TF = 2.0  # [s] prediction horizon
+# Three seconds reaches through a braking zone and far enough down the next
+# straight to plan a whole overtake. A horizon study (2/3/4 s races on this
+# roster) shows the difference in kind: at 2 s the fastest car cannot plan
+# past a defender's bubble and the weakest car wins on track position; at
+# 3 s passes complete and the field finishes sorted by pace, ~1.2 s quicker.
+# 4 s adds cost but nothing further.
+N_MPC = 31  # horizon nodes
+HORIZON_TF = 3.0  # [s] prediction horizon
 DT_MPC = HORIZON_TF / (N_MPC - 1)  # time between consecutive nodes = one race step [s]
 RACE_TIME_MAX = 15.0 + 20.0 * M_LAPS  # [s] give up if the field has not finished by then
 MAX_STEPS = int(np.ceil(RACE_TIME_MAX / DT_MPC))
+
+# Overrun past the flag: finished cars keep driving until the last car
+# crosses, and every horizon looks this far beyond its own position, so the
+# margin scales with the lookahead (top speed ~3 m/s plus slack).
+S_OVERRUN = 4.0 * HORIZON_TF
 
 # Real-time iteration: a fixed SCP budget per step instead of solving each
 # horizon to convergence — the shifted warm start carries optimality from one
