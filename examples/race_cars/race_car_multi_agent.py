@@ -30,9 +30,14 @@ simple — "gap along the track, gap across it" is exactly the (s, n) state,
 with none of the reference-path bookkeeping an MPCC formulation needs
 (compare ``examples/mpc/double_integrator_drone_racing.py``).
 
-The race is a standing start from an F1-style grid: cars staggered by
-``GRID_ROW_GAP`` down the track, alternating left and right of the
-centreline. The ``AGENTS`` roster is the single scaling knob — add an entry
+The race runs ``M_LAPS`` laps from a standing start on an F1-style grid:
+cars staggered by ``GRID_ROW_GAP`` down the track, alternating left and
+right of the centreline. As in the MPCC example, the ``s`` state lives on a
+single lap: the race loop wraps it at each line crossing (pin, warm start,
+and published plan together), counts laps, and resets the per-lap recovery
+budget ``R`` — so solver scaling and weights never depend on race length,
+and the separation gap is lap-periodic so a car being lapped is still an
+obstacle. The ``AGENTS`` roster is the single scaling knob — add an entry
 and the grid, the batch, the avoidance constraints, and the plots all grow
 with it. Spec differences are runtime parameters, so tweaking the field
 (a down-on-power engine, an oversize battery, ballast) never recompiles.
@@ -89,12 +94,20 @@ AGENTS = [
 ]
 K = len(AGENTS)
 
+# Race length. As in the MPCC example, the s state lives on a single lap and
+# the race loop wraps it at each line crossing — pin, warm start, and
+# published plan together — while counting laps and resetting the per-lap
+# recovery budget. Solver scaling, weights, and the curvature spline are
+# therefore all independent of race length.
+M_LAPS = 2
+
 # ── Track data ─────────────────────────────────────────────────────────────────
 # 4x LMS kart track, as in race_car_hybrid.py: long enough that the cars are
 # power-limited on the straights and the energy strategy matters.
 TRACK_FILE = "LMS_Track_x4.txt"
 sref_data, _, _, _, kapparef_data = getTrack(TRACK_FILE)
 pathlength = float(sref_data[-1])  # ≈ 34.84 m
+RACE_DISTANCE = M_LAPS * pathlength
 
 # Two cars racing side by side need room: open the lane to two car-widths per
 # side instead of the single-file 0.12 m of the one-car examples.
@@ -113,12 +126,15 @@ def grid_slot(i: int) -> tuple[float, float]:
     return -(i + 1) * GRID_ROW_GAP, 0.5 * LANE_HALF_WIDTH * (1.0 if i % 2 == 0 else -1.0)
 
 
-# Pad the curvature spline so it never extrapolates: below 0 it must cover the
-# deepest grid slot, above pathlength the post-finish overrun.
+# κ is lap-periodic, so two tiled copies cover every horizon: s is wrapped
+# back to the first copy at each line crossing, long before it could reach
+# the second copy's end. The low pad covers the deepest grid slot (the track
+# is straight there, so the boundary value is right).
 _pad_lo = (K + 1) * GRID_ROW_GAP + 1.0
-_pad_hi = S_OVERRUN + 1.0
-s_interp = np.concatenate([[sref_data[0] - _pad_lo], sref_data, [pathlength + _pad_hi]])
-kappa_interp = np.concatenate([[kapparef_data[0]], kapparef_data, [kapparef_data[-1]]])
+_s_tiled = np.concatenate([sref_data[:-1], sref_data + pathlength])
+_kappa_tiled = np.concatenate([kapparef_data[:-1], kapparef_data])
+s_interp = np.concatenate([[_s_tiled[0] - _pad_lo], _s_tiled])
+kappa_interp = np.concatenate([[_kappa_tiled[0]], _kappa_tiled])
 
 # ── Vehicle parameters (Kloeser et al. 2020, Table I) ─────────────────────────
 m = 0.043  # vehicle mass [kg]
@@ -144,12 +160,11 @@ R_LAP_MAX = 2.0 * E_BATT_MAX  # per-lap recovery cap [J] (a regulation: same for
 E_CAP_TOP = E_BATT_MAX * max(spec["battery_scale"] for spec in AGENTS)
 
 # ── Separation ellipse (track coordinates) ─────────────────────────────────────
-# Longer than it is wide, like the safe zone around a real car: SEP_LONG covers
-# a car length plus a braking margin, SEP_LAT one car width of daylight. Two
-# cars can run side by side (|Δn| = 2·|grid n| = LANE_HALF_WIDTH ≥ SEP_LAT) but
-# never nose-to-tail closer than SEP_LONG.
-SEP_LONG = 0.35  # semi-axis along the track [m]
-SEP_LAT = 0.12  # semi-axis across the track [m]
+# Longer than it is wide, like the safe zone around a real car, and deliberately
+# tight — about a car length nose-to-tail and a car width of daylight — so cars
+# can race in close company rather than orbiting each other at a distance.
+SEP_LONG = 0.15  # semi-axis along the track [m]
+SEP_LAT = 0.06  # semi-axis across the track [m]
 
 # ── MPC horizon ────────────────────────────────────────────────────────────────
 # Two seconds reaches through an entire braking zone and out the other side,
@@ -157,7 +172,7 @@ SEP_LAT = 0.12  # semi-axis across the track [m]
 N_MPC = 21  # horizon nodes
 HORIZON_TF = 2.0  # [s] prediction horizon
 DT_MPC = HORIZON_TF / (N_MPC - 1)  # time between consecutive nodes = one race step [s]
-RACE_TIME_MAX = 40.0  # [s] give up if the field has not finished by then
+RACE_TIME_MAX = 15.0 + 20.0 * M_LAPS  # [s] give up if the field has not finished by then
 MAX_STEPS = int(np.ceil(RACE_TIME_MAX / DT_MPC))
 
 # Real-time iteration: a fixed SCP budget per step instead of solving each
@@ -358,7 +373,15 @@ if K > 1:
     for j in range(K - 1):
         opp_s_t = ox.Sum(hat * opp_s[:, j])
         opp_n_t = ox.Sum(hat * opp_n[:, j])
-        gap = ((s[0] - opp_s_t) / SEP_LONG) ** 2 + ((n[0] - opp_n_t) / SEP_LAT) ** 2
+        # Plans are published in each car's own lap frame, so Δs can be off
+        # by whole laps (a freshly wrapped car vs. one still approaching the
+        # line, or a car being lapped). The gap is therefore lap-periodic:
+        # (L/π)·sin(π·Δs/L) matches Δs exactly near whole-lap multiples — the
+        # only place the bubble can bind — and stays harmlessly large in
+        # between.
+        ds = s[0] - opp_s_t
+        ds_wrap = ox.Constant(pathlength / np.pi) * ox.Sin(ox.Constant(np.pi / pathlength) * ds)
+        gap = (ds_wrap / SEP_LONG) ** 2 + ((n[0] - opp_n_t) / SEP_LAT) ** 2
         constraints.append(ox.ctcs(W_SEP * (1.0 - gap) <= 0.0, penalty="huber"))
 
 # ── Problem ────────────────────────────────────────────────────────────────────
@@ -513,9 +536,10 @@ def plot_race(sim: np.ndarray, t_sim: np.ndarray) -> None:
     fig2 = go.Figure()
     for i in range(K):
         for j in range(i + 1, K):
+            ds = sim[:, i, COL["s"]] - sim[:, j, COL["s"]]
+            ds = (pathlength / np.pi) * np.sin(np.pi * ds / pathlength)  # lap-periodic gap
             gap = np.sqrt(
-                ((sim[:, i, COL["s"]] - sim[:, j, COL["s"]]) / SEP_LONG) ** 2
-                + ((sim[:, i, COL["n"]] - sim[:, j, COL["n"]]) / SEP_LAT) ** 2
+                (ds / SEP_LONG) ** 2 + ((sim[:, i, COL["n"]] - sim[:, j, COL["n"]]) / SEP_LAT) ** 2
             )
             fig2.add_trace(
                 go.Scatter(x=t_sim, y=gap, name=f"{AGENTS[i]['name']} ↔ {AGENTS[j]['name']}")
@@ -583,6 +607,7 @@ def run_race(max_steps: int = MAX_STEPS) -> tuple[np.ndarray, np.ndarray, list]:
 
     sim_rows: list[np.ndarray] = []
     finish_time: list = [None] * K
+    laps = np.zeros(K)  # completed line crossings per car
     t_now = 0.0
     solve_ms: list[float] = []
 
@@ -604,17 +629,19 @@ def run_race(max_steps: int = MAX_STEPS) -> tuple[np.ndarray, np.ndarray, list]:
 
         nodes = {name: np.asarray(results.nodes[name]) for name in DRIVER_STATES}
         row = np.stack([nodes[name][:, 0, 0] for name in DRIVER_STATES], axis=1)  # (K, n)
+        row[:, COL["s"]] += laps * pathlength  # the log carries cumulative race distance
 
         # Finish detection: interpolate the flag crossing inside the last step.
         for i in range(K):
-            if finish_time[i] is None and row[i, COL["s"]] >= pathlength:
+            if finish_time[i] is None and row[i, COL["s"]] >= RACE_DISTANCE:
                 s_prev = sim_rows[-1][i, COL["s"]] if sim_rows else grid_slot(i)[0]
-                frac = (pathlength - s_prev) / max(row[i, COL["s"]] - s_prev, 1e-9)
+                frac = (RACE_DISTANCE - s_prev) / max(row[i, COL["s"]] - s_prev, 1e-9)
                 finish_time[i] = t_now - DT_MPC * (1.0 - frac)
 
         sim_rows.append(row)
         status = "  |  ".join(
-            f"{AGENTS[i]['name']}: s={row[i, COL['s']]:6.2f} v={row[i, COL['v']]:.2f}"
+            f"{AGENTS[i]['name']}: L{lap_of(row[i, COL['s']])}"
+            f" s={row[i, COL['s']]:6.2f} v={row[i, COL['v']]:.2f}"
             f" E={row[i, COL['E']]:.3f}"
             for i in range(K)
         )
@@ -627,17 +654,39 @@ def run_race(max_steps: int = MAX_STEPS) -> tuple[np.ndarray, np.ndarray, list]:
         for name in DRIVER_STATES:
             x0[:, COL[name]] = nodes[name][:, 1, 0]
         x_guess, u_guess = shifted_guesses(results)
-        pred_s = nodes["s"][:, :, 0]
+        pred_s = nodes["s"][:, :, 0].copy()
         pred_n = nodes["n"][:, :, 0]
+
+        # Lap handling, as in the MPCC example: when a car takes the line its
+        # s frame wraps back one lap — pin, warm start, and published plan
+        # together — and its recovery budget R resets. Opponents only ever see
+        # the frame through the lap-periodic gap, which is invariant to the
+        # shift. A horizon straddling the line charges its first metres of
+        # new-lap harvesting to the old lap's budget: conservative by at most
+        # one horizon, exact again at the reset.
+        for i in range(K):
+            if x0[i, COL["s"]] >= pathlength:
+                laps[i] += 1
+                x0[i, COL["s"]] -= pathlength
+                x_guess[i, :, COL["s"]] -= pathlength
+                pred_s[i] -= pathlength
+                x_guess[i, :, COL["R"]] = np.maximum(x_guess[i, :, COL["R"]] - x0[i, COL["R"]], 0.0)
+                x0[i, COL["R"]] = 0.0
+
         t_now += DT_MPC
 
     print(f"mean solve {np.mean(solve_ms):.0f} ms, max {np.max(solve_ms):.0f} ms")
     return np.stack(sim_rows), np.arange(len(sim_rows)) * DT_MPC, finish_time
 
 
+def lap_of(s_cum: float) -> int:
+    """Current lap number (1-based) at cumulative race distance ``s_cum``."""
+    return int(min(max(s_cum, 0.0) // pathlength + 1, M_LAPS))
+
+
 def crossing_index(sim: np.ndarray, i: int) -> int:
     """Number of log rows up to and including car ``i``'s flag crossing."""
-    return min(int(np.searchsorted(sim[:, i, COL["s"]], pathlength)) + 1, len(sim))
+    return min(int(np.searchsorted(sim[:, i, COL["s"]], RACE_DISTANCE)) + 1, len(sim))
 
 
 def print_classification(sim: np.ndarray, finish_time: list) -> list[int]:
@@ -650,11 +699,15 @@ def print_classification(sim: np.ndarray, finish_time: list) -> list[int]:
             print(f"  P{place}  {spec['name']:<20s}  DNF (time cap)")
             continue
         at_flag = sim[crossing_index(sim, i) - 1, i]
+        # R saws per lap (reset at each line crossing); the race total is the
+        # final value plus everything the resets discarded.
+        rec = sim[: crossing_index(sim, i), i, COL["R"]]
+        recovered = rec[-1] - np.diff(rec)[np.diff(rec) < 0.0].sum()
         gap = "" if place == 1 else f"  +{finish_time[i] - finish_time[order[0]]:.3f} s"
         print(f"  P{place}  {spec['name']:<20s}  {finish_time[i]:7.3f} s{gap}")
         print(
             f"       battery {sim[0, i, COL['E']]:.3f} → {at_flag[COL['E']]:.3f} J,"
-            f" recovered {at_flag[COL['R']]:.3f} J (cap {R_LAP_MAX:.3f} J)"
+            f" recovered {recovered:.3f} J (cap {R_LAP_MAX:.3f} J/lap)"
         )
     return order
 

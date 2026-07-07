@@ -23,7 +23,7 @@ progress, applied one node at a time in closed loop, mirroring the acados
 benchmark's NMPC formulation.
 
 `race_car_multi_agent.py` combines the two: a whole grid of the hybrid cars
-races wheel-to-wheel from an F1-style standing start. One symbolic problem
+races `M_LAPS` laps wheel-to-wheel from an F1-style standing start. One symbolic problem
 describes a single car's MPC horizon; each race step advances the entire
 field with a single `solve_batched` call, batching over per-car boundary
 pins, spec parameters (power, mass, battery size), and each car's forecast
