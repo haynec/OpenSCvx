@@ -426,10 +426,29 @@ problem = ox.Problem(
         # "converges" glued to its warm start and the field crawls. lam_vc
         # must in turn dominate the reward, or virtual control buys progress
         # at the horizon's last node instead of driving there.
+        # lam_prox/ep_tr picked by a batched sweep (solve_batched over a
+        # lam_prox x ep_tr grid, one single-car lap per element): 2.0/1e-2 is
+        # the fastest lap with ~96% of steps converged. Heavier damping
+        # "converges" more often but to visibly worse plans — the car crawls.
         "lam_vc": 1e3,
-        "lam_prox": 4e0,
+        "lam_prox": 2e0,
         "lam_cost": {"s": 4e1},
         "autotuner": ox.ConstantProximalWeight(),
+        # Convergence for a receding horizon means the *plan* is stationary,
+        # not stationary to solver precision: the terminal progress reward
+        # works against the grip limit at the horizon tail, and the linearized
+        # active set flutters there by ~1 cm no matter how many iterations run
+        # (J_vc and J_vb sit at machine precision throughout). ep_tr sits just
+        # above that structural jitter floor; the applied node-0 controls are
+        # stable well before it.
+        "ep_tr": 1e-2,
+    },
+    # The default integration atol (1e-3) is coarser than the battery states
+    # (~0.1 J), and that linearization noise lands right at the ep_tr floor:
+    # with default tolerances only ~60% of car-steps converge within the
+    # iteration budget, with tight ones ~90%+, for ~15% more time per step.
+    discretizer={
+        "diffrax_kwargs": {"atol": 1e-8, "rtol": 1e-8},
     },
     # solver=ox.MoreauPTRSolver(),
 )
@@ -463,19 +482,41 @@ def cold_start_guesses() -> tuple[np.ndarray, np.ndarray]:
     return x, u
 
 
-def shift_horizon(plan: np.ndarray) -> np.ndarray:
-    """Advance a horizon one node: drop node 0, hold the last node."""
-    return np.concatenate([plan[:, 1:], plan[:, -1:]], axis=1)
+def shift_forecast(plan: np.ndarray) -> np.ndarray:
+    """Advance published plans one node so they align with the next horizon.
+
+    Every car's horizon runs on the same uniform clock and moves forward one
+    node per race step, so node ``k`` of the *next* horizon is node ``k + 1``
+    of the plan an opponent just published. The freed final node is
+    extrapolated along the plan — holding it would forecast the opponent
+    parking for the last interval of every horizon.
+    """
+    tail = 2.0 * plan[:, -1:] - plan[:, -2:-1]
+    return np.concatenate([plan[:, 1:], tail], axis=1)
+
+
+# Driver-state box, for keeping the extrapolated warm-start tail physical.
+_X_LO = np.array([st.min[0] for st in states])
+_X_HI = np.array([st.max[0] for st in states])
 
 
 def shifted_guesses(results) -> tuple[np.ndarray, np.ndarray]:
     """Warm starts for the next step: previous plans shifted one node.
 
-    The horizon clock and the CTCS violation integrators restart from zero
-    each solve, so those columns are reset rather than shifted.
+    The freed final node is *extrapolated* along the plan, not held — a held
+    tail is dynamically infeasible (the state freezes while carrying racing
+    speed), which hands every solve a built-in defect at the last interval
+    that virtual control must burn iterations repairing. Controls hold their
+    last value. The horizon clock and the CTCS violation integrators restart
+    from zero each solve, so those columns are reset rather than shifted.
     """
-    x = shift_horizon(np.asarray(results.x))
-    u = shift_horizon(np.asarray(results.u))
+    x = np.asarray(results.x)
+    u = np.asarray(results.u)
+    n_d = len(DRIVER_STATES)
+    tail = x[:, -1:].copy()
+    tail[:, :, :n_d] = np.clip(2.0 * x[:, -1:, :n_d] - x[:, -2:-1, :n_d], _X_LO, _X_HI)
+    x = np.concatenate([x[:, 1:], tail], axis=1)
+    u = np.concatenate([u[:, 1:], u[:, -1:]], axis=1)
     x[:, :, TIME_COL] = np.linspace(0.0, HORIZON_TF, N_MPC)
     x[:, :, TIME_COL + 1 :] = 0.0
     return x, u
@@ -511,11 +552,12 @@ def accelerations(x: np.ndarray, u: np.ndarray, spec: dict) -> tuple[np.ndarray,
 
 
 def plot_race(log: RaceLog) -> None:
-    """Track projection, separation, speed/battery striplines, and g-g diagrams.
+    """Track projection, separation, and speed/battery striplines.
 
     Everything is drawn from the dense propagated log; the striplines run
     against race distance in laps rather than time, so the same corner lines
-    up vertically across cars and laps.
+    up vertically across cars and laps. The g-g diagrams live in the Viser
+    telemetry panels, where they play back with the race.
     """
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
@@ -638,43 +680,6 @@ def plot_race(log: RaceLog) -> None:
     fig3.update_xaxes(title_text="race distance [laps]", row=2, col=1)
     fig3.update_layout(title="Speed and battery state of charge", height=600)
     fig3.show()
-
-    # ── g-g diagrams: one traction circle per car ──────────────────────────────
-    n_cols = 2
-    n_rows = (K + n_cols - 1) // n_cols
-    fig4 = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[spec["name"] for spec in AGENTS])
-    theta = np.linspace(0.0, 2.0 * np.pi, 120)
-    for i, spec in enumerate(AGENTS):
-        row, col = divmod(i, n_cols)
-        a_lat, a_long = accelerations(log.dense_x[i], log.dense_u[i], spec)
-        fig4.add_trace(
-            go.Scatter(
-                x=A_MAX * np.cos(theta),
-                y=A_MAX * np.sin(theta),
-                mode="lines",
-                line=dict(color="black", dash="dash", width=1),
-                showlegend=False,
-            ),
-            row=row + 1,
-            col=col + 1,
-        )
-        fig4.add_trace(
-            go.Scatter(
-                x=a_lat[::3],
-                y=a_long[::3],
-                mode="markers",
-                marker=dict(color=css[i], size=3, opacity=0.4),
-                showlegend=False,
-            ),
-            row=row + 1,
-            col=col + 1,
-        )
-        fig4.update_xaxes(title_text="a_lat [m/s²]", row=row + 1, col=col + 1)
-        fig4.update_yaxes(
-            title_text="a_long [m/s²]", scaleanchor=f"x{i + 1}", row=row + 1, col=col + 1
-        )
-    fig4.update_layout(title="g-g diagrams vs the friction ellipse", height=450 * n_rows)
-    fig4.show()
 
 
 def build_viser_panels(log: RaceLog) -> list[dict]:
@@ -845,12 +850,13 @@ def run_race(max_steps: int = MAX_STEPS) -> RaceLog:
     laps = np.zeros(K)  # completed line crossings per car
     t_now = 0.0
     solve_ms: list[float] = []
+    conv_flags: list[np.ndarray] = []
 
     for step in range(max_steps):
         params = dict(spec_params)
         if K > 1:
-            params["opp_s"] = opponent_view(shift_horizon(pred_s))
-            params["opp_n"] = opponent_view(shift_horizon(pred_n))
+            params["opp_s"] = opponent_view(shift_forecast(pred_s))
+            params["opp_n"] = opponent_view(shift_forecast(pred_n))
 
         tic = _time.perf_counter()
         results = problem.solve_batched(
@@ -861,6 +867,7 @@ def run_race(max_steps: int = MAX_STEPS) -> RaceLog:
             max_iters=SCP_ITERS_PER_STEP,
         )
         solve_ms.append((_time.perf_counter() - tic) * 1e3)
+        conv_flags.append(np.asarray(results.converged).reshape(-1))
 
         # Propagate the horizon and keep the executed interval [0, DT_MPC):
         # stitched across steps this is the continuous closed-loop trajectory.
@@ -891,7 +898,9 @@ def run_race(max_steps: int = MAX_STEPS) -> RaceLog:
             f" E={row[i, COL['E']]:.3f}"
             for i in range(K)
         )
-        print(f"step {step:4d}  t={t_now:6.2f} s  {status}  ({solve_ms[-1]:.0f} ms)")
+        n_conv = int(conv_flags[-1].sum())
+        conv_note = "" if n_conv == K else f", conv {n_conv}/{K}"
+        print(f"step {step:4d}  t={t_now:6.2f} s  {status}  ({solve_ms[-1]:.0f} ms{conv_note})")
 
         if all(t is not None for t in finish_time):
             break
@@ -921,7 +930,11 @@ def run_race(max_steps: int = MAX_STEPS) -> RaceLog:
 
         t_now += DT_MPC
 
-    print(f"mean solve {np.mean(solve_ms):.0f} ms, max {np.max(solve_ms):.0f} ms")
+    conv_rate = float(np.mean(np.concatenate(conv_flags)))
+    print(
+        f"mean solve {np.mean(solve_ms):.0f} ms, max {np.max(solve_ms):.0f} ms, "
+        f"converged within {SCP_ITERS_PER_STEP} iters: {100 * conv_rate:.0f}% of car-steps"
+    )
     return RaceLog(
         sim=np.stack(sim_rows),
         t_sim=np.arange(len(sim_rows)) * DT_MPC,
