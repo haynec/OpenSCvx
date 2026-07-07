@@ -675,7 +675,6 @@ def create_race_car_comparison_viser_server(
     loop_animation: bool = True,
     trim_warmup: bool = True,
     distance_marker_step: float | str | None = "auto",
-    trail_fade_s: float | None = 6.0,
     plot_panels: list[dict] | None = None,
     title: str = "Race Comparison",
 ) -> "viser.ViserServer":
@@ -696,9 +695,6 @@ def create_race_car_comparison_viser_server(
         colors: Body RGB per car (defaults cycle a small palette).
         distance_marker_step: Metres between "x m" track labels; ``"auto"``
             picks ~9 per lap, ``None`` hides them.
-        trail_fade_s: Bright trail behind each car fades out over this many
-            seconds of playback (the faint full ghost stays). ``None`` keeps
-            the whole trail at full strength.
         plot_panels: Optional live plots for the GUI sidebar: dicts with a
             Plotly ``"figure"``, an ``"update"`` callable taking the current
             playback time in seconds (mutate the figure's marker traces), and
@@ -763,17 +759,9 @@ def create_race_car_comparison_viser_server(
             line_width=4.0,
         )
         handles = _add_race_car(server, base_path=f"/cars/{slug}", body_color=color)
-        cars.append({"lap": lap, "label": label, "trace": trace_line, "color": color, **handles})
+        cars.append({"lap": lap, "label": label, "trace": trace_line, **handles})
 
     hud = {"markdown": None}
-
-    # Bright trail fade: keep only the last ``trail_fade_s`` seconds of trail,
-    # blending each segment from the canvas background up to the car colour —
-    # the faint ghost above keeps the full history without the clutter.
-    fade_frames = None
-    if trail_fade_s is not None and len(t_common) > 1:
-        fade_frames = max(2, int(round(trail_fade_s / float(t_common[1] - t_common[0]))))
-    _canvas_bg = np.array([16.0, 17.0, 19.0])
 
     def update_frame(frame_idx: int) -> None:
         status_lines = []
@@ -790,13 +778,9 @@ def create_race_car_comparison_viser_server(
 
             idx = min(frame_idx + 1, len(lap["pos"]))
             if idx >= 2:
-                lo = 0 if fade_frames is None else max(0, idx - fade_frames)
-                seg = np.stack([lap["pos"][lo : idx - 1], lap["pos"][lo + 1 : idx]], axis=1)
-                car["trace"].points = seg.astype(np.float32)
-                if fade_frames is not None:
-                    w = np.linspace(0.0, 1.0, len(seg) + 1)[1:, None] ** 1.5
-                    shade = _canvas_bg * (1.0 - w) + np.asarray(car["color"], dtype=float) * w
-                    car["trace"].colors = np.repeat(shade.astype(np.uint8)[:, None, :], 2, axis=1)
+                car["trace"].points = np.stack(
+                    [lap["pos"][: idx - 1], lap["pos"][1:idx]], axis=1
+                ).astype(np.float32)
 
             finished = t_common[frame_idx] >= lap["lap_time"]
             state = "FINISHED" if finished else f"{lap['speed'][frame_idx]:.2f} m/s"
@@ -809,13 +793,17 @@ def create_race_car_comparison_viser_server(
 
     # Live GUI plots: each panel owns its figure; we hand it the playback time
     # and push the mutated figure to the client, rate-limited because every
-    # push re-serializes the whole figure.
+    # push re-serializes the whole figure. The large ``order`` keeps the
+    # telemetry folder below the Animation and race-status folders, which are
+    # created later with default (insertion-order) positions.
     panel_handles = []
-    for panel in plot_panels or []:
-        handle = server.gui.add_plotly(
-            figure=panel["figure"], aspect=float(panel.get("aspect", 1.6))
-        )
-        panel_handles.append((panel, handle))
+    if plot_panels:
+        with server.gui.add_folder("Telemetry", order=1000):
+            for panel in plot_panels:
+                handle = server.gui.add_plotly(
+                    figure=panel["figure"], aspect=float(panel.get("aspect", 1.6))
+                )
+                panel_handles.append((panel, handle))
     _panel_clock = {"last_t": -np.inf}
 
     def update_panels(frame_idx: int) -> None:

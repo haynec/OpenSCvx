@@ -82,7 +82,7 @@ AGENTS = [
     dict(
         name="down on power",
         color=(220, 35, 45),
-        power_scale=0.7,
+        power_scale=0.9,
         mass_scale=1.0,
         battery_scale=1.0,
     ),
@@ -189,7 +189,7 @@ SEP_LAT = 0.05  # semi-axis across the track [m]
 # ── MPC horizon ────────────────────────────────────────────────────────────────
 # Two seconds reaches through an entire braking zone and out the other side,
 # which is what lets a car weigh harvesting now against deploying later.
-N_MPC = 41  # horizon nodes
+N_MPC = 21  # horizon nodes
 HORIZON_TF = 2.0  # [s] prediction horizon
 DT_MPC = HORIZON_TF / (N_MPC - 1)  # time between consecutive nodes = one race step [s]
 RACE_TIME_MAX = 15.0 + 20.0 * M_LAPS  # [s] give up if the field has not finished by then
@@ -431,7 +431,7 @@ problem = ox.Problem(
         "lam_cost": {"s": 4e1},
         "autotuner": ox.ConstantProximalWeight(),
     },
-    solver=ox.MoreauPTRSolver(),
+    # solver=ox.MoreauPTRSolver(),
 )
 problem.settings.dev.printing = False
 
@@ -694,14 +694,22 @@ def build_viser_panels(log: RaceLog) -> list[dict]:
     lap_car = [log.dense_x[i, : end[i], COL["s"]] / pathlength for i in range(K)]
 
     def compact(fig: go.Figure, title: str, xaxis: str, yaxis: str) -> go.Figure:
+        # Dark styling matched to viser's control-panel grey so the panels
+        # read as part of the sidebar rather than white cutouts.
+        panel_bg = "#1a1b1e"
         fig.update_layout(
-            title=dict(text=title, font=dict(size=13)),
+            template="plotly_dark",
+            paper_bgcolor=panel_bg,
+            plot_bgcolor=panel_bg,
+            title=dict(text=title, font=dict(size=13, color="#c1c2c5")),
             xaxis_title=xaxis,
             yaxis_title=yaxis,
             margin=dict(l=45, r=10, t=30, b=35),
-            font=dict(size=10),
+            font=dict(size=10, color="#909296"),
             showlegend=False,
         )
+        fig.update_xaxes(gridcolor="#2c2e33", zerolinecolor="#2c2e33")
+        fig.update_yaxes(gridcolor="#2c2e33", zerolinecolor="#2c2e33")
         return fig
 
     def stripline_panel(signal: list[np.ndarray], title: str, yaxis: str) -> dict:
