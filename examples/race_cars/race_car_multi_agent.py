@@ -30,20 +30,14 @@ simple — "gap along the track, gap across it" is exactly the (s, n) state,
 with none of the reference-path bookkeeping an MPCC formulation needs
 (compare ``examples/mpc/double_integrator_drone_racing.py``).
 
-The race runs ``M_LAPS`` laps from a standing start on an F1-style grid:
-cars staggered by ``GRID_ROW_GAP`` down the track, alternating left and
-right of the centreline. As in the MPCC example, the ``s`` state lives on a
-single lap: the race loop wraps it at each line crossing (pin, warm start,
-and published plan together), counts laps, and resets the per-lap recovery
-budget ``R`` — so solver scaling and weights never depend on race length,
-and the separation gap is lap-periodic so a car being lapped is still an
-obstacle. The ``AGENTS`` roster is the single scaling knob — add an entry
-and the grid, the batch, the avoidance constraints, and the plots all grow
-with it. Spec differences are runtime parameters, so tweaking the field
-(a down-on-power engine, an oversize battery, ballast) never recompiles.
-The default roster puts a car that is 10% down on power on pole, a healthy
-reference car behind it, an overweight car in row two, and a second
-reference car charging from the back: every pass has to happen on track.
+The race runs ``M_LAPS`` laps from a standing start on an F1-style grid. As
+in the MPCC example, the ``s`` state lives on a single lap: the race loop
+wraps it at each line crossing, counts laps, and resets the per-lap recovery
+budget ``R``, so solver scaling and weights never depend on race length; the
+separation gap is lap-periodic so a car being lapped is still an obstacle.
+The ``AGENTS`` roster is the single scaling knob — add or tweak an entry
+(specs are runtime parameters, so no recompilation) and the grid, batch,
+constraints, and plots all follow.
 
 Run headless (no Plotly/Viser) with ``OPENSCVX_NO_PLOT=1``.
 """
@@ -73,10 +67,9 @@ from tracks.readDataFcn import getTrack
 import openscvx as ox
 
 # ── Roster ─────────────────────────────────────────────────────────────────────
-# One entry per car, in grid order (index 0 starts on pole). ``power_scale``
-# scales the whole drive-force envelope, ``mass_scale`` the chassis mass, and
-# ``battery_scale`` the energy store (the per-lap recovery cap is a regulation,
-# so it stays fixed). All three are runtime parameters of one compiled problem:
+# One entry per car, in grid order (index 0 on pole). The scales multiply the
+# drive-force envelope, chassis mass, and battery capacity (the per-lap
+# recovery cap is a regulation and stays fixed). All are runtime parameters:
 # edit or extend this list and everything downstream follows.
 AGENTS = [
     dict(
@@ -87,10 +80,10 @@ AGENTS = [
         battery_scale=1.0,
     ),
     dict(
-        name="reference spec",
+        name="miata",
         color=(90, 140, 235),
-        power_scale=1.0,
-        mass_scale=1.0,
+        power_scale=0.75,
+        mass_scale=0.75,
         battery_scale=1.0,
     ),
     dict(
@@ -110,11 +103,9 @@ AGENTS = [
 ]
 K = len(AGENTS)
 
-# Race length. As in the MPCC example, the s state lives on a single lap and
-# the race loop wraps it at each line crossing — pin, warm start, and
-# published plan together — while counting laps and resetting the per-lap
-# recovery budget. Solver scaling, weights, and the curvature spline are
-# therefore all independent of race length.
+# Race length. The s state lives on a single lap (wrapped at each crossing,
+# as in the MPCC example), so solver scaling and weights are independent of
+# race length.
 M_LAPS = 3
 
 # ── Track data ─────────────────────────────────────────────────────────────────
@@ -138,10 +129,8 @@ def grid_slot(i: int) -> tuple[float, float]:
     return -(i + 1) * GRID_ROW_GAP, 0.5 * LANE_HALF_WIDTH * (1.0 if i % 2 == 0 else -1.0)
 
 
-# κ is lap-periodic, so two tiled copies cover every horizon: s is wrapped
-# back to the first copy at each line crossing, long before it could reach
-# the second copy's end. The low pad covers the deepest grid slot (the track
-# is straight there, so the boundary value is right).
+# κ is lap-periodic: two tiled copies cover every horizon (s wraps back to the
+# first copy at each crossing), and the low pad covers the grid slots.
 _pad_lo = (K + 1) * GRID_ROW_GAP + 1.0
 _s_tiled = np.concatenate([sref_data[:-1], sref_data + pathlength])
 _kappa_tiled = np.concatenate([kapparef_data[:-1], kapparef_data])
@@ -172,37 +161,31 @@ R_LAP_MAX = 2.0 * E_BATT_MAX  # per-lap recovery cap [J] (a regulation: same for
 E_CAP_TOP = E_BATT_MAX * max(spec["battery_scale"] for spec in AGENTS)
 
 # ── Separation ellipse (track coordinates) ─────────────────────────────────────
-# Longer than it is wide, like the safe zone around a real car, and about as
-# tight as the bodywork allows: the 1:43 body is ~0.07 x 0.03 m, so these
-# centre-to-centre semi-axes leave roughly half a body of daylight in each
-# direction. Cars race nose-to-gearbox and wheel-to-wheel. The daylight is
-# also the robustness margin: each car avoids the plan its opponent published
-# one step earlier, so in a hard scrap the realized gap can sag a few percent
-# into the bubble — half a body absorbs that without bodywork contact.
+# Centre-to-centre keep-out around the ~0.07 x 0.03 m body: half a body of
+# daylight each way, which also absorbs the one-step lag of opponent forecasts.
 SEP_LONG = 0.10  # semi-axis along the track [m]
 SEP_LAT = 0.05  # semi-axis across the track [m]
 
 # ── MPC horizon ────────────────────────────────────────────────────────────────
-# Three seconds reaches through a braking zone and far enough down the next
-# straight to plan a whole overtake. A horizon study (2/3/4 s races on this
-# roster) shows the difference in kind: at 2 s the fastest car cannot plan
-# past a defender's bubble and the weakest car wins on track position; at
-# 3 s passes complete and the field finishes sorted by pace, ~1.2 s quicker.
-# 4 s adds cost but nothing further.
+# Long enough to plan a whole overtake (braking zone plus the next straight);
+# shorter horizons cannot see past a defender's bubble and track position
+# beats pace.
 N_MPC = 31  # horizon nodes
 HORIZON_TF = 3.0  # [s] prediction horizon
 DT_MPC = HORIZON_TF / (N_MPC - 1)  # time between consecutive nodes = one race step [s]
 RACE_TIME_MAX = 15.0 + 20.0 * M_LAPS  # [s] give up if the field has not finished by then
 MAX_STEPS = int(np.ceil(RACE_TIME_MAX / DT_MPC))
 
-# Overrun past the flag: finished cars keep driving until the last car
-# crosses, and every horizon looks this far beyond its own position, so the
-# margin scales with the lookahead (top speed ~3 m/s plus slack).
+# Overrun past the flag: horizons look this far beyond their own position and
+# finished cars keep driving until the last car crosses.
 S_OVERRUN = 4.0 * HORIZON_TF
 
 # Real-time iteration: a fixed SCP budget per step instead of solving each
 # horizon to convergence — the shifted warm start carries optimality from one
-# step into the next, as in any SQP-style MPC.
+# step into the next, as in any SQP-style MPC. Expect the convergence rate to
+# dip in wheel-to-wheel traffic (~85% within 20 cm of an opponent vs ~100% in
+# clean air): opponents' published plans move between steps, which is a
+# property of the game, not of any car's spec or the weights.
 SCP_ITERS_PER_STEP = 10
 
 # ── States ─────────────────────────────────────────────────────────────────────
@@ -383,16 +366,10 @@ a_long = Fxd / m_car
 
 constraints.append(ox.ctcs(a_lat**2 + a_long**2 <= A_MAX**2, penalty="huber"))
 
-# Opponent separation, continuous in time. The forecasts are only known at
-# the horizon nodes, but every car shares the same uniform clock, so hat
-# weights in the time state turn each opponent's forecast into a
-# piecewise-linear trajectory the CTCS penalty can evaluate *between* nodes
-# too — no gap for a car to slip through at a node boundary. The ``W_SEP``
-# scaling makes contact far dearer than any progress the reward could buy;
-# without it, driving through an opponent costs less than lifting, and the
-# solver ghost-passes. It also sets how crisply the soft huber penalty holds
-# the boundary — the bubble is barely half a body wide, so the few-percent
-# sag a lighter weight allows is already wheel-banging.
+# Opponent separation, continuous in time: hat weights in the time state turn
+# each opponent's node forecast into a piecewise-linear trajectory (all cars
+# share one uniform horizon clock), and W_SEP prices contact far above any
+# progress the reward could buy — an unweighted bubble gets driven through.
 W_SEP = 4e3
 
 if K > 1:
@@ -400,12 +377,9 @@ if K > 1:
     for j in range(K - 1):
         opp_s_t = ox.Sum(hat * opp_s[:, j])
         opp_n_t = ox.Sum(hat * opp_n[:, j])
-        # Plans are published in each car's own lap frame, so Δs can be off
-        # by whole laps (a freshly wrapped car vs. one still approaching the
-        # line, or a car being lapped). The gap is therefore lap-periodic:
-        # (L/π)·sin(π·Δs/L) matches Δs exactly near whole-lap multiples — the
-        # only place the bubble can bind — and stays harmlessly large in
-        # between.
+        # Plans live in per-car lap frames, so the gap must be lap-periodic:
+        # (L/π)·sin(π·Δs/L) matches Δs near whole-lap multiples — the only
+        # place the bubble can bind — and stays harmlessly large in between.
         ds = s[0] - opp_s_t
         ds_wrap = ox.Constant(pathlength / np.pi) * ox.Sin(ox.Constant(np.pi / pathlength) * ds)
         gap = (ds_wrap / SEP_LONG) ** 2 + ((n[0] - opp_n_t) / SEP_LAT) ** 2
@@ -425,37 +399,23 @@ problem = ox.Problem(
     N=N_MPC,
     float_dtype="float64",
     algorithm={
-        # The progress reward must dominate the proximal anchor (states are
-        # scaled by their ranges, and s spans the whole 4x track, so a metre
-        # of progress is a small scaled step) — too small and each solve
-        # "converges" glued to its warm start and the field crawls. lam_vc
-        # must in turn dominate the reward, or virtual control buys progress
-        # at the horizon's last node instead of driving there.
-        # lam_prox/ep_tr picked by a batched sweep (solve_batched over a
-        # lam_prox x ep_tr grid, one single-car lap per element): 2.0/1e-2 is
-        # the fastest lap with ~96% of steps converged. Heavier damping
-        # "converges" more often but to visibly worse plans — the car crawls.
+        # Weights from batched sweeps (one single-car closed-loop lap per
+        # batch element). The progress reward must dominate the proximal
+        # anchor or the field crawls glued to its warm start, and lam_vc must
+        # dominate the reward or virtual control buys progress instead of
+        # driving. ep_tr sits just above the plan's structural jitter floor
+        # (the terminal reward flutters against the grip limit at the horizon
+        # tail by ~1 cm regardless of iterations); the floor grows with the
+        # car's pace, so size it for the hottest spec in the roster.
         "lam_vc": 1e3,
         "lam_prox": 2e0,
         "lam_cost": {"s": 4e1},
         "autotuner": ox.ConstantProximalWeight(),
-        # Convergence for a receding horizon means the *plan* is stationary,
-        # not stationary to solver precision: the terminal progress reward
-        # works against the grip limit at the horizon tail, and the linearized
-        # active set flutters there by ~1 cm no matter how many iterations run
-        # (J_vc and J_vb sit at machine precision throughout). ep_tr sits just
-        # above that structural jitter floor; the applied node-0 controls are
-        # stable well before it. The floor grows with the car's pace — a spec
-        # sweep (power 0.7–1.25, mass to 1.6, battery to 0.25) showed the
-        # reference car converging 95%+ at 1e-2 but a +25% power car only 86%
-        # — so size the tolerance for the hottest spec in the roster; no other
-        # weight needed retuning across the whole spread.
         "ep_tr": 3e-2,
     },
-    # The default integration atol (1e-3) is coarser than the battery states
-    # (~0.1 J), and that linearization noise lands right at the ep_tr floor:
-    # with default tolerances only ~60% of car-steps converge within the
-    # iteration budget, with tight ones ~90%+, for ~15% more time per step.
+    # Default integration tolerances (atol 1e-3) are coarser than the battery
+    # states and put linearization noise at the ep_tr floor; tight tolerances
+    # roughly halve the non-converged steps for ~15% more time per step.
     discretizer={
         "diffrax_kwargs": {"atol": 1e-8, "rtol": 1e-8},
     },
@@ -494,11 +454,9 @@ def cold_start_guesses() -> tuple[np.ndarray, np.ndarray]:
 def shift_forecast(plan: np.ndarray) -> np.ndarray:
     """Advance published plans one node so they align with the next horizon.
 
-    Every car's horizon runs on the same uniform clock and moves forward one
-    node per race step, so node ``k`` of the *next* horizon is node ``k + 1``
-    of the plan an opponent just published. The freed final node is
-    extrapolated along the plan — holding it would forecast the opponent
-    parking for the last interval of every horizon.
+    All horizons share one uniform clock, so node ``k`` of the next horizon is
+    node ``k + 1`` of the plan just published; the freed final node is
+    extrapolated (a held node would forecast the opponent parking).
     """
     tail = 2.0 * plan[:, -1:] - plan[:, -2:-1]
     return np.concatenate([plan[:, 1:], tail], axis=1)
@@ -512,12 +470,10 @@ _X_HI = np.array([st.max[0] for st in states])
 def shifted_guesses(results) -> tuple[np.ndarray, np.ndarray]:
     """Warm starts for the next step: previous plans shifted one node.
 
-    The freed final node is *extrapolated* along the plan, not held — a held
-    tail is dynamically infeasible (the state freezes while carrying racing
-    speed), which hands every solve a built-in defect at the last interval
-    that virtual control must burn iterations repairing. Controls hold their
-    last value. The horizon clock and the CTCS violation integrators restart
-    from zero each solve, so those columns are reset rather than shifted.
+    The freed final state node is extrapolated, not held — a held tail is
+    dynamically infeasible and burns SCP iterations on virtual control.
+    Controls hold their last value; the horizon clock and CTCS integrators
+    restart from zero.
     """
     x = np.asarray(results.x)
     u = np.asarray(results.u)
@@ -922,13 +878,11 @@ def run_race(max_steps: int = MAX_STEPS) -> RaceLog:
         pred_s = nodes["s"][:, :, 0].copy()
         pred_n = nodes["n"][:, :, 0]
 
-        # Lap handling, as in the MPCC example: when a car takes the line its
-        # s frame wraps back one lap — pin, warm start, and published plan
-        # together — and its recovery budget R resets. Opponents only ever see
-        # the frame through the lap-periodic gap, which is invariant to the
-        # shift. A horizon straddling the line charges its first metres of
-        # new-lap harvesting to the old lap's budget: conservative by at most
-        # one horizon, exact again at the reset.
+        # Lap handling, as in the MPCC example: a car taking the line has its
+        # s frame wrapped back one lap — pin, warm start, and published plan
+        # together — and its recovery budget R reset. (A horizon straddling
+        # the line charges its first new-lap metres to the old lap's budget:
+        # conservative by at most one horizon.)
         for i in range(K):
             if x0[i, COL["s"]] >= pathlength:
                 laps[i] += 1
