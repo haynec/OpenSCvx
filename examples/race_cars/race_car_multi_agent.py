@@ -517,7 +517,7 @@ def accelerations(x: np.ndarray, u: np.ndarray, spec: dict) -> tuple[np.ndarray,
 
 
 def plot_race(log: RaceLog) -> None:
-    """Track projection, separation, and speed/battery striplines.
+    """Track projection and speed/battery striplines.
 
     Everything is drawn from the dense propagated log; the striplines run
     against race distance in laps rather than time, so the same corner lines
@@ -585,35 +585,10 @@ def plot_race(log: RaceLog) -> None:
     )
     fig1.show()
 
-    # ── Pairwise separation vs the ellipse limit, against race distance ───────
-    fig2 = go.Figure()
-    for i in range(K):
-        for j in range(i + 1, K):
-            ds = log.dense_x[i, :, COL["s"]] - log.dense_x[j, :, COL["s"]]
-            ds = (pathlength / np.pi) * np.sin(np.pi * ds / pathlength)  # lap-periodic gap
-            dn = log.dense_x[i, :, COL["n"]] - log.dense_x[j, :, COL["n"]]
-            gap = np.sqrt((ds / SEP_LONG) ** 2 + (dn / SEP_LAT) ** 2)
-            fig2.add_trace(
-                go.Scatter(
-                    x=0.5 * (laps_x[i] + laps_x[j]),
-                    y=gap,
-                    name=f"{AGENTS[i]['name']} ↔ {AGENTS[j]['name']}",
-                )
-            )
-    fig2.add_hline(y=1.0, line=dict(color="black", dash="dash", width=1), annotation_text="contact")
-    fig2.update_layout(
-        title="Separation (ellipse metric — below 1 is contact)",
-        xaxis_title="race distance [laps]",
-        yaxis_title="normalised gap",
-        yaxis_type="log",
-        height=400,
-    )
-    fig2.show()
-
     # ── Speed and battery striplines against race distance ────────────────────
-    fig3 = make_subplots(rows=2, cols=1, shared_xaxes=True, subplot_titles=["v [m/s]", "E [J]"])
+    fig2 = make_subplots(rows=2, cols=1, shared_xaxes=True, subplot_titles=["v [m/s]", "E [J]"])
     for i, spec in enumerate(AGENTS):
-        fig3.add_trace(
+        fig2.add_trace(
             go.Scatter(
                 x=laps_x[i],
                 y=log.dense_x[i, :, COL["v"]],
@@ -623,7 +598,7 @@ def plot_race(log: RaceLog) -> None:
             row=1,
             col=1,
         )
-        fig3.add_trace(
+        fig2.add_trace(
             go.Scatter(
                 x=laps_x[i],
                 y=log.dense_x[i, :, COL["E"]],
@@ -634,17 +609,17 @@ def plot_race(log: RaceLog) -> None:
             row=2,
             col=1,
         )
-        fig3.add_hline(
+        fig2.add_hline(
             y=spec["battery_scale"] * E_BATT_MAX,
             line=dict(color=css[i], dash="dash", width=1),
             row=2,
             col=1,
         )
     for lap in range(1, M_LAPS):
-        fig3.add_vline(x=float(lap), line=dict(color="black", dash="dot", width=1))
-    fig3.update_xaxes(title_text="race distance [laps]", row=2, col=1)
-    fig3.update_layout(title="Speed and battery state of charge", height=600)
-    fig3.show()
+        fig2.add_vline(x=float(lap), line=dict(color="black", dash="dot", width=1))
+    fig2.update_xaxes(title_text="race distance [laps]", row=2, col=1)
+    fig2.update_layout(title="Speed and battery state of charge", height=600)
+    fig2.show()
 
 
 def build_viser_panels(log: RaceLog) -> list[dict]:
