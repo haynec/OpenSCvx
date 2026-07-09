@@ -63,6 +63,20 @@ if TYPE_CHECKING:
     from ..autotuner.base import AutotuningBase
 
 
+def compute_h_plus(H_raw: jnp.ndarray) -> jnp.ndarray:
+    """Project raw curvature onto the PSD cone for the ProxConvex metric.
+
+    The input is first sanitized and symmetrized.  The reconstructed
+    matrix is symmetrized again so the solver receives a Hessian-like block.
+    """
+    H_raw = jnp.nan_to_num(H_raw, nan=0.0)
+    H_raw = 0.5 * (H_raw + H_raw.T)
+    eigenvalues, eigenvectors = jnp.linalg.eigh(H_raw)
+    H_plus = eigenvectors @ jnp.diag(jnp.maximum(0.0, eigenvalues)) @ eigenvectors.T
+    H_plus = 0.5 * (H_plus + H_plus.T)
+    return jnp.nan_to_num(H_plus, nan=0.0)
+
+
 @dataclass
 class SRComposite:
     """SR composite: s(R(x)) where R = [r_0(x,u), …, r_{n_r-1}(x,u)].
@@ -134,7 +148,7 @@ class SRComposite:
         )
         return R_val, ds_val, I_neg_mask, grad_R
 
-    def compute_hessian(
+    def compute_hessian_s_raw(
         self,
         x: jnp.ndarray,
         u: jnp.ndarray,
@@ -144,13 +158,17 @@ class SRComposite:
         I_neg_mask: jnp.ndarray,
         grad_R: jnp.ndarray,
     ) -> jnp.ndarray:
-        """Compute the PSD-projected curvature block H⁺_k for s(R(x)).
+        """Compute the **unprojected** s(R(x)) curvature block H_{s,k}.
 
         Implements Eq. (Section 2.3.1) of arXiv:2512.20602v1:
 
             H_{s,k} = G_R^T ∇²s(R_k) G_R           [outer pullback]
                     + Σ_{i∈I⁻_k} [∇s]_i ∇²r_i(x_k) [inner compensation]
-            H⁺_k = Π_{S+}(H_{s,k})
+
+        The PSD projection is **not** applied here: the iteration body sums this
+        block with the ``h(C(x))`` dynamics/constraint curvature ``H_{C,k}`` and
+        projects the total once via :func:`compute_h_plus`, keeping
+        ``H⁺_k = Π_{S+}(H_{C,k} + H_{s,k})`` unified.
 
         Args:
             x: Current state trajectory, shape ``(N, n_x)``.
@@ -164,46 +182,60 @@ class SRComposite:
                 shape ``(n_r, N, n_x)``.
 
         Returns:
-            ``H_plus``, shape ``(N*n_x, N*n_x)``, symmetric and PSD; a scalar
-            ``0.0`` placeholder when ``use_hessian`` is ``False`` (``Q_k = µ_k
-            I``).
+            ``H_{s,k}``, shape ``(D, D)`` with ``D = N*n_x + N*n_u`` over the
+            stacked ``[x.flatten(); u.flatten()]`` variable, symmetric (not
+            PSD-projected); all-zeros when ``use_hessian`` is ``False``.
         """
-        assert self._r_jax_fns is not None, "call lower_jax() before compute_hessian()"
+        assert self._r_jax_fns is not None, "call lower_jax() before compute_hessian_s_raw()"
         N, n_x = x.shape
+        n_u = u.shape[1]
         n_r = R_val.shape[0]
-        n_total = N * n_x
+        Nx = N * n_x
+        Nu = N * n_u
+        D = Nx + Nu
 
         if self.use_hessian is False:
-            return jnp.zeros(())
+            return jnp.zeros((D, D))
 
-        # Outer pullback: G_R^T H²s G_R  (n_total, n_total)
+        # Outer pullback: G_R^T H²s G_R  (D, D), where G_R = ∂R/∂z over the
+        # stacked z = [x; u].  The state columns come from the precomputed
+        # ``grad_R``; the control columns ``∂r_i/∂u`` are evaluated here so the
+        # pullback is exact when an ``r_i`` depends on the control.
         H2s = jax.hessian(lambda R: self.s(R, params))(R_val)  # (n_r, n_r)
-        G_R = grad_R.reshape(n_r, n_total)  # (n_r, n_total)
-        H_outer = G_R.T @ H2s @ G_R  # (n_total, n_total)
-
-        # Inner compensation: Σ_{i∈I⁻_k} [∇s]_i ∇²r_i(x[node_i])
-        # Each Hessian is (n_x, n_x) and sits at the block diagonal position
-        # corresponding to node_i.  Use jnp.where so the computation is always
-        # traced (no data-dependent branching) and the weight is zeroed out for
-        # channels that are NOT linearized (I_neg_mask[i] == False).
-        H_inner = jnp.zeros((n_total, n_total))
+        G_R = jnp.zeros((n_r, D))
+        G_R = G_R.at[:, :Nx].set(grad_R.reshape(n_r, Nx))
         for i, (fn, node_idx) in enumerate(zip(self._r_jax_fns, self._nodes)):
-            H2r_i = jax.hessian(lambda xi, _fn=fn, _n=node_idx: _fn(xi, u[_n], _n, params))(
-                x[node_idx]
-            )  # (n_x, n_x)
-            weight = jnp.where(I_neg_mask[i], ds_val[i], 0.0)
-            contribution = weight * H2r_i  # (n_x, n_x)
-            s = node_idx * n_x
-            H_inner = H_inner.at[s : s + n_x, s : s + n_x].add(contribution)
+            gu_i = jax.jacrev(lambda ui, _fn=fn, _n=node_idx: _fn(x[_n], ui, _n, params))(
+                u[node_idx]
+            )  # (n_u,)
+            us = Nx + node_idx * n_u
+            G_R = G_R.at[i, us : us + n_u].set(gu_i)
+        H_outer = G_R.T @ H2s @ G_R  # (D, D)
 
-        # PSD projection via eigendecomposition of the symmetric sum.
-        # NaN entries (e.g. from ||r_i||=0 singularities) are zeroed out — this
-        # conservatively drops the second-order correction for ill-defined channels
-        # and falls back to the isotropic µ_k I metric for those directions.
-        H_s = jnp.nan_to_num(H_outer + H_inner, nan=0.0)
-        eigenvalues, eigenvectors = jnp.linalg.eigh(H_s)
-        H_plus = eigenvectors @ jnp.diag(jnp.maximum(0.0, eigenvalues)) @ eigenvectors.T
-        return H_plus
+        # Inner compensation: Σ_{i∈I⁻_k} [∇s]_i ∇²r_i over the stacked [x,u] at
+        # node_i.  Each Hessian is (n_x+n_u, n_x+n_u) and scatters into the
+        # state/control blocks of node_i.  jnp.where keeps the trace static and
+        # zeros the weight for channels that are NOT linearized.
+        H_inner = jnp.zeros((D, D))
+        for i, (fn, node_idx) in enumerate(zip(self._r_jax_fns, self._nodes)):
+
+            def ri_z(z, _fn=fn, _n=node_idx):
+                return _fn(z[:n_x], z[n_x:], _n, params)
+
+            z_node = jnp.concatenate([x[node_idx], u[node_idx]])
+            H2r_i = jax.hessian(ri_z)(z_node)  # (m, m)
+            weight = jnp.where(I_neg_mask[i], ds_val[i], 0.0)
+            contribution = weight * H2r_i  # (m, m)
+            xs = node_idx * n_x
+            us = Nx + node_idx * n_u
+            H_inner = H_inner.at[xs : xs + n_x, xs : xs + n_x].add(contribution[:n_x, :n_x])
+            H_inner = H_inner.at[xs : xs + n_x, us : us + n_u].add(contribution[:n_x, n_x:])
+            H_inner = H_inner.at[us : us + n_u, xs : xs + n_x].add(contribution[n_x:, :n_x])
+            H_inner = H_inner.at[us : us + n_u, us : us + n_u].add(contribution[n_x:, n_x:])
+
+        # NaN entries (e.g. from ||r_i||=0 singularities) are zeroed so they do
+        # not contaminate the summed block before the H⁺ projection.
+        return jnp.nan_to_num(H_outer + H_inner, nan=0.0)
 
 
 def check_sr_composite(composite: "SRComposite", x_var, u_var, params: dict) -> None:
@@ -246,10 +278,9 @@ class ProxConvex(Algorithm):
     when ``∇_i s(R(x_k)) ≥ 0``, and linearized when ``∇_i s(R(x_k)) < 0``.
     The proximal metric ``Q_k = µ_k I + H⁺_k`` combines the scalar weight
     ``µ_k`` (adapted by an acceptance-ratio test, Algorithm 1 of the paper)
-    with the PSD-projected curvature block
-    ``H⁺_k = Π_{S+}(H_{s,k})`` from ``s(R(x))`` (Section 2.3.1).  Disable
-    ``H⁺_k`` (``Q_k = µ_k I``) via ``hessian_composite`` when the curvature
-    is unavailable (e.g. a non-``C²`` inner function).
+    with the PSD-projected curvature block from ``s(R(x))`` (Section 2.3.1).
+    Disable ``H⁺_k`` (``Q_k = µ_k I``) via ``hessian_composite`` when the
+    curvature is unavailable (e.g. a non-``C²`` inner function).
 
     Pair this algorithm with :class:`~openscvx.solvers.cvxpy_ptr_solver.CVXPyProxConvexSolver`.
     :meth:`Problem.initialize` forwards the composite to the solver automatically.
@@ -300,7 +331,7 @@ class ProxConvex(Algorithm):
     def __init__(
         self,
         composite: SRComposite,
-        hessian_composite: bool = True,
+        hessian_composite: bool = False,
         autotuner: "AutotuningBase" = None,
         k_max: int = 200,
         t_max: Optional[float] = None,
@@ -325,6 +356,11 @@ class ProxConvex(Algorithm):
             composite.use_hessian = hessian_composite
 
         self._composite = composite
+        # Dynamics/constraint curvature block H_{C,k}.  Both are populated by
+        # ``Problem.initialize`` from the solver's ``use_hessian_constraints``
+        # flag (the single source of truth) before ``build_iteration`` runs.
+        self._dis_hessian: Optional[Callable] = None
+        self._use_hessian_constraints: bool = False
         self._iteration_fn: Optional[Callable] = None
         self._emitter: Optional[Callable] = None
         self._states: List["State"] = states
@@ -377,6 +413,8 @@ class ProxConvex(Algorithm):
             solver_callback=solver_callback,
             autotuner=self.autotuner,
             settings=settings,
+            dis_hessian=self._dis_hessian,
+            use_hessian_constraints=self._use_hessian_constraints,
         )
 
     def get_columns(self, verbosity: int = Verbosity.STANDARD) -> List[Column]:

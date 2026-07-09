@@ -1292,6 +1292,20 @@ class CVXPyPTRSolver(PTRSolver):
         ]
 
 
+def _sqrt_factor_h_plus_numerical_guard(H_plus_np: np.ndarray) -> np.ndarray:
+    """Factor an already-PSD H⁺ matrix, allowing only roundoff-level negatives."""
+    eigvals, eigvecs = np.linalg.eigh(H_plus_np)
+    tolerance = 1e-10
+    min_eig = float(np.min(eigvals)) if eigvals.size else 0.0
+    if min_eig < -tolerance:
+        raise ValueError(
+            "Expected PSD-projected H_plus, but found eigenvalue "
+            f"{min_eig:.3e} below numerical tolerance {-tolerance:.3e}."
+        )
+    sqrt_eigvals = np.sqrt(np.maximum(0.0, eigvals))
+    return eigvecs @ np.diag(sqrt_eigvals)
+
+
 class CVXPyProxConvexSolver(CVXPyPTRSolver):
     """CVXPy solver for :class:`~openscvx.algorithms.scvx.prox_convex.ProxConvex`.
 
@@ -1317,9 +1331,14 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
             ``solver_args``, ``cvxpygen``, ``cvxpygen_override``).
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, use_hessian_constraints: bool = False, **kwargs):
         super().__init__(**kwargs)
         self._composite = None
+        # Single source of truth for the h(C(x)) curvature block H_{C,k}
+        # (dynamics defects + nonconvex constraints).  Read by
+        # ``Problem.initialize`` to wire the dynamics Hessian solver into the
+        # iteration body, and here to gate the subproblem's ``hess_cost`` term.
+        self.use_hessian_constraints = use_hessian_constraints
         # mask_key -> {'problem', 'ds_params', 'lin_coef_params', 'lin_bias_params'}
         self._sr_problem_cache: dict = {}
         self._cached_lowered = None
@@ -1408,22 +1427,30 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
                 ri_expr = lowerer.lower(self._composite.r[i])
                 sr_cost = sr_cost + ds_p * ri_expr
 
-        # Hessian curvature term: 0.5 * ||L^T (x - x_bar)||²  where  H⁺ = L L^T.
-        # L = V diag(√λ⁺); offset = L^T x_bar is precomputed on the CPU so the
-        # CVXPy expression reduces to cp.sum_squares(param_matrix @ variable - param_vector).
-        if self._composite.use_hessian is False:
+        # Hessian curvature term: 0.5 * ||L^T (z - z_bar)||² where
+        # L L^T = H⁺.  L = V diag(√λ⁺); offset = L^T z_bar is
+        # precomputed on the CPU so the CVXPy expression reduces to
+        # cp.sum_squares(param_matrix @ variable - param_vector).
+        any_hessian = (self._composite.use_hessian is not False) or self.use_hessian_constraints
+        if not any_hessian:
             L_hplus_p = None
             offset_hplus_p = None
             hess_cost = cp.Constant(0)
         else:
-            n_total = N * n_x
-            L_hplus_p = cp.Parameter((n_total, n_total))
-            offset_hplus_p = cp.Parameter(n_total)
-            x_flat = cp.hstack([x_nonscaled[k] for k in range(N)])
-            hess_cost = 0.5 * cp.sum_squares(L_hplus_p.T @ x_flat - offset_hplus_p)
+            # Curvature metric acts on the full stacked variable
+            # z = [x.flatten(); u.flatten()], dimension D = N*(n_x + n_u),
+            # matching the iteration's (D, D) H⁺_k assembly.
+            n_u = settings.sim.n_controls
+            D = N * (n_x + n_u)
+            L_hplus_p = cp.Parameter((D, D))
+            offset_hplus_p = cp.Parameter(D)
+            z_flat = cp.hstack(
+                [x_nonscaled[k] for k in range(N)] + [u_nonscaled[k] for k in range(N)]
+            )
+            hess_cost = 0.5 * cp.sum_squares(L_hplus_p.T @ z_flat - offset_hplus_p)
             # Zero initialisation → first iteration behaves as Q_k = µ_k I.
-            L_hplus_p.value = np.zeros((n_total, n_total))
-            offset_hplus_p.value = np.zeros(n_total)
+            L_hplus_p.value = np.zeros((D, D))
+            offset_hplus_p.value = np.zeros(D)
 
         # Re-build the base PTR cost expression (no side effects; all
         # Parameter references are shared with _ocp_vars).
@@ -1447,6 +1474,7 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
         R_val_np: np.ndarray,
         grad_R_np: np.ndarray,
         x_bar_np: np.ndarray,
+        u_bar_np: np.ndarray,
         H_plus_np: np.ndarray,
     ) -> None:
         """Push current-iterate SR values into the cached problem's Parameters."""
@@ -1464,16 +1492,18 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
                 entry["ds_params"][i].value = max(0.0, ds_i)
 
         # Update the square-root factor L = V diag(√λ⁺) for Q_k = µ_k I + H⁺_k.
+        # H⁺ is already PSD-projected by the ProxConvex iteration; the helper
+        # only guards against roundoff-level negative eigenvalues before sqrt.
         # offset = L^T x_bar is precomputed here so _build_sr_problem only needs a
         # single param_matrix @ variable product (DPP-compliant).
         if entry["L_hplus"] is None:
             return
-        eigvals, eigvecs = np.linalg.eigh(H_plus_np)
-        sqrt_eigvals = np.sqrt(np.maximum(0.0, eigvals))
-        L = eigvecs @ np.diag(sqrt_eigvals)
-        x_bar_flat = x_bar_np.reshape(-1)
+        L = _sqrt_factor_h_plus_numerical_guard(H_plus_np)
+        # offset = L^T z_bar with z_bar = [x_bar.flatten(); u_bar.flatten()],
+        # matching the stacked z = [x; u] the curvature metric acts on.
+        z_bar_flat = np.concatenate([x_bar_np.reshape(-1), u_bar_np.reshape(-1)])
         entry["L_hplus"].value = L
-        entry["offset_hplus"].value = L.T @ x_bar_flat
+        entry["offset_hplus"].value = L.T @ z_bar_flat
 
     def _solve_sr_problem(self, problem: cp.Problem) -> None:
         """Solve a cached SR problem with the standard DPP fallback."""
@@ -1623,6 +1653,7 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
                 R_val_np=np.asarray(data.R_val),
                 grad_R_np=np.asarray(data.grad_R),
                 x_bar_np=np.asarray(data.x_bar),
+                u_bar_np=np.asarray(data.u_bar),
                 H_plus_np=np.asarray(data.H_plus),
             )
 

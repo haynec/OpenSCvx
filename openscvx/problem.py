@@ -1082,6 +1082,17 @@ class Problem:
             if hasattr(self._solver, "set_composite"):
                 self._solver.set_composite(composite)
 
+            # ProxConvex h(C) curvature: the solver's ``use_hessian_constraints``
+            # flag is the single source of truth.  When on, build the dynamics
+            # Hessian-contraction solver and hand it (plus the flag) to the
+            # algorithm so ``build_iteration`` can fold H_{C,k} into H⁺_k.
+            use_hessian_constraints = bool(getattr(self._solver, "use_hessian_constraints", False))
+            if use_hessian_constraints:
+                self._algorithm._dis_hessian = self._discretizer.get_hessian_solver(
+                    self._lowered.dynamics, self.settings
+                )
+            self._algorithm._use_hessian_constraints = use_hessian_constraints
+
         # Generate discretization solvers via the discretizer (handles Jacobians
         # + vmapping). These are locals: they're captured by the fused
         # ``iteration_fn`` closure below, not stored on the problem.

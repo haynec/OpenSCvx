@@ -260,8 +260,9 @@ class ProxConvexSubproblemData(SubproblemData):
             ``ds_val[i] < 0`` (channel must be linearized).
         grad_R: Jacobian of each ``r_i`` w.r.t. the full state trajectory
             ``x``, shape ``(n_r, N, n_x)``.  Computed via ``jax.jacrev``.
-        H_plus: PSD-projected curvature block ``H⁺_k = Π_{S+}(H_{s,k})`` for
-            the proximal metric ``Q_k = µ_k I + H⁺_k``, shape ``(N*n_x, N*n_x)``.
+        H_plus: PSD-projected curvature block
+            ``H⁺_k = Π_{S+}(H_{s,k} + H_{C,k})`` for the proximal metric,
+            shape ``(N*(n_x+n_u), N*(n_x+n_u))``.
     """
 
     R_val: jnp.ndarray
