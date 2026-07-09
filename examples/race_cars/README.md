@@ -16,3 +16,19 @@ actively binds at the optimum. The example solves three power-unit variants — 
 MGU-K failure, and an unrestricted full-envelope ICE — as a single batched
 solve over the power-unit parameters, then races all three cars on one
 Viser track to make the electric system's lap-time worth directly visible.
+
+`race_car_mpc.py` swaps the single global minimum-time solve for a
+receding-horizon controller: a short fixed horizon that maximises arc-length
+progress, applied one node at a time in closed loop, mirroring the acados
+benchmark's NMPC formulation.
+
+`race_car_multi_agent.py` combines the two: a whole grid of the hybrid cars
+races `M_LAPS` laps wheel-to-wheel from an F1-style standing start. One symbolic problem
+describes a single car's MPC horizon; each race step advances the entire
+field with a single `solve_batched` call, batching over per-car boundary
+pins, spec parameters (power, mass, battery size), and each car's forecast
+of its opponents' trajectories. Cars keep an elliptical clearance in track
+coordinates from the plans their opponents published on the previous step —
+decentralized MPC with communicated plans — so overtakes and energy strategy
+emerge from the optimization. The `AGENTS` roster at the top of the file is
+the only thing to edit to grow the field or tweak a car's spec.

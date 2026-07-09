@@ -664,15 +664,18 @@ def _resample_to_common_time(
 
 
 def create_race_car_comparison_viser_server(
-    results_list,
+    results_list=None,
     labels: list[str] | None = None,
     *,
+    simX_list: list[np.ndarray] | None = None,
+    t_sim_list: list[np.ndarray] | None = None,
     colors: list[tuple[int, int, int]] | None = None,
     track_file: str = "LMS_Track.txt",
     lane_width: float = 0.12,
     loop_animation: bool = True,
     trim_warmup: bool = True,
     distance_marker_step: float | str | None = "auto",
+    plot_panels: list[dict] | None = None,
     title: str = "Race Comparison",
 ) -> "viser.ViserServer":
     """Replay several laps side by side on one track with a shared clock.
@@ -680,30 +683,51 @@ def create_race_car_comparison_viser_server(
     All cars launch together at the start line; each holds at the finish once
     its own lap is done, so the winning margin is visible on screen. Intended
     for A/B comparisons such as the hybrid vs ICE-only laps of
-    ``race_car_hybrid.py``.
+    ``race_car_hybrid.py``, or multi-car MPC races via ``simX_list``.
 
     Args:
         results_list: Post-processed ``OptimizationResults``, one per car.
         labels: Display name per car (default ``car 0``, ``car 1``, ...).
+        simX_list: Alternative to ``results_list``: closed-loop MPC logs, one
+            ``(N, 6)`` array per car with columns ``[s, n, α, v, D, δ]`` (same
+            layout as :func:`extract_race_trajectory_from_sim`).
+        t_sim_list: Time vector per car; required with ``simX_list``.
         colors: Body RGB per car (defaults cycle a small palette).
         distance_marker_step: Metres between "x m" track labels; ``"auto"``
             picks ~9 per lap, ``None`` hides them.
+        plot_panels: Optional live plots for the GUI sidebar: dicts with a
+            Plotly ``"figure"``, an ``"update"`` callable taking the current
+            playback time in seconds (mutate the figure's marker traces), and
+            an optional ``"aspect"`` ratio. Updates are throttled — Plotly
+            panels re-serialize on every assignment.
     """
     import viser
     import viser.transforms as vtf
 
     from openscvx.plotting.viser import add_animation_controls
 
+    if simX_list is not None:
+        if t_sim_list is None:
+            raise ValueError("t_sim_list is required when simX_list is provided")
+        datas = [
+            extract_race_trajectory_from_sim(
+                simX, t_sim, track_file=track_file, trim_warmup=trim_warmup
+            )
+            for simX, t_sim in zip(simX_list, t_sim_list)
+        ]
+    elif results_list is not None:
+        datas = [
+            extract_race_trajectory(results, track_file=track_file, trim_warmup=trim_warmup)
+            for results in results_list
+        ]
+    else:
+        raise ValueError("Provide results_list, or simX_list and t_sim_list")
+
     if labels is None:
-        labels = [f"car {i}" for i in range(len(results_list))]
+        labels = [f"car {i}" for i in range(len(datas))]
     if colors is None:
         palette = [(220, 35, 45), (90, 140, 235), (240, 190, 50), (120, 200, 120)]
-        colors = [palette[i % len(palette)] for i in range(len(results_list))]
-
-    datas = [
-        extract_race_trajectory(results, track_file=track_file, trim_warmup=trim_warmup)
-        for results in results_list
-    ]
+        colors = [palette[i % len(palette)] for i in range(len(datas))]
     t_common, laps = _resample_to_common_time(datas)
 
     server = viser.ViserServer()
@@ -767,6 +791,30 @@ def create_race_car_comparison_viser_server(
                 status_lines
             )
 
+    # Live GUI plots: each panel owns its figure; we hand it the playback time
+    # and push the mutated figure to the client, rate-limited because every
+    # push re-serializes the whole figure. The large ``order`` keeps the
+    # telemetry folder below the Animation and race-status folders, which are
+    # created later with default (insertion-order) positions.
+    panel_handles = []
+    if plot_panels:
+        with server.gui.add_folder("Telemetry", order=1000):
+            for panel in plot_panels:
+                handle = server.gui.add_plotly(
+                    figure=panel["figure"], aspect=float(panel.get("aspect", 1.6))
+                )
+                panel_handles.append((panel, handle))
+    _panel_clock = {"last_t": -np.inf}
+
+    def update_panels(frame_idx: int) -> None:
+        t = float(t_common[frame_idx])
+        if abs(t - _panel_clock["last_t"]) < 0.15:
+            return
+        _panel_clock["last_t"] = t
+        for panel, handle in panel_handles:
+            panel["update"](t)
+            handle.figure = panel["figure"]
+
     centre = np.mean(np.concatenate([lap["pos"] for lap in laps]), axis=0)
     span_xy = (
         float(np.ptp(np.concatenate([lap["pos"] for lap in laps])[:, :2], axis=0).max()) + 1e-6
@@ -777,7 +825,8 @@ def create_race_car_comparison_viser_server(
     server.initial_camera.look_at = tuple(float(x) for x in centre)
     server.initial_camera.up = (0.0, 0.0, 1.0)
 
-    add_animation_controls(server, t_common, [update_frame], loop=loop_animation)
+    callbacks = [update_frame] + ([update_panels] if panel_handles else [])
+    add_animation_controls(server, t_common, callbacks, loop=loop_animation)
     update_frame(0)
 
     lap_times = sorted((lap["lap_time"], label) for lap, label in zip(laps, labels))
