@@ -1289,6 +1289,20 @@ class CVXPyPTRSolver(PTRSolver):
         ]
 
 
+def _sqrt_factor_h_plus_numerical_guard(H_plus_np: np.ndarray) -> np.ndarray:
+    """Factor an already-PSD H⁺ matrix, allowing only roundoff-level negatives."""
+    eigvals, eigvecs = np.linalg.eigh(H_plus_np)
+    tolerance = 1e-10
+    min_eig = float(np.min(eigvals)) if eigvals.size else 0.0
+    if min_eig < -tolerance:
+        raise ValueError(
+            "Expected PSD-projected H_plus, but found eigenvalue "
+            f"{min_eig:.3e} below numerical tolerance {-tolerance:.3e}."
+        )
+    sqrt_eigvals = np.sqrt(np.maximum(0.0, eigvals))
+    return eigvecs @ np.diag(sqrt_eigvals)
+
+
 class CVXPyProxConvexSolver(CVXPyPTRSolver):
     """CVXPy solver for :class:`~openscvx.algorithms.scvx.prox_convex.ProxConvex`.
 
@@ -1410,9 +1424,10 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
                 ri_expr = lowerer.lower(self._composite.r[i])
                 sr_cost = sr_cost + ds_p * ri_expr
 
-        # Hessian curvature term: 0.5 * ||L^T (x - x_bar)||²  where  H⁺ = L L^T.
-        # L = V diag(√λ⁺); offset = L^T x_bar is precomputed on the CPU so the
-        # CVXPy expression reduces to cp.sum_squares(param_matrix @ variable - param_vector).
+        # Hessian curvature term: 0.5 * ||L^T (z - z_bar)||² where
+        # L L^T = H⁺.  L = V diag(√λ⁺); offset = L^T z_bar is
+        # precomputed on the CPU so the CVXPy expression reduces to
+        # cp.sum_squares(param_matrix @ variable - param_vector).
         any_hessian = (self._composite.use_hessian is not False) or self.use_hessian_constraints
         if not any_hessian:
             L_hplus_p = None
@@ -1474,13 +1489,13 @@ class CVXPyProxConvexSolver(CVXPyPTRSolver):
                 entry["ds_params"][i].value = max(0.0, ds_i)
 
         # Update the square-root factor L = V diag(√λ⁺) for Q_k = µ_k I + H⁺_k.
+        # H⁺ is already PSD-projected by the ProxConvex iteration; the helper
+        # only guards against roundoff-level negative eigenvalues before sqrt.
         # offset = L^T x_bar is precomputed here so _build_sr_problem only needs a
         # single param_matrix @ variable product (DPP-compliant).
         if entry["L_hplus"] is None:
             return
-        eigvals, eigvecs = np.linalg.eigh(H_plus_np)
-        sqrt_eigvals = np.sqrt(np.maximum(0.0, eigvals))
-        L = eigvecs @ np.diag(sqrt_eigvals)
+        L = _sqrt_factor_h_plus_numerical_guard(H_plus_np)
         # offset = L^T z_bar with z_bar = [x_bar.flatten(); u_bar.flatten()],
         # matching the stacked z = [x; u] the curvature metric acts on.
         z_bar_flat = np.concatenate([x_bar_np.reshape(-1), u_bar_np.reshape(-1)])

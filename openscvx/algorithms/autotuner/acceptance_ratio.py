@@ -51,7 +51,7 @@ class AcceptanceRatioHyper(LamCostRelaxHyper):
     eta_0: float = 1e-2
     eta_1: float = 1e-1
     eta_2: float = 0.8
-    lam_prox_min: float = 1e-3
+    lam_prox_min: float = 1e-8
     lam_prox_max: float = 1e4
 
 

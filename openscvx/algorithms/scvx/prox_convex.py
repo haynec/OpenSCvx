@@ -63,22 +63,18 @@ if TYPE_CHECKING:
     from ..autotuner.base import AutotuningBase
 
 
-def project_psd(H: jnp.ndarray) -> jnp.ndarray:
-    """Project a symmetric matrix onto the PSD cone ``Π_{S+}``.
+def compute_h_plus(H_raw: jnp.ndarray) -> jnp.ndarray:
+    """Project raw curvature onto the PSD cone for the ProxConvex metric.
 
-    Used to form the unified curvature block ``H⁺_k = Π_{S+}(H_{C,k} + H_{s,k})``
-    (Uzun et al. arXiv:2512.20602v1, "Final metric"): the dynamics/constraint
-    curvature ``H_{C,k}`` and the smooth-convex curvature ``H_{s,k}`` are summed
-    and projected **once** so a single eigendecomposition governs both.
-
-    NaN entries (e.g. from ``‖r_i‖=0`` kinks or integrator singularities) are
-    zeroed first — the affected directions fall back to the isotropic ``µ_k I``
-    metric — and the symmetric part's negative eigenvalues are clipped to zero.
+    The input is first sanitized and symmetrized.  The reconstructed
+    matrix is symmetrized again so the solver receives a Hessian-like block.
     """
-    H = jnp.nan_to_num(H, nan=0.0)
-    H = 0.5 * (H + H.T)
-    eigenvalues, eigenvectors = jnp.linalg.eigh(H)
-    return eigenvectors @ jnp.diag(jnp.maximum(0.0, eigenvalues)) @ eigenvectors.T
+    H_raw = jnp.nan_to_num(H_raw, nan=0.0)
+    H_raw = 0.5 * (H_raw + H_raw.T)
+    eigenvalues, eigenvectors = jnp.linalg.eigh(H_raw)
+    H_plus = eigenvectors @ jnp.diag(jnp.maximum(0.0, eigenvalues)) @ eigenvectors.T
+    H_plus = 0.5 * (H_plus + H_plus.T)
+    return jnp.nan_to_num(H_plus, nan=0.0)
 
 
 @dataclass
@@ -171,7 +167,7 @@ class SRComposite:
 
         The PSD projection is **not** applied here: the iteration body sums this
         block with the ``h(C(x))`` dynamics/constraint curvature ``H_{C,k}`` and
-        projects the total once via :func:`project_psd`, keeping
+        projects the total once via :func:`compute_h_plus`, keeping
         ``H⁺_k = Π_{S+}(H_{C,k} + H_{s,k})`` unified.
 
         Args:
@@ -238,7 +234,7 @@ class SRComposite:
             H_inner = H_inner.at[us : us + n_u, us : us + n_u].add(contribution[n_x:, n_x:])
 
         # NaN entries (e.g. from ||r_i||=0 singularities) are zeroed so they do
-        # not contaminate the summed block before the joint PSD projection.
+        # not contaminate the summed block before the H⁺ projection.
         return jnp.nan_to_num(H_outer + H_inner, nan=0.0)
 
 
@@ -282,10 +278,9 @@ class ProxConvex(Algorithm):
     when ``∇_i s(R(x_k)) ≥ 0``, and linearized when ``∇_i s(R(x_k)) < 0``.
     The proximal metric ``Q_k = µ_k I + H⁺_k`` combines the scalar weight
     ``µ_k`` (adapted by an acceptance-ratio test, Algorithm 1 of the paper)
-    with the PSD-projected curvature block
-    ``H⁺_k = Π_{S+}(H_{s,k})`` from ``s(R(x))`` (Section 2.3.1).  Disable
-    ``H⁺_k`` (``Q_k = µ_k I``) via ``hessian_composite`` when the curvature
-    is unavailable (e.g. a non-``C²`` inner function).
+    with the PSD-projected curvature block from ``s(R(x))`` (Section 2.3.1).
+    Disable ``H⁺_k`` (``Q_k = µ_k I``) via ``hessian_composite`` when the
+    curvature is unavailable (e.g. a non-``C²`` inner function).
 
     Pair this algorithm with :class:`~openscvx.solvers.cvxpy_ptr_solver.CVXPyProxConvexSolver`.
     :meth:`Problem.initialize` forwards the composite to the solver automatically.

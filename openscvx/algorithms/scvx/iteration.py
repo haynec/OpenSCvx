@@ -431,7 +431,7 @@ def make_proxconvex_iteration(
     Returns:
         ``iteration_fn(state, params) -> (next_state, diagnostics)``.
     """
-    from .prox_convex import project_psd
+    from .prox_convex import compute_h_plus
 
     N = settings.sim.n
     n_x = settings.sim.n_states
@@ -478,7 +478,7 @@ def make_proxconvex_iteration(
         # Curvature augmentation: H⁺_k = Π_{S+}(H_{C,k} + H_{s,k}) for the
         # proximal metric Q_k = µ_k I + H⁺_k.  The s(R) block H_{s,k} and the
         # h(C) block H_{C,k} (dynamics defects + nonconvex constraints) are
-        # summed and PSD-projected **once** (unified projection).
+        # summed and PSD-projected once here.
         H_s_raw = composite.compute_hessian_s_raw(
             state.x, state.u, params, R_val, ds_val, I_neg_mask, grad_R
         )
@@ -507,7 +507,7 @@ def make_proxconvex_iteration(
             )
 
         if any_hessian:
-            H_plus = project_psd(H_s_raw + H_c_raw)
+            H_plus = compute_h_plus(H_s_raw + H_c_raw)
         else:
             # Sentinel: no curvature → solver keeps Q_k = µ_k I (no hess_cost).
             H_plus = jnp.zeros(())
