@@ -73,32 +73,32 @@ import openscvx as ox
 # edit or extend this list and everything downstream follows.
 AGENTS = [
     dict(
-        name="down on power",
+        name="red",  # pole sitter, slightly down on power — must defend
         color=(220, 35, 45),
-        power_scale=0.8,
+        power_scale=0.9,
         mass_scale=1.0,
         battery_scale=1.0,
     ),
     dict(
-        name="miata",
+        name="blue",  # the reference car
         color=(90, 140, 235),
-        power_scale=0.75,
-        mass_scale=0.75,
+        power_scale=1.0,
+        mass_scale=1.0,
         battery_scale=1.0,
     ),
     dict(
-        name="overweight",
+        name="yellow",  # carrying ballast
         color=(240, 190, 50),
         power_scale=1.0,
-        mass_scale=1.25,
+        mass_scale=1.15,
         battery_scale=1.0,
     ),
     dict(
-        name="reference P4",
+        name="green",  # hot engine, starting from the back
         color=(120, 200, 120),
         power_scale=1.1,
-        mass_scale=0.9,
-        battery_scale=1.1,
+        mass_scale=1.0,
+        battery_scale=1.0,
     ),
 ]
 K = len(AGENTS)
@@ -106,7 +106,7 @@ K = len(AGENTS)
 # Race length. The s state lives on a single lap (wrapped at each crossing,
 # as in the MPCC example), so solver scaling and weights are independent of
 # race length.
-M_LAPS = 3
+M_LAPS = 2
 
 # ── Track data ─────────────────────────────────────────────────────────────────
 # 4x LMS kart track, as in race_car_hybrid.py: long enough that the cars are
@@ -419,7 +419,7 @@ problem = ox.Problem(
     discretizer={
         "diffrax_kwargs": {"atol": 1e-8, "rtol": 1e-8},
     },
-    # solver=ox.MoreauPTRSolver(),
+    solver=ox.MoreauPTRSolver(),
 )
 problem.settings.dev.printing = False
 
