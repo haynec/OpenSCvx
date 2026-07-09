@@ -180,13 +180,11 @@ MAX_STEPS = int(np.ceil(RACE_TIME_MAX / DT_MPC))
 # finished cars keep driving until the last car crosses.
 S_OVERRUN = 4.0 * HORIZON_TF
 
-# Real-time iteration: a fixed SCP budget per step instead of solving each
-# horizon to convergence — the shifted warm start carries optimality from one
-# step into the next, as in any SQP-style MPC. Expect the convergence rate to
-# dip in wheel-to-wheel traffic (~85% within 20 cm of an opponent vs ~100% in
-# clean air): opponents' published plans move between steps, which is a
-# property of the game, not of any car's spec or the weights.
-SCP_ITERS_PER_STEP = 10
+# Ceiling on SCP iterations per step — a guard against pathological steps, not
+# a real-time-iteration truncation: warm-started steps converge in a handful
+# of iterations in clean air and a few tens in wheel-to-wheel traffic, so 50
+# sits comfortably above both.
+SCP_ITERS_PER_STEP = 50
 
 # ── States ─────────────────────────────────────────────────────────────────────
 # Boundary values and guesses below describe the pole slot only: every solve
@@ -808,6 +806,9 @@ def run_race(max_steps: int = MAX_STEPS) -> RaceLog:
             max_iters=SCP_ITERS_PER_STEP,
         )
         solve_ms.append((_time.perf_counter() - tic) * 1e3)
+        # Non-converged steps concentrate in wheel-to-wheel traffic, where
+        # opponents' published plans move between steps — a property of the
+        # game, not of any car's spec or the weights.
         conv_flags.append(np.asarray(results.converged).reshape(-1))
 
         # Propagate the horizon and keep the executed interval [0, DT_MPC):
@@ -929,15 +930,12 @@ if __name__ == "__main__":
     if os.environ.get("OPENSCVX_NO_PLOT") is None:
         plot_race(log)
 
-        from race_car_viser import (
-            create_race_car_chase_viser_server,
-            create_race_car_comparison_viser_server,
-        )
+        from race_car_viser import create_race_car_comparison_viser_server
 
         # Trim each car's dense log at its own flag crossing so the replay
         # parks it at the line and the finishing gaps stay visible.
         cross = [crossing_index(log.dense_x[i, :, COL["s"]]) for i in range(K)]
-        comparison_server = create_race_car_comparison_viser_server(
+        server = create_race_car_comparison_viser_server(
             simX_list=[log.dense_x[i, : cross[i], :6] for i in range(K)],
             t_sim_list=[log.dense_t[: cross[i]] for i in range(K)],
             labels=[spec["name"] for spec in AGENTS],
@@ -949,14 +947,4 @@ if __name__ == "__main__":
             title="Multi-agent race",
             plot_panels=build_viser_panels(log),
         )
-        winner = order[0]
-        chase_server = create_race_car_chase_viser_server(
-            simX=log.dense_x[winner, : cross[winner], :6],
-            t_sim=log.dense_t[: cross[winner]],
-            track_file=TRACK_FILE,
-            lane_width=LANE_HALF_WIDTH,
-            trim_warmup=False,
-            title=f"Winner — {AGENTS[winner]['name']}",
-        )
-        print("Race replay and winner chase camera are on separate Viser ports.")
-        chase_server.sleep_forever()
+        server.sleep_forever()
