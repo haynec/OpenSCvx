@@ -161,10 +161,12 @@ R_LAP_MAX = 2.0 * E_BATT_MAX  # per-lap recovery cap [J] (a regulation: same for
 E_CAP_TOP = E_BATT_MAX * max(spec["battery_scale"] for spec in AGENTS)
 
 # ── Separation ellipse (track coordinates) ─────────────────────────────────────
-# Centre-to-centre keep-out around the ~0.07 x 0.03 m body: half a body of
+# Centre-to-centre keep-out around the ~0.07 x 0.03 m body: most of a body of
 # daylight each way, which also absorbs the one-step lag of opponent forecasts.
-SEP_LONG = 0.10  # semi-axis along the track [m]
-SEP_LAT = 0.05  # semi-axis across the track [m]
+# The ellipse must sit far enough outside the body that the huber penalty cannot
+# let grazing cars overlap on the propagated trajectory.
+SEP_LONG = 0.12  # semi-axis along the track [m]
+SEP_LAT = 0.06  # semi-axis across the track [m]
 
 # ── MPC horizon ────────────────────────────────────────────────────────────────
 # Long enough to plan a whole overtake (braking zone plus the next straight);
@@ -180,11 +182,11 @@ MAX_STEPS = int(np.ceil(RACE_TIME_MAX / DT_MPC))
 # finished cars keep driving until the last car crosses.
 S_OVERRUN = 4.0 * HORIZON_TF
 
-# Ceiling on SCP iterations per step — a guard against pathological steps, not
-# a real-time-iteration truncation: warm-started steps converge in a handful
-# of iterations in clean air and a few tens in wheel-to-wheel traffic, so 50
-# sits comfortably above both.
-SCP_ITERS_PER_STEP = 50
+# Ceiling on SCP iterations per step, in the spirit of a real-time iteration:
+# warm-started steps converge quickly in clean air, and the occasional
+# wheel-to-wheel step that wants more is cut off here and recovers on the next
+# step (per-step outcomes land in ``RaceLog.converged``).
+SCP_ITERS_PER_STEP = 10
 
 # ── States ─────────────────────────────────────────────────────────────────────
 # Boundary values and guesses below describe the pole slot only: every solve
@@ -401,21 +403,21 @@ problem = ox.Problem(
         # batch element). The progress reward must dominate the proximal
         # anchor or the field crawls glued to its warm start, and lam_vc must
         # dominate the reward or virtual control buys progress instead of
-        # driving. ep_tr sits just above the plan's structural jitter floor
-        # (the terminal reward flutters against the grip limit at the horizon
-        # tail by ~1 cm regardless of iterations); the floor grows with the
-        # car's pace, so size it for the hottest spec in the roster.
+        # driving. ep_tr sits just above the plan's structural jitter floor;
+        # that floor grows with the car's pace, so size it for the fastest
+        # spec in the roster.
         "lam_vc": 1e3,
         "lam_prox": 2e0,
         "lam_cost": {"s": 4e1},
         "autotuner": ox.ConstantProximalWeight(),
         "ep_tr": 3e-2,
     },
-    # Default integration tolerances (atol 1e-3) are coarser than the battery
-    # states and put linearization noise at the ep_tr floor; tight tolerances
-    # roughly halve the non-converged steps for ~15% more time per step.
+    # Integration tolerance sets the linearization-noise floor, which must sit
+    # below ep_tr — otherwise the trust region converges on integration noise
+    # rather than a real optimum. Tighter than this buys no accuracy and only
+    # spends integration time.
     discretizer={
-        "diffrax_kwargs": {"atol": 1e-8, "rtol": 1e-8},
+        "diffrax_kwargs": {"atol": 1e-6, "rtol": 1e-6},
     },
     solver=ox.MoreauPTRSolver(),
 )
@@ -750,8 +752,9 @@ class RaceLog:
     classification, audits. ``dense_*`` stitch each step's *propagated*
     executed interval together (``post_process_batched`` under the hood), so
     playback and plots see the continuous trajectories the cars actually
-    drove, not the node samples. ``s`` entries in both logs are cumulative
-    race distance.
+    drove, not the node samples; with ``run_race(dense=False)`` they instead
+    carry one node-rate sample per step. ``s`` entries in both logs are
+    cumulative race distance.
     """
 
     sim: np.ndarray  # (T, K, len(DRIVER_STATES)) at the MPC rate
@@ -763,12 +766,14 @@ class RaceLog:
     converged: np.ndarray  # (T, K) bool — per car, per MPC step
 
 
-def run_race(max_steps: int = MAX_STEPS) -> RaceLog:
+def run_race(max_steps: int = MAX_STEPS, dense: bool = True) -> RaceLog:
     """Race the roster to the flag and return the :class:`RaceLog`.
 
     One ``solve_batched`` call advances the whole field by one node
     (``DT_MPC``) per iteration; each step's executed interval is propagated
-    densely for the log.
+    densely for the log. ``dense=False`` skips that per-step propagation and
+    the ``dense_*`` fields fall back to one node-rate sample per step, so plots
+    and playback still work, just at the MPC rate.
     """
     x0 = initial_pins()
     x_guess, u_guess = cold_start_guesses()
@@ -811,20 +816,25 @@ def run_race(max_steps: int = MAX_STEPS) -> RaceLog:
         # game, not of any car's spec or the weights.
         conv_flags.append(np.asarray(results.converged).reshape(-1))
 
-        # Propagate the horizon and keep the executed interval [0, DT_MPC):
-        # stitched across steps this is the continuous closed-loop trajectory.
-        post = problem.post_process_batched(results)
-        t_prop = np.asarray(post.t_full)[0]  # horizon clock, shared by all cars
-        keep = t_prop < DT_MPC - 1e-9
-        seg_x = np.asarray(post.x_full)[:, keep, : len(DRIVER_STATES)].copy()
-        seg_x[:, :, COL["s"]] += laps[:, None] * pathlength
-        dense_t.append(t_now + t_prop[keep])
-        dense_x.append(seg_x)
-        dense_u.append(np.asarray(post.u_full)[:, keep, :4])
-
         nodes = {name: np.asarray(results.nodes[name]) for name in DRIVER_STATES}
         row = np.stack([nodes[name][:, 0, 0] for name in DRIVER_STATES], axis=1)  # (K, n)
         row[:, COL["s"]] += laps * pathlength  # the log carries cumulative race distance
+
+        if dense:
+            # Propagate the horizon and keep the executed interval [0, DT_MPC):
+            # stitched across steps this is the continuous closed-loop trajectory.
+            post = problem.post_process_batched(results)
+            t_prop = np.asarray(post.t_full)[0]  # horizon clock, shared by all cars
+            keep = t_prop < DT_MPC - 1e-9
+            seg_x = np.asarray(post.x_full)[:, keep, : len(DRIVER_STATES)].copy()
+            seg_x[:, :, COL["s"]] += laps[:, None] * pathlength
+            dense_t.append(t_now + t_prop[keep])
+            dense_x.append(seg_x)
+            dense_u.append(np.asarray(post.u_full)[:, keep, :4])
+        else:
+            dense_t.append(np.array([t_now]))
+            dense_x.append(row[:, None, :].copy())
+            dense_u.append(np.asarray(results.u)[:, :1, :4])
 
         # Finish detection: interpolate the flag crossing inside the last step.
         for i in range(K):
