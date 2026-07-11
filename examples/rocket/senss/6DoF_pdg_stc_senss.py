@@ -32,22 +32,31 @@ Compound state-triggered constraints (notebook cell 16 / cell 39)
 
 Reference: CT-cSTC/CT-cSTC.ipynb
 
-When run as a script, launches three viser windows after solving:
-  1. Animated trajectory – thrust plume, attitude frame, velocity-colored trail
-  2. SCP convergence – node positions across iterations
-  3. Snapshot grid – evenly-spaced body poses along the final path
+When run as a script, launches four viser windows after solving:
+  1. Animated trajectory – thrust plume, attitude frame, velocity-colored
+     trail, DEM terrain patch (position adjustable in Viser GUI)
+  2. Onboard sensor FPV – camera locked to the LOS gimbal sensor with
+     matched DEM placement, adjustable sensor FOV, and XYZ position offset sliders
+  3. SCP convergence – node positions across iterations
+  4. Snapshot grid – evenly-spaced body poses along the final path
 
 Viser scene uses the same ENU frame as the model (x, y horizontal; z = altitude up).
 """
 
 import os
 import sys
+import threading
 
 import numpy as np
+import trimesh
+import viser
+import viser.transforms as vtf
+from PIL import Image
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
-sys.path.append(grandparent_dir)
+# File lives in examples/rocket/senss/ — three parents up is the repo root.
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
 import openscvx as ox
 from examples.plotting_viser import (
@@ -57,7 +66,7 @@ from examples.plotting_viser import (
     create_snapshot_plotting_server,
 )
 from openscvx import Problem
-from openscvx.plotting.viser import add_glideslope_cone, add_animation_controls
+from openscvx.plotting.viser import add_glideslope_cone, add_animation_controls, create_server
 from openscvx.plotting.viser.animated import (
     _generate_viewcone_faces,
     _generate_viewcone_vertices,
@@ -71,33 +80,42 @@ M_WET = 100_000.0   # kg
 M_DRY =  85_000.0   # kg
 
 # Initial conditions
-R_I_INIT = np.array([200.0, 200.0, 500.0])   # m
-V_I_INIT = np.array([  0.0,   0.0, -50.0])   # m/s
+R_I_INIT = np.array([-150.0, -100.0, 250.0])   # m
+V_I_INIT = np.array([-15.0,   -5.0, -2.0])   # m/s
 # 90° tilt about x-axis: euler_to_quat([90,0,0]) → [w, x, y, z] = [√2/2, √2/2, 0, 0]
 # OpenSCvx quaternion convention [x, y, z, w]: Q_INIT = [√2/2, 0, 0, √2/2]
-Q_INIT  = np.array([np.sin(np.pi / 4), 0.0, 0.0, np.cos(np.pi / 4)])
+# Q_INIT  = np.array([np.sin(np.pi / 4), 0.0, 0.0, np.cos(np.pi / 4)])
+Q_INIT  = np.array([0.0, 0.0, 0.0, 1.0])
 W_INIT  = np.zeros(3)   # rad/s
 
 # Terminal conditions
-R_I_FINAL = np.array([0.0, 0.0, 0.001])      # m — touchdown target (slightly above pad)
-GS_LOS_APEX_OFFSET_M = 0.001                 # m — GS / LoS cone apex sits below touchdown
-R_I_APEX = R_I_FINAL - np.array([0.0, 0.0, GS_LOS_APEX_OFFSET_M])  # cone vertex (pad)
-V_I_FINAL = np.array([0.0, 0.0, -5.0])       # m/s (gentle touchdown)
+# R_I_FINAL = np.array([-10.0, -125.0, -200.0])      # m — touchdown target (slightly above pad)
+R_I_FINAL = np.array([-125.0, -10.0, -200.0]) 
+
+def _height_above_landing_pad(pos_m: np.ndarray) -> np.ndarray:
+    """Height above the touchdown z-level (m), not the world origin."""
+    return np.asarray(pos_m)[:, 2] - R_I_FINAL[2]
+
+
+R_I_GS_APEX = R_I_FINAL  # glideslope cone vertex (touchdown)
+LOS_DEPTH_BELOW_TOUCHDOWN_M = 50.0  # m — LoS target sits below touchdown (z only)
+R_I_LOS = R_I_FINAL - np.array([0.0, 0.0, LOS_DEPTH_BELOW_TOUCHDOWN_M])
+V_I_FINAL = np.array([0.0, 0.0, -0.5])       # m/s (gentle touchdown)
 Q_FINAL   = np.array([0.0, 0.0, 0.0, 1.0])   # upright
 W_FINAL   = np.zeros(3)
 
 # Thrust limits (N)
-T_MAX     = 2_200_000.0 * 3.0        # 3-engine
-T_MIN     = 2_200_000.0 * 0.4 * 3.0
-T_MAX_AFT = 2_200_000.0              # 1-engine aft phase
-T_MIN_AFT = 2_200_000.0 * 0.4
+T_MAX     = 1_900_000.0 * 3.0        # 3-engine
+T_MIN     = 1_900_000.0 * 0.4 * 3.0
+T_MAX_AFT = 1_900_000.0              # 1-engine aft phase
+T_MIN_AFT = 1_900_000.0 * 0.4
 
 # Hard control angle limits (deg)
-DELTA_ENGINE_MAX_DEG    = 10.0
-DELTA_BORESIGHT_MAX_DEG = 20.0
+DELTA_ENGINE_MAX_DEG    = 60.0
+DELTA_BORESIGHT_MAX_DEG = 0.0
 
 # State constraint limits
-THETA_MAX_DEG   = 90.0             # max tilt from vertical
+THETA_MAX_DEG   = 10.0              # max tilt from vertical
 W_B_MAX_RAD_S   = np.pi/2          # max angular rate
 GS_MAX_DEG      = 90.0 - 35.0      # glideslope cone half-angle from horizontal = 55°
 
@@ -164,7 +182,7 @@ W_LOS    = 400.0
 W_THR    = 400.0
 
 # ── Scaling (notebook cell 18 / cell 37) ──────────────────────────────────────
-R_SCALE = np.linalg.norm(R_I_INIT)   # ≈ 574.46 m
+R_SCALE = np.linalg.norm(R_I_INIT) / 2.5   # ≈ 574.46 m
 M_SCALE = M_WET
 
 _alpha_m_s = ALPHA_M * R_SCALE
@@ -182,7 +200,8 @@ _T_min_aft_s = T_MIN_AFT / (M_SCALE * R_SCALE)
 
 _r_init_s  = R_I_INIT / R_SCALE
 _r_final_s = R_I_FINAL / R_SCALE
-_r_apex_s  = R_I_APEX / R_SCALE
+_r_gs_apex_s    = R_I_GS_APEX / R_SCALE
+_r_los_target_s = R_I_LOS / R_SCALE
 _v_init_s  = V_I_INIT / R_SCALE
 _v_final_s = V_I_FINAL / R_SCALE
 _m_wet_s   = M_WET / M_SCALE   # 1.0
@@ -213,7 +232,7 @@ _alt_done_s   = ALT_DONE_M / R_SCALE
 _spd_trig_s   = SPD_STC_TRIG / R_SCALE
 
 # ── Discretization ────────────────────────────────────────────────────────────
-N = 15
+N = 30
 
 # ── States ────────────────────────────────────────────────────────────────────
 mass = ox.State("mass", shape=(1,))
@@ -223,17 +242,17 @@ mass.initial = [_m_wet_s]
 mass.final   = [ox.Maximize(_m_dry_s)]   # fuel-optimal objective
 
 position = ox.State("position", shape=(3,))
-position.max = [ 1.5,  1.5,  1.5]
-position.min = [-1.5, -1.5,  0.0]   # z ≥ 0 (above ground)
+position.max = [ 2.5,  2.0,  2.5]
+position.min = [-2.5, -2.0, -2.0]   # z ≥ 0 (above ground)
 position.initial = [ox.Free(float(_r_init_s[0])),
                     ox.Free(float(_r_init_s[1])),
                     ox.Free(float(_r_init_s[2]))]
 position.final   = [float(_r_final_s[0]), float(_r_final_s[1]), float(_r_final_s[2])]
 
 velocity = ox.State("velocity", shape=(3,))
-_v_box = 150.0 / R_SCALE
-velocity.max = [ _v_box,  _v_box,  _v_box]
-velocity.min = [-_v_box, -_v_box, -_v_box]
+# _v_box = 150.0 / R_SCALE
+velocity.max = [ 2.0,  2.0,  2.0]
+velocity.min = [-2.0, -2.0, -2.0]
 velocity.initial = [float(_v_init_s[0]), float(_v_init_s[1]), float(_v_init_s[2])]
 velocity.final   = [float(_v_final_s[0]), float(_v_final_s[1]), float(_v_final_s[2])]
 
@@ -341,7 +360,8 @@ gyro   = cross(angular_velocity, J_B_ox @ angular_velocity)
 dynamics = {
     "mass":             -_alpha_m_s * T,
     "position":          velocity,
-    "velocity":          CBI.T @ (T_B + A_B) / mass[0] + g_I_ox,
+    # "velocity":          CBI.T @ (T_B + A_B) / mass[0] + g_I_ox,
+    "velocity":          CBI.T @ (T_B) / mass[0] + g_I_ox,
     "attitude":          attitude_dot,
     "angular_velocity":  J_B_inv_ox @ (torque / mass[0] - gyro),
 }
@@ -351,14 +371,19 @@ dynamics = {
 tilt_sq   = attitude[0]**2 + attitude[1]**2
 speed     = ox.linalg.Norm(velocity)
 omega_sq  = ox.linalg.Norm(angular_velocity)**2
-z_alt     = position[2]   # height above pad (z = 0); triggers use absolute altitude
+z_alt     = position[2] - float(_r_final_s[2])   # height above touchdown (R_I_FINAL)
 
-# Position relative to GS / LoS cone apex (below touchdown, not at touchdown)
-pos_rel_x = position[0] - float(_r_apex_s[0])
-pos_rel_y = position[1] - float(_r_apex_s[1])
-pos_rel_z = position[2] - float(_r_apex_s[2])
+# Position relative to glideslope apex (touchdown)
+pos_rel_x = position[0] - float(_r_gs_apex_s[0])
+pos_rel_y = position[1] - float(_r_gs_apex_s[1])
+pos_rel_z = position[2] - float(_r_gs_apex_s[2])
 r_xy_norm = ox.linalg.Norm(ox.Concat(pos_rel_x, pos_rel_y))
-r_los_norm = ox.linalg.Norm(ox.Concat(pos_rel_x, pos_rel_y, pos_rel_z))
+
+# Position relative to LoS target (below touchdown)
+pos_los_x = position[0] - float(_r_los_target_s[0])
+pos_los_y = position[1] - float(_r_los_target_s[1])
+pos_los_z = position[2] - float(_r_los_target_s[2])
+r_los_norm = ox.linalg.Norm(ox.Concat(pos_los_x, pos_los_y, pos_los_z))
 
 # LOS boresight in inertial frame via body→inertial rotation
 db = los_elev[0]
@@ -369,9 +394,9 @@ los_B = ox.Concat(
     ox.Cos(db),
 )
 los_I = CBI.T @ los_B   # unit-norm boresight in inertial frame
-r_dot_los = (pos_rel_x * los_I[0]
-             + pos_rel_y * los_I[1]
-             + pos_rel_z * los_I[2])
+r_dot_los = (pos_los_x * los_I[0]
+             + pos_los_y * los_I[1]
+             + pos_los_z * los_I[2])
 
 
 # ── State-triggered-constraint helper ─────────────────────────────────────────
@@ -380,7 +405,7 @@ def relu(expr):
     return ox.Max(expr, 0)
 
 
-def stc(*factors, weight: float = 1.0, penalty: str = "huber"):
+def stc(*factors, weight: float = 1.0, penalty="huber"):
     """Compound state-triggered constraint as a single CTCS term.
 
     ``factors`` are the relu(trigger)/relu(constraint) expressions whose product
@@ -409,11 +434,11 @@ T_tgt60  = relu(tilt_sq - _tilt_sq_trig)       # tilt > 60°
 # ── Constraint violations (relu, > 0 when violated) ───────────────────────────
 C_gimbal_p = relu( de - _delta_stc_rad)                 # δ_e ≤ +1°
 C_gimbal_n = relu(-de - _delta_stc_rad)                 # δ_e ≥ −1°
-C_gs_stc   = relu(r_xy_norm * _tan_gs_stc - pos_rel_z)  # tight glideslope (apex at R_I_APEX)
+C_gs_stc   = relu(r_xy_norm * _tan_gs_stc - pos_rel_z)  # tight glideslope (apex at touchdown)
 C_omega    = relu(omega_sq - _omega_sq_stc)             # tight angular rate
 C_tilt     = relu(tilt_sq - _tilt_sq_stc)               # tight tilt
 C_spd      = relu(speed - _v_stc_s)                     # tight speed
-C_los      = relu(r_los_norm * _cos_psi_stc - r_dot_los)                # LOS cone (toward R_I_APEX)
+C_los      = relu(r_los_norm * _cos_psi_stc - r_dot_los)  # LOS cone (toward R_I_LOS)
 C_Tmin_f   = relu(_T_min_aft_s - T)                     # single-engine min
 C_Tmax_f   = relu(T - _T_max_aft_s)                     # single-engine max
 C_Tmin_i   = relu(_ALPHA_T_MIN * _T_min_s - T)          # three-engine min
@@ -433,10 +458,10 @@ constraints.append((attitude         == Q_FINAL).convex().at([N - 1]))
 constraints.append((angular_velocity == W_FINAL).convex().at([N - 1]))
 
 # ── Always-on CTCS (entire trajectory) ────────────────────────────────────────
-constraints.append(ox.ctcs(tilt_sq - _tilt_sq_max <= 0))                 # tilt ≤ 90°
-constraints.append(ox.ctcs(omega_sq - W_B_MAX_RAD_S**2 <= 0, penalty="huber"))            # angular rate
-constraints.append(ox.ctcs(r_xy_norm * _tan_gs_max - pos_rel_z <= 0, penalty="huber"))    # glideslope 55°
-constraints.append(ox.ctcs(_m_dry_s - mass[0] <= 0, penalty="huber"))                     # dry-mass floor
+constraints.append(ox.ctcs(tilt_sq - _tilt_sq_max <= 0, idx=1))          # tilt ≤ 90°
+constraints.append(ox.ctcs(omega_sq - W_B_MAX_RAD_S**2 <= 0, penalty="huber", idx=0))            # angular rate
+constraints.append(ox.ctcs(r_xy_norm * _tan_gs_max - pos_rel_z <= 0, penalty="huber", idx=0))    # glideslope 55°
+constraints.append(ox.ctcs(_m_dry_s - mass[0] <= 0, penalty="huber", idx=0))                     # dry-mass floor
 
 # ── Compound state-triggered constraints (notebook cell 39) ───────────────────
 # h < 100 m → tight gimbal deflection (|δ_e| ≤ 1°)
@@ -447,9 +472,9 @@ constraints.append(stc(T_alt100, T_altgt2, C_gs_stc, weight=W_GS))
 # h < 100 m → tight tilt
 constraints.append(stc(T_alt100, C_tilt, weight=W_TILT))
 # h < 110 m → tight angular rate and tight speed
-constraints.append(stc(T_alt110, C_omega, weight=W_OMEGA))
-constraints.append(stc(T_alt110, C_spd,   weight=W_SPD))
-# h < 220 m AND h > 2 m → LOS boresight cone toward R_I_APEX (below touchdown)
+constraints.append(stc(T_alt100, C_omega, weight=W_OMEGA))
+constraints.append(stc(T_alt100, C_spd,   weight=W_SPD))
+# h < 220 m AND h > 2 m → LOS boresight cone toward R_I_LOS (below touchdown)
 constraints.append(stc(T_alt220, T_altgt2, C_los, weight=W_LOS))
 
 # ||v|| < 35 m/s AND tilt < 60° → single-engine thrust limits
@@ -468,8 +493,8 @@ time = ox.Time(
     initial=0.0,
     final=ox.Free(_t_f_guess),
     min=0.0,
-    max=_t_f_guess * 1.5,
-    uniform_time_grid=True
+    max=1.5 * _t_f_guess,
+    # uniform_time_grid=True,
 )
 
 # ── Problem Assembly ──────────────────────────────────────────────────────────
@@ -483,20 +508,25 @@ problem = Problem(
     float_dtype="float64",
     licq_max = 1e-6,
     algorithm={
-        # A high *constant* constraint-violation weight (lam_vc) plays the role
-        # of the notebook's w_con_dyn, driving the integrated STC penalty to
-        # zero.  PTR (the default acceptance-ratio loop) keeps the SCP stable;
-        # the adaptive AugmentedLagrangian was found to overshoot and diverge.
-        "lam_vc": 4E0,
-        "lam_cost": 1e-2,
+        # "lam_vc": 4e0,
+        "lam_prox": 4e-1,
+        "lam_vc": 4e0,
+        "lam_cost": 1e-4,
+
         "k_max": 800,
         "autotuner": ox.ConstantProximalWeight(),
-        # "autotuner": ox.AugmentedLagrangian(ep=1E-1, eta_lambda=1e3),
+        # "autotuner": ox.AdaptiveProximalWeight(),
     },
     discretizer={
         "diffrax_kwargs": {"atol": 1e-6, "rtol": 1e-6},
+        # "ode_solver": "Dopri8",
     },
+    # solver={
+    #     "solver_args": {"abs_tol": 1e-10, "rel_tol": 1e-10},
+    # }
 )
+
+problem.settings.prp.dt = 0.001
 
 # Prop tolerances
 problem.settings.prp.atol = 1e-12
@@ -509,10 +539,41 @@ SCENE_SCALE = 10.0          # 1 viser unit = 10 m
 PLUME_SCALE = 8.0
 ATTITUDE_AXES_LENGTH = 2.0
 VIEWCONE_SCALE = 4.0
+CAMERA_FOV_DEG = 76.0       # vertical field of view (adjust in Viser GUI)
+SENSOR_FPV_ROLL_DEG = 0.0   # fixed roll about boresight in sensor FPV window
+SENSOR_FPV_OFFSET_M = (0.0, 0.0, 0.0)  # world-frame camera position offset (m)
 _VISER_UP_AXIS = (0.0, 0.0, 1.0)
 GS_HALFANGLE_DEG = 90.0 - GS_MAX_DEG
 GS_STC_HALFANGLE_DEG = 90.0 - GS_STC_DEG
 _POSITION_STATE_SLICE = slice(1, 4)
+
+# ── DEM visualization (viser only; does not affect optimization) ──────────────
+TERRAIN_HALF_EXTENT_M: float = 400.0   # m — base patch half-width (× Scale X/Y)
+DEM_BASE_RELIEF_M: float = 150.0       # m — base relief peak-to-peak at Scale Z = 1
+DEM_POS_X_M: float = -78.0              # m — patch center (adjust in Viser GUI)
+DEM_POS_Y_M: float = -72.0
+DEM_POS_Z_M: float = -244.0            # m — elevation at DEM center pixel
+DEM_SCALE_X: float = 0.5
+DEM_SCALE_Y: float = 0.5
+DEM_SCALE_Z: float = 0.65
+DEM_YAW_DEG: float = 180.0            # ° — rotation about +z through patch center
+DEM_MIRROR_X: bool = True            # flip patch across local y-axis
+DEM_MIRROR_Y: bool = False           # flip patch across local x-axis
+DEM_GRID: int = 2048                   # downsampled DEM resolution
+_DEM_PATH = os.path.join(os.path.dirname(__file__), "senns_dem.png")
+
+
+def _load_dem_normalized() -> np.ndarray:
+    img = Image.open(_DEM_PATH)
+    raw = np.array(img, dtype=np.uint16)
+    lo, hi = float(raw.min()), float(raw.max())
+    arr = np.array(img.resize((DEM_GRID, DEM_GRID), Image.BILINEAR), dtype=np.float32)
+    return (arr - lo) / max(hi - lo, 1.0)
+
+
+_dem_norm: np.ndarray = _load_dem_normalized()
+_dem_center_i = _dem_center_j = (DEM_GRID - 1) // 2
+_dem_center_norm: float = float(_dem_norm[_dem_center_i, _dem_center_j])
 
 
 def cstc_model_to_viser_xyz(v: np.ndarray) -> np.ndarray:
@@ -557,8 +618,13 @@ def add_cstc_altitude_triggers(
     *,
     scene_scale_m: float = SCENE_SCALE,
 ) -> None:
-    """Draw horizontal surfaces where altitude-based cSTC phases activate."""
-    xy_extent = float(np.max(np.linalg.norm(pos[:, :2], axis=1)))
+    """Draw horizontal surfaces where altitude-based cSTC phases activate.
+
+    Triggers are height above the touchdown point (see ``z_alt``), so the discs
+    are drawn at ``R_I_FINAL[z] + alt_m`` and centered on the landing site.
+    """
+    cx, cy = R_I_FINAL[0] / scene_scale_m, R_I_FINAL[1] / scene_scale_m
+    xy_extent = float(np.max(np.linalg.norm(pos[:, :2] - np.array([cx, cy]), axis=1)))
     radius = max(xy_extent * 1.25, 2.0)
 
     triggers = [
@@ -566,8 +632,8 @@ def add_cstc_altitude_triggers(
         (ALT_TRIGGER_H1_M, (255, 80, 80),  "h < 100 m → tight gimbal/tilt/ω/speed/GS"),
     ]
     for alt_m, color, description in triggers:
-        z = alt_m / scene_scale_m
-        center = np.array([0.0, 0.0, z], dtype=np.float32)
+        z = (R_I_FINAL[2] + alt_m) / scene_scale_m
+        center = np.array([cx, cy, z], dtype=np.float32)
         verts, faces = _horizontal_disc_mesh(center, radius)
         server.scene.add_mesh_simple(
             f"/cstc_triggers/alt_{int(alt_m)}",
@@ -592,15 +658,434 @@ def add_cstc_altitude_triggers(
         server.scene.add_label(
             f"/cstc_triggers/alt_{int(alt_m)}_label",
             text=description,
-            position=(radius * 0.85, 0.0, z + 0.05),
+            position=(cx + radius * 0.85, cy, z + 0.05),
         )
 
         server.scene.add_line_segments(
             f"/cstc_triggers/alt_{int(alt_m)}_stem",
-            points=np.array([[[-radius * 0.95, 0.0, 0.0], [-radius * 0.95, 0.0, z]]], dtype=np.float32),
+            points=np.array(
+                [[[cx - radius * 0.95, cy, R_I_FINAL[2] / scene_scale_m], [cx - radius * 0.95, cy, z]]],
+                dtype=np.float32,
+            ),
             colors=tuple(int(c * 0.7) for c in color),
             line_width=1.5,
         )
+
+
+# ── DEM terrain mesh (viser display units: real meters / SCENE_SCALE) ────────
+GREY_BASE = np.array([148, 150, 152], dtype=np.float32) / 255.0
+_K_AMBIENT: float = 0.00
+_K_PRIMARY: float = 2.25
+_LIGHT_AZ_DEG: float = 128.0
+_LIGHT_EL_DEG: float = 10.5
+
+
+def _make_terrain_faces() -> np.ndarray:
+    N = DEM_GRID
+    r, c = np.arange(N - 1, dtype=np.int32), np.arange(N - 1, dtype=np.int32)
+    i = (r[:, None] * N + c[None, :]).ravel()
+    return np.concatenate(
+        [np.stack([i, i + 1, i + N], axis=-1),
+         np.stack([i + 1, i + N + 1, i + N], axis=-1)],
+        axis=0,
+    ).astype(np.int32)
+
+
+_terrain_faces = _make_terrain_faces()
+
+
+def _make_terrain_vertices(
+    origin_m: tuple[float, float, float],
+    scale_xyz: tuple[float, float, float],
+    yaw_deg: float = 0.0,
+    mirror_xy: tuple[bool, bool] = (False, False),
+) -> np.ndarray:
+    """Terrain vertices in viser display units.
+
+    ``origin_m`` is the patch center (x, y) and the elevation at the DEM center
+    pixel (z), in meters.  ``scale_xyz`` stretches the patch in each axis.
+    ``yaw_deg`` rotates the patch about +z through the patch center.
+    ``mirror_xy`` flips the local sampling direction in x and/or y (applied
+    before the yaw rotation).
+    """
+    ox, oy, oz = origin_m
+    sx, sy, sz = scale_xyz
+    mx = -1.0 if mirror_xy[0] else 1.0
+    my = -1.0 if mirror_xy[1] else 1.0
+    N = DEM_GRID
+    half_x_m = TERRAIN_HALF_EXTENT_M * float(sx)
+    half_y_m = TERRAIN_HALF_EXTENT_M * float(sy)
+    x_loc = mx * np.linspace(-half_x_m, half_x_m, N, dtype=np.float32)
+    y_loc = my * np.linspace(-half_y_m, half_y_m, N, dtype=np.float32)
+    XX_loc, YY_loc = np.meshgrid(x_loc, y_loc, indexing="xy")
+
+    psi = np.radians(float(yaw_deg))
+    cos_p, sin_p = np.cos(psi), np.sin(psi)
+    XX_m = cos_p * XX_loc - sin_p * YY_loc + float(ox)
+    YY_m = sin_p * XX_loc + cos_p * YY_loc + float(oy)
+
+    relief_m = (_dem_norm - _dem_center_norm) * DEM_BASE_RELIEF_M * float(sz)
+    ZZ_m = float(oz) + relief_m
+
+    XX = (XX_m / SCENE_SCALE).astype(np.float32)
+    YY = (YY_m / SCENE_SCALE).astype(np.float32)
+    ZZ = (ZZ_m / SCENE_SCALE).astype(np.float32)
+    return np.stack([XX.ravel(), YY.ravel(), ZZ.ravel()], axis=-1)
+
+
+def _compute_vertex_normals(
+    scale_xyz: tuple[float, float, float],
+    yaw_deg: float = 0.0,
+    mirror_xy: tuple[bool, bool] = (False, False),
+) -> np.ndarray:
+    sx, sy, sz = scale_xyz
+    mx = -1.0 if mirror_xy[0] else 1.0
+    my = -1.0 if mirror_xy[1] else 1.0
+    N = DEM_GRID
+    half_x_m = TERRAIN_HALF_EXTENT_M * float(sx)
+    half_y_m = TERRAIN_HALF_EXTENT_M * float(sy)
+    cell_x = 2.0 * half_x_m / (N - 1)
+    cell_y = 2.0 * half_y_m / (N - 1)
+    ZZ = (_dem_norm - _dem_center_norm) * DEM_BASE_RELIEF_M * float(sz)
+    dz_dxi = np.gradient(ZZ, cell_x, axis=1).astype(np.float32)
+    dz_dyj = np.gradient(ZZ, cell_y, axis=0).astype(np.float32)
+    nx = -mx * dz_dxi.ravel()
+    ny = -my * dz_dyj.ravel()
+    nz = np.ones(N * N, dtype=np.float32)
+
+    psi = np.radians(float(yaw_deg))
+    cos_p, sin_p = np.cos(psi), np.sin(psi)
+    nx_w = cos_p * nx - sin_p * ny
+    ny_w = sin_p * nx + cos_p * ny
+    normals = np.stack([nx_w, ny_w, nz], axis=-1)
+    return normals / np.maximum(np.linalg.norm(normals, axis=-1, keepdims=True), 1e-8)
+
+
+def _bake_colors(normals: np.ndarray, k_amb: float, k_pri: float,
+                 az_deg: float, el_deg: float, enabled: bool) -> np.ndarray:
+    if enabled:
+        az, el = np.radians(az_deg), np.radians(el_deg)
+        L = np.array([np.cos(az)*np.cos(el), np.sin(az)*np.cos(el), np.sin(el)], dtype=np.float32)
+        d = np.maximum(0.0, normals @ L)
+    else:
+        d = 0.0
+    intensity = np.clip(k_amb + k_pri * d, 0.0, 1.0)
+    rgb = (GREY_BASE[None, :] * intensity[:, None]).clip(0.0, 1.0)
+    return (np.hstack([rgb, np.ones((len(rgb), 1), dtype=np.float32)]) * 255).astype(np.uint8)
+
+
+def _build_trimesh(
+    origin_m: tuple[float, float, float],
+    scale_xyz: tuple[float, float, float],
+    yaw_deg: float,
+    mirror_xy: tuple[bool, bool],
+    normals: np.ndarray,
+    k_amb: float,
+    k_pri: float,
+    az: float,
+    el: float,
+    on: bool,
+) -> trimesh.Trimesh:
+    # A single mirror (odd number of flipped axes) reverses triangle winding,
+    # which flips the geometric surface orientation and makes the renderer light
+    # the terrain from below.  Reverse winding to keep faces pointing up.
+    faces = _terrain_faces[:, ::-1] if (mirror_xy[0] ^ mirror_xy[1]) else _terrain_faces
+    return trimesh.Trimesh(
+        vertices=_make_terrain_vertices(origin_m, scale_xyz, yaw_deg, mirror_xy),
+        faces=faces,
+        vertex_colors=_bake_colors(normals, k_amb, k_pri, az, el, on),
+        process=False,
+    )
+
+
+def _add_dem_to_server(
+    server: viser.ViserServer,
+    *,
+    fov_slider: bool = True,
+    fov_folder_name: str = "Camera",
+    fov_initial_deg: float = CAMERA_FOV_DEG,
+    default_k_ambient: float = _K_AMBIENT,
+) -> viser.GuiInputHandle | None:
+    """Overlay DEM terrain and lighting/elevation GUI onto an existing server.
+
+    Returns the FOV slider handle when ``fov_slider`` is True, else None.
+    """
+    server.scene.configure_default_lights(enabled=False)
+    server.scene.add_light_ambient("/lights/ambient", color=(255, 255, 255), intensity=1.0)
+
+    _st: dict = {
+        "origin": (DEM_POS_X_M, DEM_POS_Y_M, DEM_POS_Z_M),
+        "scale": (DEM_SCALE_X, DEM_SCALE_Y, DEM_SCALE_Z),
+        "yaw_deg": DEM_YAW_DEG,
+        "mirror": (DEM_MIRROR_X, DEM_MIRROR_Y),
+        "k_amb": default_k_ambient,
+        "k_pri": _K_PRIMARY,
+        "az": _LIGHT_AZ_DEG,
+        "el": _LIGHT_EL_DEG,
+        "on": True,
+        "normals": _compute_vertex_normals(
+            (DEM_SCALE_X, DEM_SCALE_Y, DEM_SCALE_Z), DEM_YAW_DEG,
+            (DEM_MIRROR_X, DEM_MIRROR_Y),
+        ),
+        "_lock": threading.Lock(),
+    }
+
+    def _refresh() -> None:
+        with _st["_lock"]:
+            mesh = _build_trimesh(
+                _st["origin"], _st["scale"], _st["yaw_deg"], _st["mirror"], _st["normals"],
+                _st["k_amb"], _st["k_pri"], _st["az"], _st["el"], _st["on"],
+            )
+        server.scene.add_mesh_trimesh("/terrain", mesh)
+
+    _refresh()
+
+    with server.gui.add_folder("DEM Terrain"):
+        pos_x_sl = server.gui.add_slider(
+            "Position X (m)", min=-1000.0, max=1000.0, step=1.0, initial_value=DEM_POS_X_M
+        )
+        pos_y_sl = server.gui.add_slider(
+            "Position Y (m)", min=-1000.0, max=1000.0, step=1.0, initial_value=DEM_POS_Y_M
+        )
+        pos_z_sl = server.gui.add_slider(
+            "Position Z (m)", min=-1000.0, max=1000.0, step=1.0, initial_value=DEM_POS_Z_M
+        )
+        scale_x_sl = server.gui.add_slider(
+            "Scale X", min=0.1, max=10.0, step=0.05, initial_value=DEM_SCALE_X
+        )
+        scale_y_sl = server.gui.add_slider(
+            "Scale Y", min=0.1, max=10.0, step=0.05, initial_value=DEM_SCALE_Y
+        )
+        scale_z_sl = server.gui.add_slider(
+            "Scale Z", min=0.0, max=10.0, step=0.05, initial_value=DEM_SCALE_Z
+        )
+        yaw_sl = server.gui.add_slider(
+            "Yaw Z (°)", min=0.0, max=360.0, step=1.0, initial_value=DEM_YAW_DEG
+        )
+        mirror_x_cb = server.gui.add_checkbox("Mirror X", initial_value=DEM_MIRROR_X)
+        mirror_y_cb = server.gui.add_checkbox("Mirror Y", initial_value=DEM_MIRROR_Y)
+
+        def _sync_terrain(_e=None) -> None:
+            _st["origin"] = (float(pos_x_sl.value), float(pos_y_sl.value), float(pos_z_sl.value))
+            _st["scale"] = (float(scale_x_sl.value), float(scale_y_sl.value), float(scale_z_sl.value))
+            _st["yaw_deg"] = float(yaw_sl.value)
+            _st["mirror"] = (bool(mirror_x_cb.value), bool(mirror_y_cb.value))
+            _st["normals"] = _compute_vertex_normals(_st["scale"], _st["yaw_deg"], _st["mirror"])
+            _refresh()
+
+        for _ctrl in (
+            pos_x_sl, pos_y_sl, pos_z_sl, scale_x_sl, scale_y_sl, scale_z_sl,
+            yaw_sl, mirror_x_cb, mirror_y_cb,
+        ):
+            _ctrl.on_update(_sync_terrain)
+
+    with server.gui.add_folder("DEM Lighting"):
+        server.gui.add_markdown("_Baked into DEM vertex colours; other scene objects unaffected._")
+        p_on  = server.gui.add_checkbox("Enabled", initial_value=True)
+        p_az  = server.gui.add_slider("Azimuth (°)",   min=0.0,  max=360.0, step=1.0,   initial_value=_LIGHT_AZ_DEG)
+        p_el  = server.gui.add_slider("Elevation (°)", min=0.5,  max=89.0,  step=0.5,   initial_value=_LIGHT_EL_DEG)
+        p_str = server.gui.add_slider("Strength",      min=0.0,  max=5.0,   step=0.05,  initial_value=_K_PRIMARY)
+        amb_sl = server.gui.add_slider("Ambient",      min=0.0,  max=0.5,   step=0.005, initial_value=default_k_ambient)
+
+        def _sync_light(_e=None) -> None:
+            _st.update(
+                on=bool(p_on.value), az=float(p_az.value), el=float(p_el.value),
+                k_pri=float(p_str.value), k_amb=float(amb_sl.value),
+            )
+            _refresh()
+
+        for _ctrl in (p_on, p_az, p_el, p_str, amb_sl):
+            _ctrl.on_update(_sync_light)
+
+    fov_sl: viser.GuiInputHandle | None = None
+    if fov_slider:
+        with server.gui.add_folder(fov_folder_name):
+            fov_sl = server.gui.add_slider(
+                "FOV (°)", min=5.0, max=120.0, step=1.0, initial_value=fov_initial_deg
+            )
+
+            def _apply_fov(client: viser.ClientHandle) -> None:
+                client.camera.fov = float(np.radians(fov_sl.value))
+
+            @fov_sl.on_update
+            def _(_e=None) -> None:
+                for client in server.get_clients().values():
+                    _apply_fov(client)
+
+            @server.on_client_connect
+            def _(client: viser.ClientHandle) -> None:
+                _apply_fov(client)
+
+    with server.gui.add_folder("Info"):
+        server.gui.add_markdown(
+            f"**Landing target**  \n"
+            f"X = {R_I_FINAL[0]:.2f} m   Y = {R_I_FINAL[1]:.2f} m  \n"
+            f"Altitude (Z) = **{R_I_FINAL[2]:.2f} m**  \n\n"
+            f"**DEM patch center** — use Position sliders above  \n"
+            f"DEM: {DEM_GRID}×{DEM_GRID} · {_terrain_faces.shape[0]:,} tris"
+        )
+
+    return fov_sl
+
+
+def _los_sensor_fpv_pose(
+    position: np.ndarray,
+    attitude_wxyz: np.ndarray,
+    R_sb: np.ndarray,
+    *,
+    roll_deg: float = 0.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """FPV pose matching the flipped LOS viewcone (forward = sensor -Z).
+
+    Roll is locked to the sensor frame (no twist from a world-up look-at). An
+    optional ``roll_deg`` rotates the image plane about the boresight.
+    """
+    w, x, y, z = attitude_wxyz
+    R_bw = np.array(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+        ],
+        dtype=np.float64,
+    )
+    R_sensor_to_world = R_bw @ R_sb.T
+    forward = -R_sensor_to_world[:, 2]
+    forward /= np.linalg.norm(forward) + 1e-12
+
+    # OpenCV camera (+X right, +Y down, +Z forward), aligned with sensor axes.
+    right = -R_sensor_to_world[:, 0]
+    right -= forward * np.dot(right, forward)
+    right /= np.linalg.norm(right) + 1e-12
+    down = np.cross(forward, right)
+    down /= np.linalg.norm(down) + 1e-12
+
+    phi = np.radians(float(roll_deg))
+    cos_p, sin_p = np.cos(phi), np.sin(phi)
+    right_r = cos_p * right + sin_p * down
+    down_r = -sin_p * right + cos_p * down
+
+    R_world_cam = np.stack([right_r, down_r, forward], axis=1)
+    wxyz = vtf.SO3.from_matrix(R_world_cam).wxyz
+    cam_pos = np.asarray(position, dtype=np.float64)
+    return cam_pos, wxyz
+
+
+def create_cstc_sensor_fpv_server(
+    result,
+    traj_time: np.ndarray,
+) -> viser.ViserServer:
+    """Second viser window: onboard LOS sensor first-person view with matched DEM."""
+    traj = result.trajectory
+    pos = np.asarray(traj["position"], dtype=np.float64)
+    attitude = np.asarray(traj["attitude"], dtype=np.float64)
+    los_elev = np.asarray(traj["los_elev"], dtype=np.float64).flatten()
+    los_az = np.asarray(traj["los_az"], dtype=np.float64).flatten()
+    R_sb_series = [_los_body_to_sensor(de, pe) for de, pe in zip(los_elev, los_az)]
+
+    server = create_server(pos, dark_mode=True, show_grid=False)
+    fov_sl = _add_dem_to_server(
+        server,
+        fov_folder_name="Sensor",
+        fov_initial_deg=CAMERA_FOV_DEG,
+        default_k_ambient=0.45,
+    )
+
+    los_target_vis = tuple((R_I_LOS / SCENE_SCALE).tolist())
+    touchdown_vis = tuple((R_I_FINAL / SCENE_SCALE).tolist())
+    server.scene.add_icosphere(
+        "/los_target",
+        radius=0.08,
+        color=(255, 220, 80),
+        position=los_target_vis,
+    )
+    server.scene.add_icosphere(
+        "/landing_pad",
+        radius=0.12,
+        color=(50, 255, 80),
+        position=touchdown_vis,
+    )
+
+    frame_state = {
+        "idx": 0,
+        "roll_deg": float(SENSOR_FPV_ROLL_DEG),
+        "offset_m": tuple(float(x) for x in SENSOR_FPV_OFFSET_M),
+    }
+
+    def _apply_sensor_camera(client: viser.ClientHandle, frame_idx: int) -> None:
+        cam_pos, cam_wxyz = _los_sensor_fpv_pose(
+            pos[frame_idx],
+            attitude[frame_idx],
+            R_sb_series[frame_idx],
+            roll_deg=frame_state["roll_deg"],
+        )
+        offset_vis = np.asarray(frame_state["offset_m"], dtype=np.float64) / SCENE_SCALE
+        cam_pos_vis = cam_pos + offset_vis
+        client.camera.position = tuple(float(x) for x in cam_pos_vis)
+        client.camera.wxyz = tuple(float(x) for x in cam_wxyz)
+        if fov_sl is not None:
+            client.camera.fov = float(np.radians(fov_sl.value))
+
+    with server.gui.add_folder("Sensor FPV"):
+        cam_x_sl = server.gui.add_slider(
+            "Position X (m)",
+            min=-500.0,
+            max=500.0,
+            step=1.0,
+            initial_value=SENSOR_FPV_OFFSET_M[0],
+        )
+        cam_y_sl = server.gui.add_slider(
+            "Position Y (m)",
+            min=-500.0,
+            max=500.0,
+            step=1.0,
+            initial_value=SENSOR_FPV_OFFSET_M[1],
+        )
+        cam_z_sl = server.gui.add_slider(
+            "Position Z (m)",
+            min=-500.0,
+            max=500.0,
+            step=1.0,
+            initial_value=SENSOR_FPV_OFFSET_M[2],
+        )
+        roll_sl = server.gui.add_slider(
+            "Roll about boresight (°)",
+            min=-180.0,
+            max=180.0,
+            step=1.0,
+            initial_value=SENSOR_FPV_ROLL_DEG,
+        )
+        server.gui.add_markdown(
+            "_Camera forward matches the blue LOS viewcone (sensor -Z). "
+            "Position sliders offset the viewpoint in world ENU (m); roll rotates "
+            "the image about the boresight. **Sensor → FOV** sets field of view._"
+        )
+
+        def _sync_sensor_camera(_e=None) -> None:
+            frame_state["roll_deg"] = float(roll_sl.value)
+            frame_state["offset_m"] = (
+                float(cam_x_sl.value),
+                float(cam_y_sl.value),
+                float(cam_z_sl.value),
+            )
+            for client in server.get_clients().values():
+                _apply_sensor_camera(client, frame_state["idx"])
+
+        for _ctrl in (cam_x_sl, cam_y_sl, cam_z_sl, roll_sl):
+            _ctrl.on_update(_sync_sensor_camera)
+
+    def update_sensor_camera(frame_idx: int) -> None:
+        frame_state["idx"] = int(frame_idx)
+        for client in server.get_clients().values():
+            _apply_sensor_camera(client, frame_state["idx"])
+
+    @server.on_client_connect
+    def _(client: viser.ClientHandle) -> None:
+        _apply_sensor_camera(client, frame_state["idx"])
+
+    add_animation_controls(server, traj_time, [update_sensor_camera], loop=True)
+
+    return server
 
 
 def _xyzw_to_wxyz(q: np.ndarray) -> np.ndarray:
@@ -721,18 +1206,18 @@ def _node_trigger_indices(nodes) -> tuple[int | None, int | None, int | None]:
     pos_m = np.asarray(nodes["position"]) * R_SCALE
     vel_ms = np.asarray(nodes["velocity"]) * R_SCALE
     q = np.asarray(nodes["attitude"])
-    alt = pos_m[:, 2]
+    h_pad = _height_above_landing_pad(pos_m)
     spd = np.linalg.norm(vel_ms, axis=1)
     tilt_deg = np.degrees(np.arccos(np.clip(1 - 2 * (q[:, 0] ** 2 + q[:, 1] ** 2), -1.0, 1.0)))
 
-    k_h1 = _first_node_index(alt < ALT_TRIGGER_H1_M)
-    k_h2 = _first_node_index(alt < ALT_TRIGGER_H2_M)
+    k_h1 = _first_node_index(h_pad < ALT_TRIGGER_H1_M)
+    k_h2 = _first_node_index(h_pad < ALT_TRIGGER_H2_M)
     k_aft = _first_node_index((spd < SPD_STC_TRIG) & (tilt_deg < THETA_STC_TRIG))
     return k_h1, k_h2, k_aft
 
 
 def launch_viser_servers(result) -> None:
-    """Create trajectory, SCP convergence, and snapshot viser servers."""
+    """Create trajectory, sensor FPV, SCP convergence, and snapshot viser servers."""
     pos = np.asarray(result.trajectory["position"])
     initial_alt_vis = float(np.max(pos[:, 2])) * 1.15
 
@@ -751,7 +1236,7 @@ def launch_viser_servers(result) -> None:
         attitude_axes_length=ATTITUDE_AXES_LENGTH,
         show_viewcone=False,
         trail_point_size=0.08,
-        show_grid=True,
+        show_grid=False,   # DEM terrain replaces the flat ground grid
         dark_mode=True,
         scene_scale=1.0,
         controls="manual",
@@ -762,11 +1247,15 @@ def launch_viser_servers(result) -> None:
     add_animation_controls(handle.server, handle.traj_time, callbacks, loop=True)
     traj_server = handle.server
 
-    apex_vis = tuple((R_I_APEX / SCENE_SCALE).tolist())
+    _srv: viser.ViserServer = getattr(traj_server, "server", traj_server)  # type: ignore[assignment]
+    _add_dem_to_server(_srv)
+
+    gs_apex_vis = tuple((R_I_GS_APEX / SCENE_SCALE).tolist())
+    los_target_vis = tuple((R_I_LOS / SCENE_SCALE).tolist())
     touchdown_vis = tuple((R_I_FINAL / SCENE_SCALE).tolist())
     add_glideslope_cone(
         traj_server,
-        apex=apex_vis,
+        apex=gs_apex_vis,
         height=initial_alt_vis,
         glideslope_angle_deg=GS_HALFANGLE_DEG,
         axis=_VISER_UP_AXIS,
@@ -775,7 +1264,7 @@ def launch_viser_servers(result) -> None:
     )
     add_glideslope_cone(
         traj_server,
-        apex=apex_vis,
+        apex=gs_apex_vis,
         height=ALT_TRIGGER_H1_M / SCENE_SCALE,
         glideslope_angle_deg=GS_STC_HALFANGLE_DEG,
         axis=_VISER_UP_AXIS,
@@ -786,10 +1275,10 @@ def launch_viser_servers(result) -> None:
     add_cstc_altitude_triggers(traj_server, pos, scene_scale_m=SCENE_SCALE)
 
     traj_server.scene.add_icosphere(
-        "/cone_apex",
+        "/los_target",
         radius=0.08,
         color=(255, 220, 80),
-        position=apex_vis,
+        position=los_target_vis,
     )
     traj_server.scene.add_icosphere(
         "/landing_pad",
@@ -848,6 +1337,9 @@ def launch_viser_servers(result) -> None:
     )
     add_cstc_altitude_triggers(snap_server, pos, scene_scale_m=SCENE_SCALE)
 
+    sensor_server = create_cstc_sensor_fpv_server(result, handle.traj_time)
+    print("  Sensor FPV view — open the second viser URL printed above")
+
     traj_server.sleep_forever()
 
 
@@ -893,6 +1385,67 @@ def _save_plotly_figure(fig, basename: str) -> None:
         print(f"  Saved {basename}.{{png,pdf}}")
     except Exception as exc:
         print(f"  Skipped PNG/PDF for {basename} ({exc}); install kaleido for static export.")
+
+
+def _quat_xyzw_to_rpy(quat_xyzw: np.ndarray, *, degrees: bool = True) -> np.ndarray:
+    """Convert quaternion(s) in OpenSCvx order [qx, qy, qz, qw] to roll, pitch, yaw.
+
+    Uses extrinsic XYZ Euler angles (roll about x, pitch about y, yaw about z),
+    matching CT-cSTC/CT-cSTC.ipynb ``rotation_matrix`` / ``euler_to_quat``.
+    """
+    from scipy.spatial.transform import Rotation as R
+
+    quat_xyzw = np.asarray(quat_xyzw, dtype=np.float64)
+    if quat_xyzw.ndim == 1:
+        quat_xyzw = quat_xyzw.reshape(1, 4)
+    rpy = R.from_quat(quat_xyzw).as_euler("XYZ")
+    if degrees:
+        rpy = np.degrees(rpy)
+    return rpy
+
+
+def _round_sigfigs(x: np.ndarray, sig: int = 5) -> np.ndarray:
+    """Round array elements to a fixed number of significant figures."""
+    x = np.asarray(x, dtype=np.float64)
+    out = np.zeros_like(x)
+    nonzero = x != 0.0
+    if np.any(nonzero):
+        power = np.floor(np.log10(np.abs(x[nonzero])))
+        scale = 10.0 ** (sig - 1 - power)
+        out[nonzero] = np.round(x[nonzero] * scale) / scale
+    return out
+
+
+def export_trajectory_rpy_csv(
+    result,
+    path: str = "cstc_trajectory_rpy.csv",
+    *,
+    degrees: bool = True,
+) -> str:
+    """Write trajectory CSV with columns time, pos_x, pos_y, pos_z, roll, pitch, yaw.
+
+    Positions are the solver's scaled coordinates (not multiplied by ``R_SCALE``).
+    """
+    traj = result.trajectory
+    t = np.asarray(traj["time"], dtype=np.float64).reshape(-1)
+    pos = np.asarray(traj["position"], dtype=np.float64)
+    q = np.asarray(traj["attitude"], dtype=np.float64)
+    rpy = _quat_xyzw_to_rpy(q, degrees=degrees)
+
+    roll = rpy[:,0]
+    pitch = rpy[:,1]
+
+    senss_roll = pitch + 0.5
+    senss_pitch = -roll + 1.0
+
+    rpy[:,0] = senss_roll
+    rpy[:,1] = senss_pitch
+
+    data = _round_sigfigs(np.column_stack([t, pos, rpy]))
+    header = "time,pos_x,pos_y,pos_z,roll,pitch,yaw"
+    np.savetxt(path, data, delimiter=",", header=header, comments="")
+    print(f"  Saved {path}")
+    return path
 
 
 def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc_stc") -> tuple:
@@ -955,26 +1508,26 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc_stc
     omega_dps   = np.degrees(np.linalg.norm(w,   axis=1))
     omega_dps_n = np.degrees(np.linalg.norm(w_n, axis=1))
 
-    pos_rel   = pos   - R_I_APEX
-    pos_rel_n = pos_n - R_I_APEX
+    pos_rel   = pos   - R_I_GS_APEX
+    pos_rel_n = pos_n - R_I_GS_APEX
     r_xy   = np.linalg.norm(pos_rel[:,   :2], axis=1)
     r_xy_n = np.linalg.norm(pos_rel_n[:, :2], axis=1)
     gs_deg   = 90.0 - np.degrees(np.arctan2(pos_rel[:,   2], r_xy   + 1e-8))
     gs_deg_n = 90.0 - np.degrees(np.arctan2(pos_rel_n[:, 2], r_xy_n + 1e-8))
 
-    los_ang   = _compute_los_angle(pos,   q,   d_b,   phi_b,   apex=R_I_APEX)
-    los_ang_n = _compute_los_angle(pos_n, q_n, d_b_n, phi_b_n, apex=R_I_APEX)
+    los_ang   = _compute_los_angle(pos,   q,   d_b,   phi_b,   apex=R_I_LOS)
+    los_ang_n = _compute_los_angle(pos_n, q_n, d_b_n, phi_b_n, apex=R_I_LOS)
 
     # ── Trigger times from actual trajectory crossings ────────────────────────
-    alt_d = pos[:, 2]
+    h_pad = _height_above_landing_pad(pos)
 
     def _first_time(mask):
         if mask.any():
             return float(t_full[int(np.argmax(mask))])
         return float(t_full[-1])
 
-    t_h1  = _first_time(alt_d < ALT_TRIGGER_H1_M)
-    t_h2  = _first_time(alt_d < ALT_TRIGGER_H2_M)
+    t_h1  = _first_time(h_pad < ALT_TRIGGER_H1_M)
+    t_h2  = _first_time(h_pad < ALT_TRIGGER_H2_M)
     t_aft = _first_time((speed_d < SPD_STC_TRIG) & (tilt_deg < THETA_STC_TRIG))
     t_end = float(t_nodes[-1])
 
@@ -1156,8 +1709,9 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc_stc
                      marker={"color": "black", "size": 4}, name="Node")
     )
     fig_3d.add_trace(
-        go.Scatter3d(x=[0.0], y=[0.0], z=[0.0], mode="markers",
-                     marker={"color": "lime", "size": 10, "symbol": "diamond"}, name="Landing pad")
+        go.Scatter3d(
+            x=[R_I_FINAL[0]], y=[R_I_FINAL[1]], z=[R_I_FINAL[2]], mode="markers",
+            marker={"color": "lime", "size": 10, "symbol": "diamond"}, name="Landing pad")
     )
 
     all_xyz = np.vstack([pos, pos_n])
@@ -1191,6 +1745,11 @@ if __name__ == "__main__":
     result = problem.solve()
     result = problem.post_process()
 
+    from openscvx.plotting import plot_states, plot_controls
+
+    plot_states(result).show()
+    plot_controls(result).show()
+
     traj = result.trajectory
     pos = np.asarray(traj["position"]) * R_SCALE
     vel = np.asarray(traj["velocity"]) * R_SCALE
@@ -1204,6 +1763,7 @@ if __name__ == "__main__":
 
     print("\n── Generating plots ─────────────────────────────────────────────")
     plot_cstc_results(result, show=True)
+    export_trajectory_rpy_csv(result)
 
     prepare_for_viser(result)
     launch_viser_servers(result)
