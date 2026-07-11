@@ -59,8 +59,10 @@ Running the example solves all three power-unit variants in one batched
 solve (``solve_batched`` over the ``mgu_k`` and ``ice_share`` parameters) —
 the hybrid, an MGU-K failure lap (electric off), and an unrestricted ICE lap
 with the full envelope — then polishes with a few warm-start continuation
-rounds and races the cars on one Viser track. The failure lap shows what the
-electric system is worth to this car; the unrestricted lap shows what the
+rounds and races the cars on one Viser track, with live telemetry panels —
+speed, battery, MGU-K power, and g-g — running against lap distance so the
+three energy strategies compare corner by corner. The failure lap shows what
+the electric system is worth to this car; the unrestricted lap shows what the
 energy regulations cost, since with free fuel an equal-peak-power pure ICE
 strictly dominates the hybrid.
 
@@ -246,13 +248,18 @@ time = ox.Time(
 # Curvature κ(s) via PCHIP spline (smooth, monotone-preserving between knots)
 kappa = ox.Cinterp(s[0], s_interp, kappa_interp, method="pchip")
 
-# Power-unit switches. One batched solve over these parameters yields the
-# three cars raced in the Viser comparison:
-#   (ice_share=0.55, mgu_k=1)  hybrid
-#   (ice_share=0.55, mgu_k=0)  MGU-K failure — loses electric drive *and* the
-#                              electric share of its braking
-#   (ice_share=1.0,  mgu_k=0)  unrestricted ICE with the full envelope — what
-#                              the energy regulations cost in lap time
+# Power-unit switches, and the roster of cars raced over them. One batched
+# solve over ``mgu_k`` and ``ice_share`` yields all three cars; the roster is
+# the single source for the batch parameters, labels, and colors downstream:
+#   hybrid          the regulation car
+#   MGU-K failure   loses electric drive *and* the electric share of braking
+#   full-power ICE  unrestricted full envelope — what the regulations cost
+CARS = [
+    dict(name="hybrid", color=(150, 70, 200), mgu_k=1.0, ice_share=ICE_SHARE),
+    dict(name="MGU-K failure", color=(90, 140, 235), mgu_k=0.0, ice_share=ICE_SHARE),
+    dict(name="full-power ICE", color=(220, 35, 45), mgu_k=0.0, ice_share=1.0),
+]
+
 mgu_k = ox.Parameter("mgu_k", shape=(), value=1.0)
 ice_share = ox.Parameter("ice_share", shape=(), value=ICE_SHARE)
 
@@ -371,77 +378,62 @@ def batch_element(results, b: int):
     return car
 
 
-def plot_race_results(results) -> None:
-    """Track projection coloured by MGU-K power, plus energy and acceleration.
+def lap_signals(car, spec: dict) -> dict[str, np.ndarray]:
+    """Dense propagated lap signals for one car, trimmed to the flying lap.
 
-    All signals come from ``results.trajectory`` (dense single-shot propagation
-    from post_process), not from the sparse optimisation nodes.
+    Raw states and controls come from ``car.trajectory`` (single-shot
+    propagation from post_process), flattened to 1-D and trimmed to the lap:
+    the s < 0 warm-up is dropped so t = 0 is the start line, and so is any
+    non-finite tail. The derived entries — net MGU-K wheel power ``P_elec``
+    and the tyre accelerations ``a_lat`` / ``a_long`` — mirror the symbolic
+    force model under ``spec``'s power-unit switches, so they live on the
+    same friction ellipse the solver saw.
     """
+    traj = car.trajectory
+    s_full = traj["s"][:, 0]
+    stop = int(np.flatnonzero(np.isfinite(s_full))[-1]) + 1
+    lap = slice(int(np.searchsorted(s_full[:stop], 0.0)), stop)
+    sig = {
+        key: traj[key][lap, 0]
+        for key in ("s", "n", "alpha", "v", "D", "delta", "E", "R", "deploy", "regen")
+    }
+    sig["t"] = car.t_full[lap] - car.t_full[lap.start]
+
+    v, delta = sig["v"], sig["delta"]
+    F_env = Cm1 - Cm2 * v
+    F_elec = spec["mgu_k"] * ELEC_SHARE * F_env * (sig["deploy"] - sig["regen"])
+    Fxd = spec["ice_share"] * F_env * sig["D"] + F_elec - Cr2 * v**2 - Cr0 * np.tanh(5.0 * v)
+    sig["P_elec"] = F_elec * v  # net MGU-K wheel power (deploy > 0, harvest < 0)
+    sig["a_lat"] = C2 * v**2 * delta + Fxd * np.sin(C1 * delta) / m
+    sig["a_long"] = Fxd / m
+    return sig
+
+
+def plot_race_results(car, spec: dict) -> None:
+    """Track projection coloured by MGU-K power, plus energy and g-g figures."""
     import plotly.graph_objects as go
+    from race_car_plots import friction_ellipse, track_figure
     from time2spatial import transformProj2Orig
 
-    traj = results.trajectory
-    t = results.t_full  # (n_times,)  dense time vector
-
-    s_sol = traj["s"][:, 0]
-    n_sol = traj["n"][:, 0]
-    alpha_sol = traj["alpha"][:, 0]
-    v_sol = traj["v"][:, 0]
-    D_sol = traj["D"][:, 0]
-    delta_sol = traj["delta"][:, 0]
-    E_sol = traj["E"][:, 0]
-    R_sol = traj["R"][:, 0]
-    deploy_sol = traj["deploy"][:, 0]
-    regen_sol = traj["regen"][:, 0]
-
-    # Trim warm-up region (s < 0) to match the acados plotting convention.
-    lap_start = np.searchsorted(s_sol, 0.0)
-    sl = slice(lap_start, None)
-    s_sol, n_sol, alpha_sol, v_sol = s_sol[sl], n_sol[sl], alpha_sol[sl], v_sol[sl]
-    D_sol, delta_sol, E_sol, R_sol = D_sol[sl], delta_sol[sl], E_sol[sl], R_sol[sl]
-    deploy_sol, regen_sol, t = deploy_sol[sl], regen_sol[sl], t[sl]
-
-    # Net MGU-K wheel power (deploy > 0, harvest < 0)
-    F_env_sol = Cm1 - Cm2 * v_sol
-    P_elec_sol = ELEC_SHARE * F_env_sol * (deploy_sol - regen_sol) * v_sol
+    sig = lap_signals(car, spec)
+    t = sig["t"]
 
     # ── Plot 1: track projection coloured by MGU-K power ──────────────────────
-    cart_x, cart_y, _, _ = transformProj2Orig(s_sol, n_sol, alpha_sol, v_sol, TRACK_FILE)
-
-    sref_d, xref_d, yref_d, psiref_d, _ = getTrack(TRACK_FILE)
-    dist = 0.12
-    xbl = xref_d - dist * np.sin(psiref_d)
-    ybl = yref_d + dist * np.cos(psiref_d)
-    xbr = xref_d + dist * np.sin(psiref_d)
-    ybr = yref_d - dist * np.cos(psiref_d)
-
-    fig1 = go.Figure()
-    fig1.add_trace(
-        go.Scatter(
-            x=xref_d,
-            y=yref_d,
-            mode="lines",
-            line=dict(color="black", dash="dash", width=1),
-            name="centreline",
-        )
+    cart_x, cart_y, _, _ = transformProj2Orig(
+        sig["s"], sig["n"], sig["alpha"], sig["v"], TRACK_FILE
     )
-    for xb, yb in [(xbl, ybl), (xbr, ybr)]:
-        fig1.add_trace(
-            go.Scatter(
-                x=xb,
-                y=yb,
-                mode="lines",
-                line=dict(color="black", width=1.5),
-                showlegend=False,
-            )
-        )
+    fig1 = track_figure(
+        TRACK_FILE,
+        lane_width=n.max[0],
+        title=f"OpenSCvx — F1 2026 energy deployment  (T = {t[-1]:.2f} s)",
+    )
     fig1.add_trace(
         go.Scatter(
             x=cart_x,
             y=cart_y,
             mode="markers",
             marker=dict(
-                color=P_elec_sol,
+                color=sig["P_elec"],
                 colorscale="RdBu_r",
                 cmid=0.0,
                 size=4,
@@ -451,23 +443,12 @@ def plot_race_results(results) -> None:
             name="single-shot (post_process)",
         )
     )
-    for i in range(0, int(sref_d[-1]) + 1, 4):
-        k = int(np.argmin(np.abs(sref_d - i)))
-        fig1.add_annotation(
-            x=xref_d[k], y=yref_d[k], text=f"{i}m", showarrow=False, font=dict(size=10)
-        )
-    fig1.update_layout(
-        title=f"OpenSCvx — F1 2026 energy deployment  (T = {t[-1]:.2f} s)",
-        xaxis=dict(title="x [m]", scaleanchor="y"),
-        yaxis=dict(title="y [m]"),
-        height=600,
-    )
     fig1.show()
 
     # ── Plot 2: battery state of charge and lap recovery vs caps ──────────────
     fig2 = go.Figure()
-    fig2.add_trace(go.Scatter(x=t, y=E_sol, name="E (battery)", line=dict(color="blue")))
-    fig2.add_trace(go.Scatter(x=t, y=R_sol, name="R (recovered)", line=dict(color="green")))
+    fig2.add_trace(go.Scatter(x=t, y=sig["E"], name="E (battery)", line=dict(color="blue")))
+    fig2.add_trace(go.Scatter(x=t, y=sig["R"], name="R (recovered)", line=dict(color="green")))
     fig2.add_hline(
         y=E_BATT_MAX,
         line=dict(color="blue", dash="dash", width=1),
@@ -487,33 +468,15 @@ def plot_race_results(results) -> None:
     fig2.show()
 
     # ── Plot 3: g-g diagram against the friction ellipse ──────────────────────
-    Fxd_sol = (
-        ICE_SHARE * F_env_sol * D_sol
-        + ELEC_SHARE * F_env_sol * (deploy_sol - regen_sol)
-        - Cr2 * v_sol**2
-        - Cr0 * np.tanh(5.0 * v_sol)
-    )
-    a_lat_sol = C2 * v_sol**2 * delta_sol + Fxd_sol * np.sin(C1 * delta_sol) / m
-    a_long_sol = Fxd_sol / m
-
-    theta = np.linspace(0.0, 2.0 * np.pi, 200)
     fig3 = go.Figure()
+    fig3.add_trace(friction_ellipse(A_MAX))
     fig3.add_trace(
         go.Scatter(
-            x=A_MAX * np.cos(theta),
-            y=A_MAX * np.sin(theta),
-            mode="lines",
-            line=dict(color="black", dash="dash", width=1),
-            name="friction ellipse",
-        )
-    )
-    fig3.add_trace(
-        go.Scatter(
-            x=a_lat_sol,
-            y=a_long_sol,
+            x=sig["a_lat"],
+            y=sig["a_long"],
             mode="markers",
             marker=dict(
-                color=v_sol,
+                color=sig["v"],
                 colorscale="Rainbow",
                 size=4,
                 colorbar=dict(title="v [m/s]"),
@@ -531,16 +494,41 @@ def plot_race_results(results) -> None:
     fig3.show()
 
 
+def build_viser_panels(cars: list) -> list[dict]:
+    """Telemetry panels for the Viser race: all three cars against lap distance.
+
+    Distance as the x axis lines the corners up vertically across cars that
+    reach them at different times, so the braking, harvest, and deployment
+    phases of the three power units compare directly.
+    """
+    from race_car_plots import gg_panel, stripline_panel
+
+    colors = [spec["color"] for spec in CARS]
+    sigs = [lap_signals(car, spec) for car, spec in zip(cars, CARS)]
+    t = [sig["t"] for sig in sigs]
+    dist = [sig["s"] for sig in sigs]
+
+    def series(key: str) -> list[np.ndarray]:
+        return [sig[key] for sig in sigs]
+
+    x_lab = "lap distance [m]"
+    return [
+        stripline_panel(dist, series("v"), t, colors, title="speed", xaxis=x_lab, yaxis="v [m/s]"),
+        stripline_panel(dist, series("E"), t, colors, title="battery", xaxis=x_lab, yaxis="E [J]"),
+        stripline_panel(
+            dist, series("P_elec"), t, colors, title="MGU-K power", xaxis=x_lab, yaxis="P [W]"
+        ),
+        gg_panel(series("a_lat"), series("a_long"), t, colors, a_max=A_MAX),
+    ]
+
+
 if __name__ == "__main__":
     problem.initialize()
 
     # All three cars in one batched solve: element b of each parameter array
-    # is one car — hybrid, MGU-K failure, unrestricted ICE.
-    cars = {
-        "mgu_k": np.array([1.0, 0.0, 0.0]),
-        "ice_share": np.array([ICE_SHARE, ICE_SHARE, 1.0]),
-    }
-    results = problem.solve_batched(parameters=cars)
+    # is one car from the roster.
+    params = {key: np.array([spec[key] for spec in CARS]) for key in ("mgu_k", "ice_share")}
+    results = problem.solve_batched(parameters=params)
 
     # Warm-start continuation: SCP anchors each solve to its guess, so a single
     # solve stops well short of the optimum on this problem. Re-anchoring at
@@ -549,14 +537,15 @@ if __name__ == "__main__":
     # cars intact; returns diminish quickly beyond this.
     for _ in range(4):
         results = problem.solve_batched(
-            parameters=cars,
+            parameters=params,
             x_guess=np.asarray(results.x),
             u_guess=np.asarray(results.u),
         )
 
     results = problem.post_process_batched(results)
 
-    hybrid, ice, full_ice = (batch_element(results, b) for b in range(3))
+    cars = [batch_element(results, b) for b in range(len(CARS))]
+    hybrid, ice, full_ice = cars
 
     nodes = hybrid.nodes
     print("\n=== F1 2026 Energy Race Car Results ===")
@@ -580,7 +569,7 @@ if __name__ == "__main__":
 
     plot_states(hybrid).show()
     plot_controls(hybrid).show()
-    plot_race_results(hybrid)
+    plot_race_results(hybrid, CARS[0])
 
     from race_car_viser import (
         create_race_car_chase_viser_server,
@@ -588,12 +577,13 @@ if __name__ == "__main__":
     )
 
     comparison_server = create_race_car_comparison_viser_server(
-        [hybrid, ice, full_ice],
-        labels=["hybrid", "MGU-K failure", "full-power ICE"],
-        colors=[(150, 70, 200), (90, 140, 235), (220, 35, 45)],
+        cars,
+        labels=[spec["name"] for spec in CARS],
+        colors=[spec["color"] for spec in CARS],
         track_file=TRACK_FILE,
         lane_width=n.max[0],
         distance_marker_step=None,  # clean look — set "auto" to bring markers back
+        plot_panels=build_viser_panels(cars),
     )
     chase_server = create_race_car_chase_viser_server(
         hybrid,

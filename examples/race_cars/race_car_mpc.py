@@ -315,6 +315,7 @@ def plot_mpc_results(
     """
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
+    from race_car_plots import track_figure
     from time2spatial import transformProj2Orig
 
     # Convert closed-loop trajectory to Cartesian
@@ -322,35 +323,11 @@ def plot_mpc_results(
         simX[:, 0], simX[:, 1], simX[:, 2], simX[:, 3], "LMS_Track.txt"
     )
 
-    # Track geometry
-    sref_d, xref_d, yref_d, psiref_d, _ = getTrack("LMS_Track.txt")
-    dist = 0.12
-    xbl = xref_d - dist * np.sin(psiref_d)
-    ybl = yref_d + dist * np.cos(psiref_d)
-    xbr = xref_d + dist * np.sin(psiref_d)
-    ybr = yref_d - dist * np.cos(psiref_d)
-
     # ── Figure 1: track projection ────────────────────────────────────────────
-    fig1 = go.Figure()
-    fig1.add_trace(
-        go.Scatter(
-            x=xref_d,
-            y=yref_d,
-            mode="lines",
-            line=dict(color="black", dash="dash", width=1),
-            name="centreline",
-        )
+    fig1 = track_figure(
+        "LMS_Track.txt",
+        title=f"OpenSCvx MPC — track projection  ({len(simX)} steps, T={t_vec[-1]:.2f} s)",
     )
-    for xb, yb in [(xbl, ybl), (xbr, ybr)]:
-        fig1.add_trace(
-            go.Scatter(
-                x=xb,
-                y=yb,
-                mode="lines",
-                line=dict(color="black", width=1.5),
-                showlegend=False,
-            )
-        )
 
     # MPC horizon roll-outs (faint background)
     first = True
@@ -388,23 +365,6 @@ def plot_mpc_results(
         )
     )
 
-    # Arc-length markers
-    for i in range(int(sref_d[-1]) + 1):
-        k = int(np.argmin(np.abs(sref_d - i)))
-        fig1.add_annotation(
-            x=xref_d[k],
-            y=yref_d[k],
-            text=f"{i}m",
-            showarrow=False,
-            font=dict(size=10),
-        )
-
-    fig1.update_layout(
-        title=f"OpenSCvx MPC — track projection  ({len(simX)} steps, T={t_vec[-1]:.2f} s)",
-        xaxis=dict(title="x [m]", scaleanchor="y"),
-        yaxis=dict(title="y [m]"),
-        height=600,
-    )
     fig1.show()
 
     # ── Figure 2: states & controls vs time ───────────────────────────────────

@@ -248,6 +248,7 @@ def plot_race_results(results) -> None:
     from post_process), not from the sparse optimisation nodes.
     """
     import plotly.graph_objects as go
+    from race_car_plots import track_figure
     from time2spatial import transformProj2Orig
 
     traj = results.trajectory
@@ -273,45 +274,9 @@ def plot_race_results(results) -> None:
     # Convert path-parametric (s, n) → Cartesian (x, y) via track geometry
     cart_x, cart_y, _, _ = transformProj2Orig(s_sol, n_sol, alpha_sol, v_sol, "LMS_Track.txt")
 
-    # Track boundaries (±0.12 m from centreline)
-    sref_d, xref_d, yref_d, psiref_d, _ = getTrack("LMS_Track.txt")
-    dist = 0.12
-    xbl = xref_d - dist * np.sin(psiref_d)
-    ybl = yref_d + dist * np.cos(psiref_d)
-    xbr = xref_d + dist * np.sin(psiref_d)
-    ybr = yref_d - dist * np.cos(psiref_d)
-
-    fig2 = go.Figure()
-
-    # Centreline
-    fig2.add_trace(
-        go.Scatter(
-            x=xref_d,
-            y=yref_d,
-            mode="lines",
-            line=dict(color="black", dash="dash", width=1),
-            name="centreline",
-        )
-    )
-    # Left / right boundaries
-    fig2.add_trace(
-        go.Scatter(
-            x=xbl,
-            y=ybl,
-            mode="lines",
-            line=dict(color="black", width=1.5),
-            name="boundary",
-            showlegend=False,
-        )
-    )
-    fig2.add_trace(
-        go.Scatter(
-            x=xbr,
-            y=ybr,
-            mode="lines",
-            line=dict(color="black", width=1.5),
-            showlegend=False,
-        )
+    fig2 = track_figure(
+        "LMS_Track.txt",
+        title=f"OpenSCvx — track projection  (T = {t[-1]:.2f} s)",
     )
 
     # ── Multishot segments ────────────────────────────────────────────────────
@@ -359,19 +324,6 @@ def plot_race_results(results) -> None:
         )
     )
 
-    # Arc-length distance markers
-    for i in range(int(sref_d[-1]) + 1):
-        k = int(np.argmin(np.abs(sref_d - i)))
-        fig2.add_annotation(
-            x=xref_d[k], y=yref_d[k], text=f"{i}m", showarrow=False, font=dict(size=10)
-        )
-
-    fig2.update_layout(
-        title=f"OpenSCvx — track projection  (T = {t[-1]:.2f} s)",
-        xaxis=dict(title="x [m]", scaleanchor="y"),
-        yaxis=dict(title="y [m]"),
-        height=600,
-    )
     fig2.show()
 
     # ── Plot 3: lateral & longitudinal acceleration vs bounds ──────────────────
