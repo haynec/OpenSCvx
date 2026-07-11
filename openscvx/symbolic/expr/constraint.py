@@ -127,6 +127,7 @@ class Constraint(Expr):
         penalty: str = "squared_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
+        licq_max: Optional[float] = None,
     ) -> "CTCS":
         """Apply this constraint over a continuous interval using CTCS.
 
@@ -135,11 +136,22 @@ class Constraint(Expr):
             penalty: Penalty function type ("squared_relu", "huber", "smooth_relu")
             idx: Optional grouping index for multiple augmented states
             check_nodally: Whether to also enforce this constraint nodally
+            licq_max: Optional upper bound on the augmented state that accumulates
+                this constraint's violation penalty. Constraints sharing an
+                augmented state must agree on the value; groups without one use
+                the problem-wide ``licq_max`` (a ``Problem`` argument).
 
         Returns:
             CTCS constraint wrapping this constraint with interval specification
         """
-        return CTCS(self, penalty=penalty, nodes=interval, idx=idx, check_nodally=check_nodally)
+        return CTCS(
+            self,
+            penalty=penalty,
+            nodes=interval,
+            idx=idx,
+            check_nodally=check_nodally,
+            licq_max=licq_max,
+        )
 
     def convex(self) -> "Constraint":
         """Mark this constraint as convex for CVXPy lowering.
@@ -609,6 +621,11 @@ class CTCS(Expr):
             an augmented state. If None, auto-assigned based on node intervals.
         check_nodally: Whether to also enforce the constraint at discrete nodes for
             additional numerical robustness (creates both continuous and nodal constraints)
+        licq_max: Optional upper bound on the augmented state accumulating this
+            constraint's violation penalty. Smaller values enforce the constraint
+            more strictly between nodes. Constraints sharing an augmented state
+            must agree on the value; groups without one use the problem-wide
+            ``licq_max`` (a ``Problem`` argument).
 
     Example:
         Single augmented state (default behavior - same node interval):
@@ -642,6 +659,7 @@ class CTCS(Expr):
         nodes: Optional[Tuple[int, int]] = None,
         idx: Optional[int] = None,
         check_nodally: bool = False,
+        licq_max: Optional[float] = None,
     ):
         """Initialize a CTCS constraint.
 
@@ -662,11 +680,16 @@ class CTCS(Expr):
             check_nodally: If True, also enforce the constraint at discrete nodes for
                 numerical stability (creates both continuous and nodal constraints).
                 Defaults to False.
+            licq_max: Optional upper bound on the augmented state accumulating this
+                constraint's violation penalty. Constraints sharing an augmented
+                state must agree on the value; groups without one use the
+                problem-wide ``licq_max`` (a ``Problem`` argument).
 
         Raises:
             TypeError: If constraint is not a Constraint instance
             ValueError: If nodes is not None or a 2-tuple of integers
             ValueError: If nodes[0] >= nodes[1] (invalid interval)
+            ValueError: If licq_max is not a positive number
         """
         if not isinstance(constraint, Constraint):
             raise TypeError("CTCS must wrap a Constraint")
@@ -683,12 +706,19 @@ class CTCS(Expr):
             if nodes[0] >= nodes[1]:
                 raise ValueError("CTCS node range must have start < end")
 
+        if licq_max is not None:
+            if not isinstance(licq_max, (int, float)) or licq_max <= 0:
+                raise ValueError(f"licq_max must be a positive number, got {licq_max!r}")
+            licq_max = float(licq_max)
+
         self.constraint = constraint
         self.penalty = penalty
         self.nodes = nodes  # (start, end) node range or None for all nodes
         self.idx = idx  # Optional grouping index for multiple augmented states
         # Whether to also enforce this constraint nodally for numerical stability
         self.check_nodally = check_nodally
+        # Upper bound on the augmented state; None defers to the group default
+        self.licq_max = licq_max
 
     def children(self) -> List[Expr]:
         """Return the wrapped constraint as the only child.
@@ -711,6 +741,7 @@ class CTCS(Expr):
             nodes=self.nodes,
             idx=self.idx,
             check_nodally=self.check_nodally,
+            licq_max=self.licq_max,
         )
 
     def check_shape(self) -> Tuple[int, ...]:
@@ -767,6 +798,11 @@ class CTCS(Expr):
             hasher.update(b"None")
         # Hash check_nodally
         hasher.update(b"1" if self.check_nodally else b"0")
+        # Hash licq_max
+        if self.licq_max is not None:
+            hasher.update(struct.pack(">d", self.licq_max))
+        else:
+            hasher.update(b"None")
         # Hash the wrapped constraint
         self.constraint._hash_into(hasher)
 
@@ -794,6 +830,7 @@ class CTCS(Expr):
             nodes=interval,
             idx=self.idx,
             check_nodally=self.check_nodally,
+            licq_max=self.licq_max,
         )
 
     def __repr__(self) -> str:
@@ -809,6 +846,8 @@ class CTCS(Expr):
             parts.append(f"idx={self.idx}")
         if self.check_nodally:
             parts.append(f"check_nodally={self.check_nodally}")
+        if self.licq_max is not None:
+            parts.append(f"licq_max={self.licq_max}")
         return f"CTCS({', '.join(parts)})"
 
     def penalty_expr(self) -> Expr:
@@ -861,6 +900,7 @@ def ctcs(
     nodes: Optional[Tuple[int, int]] = None,
     idx: Optional[int] = None,
     check_nodally: bool = False,
+    licq_max: Optional[float] = None,
 ) -> CTCS:
     """Helper function to create CTCS (Continuous-Time Constraint Satisfaction) constraints.
 
@@ -876,6 +916,10 @@ def ctcs(
         idx: Optional grouping index for multiple augmented states
         check_nodally: Whether to also enforce constraint at discrete nodes.
             Defaults to False.
+        licq_max: Optional upper bound on the augmented state accumulating this
+            constraint's violation penalty. Constraints sharing an augmented
+            state must agree on the value; groups without one use the
+            problem-wide ``licq_max`` (a ``Problem`` argument).
 
     Returns:
         CTCS: A CTCS constraint wrapping the input constraint
@@ -899,4 +943,4 @@ def ctcs(
 
             altitude_constraint = (altitude >= 10).over((0, 100), penalty="huber")
     """
-    return CTCS(constraint, penalty, nodes, idx, check_nodally)
+    return CTCS(constraint, penalty, nodes, idx, check_nodally, licq_max)

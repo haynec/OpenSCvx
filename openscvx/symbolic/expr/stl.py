@@ -310,6 +310,7 @@ class STLExpr(Expr):
         penalty: str = "smooth_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
+        licq_max: Optional[float] = None,
         interval_type: IntervalKind = "nodes",
     ) -> "CTCS":
         """Apply this STL expression over an enforcement interval using CTCS.
@@ -323,6 +324,10 @@ class STLExpr(Expr):
             penalty: Penalty function type for CTCS
             idx: Optional grouping index for multiple augmented states
             check_nodally: Whether to also enforce at discrete nodes
+            licq_max: Optional upper bound on the augmented state accumulating
+                this constraint's violation penalty. Constraints sharing an
+                augmented state must agree on the value; groups without one use
+                the problem-wide ``licq_max`` (a ``Problem`` argument).
 
         Returns:
             Continuous-time constraint satisfaction wrapper
@@ -359,6 +364,7 @@ class STLExpr(Expr):
             nodes=(coerced.start, coerced.end),
             idx=idx,
             check_nodally=check_nodally,
+            licq_max=licq_max,
         )
 
     def at(self, nodes: Union[list, tuple]) -> "NodalConstraint":
@@ -863,6 +869,7 @@ class Always(_TemporalSTLExpr):
         penalty: str = "smooth_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
+        licq_max: Optional[float] = None,
         interval_type: IntervalKind = "nodes",
     ) -> "CTCS":
         """Convert this ``Always`` to a ``CTCS`` constraint.
@@ -876,6 +883,10 @@ class Always(_TemporalSTLExpr):
             penalty: CTCS penalty function name.
             idx: Optional grouping index for multiple augmented states.
             check_nodally: Whether to additionally enforce at discrete nodes.
+            licq_max: Optional upper bound on the augmented state accumulating
+                this constraint's violation penalty. Constraints sharing an
+                augmented state must agree on the value; groups without one use
+                the problem-wide ``licq_max`` (a ``Problem`` argument).
 
         Returns:
             A ``CTCS`` constraint enforcing the inner predicate over the
@@ -903,7 +914,7 @@ class Always(_TemporalSTLExpr):
 
         if isinstance(self.predicate, STLExpr):
             return self.predicate.over(
-                chosen, penalty=penalty, idx=idx, check_nodally=check_nodally
+                chosen, penalty=penalty, idx=idx, check_nodally=check_nodally, licq_max=licq_max
             )
 
         from .constraint import CTCS
@@ -914,6 +925,7 @@ class Always(_TemporalSTLExpr):
             nodes=(chosen.start, chosen.end),
             idx=idx,
             check_nodally=check_nodally,
+            licq_max=licq_max,
         )
 
     def __repr__(self) -> str:
