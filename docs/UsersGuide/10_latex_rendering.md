@@ -24,18 +24,23 @@ from openscvx.symbolic.expr import Norm
 position = ox.State("position", shape=(2,))
 
 ox.to_latex(Norm(position) - 5.0)
-# '\\left\\| \\mathrm{position} \\right\\| - 5'
+# '\\left\\| x_{\\mathrm{position}} \\right\\| - 5'
 ```
 
-Multi-letter names render as `\mathrm{...}`, Greek words map to their symbols
-(`alpha` → `\alpha`), and `name_sub` becomes a subscript — so the output reads
-like math rather than a run of italic letters.
+States and controls are **role-prefixed** so every occurrence is grounded in the
+skeleton's `f(x, u)`: a `State` renders as `x_{<sym>}` and a `Control` as
+`u_{<sym>}`, where `<sym>` is the name rendered as a symbol — multi-letter names
+as `\mathrm{...}`, Greek words as their commands (`theta` → `\theta`), and
+`name_sub` as a subscript. A state literally named `x` (or a control named `u`)
+renders bare, and time stays `t`. Element indexing comma-merges into the same
+subscript group — `x_{\mathrm{position},0}`, never the invalid
+`x_{\mathrm{position}}_{0}`.
 
 Pass a list to render several expressions at once:
 
 ```python
 ox.to_latex([Norm(position), ox.Sum(position)])
-# ['\\left\\| \\mathrm{position} \\right\\|', '\\sum \\mathrm{position}']
+# ['\\left\\| x_{\\mathrm{position}} \\right\\|', '\\sum x_{\\mathrm{position}}']
 ```
 
 The strings carry **no `$` delimiters** — you add your own, so the output drops
@@ -74,20 +79,20 @@ variable, and fixed initial/final positions — the default output is:
 
 ```latex
 \begin{aligned}
-\min_{x,\,u} \quad & 0.01\, t(t_f) \\
+\min_{x,\,u} \quad & \lambda_{t}\, t(t_f) \\
 \text{s.t.} \quad & \dot{x} = f(x, u) \\
- & \left\| \mathrm{position} \right\| - 5 \le 0 \quad \forall t \\
+ & \left\| x_{\mathrm{position}} \right\| - 5 \le 0 \quad \forall t \\
  & t - 2 \le 0 \quad \forall t \\
  & 0 - t \le 0 \quad \forall t \\
  & \left\| u \right\| - 10 \le 0 \quad k = 4 \\
- & \mathrm{velocity}_{0} - 0 = 0 \quad k = 4 \\
- & \begin{bmatrix} -10 \\ -10 \end{bmatrix} \le \mathrm{position} \le \begin{bmatrix} 10 \\ 10 \end{bmatrix} \\
- & \begin{bmatrix} -5 \\ -5 \end{bmatrix} \le \mathrm{velocity} \le \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
+ & x_{\mathrm{velocity},0} - 0 = 0 \quad k = 4 \\
+ & \begin{bmatrix} -10 \\ -10 \end{bmatrix} \le x_{\mathrm{position}} \le \begin{bmatrix} 10 \\ 10 \end{bmatrix} \\
+ & \begin{bmatrix} -5 \\ -5 \end{bmatrix} \le x_{\mathrm{velocity}} \le \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
  & 0 \le t \le 2 \\
  & \begin{bmatrix} -1 \\ -1 \end{bmatrix} \le u \le \begin{bmatrix} 1 \\ 1 \end{bmatrix} \\
- & \mathrm{position}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
- & \mathrm{position}(t_f) = \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
- & \mathrm{velocity}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
+ & x_{\mathrm{position}}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
+ & x_{\mathrm{position}}(t_f) = \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
+ & x_{\mathrm{velocity}}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
  & t(t_0) = 0
 \end{aligned}
 ```
@@ -96,20 +101,20 @@ which typesets as:
 
 $$
 \begin{aligned}
-\min_{x,\,u} \quad & 0.01\, t(t_f) \\
+\min_{x,\,u} \quad & \lambda_{t}\, t(t_f) \\
 \text{s.t.} \quad & \dot{x} = f(x, u) \\
- & \left\| \mathrm{position} \right\| - 5 \le 0 \quad \forall t \\
+ & \left\| x_{\mathrm{position}} \right\| - 5 \le 0 \quad \forall t \\
  & t - 2 \le 0 \quad \forall t \\
  & 0 - t \le 0 \quad \forall t \\
  & \left\| u \right\| - 10 \le 0 \quad k = 4 \\
- & \mathrm{velocity}_{0} - 0 = 0 \quad k = 4 \\
- & \begin{bmatrix} -10 \\ -10 \end{bmatrix} \le \mathrm{position} \le \begin{bmatrix} 10 \\ 10 \end{bmatrix} \\
- & \begin{bmatrix} -5 \\ -5 \end{bmatrix} \le \mathrm{velocity} \le \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
+ & x_{\mathrm{velocity},0} - 0 = 0 \quad k = 4 \\
+ & \begin{bmatrix} -10 \\ -10 \end{bmatrix} \le x_{\mathrm{position}} \le \begin{bmatrix} 10 \\ 10 \end{bmatrix} \\
+ & \begin{bmatrix} -5 \\ -5 \end{bmatrix} \le x_{\mathrm{velocity}} \le \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
  & 0 \le t \le 2 \\
  & \begin{bmatrix} -1 \\ -1 \end{bmatrix} \le u \le \begin{bmatrix} 1 \\ 1 \end{bmatrix} \\
- & \mathrm{position}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
- & \mathrm{position}(t_f) = \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
- & \mathrm{velocity}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
+ & x_{\mathrm{position}}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
+ & x_{\mathrm{position}}(t_f) = \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
+ & x_{\mathrm{velocity}}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
  & t(t_0) = 0
 \end{aligned}
 $$
@@ -117,8 +122,12 @@ $$
 Reading the rows:
 
 - **Objective.** Built from the `minimize` / `maximize` boundary types: a
-  minimized final time shows as `+0.01\, t(t_f)`. The coefficient is the
-  `lam_cost` weight (omitted when it is `1`); `maximize` flips the sign.
+  minimized final time shows as `+\lambda_{t}\, t(t_f)`. By default the
+  coefficient is a symbolic `\lambda` subscripted by the state's symbol and
+  element (`\lambda_{t}`, `\lambda_{\mathrm{velocity},1}`) — the weight as
+  notation, not a tuned number. Pass `weights="numeric"` to substitute the
+  `lam_cost` values instead (`0.01\, t(t_f)`, omitted when the weight is `1`);
+  `maximize` flips the sign either way.
 - **Dynamics.** By default a single symbolic row `\dot{x} = f(x, u)`.
 - **Path constraints.** Each CTCS / nodal / cross-node constraint, with its
   temporal annotation kept visible — `\forall t` for a full-horizon CTCS,
@@ -145,7 +154,7 @@ of each section is expanded, at one of three levels:
 
 | Level | Dynamics | Constraints |
 |-------|----------|-------------|
-| `"inline"` | one `\dot{x_i} = ...` row per equation | full constraint bodies with annotations |
+| `"inline"` | one `\dot{x}_{i} = ...` row per equation | full constraint bodies with annotations |
 | `"symbolic"` | one `\dot{x} = f(x, u)` placeholder | numbered `g_i(x,u) \le 0` / `h_j(x,u) = 0` references |
 | `"separate"` | symbolic, with definitions appended in a `\text{where}` block | symbolic, with residual definitions appended |
 
@@ -162,35 +171,35 @@ print(problem.to_latex(dynamics="separate", constraints="separate"))
 
 ```latex
 \begin{aligned}
-\min_{x,\,u} \quad & 0.01\, t(t_f) \\
+\min_{x,\,u} \quad & \lambda_{t}\, t(t_f) \\
 \text{s.t.} \quad & \dot{x} = f(x, u) \\
  & g_{1}(x, u) \le 0 \quad \forall t \\
  & g_{2}(x, u) \le 0 \quad \forall t \\
  & g_{3}(x, u) \le 0 \quad \forall t \\
  & g_{4}(x, u) \le 0 \quad k = 4 \\
  & h_{1}(x, u) = 0 \quad k = 4 \\
- & \begin{bmatrix} -10 \\ -10 \end{bmatrix} \le \mathrm{position} \le \begin{bmatrix} 10 \\ 10 \end{bmatrix} \\
- & \begin{bmatrix} -5 \\ -5 \end{bmatrix} \le \mathrm{velocity} \le \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
+ & \begin{bmatrix} -10 \\ -10 \end{bmatrix} \le x_{\mathrm{position}} \le \begin{bmatrix} 10 \\ 10 \end{bmatrix} \\
+ & \begin{bmatrix} -5 \\ -5 \end{bmatrix} \le x_{\mathrm{velocity}} \le \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
  & 0 \le t \le 2 \\
  & \begin{bmatrix} -1 \\ -1 \end{bmatrix} \le u \le \begin{bmatrix} 1 \\ 1 \end{bmatrix} \\
- & \mathrm{position}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
- & \mathrm{position}(t_f) = \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
- & \mathrm{velocity}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
+ & x_{\mathrm{position}}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
+ & x_{\mathrm{position}}(t_f) = \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
+ & x_{\mathrm{velocity}}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
  & t(t_0) = 0
 \end{aligned}
 \\[1ex]
 \text{where}\\[0.5ex]
 \begin{aligned}
-\dot{\mathrm{position}} &= \mathrm{velocity} \\
-\dot{\mathrm{velocity}} &= u
+\dot{x}_{\mathrm{position}} &= x_{\mathrm{velocity}} \\
+\dot{x}_{\mathrm{velocity}} &= u
 \end{aligned}
 \\[1ex]
 \begin{aligned}
-g_{1}(x, u) &= \left\| \mathrm{position} \right\| - 5 \\
+g_{1}(x, u) &= \left\| x_{\mathrm{position}} \right\| - 5 \\
 g_{2}(x, u) &= t - 2 \\
 g_{3}(x, u) &= 0 - t \\
 g_{4}(x, u) &= \left\| u \right\| - 10 \\
-h_{1}(x, u) &= \mathrm{velocity}_{0} - 0
+h_{1}(x, u) &= x_{\mathrm{velocity},0} - 0
 \end{aligned}
 ```
 

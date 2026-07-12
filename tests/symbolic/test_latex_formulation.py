@@ -17,6 +17,8 @@ import pytest
 import openscvx as ox
 from openscvx import Problem
 from openscvx.symbolic.expr import Norm
+from openscvx.symbolic.lowerers.latex import LatexLowerer
+from openscvx.symbolic.lowerers.latex.formulation import _objective
 
 N = 5
 
@@ -118,9 +120,25 @@ def test_dynamics_property_decoupled_from_input_dict():
 # === objective ==============================================================
 
 
-def test_objective_is_weighted_final_time(problem):
-    # Minimize final time renders as +weight * t(t_f), weight via %g.
-    assert r"\min_{x,\,u} \quad & 0.01\, t(t_f)" in problem.to_latex()
+def test_objective_symbolic_weight_is_default(problem):
+    # Default weights="symbolic": coefficient is a \lambda subscripted by the
+    # state's inner symbol (t for time), always shown.
+    assert r"\min_{x,\,u} \quad & \lambda_{t}\, t(t_f)" in problem.to_latex()
+
+
+def test_objective_numeric_weight_substitutes_lam_cost(problem):
+    # weights="numeric" substitutes the lam_cost value, formatted via %g.
+    assert r"\min_{x,\,u} \quad & 0.01\, t(t_f)" in problem.to_latex(weights="numeric")
+
+
+def test_objective_symbolic_weight_on_vector_state_element():
+    # A minimized element of a vector state: both the \lambda subscript and the
+    # element term comma-merge the element index into the role-prefixed group.
+    v = ox.State("velocity", shape=(2,))
+    v._slice = slice(0, 2)
+    v.final = [ox.Minimize(0.0), ("free", 0.0)]
+    got = _objective([v], lam_cost=1.0, weights="symbolic", lowerer=LatexLowerer())
+    assert got == r"\lambda_{\mathrm{velocity},0}\, x_{\mathrm{velocity},0}(t_f)"
 
 
 # === dynamics section =======================================================
@@ -132,16 +150,17 @@ def test_dynamics_symbolic_is_placeholder(problem):
 
 def test_dynamics_inline_expands_each_row(problem):
     out = problem.to_latex(dynamics="inline")
-    assert r"\dot{\mathrm{position}} = \mathrm{velocity}" in out
-    assert r"\dot{\mathrm{velocity}} = u" in out
+    # The accent sits on the role letter, subscript after: \dot{x}_{...}.
+    assert r"\dot{x}_{\mathrm{position}} = x_{\mathrm{velocity}}" in out
+    assert r"\dot{x}_{\mathrm{velocity}} = u" in out
 
 
 def test_dynamics_separate_appends_where_block(problem):
     out = problem.to_latex(dynamics="separate")
     assert r"\dot{x} = f(x, u)" in out  # skeleton stays in the formulation
     assert r"\text{where}" in out
-    assert r"\dot{\mathrm{position}} &= \mathrm{velocity}" in out
-    assert r"\dot{\mathrm{velocity}} &= u" in out
+    assert r"\dot{x}_{\mathrm{position}} &= x_{\mathrm{velocity}}" in out
+    assert r"\dot{x}_{\mathrm{velocity}} &= u" in out
 
 
 # === constraint section =====================================================
@@ -150,7 +169,7 @@ def test_dynamics_separate_appends_where_block(problem):
 def test_constraints_inline_shows_bodies_and_annotations(problem):
     out = problem.to_latex(constraints="inline")
     # CTCS over the whole horizon collapses to a bare \forall t.
-    assert r"\left\| \mathrm{position} \right\| - 5 \le 0 \quad \forall t" in out
+    assert r"\left\| x_{\mathrm{position}} \right\| - 5 \le 0 \quad \forall t" in out
     # Nodal constraint at a single node keeps its k = ... annotation.
     assert r"\left\| u \right\| - 10 \le 0 \quad k = 4" in out
 
@@ -165,8 +184,8 @@ def test_constraints_symbolic_numbers_ineq_and_eq(problem):
 def test_constraints_separate_defines_each_residual(problem):
     out = problem.to_latex(constraints="separate")
     assert r"\text{where}" in out
-    assert r"g_{1}(x, u) &= \left\| \mathrm{position} \right\| - 5" in out
-    assert r"h_{1}(x, u) &= \mathrm{velocity}_{0} - 0" in out
+    assert r"g_{1}(x, u) &= \left\| x_{\mathrm{position}} \right\| - 5" in out
+    assert r"h_{1}(x, u) &= x_{\mathrm{velocity},0} - 0" in out
 
 
 def test_separate_numbering_matches_between_refs_and_defs(problem):
@@ -196,11 +215,11 @@ def test_box_bounds_render_finite_sides(problem):
 def test_boundary_conditions_render_fixed_only(problem):
     out = problem.to_latex()
     # Whole-vector fixed initial/final render as one bmatrix row.
-    assert r"\mathrm{position}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix}" in out
-    assert r"\mathrm{position}(t_f) = \begin{bmatrix} 5 \\ 5 \end{bmatrix}" in out
+    assert r"x_{\mathrm{position}}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix}" in out
+    assert r"x_{\mathrm{position}}(t_f) = \begin{bmatrix} 5 \\ 5 \end{bmatrix}" in out
     # Fixed initial time renders as a scalar; free final velocity is omitted.
     assert r"t(t_0) = 0" in out
-    assert r"\mathrm{velocity}(t_f)" not in out
+    assert r"x_{\mathrm{velocity}}(t_f)" not in out
 
 
 # === augmentation filtering =================================================
@@ -235,6 +254,11 @@ def test_invalid_dynamics_mode_raises(problem):
 def test_invalid_constraints_mode_raises(problem):
     with pytest.raises(ValueError, match="bogus"):
         problem.to_latex(constraints="bogus")
+
+
+def test_invalid_weights_mode_raises(problem):
+    with pytest.raises(ValueError, match="weights"):
+        problem.to_latex(weights="bogus")
 
 
 # === notebook hook ==========================================================

@@ -703,6 +703,7 @@ class Problem:
         *,
         dynamics: Literal["inline", "symbolic", "separate"] = "symbolic",
         constraints: Literal["inline", "symbolic", "separate"] = "inline",
+        weights: Literal["symbolic", "numeric"] = "symbolic",
     ) -> str:
         """Render the problem as a Mayer-form LaTeX formulation.
 
@@ -723,19 +724,28 @@ class Problem:
         Args:
             dynamics: Detail level for the dynamics section.
             constraints: Detail level for the constraint section.
+            weights: How objective coefficients render. ``"symbolic"`` (the
+                default) shows each as a ``\\lambda`` subscripted by the state's
+                symbol and element (``\\lambda_{t}``, ``\\lambda_{\\mathrm{v},1}``);
+                ``"numeric"`` substitutes the tuned ``lam_cost`` values (``%g``,
+                omitted when equal to 1).
 
         Returns:
             The formulation as a single LaTeX string; ``"separate"`` modes append
             the definition blocks after it.
 
         Example:
-            Default (symbolic dynamics, inline constraints)::
+            Default (symbolic dynamics, inline constraints, symbolic weights)::
 
                 print(problem.to_latex())
 
             Paper style (symbolic skeleton, definitions as separate equations)::
 
                 print(problem.to_latex(dynamics="separate", constraints="separate"))
+
+            Substitute the tuned objective weights::
+
+                print(problem.to_latex(weights="numeric"))
         """
         from openscvx.symbolic.lowerers.latex import problem_to_latex
 
@@ -745,6 +755,7 @@ class Problem:
             self.algorithm.lam_cost,
             dynamics=dynamics,
             constraints=constraints,
+            weights=weights,
         )
 
     def _repr_latex_(self) -> str:

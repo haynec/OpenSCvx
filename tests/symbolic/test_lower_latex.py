@@ -54,6 +54,7 @@ from openscvx.symbolic.expr.constraint import CTCS, Equality, Inequality, NodalC
 from openscvx.symbolic.expr.lie.so3 import SO3Exp
 from openscvx.symbolic.lower import to_latex
 from openscvx.symbolic.lowerers.latex import LatexLowerer, format_constant, latex_symbol
+from openscvx.symbolic.lowerers.latex._lowerer import merge_subscript
 
 
 def _sliced_state(name, dim):
@@ -77,16 +78,26 @@ def lower(expr) -> str:
 # =============================================================================
 
 
-def test_state_single_letter_renders_bare():
+def test_state_named_x_renders_bare():
+    # The bare-`x` exception: a state literally named "x" keeps the role letter.
     assert lower(_sliced_state("x", 3)) == "x"
 
 
-def test_state_multi_letter_uses_mathrm():
-    assert lower(_sliced_state("pos", 3)) == r"\mathrm{pos}"
+def test_state_gets_x_role_prefix():
+    # Any other state is grounded in the skeleton's f(x, u) via an x_ prefix.
+    assert lower(_sliced_state("r", 3)) == r"x_{r}"
+    assert lower(_sliced_state("pos", 3)) == r"x_{\mathrm{pos}}"
+    assert lower(_sliced_state("velocity", 3)) == r"x_{\mathrm{velocity}}"
 
 
-def test_control_renders_symbol():
+def test_control_named_u_renders_bare():
+    # The bare-`u` exception mirrors the bare-`x` one.
     assert lower(_sliced_control("u", 2)) == "u"
+
+
+def test_control_gets_u_role_prefix():
+    assert lower(_sliced_control("theta", 2)) == r"u_{\theta}"
+    assert lower(_sliced_control("thrust", 2)) == r"u_{\mathrm{thrust}}"
 
 
 def test_time_renders_as_t():
@@ -109,7 +120,7 @@ def test_constant_scalar():
 
 def test_node_reference_superscript():
     pos = _sliced_state("pos", 2)
-    assert lower(pos.at(5)) == r"\mathrm{pos}^{(5)}"
+    assert lower(pos.at(5)) == r"x_{\mathrm{pos}}^{(5)}"
 
 
 # =============================================================================
@@ -202,6 +213,13 @@ def test_index_slice():
     assert lower(Index(x, slice(0, 2))) == "x_{0:2}"
 
 
+def test_index_merges_into_role_prefixed_subscript():
+    # An index on a role-prefixed state comma-merges into the existing group
+    # rather than emitting the invalid double subscript x_{...}_{0}.
+    v = _sliced_state("velocity", 3)
+    assert lower(Index(v, 0)) == r"x_{\mathrm{velocity},0}"
+
+
 def test_concat_column_bmatrix():
     x = _sliced_state("x", 1)
     y = Constant(np.array(1.0))
@@ -210,13 +228,13 @@ def test_concat_column_bmatrix():
 
 def test_hstack_row_bmatrix():
     x = _sliced_state("x", 1)
-    y = _sliced_state("y", 1)
+    y = Variable("y", (1,))
     assert lower(Hstack([x, y])) == r"\begin{bmatrix} x & y \end{bmatrix}"
 
 
 def test_stack_and_vstack_column_bmatrix():
     x = _sliced_state("x", 1)
-    y = _sliced_state("y", 1)
+    y = Variable("y", (1,))
     assert lower(Stack([x, y])) == r"\begin{bmatrix} x \\ y \end{bmatrix}"
     assert lower(Vstack([x, y])) == r"\begin{bmatrix} x \\ y \end{bmatrix}"
 
@@ -282,7 +300,7 @@ def test_inverse_trig_functions():
 
 def test_atan2():
     x = _sliced_state("x", 1)
-    y = _sliced_state("y", 1)
+    y = Variable("y", (1,))
     assert lower(Atan2(y, x)) == r"\operatorname{atan2}\left( y, x \right)"
 
 
@@ -309,7 +327,7 @@ def test_abs():
 
 def test_max_and_min():
     x = _sliced_state("x", 1)
-    y = _sliced_state("y", 1)
+    y = Variable("y", (1,))
     assert lower(Max(x, y)) == r"\max\left( x, y \right)"
     assert lower(Min(x, y)) == r"\min\left( x, y \right)"
 
@@ -373,7 +391,7 @@ def test_ctcs_with_node_interval():
 def test_cross_node_constraint_renders_inner():
     pos = _sliced_state("pos", 2)
     cnc = CrossNodeConstraint(Inequality(pos.at(5) - pos.at(4), Constant(np.array(0.1))))
-    assert lower(cnc) == r"\mathrm{pos}^{(5)} - \mathrm{pos}^{(4)} \le 0.1"
+    assert lower(cnc) == r"x_{\mathrm{pos}}^{(5)} - x_{\mathrm{pos}}^{(4)} \le 0.1"
 
 
 # =============================================================================
@@ -401,6 +419,37 @@ def test_latex_symbol_greek_base_subscript():
 
 def test_latex_symbol_multi_letter():
     assert latex_symbol("position") == r"\mathrm{position}"
+
+
+# =============================================================================
+# merge_subscript
+# =============================================================================
+
+
+def test_merge_subscript_appends_when_no_subscript_group():
+    # A base with no trailing _{...} group gets a fresh subscript.
+    assert merge_subscript(r"\theta", 0) == r"\theta_{0}"
+    assert merge_subscript("x", 3) == "x_{3}"
+
+
+def test_merge_subscript_splices_into_existing_group():
+    # A trailing _{...} group is extended with a comma-joined subscript.
+    assert merge_subscript(r"x_{\mathrm{velocity}}", 0) == r"x_{\mathrm{velocity},0}"
+
+
+def test_merge_subscript_handles_nested_brace_base():
+    # The closing brace is matched by depth-scanning, so nested groups inside
+    # the subscript don't confuse the splice point.
+    assert (
+        merge_subscript(r"x_{\lambda_{\mathrm{a}}}", 1) == r"x_{\lambda_{\mathrm{a}},1}"
+    )
+
+
+def test_merge_subscript_appends_after_non_subscript_group():
+    # A trailing brace group that is not a subscript (an accent, \mathrm{...})
+    # appends a new subscript instead of splicing into it.
+    assert merge_subscript(r"\dot{x}", 0) == r"\dot{x}_{0}"
+    assert merge_subscript(r"\mathrm{position}", 1) == r"\mathrm{position}_{1}"
 
 
 # =============================================================================

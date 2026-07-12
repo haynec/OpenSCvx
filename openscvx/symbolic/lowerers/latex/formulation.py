@@ -41,14 +41,17 @@ import numpy as np
 from openscvx.symbolic.expr import CTCS, Equality, Expr, NodalConstraint, traverse, to_expr
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
+from openscvx.symbolic.expr.time import Time
 from openscvx.symbolic.expr.variable import Variable
 from openscvx.symbolic.lowerers.latex._lowerer import (
     LatexLowerer,
     format_constant,
     latex_symbol,
+    merge_subscript,
 )
 
 _MODES = ("inline", "symbolic", "separate")
+_WEIGHT_MODES = ("symbolic", "numeric")
 
 # Boundary-condition types that pin a value (Variable.initial/final setters
 # store plain numbers as "Fix" and ("fixed", v) tuples as "Fixed").
@@ -62,6 +65,7 @@ def problem_to_latex(
     *,
     dynamics: str,
     constraints: str,
+    weights: str = "symbolic",
 ) -> str:
     """Assemble a Mayer-form LaTeX formulation of a problem.
 
@@ -75,6 +79,10 @@ def problem_to_latex(
         dynamics: Detail level for the dynamics section — one of ``"inline"``,
             ``"symbolic"``, ``"separate"``.
         constraints: Detail level for the constraint section — same choices.
+        weights: How objective coefficients render — ``"symbolic"`` (the default)
+            renders each as a ``\\lambda`` subscripted by the state's inner symbol
+            and element; ``"numeric"`` substitutes the ``lam_cost`` values (``%g``,
+            omitted when equal to 1).
 
     Returns:
         One LaTeX string: the ``\\begin{aligned}...\\end{aligned}`` formulation,
@@ -82,19 +90,21 @@ def problem_to_latex(
         No ``$`` delimiters.
 
     Raises:
-        ValueError: If ``dynamics`` or ``constraints`` is not a valid mode.
+        ValueError: If ``dynamics``, ``constraints``, or ``weights`` is not a
+            valid mode.
     """
     _validate_mode("dynamics", dynamics)
     _validate_mode("constraints", constraints)
+    _validate_weights(weights)
 
     lowerer = LatexLowerer()
     N = symbolic.N
 
-    objective = _objective(symbolic.states, lam_cost, lowerer)
+    objective = _objective(symbolic.states, lam_cost, weights, lowerer)
 
     dyn_pairs = _dynamics_pairs(dynamics_dict, lowerer)
     if dynamics == "inline":
-        dyn_rows = [rf"\dot{{{nm}}} = {ex}" for nm, ex in dyn_pairs]
+        dyn_rows = [rf"{lhs} = {ex}" for lhs, ex in dyn_pairs]
     else:
         dyn_rows = [r"\dot{x} = f(x, u)"]
 
@@ -109,7 +119,7 @@ def problem_to_latex(
     where_blocks: List[str] = []
     if dynamics == "separate":
         where_blocks.append(
-            _aligned_block(rf"\dot{{{nm}}} &= {ex}" for nm, ex in dyn_pairs)
+            _aligned_block(rf"{lhs} &= {ex}" for lhs, ex in dyn_pairs)
         )
     if constraints == "separate":
         where_blocks.append(
@@ -136,20 +146,34 @@ def _validate_mode(name: str, value: str) -> None:
         )
 
 
+def _validate_weights(value: str) -> None:
+    """Reject an unknown weights mode, naming the argument and valid choices."""
+    if value not in _WEIGHT_MODES:
+        raise ValueError(
+            f"weights must be one of {_WEIGHT_MODES}, got {value!r}."
+        )
+
+
 # --- objective --------------------------------------------------------------
 
 
-def _objective(states: Sequence[State], lam_cost, lowerer: LatexLowerer) -> str:
+def _objective(
+    states: Sequence[State], lam_cost, weights: str, lowerer: LatexLowerer
+) -> str:
     """Build the Mayer objective from minimize/maximize boundary types.
 
     A ``minimize`` element adds ``+w x(t)`` and a ``maximize`` element ``-w x(t)``
-    (matching the solver's cost sign convention), weighted by ``lam_cost``.
+    (matching the solver's cost sign convention).  The ``weights`` mode picks the
+    coefficient form: ``"symbolic"`` renders ``\\lambda`` subscripted by the
+    state's inner symbol and element; ``"numeric"`` substitutes the ``lam_cost``
+    values.
     """
     terms: List[Tuple[str, str]] = []
     for state in states:
         if _is_augmented(state.name):
             continue
-        base = lowerer.lower(state)
+        role_sym = lowerer.lower(state)
+        inner_sym = _inner_symbol(state)
         n = state.shape[0]
         for types, when in ((state.initial_type, "t_0"), (state.final_type, "t_f")):
             if types is None:
@@ -158,9 +182,13 @@ def _objective(states: Sequence[State], lam_cost, lowerer: LatexLowerer) -> str:
                 sign = {"Minimize": "+", "Maximize": "-"}.get(types[i])
                 if sign is None:
                     continue
-                weight = lam_cost if np.ndim(lam_cost) == 0 else lam_cost[state._slice.start + i]
-                sym = base + (rf"_{{{i}}}" if n > 1 else "")
-                terms.append((sign, rf"{_coefficient(weight)}{sym}({when})"))
+                elem = merge_subscript(role_sym, i) if n > 1 else role_sym
+                if weights == "symbolic":
+                    coeff = _symbolic_coefficient(inner_sym, i if n > 1 else None)
+                else:
+                    weight = lam_cost if np.ndim(lam_cost) == 0 else lam_cost[state._slice.start + i]
+                    coeff = _numeric_coefficient(weight)
+                terms.append((sign, rf"{coeff}{elem}({when})"))
 
     if not terms:
         return "0"
@@ -170,8 +198,21 @@ def _objective(states: Sequence[State], lam_cost, lowerer: LatexLowerer) -> str:
     return "".join(parts)
 
 
-def _coefficient(weight) -> str:
-    """Render a weight prefix, omitting it entirely when the weight is 1."""
+def _inner_symbol(state: State) -> str:
+    """The state's symbol without the ``x`` role prefix (for weight subscripts)."""
+    return "t" if isinstance(state, Time) else latex_symbol(state.name)
+
+
+def _symbolic_coefficient(inner_sym: str, elem: int | None) -> str:
+    """Render a ``\\lambda`` weight subscripted by the state's symbol and element."""
+    lam = merge_subscript(r"\lambda", inner_sym)
+    if elem is not None:
+        lam = merge_subscript(lam, elem)
+    return rf"{lam}\, "
+
+
+def _numeric_coefficient(weight) -> str:
+    """Render a numeric weight prefix, omitting it entirely when the weight is 1."""
     if float(weight) == 1.0:
         return ""
     return rf"{_scalar(weight)}\, "
@@ -183,11 +224,27 @@ def _coefficient(weight) -> str:
 def _dynamics_pairs(
     dynamics_dict: dict, lowerer: LatexLowerer
 ) -> List[Tuple[str, str]]:
-    """Return ``(\\dot{}-symbol, rhs-latex)`` pairs for the user dynamics dict."""
+    """Return ``(\\dot{}-symbol, rhs-latex)`` pairs for the user dynamics dict.
+
+    Dynamics keys are user states (role ``x``), so the left-hand symbol carries
+    the state's role prefix with the accent on the ``x`` and the subscript after
+    it — ``\\dot{x}_{\\mathrm{position}}``, not ``\\dot{x_{\\mathrm{position}}}``.
+    """
     return [
-        (latex_symbol(name), lowerer.lower(to_expr(expr)))
+        (_dot_symbol(name), lowerer.lower(to_expr(expr)))
         for name, expr in dynamics_dict.items()
     ]
+
+
+def _dot_symbol(name: str) -> str:
+    """The ``\\dot{}`` left-hand symbol for a state's derivative row.
+
+    Keeps the role prefix consistent with the state visitor: ``\\dot{x}`` for a
+    state literally named ``x``, otherwise ``\\dot{x}_{<sym>}``.
+    """
+    if name == "x":
+        return r"\dot{x}"
+    return merge_subscript(r"\dot{x}", latex_symbol(name))
 
 
 # --- path constraints -------------------------------------------------------
@@ -325,7 +382,7 @@ def _boundary_rows(states: Sequence[State], lowerer: LatexLowerer) -> List[str]:
             else:
                 for i in range(n):
                     if fixed[i]:
-                        elem = sym + (rf"_{{{i}}}" if n > 1 else "")
+                        elem = merge_subscript(sym, i) if n > 1 else sym
                         rows.append(rf"{elem}({when}) = {_scalar(values[i])}")
     return rows
 

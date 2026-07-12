@@ -127,6 +127,70 @@ def latex_symbol(name: str) -> str:
     return rf"\mathrm{{{escaped}}}"
 
 
+def merge_subscript(base: str, sub) -> str:
+    """Append a subscript to a symbol, merging into an existing subscript group.
+
+    If ``base`` already ends in a ``_{...}`` group, ``sub`` is spliced in before
+    the closing brace as ``,<sub>`` (``x_{\\mathrm{velocity}}`` + ``0`` ->
+    ``x_{\\mathrm{velocity},0}``); otherwise ``_{<sub>}`` is appended
+    (``\\theta`` + ``0`` -> ``\\theta_{0}``).  This never emits a double
+    subscript like ``x_{a}_{b}``, which is invalid LaTeX.
+
+    The trailing group is matched by depth-scanning braces (not a naive
+    ``[^{}]`` regex), so nested groups like ``\\mathrm{velocity}`` inside the
+    subscript are handled, and a non-subscript trailing group such as the
+    ``\\dot{x}`` accent or ``\\mathrm{position}`` correctly appends instead of
+    splicing.
+
+    Args:
+        base: The symbol to subscript (already-rendered LaTeX).
+        sub: The subscript to add (stringified).
+
+    Returns:
+        ``base`` with ``sub`` merged into its subscript.
+    """
+    sub = str(sub)
+    if base.endswith("}"):
+        depth = 0
+        open_idx = None
+        for i in range(len(base) - 1, -1, -1):
+            if base[i] == "}":
+                depth += 1
+            elif base[i] == "{":
+                depth -= 1
+                if depth == 0:
+                    open_idx = i
+                    break
+        # A trailing group is a subscript group only when its `{` follows `_`.
+        if open_idx is not None and open_idx >= 1 and base[open_idx - 1] == "_":
+            return f"{base[:-1]},{sub}}}"
+    return rf"{base}_{{{sub}}}"
+
+
+def state_symbol(name: str) -> str:
+    """Render a state's role-prefixed symbol: ``x_{<sym>}``.
+
+    States are grounded in the skeleton's ``f(x, u)`` by prefixing the role
+    letter ``x``; ``<sym>`` is the :func:`latex_symbol` rendering of the name
+    (``x_{\\mathrm{velocity}}``, ``x_{\\theta}``).  A state literally named
+    ``x`` renders bare as ``x``.
+    """
+    if name == "x":
+        return "x"
+    return merge_subscript("x", latex_symbol(name))
+
+
+def control_symbol(name: str) -> str:
+    """Render a control's role-prefixed symbol: ``u_{<sym>}``.
+
+    Mirrors :func:`state_symbol` with the role letter ``u``; a control literally
+    named ``u`` renders bare as ``u``.
+    """
+    if name == "u":
+        return "u"
+    return merge_subscript("u", latex_symbol(name))
+
+
 def _format_scalar(value: float) -> str:
     """Render a scalar with ``%g`` (compact, no trailing zeros)."""
     return "%g" % value

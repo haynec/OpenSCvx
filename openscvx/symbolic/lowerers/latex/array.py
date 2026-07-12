@@ -4,7 +4,7 @@ Visitors: Index, Concat, Stack, Hstack, Vstack
 """
 
 from openscvx.symbolic.expr.array import Concat, Hstack, Index, Stack, Vstack
-from openscvx.symbolic.lowerers.latex._lowerer import wrap
+from openscvx.symbolic.lowerers.latex._lowerer import merge_subscript, wrap
 from openscvx.symbolic.lowerers.latex._registry import visitor
 
 
@@ -28,9 +28,14 @@ def _bmatrix(entries: list[str], sep: str) -> str:
 
 @visitor(Index)
 def _visit_index(lowerer, node: Index):
-    """Render indexing/slicing as a subscript, ``x_{0}`` or ``x_{0:5}``."""
+    """Render indexing/slicing as a subscript, ``x_{0}`` or ``x_{0:5}``.
+
+    Uses :func:`merge_subscript` so an index on a role-prefixed variable
+    comma-merges into the existing group (``x_{\\mathrm{velocity}}`` ->
+    ``x_{\\mathrm{velocity},0}``) rather than emitting a double subscript.
+    """
     base = wrap(lowerer, node.base, 10)
-    return rf"{base}_{{{_format_index(node.index)}}}"
+    return merge_subscript(base, _format_index(node.index))
 
 
 @visitor(Concat)
