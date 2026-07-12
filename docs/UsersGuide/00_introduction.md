@@ -17,6 +17,7 @@ The tutorials are designed to be read in order. Each builds on concepts from the
 | [07 Multi-Link Arms](07_lie.md) | Articulated robot control | Lie algebra, propagated states |
 | [08 Model Predictive Control](08_mpcc.md) | Closed-loop drone racing | Receding horizon control, warm starting, cubic spline interpolation |
 | [09 MuJoCo MJX Dynamics](09_mjx_dynamics.md) | Cartpole swing-up, quadrotor racing | `MjxDynamics`, MuJoCo MJCF, free-joint quaternions, `examples/mjx/` |
+| [10 LaTeX Rendering](10_latex_rendering.md) | — | `ox.to_latex`, Jupyter math display, `problem.to_latex()` Mayer-form output |
 
 ## Quick Start
 
