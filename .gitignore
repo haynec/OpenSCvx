@@ -221,3 +221,6 @@ src/
 
 # Solver_data folder
 solver_data/
+
+# Cached phase-1 reference laps for the tracking multi-agent race example
+examples/race_cars/race_car_reference.npz
