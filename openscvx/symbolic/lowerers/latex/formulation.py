@@ -219,7 +219,7 @@ def _constraint_rows(
     n_ineq = n_eq = 0
     for con in buckets:
         inner = con.constraint
-        if _only_augmented(inner) or _is_injected_time_bound(con):
+        if _only_augmented(inner):
             continue
         body = lowerer.lower(inner)
         annotation = _annotation(con, N)
@@ -369,22 +369,6 @@ def _only_augmented(expr: Expr) -> bool:
     """True if ``expr`` references variables and every one is ``_``-prefixed."""
     names = _variable_names(expr)
     return bool(names) and all(_is_augmented(n) for n in names)
-
-
-def _is_injected_time_bound(con) -> bool:
-    """True for the time-bound CTCS constraints preprocessing injects.
-
-    The builder appends ``CTCS(time <= time.max)`` and ``CTCS(time.min <= time)``
-    to every problem (``builder.py``, time handling phase). They are solver
-    machinery, not math the user wrote, and the ``t_min \\le t \\le t_max`` box
-    row already carries the same information — so any CTCS constraint whose
-    only variable is the time state is dropped from the path-constraint
-    section.
-    """
-    if not isinstance(con, CTCS):
-        return False
-    names = _variable_names(con.constraint)
-    return bool(names) and all(n == "time" for n in names)
 
 
 def _const(value: np.ndarray) -> str:

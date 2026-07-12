@@ -215,13 +215,12 @@ def test_augmented_names_never_appear(problem):
     assert "time_dilation" not in out
 
 
-def test_injected_time_bound_ctcs_suppressed(problem):
-    # Preprocessing appends CTCS(time <= max) / CTCS(min <= time); the time
-    # box-bound row carries the same information, so no pure-time path
-    # constraint should render.
+def test_time_bound_ctcs_render_as_path_constraints(problem):
+    # Preprocessing appends CTCS(time <= max) / CTCS(min <= time); they are
+    # real constraints on the problem and render alongside the time box row.
     out = problem.to_latex(constraints="inline")
-    assert r"t - 2 \le 0" not in out
-    assert r"0 - t \le 0" not in out
+    assert r"t - 2 \le 0" in out
+    assert r"0 - t \le 0" in out
     assert r"0 \le t \le 2" in out
 
 
