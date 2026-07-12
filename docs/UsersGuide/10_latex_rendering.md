@@ -99,14 +99,22 @@ variable, and fixed initial/final positions — the default output is:
  & t(t_0) = 0
 \end{align}
 \end{subequations}
+\begin{align}
+\dot{x}_{\mathrm{position}} &= x_{\mathrm{velocity}} \\
+\dot{x}_{\mathrm{velocity}} &= u
+\end{align}
 ```
 
-The `subequations` + `align` wrapper makes each row number as `(4a)`, `(4b)`, …
-in a paper, and the whole string is a complete display-math fragment — paste it
-in as-is, with **no `$$` wrapping**. It typesets as (the docs and Jupyter render
-an `aligned` variant, since MathJax doesn't implement `subequations`):
+The Mayer form keeps a clean `\dot{x} = f(x, u)` skeleton row, with the
+per-state dynamics following as their own `align` block — that's the default
+`dynamics="separate"`. The `subequations` + `align` wrapper makes each
+formulation row number as `(4a)`, `(4b)`, … in a paper, and the whole string is
+a complete display-math fragment — paste it in as-is, with **no `$$`
+wrapping**. It typesets as (the docs and Jupyter render an `aligned` variant,
+since MathJax doesn't implement `subequations`):
 
 $$
+\begin{gathered}
 \begin{aligned}
 \min_{x,\,u} \quad & \lambda_{t}\, t(t_f) \\
 \text{s.t.} \quad & \dot{x} = f(x, u) \\
@@ -124,6 +132,12 @@ $$
  & x_{\mathrm{velocity}}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
  & t(t_0) = 0
 \end{aligned}
+\\
+\begin{aligned}
+\dot{x}_{\mathrm{position}} &= x_{\mathrm{velocity}} \\
+\dot{x}_{\mathrm{velocity}} &= u
+\end{aligned}
+\end{gathered}
 $$
 
 Reading the rows:
@@ -135,7 +149,10 @@ Reading the rows:
   notation, not a tuned number. Pass `weights="numeric"` to substitute the
   `lam_cost` values instead (`0.01\, t(t_f)`, omitted when the weight is `1`);
   `maximize` flips the sign either way.
-- **Dynamics.** By default a single symbolic row `\dot{x} = f(x, u)`.
+- **Dynamics.** By default the formulation carries the skeleton row
+  `\dot{x} = f(x, u)` and the per-state definitions follow as their own
+  block (`dynamics="separate"`); pass `dynamics="inline"` to put the
+  `\dot{x}_{i} = \ldots` rows directly in the formulation.
 - **Path constraints.** Each CTCS / nodal / cross-node constraint, with its
   temporal annotation kept visible — `\forall t` for a full-horizon CTCS,
   `k = 4` (or `k \in \{...\}`, `\forall k`) for nodal constraints. The two
@@ -157,23 +174,24 @@ Reading the rows:
 ## Detail levels
 
 The `dynamics=` and `constraints=` keyword arguments independently set how much
-of each section is expanded, at one of three levels:
+of each section is expanded:
 
 | Level | Dynamics | Constraints |
 |-------|----------|-------------|
 | `"inline"` | one `\dot{x}_{i} = ...` row per equation | full constraint bodies with annotations |
-| `"symbolic"` | one `\dot{x} = f(x, u)` placeholder | numbered `g_i(x,u) \le 0` / `h_j(x,u) = 0` references |
-| `"separate"` | symbolic, with definitions appended as a bare `align` block | symbolic, with residual definitions appended |
+| `"symbolic"` | — | numbered `g_i(x,u) \le 0` / `h_j(x,u) = 0` references only |
+| `"separate"` | `\dot{x} = f(x, u)` skeleton, definitions appended as a bare `align` block | numbered references, residual definitions appended |
 
-The defaults are `dynamics="symbolic", constraints="inline"` — dynamics dicts
-are where the bloat lives, while path constraints are usually one-liners worth
-showing in place.
+The defaults are `dynamics="separate", constraints="inline"` — the default
+output is complete (nothing about your problem is hidden), the Mayer skeleton
+stays clean however large the dynamics get, and path constraints are usually
+one-liners worth showing in place. If you want only the `\dot{x} = f(x, u)`
+skeleton, delete the definition block from the output.
 
-For a paper-style skeleton with everything defined below it, use
-`"separate"` for both sections:
+For a fully symbolic paper skeleton, separate the constraints too:
 
 ```python
-print(problem.to_latex(dynamics="separate", constraints="separate"))
+print(problem.to_latex(constraints="separate"))
 ```
 
 ```latex

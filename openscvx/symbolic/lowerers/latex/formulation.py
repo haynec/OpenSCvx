@@ -20,15 +20,20 @@ named with a leading underscore is filtered out.  CTCS constraints render as the
 continuous-time path constraints they stand for, which is the whole point of the
 Mayer story.
 
-Each of the two configurable sections (``dynamics`` and ``constraints``) renders
-at one of three detail levels:
+Each of the two configurable sections has its own detail levels.  Dynamics:
 
-- ``"inline"``   — full expressions sit in the formulation.
-- ``"symbolic"`` — structure only: ``\\dot{x} = f(x, u)`` for dynamics, numbered
-  ``g_i(x, u) \\le 0`` / ``h_j(x, u) = 0`` references for constraints, with their
-  ``\\forall t`` / node annotations kept visible.
-- ``"separate"`` — symbolic in the formulation, with the bodies appended as their
-  own definition blocks.  The ``g_i`` / ``h_j`` numbering lines up between the
+- ``"inline"``   — one ``\\dot{<state>} = <expr>`` row per equation in the
+  formulation.
+- ``"separate"`` — the formulation carries ``\\dot{x} = f(x, u)`` and the
+  per-state definitions follow as their own block.
+
+Constraints add a middle level:
+
+- ``"inline"``   — full constraint bodies with their annotations.
+- ``"symbolic"`` — numbered ``g_i(x, u) \\le 0`` / ``h_j(x, u) = 0`` references
+  only, ``\\forall t`` / node annotations kept visible.
+- ``"separate"`` — symbolic references with the residual bodies appended as a
+  definition block.  The ``g_i`` / ``h_j`` numbering lines up between the
   references and the definitions.
 
 The output is a complete display-math fragment: the Mayer form as a
@@ -56,7 +61,8 @@ from openscvx.symbolic.lowerers.latex._lowerer import (
     merge_subscript,
 )
 
-_MODES = ("inline", "symbolic", "separate")
+_DYNAMICS_MODES = ("inline", "separate")
+_CONSTRAINT_MODES = ("inline", "symbolic", "separate")
 _WEIGHT_MODES = ("symbolic", "numeric")
 
 # Boundary-condition types that pin a value (Variable.initial/final setters
@@ -83,9 +89,10 @@ def problem_to_latex(
             time/CTCS augmentation.
         lam_cost: Objective weights — a scalar or an ``(n_states,)`` array indexed
             by each state's ``_slice`` (the resolved ``algorithm.lam_cost``).
-        dynamics: Detail level for the dynamics section — one of ``"inline"``,
-            ``"symbolic"``, ``"separate"``.
-        constraints: Detail level for the constraint section — same choices.
+        dynamics: Detail level for the dynamics section — ``"inline"`` or
+            ``"separate"``.
+        constraints: Detail level for the constraint section — ``"inline"``,
+            ``"symbolic"``, or ``"separate"``.
         weights: How objective coefficients render — ``"symbolic"`` (the default)
             renders each as a ``\\lambda`` subscripted by the state's inner symbol
             and element; ``"numeric"`` substitutes the ``lam_cost`` values (``%g``,
@@ -106,9 +113,9 @@ def problem_to_latex(
         ValueError: If ``dynamics``, ``constraints``, or ``weights`` is not a
             valid mode.
     """
-    _validate_mode("dynamics", dynamics)
-    _validate_mode("constraints", constraints)
-    _validate_weights(weights)
+    _validate_mode("dynamics", dynamics, _DYNAMICS_MODES)
+    _validate_mode("constraints", constraints, _CONSTRAINT_MODES)
+    _validate_mode("weights", weights, _WEIGHT_MODES)
 
     lowerer = LatexLowerer()
     N = symbolic.N
@@ -139,25 +146,21 @@ def problem_to_latex(
                 (rf"{label}(x, u) &= {residual}" for label, residual in con_defs), env
             )
         )
+    if env == "aligned" and len(blocks) > 1:
+        # Adjacent ``aligned`` boxes inside one ``$$`` typeset side by side;
+        # ``gathered`` stacks them vertically for the notebook renderer.
+        return "\\begin{gathered}\n" + "\n\\\\\n".join(blocks) + "\n\\end{gathered}"
     return "\n".join(blocks)
 
 
 # --- validation -------------------------------------------------------------
 
 
-def _validate_mode(name: str, value: str) -> None:
-    """Reject an unknown section mode, naming the argument and valid choices."""
-    if value not in _MODES:
+def _validate_mode(name: str, value: str, choices: Tuple[str, ...]) -> None:
+    """Reject an unknown mode value, naming the argument and valid choices."""
+    if value not in choices:
         raise ValueError(
-            f"{name} must be one of {_MODES}, got {value!r}."
-        )
-
-
-def _validate_weights(value: str) -> None:
-    """Reject an unknown weights mode, naming the argument and valid choices."""
-    if value not in _WEIGHT_MODES:
-        raise ValueError(
-            f"weights must be one of {_WEIGHT_MODES}, got {value!r}."
+            f"{name} must be one of {choices}, got {value!r}."
         )
 
 

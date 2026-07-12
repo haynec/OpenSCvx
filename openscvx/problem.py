@@ -701,7 +701,7 @@ class Problem:
     def to_latex(
         self,
         *,
-        dynamics: Literal["inline", "symbolic", "separate"] = "symbolic",
+        dynamics: Literal["inline", "separate"] = "separate",
         constraints: Literal["inline", "symbolic", "separate"] = "inline",
         weights: Literal["symbolic", "numeric"] = "symbolic",
     ) -> str:
@@ -714,14 +714,20 @@ class Problem:
         ``"separate"`` definitions as bare ``align`` blocks) that pastes into a
         paper as-is, no ``$$`` wrapping.
 
-        Each section renders at one of three detail levels:
+        Dynamics render at one of two detail levels:
 
-        - ``"inline"``: full expressions inside the formulation.
-        - ``"symbolic"``: structure only — ``\\dot{x} = f(x, u)`` for dynamics,
-          numbered ``g_i(x, u) \\le 0`` / ``h_j(x, u) = 0`` (with their
-          ``\\forall t`` / node annotations) for constraints.
-        - ``"separate"``: symbolic in the formulation, with the definitions
-          appended as their own bare ``align`` block.
+        - ``"separate"`` (default): the formulation carries ``\\dot{x} = f(x, u)``
+          and the per-state ``\\dot{x}_{i} = \\ldots`` definitions follow as
+          their own ``align`` block.
+        - ``"inline"``: one ``\\dot{x}_{i} = \\ldots`` row per equation inside
+          the formulation.
+
+        Constraints add a middle level:
+
+        - ``"inline"`` (default): full constraint bodies with annotations.
+        - ``"symbolic"``: numbered ``g_i(x, u) \\le 0`` / ``h_j(x, u) = 0``
+          references only (with their ``\\forall t`` / node annotations).
+        - ``"separate"``: symbolic references plus an appended definition block.
 
         Args:
             dynamics: Detail level for the dynamics section.
@@ -737,13 +743,13 @@ class Problem:
             the definition blocks after it.
 
         Example:
-            Default (symbolic dynamics, inline constraints, symbolic weights)::
+            Default (separate dynamics, inline constraints, symbolic weights)::
 
                 print(problem.to_latex())
 
-            Paper style (symbolic skeleton, definitions as separate equations)::
+            Everything expanded in a single block::
 
-                print(problem.to_latex(dynamics="separate", constraints="separate"))
+                print(problem.to_latex(dynamics="inline"))
 
             Substitute the tuned objective weights::
 
@@ -774,7 +780,7 @@ class Problem:
             self.symbolic,
             self._dynamics_dict,
             self.algorithm.lam_cost,
-            dynamics="symbolic",
+            dynamics="separate",
             constraints="inline",
             env="aligned",
         )

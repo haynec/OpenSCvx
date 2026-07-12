@@ -74,13 +74,16 @@ def problem() -> Problem:
     return prob
 
 
-_MODES = ("inline", "symbolic", "separate")
+_DYNAMICS_MODES = ("inline", "separate")
+_CONSTRAINT_MODES = ("inline", "symbolic", "separate")
 
 
 def _all_renderings(prob):
     """Every ``(dynamics, constraints)`` mode combination as one joined string."""
     return "\n".join(
-        prob.to_latex(dynamics=d, constraints=c) for d in _MODES for c in _MODES
+        prob.to_latex(dynamics=d, constraints=c)
+        for d in _DYNAMICS_MODES
+        for c in _CONSTRAINT_MODES
     )
 
 
@@ -144,8 +147,16 @@ def test_objective_symbolic_weight_on_vector_state_element():
 # === dynamics section =======================================================
 
 
-def test_dynamics_symbolic_is_placeholder(problem):
-    assert r"\dot{x} = f(x, u)" in problem.to_latex(dynamics="symbolic")
+def test_dynamics_default_is_separate(problem):
+    # The default output carries the skeleton row AND the definition block.
+    out = problem.to_latex()
+    assert r"\dot{x} = f(x, u)" in out
+    assert r"\dot{x}_{\mathrm{position}} &= x_{\mathrm{velocity}}" in out
+
+
+def test_dynamics_symbolic_mode_removed(problem):
+    with pytest.raises(ValueError, match="dynamics"):
+        problem.to_latex(dynamics="symbolic")
 
 
 def test_dynamics_inline_expands_each_row(problem):
@@ -193,7 +204,7 @@ def test_constraints_separate_defines_each_residual(problem):
 
 
 def test_separate_numbering_matches_between_refs_and_defs(problem):
-    out = problem.to_latex(dynamics="symbolic", constraints="separate")
+    out = problem.to_latex(constraints="separate")
     formulation, _, definitions = out.partition(r"\end{subequations}")
 
     ref_labels = set(re.findall(r"([gh]_\{\d+\})\(x, u\) (?:\\le|=) 0", formulation))
@@ -273,7 +284,9 @@ def test_default_wraps_mayer_form_in_subequations_align(problem):
     # a complete display-math fragment with no $$ wrapping.
     out = problem.to_latex()
     assert out.startswith(r"\begin{subequations}" + "\n" + r"\begin{align}")
-    assert out.rstrip().endswith(r"\end{align}" + "\n" + r"\end{subequations}")
+    # The Mayer form closes before the (default, separate) dynamics block.
+    assert r"\end{align}" + "\n" + r"\end{subequations}" in out
+    assert out.rstrip().endswith(r"\end{align}")
     assert "$$" not in out
     assert r"\begin{aligned}" not in out
 
