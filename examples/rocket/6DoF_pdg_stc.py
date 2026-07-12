@@ -213,7 +213,7 @@ _alt_done_s   = ALT_DONE_M / R_SCALE
 _spd_trig_s   = SPD_STC_TRIG / R_SCALE
 
 # ── Discretization ────────────────────────────────────────────────────────────
-N = 15
+N = 12
 
 # ── States ────────────────────────────────────────────────────────────────────
 mass = ox.State("mass", shape=(1,))
@@ -895,12 +895,87 @@ def _save_plotly_figure(fig, basename: str) -> None:
         print(f"  Skipped PNG/PDF for {basename} ({exc}); install kaleido for static export.")
 
 
-def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc_stc") -> tuple:
+def _apply_cstc_panel_dark_theme(fig) -> None:
+    """Restyle a states/controls panel figure for dark backgrounds."""
+    for tr in fig.data:
+        marker = getattr(tr, "marker", None)
+        if marker is not None and getattr(marker, "color", None) == "black":
+            tr.marker.color = "#e8e8e8"
+        line = getattr(tr, "line", None)
+        if line is None:
+            continue
+        color = getattr(line, "color", None)
+        if color == "blue":
+            tr.line.color = "#6eb5ff"
+        elif color == "green":
+            tr.line.color = "#3ddc84"
+        elif color == "purple":
+            tr.line.color = "#c084fc"
+        elif color == "burlywood":
+            tr.line.color = "#e0b878"
+
+    shapes = list(fig.layout.shapes) if fig.layout.shapes else []
+    new_shapes = []
+    for shape in shapes:
+        shape = dict(shape.to_plotly_json() if hasattr(shape, "to_plotly_json") else shape)
+        line = dict(shape.get("line") or {})
+        color = line.get("color")
+        if color == "green":
+            line["color"] = "#3ddc84"
+        elif color == "purple":
+            line["color"] = "#c084fc"
+        elif color == "burlywood":
+            line["color"] = "#e0b878"
+        shape["line"] = line
+        new_shapes.append(shape)
+
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#111111",
+        plot_bgcolor="#1a1a1a",
+        font={"color": "#e8e8e8"},
+        shapes=new_shapes,
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "xanchor": "left",
+            "x": 0,
+            "font": {"size": 10, "color": "#e8e8e8"},
+        },
+    )
+    fig.update_xaxes(
+        gridcolor="#333333",
+        zerolinecolor="#444444",
+        linecolor="#666666",
+        tickfont={"color": "#e8e8e8"},
+        title_font={"color": "#e8e8e8"},
+    )
+    fig.update_yaxes(
+        gridcolor="#333333",
+        zerolinecolor="#444444",
+        linecolor="#666666",
+        tickfont={"color": "#e8e8e8"},
+        title_font={"color": "#e8e8e8"},
+    )
+
+
+def plot_cstc_results(
+    result,
+    *,
+    show: bool = True,
+    save_prefix: str = "cstc_stc",
+    dark_mode: bool = False,
+    save_dark: bool = True,
+) -> tuple:
     """Generate state/control panel and 3-D trajectory plots matching CT-cSTC notebook.
 
     Trigger times are computed from where the actual trajectory first crosses each
     trigger threshold, so the tightened bounds (drawn after the trigger) reflect
     the *real* state-triggered behaviour rather than fixed node intervals.
+
+    When ``save_prefix`` is set and ``save_dark`` is True, also writes a dark-themed
+    copy of the states/controls panel as ``{save_prefix}_states_controls_dark``.
     """
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
@@ -1134,8 +1209,23 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc_stc
                 "xanchor": "left", "x": 0, "font": {"size": 10}},
     )
 
+    need_dark = dark_mode or bool(save_prefix and save_dark)
+    fig_panel_dark = None
+    if need_dark:
+        fig_panel_dark = go.Figure(fig_panel)
+        _apply_cstc_panel_dark_theme(fig_panel_dark)
+        fig_panel_dark.update_layout(
+            width=1100, height=650, margin={"t": 80, "b": 40, "l": 50, "r": 30},
+        )
+
     if save_prefix:
-        _save_plotly_figure(fig_panel, f"{save_prefix}_states_controls")
+        if not dark_mode:
+            _save_plotly_figure(fig_panel, f"{save_prefix}_states_controls")
+        if fig_panel_dark is not None:
+            _save_plotly_figure(fig_panel_dark, f"{save_prefix}_states_controls_dark")
+
+    if dark_mode and fig_panel_dark is not None:
+        fig_panel = fig_panel_dark
 
     # ── Figure 2: 3-D trajectory coloured by speed ────────────────────────────
     fig_3d = go.Figure()
