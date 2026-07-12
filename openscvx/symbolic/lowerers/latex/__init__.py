@@ -36,5 +36,6 @@ from openscvx.symbolic.lowerers.latex._lowerer import (
     format_constant,
     latex_symbol,
 )
+from openscvx.symbolic.lowerers.latex.formulation import problem_to_latex
 
-__all__ = ["LatexLowerer", "latex_symbol", "format_constant"]
+__all__ = ["LatexLowerer", "latex_symbol", "format_constant", "problem_to_latex"]
