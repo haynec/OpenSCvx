@@ -158,8 +158,10 @@ def test_dynamics_inline_expands_each_row(problem):
 def test_dynamics_separate_appends_where_block(problem):
     out = problem.to_latex(dynamics="separate")
     assert r"\dot{x} = f(x, u)" in out  # skeleton stays in the formulation
-    assert r"\text{where}" in out
-    assert r"\dot{x}_{\mathrm{position}} &= x_{\mathrm{velocity}}" in out
+    # Definitions live in a bare align block, with no connective text or spacing.
+    assert r"\text{where}" not in out
+    assert r"\\[1ex]" not in out
+    assert "\\begin{align}\n\\dot{x}_{\\mathrm{position}} &= x_{\\mathrm{velocity}}" in out
     assert r"\dot{x}_{\mathrm{velocity}} &= u" in out
 
 
@@ -183,14 +185,16 @@ def test_constraints_symbolic_numbers_ineq_and_eq(problem):
 
 def test_constraints_separate_defines_each_residual(problem):
     out = problem.to_latex(constraints="separate")
-    assert r"\text{where}" in out
-    assert r"g_{1}(x, u) &= \left\| x_{\mathrm{position}} \right\| - 5" in out
+    # Definitions live in a bare align block, with no connective text or spacing.
+    assert r"\text{where}" not in out
+    assert r"\\[1ex]" not in out
+    assert "\\begin{align}\ng_{1}(x, u) &= \\left\\| x_{\\mathrm{position}} \\right\\| - 5" in out
     assert r"h_{1}(x, u) &= x_{\mathrm{velocity},0} - 0" in out
 
 
 def test_separate_numbering_matches_between_refs_and_defs(problem):
     out = problem.to_latex(dynamics="symbolic", constraints="separate")
-    formulation, _, definitions = out.partition(r"\text{where}")
+    formulation, _, definitions = out.partition(r"\end{subequations}")
 
     ref_labels = set(re.findall(r"([gh]_\{\d+\})\(x, u\) (?:\\le|=) 0", formulation))
     def_labels = set(re.findall(r"([gh]_\{\d+\})\(x, u\) &=", definitions))
@@ -261,6 +265,32 @@ def test_invalid_weights_mode_raises(problem):
         problem.to_latex(weights="bogus")
 
 
+# === output envelope ========================================================
+
+
+def test_default_wraps_mayer_form_in_subequations_align(problem):
+    # The paper-grade envelope: subequations + align for per-row numbering,
+    # a complete display-math fragment with no $$ wrapping.
+    out = problem.to_latex()
+    assert out.startswith(r"\begin{subequations}" + "\n" + r"\begin{align}")
+    assert out.rstrip().endswith(r"\end{align}" + "\n" + r"\end{subequations}")
+    assert "$$" not in out
+    assert r"\begin{aligned}" not in out
+
+
+def test_separate_definition_blocks_are_bare_align(problem):
+    # The definition blocks are bare align, joined to the main block by a single
+    # newline with no \text{where} / \\[1ex] glue.
+    out = problem.to_latex(dynamics="separate", constraints="separate")
+    assert r"\text{where}" not in out
+    assert r"\\[1ex]" not in out
+    # Main subequations block, then two bare align blocks joined by newlines.
+    assert out.count(r"\begin{subequations}") == 1
+    tail = out.partition(r"\end{subequations}")[2]
+    assert tail.count(r"\begin{align}") == 2
+    assert r"\begin{aligned}" not in out
+
+
 # === notebook hook ==========================================================
 
 
@@ -268,4 +298,6 @@ def test_repr_latex_wraps_in_display_math(problem):
     rendered = problem._repr_latex_()
     assert rendered.startswith("$$")
     assert rendered.rstrip().endswith("$$")
+    # The notebook hook uses the aligned envelope: MathJax has no subequations.
     assert r"\begin{aligned}" in rendered
+    assert "subequations" not in rendered

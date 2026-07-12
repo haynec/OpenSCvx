@@ -28,13 +28,19 @@ at one of three detail levels:
   ``g_i(x, u) \\le 0`` / ``h_j(x, u) = 0`` references for constraints, with their
   ``\\forall t`` / node annotations kept visible.
 - ``"separate"`` — symbolic in the formulation, with the bodies appended as their
-  own ``\\text{where}`` equation blocks.  The ``g_i`` / ``h_j`` numbering lines up
-  between the references and the definitions.
+  own definition blocks.  The ``g_i`` / ``h_j`` numbering lines up between the
+  references and the definitions.
 
-The whole thing is one string with no ``$`` delimiters — callers add their own.
+The output is a complete display-math fragment: the Mayer form as a
+``subequations``/``align`` block (per-row numbering, drops into a paper as-is),
+with each ``"separate"`` definition block a bare ``align``, joined by newlines
+and no connective text — any ``where``/spacing glue is the author's editorial
+call.  No ``$$`` wrapping.  ``env="aligned"`` swaps the paper envelope for plain
+``aligned`` blocks that renderers without ``subequations`` support (MathJax,
+KaTeX) can typeset inside ``$$``.
 """
 
-from typing import List, Sequence, Tuple
+from typing import List, Literal, Sequence, Tuple
 
 import numpy as np
 
@@ -66,6 +72,7 @@ def problem_to_latex(
     dynamics: str,
     constraints: str,
     weights: str = "symbolic",
+    env: Literal["align", "aligned"] = "align",
 ) -> str:
     """Assemble a Mayer-form LaTeX formulation of a problem.
 
@@ -83,11 +90,17 @@ def problem_to_latex(
             renders each as a ``\\lambda`` subscripted by the state's inner symbol
             and element; ``"numeric"`` substitutes the ``lam_cost`` values (``%g``,
             omitted when equal to 1).
+        env: Output envelope.  ``"align"`` (the default) wraps the Mayer form in
+            ``subequations`` + ``align`` for paper-grade per-row numbering — the
+            form ``Problem.to_latex`` returns.  ``"aligned"`` emits plain
+            ``aligned`` blocks instead; this exists solely for the notebook hook,
+            since MathJax/KaTeX do not implement ``subequations`` and ``align``
+            cannot nest inside ``$$``, whereas ``aligned`` can.
 
     Returns:
-        One LaTeX string: the ``\\begin{aligned}...\\end{aligned}`` formulation,
-        with ``\\text{where}`` definition blocks appended in ``"separate"`` modes.
-        No ``$`` delimiters.
+        One LaTeX display-math fragment: the formulation block followed, in
+        ``"separate"`` modes, by a bare definition block per separated section,
+        joined by newlines with no connective glue.  No ``$$`` delimiters.
 
     Raises:
         ValueError: If ``dynamics``, ``constraints``, or ``weights`` is not a
@@ -114,25 +127,19 @@ def problem_to_latex(
     bc_rows = _boundary_rows(symbolic.states, lowerer)
 
     st_rows = dyn_rows + con_refs + box_rows + bc_rows
-    main = _aligned_formulation(objective, st_rows)
 
-    where_blocks: List[str] = []
+    blocks = [_formulation(objective, st_rows, env)]
     if dynamics == "separate":
-        where_blocks.append(
-            _aligned_block(rf"{lhs} &= {ex}" for lhs, ex in dyn_pairs)
+        blocks.append(
+            _definition_block((rf"{lhs} &= {ex}" for lhs, ex in dyn_pairs), env)
         )
     if constraints == "separate":
-        where_blocks.append(
-            _aligned_block(rf"{label}(x, u) &= {residual}" for label, residual in con_defs)
+        blocks.append(
+            _definition_block(
+                (rf"{label}(x, u) &= {residual}" for label, residual in con_defs), env
+            )
         )
-
-    if not where_blocks:
-        return main
-    return (
-        main
-        + "\n\\\\[1ex]\n\\text{where}\\\\[0.5ex]\n"
-        + "\n\\\\[1ex]\n".join(where_blocks)
-    )
+    return "\n".join(blocks)
 
 
 # --- validation -------------------------------------------------------------
@@ -390,19 +397,35 @@ def _boundary_rows(states: Sequence[State], lowerer: LatexLowerer) -> List[str]:
 # --- assembly & shared helpers ----------------------------------------------
 
 
-def _aligned_formulation(objective: str, st_rows: Sequence[str]) -> str:
-    """Wrap the objective and subject-to rows in an ``aligned`` environment."""
+def _formulation(objective: str, st_rows: Sequence[str], env: str) -> str:
+    """Wrap the objective and subject-to rows in the chosen output envelope.
+
+    ``env="align"`` produces a paper-grade ``subequations`` + ``align`` block
+    (per-row numbering); ``env="aligned"`` produces a plain ``aligned`` block for
+    ``$$``-embedded rendering.
+    """
     rows: List[Tuple[str, str]] = [(r"\min_{x,\,u} \quad", objective)]
     for i, row in enumerate(st_rows):
         rows.append((r"\text{s.t.} \quad" if i == 0 else "", row))
     body = " \\\\\n".join(f"{lead} & {content}" for lead, content in rows)
+    if env == "align":
+        return (
+            "\\begin{subequations}\n\\begin{align}\n"
+            + body
+            + "\n\\end{align}\n\\end{subequations}"
+        )
     return "\\begin{aligned}\n" + body + "\n\\end{aligned}"
 
 
-def _aligned_block(rows) -> str:
-    """Wrap already-``&``-aligned rows in a bare ``aligned`` environment."""
+def _definition_block(rows, env: str) -> str:
+    """Wrap already-``&``-aligned definition rows in a bare ``align``/``aligned``.
+
+    ``env="align"`` emits ``align`` (numbered, matching the paper envelope);
+    ``env="aligned"`` emits ``aligned`` for ``$$``-embedded rendering.
+    """
+    name = "align" if env == "align" else "aligned"
     body = " \\\\\n".join(rows)
-    return "\\begin{aligned}\n" + body + "\n\\end{aligned}"
+    return f"\\begin{{{name}}}\n" + body + f"\n\\end{{{name}}}"
 
 
 def _is_augmented(name: str) -> bool:

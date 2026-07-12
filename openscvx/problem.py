@@ -709,8 +709,10 @@ class Problem:
 
         The rendered problem is the one you wrote — pre-augmentation, so no
         time-dilation control or CTCS penalty states appear; CTCS constraints
-        show up as continuous-time path constraints.  The result is a single
-        LaTeX string with no ``$`` delimiters (add your own, or ``print`` it).
+        show up as continuous-time path constraints.  The result is a complete
+        display-math fragment — a ``subequations`` + ``align`` block (with
+        ``"separate"`` definitions as bare ``align`` blocks) that pastes into a
+        paper as-is, no ``$$`` wrapping.
 
         Each section renders at one of three detail levels:
 
@@ -719,7 +721,7 @@ class Problem:
           numbered ``g_i(x, u) \\le 0`` / ``h_j(x, u) = 0`` (with their
           ``\\forall t`` / node annotations) for constraints.
         - ``"separate"``: symbolic in the formulation, with the definitions
-          appended as their own ``\\text{where}`` equation block.
+          appended as their own bare ``align`` block.
 
         Args:
             dynamics: Detail level for the dynamics section.
@@ -759,8 +761,24 @@ class Problem:
         )
 
     def _repr_latex_(self) -> str:
-        """Render as display math in Jupyter (default detail levels, in ``$$``)."""
-        return f"$$\n{self.to_latex()}\n$$"
+        """Render as display math in Jupyter (default detail levels, in ``$$``).
+
+        Uses the builder's ``aligned`` envelope rather than the ``subequations``
+        + ``align`` form ``to_latex`` returns: MathJax/KaTeX (the notebook and
+        docs renderers) do not implement ``subequations``, and ``align`` cannot
+        nest inside ``$$``, whereas ``aligned`` can.
+        """
+        from openscvx.symbolic.lowerers.latex import problem_to_latex
+
+        body = problem_to_latex(
+            self.symbolic,
+            self._dynamics_dict,
+            self.algorithm.lam_cost,
+            dynamics="symbolic",
+            constraints="inline",
+            env="aligned",
+        )
+        return f"$$\n{body}\n$$"
 
     @property
     def solver(self) -> ConvexSolver:

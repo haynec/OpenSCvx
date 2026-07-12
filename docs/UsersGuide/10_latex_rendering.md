@@ -43,8 +43,10 @@ ox.to_latex([Norm(position), ox.Sum(position)])
 # ['\\left\\| x_{\\mathrm{position}} \\right\\|', '\\sum x_{\\mathrm{position}}']
 ```
 
-The strings carry **no `$` delimiters** — you add your own, so the output drops
-straight into any math environment.
+Expression-level `ox.to_latex` output is **bare math** with no `$` delimiters —
+you add your own, so it drops straight into any math environment. (A whole
+problem is different: `problem.to_latex()` returns a complete display-math
+fragment you paste as-is, covered [below](#rendering-a-whole-problem).)
 
 !!! tip "Rendering a single dynamics equation"
     `problem.dynamics` exposes the user-authored `{state_name: expr}` dict, so
@@ -78,7 +80,8 @@ position, a nodal control bound, a nodal terminal equality, box bounds on every
 variable, and fixed initial/final positions — the default output is:
 
 ```latex
-\begin{aligned}
+\begin{subequations}
+\begin{align}
 \min_{x,\,u} \quad & \lambda_{t}\, t(t_f) \\
 \text{s.t.} \quad & \dot{x} = f(x, u) \\
  & \left\| x_{\mathrm{position}} \right\| - 5 \le 0 \quad \forall t \\
@@ -94,10 +97,14 @@ variable, and fixed initial/final positions — the default output is:
  & x_{\mathrm{position}}(t_f) = \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
  & x_{\mathrm{velocity}}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
  & t(t_0) = 0
-\end{aligned}
+\end{align}
+\end{subequations}
 ```
 
-which typesets as:
+The `subequations` + `align` wrapper makes each row number as `(4a)`, `(4b)`, …
+in a paper, and the whole string is a complete display-math fragment — paste it
+in as-is, with **no `$$` wrapping**. It typesets as (the docs and Jupyter render
+an `aligned` variant, since MathJax doesn't implement `subequations`):
 
 $$
 \begin{aligned}
@@ -156,7 +163,7 @@ of each section is expanded, at one of three levels:
 |-------|----------|-------------|
 | `"inline"` | one `\dot{x}_{i} = ...` row per equation | full constraint bodies with annotations |
 | `"symbolic"` | one `\dot{x} = f(x, u)` placeholder | numbered `g_i(x,u) \le 0` / `h_j(x,u) = 0` references |
-| `"separate"` | symbolic, with definitions appended in a `\text{where}` block | symbolic, with residual definitions appended |
+| `"separate"` | symbolic, with definitions appended as a bare `align` block | symbolic, with residual definitions appended |
 
 The defaults are `dynamics="symbolic", constraints="inline"` — dynamics dicts
 are where the bloat lives, while path constraints are usually one-liners worth
@@ -170,7 +177,8 @@ print(problem.to_latex(dynamics="separate", constraints="separate"))
 ```
 
 ```latex
-\begin{aligned}
+\begin{subequations}
+\begin{align}
 \min_{x,\,u} \quad & \lambda_{t}\, t(t_f) \\
 \text{s.t.} \quad & \dot{x} = f(x, u) \\
  & g_{1}(x, u) \le 0 \quad \forall t \\
@@ -186,26 +194,27 @@ print(problem.to_latex(dynamics="separate", constraints="separate"))
  & x_{\mathrm{position}}(t_f) = \begin{bmatrix} 5 \\ 5 \end{bmatrix} \\
  & x_{\mathrm{velocity}}(t_0) = \begin{bmatrix} 0 \\ 0 \end{bmatrix} \\
  & t(t_0) = 0
-\end{aligned}
-\\[1ex]
-\text{where}\\[0.5ex]
-\begin{aligned}
+\end{align}
+\end{subequations}
+\begin{align}
 \dot{x}_{\mathrm{position}} &= x_{\mathrm{velocity}} \\
 \dot{x}_{\mathrm{velocity}} &= u
-\end{aligned}
-\\[1ex]
-\begin{aligned}
+\end{align}
+\begin{align}
 g_{1}(x, u) &= \left\| x_{\mathrm{position}} \right\| - 5 \\
 g_{2}(x, u) &= t - 2 \\
 g_{3}(x, u) &= 0 - t \\
 g_{4}(x, u) &= \left\| u \right\| - 10 \\
 h_{1}(x, u) &= x_{\mathrm{velocity},0} - 0
-\end{aligned}
+\end{align}
 ```
 
-Inequalities are numbered `g_i` and equalities `h_j`, in bucket order; the same
-label indexes both the formulation reference and its definition, so the two line
-up. The whole thing is still one string — a reader who only wants the
+Each separated section becomes its own bare `align` block, joined to the Mayer
+form by a single newline and **no** connective text — no `\text{where}`, no
+spacing glue. That editorial call (a "where", vertical space, prose) is left to
+you. Inequalities are numbered `g_i` and equalities `h_j`, in bucket order; the
+same label indexes both the formulation reference and its definition, so the two
+line up. The whole thing is still one string — a reader who only wants the
 constraints block copies it out of the output.
 
 ## A note on exotic nodes
