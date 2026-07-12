@@ -420,6 +420,25 @@ class Expr:
             lines.append(child.pretty(indent + 1))
         return "\n".join(lines)
 
+    def _repr_latex_(self) -> Union[str, None]:
+        """Render this expression as inline LaTeX for Jupyter.
+
+        Jupyter calls this hook to display an object as math. The expression
+        is lowered to LaTeX and wrapped in ``$...$``. Nodes without a
+        registered LaTeX visitor return ``None`` so Jupyter falls back to the
+        plain ``__repr__``.
+
+        Returns:
+            The inline-math string ``"$...$"``, or ``None`` when the
+            expression contains a node the LaTeX backend does not support.
+        """
+        from openscvx.symbolic.lower import to_latex
+
+        try:
+            return f"${to_latex(self)}$"
+        except NotImplementedError:
+            return None
+
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Contribute this expression's structural identity to a hash.
 

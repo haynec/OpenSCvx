@@ -84,6 +84,7 @@ if TYPE_CHECKING:
 __all__ = [
     "lower",
     "lower_to_jax",
+    "to_latex",
     "lower_cvxpy_constraints",
     "create_cvxpy_variables",
     "lower_symbolic_problem",
@@ -167,6 +168,47 @@ def lower_to_jax(exprs: Union[Expr, Sequence[Expr]]) -> Union[callable, list[cal
         return lower(exprs, jl)
     fns = [lower(e, jl) for e in exprs]
     return fns
+
+
+def to_latex(exprs: Union[Expr, Sequence[Expr]]) -> Union[str, list[str]]:
+    """Lower symbolic expression(s) to LaTeX math string(s).
+
+    Convenience wrapper that creates a LatexLowerer and renders one or more
+    symbolic expressions as LaTeX. This is the escape hatch for rendering a
+    single expression (or a handful) — e.g. one entry of a problem's dynamics
+    dict — without going through ``Problem.to_latex``.
+
+    Args:
+        exprs: Single expression or sequence of expressions to lower
+
+    Returns:
+        - If exprs is a single Expr: Returns a single LaTeX string.
+        - If exprs is a sequence: Returns a list of LaTeX strings in order.
+
+    Example:
+        Single expression::
+
+            x = ox.State("x", shape=(3,))
+            to_latex(ox.Norm(x) - 5.0)
+            # '\\left\\| x \\right\\| - 5'
+
+        Multiple expressions::
+
+            exprs = [ox.Norm(x), ox.Sum(x)]
+            to_latex(exprs)
+            # ['\\left\\| x \\right\\|', '\\sum x']
+
+    Note:
+        The returned strings carry no ``$`` delimiters — callers add their own.
+        Nodes without a registered LaTeX visitor (STL, Lie, spatial, ...) raise
+        ``NotImplementedError``.
+    """
+    from openscvx.symbolic.lowerers.latex import LatexLowerer
+
+    ll = LatexLowerer()
+    if isinstance(exprs, Expr):
+        return lower(exprs, ll)
+    return [lower(e, ll) for e in exprs]
 
 
 def _tile_sparsity(pattern_2d: np.ndarray, K: int):

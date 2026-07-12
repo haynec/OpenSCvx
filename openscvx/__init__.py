@@ -90,6 +90,7 @@ from openscvx.symbolic.expr import (
     ctcs,
 )
 from openscvx.symbolic.expr.time import Time
+from openscvx.symbolic.lower import to_latex
 from openscvx.utils.cache import clear_cache, get_cache_dir, get_cache_size
 
 load_results = OptimizationResults.load
@@ -186,6 +187,8 @@ __all__ = [
     "ctcs",
     # Data parallelism
     "Vmap",
+    # LaTeX rendering
+    "to_latex",
     # Submodules
     "init",
     "stl",

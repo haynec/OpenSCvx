@@ -52,6 +52,7 @@ from openscvx.symbolic.expr import (
 )
 from openscvx.symbolic.expr.constraint import CTCS, Equality, Inequality, NodalConstraint
 from openscvx.symbolic.expr.lie.so3 import SO3Exp
+from openscvx.symbolic.lower import to_latex
 from openscvx.symbolic.lowerers.latex import LatexLowerer, format_constant, latex_symbol
 
 
@@ -441,3 +442,44 @@ def test_unregistered_node_raises_not_implemented():
     msg = str(excinfo.value)
     assert "LatexLowerer" in msg
     assert "SO3Exp" in msg
+
+
+# =============================================================================
+# to_latex entry point
+# =============================================================================
+
+
+def test_to_latex_single_expr_returns_str():
+    x = _sliced_state("x", 3)
+    result = to_latex(Norm(x) - 5.0)
+    assert isinstance(result, str)
+    assert result == r"\left\| x \right\| - 5"
+
+
+def test_to_latex_sequence_returns_list_in_order():
+    x = _sliced_state("x", 3)
+    results = to_latex([Norm(x), Sum(x)])
+    assert isinstance(results, list)
+    assert results == [r"\left\| x \right\|", r"\sum x"]
+
+
+def test_to_latex_exported_from_top_level_package():
+    import openscvx as ox
+
+    assert ox.to_latex is to_latex
+    assert ox.to_latex(Time()) == "t"
+
+
+# =============================================================================
+# Expr._repr_latex_
+# =============================================================================
+
+
+def test_repr_latex_wraps_supported_node_in_dollars():
+    x = _sliced_state("x", 3)
+    assert (Norm(x) - 5.0)._repr_latex_() == r"$\left\| x \right\| - 5$"
+
+
+def test_repr_latex_returns_none_for_unsupported_node():
+    node = SO3Exp(Constant(np.array([0.0, 0.0, 1.0])))
+    assert node._repr_latex_() is None
