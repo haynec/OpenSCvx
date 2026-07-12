@@ -365,39 +365,39 @@ def batch_element(results, b: int):
     """Unbatched view of car ``b`` from post-processed batched results.
 
     ``solve_batched`` stacks every array with a leading batch axis; the
-    plotting helpers and Viser servers consume one car at a time.
+    plotting helpers and Viser servers consume one car at a time. The batched
+    dense grid runs to the slowest car's flag and NaN-pads a faster car's
+    tail, so the dense arrays are cut at this car's own last sample — its lap
+    simply ends earlier.
     """
     car = copy.copy(results)
     car.converged = bool(np.asarray(results.converged).reshape(-1)[b])
     car.t_final = float(np.asarray(results.t_final).reshape(-1)[b])
     car.nodes = {k: np.asarray(v)[b] for k, v in results.nodes.items()}
-    car.trajectory = {k: np.asarray(v)[b] for k, v in results.trajectory.items()}
-    car.t_full = np.asarray(results.t_full)[b]
-    car.x_full = np.asarray(results.x_full)[b]
-    car.u_full = np.asarray(results.u_full)[b]
+    x_full = np.asarray(results.x_full)[b]
+    stop = int(np.flatnonzero(np.isfinite(x_full).all(axis=1))[-1]) + 1
+    car.trajectory = {k: np.asarray(v)[b, :stop] for k, v in results.trajectory.items()}
+    car.t_full = np.asarray(results.t_full)[b, :stop]
+    car.x_full = x_full[:stop]
+    car.u_full = np.asarray(results.u_full)[b, :stop]
     return car
 
 
 def lap_signals(car, spec: dict) -> dict[str, np.ndarray]:
-    """Dense propagated lap signals for one car, trimmed to the flying lap.
+    """Dense propagated lap signals for one car, flattened to 1-D.
 
     Raw states and controls come from ``car.trajectory`` (single-shot
-    propagation from post_process), flattened to 1-D and trimmed to the lap:
-    the s < 0 warm-up is dropped so t = 0 is the start line, and so is any
-    non-finite tail. The derived entries — net MGU-K wheel power ``P_elec``
-    and the tyre accelerations ``a_lat`` / ``a_long`` — mirror the symbolic
-    force model under ``spec``'s power-unit switches, so they live on the
-    same friction ellipse the solver saw.
+    propagation from post_process). The derived entries — net MGU-K wheel
+    power ``P_elec`` and the tyre accelerations ``a_lat`` / ``a_long`` —
+    mirror the symbolic force model under ``spec``'s power-unit switches, so
+    they live on the same friction ellipse the solver saw.
     """
     traj = car.trajectory
-    s_full = traj["s"][:, 0]
-    stop = int(np.flatnonzero(np.isfinite(s_full))[-1]) + 1
-    lap = slice(int(np.searchsorted(s_full[:stop], 0.0)), stop)
     sig = {
-        key: traj[key][lap, 0]
+        key: traj[key][:, 0]
         for key in ("s", "n", "alpha", "v", "D", "delta", "E", "R", "deploy", "regen")
     }
-    sig["t"] = car.t_full[lap] - car.t_full[lap.start]
+    sig["t"] = car.t_full
 
     v, delta = sig["v"], sig["delta"]
     F_env = Cm1 - Cm2 * v

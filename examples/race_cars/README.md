@@ -33,10 +33,11 @@ decentralized MPC with communicated plans — so overtakes and energy strategy
 emerge from the optimization. The `AGENTS` roster at the top of the file is
 the only thing to edit to grow the field or tweak a car's spec.
 
-`race_car_viser.py` and `race_car_plots.py` are the shared visualisation
-toolkit behind all of the above. The former builds the 3D Viser scene — track
-mesh, low-poly cars, single-lap, chase-camera, and multi-car comparison
-servers. The latter holds the Plotly vocabulary the examples compose their
-figures from: the bird's-eye track scaffold, the friction-ellipse trace, and
-the live telemetry panels (striplines and g-g with per-car playback markers)
-that run inside the Viser sidebar during a replay.
+`race_car_viser.py` builds the 3D Viser scene behind all of the above —
+track mesh, low-poly cars, single-lap, chase-camera, and multi-car
+comparison servers. `race_car_plots.py` is the Plotly vocabulary shared by
+the hybrid and multi-agent examples: the bird's-eye track scaffold, the
+friction-ellipse trace, and the live telemetry panels (striplines and g-g
+with per-car playback markers) that run inside the Viser sidebar during a
+replay. The two acados ports keep their plotting self-contained on purpose —
+their figures mirror the acados benchmark's conventions.
