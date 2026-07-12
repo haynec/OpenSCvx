@@ -17,13 +17,15 @@ plain per-state tracking against reference profiles keyed on ``s``:
   * pace error      (v − v_ref(s))²  — speed deficit/surplus at this point
   * energy error    (E − E_ref(s))²  — deviation from the lap energy plan
 
-The weighted sum of these errors — the MPCC stage cost — integrates into a
-single ``track_err`` state whose final value is minimised, alongside a small
-residual progress reward that gives cars a reason to overtake rather than
-follow. The references enter as per-car Parameter tables interpolated by hat
-weights in ``s`` (the same idiom the opponent forecasts use in time), and the
-error weights are parameters too, so every car tracks its own lap and neither
-reference updates nor weight sweeps ever recompile.
+Each error integrates into its own state (``track_n``/``track_v``/
+``track_E``) — physical quantities in m²·s, (m/s)²·s, and J²·s whose box
+bounds are sized to real racing deviations — and the final values are
+minimised with per-state weights, alongside a small residual progress reward
+that gives cars a reason to overtake rather than follow. The references
+enter as per-car Parameter tables interpolated by hat weights in ``s`` (the
+same idiom the opponent forecasts use in time), so every car tracks its own
+lap and reference updates never recompile; the weights are ``lam_cost``
+entries, sweepable at runtime through ``solve_batched`` algorithm overrides.
 
 The payoff over the progress-max controller: the horizon no longer has to
 rediscover the racing line, corner speeds, and — critically — the energy
@@ -485,19 +487,30 @@ E_rec.initial = [0.0]
 E_rec.final = [ox.Free(0.0)]
 E_rec.guess = np.zeros((N_MPC, 1))
 
-# Tracking cost integrator: accumulates the weighted MPCC stage cost
-# w_c·(n − n_ref)² + w_p·(v − v_ref)² + w_e·(E − E_ref)² along the horizon and
-# is minimised at the final node (the lag_sum/contour_sum idiom of the drone
-# example, with the n/v/E trade-off folded into one state via the runtime
-# weight parameters below). The box bound only sets solver scaling — a
-# generous cap keeps deviating from the reference cheap, which is what lets a
-# blocked car leave its line to pass.
-track_err = ox.State("track_err", shape=(1,))
-track_err.min, track_err.max = [0.0], [50.0]
-track_err.initial, track_err.final = [0.0], [ox.Minimize(0.0)]
-track_err.guess = np.zeros((N_MPC, 1))
+# Tracking cost integrators (the lag_sum/contour_sum idiom of the drone
+# example): each accumulates one squared tracking error along the horizon, in
+# its own physical units, and is minimised at the final node with its own
+# weight. The box bounds are never constrained — they set solver scaling, and
+# each is sized to a genuine racing deviation held for a whole horizon (a
+# car-width off line, ~1 m/s off pace, a half-battery split), so that going
+# off-reference to pass sits comfortably inside the state's scale rather
+# than saturating it.
+track_n = ox.State("track_n", shape=(1,))  # ∫(n − n_ref)² dt  [m²·s]
+track_n.min, track_n.max = [0.0], [1.0]
+track_n.initial, track_n.final = [0.0], [ox.Minimize(0.0)]
+track_n.guess = np.zeros((N_MPC, 1))
 
-TRACK_STATES = ("track_err",)
+track_v = ox.State("track_v", shape=(1,))  # ∫(v − v_ref)² dt  [(m/s)²·s]
+track_v.min, track_v.max = [0.0], [30.0]
+track_v.initial, track_v.final = [0.0], [ox.Minimize(0.0)]
+track_v.guess = np.zeros((N_MPC, 1))
+
+track_E = ox.State("track_E", shape=(1,))  # ∫(E − E_ref)² dt  [J²·s]
+track_E.min, track_E.max = [0.0], [0.01]
+track_E.initial, track_E.final = [0.0], [ox.Minimize(0.0)]
+track_E.guess = np.zeros((N_MPC, 1))
+
+TRACK_STATES = ("track_n", "track_v", "track_E")
 COL = {name: i for i, name in enumerate(DRIVER_STATES + TRACK_STATES)}
 TIME_COL = len(DRIVER_STATES) + len(TRACK_STATES)
 
@@ -546,13 +559,6 @@ ref_n = ox.Parameter("ref_n", shape=(M_REF,), value=REF_N[0])
 ref_v = ox.Parameter("ref_v", shape=(M_REF,), value=REF_V[0])
 ref_E = ox.Parameter("ref_E", shape=(M_REF,), value=REF_E[0])
 
-# Stage-cost weights on the tracking errors, in physical units (m², (m/s)²,
-# J²). Runtime parameters so the trade-off sweeps without recompilation; the
-# energy weight is large because battery errors are numerically tiny in J².
-w_contour = ox.Parameter("w_contour", shape=(), value=1e1)
-w_pace = ox.Parameter("w_pace", shape=(), value=3e0)
-w_energy = ox.Parameter("w_energy", shape=(), value=1e3)
-
 # ── Dynamics (hybrid spatial bicycle model, per-car spec via parameters) ───────
 kappa = ox.Cinterp(s[0], s_interp, kappa_interp, method="pchip")
 m_car = ox.Constant(m) * mass_scale
@@ -592,15 +598,13 @@ dynamics = {
     "delta": derDelta[0],
     "E": P_harvest - P_deploy,
     "R": P_harvest,
-    "track_err": (
-        w_contour * (n[0] - n_ref_s) ** 2
-        + w_pace * (v[0] - v_ref_s) ** 2
-        + w_energy * (E_batt[0] - E_ref_s) ** 2
-    ),
+    "track_n": (n[0] - n_ref_s) ** 2,
+    "track_v": (v[0] - v_ref_s) ** 2,
+    "track_E": (E_batt[0] - E_ref_s) ** 2,
 }
 
 # ── Constraints ────────────────────────────────────────────────────────────────
-states = [s, n, alpha, v, D_throt, delta, E_batt, E_rec, track_err]
+states = [s, n, alpha, v, D_throt, delta, E_batt, E_rec, track_n, track_v, track_E]
 controls = [derD, derDelta, deploy, regen]
 
 constraints: list = []
@@ -639,11 +643,16 @@ if K > 1:
 
 # ── Problem ────────────────────────────────────────────────────────────────────
 # The references carry the racing line, pace, and energy plan, so the cost is
-# regulation around the reference (the stage-cost weights live on the
-# ``w_contour``/``w_pace``/``w_energy`` parameters above) plus a residual
-# progress reward that gives cars a reason to overtake rather than follow.
+# regulation around them plus a residual progress reward that gives cars a
+# reason to overtake rather than follow. ``lam_cost`` weighs the *scaled*
+# integrators, so a weight's physical strength is lam / box-cap; the values
+# below keep deviating off-reference cheap — wheel-to-wheel racing thrashes
+# (convergence and solve time both suffer) when the line or pace is priced
+# too dearly to leave.
 W_PROGRESS = 3e1
-W_TRACK = 1e0
+W_TRACK_N = 1e1
+W_TRACK_V = 9e1
+W_TRACK_E = 1e1
 
 problem = ox.Problem(
     dynamics=dynamics,
@@ -658,7 +667,9 @@ problem = ox.Problem(
         "lam_prox": 2e0,
         "lam_cost": {
             "s": W_PROGRESS,
-            "track_err": W_TRACK,
+            "track_n": W_TRACK_N,
+            "track_v": W_TRACK_V,
+            "track_E": W_TRACK_E,
         },
         "autotuner": ox.ConstantProximalWeight(),
         "ep_tr": 3e-2,
