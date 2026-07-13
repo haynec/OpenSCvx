@@ -21,11 +21,13 @@ Each error integrates into its own state (``track_n``/``track_v``/
 ``track_E``) — physical quantities in m²·s, (m/s)²·s, and J²·s whose box
 bounds are sized to real racing deviations — and the final values are
 minimised with per-state weights, alongside a small residual progress reward
-that gives cars a reason to overtake rather than follow. The references
-enter as per-car Parameter tables interpolated by hat weights in ``s`` (the
-same idiom the opponent forecasts use in time), so every car tracks its own
-lap and reference updates never recompile; the weights are ``lam_cost``
-entries, sweepable at runtime through ``solve_batched`` algorithm overrides.
+that gives cars a reason to overtake rather than follow. All cars regulate
+around one *shared* reference: the nominal unity-spec lap, baked into pchip
+splines over the tiled arc-length grid exactly like ``kappa`` — a smooth,
+kink-free lookup the SCP linearises cleanly, cheaper than a per-knot hat sum.
+Heavier or lower-power cars therefore track a lap a touch beyond their reach
+and lighter ones a lap they could beat; the pace they win or lose back is
+priced by ``W_TRACK_V``/``W_TRACK_E`` against the residual progress reward.
 
 The payoff over the progress-max controller: the horizon no longer has to
 rediscover the racing line, corner speeds, and — critically — the energy
@@ -427,6 +429,21 @@ REF_D = _tile(_ref["ref_D"])
 REF_DEPLOY = _tile(_ref["ref_deploy"])
 REF_REGEN = _tile(_ref["ref_regen"])
 
+# Uniform arc-length grid of the tiled tables — the breakpoints the shared
+# reference splines and the warm-start lookups both key on.
+REF_S_EXT = S_REF_LO + np.arange(M_REF) * _DS_REF
+
+# All cars regulate around the nominal unity-spec lap; if no unity-spec car is
+# in the roster (e.g. a truncated field) the first car's lap stands in.
+REF_IDX = next(
+    (
+        i
+        for i, spec in enumerate(AGENTS)
+        if spec["power_scale"] == spec["mass_scale"] == spec["battery_scale"] == 1.0
+    ),
+    0,
+)
+
 # ── States ─────────────────────────────────────────────────────────────────────
 S_POLE, N_POLE = grid_slot(0)
 S_MIN = grid_slot(K - 1)[0] - 0.1
@@ -544,7 +561,7 @@ time = ox.Time(
     uniform_time_grid=True,
 )
 
-# ── Parameters: car spec, opponent plans, and reference lap ───────────────────
+# ── Parameters: car spec and opponent plans ──────────────────────────────────
 power_scale = ox.Parameter("power_scale", shape=(), value=1.0)
 mass_scale = ox.Parameter("mass_scale", shape=(), value=1.0)
 battery_scale = ox.Parameter("battery_scale", shape=(), value=1.0)
@@ -552,12 +569,6 @@ battery_scale = ox.Parameter("battery_scale", shape=(), value=1.0)
 if K > 1:
     opp_s = ox.Parameter("opp_s", shape=(N_MPC, K - 1), value=np.full((N_MPC, K - 1), S_MIN - 10.0))
     opp_n = ox.Parameter("opp_n", shape=(N_MPC, K - 1), value=np.zeros((N_MPC, K - 1)))
-
-# Per-car reference profiles vs s. Parameters (not Cinterp) so each car in the
-# batch tracks its own lap and the tables can change without recompiling.
-ref_n = ox.Parameter("ref_n", shape=(M_REF,), value=REF_N[0])
-ref_v = ox.Parameter("ref_v", shape=(M_REF,), value=REF_V[0])
-ref_E = ox.Parameter("ref_E", shape=(M_REF,), value=REF_E[0])
 
 # ── Dynamics (hybrid spatial bicycle model, per-car spec via parameters) ───────
 kappa = ox.Cinterp(s[0], s_interp, kappa_interp, method="pchip")
@@ -580,14 +591,12 @@ P_harvest = ox.Constant(ETA_BATT) * ox.Constant(ELEC_SHARE) * F_env * regen[0] *
 slip_angle = alpha[0] + ox.Constant(C1) * delta[0]
 sdot = (v[0] * ox.Cos(slip_angle)) / (ox.Constant(1.0) - kappa * n[0])
 
-# Reference lookup: hat weights in s turn each table into a piecewise-linear
-# profile of arc length, exactly as the opponent forecasts interpolate in time.
-ref_hat = ox.Max(
-    1.0 - ox.Abs((s[0] - ox.Constant(S_REF_LO)) / _DS_REF - np.arange(M_REF, dtype=float)), 0.0
-)
-n_ref_s = ox.Sum(ref_hat * ref_n)
-v_ref_s = ox.Sum(ref_hat * ref_v)
-E_ref_s = ox.Sum(ref_hat * ref_E)
+# Reference lookup: the shared nominal lap as pchip splines of arc length, the
+# same construction ``kappa`` uses — smooth and kink-free, so the tracking
+# error linearises cleanly and the lookup is a segment eval, not a per-knot sum.
+n_ref_s = ox.Cinterp(s[0], REF_S_EXT, REF_N[REF_IDX], method="pchip")
+v_ref_s = ox.Cinterp(s[0], REF_S_EXT, REF_V[REF_IDX], method="pchip")
+E_ref_s = ox.Cinterp(s[0], REF_S_EXT, REF_E[REF_IDX], method="pchip")
 
 dynamics = {
     "s": sdot,
@@ -731,12 +740,12 @@ def _ref_lookup(table: np.ndarray, s_query: np.ndarray) -> np.ndarray:
 def shifted_guesses(results) -> tuple[np.ndarray, np.ndarray]:
     """Warm starts for the next step: previous plans shifted one node.
 
-    The freed tip node is seeded from the car's own reference lap at its
-    predicted arc length — the reference is dynamically feasible, so unlike a
-    raw heuristic profile this costs no virtual control — and the tracking
-    integrators restart with their accumulated offset removed. Other controls
-    hold their last value; the horizon clock and CTCS integrators restart
-    from zero.
+    The freed tip node is seeded from the car's own phase-1 lap at its
+    predicted arc length — feasible for the car's spec, so unlike a raw
+    heuristic profile this costs no virtual control, even though the horizon
+    tracks the shared nominal lap — and the tracking integrators restart with
+    their accumulated offset removed. Other controls hold their last value;
+    the horizon clock and CTCS integrators restart from zero.
     """
     x = np.asarray(results.x)
     u = np.asarray(results.u)
@@ -794,9 +803,9 @@ def plot_race(log: RaceLog) -> None:
 
     As in ``race_car_multi_agent.plot_race``, everything is drawn from the
     dense propagated log against race distance in laps. The one addition is
-    the dotted per-car reference overlays on the striplines: each car's
-    phase-1 lap plan, tiled over the race, so the tracking quality — and any
-    deviation bought to race the field — is visible directly.
+    the dotted shared reference on each stripline: the nominal lap every car
+    tracks, tiled over the race, so the tracking quality — and any deviation
+    bought to race the field — is visible directly.
     """
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
@@ -862,11 +871,20 @@ def plot_race(log: RaceLog) -> None:
     # ── Speed and battery striplines against race distance ────────────────────
     ref_lap_x = np.concatenate([lap + REF_S_GRID / pathlength for lap in range(M_LAPS)])
     fig2 = make_subplots(rows=2, cols=1, shared_xaxes=True, subplot_titles=["v [m/s]", "E [J]"])
+    for row, ref in [(1, _ref["ref_v"][REF_IDX]), (2, _ref["ref_E"][REF_IDX])]:
+        fig2.add_trace(
+            go.Scatter(
+                x=ref_lap_x,
+                y=np.tile(ref, M_LAPS),
+                line=dict(color="black", dash="dot", width=1),
+                name="shared reference",
+                showlegend=row == 1,
+            ),
+            row=row,
+            col=1,
+        )
     for i, spec in enumerate(AGENTS):
-        for row, signal, ref in [
-            (1, log.dense_x[i, :, COL["v"]], _ref["ref_v"][i]),
-            (2, log.dense_x[i, :, COL["E"]], _ref["ref_E"][i]),
-        ]:
+        for row, signal in [(1, log.dense_x[i, :, COL["v"]]), (2, log.dense_x[i, :, COL["E"]])]:
             fig2.add_trace(
                 go.Scatter(
                     x=laps_x[i],
@@ -874,17 +892,6 @@ def plot_race(log: RaceLog) -> None:
                     line=dict(color=css[i]),
                     name=spec["name"],
                     showlegend=row == 1,
-                ),
-                row=row,
-                col=1,
-            )
-            fig2.add_trace(
-                go.Scatter(
-                    x=ref_lap_x,
-                    y=np.tile(ref, M_LAPS),
-                    line=dict(color=css[i], dash="dot", width=1),
-                    name=f"{spec['name']} reference",
-                    showlegend=False,
                 ),
                 row=row,
                 col=1,
@@ -899,7 +906,7 @@ def plot_race(log: RaceLog) -> None:
         fig2.add_vline(x=float(lap), line=dict(color="black", dash="dot", width=1))
     fig2.update_xaxes(title_text="race distance [laps]", row=2, col=1)
     fig2.update_layout(
-        title="Speed and battery state of charge vs each car's reference lap", height=600
+        title="Speed and battery state of charge vs the shared reference lap", height=600
     )
     fig2.show()
 
@@ -1049,9 +1056,6 @@ def run_race(max_steps: int = MAX_STEPS, dense: bool = True) -> RaceLog:
         key: np.array([spec[key] for spec in AGENTS])
         for key in ("power_scale", "mass_scale", "battery_scale")
     }
-    fixed_params["ref_n"] = REF_N
-    fixed_params["ref_v"] = REF_V
-    fixed_params["ref_E"] = REF_E
 
     sim_rows: list[np.ndarray] = []
     dense_t: list[np.ndarray] = []
