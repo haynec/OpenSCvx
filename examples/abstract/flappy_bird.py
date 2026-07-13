@@ -574,6 +574,35 @@ def _add_flappy_pipes(
         )
 
 
+def _flappy_follow_camera_pose(
+    t: float,
+    *,
+    x0: float = x0,
+    v_x: float = v_x0,
+    world_y: tuple[float, float] = world_y,
+    cam_z: float = 7.0,
+    cam_y_offset: float = 0.35,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Side-scroll cam: constant ``v_x``, fixed height, looking into the plane.
+
+    Camera x = ``x0 + v_x * t`` (no vertical motion). Look-at shares that x at a
+    fixed mid-world y so orientation stays level while the bird flaps independently.
+    """
+    examples_dir = os.path.dirname(current_dir)
+    if examples_dir not in sys.path:
+        sys.path.insert(0, examples_dir)
+    from animations._camera import look_at_wxyz
+
+    cam_x = float(x0 + v_x * t)
+    cam_y = 0.5 * (world_y[0] + world_y[1]) + cam_y_offset
+    look_y = 0.5 * (world_y[0] + world_y[1])
+    cam_pos = np.array([cam_x, cam_y, cam_z], dtype=np.float64)
+    look_at = np.array([cam_x, look_y, 0.0], dtype=np.float64)
+    up = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+    wxyz = look_at_wxyz(cam_pos, look_at, up)
+    return cam_pos, wxyz, look_at
+
+
 def create_flappy_bird_viser_server(
     results,
     pipes=pipes,
@@ -588,7 +617,7 @@ def create_flappy_bird_viser_server(
 
     Playback follows the dense ``post_process`` trajectory. A static polyline shows the
     full route immediately; the cyan trace and point cloud grow during playback (press
-    Play in the Animation folder). The camera starts with a fixed overview.
+    Play in the Animation folder). The camera scrolls at constant ``v_x`` with fixed height.
     """
     import viser
     import viser.transforms as vtf
@@ -727,17 +756,37 @@ def create_flappy_bird_viser_server(
             flap_handle.points = np.zeros((1, 2, 3), dtype=np.float32)
             bird.color = (255, 230, 60)
 
-    callbacks = [update_bird, update_trace, update_trail]
+    def update_follow_camera(frame_idx: int) -> None:
+        cam_pos, cam_wxyz, look_at = _flappy_follow_camera_pose(
+            float(t_arr[frame_idx]), world_y=world_y
+        )
+        for client in server.get_clients().values():
+            client.camera.position = tuple(float(x) for x in cam_pos)
+            client.camera.wxyz = tuple(float(x) for x in cam_wxyz)
+            client.camera.look_at = tuple(float(x) for x in look_at)
+
+    callbacks = [update_bird, update_trace, update_trail, update_follow_camera]
     add_animation_controls(server, t_arr, callbacks, loop=loop_animation)
     update_bird(0)
     update_trace(0)
     update_trail(0)
+    update_follow_camera(0)
 
-    # Default overview camera only — user can orbit/pan freely in the viewer
-    scene_center = np.array([0.5 * x_final, 0.5 * (world_y[0] + world_y[1]), 0.0])
-    server.initial_camera.position = tuple(scene_center + np.array([-10.0, 2.0, 16.0]))
-    server.initial_camera.look_at = tuple(scene_center)
+    # Constant-vx side-scroll: fixed height/orientation, no bobbing with the bird
+    cam0, wxyz0, look0 = _flappy_follow_camera_pose(float(t_arr[0]), world_y=world_y)
+    server.initial_camera.position = tuple(float(x) for x in cam0)
+    server.initial_camera.wxyz = tuple(float(x) for x in wxyz0)
+    server.initial_camera.look_at = tuple(float(x) for x in look0)
     server.initial_camera.up = (0.0, 1.0, 0.0)
+
+    @server.on_client_connect
+    def _on_client_connect(client) -> None:
+        cam_pos, cam_wxyz, look_at = _flappy_follow_camera_pose(
+            float(t_arr[0]), world_y=world_y
+        )
+        client.camera.position = tuple(float(x) for x in cam_pos)
+        client.camera.wxyz = tuple(float(x) for x in cam_wxyz)
+        client.camera.look_at = tuple(float(x) for x in look_at)
 
     with server.gui.add_folder("Flappy SCP"):
         server.gui.add_markdown(
@@ -745,12 +794,13 @@ def create_flappy_bird_viser_server(
             f"**Flap |Δv_y|:** {flap_magnitude:.2f} m/s  \n"
             f"**Horizon:** {t_arr[-1]:.2f} s  \n"
             f"**Pipes:** {len(pipes)}  \n"
-            "**Trail:** post-process trajectory (press Play to animate)"
+            "**Trail:** post-process trajectory (press Play to animate)  \n"
+            f"**Camera:** constant v_x = {v_x0:.2f} m/s, fixed height"
         )
 
     print(
         "Viser trajectory animation: open the URL above (not the SCP iteration viewer). "
-        "Press Play in the Animation folder to grow the highlighted trail."
+        "Press Play in the Animation folder — camera scrolls at constant v_x."
     )
     return server
 

@@ -447,7 +447,7 @@ plotting_dict = {
     "angle_to_target": angle_to_target,
     "extend_boresight": True,
     "relative_vector": True,
-    "logo_trace_color": (0, 0, 0),
+    "logo_trace_color": (0, 255, 255),
     "vertices": hoop_vertices,
     "gate_centers": hoop_centers,
     "A_gate": A_hoop,
@@ -503,13 +503,13 @@ if __name__ == "__main__":
     results["logo_plane_normal"] = plane_normal
 
     vehicle_mesh = make_quadrotor_mesh()
-    vehicle_mesh_color = (55, 60, 68)
+    vehicle_mesh_color = (200, 200, 210)
 
     server = create_animated_plotting_server(
         results,
         thrust_key="thrust_force",
         show_grid=True,
-        dark_mode=False,
+        dark_mode=True,
         vehicle_mesh=vehicle_mesh,
         vehicle_mesh_color=vehicle_mesh_color,
     )
@@ -523,5 +523,6 @@ if __name__ == "__main__":
         ghost_point_size=0.15,
         vehicle_mesh=vehicle_mesh,
         vehicle_mesh_color=vehicle_mesh_color,
+        dark_mode=True,
     )
     server.sleep_forever()

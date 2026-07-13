@@ -22,8 +22,8 @@ sys.path.append(grandparent_dir)
 import openscvx as ox
 from openscvx import Problem
 
-n = 40  # Number of nodes
-total_time = 120.0  # Total time for the simulation
+n = 50  # Number of nodes
+total_time = 220.0  # Total time for the simulation
 
 # =============================================================================
 # State and Control Definitions (planar double integrator)
@@ -173,8 +173,8 @@ def plot_obstacle_avoidance_vmap_2d(
             y0=yc - radius,
             x1=xc + radius,
             y1=yc + radius,
-            fillcolor="rgba(255, 190, 190, 0.30)",
-            line={"color": "rgba(220, 130, 130, 0.50)", "width": 1},
+            fillcolor="rgba(220, 100, 100, 0.35)",
+            line={"color": "rgba(255, 150, 150, 0.55)", "width": 1},
             layer="below",
         )
 
@@ -189,7 +189,7 @@ def plot_obstacle_avoidance_vmap_2d(
                 y=position[:, 1],
                 mode="lines+markers",
                 showlegend=False,
-                line={"color": "rgba(55, 55, 55, 0.35)", "width": 0.5},
+                line={"color": "rgba(200, 200, 200, 0.35)", "width": 0.5},
                 marker={
                     "color": speed,
                     "colorscale": "Viridis",
@@ -219,7 +219,7 @@ def plot_obstacle_avoidance_vmap_2d(
             y=[position[0, 1]],
             mode="markers",
             showlegend=False,
-            marker={"color": "black", "size": 10, "symbol": "circle"},
+            marker={"color": "white", "size": 10, "symbol": "circle"},
         )
     )
     fig.add_trace(
@@ -228,7 +228,7 @@ def plot_obstacle_avoidance_vmap_2d(
             y=[position[-1, 1]],
             mode="markers",
             showlegend=False,
-            marker={"color": "black", "size": 10, "symbol": "x"},
+            marker={"color": "white", "size": 10, "symbol": "x"},
         )
     )
 
@@ -237,17 +237,27 @@ def plot_obstacle_avoidance_vmap_2d(
         yaxis_title=r"$y$",
         yaxis={"scaleanchor": "x", "scaleratio": 1},
         showlegend=False,
-        template="simple_white",
-        paper_bgcolor="white",
-        plot_bgcolor="white",
+        template="plotly_dark",
+        paper_bgcolor="#111111",
+        plot_bgcolor="#111111",
         font=_LM_PLOTLY_FONT,
         autosize=False,
         width=width,
         height=height,
         margin={"l": 60, "r": 90, "t": 24, "b": 60},
     )
-    fig.update_xaxes(title_font=_LM_PLOTLY_FONT, tickfont=_LM_PLOTLY_TICK_FONT)
-    fig.update_yaxes(title_font=_LM_PLOTLY_FONT, tickfont=_LM_PLOTLY_TICK_FONT)
+    fig.update_xaxes(
+        title_font=_LM_PLOTLY_FONT,
+        tickfont=_LM_PLOTLY_TICK_FONT,
+        gridcolor="#2c2e33",
+        zerolinecolor="#2c2e33",
+    )
+    fig.update_yaxes(
+        title_font=_LM_PLOTLY_FONT,
+        tickfont=_LM_PLOTLY_TICK_FONT,
+        gridcolor="#2c2e33",
+        zerolinecolor="#2c2e33",
+    )
     return fig
 
 
@@ -274,10 +284,14 @@ def save_obstacle_avoidance_vmap_2d_pdf(
     if lm_fp is None:
         print("[plot] Latin Modern OTF not found; PDF will use matplotlib default serif.")
 
+    bg = "#111111"
+    fg = "#e0e0e0"
+    grid = "#2c2e33"
+
     dpi = 100
     fig, ax = plt.subplots(figsize=(width / dpi, height / dpi), dpi=dpi)
-    fig.patch.set_facecolor("white")
-    ax.set_facecolor("white")
+    fig.patch.set_facecolor(bg)
+    ax.set_facecolor(bg)
 
     centers = np.asarray(obstacle_centers, dtype=np.float64)
     radii = np.asarray(obstacle_radii, dtype=np.float64).reshape(-1)
@@ -286,8 +300,8 @@ def save_obstacle_avoidance_vmap_2d_pdf(
             Circle(
                 center,
                 radius,
-                facecolor=(255 / 255, 190 / 255, 190 / 255, 0.30),
-                edgecolor=(220 / 255, 130 / 255, 130 / 255, 0.50),
+                facecolor=(220 / 255, 100 / 255, 100 / 255, 0.35),
+                edgecolor=(255 / 255, 150 / 255, 150 / 255, 0.55),
                 linewidth=1.0,
                 zorder=1,
             )
@@ -301,7 +315,7 @@ def save_obstacle_avoidance_vmap_2d_pdf(
         ax.plot(
             position[:, 0],
             position[:, 1],
-            color=(0.55, 0.55, 0.55, 0.35),
+            color=(200 / 255, 200 / 255, 200 / 255, 0.35),
             linewidth=0.5,
             zorder=2,
         )
@@ -315,7 +329,10 @@ def save_obstacle_avoidance_vmap_2d_pdf(
             zorder=3,
         )
         cbar = fig.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
-        cbar.set_label(r"$\|v\|_2$", fontproperties=lm_fp)
+        cbar.set_label(r"$\|v\|_2$", fontproperties=lm_fp, color=fg)
+        cbar.ax.yaxis.set_tick_params(color=fg)
+        cbar.outline.set_edgecolor(grid)
+        plt.setp(cbar.ax.get_yticklabels(), color=fg)
         if lm_fp is not None:
             for lbl in cbar.ax.get_yticklabels():
                 lbl.set_fontproperties(lm_fp)
@@ -332,7 +349,7 @@ def save_obstacle_avoidance_vmap_2d_pdf(
         position[0, 0],
         position[0, 1],
         marker="o",
-        color="black",
+        color="white",
         markersize=6,
         linestyle="None",
         zorder=4,
@@ -341,15 +358,17 @@ def save_obstacle_avoidance_vmap_2d_pdf(
         position[-1, 0],
         position[-1, 1],
         marker="x",
-        color="black",
+        color="white",
         markersize=7,
         linestyle="None",
         zorder=4,
     )
 
     ax.set_aspect("equal", adjustable="box")
-    ax.set_xlabel(r"$x$", fontproperties=lm_fp)
-    ax.set_ylabel(r"$y$", fontproperties=lm_fp)
+    ax.set_xlabel(r"$x$", fontproperties=lm_fp, color=fg)
+    ax.set_ylabel(r"$y$", fontproperties=lm_fp, color=fg)
+    ax.tick_params(colors=fg)
+    ax.spines[:].set_color(grid)
     if lm_fp is not None:
         for lbl in ax.get_xticklabels() + ax.get_yticklabels():
             lbl.set_fontproperties(lm_fp)
@@ -358,7 +377,7 @@ def save_obstacle_avoidance_vmap_2d_pdf(
 
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, format="pdf", bbox_inches="tight", facecolor="white")
+    fig.savefig(out, format="pdf", bbox_inches="tight", facecolor=bg, edgecolor=bg)
     plt.close(fig)
     print(f"[plot] Saved 2D obstacle avoidance figure to {out.resolve()}")
 
