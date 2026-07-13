@@ -186,7 +186,6 @@ nav:
       - 'UsersGuide/07_lie.md'
       - 'UsersGuide/08_mpcc.md'
       - 'UsersGuide/09_mjx_dynamics.md'
-      - 'UsersGuide/10_latex_rendering.md'
     - Examples: Examples/
     - Reference: Reference/
     - Foundations:
