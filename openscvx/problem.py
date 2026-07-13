@@ -340,8 +340,7 @@ class Problem:
         dynamics_prop: Optional[dict] = None,
         states_prop: Optional[List[State]] = None,
         algebraic_prop: Optional[dict] = None,
-        licq_min: Union[float, Dict[int, float]] = 0.0,
-        licq_max: Union[float, Dict[int, float]] = 1e-4,
+        licq_max: float = 1e-4,
         algorithm: Optional[Union[Algorithm, dict]] = None,
         discretizer: Optional[Union[Discretizer, dict]] = None,
         solver: Optional[Union[ConvexSolver, dict]] = None,
@@ -373,12 +372,11 @@ class Problem:
                 Only specify additional states beyond optimization states. Used with dynamics_prop.
             algebraic_prop (dict, optional): Dictionary mapping names to symbolic expressions
                 for outputs evaluated (not integrated) during propagation.
-            licq_min: Minimum LICQ constraint value. Defaults to 0.0.
-                Either a scalar (applied to all CTCS groups) or a dict
-                mapping CTCS group ``idx`` to per-group bounds.
-            licq_max: Maximum LICQ constraint value. Defaults to 1e-4.
-                Either a scalar (applied to all CTCS groups) or a dict
-                mapping CTCS group ``idx`` to per-group bounds.
+            licq_max: Problem-wide upper bound for CTCS augmented states
+                (default: 1e-4). Serves as the default for all constraint
+                groups; a ``licq_max`` set on an individual constraint (via
+                ``ctcs(...)`` or ``.over(...)``) overrides it for that
+                constraint's augmented state.
             algorithm: SCP algorithm configuration. Accepts:
 
                 - ``None`` — uses ``PenalizedTrustRegion()`` with defaults.
@@ -539,7 +537,6 @@ class Problem:
             controls=controls,
             N=N,
             time=time,
-            licq_min=licq_min,
             licq_max=licq_max,
             dynamics_prop_extra=dynamics_prop,
             states_prop_extra=states_prop,

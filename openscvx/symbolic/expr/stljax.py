@@ -59,6 +59,7 @@ class STLJaxExpr(Expr):
         penalty: str = "squared_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
+        licq_max: Optional[float] = None,
     ) -> "CTCS":
         """Apply this STL expression over a continuous interval using CTCS.
 
@@ -70,6 +71,10 @@ class STLJaxExpr(Expr):
             penalty: Penalty function type for CTCS
             idx: Optional grouping index for multiple augmented states
             check_nodally: Whether to also enforce at discrete nodes
+            licq_max: Optional upper bound on the augmented state accumulating
+                this constraint's violation penalty. Constraints sharing an
+                augmented state must agree on the value; groups without one use
+                the problem-wide ``licq_max`` (a ``Problem`` argument).
 
         Returns:
             Continuous-time constraint satisfaction wrapper
@@ -89,7 +94,12 @@ class STLJaxExpr(Expr):
         constraint = Inequality(Neg(self), Constant(np.array(0.0)))
 
         return CTCS(
-            constraint, penalty=penalty, nodes=interval, idx=idx, check_nodally=check_nodally
+            constraint,
+            penalty=penalty,
+            nodes=interval,
+            idx=idx,
+            check_nodally=check_nodally,
+            licq_max=licq_max,
         )
 
     def at(self, nodes: Union[list, tuple]) -> "NodalConstraint":
