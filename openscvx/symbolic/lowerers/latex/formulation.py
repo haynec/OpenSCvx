@@ -140,9 +140,7 @@ def problem_to_latex(
 
     blocks = [_formulation(objective, st_rows, env)]
     if dynamics == "separate":
-        blocks.append(
-            _definition_block((rf"{lhs} &= {ex}" for lhs, ex in dyn_pairs), env)
-        )
+        blocks.append(_definition_block((rf"{lhs} &= {ex}" for lhs, ex in dyn_pairs), env))
     if constraints == "separate":
         blocks.append(
             _definition_block(
@@ -162,9 +160,7 @@ def problem_to_latex(
 def _validate_mode(name: str, value: str, choices: Tuple[str, ...]) -> None:
     """Reject an unknown mode value, naming the argument and valid choices."""
     if value not in choices:
-        raise ValueError(
-            f"{name} must be one of {choices}, got {value!r}."
-        )
+        raise ValueError(f"{name} must be one of {choices}, got {value!r}.")
 
 
 # --- objective --------------------------------------------------------------
@@ -240,9 +236,7 @@ def _numeric_coefficient(weight) -> str:
 # --- dynamics ---------------------------------------------------------------
 
 
-def _dynamics_pairs(
-    dynamics_dict: dict, lowerer: LatexLowerer
-) -> List[Tuple[str, str]]:
+def _dynamics_pairs(dynamics_dict: dict, lowerer: LatexLowerer) -> List[Tuple[str, str]]:
     """Return ``(\\dot{}-symbol, rhs-latex)`` pairs for the user dynamics dict.
 
     Dynamics keys are user states (role ``x``), so the left-hand symbol carries
@@ -250,8 +244,7 @@ def _dynamics_pairs(
     it — ``\\dot{x}_{\\mathrm{position}}``, not ``\\dot{x_{\\mathrm{position}}}``.
     """
     return [
-        (_dot_symbol(name), lowerer.lower(to_expr(expr)))
-        for name, expr in dynamics_dict.items()
+        (_dot_symbol(name), lowerer.lower(to_expr(expr))) for name, expr in dynamics_dict.items()
     ]
 
 
@@ -349,9 +342,7 @@ def _node_annotation(nodes: Sequence[int], N: int) -> str:
 # --- box bounds -------------------------------------------------------------
 
 
-def _box_bound_rows(
-    variables: Sequence[Variable], lowerer: LatexLowerer
-) -> List[str]:
+def _box_bound_rows(variables: Sequence[Variable], lowerer: LatexLowerer) -> List[str]:
     """One ``lb \\le v \\le ub`` row per variable with any finite bound."""
     rows: List[str] = []
     for var in variables:
@@ -422,9 +413,7 @@ def _formulation(objective: str, st_rows: Sequence[str], env: str) -> str:
     body = " \\\\\n".join(f"{lead} & {content}" for lead, content in rows)
     if env == "align":
         return (
-            "\\begin{subequations}\n\\begin{align}\n"
-            + body
-            + "\n\\end{align}\n\\end{subequations}"
+            "\\begin{subequations}\n\\begin{align}\n" + body + "\n\\end{align}\n\\end{subequations}"
         )
     return "\\begin{aligned}\n" + body + "\n\\end{aligned}"
 

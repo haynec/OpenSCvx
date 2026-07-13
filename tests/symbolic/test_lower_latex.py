@@ -487,9 +487,7 @@ def test_cond_cases_environment():
     x = _sliced_state("x", 1)
     pred = Inequality(x, Constant(np.array(5.0)))
     got = lower(Cond(pred, Constant(np.array(1.0)), Constant(np.array(0.0))))
-    assert got == (
-        r"\begin{cases} 1 & \text{if } x \le 5 \\ 0 & \text{otherwise} \end{cases}"
-    )
+    assert got == (r"\begin{cases} 1 & \text{if } x \le 5 \\ 0 & \text{otherwise} \end{cases}")
 
 
 def test_cond_node_ranges_without_predicate():
@@ -597,9 +595,7 @@ def test_stl_ifthen():
 
 def test_stl_integer_variable_membership():
     g = _sliced_state("g", 1)
-    assert lower(stl.IntegerVariable(g, [1, 2, 3, 4])) == (
-        r"x_{g} \in \left\{ 1, 2, 3, 4 \right\}"
-    )
+    assert lower(stl.IntegerVariable(g, [1, 2, 3, 4])) == (r"x_{g} \in \left\{ 1, 2, 3, 4 \right\}")
 
 
 def test_stl_always_with_bounded_interval():
@@ -689,9 +685,7 @@ def test_merge_subscript_splices_into_existing_group():
 def test_merge_subscript_handles_nested_brace_base():
     # The closing brace is matched by depth-scanning, so nested groups inside
     # the subscript don't confuse the splice point.
-    assert (
-        merge_subscript(r"x_{\lambda_{\mathrm{a}}}", 1) == r"x_{\lambda_{\mathrm{a}},1}"
-    )
+    assert merge_subscript(r"x_{\lambda_{\mathrm{a}}}", 1) == r"x_{\lambda_{\mathrm{a}},1}"
 
 
 def test_merge_subscript_appends_after_non_subscript_group():

@@ -81,9 +81,7 @@ _CONSTRAINT_MODES = ("inline", "symbolic", "separate")
 def _all_renderings(prob):
     """Every ``(dynamics, constraints)`` mode combination as one joined string."""
     return "\n".join(
-        prob.to_latex(dynamics=d, constraints=c)
-        for d in _DYNAMICS_MODES
-        for c in _CONSTRAINT_MODES
+        prob.to_latex(dynamics=d, constraints=c) for d in _DYNAMICS_MODES for c in _CONSTRAINT_MODES
     )
 
 
