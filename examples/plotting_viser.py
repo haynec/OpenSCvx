@@ -1069,7 +1069,7 @@ def create_snapshot_plotting_server(
     scene_scale: float = 1.0,
     initial_n_snapshots: int = 5,
     max_n_snapshots: int | None = None,
-    background_color: tuple[int, int, int] = (255, 255, 255),
+    background_color: tuple[int, int, int] | None = None,
     show_grid: bool = False,
     ghost_point_size: float = 0.08,
     ghost_opacity: float = 0.35,
@@ -1079,6 +1079,7 @@ def create_snapshot_plotting_server(
     snapshot_builder: Callable[[viser.ViserServer, int, int], list] | None = None,
     vehicle_mesh: tuple[np.ndarray, np.ndarray] | None = None,
     vehicle_mesh_color: tuple[int, int, int] = (200, 200, 210),
+    dark_mode: bool = False,
 ) -> viser.ViserServer:
     """Create a static multi-pose visualization with GUI-controlled snapshot count.
 
@@ -1120,7 +1121,8 @@ def create_snapshot_plotting_server(
         initial_n_snapshots: Initial snapshot count (overridden by
             ``results["initial_n_snapshots"]`` when set).
         max_n_snapshots: Upper bound for the GUI slider (defaults to frame count).
-        background_color: RGB canvas background (default white).
+        background_color: RGB canvas background. Defaults to black when
+            ``dark_mode`` is True and white when False.
         show_grid: Whether to draw the ground grid.
         ghost_point_size: Point size for the ghost trajectory.
         ghost_opacity: Opacity multiplier on velocity-colored ghost points (1.0 matches the
@@ -1131,6 +1133,7 @@ def create_snapshot_plotting_server(
             Uses ``compute_boresight_intersection_trail`` when available (same as the animated
             ``/boresight_intersection_trail``); otherwise falls back to ``traced_path_on_plane``.
             A GUI slider adjusts point size live.
+        dark_mode: Whether to use the viser dark GUI theme (default False).
 
     Returns:
         ViserServer instance.
@@ -1208,7 +1211,10 @@ def create_snapshot_plotting_server(
 
     colors = compute_velocity_colors(vel, fallback_length=n_frames)
 
-    server = create_server(pos, dark_mode=False, show_grid=show_grid)
+    if background_color is None:
+        background_color = (0, 0, 0) if dark_mode else (255, 255, 255)
+
+    server = create_server(pos, dark_mode=dark_mode, show_grid=show_grid)
     _set_scene_background(server, background_color)
 
     if "vertices" in results:
