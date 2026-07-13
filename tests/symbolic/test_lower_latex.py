@@ -50,8 +50,28 @@ from openscvx.symbolic.expr import (
     Variable,
     Vstack,
 )
+from openscvx.symbolic.expr import stl
 from openscvx.symbolic.expr.constraint import CTCS, Equality, Inequality, NodalConstraint
-from openscvx.symbolic.expr.lie.so3 import SO3Exp
+from openscvx.symbolic.expr.expr import Expr
+from openscvx.symbolic.expr.lie.adjoint import (
+    Adjoint,
+    AdjointDual,
+    SE3Adjoint,
+    SE3AdjointDual,
+)
+from openscvx.symbolic.expr.lie.se3 import SE3Exp, SE3Log
+from openscvx.symbolic.expr.lie.so3 import SO3Exp, SO3Log
+from openscvx.symbolic.expr.logic import All, Any, Cond
+from openscvx.symbolic.expr.math import (
+    Bilerp,
+    Cinterp,
+    Huber,
+    Linterp,
+    LogSumExp,
+    SmoothReLU,
+)
+from openscvx.symbolic.expr.spatial import QDCM, SSM, SSMP
+from openscvx.symbolic.expr.vmap import Vmap
 from openscvx.symbolic.lower import to_latex
 from openscvx.symbolic.lowerers.latex import LatexLowerer, format_constant, latex_symbol
 from openscvx.symbolic.lowerers.latex._lowerer import merge_subscript
@@ -395,6 +415,235 @@ def test_cross_node_constraint_renders_inner():
 
 
 # =============================================================================
+# Math extras (Huber, SmoothReLU, LogSumExp, interpolation)
+# =============================================================================
+
+
+def test_huber_subscripts_delta():
+    x = _sliced_state("x", 1)
+    assert lower(Huber(x, delta=0.5)) == r"\operatorname{huber}_{0.5}\left( x \right)"
+
+
+def test_smooth_relu():
+    x = _sliced_state("x", 1)
+    assert lower(SmoothReLU(x)) == r"\operatorname{smoothrelu}\left( x \right)"
+
+
+def test_logsumexp():
+    x = _sliced_state("x", 1)
+    y = Variable("y", (1,))
+    assert lower(LogSumExp(x, y)) == r"\operatorname{logsumexp}\left( x, y \right)"
+
+
+def test_linterp_lowers_all_operands():
+    x = _sliced_state("x", 1)
+    xp = Constant(np.array([0.0, 1.0]))
+    fp = Constant(np.array([0.0, 2.0]))
+    assert lower(Linterp(x, xp, fp)) == (
+        r"\operatorname{linterp}\left( x, "
+        r"\begin{bmatrix} 0 \\ 1 \end{bmatrix}, "
+        r"\begin{bmatrix} 0 \\ 2 \end{bmatrix} \right)"
+    )
+
+
+def test_cinterp_lowers_only_query_point():
+    # Breakpoints/coeffs are baked in, so x is the only symbolic operand.
+    x = _sliced_state("x", 1)
+    assert lower(Cinterp(x, np.arange(5.0), np.arange(5.0))) == (
+        r"\operatorname{cinterp}\left( x \right)"
+    )
+
+
+def test_bilerp_lowers_all_operands():
+    x = _sliced_state("x", 1)
+    y = Variable("y", ())
+    xp = Constant(np.array([0.0, 1.0]))
+    yp = Constant(np.array([0.0, 1.0]))
+    fp = Constant(np.zeros((2, 2)))
+    got = lower(Bilerp(x[0], y, xp, yp, fp))
+    assert got.startswith(r"\operatorname{bilerp}\left( x_{0}, y, ")
+
+
+# =============================================================================
+# Logic (All, Any, Cond)
+# =============================================================================
+
+
+def test_all_bigwedge():
+    x = _sliced_state("x", 1)
+    p1 = Inequality(x, Constant(np.array(5.0)))
+    p2 = Inequality(Neg(x), Constant(np.array(0.0)))
+    assert lower(All([p1, p2])) == r"\bigwedge \left( x \le 5, -x \le 0 \right)"
+
+
+def test_any_bigvee():
+    x = _sliced_state("x", 1)
+    p1 = Inequality(x, Constant(np.array(5.0)))
+    p2 = Inequality(Neg(x), Constant(np.array(0.0)))
+    assert lower(Any([p1, p2])) == r"\bigvee \left( x \le 5, -x \le 0 \right)"
+
+
+def test_cond_cases_environment():
+    x = _sliced_state("x", 1)
+    pred = Inequality(x, Constant(np.array(5.0)))
+    got = lower(Cond(pred, Constant(np.array(1.0)), Constant(np.array(0.0))))
+    assert got == (
+        r"\begin{cases} 1 & \text{if } x \le 5 \\ 0 & \text{otherwise} \end{cases}"
+    )
+
+
+def test_cond_node_ranges_without_predicate():
+    got = lower(
+        Cond(None, Constant(np.array(1.0)), Constant(np.array(0.0)), node_ranges=[(0, 2), (5, 7)])
+    )
+    assert got == (
+        r"\begin{cases} 1 & \text{if } k \in [0, 2) \cup [5, 7) "
+        r"\\ 0 & \text{otherwise} \end{cases}"
+    )
+
+
+# =============================================================================
+# Spatial (SSM, SSMP, QDCM)
+# =============================================================================
+
+
+def test_ssm_cross_product_matrix():
+    w = _sliced_state("w", 3)
+    assert lower(SSM(w)) == r"\left[ x_{w} \right]_{\times}"
+
+
+def test_ssmp_omega():
+    w = _sliced_state("w", 3)
+    assert lower(SSMP(w)) == r"\Omega\left( x_{w} \right)"
+
+
+def test_qdcm():
+    q = _sliced_state("q", 4)
+    assert lower(QDCM(q)) == r"C\left( x_{q} \right)"
+
+
+# =============================================================================
+# Lie (SO3/SE3 exp & log, adjoints)
+# =============================================================================
+
+
+def test_so3_exp_and_log():
+    w = _sliced_state("w", 3)
+    R = Parameter("R", shape=(3, 3), value=np.eye(3))
+    assert lower(SO3Exp(w)) == r"\operatorname{Exp}_{SO(3)}\left( x_{w} \right)"
+    assert lower(SO3Log(R)) == r"\operatorname{Log}_{SO(3)}\left( R \right)"
+
+
+def test_se3_exp_and_log():
+    xi = _sliced_state("xi", 6)
+    T = Parameter("T", shape=(4, 4), value=np.eye(4))
+    assert lower(SE3Exp(xi)) == r"\operatorname{Exp}_{SE(3)}\left( x_{\xi} \right)"
+    assert lower(SE3Log(T)) == r"\operatorname{Log}_{SE(3)}\left( T \right)"
+
+
+def test_little_adjoint_and_coadjoint():
+    a = _sliced_state("a", 6)
+    b = _sliced_state("b", 6)
+    assert lower(Adjoint(a, b)) == r"\operatorname{ad}_{x_{a}}\left( x_{b} \right)"
+    assert lower(AdjointDual(a, b)) == r"\operatorname{ad}^{*}_{x_{a}}\left( x_{b} \right)"
+
+
+def test_big_adjoint_and_coadjoint():
+    T = Parameter("T", shape=(4, 4), value=np.eye(4))
+    assert lower(SE3Adjoint(T)) == r"\operatorname{Ad}_{SE(3)}\left( T \right)"
+    assert lower(SE3AdjointDual(T)) == r"\operatorname{Ad}^{*}_{SE(3)}\left( T \right)"
+
+
+# =============================================================================
+# STL (propositional and temporal)
+# =============================================================================
+
+
+def _ball(radius):
+    pos = _sliced_state("pos", 2)
+    return Norm(pos) <= Constant(np.array(float(radius)))
+
+
+def test_stl_or_nary():
+    got = lower(stl.Or(_ball(1), _ball(2), _ball(3)))
+    assert got == (
+        r"\left( \left\| x_{\mathrm{pos}} \right\| \le 1 \right) \vee "
+        r"\left( \left\| x_{\mathrm{pos}} \right\| \le 2 \right) \vee "
+        r"\left( \left\| x_{\mathrm{pos}} \right\| \le 3 \right)"
+    )
+
+
+def test_stl_and_nary():
+    got = lower(stl.And(_ball(1), _ball(2)))
+    assert got == (
+        r"\left( \left\| x_{\mathrm{pos}} \right\| \le 1 \right) \wedge "
+        r"\left( \left\| x_{\mathrm{pos}} \right\| \le 2 \right)"
+    )
+
+
+def test_stl_not():
+    assert lower(stl.Not(_ball(1))) == (
+        r"\neg \left( \left\| x_{\mathrm{pos}} \right\| \le 1 \right)"
+    )
+
+
+def test_stl_ifthen():
+    got = lower(stl.IfThen(_ball(1), _ball(2)))
+    assert got == (
+        r"\left( \left\| x_{\mathrm{pos}} \right\| \le 1 \right) \implies "
+        r"\left( \left\| x_{\mathrm{pos}} \right\| \le 2 \right)"
+    )
+
+
+def test_stl_integer_variable_membership():
+    g = _sliced_state("g", 1)
+    assert lower(stl.IntegerVariable(g, [1, 2, 3, 4])) == (
+        r"x_{g} \in \left\{ 1, 2, 3, 4 \right\}"
+    )
+
+
+def test_stl_always_with_bounded_interval():
+    assert lower(stl.Always(_ball(1), (0, 5))) == (
+        r"\Box_{[0, 5]} \left( \left\| x_{\mathrm{pos}} \right\| \le 1 \right)"
+    )
+
+
+def test_stl_always_unbounded_omits_subscript():
+    # A nested/interval-free Always renders no interval subscript.
+    assert lower(stl.Always(_ball(1))) == (
+        r"\Box \left( \left\| x_{\mathrm{pos}} \right\| \le 1 \right)"
+    )
+
+
+def test_stl_eventually_with_interval():
+    assert lower(stl.Eventually(_ball(1), (2, 8))) == (
+        r"\Diamond_{[2, 8]} \left( \left\| x_{\mathrm{pos}} \right\| \le 1 \right)"
+    )
+
+
+def test_stl_until_with_interval():
+    got = lower(stl.Until(_ball(1), _ball(2), (1, 4)))
+    assert got == (
+        r"\left( \left\| x_{\mathrm{pos}} \right\| \le 1 \right) \, "
+        r"\mathcal{U}_{[1, 4]} \, "
+        r"\left( \left\| x_{\mathrm{pos}} \right\| \le 2 \right)"
+    )
+
+
+# =============================================================================
+# Vmap
+# =============================================================================
+
+
+def test_vmap_renders_body_with_placeholder_box():
+    position = _sliced_state("position", 3)
+    vm = Vmap(lambda pt: Norm(position - pt), batch=np.eye(3))
+    assert lower(vm) == (
+        r"\operatorname{vmap}\left( \left\| x_{\mathrm{position}} - \square \right\| \right)"
+    )
+
+
+# =============================================================================
 # latex_symbol
 # =============================================================================
 
@@ -484,13 +733,22 @@ def test_format_constant_large_matrix_placeholder():
 # =============================================================================
 
 
+class _UnregisteredExpr(Expr):
+    """A stand-in node type with no registered LaTeX visitor.
+
+    Every shipped node type now has a visitor, so the fallback is exercised
+    with a synthesized subclass — this is exactly the path a future,
+    not-yet-supported node takes.
+    """
+
+
 def test_unregistered_node_raises_not_implemented():
-    node = SO3Exp(Constant(np.array([0.0, 0.0, 1.0])))
+    node = _UnregisteredExpr()
     with pytest.raises(NotImplementedError) as excinfo:
         lower(node)
     msg = str(excinfo.value)
     assert "LatexLowerer" in msg
-    assert "SO3Exp" in msg
+    assert "_UnregisteredExpr" in msg
 
 
 # =============================================================================
@@ -530,5 +788,5 @@ def test_repr_latex_wraps_supported_node_in_dollars():
 
 
 def test_repr_latex_returns_none_for_unsupported_node():
-    node = SO3Exp(Constant(np.array([0.0, 0.0, 1.0])))
+    node = _UnregisteredExpr()
     assert node._repr_latex_() is None

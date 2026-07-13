@@ -5,10 +5,10 @@ and the ``dispatch`` function.  It is deliberately kept free of heavyweight
 imports (no expression subclasses beyond the base ``Expr``) so that the visitor
 modules can import from it without circular-dependency issues.
 
-The registry is independent of the JAX and CVXPy registries.  Nodes without a
-registered LaTeX visitor (STL, Lie, spatial, ``Vmap``, logic) raise
-``NotImplementedError`` on dispatch — the designed fallback, since rendering
-them is a later, on-demand extension.
+The registry is independent of the JAX and CVXPy registries.  It covers every
+shipped node type; a future node added without a registered LaTeX visitor (or a
+deliberately-unregistered legacy node like the ``stljax`` operators) raises
+``NotImplementedError`` on dispatch — the designed fallback.
 """
 
 from typing import Any, Callable, Dict, Type

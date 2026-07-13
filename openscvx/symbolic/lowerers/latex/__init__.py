@@ -7,9 +7,12 @@ corresponding visitor function registered via ``@visitor``.
 
 The visitor functions are split across submodules that mirror the
 ``openscvx.symbolic.expr`` package structure.  Importing this package
-triggers registration of all visitors.  Nodes without a registered visitor
-(STL, Lie, spatial, ``Vmap``, logic) raise ``NotImplementedError`` — the
-designed fallback until they are needed.
+triggers registration of all visitors, which now cover every shipped node
+type — arithmetic, linear algebra, elementwise math, arrays, constraints,
+logic, spatial, Lie-group, STL, and ``Vmap``.  A future node added without a
+visitor raises ``NotImplementedError`` — the designed fallback until its
+visitor lands.  (The legacy ``stljax`` operators are intentionally left
+unregistered; the GMSR ``ox.stl`` surface is the rendered one.)
 
 Example::
 
@@ -27,9 +30,14 @@ from openscvx.symbolic.lowerers.latex import (
     constraint,  # noqa: F401
     control,  # noqa: F401
     expr,  # noqa: F401
+    lie,  # noqa: F401
     linalg,  # noqa: F401
+    logic,  # noqa: F401
     math,  # noqa: F401
+    spatial,  # noqa: F401
     state,  # noqa: F401
+    stl,  # noqa: F401
+    vmap,  # noqa: F401
 )
 from openscvx.symbolic.lowerers.latex._lowerer import (
     LatexLowerer,

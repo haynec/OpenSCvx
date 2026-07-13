@@ -235,17 +235,51 @@ same label indexes both the formulation reference and its definition, so the two
 line up. The whole thing is still one string — a reader who only wants the
 constraints block copies it out of the output.
 
-## A note on exotic nodes
+## Exotic nodes
 
-The LaTeX backend ships visitors for arithmetic, linear algebra, elementwise
-math, array construction, and the constraint nodes — enough for the vast
-majority of problems. Nodes without a visitor yet (STL, Lie-group operators like
-`SO3Exp`, spatial nodes) raise `NotImplementedError`:
+The LaTeX backend covers **every shipped node type** — not just arithmetic,
+linear algebra, elementwise math, arrays, and constraints, but also the logic
+(`All`, `Any`, `Cond`), spatial, Lie-group, STL, and `Vmap` nodes. They render
+in the standard notation you would reach for on paper:
+
+- **STL** uses the usual connectives and temporal operators — `\wedge`, `\vee`,
+  `\neg`, `\implies`, and `\Box_{[a,b]}` (always), `\Diamond_{[a,b]}`
+  (eventually), `\mathcal{U}_{[a,b]}` (until), the interval subscript dropping
+  out when the operator is unbounded. (`\Box`/`\Diamond` come from `amssymb`,
+  so STL-bearing output needs `\usepackage{amsmath,amssymb}` rather than
+  `amsmath` alone.)
+
+  ```python
+  ox.to_latex(ox.stl.Always(ox.stl.Or(reach_a, reach_b), (0, 5)))
+  # '\\Box_{[0, 5]} \\left( \\left( \\left\\| x_{\\mathrm{position}} \\right\\| \\le 1 \\right) \\vee \\left( \\left\\| x_{\\mathrm{position}} \\right\\| \\le 2 \\right) \\right)'
+  ```
+
+- **Lie-group** operators use `\operatorname{Exp}_{SO(3)}` /
+  `\operatorname{Log}_{SE(3)}` for the exp/log maps, `\operatorname{Ad}` for the
+  big Adjoint and `\operatorname{ad}` for the little adjoint (Lie bracket), with
+  a `{}^{*}` superscript on the duals:
+
+  ```python
+  ox.to_latex(ox.lie.SO3Exp(omega))
+  # '\\operatorname{Exp}_{SO(3)}\\left( x_{\\omega} \\right)'
+  ```
+
+- **Spatial** nodes render as `\left[ w \right]_{\times}` (the skew/cross-product
+  matrix), `\Omega(w)` (the quaternion-kinematics matrix), and `C(q)` (the
+  quaternion-to-DCM).
+
+A *future* node added without a visitor still raises `NotImplementedError`:
 
 ```python
-ox.to_latex(SO3Exp(omega))
-# NotImplementedError: 'LatexLowerer' has no visitor for SO3Exp
+ox.to_latex(SomeBrandNewNode(...))
+# NotImplementedError: 'LatexLowerer' has no visitor for SomeBrandNewNode
 ```
 
 In a notebook this is invisible — `_repr_latex_` catches the error and returns
 `None`, so Jupyter simply falls back to the plain `__repr__`.
+
+!!! note "Legacy `stljax` operators"
+    The older `ox.stljax` STL surface (backed by the external `stljax` library)
+    is intentionally left unrendered — those nodes raise `NotImplementedError`
+    like any unsupported node. Use the GMSR `ox.stl` operators, which render
+    fully, for task specifications you want to typeset.

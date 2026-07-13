@@ -1,7 +1,8 @@
 """LaTeX visitors for math expressions.
 
 Visitors: Sin, Cos, Tan, Asin, Acos, Atan, Atan2, Square, Sqrt, Exp, Log, Abs,
-          Max, Min, PositivePart
+          Max, Min, PositivePart, Huber, SmoothReLU, LogSumExp, Linterp,
+          Cinterp, Bilerp
 """
 
 from openscvx.symbolic.expr.arithmetic import Power
@@ -11,13 +12,19 @@ from openscvx.symbolic.expr.math import (
     Asin,
     Atan,
     Atan2,
+    Bilerp,
+    Cinterp,
     Cos,
     Exp,
+    Huber,
+    Linterp,
     Log,
+    LogSumExp,
     Max,
     Min,
     PositivePart,
     Sin,
+    SmoothReLU,
     Sqrt,
     Square,
     Tan,
@@ -119,3 +126,57 @@ def _visit_min(lowerer, node: Min):
 def _visit_positive_part(lowerer, node: PositivePart):
     """Render the positive part as ``\\left( a \\right)_{+}``."""
     return rf"\left( {lowerer.lower(node.x)} \right)_{{+}}"
+
+
+@visitor(Huber)
+def _visit_huber(lowerer, node: Huber):
+    """Render the Huber penalty as ``\\operatorname{huber}_{\\delta}(x)``.
+
+    The threshold ``delta`` (the quadratic-to-linear transition point) is
+    carried as the subscript so distinct thresholds render distinctly.
+    """
+    delta = "%g" % node.delta
+    return rf"\operatorname{{huber}}_{{{delta}}}\left( {lowerer.lower(node.x)} \right)"
+
+
+@visitor(SmoothReLU)
+def _visit_smooth_relu(lowerer, node: SmoothReLU):
+    """Render the smooth ReLU as ``\\operatorname{smoothrelu}(x)``.
+
+    The smoothing parameter ``c`` is evaluation machinery (it only rounds the
+    kink) rather than part of the function's identity, so it is not shown.
+    """
+    return rf"\operatorname{{smoothrelu}}\left( {lowerer.lower(node.x)} \right)"
+
+
+@visitor(LogSumExp)
+def _visit_logsumexp(lowerer, node: LogSumExp):
+    """Render log-sum-exp as ``\\operatorname{logsumexp}(a, b, ...)``."""
+    args = ", ".join(lowerer.lower(op) for op in node.operands)
+    return _call(r"\operatorname{logsumexp}", args)
+
+
+@visitor(Linterp)
+def _visit_linterp(lowerer, node: Linterp):
+    """Render 1-D linear interpolation as ``\\operatorname{linterp}(x, xp, fp)``."""
+    args = ", ".join(lowerer.lower(c) for c in node.children())
+    return _call(r"\operatorname{linterp}", args)
+
+
+@visitor(Cinterp)
+def _visit_cinterp(lowerer, node: Cinterp):
+    """Render 1-D cubic-spline interpolation as ``\\operatorname{cinterp}(x)``.
+
+    Only the query point is a symbolic operand — the breakpoints and spline
+    coefficients are baked in at construction — so it is the only rendered
+    argument.
+    """
+    args = ", ".join(lowerer.lower(c) for c in node.children())
+    return _call(r"\operatorname{cinterp}", args)
+
+
+@visitor(Bilerp)
+def _visit_bilerp(lowerer, node: Bilerp):
+    """Render 2-D bilinear interpolation as ``\\operatorname{bilerp}(x, y, xp, yp, fp)``."""
+    args = ", ".join(lowerer.lower(c) for c in node.children())
+    return _call(r"\operatorname{bilerp}", args)
