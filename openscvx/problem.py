@@ -26,7 +26,7 @@ import time
 import warnings
 from dataclasses import fields as dc_fields
 from dataclasses import replace as dc_replace
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union
 
 import jax
 import numpy as np
@@ -525,6 +525,10 @@ class Problem:
             dynamics, adapter_byof = dynamics.expand()
             byof = _merge_byof(byof, adapter_byof)
 
+        # Stash the user-authored dynamics (pre-augmentation) for `to_latex`.
+        # Shallow-copy so later user mutation of their dict doesn't alias.
+        self._dynamics_dict: dict = dict(dynamics)
+
         # Resolve byof: dict → ByofSpec (validates keys and nested specs)
         if byof is not None:
             byof = ByofSpec.model_validate(byof)
@@ -677,6 +681,107 @@ class Problem:
         self._solution_parameters: Optional[Dict[str, np.ndarray]] = None
 
         # SCP algorithm (resolved from `algorithm` parameter above)
+
+    @property
+    def dynamics(self) -> dict:
+        """The user-authored dynamics dict, ``{state_name: expr}``.
+
+        This is the problem as written, *before* the solver augments it with a
+        time-dilation control and per-CTCS penalty states.  Handy for rendering
+        or inspecting a single equation, e.g. ``ox.to_latex(problem.dynamics["v"])``.
+
+        Returns:
+            A dict mapping each user state name to its symbolic time derivative.
+        """
+        return self._dynamics_dict
+
+    def to_latex(
+        self,
+        *,
+        dynamics: Literal["inline", "separate"] = "separate",
+        constraints: Literal["inline", "symbolic", "separate"] = "inline",
+        weights: Literal["symbolic", "numeric"] = "symbolic",
+    ) -> str:
+        """Render the problem as a Mayer-form LaTeX formulation.
+
+        The rendered problem is the one you wrote — pre-augmentation, so no
+        time-dilation control or CTCS penalty states appear; CTCS constraints
+        show up as continuous-time path constraints.  The result is a complete
+        display-math fragment — a ``subequations`` + ``align`` block (with
+        ``"separate"`` definitions as bare ``align`` blocks) that pastes into a
+        paper as-is, no ``$$`` wrapping.
+
+        Dynamics render at one of two detail levels:
+
+        - ``"separate"`` (default): the formulation carries ``\\dot{x} = f(x, u)``
+          and the per-state ``\\dot{x}_{i} = \\ldots`` definitions follow as
+          their own ``align`` block.
+        - ``"inline"``: one ``\\dot{x}_{i} = \\ldots`` row per equation inside
+          the formulation.
+
+        Constraints add a middle level:
+
+        - ``"inline"`` (default): full constraint bodies with annotations.
+        - ``"symbolic"``: numbered ``g_i(x, u) \\le 0`` / ``h_j(x, u) = 0``
+          references only (with their ``\\forall t`` / node annotations).
+        - ``"separate"``: symbolic references plus an appended definition block.
+
+        Args:
+            dynamics: Detail level for the dynamics section.
+            constraints: Detail level for the constraint section.
+            weights: How objective coefficients render. ``"symbolic"`` (the
+                default) shows each as a ``\\lambda`` subscripted by the state's
+                symbol and element (``\\lambda_{t}``, ``\\lambda_{\\mathrm{v},1}``);
+                ``"numeric"`` substitutes the tuned ``lam_cost`` values (``%g``,
+                omitted when equal to 1).
+
+        Returns:
+            The formulation as a single LaTeX string; ``"separate"`` modes append
+            the definition blocks after it.
+
+        Example:
+            Default (separate dynamics, inline constraints, symbolic weights)::
+
+                print(problem.to_latex())
+
+            Everything expanded in a single block::
+
+                print(problem.to_latex(dynamics="inline"))
+
+            Substitute the tuned objective weights::
+
+                print(problem.to_latex(weights="numeric"))
+        """
+        from openscvx.symbolic.lowerers.latex import problem_to_latex
+
+        return problem_to_latex(
+            self.symbolic,
+            self._dynamics_dict,
+            self.algorithm.lam_cost,
+            dynamics=dynamics,
+            constraints=constraints,
+            weights=weights,
+        )
+
+    def _repr_latex_(self) -> str:
+        """Render as display math in Jupyter (default detail levels, in ``$$``).
+
+        Uses the builder's ``aligned`` envelope rather than the ``subequations``
+        + ``align`` form ``to_latex`` returns: MathJax/KaTeX (the notebook and
+        docs renderers) do not implement ``subequations``, and ``align`` cannot
+        nest inside ``$$``, whereas ``aligned`` can.
+        """
+        from openscvx.symbolic.lowerers.latex import problem_to_latex
+
+        body = problem_to_latex(
+            self.symbolic,
+            self._dynamics_dict,
+            self.algorithm.lam_cost,
+            dynamics="separate",
+            constraints="inline",
+            env="aligned",
+        )
+        return f"$$\n{body}\n$$"
 
     @property
     def solver(self) -> ConvexSolver:
