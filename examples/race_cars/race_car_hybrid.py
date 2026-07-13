@@ -196,9 +196,8 @@ v.guess = 2.0 * np.ones((N, 1))
 
 # Combustion throttle / friction brake. Negative D is friction braking, which
 # carries only the combustion share of the envelope — full-strength braking
-# requires harvesting the electric share through regen.
-# The trail-braking profile on the guessed arc-length grid seeds the throttle
-# here and the MGU-K controls below.
+# requires harvesting the electric share through regen. The trail-braking
+# profile seeds this throttle and the MGU-K controls below.
 D_trail = trail_brake_throttle(s.guess[:, 0])
 
 D_throt = ox.State("D", shape=(1,))
@@ -250,10 +249,8 @@ derDelta.guess = np.zeros((N, 1))
 # steps. They stay separate controls because the battery sees them
 # asymmetrically — harvest pays the round-trip efficiency and counts against
 # the recovery cap — whereas a single signed control would put max(·, 0)
-# kinks in the dynamics. Overlap is self-penalizing through η.
-# The MGU-K mirrors the trail-braking profile: friction brakes carry only the
-# combustion share, so full-strength braking harvests at full regen on corner
-# entry, and the drive side of the profile is matched with full deployment.
+# kinks in the dynamics. Overlap is self-penalizing through η. The guesses
+# mirror the trail-braking profile: harvest into the corner, deploy from it.
 deploy = ox.Control("deploy", shape=(1,), parameterization="FOH")
 deploy.min = [0.0]
 deploy.max = [1.0]
@@ -368,12 +365,12 @@ problem = ox.Problem(
     float_dtype="float64",
     licq_max=1e-12,
     algorithm={
-        # lam_prox/lam_cost re-swept (4x4 log grid, one solve_batched call over
-        # algorithm hyperparameters) after the trail-braking guess landed: the
-        # better-conditioned guess tolerates a much looser proximal anchor, and
-        # this pair is the fastest converged config. Lap time improves
-        # monotonically with lam_cost/lam_prox until ratios near ~1000 diverge.
-        "lam_prox": 3e-2,
+        # lam_prox/lam_cost from batched sweeps. Beware loosening lam_prox
+        # further: the lane is a soft (huber) CTCS penalty, so looser anchors
+        # still report convergence while the propagated trajectory cuts the
+        # final corner — validate a retune against the lane violation, not
+        # just the lap time.
+        "lam_prox": 3e-1,
         "lam_cost": 3e0,
         "lam_vc": 1e2,
         "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
@@ -577,9 +574,8 @@ if __name__ == "__main__":
 
     # Warm-start continuation: SCP anchors each solve to its guess, so a single
     # solve stops well short of the optimum on this problem. Re-anchoring at
-    # the previous solution resumes the descent — a few rounds recover over a
-    # second of lap time per car and keep the physical ordering of the three
-    # cars intact; returns diminish quickly beyond this.
+    # the previous solution resumes the descent; returns diminish after a few
+    # rounds.
     for _ in range(4):
         results = problem.solve_batched(
             parameters=cars,
