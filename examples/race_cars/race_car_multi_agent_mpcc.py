@@ -24,10 +24,10 @@ minimised with per-state weights, alongside a small residual progress reward
 that gives cars a reason to overtake rather than follow. All cars regulate
 around one *shared* reference: the nominal unity-spec lap, baked into pchip
 splines over the tiled arc-length grid exactly like ``kappa`` — a smooth,
-kink-free lookup the SCP linearises cleanly, cheaper than a per-knot hat sum.
-Heavier or lower-power cars therefore track a lap a touch beyond their reach
-and lighter ones a lap they could beat; the pace they win or lose back is
-priced by ``W_TRACK_V``/``W_TRACK_E`` against the residual progress reward.
+kink-free lookup the SCP linearises cleanly. Spec differences enter through
+one scalar ``pace_scale`` parameter that rescales the speed profile by the
+ratio of phase-1 lap times: the pace hierarchy that lets wheel-to-wheel
+battles resolve instead of two cars chasing the same point indefinitely.
 
 The payoff over the progress-max controller: the horizon no longer has to
 rediscover the racing line, corner speeds, and — critically — the energy
@@ -444,6 +444,12 @@ REF_IDX = next(
     0,
 )
 
+# Pace factor: the nominal speed profile rescaled by the ratio of phase-1 lap
+# times. Without it two neighbouring cars chase the same point at the same
+# speed and a duel never resolves; the pace hierarchy is what lets battles
+# end and the field string out.
+PACE = REF_LAP_TIMES[REF_IDX] / REF_LAP_TIMES
+
 # ── States ─────────────────────────────────────────────────────────────────────
 S_POLE, N_POLE = grid_slot(0)
 S_MIN = grid_slot(K - 1)[0] - 0.1
@@ -561,10 +567,11 @@ time = ox.Time(
     uniform_time_grid=True,
 )
 
-# ── Parameters: car spec and opponent plans ──────────────────────────────────
+# ── Parameters: car spec, pace factor, and opponent plans ────────────────────
 power_scale = ox.Parameter("power_scale", shape=(), value=1.0)
 mass_scale = ox.Parameter("mass_scale", shape=(), value=1.0)
 battery_scale = ox.Parameter("battery_scale", shape=(), value=1.0)
+pace_scale = ox.Parameter("pace_scale", shape=(), value=1.0)
 
 if K > 1:
     opp_s = ox.Parameter("opp_s", shape=(N_MPC, K - 1), value=np.full((N_MPC, K - 1), S_MIN - 10.0))
@@ -593,9 +600,10 @@ sdot = (v[0] * ox.Cos(slip_angle)) / (ox.Constant(1.0) - kappa * n[0])
 
 # Reference lookup: the shared nominal lap as pchip splines of arc length, the
 # same construction ``kappa`` uses — smooth and kink-free, so the tracking
-# error linearises cleanly and the lookup is a segment eval, not a per-knot sum.
+# error linearises cleanly. Only the speed profile is per-car, through the
+# scalar pace factor.
 n_ref_s = ox.Cinterp(s[0], REF_S_EXT, REF_N[REF_IDX], method="pchip")
-v_ref_s = ox.Cinterp(s[0], REF_S_EXT, REF_V[REF_IDX], method="pchip")
+v_ref_s = pace_scale * ox.Cinterp(s[0], REF_S_EXT, REF_V[REF_IDX], method="pchip")
 E_ref_s = ox.Cinterp(s[0], REF_S_EXT, REF_E[REF_IDX], method="pchip")
 
 dynamics = {
@@ -1056,6 +1064,7 @@ def run_race(max_steps: int = MAX_STEPS, dense: bool = True) -> RaceLog:
         key: np.array([spec[key] for spec in AGENTS])
         for key in ("power_scale", "mass_scale", "battery_scale")
     }
+    fixed_params["pace_scale"] = PACE
 
     sim_rows: list[np.ndarray] = []
     dense_t: list[np.ndarray] = []
