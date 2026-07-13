@@ -49,8 +49,8 @@ from openscvx.symbolic.expr import (
     Transpose,
     Variable,
     Vstack,
+    stl,
 )
-from openscvx.symbolic.expr import stl
 from openscvx.symbolic.expr.constraint import CTCS, Equality, Inequality, NodalConstraint
 from openscvx.symbolic.expr.expr import Expr
 from openscvx.symbolic.expr.lie.adjoint import (

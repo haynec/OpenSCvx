@@ -45,11 +45,14 @@ call.  No ``$$`` wrapping.  ``env="aligned"`` swaps the paper envelope for plain
 KaTeX) can typeset inside ``$$``.
 """
 
-from typing import List, Literal, Sequence, Tuple
+from typing import TYPE_CHECKING, List, Literal, Sequence, Tuple, Union
 
 import numpy as np
 
-from openscvx.symbolic.expr import CTCS, Equality, Expr, NodalConstraint, traverse, to_expr
+if TYPE_CHECKING:
+    from openscvx.symbolic.problem import SymbolicProblem
+
+from openscvx.symbolic.expr import CTCS, Equality, Expr, NodalConstraint, to_expr, traverse
 from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
 from openscvx.symbolic.expr.time import Time
@@ -71,9 +74,9 @@ _FIXED_TYPES = ("Fix", "Fixed")
 
 
 def problem_to_latex(
-    symbolic,
+    symbolic: "SymbolicProblem",
     dynamics_dict: dict,
-    lam_cost,
+    lam_cost: Union[float, np.ndarray],
     *,
     dynamics: str,
     constraints: str,
@@ -168,7 +171,10 @@ def _validate_mode(name: str, value: str, choices: Tuple[str, ...]) -> None:
 
 
 def _objective(
-    states: Sequence[State], lam_cost, weights: str, lowerer: LatexLowerer
+    states: Sequence[State],
+    lam_cost: Union[float, np.ndarray],
+    weights: str,
+    lowerer: LatexLowerer,
 ) -> str:
     """Build the Mayer objective from minimize/maximize boundary types.
 
@@ -196,7 +202,10 @@ def _objective(
                 if weights == "symbolic":
                     coeff = _symbolic_coefficient(inner_sym, i if n > 1 else None)
                 else:
-                    weight = lam_cost if np.ndim(lam_cost) == 0 else lam_cost[state._slice.start + i]
+                    if np.ndim(lam_cost) == 0:
+                        weight = lam_cost
+                    else:
+                        weight = lam_cost[state._slice.start + i]
                     coeff = _numeric_coefficient(weight)
                 terms.append((sign, rf"{coeff}{elem}({when})"))
 

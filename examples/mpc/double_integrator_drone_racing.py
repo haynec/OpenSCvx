@@ -444,6 +444,7 @@ if __name__ == "__main__":
         },
     )
     problem_mpc.settings.dev.printing = False
+    print(problem_mpc.to_latex())
 
     # =================================================================
     # Initial guesses
