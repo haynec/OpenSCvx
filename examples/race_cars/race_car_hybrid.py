@@ -141,6 +141,27 @@ T_guess = 20.0  # initial guess for lap time [s]
 # battery. The battery itself stays non-periodic: a qualifying lap spends it.
 PERIODIC_LAP = True
 
+# ── Trail-braking throttle guess ───────────────────────────────────────────────
+# SCP anchors near its guess, so rather than a flat throttle the guess encodes
+# how a lap is driven: brake hardest at turn-in, then feed the throttle back in
+# through the corner ("trail braking"). Corners are the contiguous stretches of
+# the guess arc-length grid where the track curvature exceeds KAPPA_CORNER;
+# through each one the throttle ramps linearly from full braking at entry to
+# full throttle at exit, and the straights run flat out.
+
+KAPPA_CORNER = 0.5  # curvature magnitude above which a node counts as cornering [1/m]
+
+
+def trail_brake_throttle(s_nodes: np.ndarray) -> np.ndarray:
+    """Trail-braking throttle profile D(s) ∈ [-1, 1] on the guess grid ``s_nodes``."""
+    kappa_nodes = np.interp(s_nodes, s_interp, kappa_interp)
+    corner_nodes = np.flatnonzero(np.abs(kappa_nodes) > KAPPA_CORNER)
+    D = np.ones_like(s_nodes)
+    for corner in np.split(corner_nodes, np.flatnonzero(np.diff(corner_nodes) > 1) + 1):
+        D[corner] = np.linspace(-1.0, 1.0, corner.size)
+    return D
+
+
 # ── States ─────────────────────────────────────────────────────────────────────
 S_INIT = 0.0
 
@@ -176,12 +197,16 @@ v.guess = 2.0 * np.ones((N, 1))
 # Combustion throttle / friction brake. Negative D is friction braking, which
 # carries only the combustion share of the envelope — full-strength braking
 # requires harvesting the electric share through regen.
+# The trail-braking profile on the guessed arc-length grid seeds the throttle
+# here and the MGU-K controls below.
+D_trail = trail_brake_throttle(s.guess[:, 0])
+
 D_throt = ox.State("D", shape=(1,))
 D_throt.min = [-1.0]
 D_throt.max = [1.0]
-D_throt.initial = [ox.Free(0.9)]  # flying lap: cross the line on the throttle
+D_throt.initial = [ox.Free(1.0)]  # flying lap: cross the line on the throttle
 D_throt.final = [ox.Free(0.0)]
-D_throt.guess = 0.9 * np.ones((N, 1))
+D_throt.guess = D_trail.reshape(-1, 1)
 
 delta = ox.State("delta", shape=(1,))
 delta.min = [-0.40]
@@ -211,7 +236,10 @@ E_rec.guess = np.linspace(0.0, 0.5 * R_LAP_MAX, N).reshape(-1, 1)
 derD = ox.Control("derD", shape=(1,), parameterization="ZOH")
 derD.min = [-10.0]
 derD.max = [10.0]
-derD.guess = np.zeros((N, 1))
+# Throttle rate consistent with the trail-braking profile (Ḋ = derD).
+derD.guess = np.clip(
+    np.diff(D_trail, append=D_trail[-1]) * (N - 1) / T_guess, derD.min, derD.max
+).reshape(-1, 1)
 
 derDelta = ox.Control("derDelta", shape=(1,), parameterization="ZOH")
 derDelta.min = [-2.0]
@@ -223,15 +251,18 @@ derDelta.guess = np.zeros((N, 1))
 # asymmetrically — harvest pays the round-trip efficiency and counts against
 # the recovery cap — whereas a single signed control would put max(·, 0)
 # kinks in the dynamics. Overlap is self-penalizing through η.
+# The MGU-K mirrors the trail-braking profile: friction brakes carry only the
+# combustion share, so full-strength braking harvests at full regen on corner
+# entry, and the drive side of the profile is matched with full deployment.
 deploy = ox.Control("deploy", shape=(1,), parameterization="FOH")
 deploy.min = [0.0]
 deploy.max = [1.0]
-deploy.guess = 0.3 * np.ones((N, 1))
+deploy.guess = np.clip(D_trail, 0.0, 1.0).reshape(-1, 1)
 
 regen = ox.Control("regen", shape=(1,), parameterization="FOH")
 regen.min = [0.0]
 regen.max = [1.0]
-regen.guess = 0.1 * np.ones((N, 1))
+regen.guess = np.clip(-D_trail, 0.0, 1.0).reshape(-1, 1)
 
 # ── Time: free final time, minimise T ─────────────────────────────────────────
 time = ox.Time(
@@ -337,10 +368,12 @@ problem = ox.Problem(
     float_dtype="float64",
     licq_max=1e-12,
     algorithm={
-        # lam_prox/lam_cost from a 4x4 log-grid swept in one solve_batched call
-        # over algorithm hyperparameters: this pair is the fastest converged
-        # config; pushing lam_cost/lam_prox much past ~10 stops converging.
-        "lam_prox": 3e-1,
+        # lam_prox/lam_cost re-swept (4x4 log grid, one solve_batched call over
+        # algorithm hyperparameters) after the trail-braking guess landed: the
+        # better-conditioned guess tolerates a much looser proximal anchor, and
+        # this pair is the fastest converged config. Lap time improves
+        # monotonically with lam_cost/lam_prox until ratios near ~1000 diverge.
+        "lam_prox": 3e-2,
         "lam_cost": 3e0,
         "lam_vc": 1e2,
         "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
