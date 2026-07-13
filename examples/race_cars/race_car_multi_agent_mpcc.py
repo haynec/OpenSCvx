@@ -667,7 +667,7 @@ if K > 1:
 # (convergence and solve time both suffer) when the line or pace is priced
 # too dearly to leave.
 W_PROGRESS = 3e1
-W_TRACK_N = 1e1
+W_TRACK_N = 5e0
 W_TRACK_V = 9e1
 W_TRACK_E = 1e1
 
