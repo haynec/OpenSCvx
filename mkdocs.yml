@@ -118,6 +118,9 @@ plugins:
   - git-revision-date-localized:
       enable_creation_date: true
       fallback_to_build_date: true
+      # --follow across gen-files renames produces out-of-order timestamps on a few
+      # Reference pages; plain path history is correct for this repo.
+      enable_git_follow: false
 
 # Drop the stale hand-written examples.md (superseded by the generated Examples/ index, and a
 # case-colliding duplicate of its URL) from the built site and sitemap. The generated

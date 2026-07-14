@@ -21,9 +21,11 @@
 -#}
 {% block extrahead %}
   {{ super() }}
-  {%- if config.extra.mike_version == "nightly" %}
-  <!-- Nightly is a moving development build; keep it out of the index so it does not
-       compete with the released docs served from latest/. -->
+  {%- if config.extra.mike_version == "nightly" or (page and page.meta and page.meta.noindex) %}
+  <!-- Nightly is a moving development build, and pages front-mattered `noindex: true`
+       (e.g. work-in-progress tutorials) are unfinished; keep both out of the index so
+       they do not compete with the released docs served from latest/. Noindexed pages
+       are also dropped from sitemap.xml (see the sitemap.xml override). -->
   <meta name="robots" content="noindex">
   {%- endif %}
   {#- Twitter/X card metas are emitted by Material's social plugin (twitter:card/title/

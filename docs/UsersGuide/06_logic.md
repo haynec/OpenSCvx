@@ -1,4 +1,5 @@
 ---
+noindex: true
 search:
   exclude: true
 ---
