@@ -32,6 +32,7 @@ def _module_summary(path: Path, dotted: str) -> str:
             return first_line
     return f"API reference for openscvx.{dotted}, generated from source."
 
+
 # Icon + one-line blurb for each subpackage (Material emoji shortcodes for MkDocs).
 _REFERENCE_PACKAGES: dict[str, tuple[str, str]] = {
     "algorithms": (
