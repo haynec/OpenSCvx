@@ -1,13 +1,13 @@
-"""Multi-agent race where each car tracks its own precomputed optimal lap.
+"""Multi-agent race where the field tracks a precomputed optimal lap.
 
 Same field, track, and collision-avoidance scheme as
 ``race_car_multi_agent.py``, but the horizon objective changes from "maximise
-arc-length progress" to "follow your reference lap", with the two-phase
+arc-length progress" to "follow the reference lap", with the two-phase
 structure of the MPCC drone-racing example
 (``examples/mpc/double_integrator_drone_racing.py``): phase 1 solves the
-charge-sustaining minimum-time flying lap for *each car's own spec* (power,
-mass, battery) in one batched solve, and phase 2 races the field while every
-car tracks its own lap.
+charge-sustaining minimum-time flying lap for each car's spec (power, mass,
+battery) in one batched solve, and phase 2 races the field while every car
+regulates around the nominal lap, paced to its own spec.
 
 Because the model is already in Frenet coordinates, no virtual progress state
 is needed — ``s`` *is* progress, and the MPCC error decomposition collapses to
@@ -513,11 +513,11 @@ E_rec.guess = np.zeros((N_MPC, 1))
 # Tracking cost integrators (the lag_sum/contour_sum idiom of the drone
 # example): each accumulates one squared tracking error along the horizon, in
 # its own physical units, and is minimised at the final node with its own
-# weight. The box bounds are never constrained — they set solver scaling, and
+# weight. The box caps are hard nodal bounds as well as solver scaling, so
 # each is sized to a genuine racing deviation held for a whole horizon (a
-# car-width off line, ~1 m/s off pace, a half-battery split), so that going
-# off-reference to pass sits comfortably inside the state's scale rather
-# than saturating it.
+# car-width off line, ~1 m/s off pace, a half-battery split): going
+# off-reference to pass must sit comfortably inside the cap, because an
+# integrator that rails its box fights the solver on every horizon it does.
 track_n = ox.State("track_n", shape=(1,))  # ∫(n − n_ref)² dt  [m²·s]
 track_n.min, track_n.max = [0.0], [1.0]
 track_n.initial, track_n.final = [0.0], [ox.Minimize(0.0)]
@@ -659,13 +659,19 @@ if K > 1:
         constraints.append(ox.ctcs(W_SEP * (1.0 - gap) <= 0.0, penalty="huber"))
 
 # ── Problem ────────────────────────────────────────────────────────────────────
-# The references carry the racing line, pace, and energy plan, so the cost is
-# regulation around them plus a residual progress reward that gives cars a
+# The reference carries the racing line, pace, and energy plan, so the cost is
+# regulation around it plus a residual progress reward that gives cars a
 # reason to overtake rather than follow. ``lam_cost`` weighs the *scaled*
-# integrators, so a weight's physical strength is lam / box-cap; the values
-# below keep deviating off-reference cheap — wheel-to-wheel racing thrashes
-# (convergence and solve time both suffer) when the line or pace is priced
-# too dearly to leave.
+# integrators — state scaling divides by max(1, half-range of the box), so a
+# weight's physical strength is its lam over that factor, and the narrow
+# track_n / track_E boxes clamp to 1 (their lams ARE their strengths).
+# Contour is priced cheapest: lateral room is the overtaking degree of
+# freedom, and racing thrashes (convergence and solve time both suffer) when
+# the line or pace is too dear to leave — but on a shared line it cannot be
+# too cheap either, or side-by-side duels stop resolving. Energy is priced so
+# the charge plan actually binds: any weaker and the progress reward runs the
+# field net-negative every lap until the battery pins at empty and the
+# track_E integrator rails its box all through the following laps.
 W_PROGRESS = 3e1
 W_TRACK_N = 5e0
 W_TRACK_V = 9e1
