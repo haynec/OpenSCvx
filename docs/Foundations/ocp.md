@@ -1,6 +1,11 @@
+---
+title: Optimal Control Problem
+description: >-
+  The convex subproblem OpenSCvx solves each SCP iteration: variables, affine
+  scaling, discretized dynamics, virtual control, and trust-region costs.
+---
+
 # Optimal Control Problem
-!!! Warning
-    This page is still under development :construction:.
 
 The underlying convex subproblem is posed in the following general form. 
 

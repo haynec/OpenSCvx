@@ -1,3 +1,8 @@
+---
+search:
+  exclude: true
+---
+
 # 06 Dubin's Car: Conditional Statements and Signal Temporal Logic
 
 !!! Warning "Work In Progress"

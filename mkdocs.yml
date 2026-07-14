@@ -172,6 +172,7 @@ extra_javascript:
 # Page tree
 nav:
     - Home: index.md
+    - Installation: installation.md
     - Resources:
       - 'examples.md'
       - 'citation.md'
@@ -182,7 +183,6 @@ nav:
       - 'UsersGuide/03_obstacle_avoidance_vmap.md'
       - 'UsersGuide/04_viewpoint_constraints.md'
       - 'UsersGuide/05_visualization.md'
-      - 'UsersGuide/06_logic.md'
       - 'UsersGuide/07_lie.md'
       - 'UsersGuide/08_mpcc.md'
       - 'UsersGuide/09_mjx_dynamics.md'

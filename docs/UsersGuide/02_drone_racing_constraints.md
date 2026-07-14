@@ -1,3 +1,8 @@
+---
+description: >-
+  Model a 3-DOF drone racing through gates in OpenSCvx using nodal constraints, .at()/.over()/.convex(), and keyframe initialization.
+---
+
 # 02 Drone Racing: Constraints and 3-DOF Dynamics
 
 In this tutorial we build on the concepts from [Hello Brachistochrone](01_hello_world_brachistochrone.md) to tackle a more interesting problem: time-optimal drone racing through gates.

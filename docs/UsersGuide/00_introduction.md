@@ -1,3 +1,8 @@
+---
+description: >-
+  A progressive introduction to trajectory optimization with OpenSCvx, building from a first model to representative real-world problems.
+---
+
 # Users Guide
 
 Welcome to the OpenSCvx Users Guide. This section aims to provides a progressive and useful introduction to trajectory optimization with OpenSCvx, starting from first principles and building toward complex, representative problems.

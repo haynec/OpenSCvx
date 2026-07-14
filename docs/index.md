@@ -5,11 +5,23 @@ hide:
   - navigation
   - toc
 description: >-
-  An Open-Source Modular and Extensible Nonlinear Trajectory Optimization Package
+  OpenSCvx is an open-source Python library for nonlinear trajectory
+  optimization built on successive convexification (SCvx), with a composable
+  problem API and a JAX backend.
 social:
   cards_layout_options:
     title: Fast and Easy Nonconvex Trajectory Optimization
 ---
+
+# OpenSCvx — Trajectory Optimization via Successive Convexification in Python/JAX
+
+OpenSCvx is an open-source Python library for nonlinear trajectory optimization
+built on successive convexification (SCvx). You write dynamics, costs, and
+constraints as a single composable problem object; the library lowers that
+symbolic definition to JAX, discretizes it on a time grid, and solves the
+resulting nonconvex problem through a sequence of convex subproblems. The same
+problem definition runs on CPU and GPU, and vectorizes across decision nodes and
+scenario batches.
 
 ## Why OpenSCvx
 

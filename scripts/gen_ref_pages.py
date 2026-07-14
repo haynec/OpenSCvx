@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ast
+import json
 from pathlib import Path
 
 import mkdocs_gen_files
@@ -10,6 +12,25 @@ nav = mkdocs_gen_files.Nav()
 
 root = Path(__file__).parent.parent
 src = root / "openscvx"
+
+
+def _module_summary(path: Path, dotted: str) -> str:
+    """First line of a module's docstring, or a package-qualified fallback.
+
+    The summary becomes the page's ``description`` meta tag so that every module
+    in the reference gets a distinct, extractable one-liner instead of inheriting
+    the site-wide tagline. ``dotted`` is the import path relative to ``openscvx``
+    (e.g. ``symbolic.lowerers.jax.state``).
+    """
+    try:
+        docstring = ast.get_docstring(ast.parse(path.read_text(encoding="utf-8")))
+    except (SyntaxError, OSError):
+        docstring = None
+    if docstring:
+        first_line = docstring.strip().splitlines()[0].strip()
+        if first_line:
+            return first_line
+    return f"API reference for openscvx.{dotted}, generated from source."
 
 # Icon + one-line blurb for each subpackage (Material emoji shortcodes for MkDocs).
 _REFERENCE_PACKAGES: dict[str, tuple[str, str]] = {
@@ -155,8 +176,17 @@ for path in sorted(src.rglob("*.py")):
 
     nav[parts] = doc_path.as_posix()
 
+    dotted = ".".join(parts)
+    identifier = ".".join(("openscvx",) + parts)
     with mkdocs_gen_files.open(full_doc_path, "w") as fd:
-        identifier = ".".join(("openscvx",) + parts)
+        # Front matter qualifies the page title by package path (leaf module names
+        # such as ``state`` and ``base`` recur across the jax/cvxpy/latex lowerers)
+        # and gives each module a distinct meta description.
+        fd.write("---\n")
+        fd.write(f"title: {dotted}\n")
+        # json.dumps yields a double-quoted, escaped scalar that is valid YAML.
+        fd.write(f"description: {json.dumps(_module_summary(path, dotted))}\n")
+        fd.write("---\n\n")
         fd.write(f"::: {identifier}\n")
 
     mkdocs_gen_files.set_edit_path(full_doc_path, path.relative_to(root))

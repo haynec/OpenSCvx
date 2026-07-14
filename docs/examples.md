@@ -1,3 +1,8 @@
+---
+description: >-
+  Runnable OpenSCvx trajectory optimization examples spanning aerospace, robotics, and abstract optimal-control problems.
+---
+
 # Examples
 
 OpenSCvx comes with a comprehensive set of examples demonstrating various trajectory optimization problems. These examples are located in the `examples/` folder and cover different applications and complexity levels.
