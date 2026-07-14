@@ -1,6 +1,14 @@
 """JAX visitors for array expressions.
 
 Visitors: Index, Concat, Stack, Hstack, Vstack, Block
+
+Lowers the array construction and indexing AST nodes to JAX functions built on
+``jnp`` (``concatenate``, ``stack``, ``hstack``, ``vstack``, ``block``). Two
+shape details drive the code: ``Index`` first reshapes its base back to the
+node's declared shape, since states live flattened in the unified state vector,
+and the joining visitors promote scalars to 1-D before combining. ``Block`` uses
+``jnp.block`` for 2-D and falls back to manual axis-0/axis-1 concatenation for
+3-D+ tensors, where ``jnp.block`` semantics no longer match.
 """
 
 import jax.numpy as jnp

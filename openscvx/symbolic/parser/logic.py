@@ -1,6 +1,11 @@
 """Parser handlers for logical and control flow operations.
 
 Handlers: All, Any, Cond
+
+Each handler is registered under its function name via ``@function`` and turns the
+call-syntax form (e.g. ``Cond(pred, a, b)``) that the Pratt parser encounters in
+an expression string into the corresponding logic ``Expr`` node — the boolean
+reductions and the conditional branch.
 """
 
 from openscvx.symbolic.expr.constraint import Inequality

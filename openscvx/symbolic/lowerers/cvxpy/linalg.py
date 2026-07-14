@@ -1,6 +1,12 @@
 """CVXPy visitors for linear algebra expressions.
 
 Visitors: Sum, Norm, Transpose, Inv
+
+Lowers the linear-algebra AST nodes to CVXPy expressions. ``Sum`` and
+``Transpose`` are curvature-preserving, and ``Norm`` maps onto ``cp.norm`` (a
+convex atom) for any supported order. ``Inv`` has no disciplined-convex form for a
+variable matrix and raises ``NotImplementedError``, pointing the user to a
+constant precomputation or the JAX layer.
 """
 
 import cvxpy as cp

@@ -1,6 +1,11 @@
 """Parser handlers for array manipulation operations.
 
 Handlers: Concat, Stack, Hstack, Vstack, Block
+
+Each handler is registered under its function name via ``@function`` and turns the
+call-syntax form (e.g. ``Stack(a, b)``) that the Pratt parser encounters in an
+expression string into the corresponding array-construction ``Expr`` node,
+validating argument counts as it goes.
 """
 
 from openscvx.symbolic.expr.array import Block, Concat, Hstack, Stack, Vstack

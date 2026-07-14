@@ -1,6 +1,13 @@
 """JAX visitors for spatial expressions.
 
 Visitors: QDCM, SSMP, SSM
+
+Lowers the 6-DOF rigid-body primitives to JAX functions that build small
+matrices from their operand vectors: ``QDCM`` turns a (normalized) quaternion
+into a 3x3 direction-cosine matrix, ``SSM`` builds the 3x3 skew-symmetric
+(cross-product) matrix of a 3-vector, and ``SSMP`` builds the 4x4 matrix used in
+the quaternion kinematics ``q_dot = 0.5 * SSMP(omega) @ q``. These are the
+building blocks for attitude and spacecraft/robotics dynamics.
 """
 
 import jax.numpy as jnp

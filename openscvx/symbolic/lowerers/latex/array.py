@@ -1,6 +1,13 @@
 """LaTeX visitors for array expressions.
 
 Visitors: Index, Concat, Stack, Hstack, Vstack
+
+Renders the array construction and indexing AST nodes to LaTeX: the joining nodes
+build ``bmatrix`` blocks, and ``Index`` renders as a subscript. Indexing uses
+``merge_subscript`` so an index on a role-prefixed variable comma-merges into the
+existing subscript group (``x_{\\mathrm{velocity}}`` -> ``x_{\\mathrm{velocity},0}``)
+rather than emitting a double subscript. ``Block`` has no LaTeX visitor — the
+notation is only defined for the flat array constructors.
 """
 
 from openscvx.symbolic.expr.array import Concat, Hstack, Index, Stack, Vstack

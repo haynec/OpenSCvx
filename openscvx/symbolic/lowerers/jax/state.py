@@ -1,6 +1,11 @@
 """JAX visitors for state/time expressions.
 
 Visitors: State, Time
+
+Lowers a ``State`` leaf to a JAX function that slices the corresponding entries
+out of the unified state vector ``x``, using the slice assigned during
+unification. ``Time`` is a ``State`` subclass and shares the same visitor;
+lowering a state whose slice is still unset is a usage error and raises.
 """
 
 # Expression types to handle — uncomment as you paste visitors:

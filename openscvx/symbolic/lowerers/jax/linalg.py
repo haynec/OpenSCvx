@@ -1,6 +1,12 @@
 """JAX visitors for linear algebra expressions.
 
 Visitors: Transpose, Diag, Sum, Inv, Norm
+
+Lowers the linear-algebra AST nodes to JAX functions over ``jnp`` and
+``jnp.linalg``. ``Sum`` reduces over all elements; ``Norm`` translates the
+node's symbolic ``ord`` (including the string forms ``"inf"``/``"-inf"``/``"fro"``)
+to the value ``jnp.linalg.norm`` expects. ``Inv`` lowers to a full matrix inverse
+here — a node the CVXPy backend rejects as non-convex.
 """
 
 import jax.numpy as jnp

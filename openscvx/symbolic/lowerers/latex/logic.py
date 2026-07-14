@@ -1,6 +1,13 @@
 """LaTeX visitors for logic expressions.
 
 Visitors: All, Any, Cond
+
+Renders the logic AST nodes to LaTeX math strings. ``All`` and ``Any`` render as
+big-operator reductions over their predicates (``\\bigwedge`` / ``\\bigvee``); a
+single predicate still gets the operator so the reduce-over-elements semantics of
+a vector predicate stay visible. ``Cond`` renders as a cases block. These nodes
+have no convex form, so where the CVXPy backend rejects them, LaTeX simply
+typesets the logical structure the user wrote.
 """
 
 from openscvx.symbolic.expr.logic import All, Any, Cond

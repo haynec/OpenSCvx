@@ -1,6 +1,15 @@
 """JAX visitors for vmap expressions.
 
 Visitors: _Placeholder, Vmap
+
+Lowers a ``Vmap`` node to a ``jax.vmap`` over its body, mapping each batch
+argument to a ``_Placeholder`` that the body reads back through ``params``. Batch
+data is resolved per source: constants are baked into the closure at lowering
+time, while ``Parameter``/``State``/``Control`` batches are gathered from
+``params``/``x``/``u`` at runtime so they track SCP updates. Because the mapped
+body is a nested sub-trace that re-reads the same captured ``(x, u, node)``, the
+visitor pauses the value memo around the ``vmap`` so no cached tracer leaks across
+the trace boundary.
 """
 
 import jax

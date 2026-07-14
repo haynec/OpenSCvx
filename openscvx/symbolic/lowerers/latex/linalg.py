@@ -1,6 +1,12 @@
 """LaTeX visitors for linear algebra expressions.
 
 Visitors: Transpose, Diag, Sum, Inv, Norm
+
+Renders the linear-algebra AST nodes to LaTeX math strings: ``Transpose`` as
+``A^{\\top}``, ``Inv`` as ``A^{-1}``, ``Sum`` as ``\\sum``, ``Diag`` as
+``\\operatorname{diag}(...)``, and ``Norm`` as ``\\left\\| ... \\right\\|`` with an
+order subscript. Euclidean/Frobenius orders (``None``, ``2``, ``"fro"``) render
+without a subscript, since the double-bar already reads as the 2-norm.
 """
 
 from openscvx.symbolic.expr.linalg import Diag, Inv, Norm, Sum, Transpose

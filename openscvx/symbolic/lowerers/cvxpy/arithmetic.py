@@ -1,6 +1,12 @@
 """CVXPy visitors for arithmetic expressions.
 
 Visitors: Add, Sub, Mul, Div, MatMul, Neg, Power
+
+Lowers the arithmetic AST nodes to CVXPy expressions that build the convex
+subproblem. ``Add``, ``Sub``, and ``Neg`` are affine and always DCP; ``Mul``,
+``Div``, ``MatMul``, and ``Power`` are admitted structurally but are only
+disciplined-convex under the usual conditions (one operand constant, a valid
+exponent), which CVXPy verifies when the problem is assembled rather than here.
 """
 
 import cvxpy as cp

@@ -1,6 +1,13 @@
 """LaTeX visitors for arithmetic expressions.
 
 Visitors: Add, Sub, Mul, Div, MatMul, Neg, Power
+
+Renders the arithmetic AST nodes to LaTeX math strings: sums join with ``+``,
+products with ``\\cdot``, and ``Div`` becomes a self-delimiting ``\\frac``.
+Operands are wrapped by operator precedence (via ``wrap``/``_PRECEDENCE``) so
+parenthesization stays minimal but correct — e.g. ``Sub`` wraps its right operand
+one level higher so ``a - (b + c)`` is grouped, while a ``\\frac`` needs no
+wrapping at all.
 """
 
 from openscvx.symbolic.expr.arithmetic import Add, Div, MatMul, Mul, Neg, Power, Sub

@@ -1,6 +1,14 @@
 """JAX visitors for STL (Signal Temporal Logic) expressions.
 
 Visitors: Or
+
+Lowers the :mod:`~openscvx.symbolic.expr.stljax` disjunction to a JAX function
+that evaluates robustness through the external ``stljax`` library, as opposed to
+the in-house GMSR STL backend in :mod:`openscvx.symbolic.lowerers.jax.stl`. Each
+predicate contributes a robustness signal (``rhs - lhs`` for a constraint,
+positive when satisfied, or a recursively lowered nested STL expression); these
+become ``stljax`` predicates combined by ``stljax.formula.Or``, whose robustness
+is positive when at least one predicate holds.
 """
 
 # Expression types to handle — uncomment as you paste visitors:
