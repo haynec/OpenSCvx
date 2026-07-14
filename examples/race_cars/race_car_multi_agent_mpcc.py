@@ -1048,7 +1048,16 @@ def build_viser_panels(log: RaceLog) -> list[dict]:
 
 @dataclass
 class RaceLog:
-    """Closed-loop record of one race (see race_car_multi_agent.RaceLog)."""
+    """Closed-loop record of one race.
+
+    ``sim`` samples the driver states at the MPC rate (``T`` steps of
+    ``DT_MPC``) and is what the race logic consumes — finish detection,
+    classification, audits. ``dense_*`` stitch each step's *propagated*
+    executed interval together (``post_process_batched`` under the hood), so
+    playback and plots see the continuous trajectories the cars actually
+    drove, not the node samples. ``s`` entries in both logs are cumulative
+    race distance.
+    """
 
     sim: np.ndarray
     t_sim: np.ndarray
@@ -1059,8 +1068,14 @@ class RaceLog:
     converged: np.ndarray
 
 
-def run_race(max_steps: int = MAX_STEPS, dense: bool = True) -> RaceLog:
-    """Race the roster to the flag and return the :class:`RaceLog`."""
+def run_race(max_steps: int = MAX_STEPS) -> RaceLog:
+    """Race the roster to the flag and return the :class:`RaceLog`.
+
+    One ``solve_batched`` call plans the whole field; the plant then advances
+    one node (``DT_MPC``) along the *propagated* executed interval, so a defect
+    in an unconverged plan stays a plan instead of becoming real motion. That
+    same executed interval is logged densely for playback and plots.
+    """
     x0 = initial_pins()
     x_guess, u_guess = cold_start_guesses()
     pred_s = x_guess[:, :, COL["s"]].copy()
@@ -1103,19 +1118,18 @@ def run_race(max_steps: int = MAX_STEPS, dense: bool = True) -> RaceLog:
         row = np.stack([nodes[name][:, 0, 0] for name in DRIVER_STATES], axis=1)
         row[:, COL["s"]] += laps * pathlength
 
-        if dense:
-            post = problem.post_process_batched(results)
-            t_prop = np.asarray(post.t_full)[0]
-            keep = t_prop < DT_MPC - 1e-9
-            seg_x = np.asarray(post.x_full)[:, keep, : len(DRIVER_STATES)].copy()
-            seg_x[:, :, COL["s"]] += laps[:, None] * pathlength
-            dense_t.append(t_now + t_prop[keep])
-            dense_x.append(seg_x)
-            dense_u.append(np.asarray(post.u_full)[:, keep, :4])
-        else:
-            dense_t.append(np.array([t_now]))
-            dense_x.append(row[:, None, :].copy())
-            dense_u.append(np.asarray(results.u)[:, :1, :4])
+        # Propagate every step's executed interval through the nonlinear
+        # dynamics: the segment [0, DT_MPC) is both the dense log and, at its
+        # endpoint, the honest plant update below.
+        post = problem.post_process_batched(results)
+        t_prop = np.asarray(post.t_full)  # (K, n_times)
+        x_prop = np.asarray(post.x_full)  # (K, n_times, n_prop_states)
+        keep = t_prop[0] < DT_MPC - 1e-9
+        seg_x = x_prop[:, keep, : len(DRIVER_STATES)].copy()
+        seg_x[:, :, COL["s"]] += laps[:, None] * pathlength
+        dense_t.append(t_now + t_prop[0][keep])
+        dense_x.append(seg_x)
+        dense_u.append(np.asarray(post.u_full)[:, keep, :4])
 
         for i in range(K):
             if finish_time[i] is None and row[i, COL["s"]] >= RACE_DISTANCE:
@@ -1136,8 +1150,22 @@ def run_race(max_steps: int = MAX_STEPS, dense: bool = True) -> RaceLog:
         if all(t is not None for t in finish_time):
             break
 
+        # Advance the plant to the executed segment's endpoint at t = DT_MPC
+        # rather than trusting solved node 1: node 1 is the convex plan's value,
+        # so on an unconverged step its first interval carries a virtual-control
+        # defect. Propagating the nonlinear dynamics keeps that defect a plan,
+        # not car motion — the field drives the segment it was handed and
+        # recovers on the next horizon. The propagation grid is a linspace over
+        # the whole horizon, so interpolate each driver state at t = DT_MPC.
+        # Clip to the state box: propagation is free to drift past a soft bound
+        # (e.g. draining the battery a hair below empty, or running wide of the
+        # lane on an unconverged plan), but an x_initial pinned outside the box
+        # cannot satisfy the subproblem's node bounds and poisons that car's
+        # solve, so the plant enforces the box at the handoff.
         for name in DRIVER_STATES:
-            x0[:, COL[name]] = nodes[name][:, 1, 0]
+            col = COL[name]
+            at_dt = [np.interp(DT_MPC, t_prop[i], x_prop[i, :, col]) for i in range(K)]
+            x0[:, col] = np.clip(at_dt, _X_LO[col], _X_HI[col])
         x_guess, u_guess = shifted_guesses(results)
         pred_s = nodes["s"][:, :, 0].copy()
         pred_n = nodes["n"][:, :, 0]
@@ -1200,7 +1228,7 @@ def print_classification(log: RaceLog) -> list[int]:
 # ── Main: run the race ─────────────────────────────────────────────────────────
 if __name__ == "__main__":
     problem.initialize()
-    log = run_race(dense=os.environ.get("OPENSCVX_NO_PLOT") is None)
+    log = run_race()
     order = print_classification(log)
 
     if os.environ.get("OPENSCVX_NO_PLOT") is None:
