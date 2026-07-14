@@ -42,9 +42,8 @@ for every outer loop (see [Obstacle avoidance with Vmap](UsersGuide/03_obstacle_
 
 <div class="grid cards" markdown>
 
-- :material-rocket-launch: __[Run examples](examples.md)__ — locate scripts in the repo, run them locally, and browse problem categories.
 - :material-book-open-variant: __[Users guide](UsersGuide/00_introduction.md)__ — modeling, constraints, and visualization.
 - :material-code-braces: __[API reference](Reference/index.md)__ — modules and functions generated from source with docstrings.
-- :material-view-dashboard: __[Examples](Examples/index.md)__ — runnable scripts organized by topic.
+- :material-view-dashboard: __[Examples](Examples/index.md)__ — runnable scripts organized by topic, run them locally and browse problem categories.
 
 </div>
