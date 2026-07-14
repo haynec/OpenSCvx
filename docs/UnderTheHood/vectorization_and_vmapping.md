@@ -1,3 +1,9 @@
+---
+description: >-
+  How OpenSCvx unifies per-node State and Control objects into monolithic vectors and
+  applies `jax.vmap` to evaluate dynamics and nonconvex constraints across decision nodes in parallel.
+---
+
 # Vectorization and Vmapping Across Decision Nodes
 
 This page explains how OpenSCvx internally processes symbolic problem definitions into vectorized JAX computations. After symbolic preprocessing and augmentation (which you've likely seen in basic usage), the library creates unified state/control vectors and applies JAX's `vmap` to evaluate dynamics and non-convex constraints across decision nodes in parallel.

@@ -1,3 +1,9 @@
+---
+description: >-
+  How OpenSCvx's `solve_jax()` entry point runs the SCP loop as a pure JAX
+  `lax.while_loop` so solves compose with `jax.vmap`, `jax.jit`, and `jax.grad`.
+---
+
 # Batching, JIT, and Grad with `Problem.solve_jax()`
 
 `Problem` exposes two solve entry points. `solve()` is the familiar
