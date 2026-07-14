@@ -669,7 +669,7 @@ if K > 1:
 W_PROGRESS = 3e1
 W_TRACK_N = 5e0
 W_TRACK_V = 9e1
-W_TRACK_E = 1e1
+W_TRACK_E = 1e2
 
 problem = ox.Problem(
     dynamics=dynamics,
