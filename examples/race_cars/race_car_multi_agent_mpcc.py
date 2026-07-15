@@ -35,6 +35,18 @@ strategy, which a 3 s horizon fundamentally cannot plan; the whole-lap-aware
 deploy/harvest schedule lives in the reference and the MPC only regulates
 around it while racing the field.
 
+!!! note "Twin example"
+    ``race_car_multi_agent.py`` and ``race_car_multi_agent_mpcc.py`` share
+    the field, track, model, and collision scheme; they differ only in the
+    horizon objective — maximise progress vs. regulate around a precomputed
+    reference lap.
+
+!!! warning "Not real time"
+    This is an offline closed-loop simulation: each 0.1 s MPC step takes on
+    the order of 0.1–1 s to solve on a laptop CPU — growing with the size of
+    the field — and phase 1 solves the reference laps once up front (several
+    minutes).
+
 Run headless (no Plotly/Viser) with ``OPENSCVX_NO_PLOT=1``.
 """
 

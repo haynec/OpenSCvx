@@ -39,6 +39,17 @@ The ``AGENTS`` roster is the single scaling knob — add or tweak an entry
 (specs are runtime parameters, so no recompilation) and the grid, batch,
 constraints, and plots all follow.
 
+!!! note "Twin example"
+    ``race_car_multi_agent.py`` and ``race_car_multi_agent_mpcc.py`` share
+    the field, track, model, and collision scheme; they differ only in the
+    horizon objective — maximise progress vs. regulate around a precomputed
+    reference lap.
+
+!!! warning "Not real time"
+    This is an offline closed-loop simulation: each 0.1 s MPC step takes on
+    the order of 0.1–1 s to solve on a laptop CPU, growing with the size of
+    the field.
+
 Run headless (no Plotly/Viser) with ``OPENSCVX_NO_PLOT=1``.
 """
 
