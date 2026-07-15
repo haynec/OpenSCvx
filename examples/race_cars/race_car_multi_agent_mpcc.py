@@ -1,43 +1,39 @@
-"""Multi-agent race: K hybrid cars racing wheel-to-wheel via batched MPC.
+"""Multi-agent race where the field tracks a precomputed optimal lap.
 
-Puts a whole field of the F1 2026-style hybrid cars from
-``race_car_hybrid.py`` on the 4x LMS track at once. Each car runs the same
-receding-horizon controller as ``race_car_mpc.py`` — maximise arc-length
-progress over a short fixed horizon — and the cars interact only through
-collision-avoidance constraints, so overtakes, defence, and energy strategy
-all emerge from the optimization rather than being scripted.
+Same field, track, and collision-avoidance scheme as
+``race_car_multi_agent.py``, but the horizon objective changes from "maximise
+arc-length progress" to "follow the reference lap", with the two-phase
+structure of the MPCC drone-racing example
+(``examples/mpc/double_integrator_drone_racing.py``): phase 1 solves the
+charge-sustaining minimum-time flying lap for each car's spec (power, mass,
+battery) in one batched solve, and phase 2 races the field while every car
+regulates around the nominal lap, paced to its own spec.
 
-One symbolic ``Problem`` describes a single car. Everything that differs
-between cars enters through runtime inputs, so advancing the whole field one
-MPC step is a single ``solve_batched`` call with a leading agent axis:
+Because the model is already in Frenet coordinates, no virtual progress state
+is needed — ``s`` *is* progress, and the MPCC error decomposition collapses to
+plain per-state tracking against reference profiles keyed on ``s``:
 
-  * ``x_initial`` — each car's current state, as batched boundary pins;
-  * ``power_scale`` / ``mass_scale`` / ``battery_scale`` — the car's spec;
-  * ``opp_s`` / ``opp_n`` — the opponents' latest predicted trajectories.
+  * contour error   (n − n_ref(s))²  — distance off the racing line
+  * pace error      (v − v_ref(s))²  — speed deficit/surplus at this point
+  * energy error    (E − E_ref(s))²  — deviation from the lap energy plan
 
-Cars negotiate by the *communicated plans* scheme standard in decentralized
-MPC: at every step each car re-plans against the plans its opponents
-published on the previous step (shifted one node so the horizons stay
-aligned), keeping an elliptical clearance in track coordinates
+Each error integrates into its own state (``track_n``/``track_v``/
+``track_E``) — physical quantities in m²·s, (m/s)²·s, and J²·s whose box
+bounds are sized to real racing deviations — and the final values are
+minimised with per-state weights, alongside a small residual progress reward
+that gives cars a reason to overtake rather than follow. All cars regulate
+around one *shared* reference: the nominal unity-spec lap, baked into pchip
+splines over the tiled arc-length grid exactly like ``kappa`` — a smooth,
+kink-free lookup the SCP linearises cleanly. Spec differences enter through
+one scalar ``pace_scale`` parameter that rescales the speed profile by the
+ratio of phase-1 lap times: the pace hierarchy that lets wheel-to-wheel
+battles resolve instead of two cars chasing the same point indefinitely.
 
-    ((s - s_j(t)) / SEP_LONG)² + ((n - n_j(t)) / SEP_LAT)² ≥ 1
-
-from every opponent j, enforced continuously in time (CTCS). All cars share
-one fixed, uniform horizon clock, so an opponent's forecast — known at the
-horizon nodes — interpolates to a trajectory s_j(t), n_j(t) the constraint
-can evaluate between nodes too. The Frenet model makes the constraint this
-simple — "gap along the track, gap across it" is exactly the (s, n) state,
-with none of the reference-path bookkeeping an MPCC formulation needs
-(compare ``examples/mpc/double_integrator_drone_racing.py``).
-
-The race runs ``M_LAPS`` laps from a standing start on an F1-style grid. As
-in the MPCC example, the ``s`` state lives on a single lap: the race loop
-wraps it at each line crossing, counts laps, and resets the per-lap recovery
-budget ``R``, so solver scaling and weights never depend on race length; the
-separation gap is lap-periodic so a car being lapped is still an obstacle.
-The ``AGENTS`` roster is the single scaling knob — add or tweak an entry
-(specs are runtime parameters, so no recompilation) and the grid, batch,
-constraints, and plots all follow.
+The payoff over the progress-max controller: the horizon no longer has to
+rediscover the racing line, corner speeds, and — critically — the energy
+strategy, which a 3 s horizon fundamentally cannot plan; the whole-lap-aware
+deploy/harvest schedule lives in the reference and the MPC only regulates
+around it while racing the field.
 
 !!! note "Twin example"
     ``race_car_multi_agent.py`` and ``race_car_multi_agent_mpcc.py`` share
@@ -47,8 +43,9 @@ constraints, and plots all follow.
 
 !!! warning "Not real time"
     This is an offline closed-loop simulation: each 0.1 s MPC step takes on
-    the order of 0.1–1 s to solve on a laptop CPU, growing with the size of
-    the field.
+    the order of 0.1–1 s to solve on a laptop CPU — growing with the size of
+    the field — and phase 1 solves the reference laps once up front (several
+    minutes).
 
 Run headless (no Plotly/Viser) with ``OPENSCVX_NO_PLOT=1``.
 """
@@ -78,10 +75,6 @@ from tracks.readDataFcn import getTrack
 import openscvx as ox
 
 # ── Roster ─────────────────────────────────────────────────────────────────────
-# One entry per car, in grid order (index 0 on pole). The scales multiply the
-# drive-force envelope, chassis mass, and battery capacity (the per-lap
-# recovery cap is a regulation and stays fixed). All are runtime parameters:
-# edit or extend this list and everything downstream follows.
 AGENTS = [
     dict(
         name="red",  # pole sitter, slightly down on power — must defend
@@ -114,25 +107,18 @@ AGENTS = [
 ]
 K = len(AGENTS)
 
-# Race length. The s state lives on a single lap (wrapped at each crossing,
-# as in the MPCC example), so solver scaling and weights are independent of
-# race length.
 M_LAPS = 2
 
 # ── Track data ─────────────────────────────────────────────────────────────────
-# 4x LMS kart track, as in race_car_hybrid.py: long enough that the cars are
-# power-limited on the straights and the energy strategy matters.
 TRACK_FILE = "LMS_Track_x4.txt"
 sref_data, _, _, _, kapparef_data = getTrack(TRACK_FILE)
 pathlength = float(sref_data[-1])  # ≈ 34.84 m
 RACE_DISTANCE = M_LAPS * pathlength
 
-# Two cars racing side by side need room: open the lane to two car-widths per
-# side instead of the single-file 0.12 m of the one-car examples.
 LANE_HALF_WIDTH = 0.24
 
 # ── Grid (F1 standing start) ───────────────────────────────────────────────────
-GRID_ROW_GAP = 0.5  # longitudinal stagger between consecutive grid slots [m]
+GRID_ROW_GAP = 0.5
 
 
 def grid_slot(i: int) -> tuple[float, float]:
@@ -140,8 +126,8 @@ def grid_slot(i: int) -> tuple[float, float]:
     return -(i + 1) * GRID_ROW_GAP, 0.5 * LANE_HALF_WIDTH * (1.0 if i % 2 == 0 else -1.0)
 
 
-# κ is lap-periodic: two tiled copies cover every horizon (s wraps back to the
-# first copy at each crossing), and the low pad covers the grid slots.
+# κ is lap-periodic: two tiled copies cover every horizon, the low pad covers
+# the grid slots.
 _pad_lo = (K + 1) * GRID_ROW_GAP + 1.0
 _s_tiled = np.concatenate([sref_data[:-1], sref_data + pathlength])
 _kappa_tiled = np.concatenate([kapparef_data[:-1], kapparef_data])
@@ -149,59 +135,334 @@ s_interp = np.concatenate([[_s_tiled[0] - _pad_lo], _s_tiled])
 kappa_interp = np.concatenate([[_kappa_tiled[0]], _kappa_tiled])
 
 # ── Vehicle parameters (Kloeser et al. 2020, Table I) ─────────────────────────
-m = 0.043  # vehicle mass [kg]
-C1 = 0.5  # front-axle normalised position
-C2 = 15.5  # lateral slip-force parameter [1/m]
-Cm1 = 0.28  # drive-force coefficient 1 [N]
-Cm2 = 0.05  # drive-force coefficient 2 [N·s/m]
-Cr0 = 0.011  # rolling-resistance constant [N]
-Cr2 = 0.006  # rolling-resistance quadratic [N·s²/m²]
-A_MAX = 4.0  # tyre grip limit — friction-ellipse radius [m/s²]
+m = 0.043
+C1 = 0.5
+C2 = 15.5
+Cm1 = 0.28
+Cm2 = 0.05
+Cr0 = 0.011
+Cr2 = 0.006
+A_MAX = 4.0
 
-# ── Hybrid power unit (F1 2026 ratios, RC-car scale — see race_car_hybrid.py) ──
-ICE_SHARE = 0.55  # combustion share of the drive-force envelope
-ELEC_SHARE = 0.45  # electric (MGU-K) share of the drive-force envelope
-ETA_BATT = 0.90  # battery round-trip efficiency, charged on the harvest side
+# ── Hybrid power unit (F1 2026 ratios, RC-car scale) ──────────────────────────
+ICE_SHARE = 0.55
+ELEC_SHARE = 0.45
+ETA_BATT = 0.90
 
-T_LAP_KART = 6.0  # power-unit sizing reference: lap of the unscaled track [s]
-P_PEAK = Cm1**2 / (4.0 * Cm2)  # peak envelope wheel power ≈ 0.39 W
-P_ELEC_PEAK = ELEC_SHARE * P_PEAK  # peak MGU-K wheel power ≈ 0.18 W
+T_LAP_KART = 6.0
+P_PEAK = Cm1**2 / (4.0 * Cm2)
+P_ELEC_PEAK = ELEC_SHARE * P_PEAK
 
-E_BATT_MAX = 0.13 * T_LAP_KART * P_ELEC_PEAK  # reference battery capacity [J]
-R_LAP_MAX = 2.0 * E_BATT_MAX  # per-lap recovery cap [J] (a regulation: same for all)
+E_BATT_MAX = 0.13 * T_LAP_KART * P_ELEC_PEAK
+R_LAP_MAX = 2.0 * E_BATT_MAX
 E_CAP_TOP = E_BATT_MAX * max(spec["battery_scale"] for spec in AGENTS)
 
 # ── Separation ellipse (track coordinates) ─────────────────────────────────────
-# Centre-to-centre keep-out around the ~0.07 x 0.03 m body: most of a body of
-# daylight each way, which also absorbs the one-step lag of opponent forecasts.
-# The ellipse must sit far enough outside the body that the huber penalty cannot
-# let grazing cars overlap on the propagated trajectory.
-SEP_LONG = 0.12  # semi-axis along the track [m]
-SEP_LAT = 0.06  # semi-axis across the track [m]
+SEP_LONG = 0.12
+SEP_LAT = 0.06
 
 # ── MPC horizon ────────────────────────────────────────────────────────────────
-# Long enough to plan a whole overtake (braking zone plus the next straight);
-# shorter horizons cannot see past a defender's bubble and track position
-# beats pace.
-N_MPC = 31  # horizon nodes
-HORIZON_TF = 3.0  # [s] prediction horizon
-DT_MPC = HORIZON_TF / (N_MPC - 1)  # time between consecutive nodes = one race step [s]
-RACE_TIME_MAX = 15.0 + 20.0 * M_LAPS  # [s] give up if the field has not finished by then
+N_MPC = 31
+HORIZON_TF = 3.0
+DT_MPC = HORIZON_TF / (N_MPC - 1)
+RACE_TIME_MAX = 15.0 + 20.0 * M_LAPS
 MAX_STEPS = int(np.ceil(RACE_TIME_MAX / DT_MPC))
 
-# Overrun past the flag: horizons look this far beyond their own position and
-# finished cars keep driving until the last car crosses.
 S_OVERRUN = 4.0 * HORIZON_TF
 
-# Ceiling on SCP iterations per step, in the spirit of a real-time iteration:
-# warm-started steps converge quickly in clean air, and the occasional
-# wheel-to-wheel step that wants more is cut off here and recovers on the next
-# step (per-step outcomes land in ``RaceLog.converged``).
 SCP_ITERS_PER_STEP = 10
 
+# ── Trail-braking throttle guess (for the reference lap solve) ─────────────────
+# Corners are the intervals where the tiled curvature exceeds KAPPA_CORNER and
+# D(s) ramps linearly from full braking at entry to full throttle at exit —
+# the guess shape validated on race_car_hybrid.py's open-loop lap.
+KAPPA_CORNER = 0.5
+
+_corner_mask = np.abs(kappa_interp) > KAPPA_CORNER
+_corner_edges = np.diff(_corner_mask.astype(int))
+_CORNERS = list(
+    zip(
+        s_interp[np.flatnonzero(_corner_edges == 1) + 1],
+        s_interp[np.flatnonzero(_corner_edges == -1)],
+    )
+)
+
+
+def trail_brake_throttle(s_query: np.ndarray) -> np.ndarray:
+    """Trail-braking throttle profile D(s) ∈ [-1, 1]: -1 at corner entry, +1 at exit."""
+    s_query = np.asarray(s_query, dtype=float)
+    D = np.ones_like(s_query)
+    for s0, s1 in _CORNERS:
+        in_corner = (s_query >= s0) & (s_query <= s1)
+        D = np.where(in_corner, -1.0 + 2.0 * (s_query - s0) / (s1 - s0), D)
+    return D
+
+
+# ── Phase 1: reference laps ────────────────────────────────────────────────────
+# Each car's charge-sustaining minimum-time flying lap for its own spec, under
+# the race bounds: periodic driving states AND periodic battery — the lap's
+# deploy spend equals its capped recovery, the right plan for the middle of a
+# race, unlike the drain-to-zero qualifying lap of race_car_hybrid.py. The
+# result is sampled on a uniform s grid (coarse is fine — the profiles are
+# smooth, and every extra knot costs Jacobian work in the tracking dynamics).
+M_REF_LAP = 64
+
+
+def _solve_reference_laps() -> dict:
+    """Solve the batched per-spec reference laps and return the lap tables."""
+    N = 80
+    T_guess = 20.0
+
+    rs = ox.State("s", shape=(1,))
+    rs.min, rs.max = [-0.1], [pathlength + 0.1]
+    rs.initial, rs.final = [0.0], [pathlength]
+    rs.guess = np.linspace(0.0, pathlength, N).reshape(-1, 1)
+
+    rn = ox.State("n", shape=(1,))
+    rn.min, rn.max = [-LANE_HALF_WIDTH], [LANE_HALF_WIDTH]
+    rn.initial, rn.final = [ox.Free(0.0)], [ox.Free(0.0)]
+    rn.guess = np.zeros((N, 1))
+
+    ralpha = ox.State("alpha", shape=(1,))
+    ralpha.min, ralpha.max = [-np.pi / 2], [np.pi / 2]
+    ralpha.initial, ralpha.final = [ox.Free(0.0)], [ox.Free(0.0)]
+    ralpha.guess = np.zeros((N, 1))
+
+    rv = ox.State("v", shape=(1,))
+    rv.min, rv.max = [0.0], [6.0]
+    rv.initial, rv.final = [ox.Free(2.0)], [ox.Free(2.0)]
+    rv.guess = 2.0 * np.ones((N, 1))
+
+    rD = ox.State("D", shape=(1,))
+    rD.min, rD.max = [-1.0], [1.0]
+    rD.initial, rD.final = [ox.Free(1.0)], [ox.Free(1.0)]
+    D_trail = trail_brake_throttle(rs.guess[:, 0])
+    rD.guess = D_trail.reshape(-1, 1)
+
+    rdelta = ox.State("delta", shape=(1,))
+    rdelta.min, rdelta.max = [-0.40], [0.40]
+    rdelta.initial, rdelta.final = [ox.Free(0.0)], [ox.Free(0.0)]
+    rdelta.guess = np.zeros((N, 1))
+
+    rE = ox.State("E", shape=(1,))
+    rE.min, rE.max = [0.0], [E_CAP_TOP]
+    rE.initial, rE.final = [ox.Free(0.5 * E_BATT_MAX)], [ox.Free(0.5 * E_BATT_MAX)]
+    rE.guess = 0.5 * E_BATT_MAX * np.ones((N, 1))
+
+    rR = ox.State("R", shape=(1,))
+    rR.min, rR.max = [0.0], [R_LAP_MAX]
+    rR.initial, rR.final = [0.0], [ox.Free(0.0)]
+    rR.guess = np.linspace(0.0, 0.8 * R_LAP_MAX, N).reshape(-1, 1)
+
+    rderD = ox.Control("derD", shape=(1,), parameterization="ZOH")
+    rderD.min, rderD.max = [-10.0], [10.0]
+    rderD.guess = np.clip(
+        np.diff(D_trail, append=D_trail[-1]) * (N - 1) / T_guess, rderD.min, rderD.max
+    ).reshape(-1, 1)
+
+    rderDelta = ox.Control("derDelta", shape=(1,), parameterization="ZOH")
+    rderDelta.min, rderDelta.max = [-2.0], [2.0]
+    rderDelta.guess = np.zeros((N, 1))
+
+    rdeploy = ox.Control("deploy", shape=(1,), parameterization="FOH")
+    rdeploy.min, rdeploy.max = [0.0], [1.0]
+    rdeploy.guess = np.clip(D_trail, 0.0, 1.0).reshape(-1, 1)
+
+    rregen = ox.Control("regen", shape=(1,), parameterization="FOH")
+    rregen.min, rregen.max = [0.0], [1.0]
+    rregen.guess = np.clip(-D_trail, 0.0, 1.0).reshape(-1, 1)
+
+    rtime = ox.Time(
+        initial=0.0,
+        final=ox.Minimize(T_guess),
+        min=0.0,
+        max=60.0,
+        guess=np.linspace(0.0, T_guess, N).reshape(-1, 1),
+    )
+
+    rpower = ox.Parameter("power_scale", shape=(), value=1.0)
+    rmass = ox.Parameter("mass_scale", shape=(), value=1.0)
+    rbattery = ox.Parameter("battery_scale", shape=(), value=1.0)
+
+    rkappa = ox.Cinterp(rs[0], s_interp, kappa_interp, method="pchip")
+    rm_car = ox.Constant(m) * rmass
+    rF_env = rpower * (ox.Constant(Cm1) - ox.Constant(Cm2) * rv[0])
+    rFxd = (
+        ox.Constant(ICE_SHARE) * rF_env * rD[0]
+        + ox.Constant(ELEC_SHARE) * rF_env * (rdeploy[0] - rregen[0])
+        - ox.Constant(Cr2) * rv[0] ** 2
+        - ox.Constant(Cr0) * ox.Tanh(ox.Constant(5.0) * rv[0])
+    )
+    rP_deploy = ox.Constant(ELEC_SHARE) * rF_env * rdeploy[0] * rv[0]
+    rP_harvest = ox.Constant(ETA_BATT) * ox.Constant(ELEC_SHARE) * rF_env * rregen[0] * rv[0]
+    rslip = ralpha[0] + ox.Constant(C1) * rdelta[0]
+    rsdot = (rv[0] * ox.Cos(rslip)) / (ox.Constant(1.0) - rkappa * rn[0])
+
+    rdynamics = {
+        "s": rsdot,
+        "n": rv[0] * ox.Sin(rslip),
+        "alpha": rv[0] * ox.Constant(C2) * rdelta[0] - rkappa * rsdot,
+        "v": (rFxd / rm_car) * ox.Cos(ox.Constant(C1) * rdelta[0]),
+        "D": rderD[0],
+        "delta": rderDelta[0],
+        "E": rP_harvest - rP_deploy,
+        "R": rP_harvest,
+    }
+
+    rstates = [rs, rn, ralpha, rv, rD, rdelta, rE, rR]
+    rcontrols = [rderD, rderDelta, rdeploy, rregen]
+
+    rconstraints: list = []
+    for state in [rs, rn, ralpha, rv, rD, rdelta, rR]:
+        rconstraints.extend(
+            [
+                ox.ctcs(state <= state.max, penalty="huber"),
+                ox.ctcs(state.min <= state, penalty="huber"),
+            ]
+        )
+    rconstraints.extend(
+        [
+            ox.ctcs(rE[0] <= rbattery * ox.Constant(E_BATT_MAX), penalty="huber"),
+            ox.ctcs(0.0 <= rE[0], penalty="huber"),
+        ]
+    )
+    # Flying-lap periodicity, including the battery (charge sustain).
+    rconstraints.extend(
+        (x.at(0) == x.at(N - 1)).convex() for x in [rn, ralpha, rv, rD, rdelta, rE]
+    )
+    ra_lat = (
+        ox.Constant(C2) * rv[0] ** 2 * rdelta[0]
+        + rFxd * ox.Sin(ox.Constant(C1) * rdelta[0]) / rm_car
+    )
+    rconstraints.append(ox.ctcs(ra_lat**2 + (rFxd / rm_car) ** 2 <= A_MAX**2, penalty="huber"))
+
+    ref_problem = ox.Problem(
+        dynamics=rdynamics,
+        states=rstates,
+        controls=rcontrols,
+        time=rtime,
+        constraints=rconstraints,
+        N=N,
+        float_dtype="float64",
+        licq_max=1e-12,
+        algorithm={
+            # Anchor loose enough to escape the initial guess but stiff enough
+            # that the warm-start continuation rounds below stay finite.
+            "lam_prox": 1e-1,
+            "lam_cost": 3e0,
+            "lam_vc": 1e2,
+            "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
+        },
+        discretizer={"diffrax_kwargs": {"atol": 1e-8, "rtol": 1e-8}},
+    )
+    ref_problem.settings.dev.printing = False
+    ref_problem.settings.prp.atol = 1e-10
+    ref_problem.settings.prp.rtol = 1e-10
+    ref_problem.initialize()
+
+    specs = {
+        key: np.array([spec[key] for spec in AGENTS])
+        for key in ("power_scale", "mass_scale", "battery_scale")
+    }
+    results = ref_problem.solve_batched(parameters=specs)
+    # Warm-start continuation escapes the guess anchoring; a diverged round
+    # keeps the previous (finite) solution.
+    for _ in range(3):
+        try:
+            nxt = ref_problem.solve_batched(
+                parameters=specs,
+                x_guess=np.asarray(results.x),
+                u_guess=np.asarray(results.u),
+            )
+        except Exception:
+            break
+        if np.isnan(np.asarray(nxt.x)).any():
+            break
+        results = nxt
+    results = ref_problem.post_process_batched(results)
+
+    # Sample every signal onto the uniform lap grid, clipped to the feasible
+    # box: the huber CTCS penalties let the solve leak slightly past a bound,
+    # and the race MPC must never be asked to track an infeasible point.
+    s_grid = np.linspace(0.0, pathlength, M_REF_LAP, endpoint=False)
+    x_full = np.asarray(results.x_full)
+    u_full = np.asarray(results.u_full)
+    cols = {name: i for i, name in enumerate(DRIVER_STATES)}
+    n_margin = LANE_HALF_WIDTH - 0.005
+    signals = {
+        "ref_n": (x_full, cols["n"], (-n_margin, n_margin)),
+        "ref_v": (x_full, cols["v"], (0.0, 6.0)),
+        "ref_E": (x_full, cols["E"], (0.0, E_BATT_MAX)),
+        "ref_D": (x_full, cols["D"], (-1.0, 1.0)),
+        "ref_deploy": (u_full, 2, (0.0, 1.0)),
+        "ref_regen": (u_full, 3, (0.0, 1.0)),
+    }
+    tables = {sig: np.zeros((K, M_REF_LAP)) for sig in signals}
+    for i in range(K):
+        order = np.argsort(x_full[i, :, cols["s"]])
+        s_o = x_full[i, order, cols["s"]]
+        for sig, (src, col, (lo, hi)) in signals.items():
+            tables[sig][i] = np.clip(np.interp(s_grid, s_o, src[i, order, col]), lo, hi)
+
+    return dict(
+        s_grid=s_grid,
+        lap_times=np.asarray(results.t_final).reshape(-1),
+        **tables,
+    )
+
+
+DRIVER_STATES = ("s", "n", "alpha", "v", "D", "delta", "E", "R")
+
+print("Phase 1: solving each car's reference lap (a few minutes)...")
+_ref = _solve_reference_laps()
+REF_S_GRID = _ref["s_grid"]  # (M,) uniform on [0, pathlength)
+REF_LAP_TIMES = _ref["lap_times"]  # (K,)
+_M_LAP = len(REF_S_GRID)
+_DS_REF = pathlength / _M_LAP
+
+# Tile the lap-periodic tables onto a uniform grid spanning every s a horizon
+# can visit: grid slots (negative) through the post-flag overrun.
+S_REF_LO = -np.ceil((_pad_lo + 1.0) / _DS_REF) * _DS_REF
+_k_lo = int(round(S_REF_LO / _DS_REF))
+_k_hi = int(np.ceil((pathlength + S_OVERRUN + 1.0) / _DS_REF))
+_k_ext = np.arange(_k_lo, _k_hi + 1)
+M_REF = len(_k_ext)
+
+
+def _tile(table: np.ndarray) -> np.ndarray:
+    """(K, M) lap table -> (K, M_REF) lap-periodic extended table."""
+    return table[:, _k_ext % _M_LAP]
+
+
+REF_N = _tile(_ref["ref_n"])
+REF_V = _tile(_ref["ref_v"])
+REF_E = _tile(_ref["ref_E"])
+REF_D = _tile(_ref["ref_D"])
+REF_DEPLOY = _tile(_ref["ref_deploy"])
+REF_REGEN = _tile(_ref["ref_regen"])
+
+# Uniform arc-length grid of the tiled tables — the breakpoints the shared
+# reference splines and the warm-start lookups both key on.
+REF_S_EXT = S_REF_LO + np.arange(M_REF) * _DS_REF
+
+# All cars regulate around the nominal unity-spec lap; if no unity-spec car is
+# in the roster (e.g. a truncated field) the first car's lap stands in.
+REF_IDX = next(
+    (
+        i
+        for i, spec in enumerate(AGENTS)
+        if spec["power_scale"] == spec["mass_scale"] == spec["battery_scale"] == 1.0
+    ),
+    0,
+)
+
+# Pace factor: the nominal speed profile rescaled by the ratio of phase-1 lap
+# times. Without it two neighbouring cars chase the same point at the same
+# speed and a duel never resolves; the pace hierarchy is what lets battles
+# end and the field string out.
+PACE = REF_LAP_TIMES[REF_IDX] / REF_LAP_TIMES
+
 # ── States ─────────────────────────────────────────────────────────────────────
-# Boundary values and guesses below describe the pole slot only: every solve
-# overrides them per car through the batched ``x_initial`` pins and guesses.
 S_POLE, N_POLE = grid_slot(0)
 S_MIN = grid_slot(K - 1)[0] - 0.1
 
@@ -209,7 +470,7 @@ s = ox.State("s", shape=(1,))
 s.min = [S_MIN]
 s.max = [pathlength + S_OVERRUN]
 s.initial = [S_POLE]
-s.final = [ox.Maximize(0.0)]  # maximise arc-length progress each horizon
+s.final = [ox.Maximize(0.0)]  # residual progress reward: the incentive to overtake
 s.guess = np.full((N_MPC, 1), S_POLE)
 
 n = ox.State("n", shape=(1,))
@@ -229,7 +490,7 @@ alpha.guess = np.zeros((N_MPC, 1))
 v = ox.State("v", shape=(1,))
 v.min = [0.0]
 v.max = [6.0]
-v.initial = [0.0]  # standing start
+v.initial = [0.0]
 v.final = [ox.Free(0.0)]
 v.guess = np.zeros((N_MPC, 1))
 
@@ -249,8 +510,8 @@ delta.guess = np.zeros((N_MPC, 1))
 
 E_batt = ox.State("E", shape=(1,))
 E_batt.min = [0.0]
-E_batt.max = [E_CAP_TOP]  # scaling bound; the binding capacity is per-car below
-E_batt.initial = [E_BATT_MAX]  # lights out on a full charge
+E_batt.max = [E_CAP_TOP]
+E_batt.initial = [E_BATT_MAX]
 E_batt.final = [ox.Free(0.0)]
 E_batt.guess = np.full((N_MPC, 1), E_BATT_MAX)
 
@@ -261,11 +522,32 @@ E_rec.initial = [0.0]
 E_rec.final = [ox.Free(0.0)]
 E_rec.guess = np.zeros((N_MPC, 1))
 
-# Unified state layout: the driver states above in declared order, then the
-# time state, then the CTCS integrators appended by constraint augmentation.
-DRIVER_STATES = ("s", "n", "alpha", "v", "D", "delta", "E", "R")
-COL = {name: i for i, name in enumerate(DRIVER_STATES)}
-TIME_COL = len(DRIVER_STATES)
+# Tracking cost integrators (the lag_sum/contour_sum idiom of the drone
+# example): each accumulates one squared tracking error along the horizon, in
+# its own physical units, and is minimised at the final node with its own
+# weight. The box caps are hard nodal bounds as well as solver scaling, so
+# each is sized to a genuine racing deviation held for a whole horizon (a
+# car-width off line, ~1 m/s off pace, a half-battery split): going
+# off-reference to pass must sit comfortably inside the cap, because an
+# integrator that rails its box fights the solver on every horizon it does.
+track_n = ox.State("track_n", shape=(1,))  # ∫(n − n_ref)² dt  [m²·s]
+track_n.min, track_n.max = [0.0], [1.0]
+track_n.initial, track_n.final = [0.0], [ox.Minimize(0.0)]
+track_n.guess = np.zeros((N_MPC, 1))
+
+track_v = ox.State("track_v", shape=(1,))  # ∫(v − v_ref)² dt  [(m/s)²·s]
+track_v.min, track_v.max = [0.0], [30.0]
+track_v.initial, track_v.final = [0.0], [ox.Minimize(0.0)]
+track_v.guess = np.zeros((N_MPC, 1))
+
+track_E = ox.State("track_E", shape=(1,))  # ∫(E − E_ref)² dt  [J²·s]
+track_E.min, track_E.max = [0.0], [0.01]
+track_E.initial, track_E.final = [0.0], [ox.Minimize(0.0)]
+track_E.guess = np.zeros((N_MPC, 1))
+
+TRACK_STATES = ("track_n", "track_v", "track_E")
+COL = {name: i for i, name in enumerate(DRIVER_STATES + TRACK_STATES)}
+TIME_COL = len(DRIVER_STATES) + len(TRACK_STATES)
 
 # ── Controls ───────────────────────────────────────────────────────────────────
 derD = ox.Control("derD", shape=(1,), parameterization="ZOH")
@@ -289,8 +571,6 @@ regen.max = [1.0]
 regen.guess = 0.1 * np.ones((N_MPC, 1))
 
 # ── Time: fixed horizon, uniform grid ─────────────────────────────────────────
-# Every car's horizon runs on this same clock, which is what lets node k of one
-# car's plan be checked against node k of an opponent's.
 time = ox.Time(
     initial=0.0,
     final=HORIZON_TF,
@@ -299,15 +579,12 @@ time = ox.Time(
     uniform_time_grid=True,
 )
 
-# ── Parameters: car spec and opponent plans ────────────────────────────────────
+# ── Parameters: car spec, pace factor, and opponent plans ────────────────────
 power_scale = ox.Parameter("power_scale", shape=(), value=1.0)
 mass_scale = ox.Parameter("mass_scale", shape=(), value=1.0)
 battery_scale = ox.Parameter("battery_scale", shape=(), value=1.0)
+pace_scale = ox.Parameter("pace_scale", shape=(), value=1.0)
 
-# Opponent (s, n) forecasts, one row per horizon node, one column per opponent.
-# Refreshed every race step from the other cars' previous plans; parameters are
-# hashed by shape, so the updates never recompile. Initialised far behind the
-# grid so the constraints start inactive.
 if K > 1:
     opp_s = ox.Parameter("opp_s", shape=(N_MPC, K - 1), value=np.full((N_MPC, K - 1), S_MIN - 10.0))
     opp_n = ox.Parameter("opp_n", shape=(N_MPC, K - 1), value=np.zeros((N_MPC, K - 1)))
@@ -316,12 +593,10 @@ if K > 1:
 kappa = ox.Cinterp(s[0], s_interp, kappa_interp, method="pchip")
 m_car = ox.Constant(m) * mass_scale
 
-# Drive-force envelope, scaled by engine health and split ICE / MGU-K
 F_env = power_scale * (ox.Constant(Cm1) - ox.Constant(Cm2) * v[0])
 F_ice = ox.Constant(ICE_SHARE) * F_env * D_throt[0]
 F_elec = ox.Constant(ELEC_SHARE) * F_env * (deploy[0] - regen[0])
 
-# Longitudinal tyre force [N]
 Fxd = (
     F_ice
     + F_elec
@@ -329,13 +604,19 @@ Fxd = (
     - ox.Constant(Cr0) * ox.Tanh(ox.Constant(5.0) * v[0])
 )
 
-# Battery power flows: deployment drains at wheel power, harvesting charges
-# through the round-trip efficiency and counts against the recovery cap.
 P_deploy = ox.Constant(ELEC_SHARE) * F_env * deploy[0] * v[0]
 P_harvest = ox.Constant(ETA_BATT) * ox.Constant(ELEC_SHARE) * F_env * regen[0] * v[0]
 
 slip_angle = alpha[0] + ox.Constant(C1) * delta[0]
 sdot = (v[0] * ox.Cos(slip_angle)) / (ox.Constant(1.0) - kappa * n[0])
+
+# Reference lookup: the shared nominal lap as pchip splines of arc length, the
+# same construction ``kappa`` uses — smooth and kink-free, so the tracking
+# error linearises cleanly. Only the speed profile is per-car, through the
+# scalar pace factor.
+n_ref_s = ox.Cinterp(s[0], REF_S_EXT, REF_N[REF_IDX], method="pchip")
+v_ref_s = pace_scale * ox.Cinterp(s[0], REF_S_EXT, REF_V[REF_IDX], method="pchip")
+E_ref_s = ox.Cinterp(s[0], REF_S_EXT, REF_E[REF_IDX], method="pchip")
 
 dynamics = {
     "s": sdot,
@@ -346,15 +627,17 @@ dynamics = {
     "delta": derDelta[0],
     "E": P_harvest - P_deploy,
     "R": P_harvest,
+    "track_n": (n[0] - n_ref_s) ** 2,
+    "track_v": (v[0] - v_ref_s) ** 2,
+    "track_E": (E_batt[0] - E_ref_s) ** 2,
 }
 
 # ── Constraints ────────────────────────────────────────────────────────────────
-states = [s, n, alpha, v, D_throt, delta, E_batt, E_rec]
+states = [s, n, alpha, v, D_throt, delta, E_batt, E_rec, track_n, track_v, track_E]
 controls = [derD, derDelta, deploy, regen]
 
 constraints: list = []
 
-# Track limits and path constraints, continuous between nodes.
 for state in [s, n, alpha, v, D_throt, delta, E_rec]:
     constraints.extend(
         [
@@ -363,7 +646,6 @@ for state in [s, n, alpha, v, D_throt, delta, E_rec]:
         ]
     )
 
-# Battery: the box bound above only scales; the capacity that binds is the car's.
 constraints.extend(
     [
         ox.ctcs(E_batt[0] <= battery_scale * ox.Constant(E_BATT_MAX), penalty="huber"),
@@ -371,16 +653,11 @@ constraints.extend(
     ]
 )
 
-# Friction ellipse: lateral and longitudinal grip share one tyre.
 a_lat = ox.Constant(C2) * v[0] ** 2 * delta[0] + Fxd * ox.Sin(ox.Constant(C1) * delta[0]) / m_car
 a_long = Fxd / m_car
 
 constraints.append(ox.ctcs(a_lat**2 + a_long**2 <= A_MAX**2, penalty="huber"))
 
-# Opponent separation, continuous in time: hat weights in the time state turn
-# each opponent's node forecast into a piecewise-linear trajectory (all cars
-# share one uniform horizon clock), and W_SEP prices contact far above any
-# progress the reward could buy — an unweighted bubble gets driven through.
 W_SEP = 4e3
 
 if K > 1:
@@ -388,19 +665,30 @@ if K > 1:
     for j in range(K - 1):
         opp_s_t = ox.Sum(hat * opp_s[:, j])
         opp_n_t = ox.Sum(hat * opp_n[:, j])
-        # Plans live in per-car lap frames, so the gap must be lap-periodic:
-        # (L/π)·sin(π·Δs/L) matches Δs near whole-lap multiples — the only
-        # place the bubble can bind — and stays harmlessly large in between.
         ds = s[0] - opp_s_t
         ds_wrap = ox.Constant(pathlength / np.pi) * ox.Sin(ox.Constant(np.pi / pathlength) * ds)
         gap = (ds_wrap / SEP_LONG) ** 2 + ((n[0] - opp_n_t) / SEP_LAT) ** 2
         constraints.append(ox.ctcs(W_SEP * (1.0 - gap) <= 0.0, penalty="huber"))
 
 # ── Problem ────────────────────────────────────────────────────────────────────
-# One car's horizon problem; the race batches it over the roster. The default
-# CVXPy backend solves the K subproblems sequentially; a JAX-native backend
-# (e.g. solver={"backend": "qpax"}) vectorizes the whole field into one XLA
-# program.
+# The reference carries the racing line, pace, and energy plan, so the cost is
+# regulation around it plus a residual progress reward that gives cars a
+# reason to overtake rather than follow. ``lam_cost`` weighs the *scaled*
+# integrators — state scaling divides by max(1, half-range of the box), so a
+# weight's physical strength is its lam over that factor, and the narrow
+# track_n / track_E boxes clamp to 1 (their lams ARE their strengths).
+# Contour is priced cheapest: lateral room is the overtaking degree of
+# freedom, and racing thrashes (convergence and solve time both suffer) when
+# the line or pace is too dear to leave — but on a shared line it cannot be
+# too cheap either, or side-by-side duels stop resolving. Energy is priced so
+# the charge plan actually binds: any weaker and the progress reward runs the
+# field net-negative every lap until the battery pins at empty and the
+# track_E integrator rails its box all through the following laps.
+W_PROGRESS = 3e1
+W_TRACK_N = 5e0
+W_TRACK_V = 9e1
+W_TRACK_E = 1e2
+
 problem = ox.Problem(
     dynamics=dynamics,
     states=states,
@@ -410,23 +698,17 @@ problem = ox.Problem(
     N=N_MPC,
     float_dtype="float64",
     algorithm={
-        # Weights from batched sweeps (one single-car closed-loop lap per
-        # batch element). The progress reward must dominate the proximal
-        # anchor or the field crawls glued to its warm start, and lam_vc must
-        # dominate the reward or virtual control buys progress instead of
-        # driving. ep_tr sits just above the plan's structural jitter floor;
-        # that floor grows with the car's pace, so size it for the fastest
-        # spec in the roster.
-        "lam_vc": 1e3,
+        "lam_vc": 3e3,
         "lam_prox": 2e0,
-        "lam_cost": {"s": 4e1},
+        "lam_cost": {
+            "s": W_PROGRESS,
+            "track_n": W_TRACK_N,
+            "track_v": W_TRACK_V,
+            "track_E": W_TRACK_E,
+        },
         "autotuner": ox.ConstantProximalWeight(),
         "ep_tr": 3e-2,
     },
-    # Integration tolerance sets the linearization-noise floor, which must sit
-    # below ep_tr — otherwise the trust region converges on integration noise
-    # rather than a real optimum. Tighter than this buys no accuracy and only
-    # spends integration time.
     discretizer={
         "diffrax_kwargs": {"atol": 1e-6, "rtol": 1e-6},
     },
@@ -463,36 +745,51 @@ def cold_start_guesses() -> tuple[np.ndarray, np.ndarray]:
 
 
 def shift_forecast(plan: np.ndarray) -> np.ndarray:
-    """Advance published plans one node so they align with the next horizon.
-
-    All horizons share one uniform clock, so node ``k`` of the next horizon is
-    node ``k + 1`` of the plan just published; the freed final node is
-    extrapolated (a held node would forecast the opponent parking).
-    """
+    """Advance published plans one node so they align with the next horizon."""
     tail = 2.0 * plan[:, -1:] - plan[:, -2:-1]
     return np.concatenate([plan[:, 1:], tail], axis=1)
 
 
-# Driver-state box, for keeping the extrapolated warm-start tail physical.
 _X_LO = np.array([st.min[0] for st in states])
 _X_HI = np.array([st.max[0] for st in states])
+
+
+def _ref_lookup(table: np.ndarray, s_query: np.ndarray) -> np.ndarray:
+    """Per-car linear interpolation of a (K, M_REF) table at s_query (K,)."""
+    pos = np.clip((s_query - S_REF_LO) / _DS_REF, 0.0, M_REF - 1.001)
+    k0 = pos.astype(int)
+    w = pos - k0
+    rows = np.arange(len(s_query))
+    return (1.0 - w) * table[rows, k0] + w * table[rows, k0 + 1]
 
 
 def shifted_guesses(results) -> tuple[np.ndarray, np.ndarray]:
     """Warm starts for the next step: previous plans shifted one node.
 
-    The freed final state node is extrapolated, not held — a held tail is
-    dynamically infeasible and burns SCP iterations on virtual control.
-    Controls hold their last value; the horizon clock and CTCS integrators
-    restart from zero.
+    The freed tip node is seeded from the car's own phase-1 lap at its
+    predicted arc length — feasible for the car's spec, so unlike a raw
+    heuristic profile this costs no virtual control, even though the horizon
+    tracks the shared nominal lap — and the tracking integrators restart with
+    their accumulated offset removed. Other controls hold their last value;
+    the horizon clock and CTCS integrators restart from zero.
     """
     x = np.asarray(results.x)
     u = np.asarray(results.u)
     n_d = len(DRIVER_STATES)
     tail = x[:, -1:].copy()
-    tail[:, :, :n_d] = np.clip(2.0 * x[:, -1:, :n_d] - x[:, -2:-1, :n_d], _X_LO, _X_HI)
+    tail[:, :, :n_d] = np.clip(2.0 * x[:, -1:, :n_d] - x[:, -2:-1, :n_d], _X_LO[:n_d], _X_HI[:n_d])
+    s_tip = tail[:, 0, COL["s"]]
+    for name, table in [("n", REF_N), ("v", REF_V), ("D", REF_D), ("E", REF_E)]:
+        tail[:, 0, COL[name]] = _ref_lookup(table, s_tip)
     x = np.concatenate([x[:, 1:], tail], axis=1)
     u = np.concatenate([u[:, 1:], u[:, -1:]], axis=1)
+    u[:, -1, 2] = _ref_lookup(REF_DEPLOY, s_tip)
+    u[:, -1, 3] = _ref_lookup(REF_REGEN, s_tip)
+    # Tracking integrators: drop the first node's accumulation so each horizon
+    # restarts at zero, as its pinned initial condition requires.
+    for name in TRACK_STATES:
+        col = x[:, :, COL[name]]
+        x[:, :, COL[name]] = np.maximum(col - col[:, :1], 0.0)
     x[:, :, TIME_COL] = np.linspace(0.0, HORIZON_TF, N_MPC)
     x[:, :, TIME_COL + 1 :] = 0.0
     return x, u
@@ -530,10 +827,11 @@ def accelerations(x: np.ndarray, u: np.ndarray, spec: dict) -> tuple[np.ndarray,
 def plot_race(log: RaceLog) -> None:
     """Track projection and speed/battery striplines.
 
-    Everything is drawn from the dense propagated log; the striplines run
-    against race distance in laps rather than time, so the same corner lines
-    up vertically across cars and laps. The g-g diagrams live in the Viser
-    telemetry panels, where they play back with the race.
+    As in ``race_car_multi_agent.plot_race``, everything is drawn from the
+    dense propagated log against race distance in laps. The one addition is
+    the dotted shared reference on each stripline: the nominal lap every car
+    tracks, tiled over the race, so the tracking quality — and any deviation
+    bought to race the field — is visible directly.
     """
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
@@ -589,7 +887,7 @@ def plot_race(log: RaceLog) -> None:
             )
         )
     fig1.update_layout(
-        title=f"Multi-agent race — propagated closed-loop trajectories  ({len(log.sim)} steps)",
+        title=f"Tracking race — propagated closed-loop trajectories  ({len(log.sim)} steps)",
         xaxis=dict(title="x [m]", scaleanchor="y"),
         yaxis=dict(title="y [m]"),
         height=600,
@@ -597,29 +895,33 @@ def plot_race(log: RaceLog) -> None:
     fig1.show()
 
     # ── Speed and battery striplines against race distance ────────────────────
+    ref_lap_x = np.concatenate([lap + REF_S_GRID / pathlength for lap in range(M_LAPS)])
     fig2 = make_subplots(rows=2, cols=1, shared_xaxes=True, subplot_titles=["v [m/s]", "E [J]"])
+    for row, ref in [(1, _ref["ref_v"][REF_IDX]), (2, _ref["ref_E"][REF_IDX])]:
+        fig2.add_trace(
+            go.Scatter(
+                x=ref_lap_x,
+                y=np.tile(ref, M_LAPS),
+                line=dict(color="black", dash="dot", width=1),
+                name="shared reference",
+                showlegend=row == 1,
+            ),
+            row=row,
+            col=1,
+        )
     for i, spec in enumerate(AGENTS):
-        fig2.add_trace(
-            go.Scatter(
-                x=laps_x[i],
-                y=log.dense_x[i, :, COL["v"]],
-                line=dict(color=css[i]),
-                name=spec["name"],
-            ),
-            row=1,
-            col=1,
-        )
-        fig2.add_trace(
-            go.Scatter(
-                x=laps_x[i],
-                y=log.dense_x[i, :, COL["E"]],
-                line=dict(color=css[i]),
-                name=spec["name"],
-                showlegend=False,
-            ),
-            row=2,
-            col=1,
-        )
+        for row, signal in [(1, log.dense_x[i, :, COL["v"]]), (2, log.dense_x[i, :, COL["E"]])]:
+            fig2.add_trace(
+                go.Scatter(
+                    x=laps_x[i],
+                    y=signal,
+                    line=dict(color=css[i]),
+                    name=spec["name"],
+                    showlegend=row == 1,
+                ),
+                row=row,
+                col=1,
+            )
         fig2.add_hline(
             y=spec["battery_scale"] * E_BATT_MAX,
             line=dict(color=css[i], dash="dash", width=1),
@@ -629,7 +931,9 @@ def plot_race(log: RaceLog) -> None:
     for lap in range(1, M_LAPS):
         fig2.add_vline(x=float(lap), line=dict(color="black", dash="dot", width=1))
     fig2.update_xaxes(title_text="race distance [laps]", row=2, col=1)
-    fig2.update_layout(title="Speed and battery state of charge", height=600)
+    fig2.update_layout(
+        title="Speed and battery state of charge vs the shared reference lap", height=600
+    )
     fig2.show()
 
 
@@ -763,52 +1067,50 @@ class RaceLog:
     classification, audits. ``dense_*`` stitch each step's *propagated*
     executed interval together (``post_process_batched`` under the hood), so
     playback and plots see the continuous trajectories the cars actually
-    drove, not the node samples; with ``run_race(dense=False)`` they instead
-    carry one node-rate sample per step. ``s`` entries in both logs are
-    cumulative race distance.
+    drove, not the node samples. ``s`` entries in both logs are cumulative
+    race distance.
     """
 
-    sim: np.ndarray  # (T, K, len(DRIVER_STATES)) at the MPC rate
-    t_sim: np.ndarray  # (T,)
-    finish_time: list  # per car; None if the time cap expired first
-    dense_t: np.ndarray  # (Td,)
-    dense_x: np.ndarray  # (K, Td, len(DRIVER_STATES))
-    dense_u: np.ndarray  # (K, Td, 4)  [derD, derDelta, deploy, regen]
-    converged: np.ndarray  # (T, K) bool — per car, per MPC step
+    sim: np.ndarray
+    t_sim: np.ndarray
+    finish_time: list
+    dense_t: np.ndarray
+    dense_x: np.ndarray
+    dense_u: np.ndarray
+    converged: np.ndarray
 
 
-def run_race(max_steps: int = MAX_STEPS, dense: bool = True) -> RaceLog:
+def run_race(max_steps: int = MAX_STEPS) -> RaceLog:
     """Race the roster to the flag and return the :class:`RaceLog`.
 
-    One ``solve_batched`` call advances the whole field by one node
-    (``DT_MPC``) per iteration; each step's executed interval is propagated
-    densely for the log. ``dense=False`` skips that per-step propagation and
-    the ``dense_*`` fields fall back to one node-rate sample per step, so plots
-    and playback still work, just at the MPC rate.
+    One ``solve_batched`` call plans the whole field; the plant then advances
+    one node (``DT_MPC``) along the *propagated* executed interval, so a defect
+    in an unconverged plan stays a plan instead of becoming real motion. That
+    same executed interval is logged densely for playback and plots.
     """
     x0 = initial_pins()
     x_guess, u_guess = cold_start_guesses()
-    # Published plans; before lights out every car assumes the field holds station.
     pred_s = x_guess[:, :, COL["s"]].copy()
     pred_n = x_guess[:, :, COL["n"]].copy()
 
-    spec_params = {
+    fixed_params = {
         key: np.array([spec[key] for spec in AGENTS])
         for key in ("power_scale", "mass_scale", "battery_scale")
     }
+    fixed_params["pace_scale"] = PACE
 
     sim_rows: list[np.ndarray] = []
     dense_t: list[np.ndarray] = []
     dense_x: list[np.ndarray] = []
     dense_u: list[np.ndarray] = []
     finish_time: list = [None] * K
-    laps = np.zeros(K)  # completed line crossings per car
+    laps = np.zeros(K)
     t_now = 0.0
     solve_ms: list[float] = []
     conv_flags: list[np.ndarray] = []
 
     for step in range(max_steps):
-        params = dict(spec_params)
+        params = dict(fixed_params)
         if K > 1:
             params["opp_s"] = opponent_view(shift_forecast(pred_s))
             params["opp_n"] = opponent_view(shift_forecast(pred_n))
@@ -822,32 +1124,25 @@ def run_race(max_steps: int = MAX_STEPS, dense: bool = True) -> RaceLog:
             max_iters=SCP_ITERS_PER_STEP,
         )
         solve_ms.append((_time.perf_counter() - tic) * 1e3)
-        # Non-converged steps concentrate in wheel-to-wheel traffic, where
-        # opponents' published plans move between steps — a property of the
-        # game, not of any car's spec or the weights.
         conv_flags.append(np.asarray(results.converged).reshape(-1))
 
         nodes = {name: np.asarray(results.nodes[name]) for name in DRIVER_STATES}
-        row = np.stack([nodes[name][:, 0, 0] for name in DRIVER_STATES], axis=1)  # (K, n)
-        row[:, COL["s"]] += laps * pathlength  # the log carries cumulative race distance
+        row = np.stack([nodes[name][:, 0, 0] for name in DRIVER_STATES], axis=1)
+        row[:, COL["s"]] += laps * pathlength
 
-        if dense:
-            # Propagate the horizon and keep the executed interval [0, DT_MPC):
-            # stitched across steps this is the continuous closed-loop trajectory.
-            post = problem.post_process_batched(results)
-            t_prop = np.asarray(post.t_full)[0]  # horizon clock, shared by all cars
-            keep = t_prop < DT_MPC - 1e-9
-            seg_x = np.asarray(post.x_full)[:, keep, : len(DRIVER_STATES)].copy()
-            seg_x[:, :, COL["s"]] += laps[:, None] * pathlength
-            dense_t.append(t_now + t_prop[keep])
-            dense_x.append(seg_x)
-            dense_u.append(np.asarray(post.u_full)[:, keep, :4])
-        else:
-            dense_t.append(np.array([t_now]))
-            dense_x.append(row[:, None, :].copy())
-            dense_u.append(np.asarray(results.u)[:, :1, :4])
+        # Propagate every step's executed interval through the nonlinear
+        # dynamics: the segment [0, DT_MPC) is both the dense log and, at its
+        # endpoint, the honest plant update below.
+        post = problem.post_process_batched(results)
+        t_prop = np.asarray(post.t_full)  # (K, n_times)
+        x_prop = np.asarray(post.x_full)  # (K, n_times, n_prop_states)
+        keep = t_prop[0] < DT_MPC - 1e-9
+        seg_x = x_prop[:, keep, : len(DRIVER_STATES)].copy()
+        seg_x[:, :, COL["s"]] += laps[:, None] * pathlength
+        dense_t.append(t_now + t_prop[0][keep])
+        dense_x.append(seg_x)
+        dense_u.append(np.asarray(post.u_full)[:, keep, :4])
 
-        # Finish detection: interpolate the flag crossing inside the last step.
         for i in range(K):
             if finish_time[i] is None and row[i, COL["s"]] >= RACE_DISTANCE:
                 s_prev = sim_rows[-1][i, COL["s"]] if sim_rows else grid_slot(i)[0]
@@ -856,8 +1151,7 @@ def run_race(max_steps: int = MAX_STEPS, dense: bool = True) -> RaceLog:
 
         sim_rows.append(row)
         status = "  |  ".join(
-            f"{AGENTS[i]['name']}: L{lap_of(row[i, COL['s']])}"
-            f" s={row[i, COL['s']]:6.2f} v={row[i, COL['v']]:.2f}"
+            f"{AGENTS[i]['name']}: s={row[i, COL['s']]:6.2f} v={row[i, COL['v']]:.2f}"
             f" E={row[i, COL['E']]:.3f}"
             for i in range(K)
         )
@@ -868,18 +1162,26 @@ def run_race(max_steps: int = MAX_STEPS, dense: bool = True) -> RaceLog:
         if all(t is not None for t in finish_time):
             break
 
-        # Advance the field one node and publish this step's plans.
+        # Advance the plant to the executed segment's endpoint at t = DT_MPC
+        # rather than trusting solved node 1: node 1 is the convex plan's value,
+        # so on an unconverged step its first interval carries a virtual-control
+        # defect. Propagating the nonlinear dynamics keeps that defect a plan,
+        # not car motion — the field drives the segment it was handed and
+        # recovers on the next horizon. The propagation grid is a linspace over
+        # the whole horizon, so interpolate each driver state at t = DT_MPC.
+        # Clip to the state box: propagation is free to drift past a soft bound
+        # (e.g. draining the battery a hair below empty, or running wide of the
+        # lane on an unconverged plan), but an x_initial pinned outside the box
+        # cannot satisfy the subproblem's node bounds and poisons that car's
+        # solve, so the plant enforces the box at the handoff.
         for name in DRIVER_STATES:
-            x0[:, COL[name]] = nodes[name][:, 1, 0]
+            col = COL[name]
+            at_dt = [np.interp(DT_MPC, t_prop[i], x_prop[i, :, col]) for i in range(K)]
+            x0[:, col] = np.clip(at_dt, _X_LO[col], _X_HI[col])
         x_guess, u_guess = shifted_guesses(results)
         pred_s = nodes["s"][:, :, 0].copy()
         pred_n = nodes["n"][:, :, 0]
 
-        # Lap handling, as in the MPCC example: a car taking the line has its
-        # s frame wrapped back one lap — pin, warm start, and published plan
-        # together — and its recovery budget R reset. (A horizon straddling
-        # the line charges its first new-lap metres to the old lap's budget:
-        # conservative by at most one horizon.)
         for i in range(K):
             if x0[i, COL["s"]] >= pathlength:
                 laps[i] += 1
@@ -907,11 +1209,6 @@ def run_race(max_steps: int = MAX_STEPS, dense: bool = True) -> RaceLog:
     )
 
 
-def lap_of(s_cum: float) -> int:
-    """Current lap number (1-based) at cumulative race distance ``s_cum``."""
-    return int(min(max(s_cum, 0.0) // pathlength + 1, M_LAPS))
-
-
 def crossing_index(s_cum: np.ndarray) -> int:
     """Number of samples of a cumulative-distance log up to the flag crossing."""
     return min(int(np.searchsorted(s_cum, RACE_DISTANCE)) + 1, len(s_cum))
@@ -929,8 +1226,6 @@ def print_classification(log: RaceLog) -> list[int]:
             continue
         cross = crossing_index(sim[:, i, COL["s"]])
         at_flag = sim[cross - 1, i]
-        # R saws per lap (reset at each line crossing); the race total is the
-        # final value plus everything the resets discarded.
         rec = sim[:cross, i, COL["R"]]
         recovered = rec[-1] - np.diff(rec)[np.diff(rec) < 0.0].sum()
         gap = "" if place == 1 else f"  +{finish_time[i] - finish_time[order[0]]:.3f} s"
@@ -965,7 +1260,7 @@ if __name__ == "__main__":
             lane_width=LANE_HALF_WIDTH,
             trim_warmup=False,
             distance_marker_step=None,
-            title="Multi-agent race",
+            title="Tracking race",
             plot_panels=build_viser_panels(log),
         )
         server.sleep_forever()
