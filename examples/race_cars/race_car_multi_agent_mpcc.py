@@ -686,7 +686,7 @@ problem = ox.Problem(
     N=N_MPC,
     float_dtype="float64",
     algorithm={
-        "lam_vc": 1e3,
+        "lam_vc": 3e3,
         "lam_prox": 2e0,
         "lam_cost": {
             "s": W_PROGRESS,
