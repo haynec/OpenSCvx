@@ -1,0 +1,28 @@
+# OpenSCvx
+
+> OpenSCvx is an open-source Python library for nonlinear trajectory optimization built on successive convexification (SCvx). You write dynamics, costs, and constraints as a single composable problem object; the library lowers that symbolic definition to JAX, discretizes it on a time grid, and solves the resulting nonconvex problem through a sequence of convex subproblems. The same problem definition runs on CPU and GPU and vectorizes across decision nodes and scenario batches.
+
+- Package: `openscvx` on PyPI (Python 3.11+). Install with `pip install openscvx` or `uv pip install openscvx`; optional extras: `cvxpygen`, `qpax`, `moreau`, `stl`, `lie`, `mjx`, `frax`.
+- Documentation: https://openscvx.github.io/OpenSCvx/
+- Source: https://github.com/OpenSCvx/OpenSCvx
+- PyPI: https://pypi.org/project/openscvx/
+
+## Getting started
+
+- [Installation](https://openscvx.github.io/OpenSCvx/installation/): install from PyPI with uv or pip, or from source, with optional extras.
+- [Users Guide](https://openscvx.github.io/OpenSCvx/UsersGuide/00_introduction/): a progressive tutorial series from a first model to representative problems.
+- [Examples](https://openscvx.github.io/OpenSCvx/examples/): runnable trajectory optimization scripts across aerospace, robotics, and abstract control.
+
+## Key concepts
+
+- [What is Successive Convexification?](https://openscvx.github.io/OpenSCvx/Foundations/scvx/): the SCvx algorithm and the Mayer-form problem statement.
+- [Optimal Control Problem](https://openscvx.github.io/OpenSCvx/Foundations/ocp/): the convex subproblem solved each SCP iteration.
+- [Exact Discretization](https://openscvx.github.io/OpenSCvx/Foundations/discretization/): linearizing and discretizing continuous-time dynamics.
+- [Constraint Reformulation (CTCS)](https://openscvx.github.io/OpenSCvx/Foundations/constraint_reformulation/): enforcing path constraints continuously in time.
+- [Control Parameterization](https://openscvx.github.io/OpenSCvx/Foundations/control_parameterization/): zero-order vs first-order hold between nodes.
+- [Time Dilation](https://openscvx.github.io/OpenSCvx/Foundations/time_dilation/): free-final-time and minimum-time problems.
+
+## Reference and citation
+
+- [API Reference](https://openscvx.github.io/OpenSCvx/Reference/): modules and functions generated from source docstrings.
+- [Citation](https://openscvx.github.io/OpenSCvx/citation/): cite Hayner et al., IEEE RA-L 2025 (DOI: 10.1109/LRA.2025.3545299); see CITATION.cff at the repository root.

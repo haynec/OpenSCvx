@@ -6,34 +6,38 @@
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
       
-        <meta name="description" content="Trajectory optimization with a composable problem API, JAX compiling (including jax.export), and vectorization for scaling to batches of scenarios—built on successive convexification.">
+        <meta name="description" content="Release history for OpenSCvx. Each tagged release publishes versioned documentation and a detailed set of notes on GitHub.">
       
       
         <meta name="author" content="Chris Hayner">
       
       
-        <link rel="canonical" href="https://openscvx.github.io/OpenSCvx/nightly/Reference/SUMMARY/">
+        <link rel="canonical" href="https://openscvx.github.io/OpenSCvx/latest/changelog/">
       
       
+        <link rel="prev" href="../citation/">
+      
+      
+        <link rel="next" href="../UsersGuide/00_introduction/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/favicon.png">
+      <link rel="icon" href="../assets/favicon.png">
       <meta name="generator" content="mkdocs-ProperDocs 1.6.7, mkdocs-material-9.7.6">
     
     
       
-        <title>SUMMARY - OpenSCvx</title>
+        <title>Changelog - OpenSCvx</title>
       
     
     
   
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -42,7 +46,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700&display=swap">
-  <link rel="stylesheet" href="../../assets/stylesheets/custom.css">
+  <link rel="stylesheet" href="../assets/stylesheets/custom.css">
 
     
       
@@ -57,27 +61,34 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
     
     
   
+  <!-- Nightly is a moving development build, and pages front-mattered `noindex: true`
+       (e.g. work-in-progress tutorials) are unfinished; keep both out of the index so
+       they do not compete with the released docs served from latest/. Noindexed pages
+       are also dropped from sitemap.xml (see the sitemap.xml override). -->
+  <meta name="robots" content="noindex">
+
+  
 <meta property="og:type" content="website" />
-<meta property="og:title" content="SUMMARY - OpenSCvx" />
-<meta property="og:description" content="Trajectory optimization with a composable problem API, JAX compiling (including jax.export), and vectorization for scaling to batches of scenarios—built on successive convexification." />
-<meta property="og:image" content="https://openscvx.github.io/OpenSCvx/nightly/assets/images/social/Reference/SUMMARY.png" />
+<meta property="og:title" content="Changelog - OpenSCvx" />
+<meta property="og:description" content="Release history for OpenSCvx. Each tagged release publishes versioned documentation and a detailed set of notes on GitHub." />
+<meta property="og:image" content="https://openscvx.github.io/OpenSCvx/latest/assets/images/social/changelog.png" />
 <meta property="og:image:type" content="image/png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:url" content="https://openscvx.github.io/OpenSCvx/nightly/Reference/SUMMARY/" />
+<meta property="og:url" content="https://openscvx.github.io/OpenSCvx/latest/changelog/" />
 <meta property="twitter:card" content="summary_large_image" />
-<meta property="twitter:title" content="SUMMARY - OpenSCvx" />
-<meta property="twitter:description" content="Trajectory optimization with a composable problem API, JAX compiling (including jax.export), and vectorization for scaling to batches of scenarios—built on successive convexification." />
-<meta property="twitter:image" content="https://openscvx.github.io/OpenSCvx/nightly/assets/images/social/Reference/SUMMARY.png" />
+<meta property="twitter:title" content="Changelog - OpenSCvx" />
+<meta property="twitter:description" content="Release history for OpenSCvx. Each tagged release publishes versioned documentation and a detailed set of notes on GitHub." />
+<meta property="twitter:image" content="https://openscvx.github.io/OpenSCvx/latest/assets/images/social/changelog.png" />
 </head>
   
   
@@ -96,6 +107,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#changelog" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -110,9 +126,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="OpenSCvx" class="md-header__button md-logo" aria-label="OpenSCvx" data-md-component="logo">
+    <a href=".." title="OpenSCvx" class="md-header__button md-logo" aria-label="OpenSCvx" data-md-component="logo">
       
-  <img src="../../assets/openscvx_logo_square.png" alt="logo">
+  <img src="../assets/openscvx_logo_square.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -129,7 +145,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              SUMMARY
+              Changelog
             
           </span>
         </div>
@@ -257,7 +273,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../.." class="md-tabs__link">
+      <a href=".." class="md-tabs__link">
         
   
   
@@ -276,7 +292,28 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../examples/" class="md-tabs__link">
+      <a href="../installation/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Installation
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="../citation/" class="md-tabs__link">
         
   
   
@@ -295,7 +332,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../UsersGuide/00_introduction/" class="md-tabs__link">
+      <a href="../UsersGuide/00_introduction/" class="md-tabs__link">
         
   
   
@@ -316,7 +353,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../Examples/" class="md-tabs__link">
+        <a href="../Examples/" class="md-tabs__link">
           
   
   
@@ -338,7 +375,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../" class="md-tabs__link">
+        <a href="../Reference/" class="md-tabs__link">
           
   
   
@@ -358,7 +395,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../Foundations/scvx/" class="md-tabs__link">
+      <a href="../Foundations/scvx/" class="md-tabs__link">
         
   
   
@@ -377,7 +414,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../UnderTheHood/vectorization_and_vmapping/" class="md-tabs__link">
+      <a href="../UnderTheHood/vectorization_and_vmapping/" class="md-tabs__link">
         
   
   
@@ -412,9 +449,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="OpenSCvx" class="md-nav__button md-logo" aria-label="OpenSCvx" data-md-component="logo">
+    <a href=".." title="OpenSCvx" class="md-nav__button md-logo" aria-label="OpenSCvx" data-md-component="logo">
       
-  <img src="../../assets/openscvx_logo_square.png" alt="logo">
+  <img src="../assets/openscvx_logo_square.png" alt="logo">
 
     </a>
     OpenSCvx
@@ -441,7 +478,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -467,6 +504,35 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
     
     
       
@@ -476,22 +542,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../examples/" class="md-nav__link ">
+            <a href="../citation/" class="md-nav__link ">
               
   
   
@@ -509,14 +576,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_2" id="__nav_2_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_2">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -530,17 +597,26 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../citation/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
   <span class="md-ellipsis">
     
   
-    Citation
+    Changelog
   
 
     
@@ -549,6 +625,7 @@
   
 
       </a>
+      
     </li>
   
 
@@ -586,8 +663,6 @@
       
         
       
-        
-      
     
     
     
@@ -603,11 +678,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../UsersGuide/00_introduction/" class="md-nav__link ">
+            <a href="../UsersGuide/00_introduction/" class="md-nav__link ">
               
   
   
@@ -625,14 +700,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_3">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -649,7 +724,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../UsersGuide/01_hello_world_brachistochrone/" class="md-nav__link">
+      <a href="../UsersGuide/01_hello_world_brachistochrone/" class="md-nav__link">
         
   
   
@@ -677,7 +752,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../UsersGuide/02_drone_racing_constraints/" class="md-nav__link">
+      <a href="../UsersGuide/02_drone_racing_constraints/" class="md-nav__link">
         
   
   
@@ -705,7 +780,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../UsersGuide/03_obstacle_avoidance_vmap/" class="md-nav__link">
+      <a href="../UsersGuide/03_obstacle_avoidance_vmap/" class="md-nav__link">
         
   
   
@@ -733,7 +808,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../UsersGuide/04_viewpoint_constraints/" class="md-nav__link">
+      <a href="../UsersGuide/04_viewpoint_constraints/" class="md-nav__link">
         
   
   
@@ -761,7 +836,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../UsersGuide/05_visualization/" class="md-nav__link">
+      <a href="../UsersGuide/05_visualization/" class="md-nav__link">
         
   
   
@@ -789,35 +864,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../UsersGuide/06_logic/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    06 Dubin's Car: Conditional Statements and Signal Temporal Logic
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../UsersGuide/07_lie/" class="md-nav__link">
+      <a href="../UsersGuide/07_lie/" class="md-nav__link">
         
   
   
@@ -845,7 +892,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../UsersGuide/08_mpcc/" class="md-nav__link">
+      <a href="../UsersGuide/08_mpcc/" class="md-nav__link">
         
   
   
@@ -873,7 +920,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../UsersGuide/09_mjx_dynamics/" class="md-nav__link">
+      <a href="../UsersGuide/09_mjx_dynamics/" class="md-nav__link">
         
   
   
@@ -955,11 +1002,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../Examples/" class="md-nav__link ">
+            <a href="../Examples/" class="md-nav__link ">
               
   
   
@@ -977,14 +1024,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1034,10 +1081,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_2" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_2" >
         
           
-          <label class="md-nav__link" for="__nav_4_2" id="__nav_4_2_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
             
   
   
@@ -1055,8 +1102,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_2">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_2">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1073,7 +1120,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/abstract/brachistochrone/" class="md-nav__link">
+      <a href="../Examples/abstract/brachistochrone/" class="md-nav__link">
         
   
   
@@ -1101,7 +1148,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/abstract/brachistochrone_batched/" class="md-nav__link">
+      <a href="../Examples/abstract/brachistochrone_batched/" class="md-nav__link">
         
   
   
@@ -1129,7 +1176,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/abstract/flappy_bird/" class="md-nav__link">
+      <a href="../Examples/abstract/flappy_bird/" class="md-nav__link">
         
   
   
@@ -1157,7 +1204,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/abstract/hypersensitive/" class="md-nav__link">
+      <a href="../Examples/abstract/hypersensitive/" class="md-nav__link">
         
   
   
@@ -1185,7 +1232,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/abstract/impulsive/" class="md-nav__link">
+      <a href="../Examples/abstract/impulsive/" class="md-nav__link">
         
   
   
@@ -1213,7 +1260,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/abstract/stl_integer_variable/" class="md-nav__link">
+      <a href="../Examples/abstract/stl_integer_variable/" class="md-nav__link">
         
   
   
@@ -1241,7 +1288,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/abstract/stl_or/" class="md-nav__link">
+      <a href="../Examples/abstract/stl_or/" class="md-nav__link">
         
   
   
@@ -1298,10 +1345,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_3" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_3" >
         
           
-          <label class="md-nav__link" for="__nav_4_3" id="__nav_4_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_3" id="__nav_5_3_label" tabindex="0">
             
   
   
@@ -1319,8 +1366,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_3">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1337,7 +1384,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/aircraft/dynamic_soaring/" class="md-nav__link">
+      <a href="../Examples/aircraft/dynamic_soaring/" class="md-nav__link">
         
   
   
@@ -1365,7 +1412,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/aircraft/supersonic_time_to_climb/" class="md-nav__link">
+      <a href="../Examples/aircraft/supersonic_time_to_climb/" class="md-nav__link">
         
   
   
@@ -1428,10 +1475,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_4" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_4" >
         
           
-          <label class="md-nav__link" for="__nav_4_4" id="__nav_4_4_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
             
   
   
@@ -1449,8 +1496,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_4">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1467,7 +1514,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/animations/7_dof_arm/" class="md-nav__link">
+      <a href="../Examples/animations/7_dof_arm/" class="md-nav__link">
         
   
   
@@ -1495,7 +1542,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/animations/dr_vp_polytope/" class="md-nav__link">
+      <a href="../Examples/animations/dr_vp_polytope/" class="md-nav__link">
         
   
   
@@ -1523,7 +1570,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/animations/franka_fr3v2_pick_place/" class="md-nav__link">
+      <a href="../Examples/animations/franka_fr3v2_pick_place/" class="md-nav__link">
         
   
   
@@ -1551,7 +1598,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/animations/logo/" class="md-nav__link">
+      <a href="../Examples/animations/logo/" class="md-nav__link">
         
   
   
@@ -1579,7 +1626,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/animations/obstacle_avoidance_vmap/" class="md-nav__link">
+      <a href="../Examples/animations/obstacle_avoidance_vmap/" class="md-nav__link">
         
   
   
@@ -1646,10 +1693,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_5" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_5" >
         
           
-          <label class="md-nav__link" for="__nav_4_5" id="__nav_4_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_5" id="__nav_5_5_label" tabindex="0">
             
   
   
@@ -1667,8 +1714,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_5">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1685,7 +1732,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/arm/3_dof_arm/" class="md-nav__link">
+      <a href="../Examples/arm/3_dof_arm/" class="md-nav__link">
         
   
   
@@ -1713,7 +1760,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/arm/7_dof_arm/" class="md-nav__link">
+      <a href="../Examples/arm/7_dof_arm/" class="md-nav__link">
         
   
   
@@ -1741,7 +1788,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/arm/7_dof_arm_collision/" class="md-nav__link">
+      <a href="../Examples/arm/7_dof_arm_collision/" class="md-nav__link">
         
   
   
@@ -1769,7 +1816,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/arm/7_dof_arm_vp/" class="md-nav__link">
+      <a href="../Examples/arm/7_dof_arm_vp/" class="md-nav__link">
         
   
   
@@ -1797,7 +1844,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/arm/franka_fr3v2_pick_place/" class="md-nav__link">
+      <a href="../Examples/arm/franka_fr3v2_pick_place/" class="md-nav__link">
         
   
   
@@ -1825,7 +1872,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/arm/franka_fr3v2_viewplanning/" class="md-nav__link">
+      <a href="../Examples/arm/franka_fr3v2_viewplanning/" class="md-nav__link">
         
   
   
@@ -1853,7 +1900,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/arm/franka_fr3v2_viewplanning_nodal/" class="md-nav__link">
+      <a href="../Examples/arm/franka_fr3v2_viewplanning_nodal/" class="md-nav__link">
         
   
   
@@ -1918,10 +1965,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_6" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_6" >
         
           
-          <label class="md-nav__link" for="__nav_4_6" id="__nav_4_6_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
             
   
   
@@ -1939,8 +1986,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_6">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_6">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1957,7 +2004,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/car/dubins_car/" class="md-nav__link">
+      <a href="../Examples/car/dubins_car/" class="md-nav__link">
         
   
   
@@ -1985,7 +2032,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/car/dubins_car_disjoint/" class="md-nav__link">
+      <a href="../Examples/car/dubins_car_disjoint/" class="md-nav__link">
         
   
   
@@ -2013,7 +2060,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/car/dubins_car_obstacle_conditional/" class="md-nav__link">
+      <a href="../Examples/car/dubins_car_obstacle_conditional/" class="md-nav__link">
         
   
   
@@ -2041,7 +2088,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/car/dubins_car_obstacle_stl/" class="md-nav__link">
+      <a href="../Examples/car/dubins_car_obstacle_stl/" class="md-nav__link">
         
   
   
@@ -2069,7 +2116,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/car/dubins_car_stl_or/" class="md-nav__link">
+      <a href="../Examples/car/dubins_car_stl_or/" class="md-nav__link">
         
   
   
@@ -2097,7 +2144,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/car/dubins_car_waypoint_stl/" class="md-nav__link">
+      <a href="../Examples/car/dubins_car_waypoint_stl/" class="md-nav__link">
         
   
   
@@ -2152,10 +2199,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_7" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_7" >
         
           
-          <label class="md-nav__link" for="__nav_4_7" id="__nav_4_7_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_7" id="__nav_5_7_label" tabindex="0">
             
   
   
@@ -2173,8 +2220,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_7">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2191,7 +2238,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/double_integrator/moving_safe_zones/" class="md-nav__link">
+      <a href="../Examples/double_integrator/moving_safe_zones/" class="md-nav__link">
         
   
   
@@ -2278,10 +2325,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_8" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_8" >
         
           
-          <label class="md-nav__link" for="__nav_4_8" id="__nav_4_8_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_8" id="__nav_5_8_label" tabindex="0">
             
   
   
@@ -2299,8 +2346,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_8_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_8">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2317,7 +2364,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/2d_obstacle_avoidance_batched_ic/" class="md-nav__link">
+      <a href="../Examples/drone/2d_obstacle_avoidance_batched_ic/" class="md-nav__link">
         
   
   
@@ -2345,7 +2392,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/cinema_vp/" class="md-nav__link">
+      <a href="../Examples/drone/cinema_vp/" class="md-nav__link">
         
   
   
@@ -2373,7 +2420,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/cinema_vp_nodal/" class="md-nav__link">
+      <a href="../Examples/drone/cinema_vp_nodal/" class="md-nav__link">
         
   
   
@@ -2401,7 +2448,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/dr_double_integrator/" class="md-nav__link">
+      <a href="../Examples/drone/dr_double_integrator/" class="md-nav__link">
         
   
   
@@ -2429,7 +2476,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/dr_vp/" class="md-nav__link">
+      <a href="../Examples/drone/dr_vp/" class="md-nav__link">
         
   
   
@@ -2457,7 +2504,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/dr_vp_nodal/" class="md-nav__link">
+      <a href="../Examples/drone/dr_vp_nodal/" class="md-nav__link">
         
   
   
@@ -2485,7 +2532,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/dr_vp_polytope/" class="md-nav__link">
+      <a href="../Examples/drone/dr_vp_polytope/" class="md-nav__link">
         
   
   
@@ -2513,7 +2560,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/drone_racing/" class="md-nav__link">
+      <a href="../Examples/drone/drone_racing/" class="md-nav__link">
         
   
   
@@ -2541,7 +2588,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/drone_racing_batched_gates/" class="md-nav__link">
+      <a href="../Examples/drone/drone_racing_batched_gates/" class="md-nav__link">
         
   
   
@@ -2569,7 +2616,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/logo/" class="md-nav__link">
+      <a href="../Examples/drone/logo/" class="md-nav__link">
         
   
   
@@ -2618,10 +2665,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_8_11" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_8_11" >
         
           
-          <label class="md-nav__link" for="__nav_4_8_11" id="__nav_4_8_11_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_8_11" id="__nav_5_8_11_label" tabindex="0">
             
   
   
@@ -2639,8 +2686,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_8_11_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_8_11">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_8_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_8_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2657,7 +2704,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/logo_utils/quadrotor_mesh/" class="md-nav__link">
+      <a href="../Examples/drone/logo_utils/quadrotor_mesh/" class="md-nav__link">
         
   
   
@@ -2685,7 +2732,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/logo_utils/svg_path_utils/" class="md-nav__link">
+      <a href="../Examples/drone/logo_utils/svg_path_utils/" class="md-nav__link">
         
   
   
@@ -2721,7 +2768,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/multi_agent_circle_swap/" class="md-nav__link">
+      <a href="../Examples/drone/multi_agent_circle_swap/" class="md-nav__link">
         
   
   
@@ -2749,7 +2796,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/obstacle_avoidance/" class="md-nav__link">
+      <a href="../Examples/drone/obstacle_avoidance/" class="md-nav__link">
         
   
   
@@ -2777,7 +2824,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/obstacle_avoidance_nodal/" class="md-nav__link">
+      <a href="../Examples/drone/obstacle_avoidance_nodal/" class="md-nav__link">
         
   
   
@@ -2805,7 +2852,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/obstacle_avoidance_vmap/" class="md-nav__link">
+      <a href="../Examples/drone/obstacle_avoidance_vmap/" class="md-nav__link">
         
   
   
@@ -2833,7 +2880,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/obstacle_avoidance_vmap_2d/" class="md-nav__link">
+      <a href="../Examples/drone/obstacle_avoidance_vmap_2d/" class="md-nav__link">
         
   
   
@@ -2861,7 +2908,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/drone/openscvx_logo/" class="md-nav__link">
+      <a href="../Examples/drone/openscvx_logo/" class="md-nav__link">
         
   
   
@@ -2922,10 +2969,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_9" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_9" >
         
           
-          <label class="md-nav__link" for="__nav_4_9" id="__nav_4_9_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_9" id="__nav_5_9_label" tabindex="0">
             
   
   
@@ -2943,8 +2990,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_9">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_9">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2961,7 +3008,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/frax/panda_frax/" class="md-nav__link">
+      <a href="../Examples/frax/panda_frax/" class="md-nav__link">
         
   
   
@@ -2989,7 +3036,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/frax/panda_frax_pick_place/" class="md-nav__link">
+      <a href="../Examples/frax/panda_frax_pick_place/" class="md-nav__link">
         
   
   
@@ -3017,7 +3064,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/frax/panda_frax_viewplanning/" class="md-nav__link">
+      <a href="../Examples/frax/panda_frax_viewplanning/" class="md-nav__link">
         
   
   
@@ -3045,7 +3092,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/frax/panda_frax_waypoint/" class="md-nav__link">
+      <a href="../Examples/frax/panda_frax_waypoint/" class="md-nav__link">
         
   
   
@@ -3110,10 +3157,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_10" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_10" >
         
           
-          <label class="md-nav__link" for="__nav_4_10" id="__nav_4_10_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
             
   
   
@@ -3131,8 +3178,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_10">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3149,7 +3196,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/mjx/cartpole_mjx/" class="md-nav__link">
+      <a href="../Examples/mjx/cartpole_mjx/" class="md-nav__link">
         
   
   
@@ -3177,7 +3224,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/mjx/double_cartpole_mjx/" class="md-nav__link">
+      <a href="../Examples/mjx/double_cartpole_mjx/" class="md-nav__link">
         
   
   
@@ -3205,7 +3252,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/mjx/skydio_x2_mjx/" class="md-nav__link">
+      <a href="../Examples/mjx/skydio_x2_mjx/" class="md-nav__link">
         
   
   
@@ -3233,7 +3280,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/mjx/triple_cartpole_3d_mjx/" class="md-nav__link">
+      <a href="../Examples/mjx/triple_cartpole_3d_mjx/" class="md-nav__link">
         
   
   
@@ -3261,7 +3308,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/mjx/triple_cartpole_game/" class="md-nav__link">
+      <a href="../Examples/mjx/triple_cartpole_game/" class="md-nav__link">
         
   
   
@@ -3289,7 +3336,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/mjx/triple_cartpole_mjx/" class="md-nav__link">
+      <a href="../Examples/mjx/triple_cartpole_mjx/" class="md-nav__link">
         
   
   
@@ -3352,10 +3399,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_11" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_11" >
         
           
-          <label class="md-nav__link" for="__nav_4_11" id="__nav_4_11_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_11" id="__nav_5_11_label" tabindex="0">
             
   
   
@@ -3373,8 +3420,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_11_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_11">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3391,7 +3438,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/mpc/double_integrator_discrete/" class="md-nav__link">
+      <a href="../Examples/mpc/double_integrator_discrete/" class="md-nav__link">
         
   
   
@@ -3419,7 +3466,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/mpc/double_integrator_drone_racing/" class="md-nav__link">
+      <a href="../Examples/mpc/double_integrator_drone_racing/" class="md-nav__link">
         
   
   
@@ -3447,7 +3494,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/mpc/dubins_car_circle_analytical/" class="md-nav__link">
+      <a href="../Examples/mpc/dubins_car_circle_analytical/" class="md-nav__link">
         
   
   
@@ -3475,7 +3522,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/mpc/dubins_car_circle_discrete/" class="md-nav__link">
+      <a href="../Examples/mpc/dubins_car_circle_discrete/" class="md-nav__link">
         
   
   
@@ -3503,7 +3550,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/mpc/realtime_double_integrator_drone_racing/" class="md-nav__link">
+      <a href="../Examples/mpc/realtime_double_integrator_drone_racing/" class="md-nav__link">
         
   
   
@@ -3570,10 +3617,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_12" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_12" >
         
           
-          <label class="md-nav__link" for="__nav_4_12" id="__nav_4_12_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_12" id="__nav_5_12_label" tabindex="0">
             
   
   
@@ -3591,8 +3638,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_12_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_12">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_12">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3609,7 +3656,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/realtime/3DoF_pdg_realtime/" class="md-nav__link">
+      <a href="../Examples/realtime/3DoF_pdg_realtime/" class="md-nav__link">
         
   
   
@@ -3637,7 +3684,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/realtime/6DoF_pdg_realtime/" class="md-nav__link">
+      <a href="../Examples/realtime/6DoF_pdg_realtime/" class="md-nav__link">
         
   
   
@@ -3694,10 +3741,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_12_3" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_12_3" >
         
           
-          <label class="md-nav__link" for="__nav_4_12_3" id="__nav_4_12_3_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_12_3" id="__nav_5_12_3_label" tabindex="0">
             
   
   
@@ -3715,8 +3762,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_4_12_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_12_3">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_12_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_12_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -3733,7 +3780,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/realtime/base_problems/3DoF_pdg_realtime_base/" class="md-nav__link">
+      <a href="../Examples/realtime/base_problems/3DoF_pdg_realtime_base/" class="md-nav__link">
         
   
   
@@ -3761,7 +3808,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/realtime/base_problems/6DoF_pdg_realtime_base/" class="md-nav__link">
+      <a href="../Examples/realtime/base_problems/6DoF_pdg_realtime_base/" class="md-nav__link">
         
   
   
@@ -3789,7 +3836,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/realtime/base_problems/cinema_vp_realtime_base/" class="md-nav__link">
+      <a href="../Examples/realtime/base_problems/cinema_vp_realtime_base/" class="md-nav__link">
         
   
   
@@ -3817,7 +3864,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/realtime/base_problems/drone_racing_realtime_base/" class="md-nav__link">
+      <a href="../Examples/realtime/base_problems/drone_racing_realtime_base/" class="md-nav__link">
         
   
   
@@ -3845,7 +3892,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/realtime/base_problems/dubins_car_realtime_base/" class="md-nav__link">
+      <a href="../Examples/realtime/base_problems/dubins_car_realtime_base/" class="md-nav__link">
         
   
   
@@ -3873,7 +3920,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/realtime/base_problems/obstacle_avoidance_realtime_base/" class="md-nav__link">
+      <a href="../Examples/realtime/base_problems/obstacle_avoidance_realtime_base/" class="md-nav__link">
         
   
   
@@ -3909,7 +3956,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/realtime/cinema_vp_realtime/" class="md-nav__link">
+      <a href="../Examples/realtime/cinema_vp_realtime/" class="md-nav__link">
         
   
   
@@ -3937,7 +3984,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/realtime/drone_racing_realtime/" class="md-nav__link">
+      <a href="../Examples/realtime/drone_racing_realtime/" class="md-nav__link">
         
   
   
@@ -3965,7 +4012,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/realtime/dubins_car_realtime/" class="md-nav__link">
+      <a href="../Examples/realtime/dubins_car_realtime/" class="md-nav__link">
         
   
   
@@ -3993,7 +4040,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/realtime/obstacle_avoidance_realtime/" class="md-nav__link">
+      <a href="../Examples/realtime/obstacle_avoidance_realtime/" class="md-nav__link">
         
   
   
@@ -4054,10 +4101,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_13" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_13" >
         
           
-          <label class="md-nav__link" for="__nav_4_13" id="__nav_4_13_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_13" id="__nav_5_13_label" tabindex="0">
             
   
   
@@ -4075,8 +4122,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_13_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_13">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_13">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4093,7 +4140,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/rocket/3DoF_pdg/" class="md-nav__link">
+      <a href="../Examples/rocket/3DoF_pdg/" class="md-nav__link">
         
   
   
@@ -4121,7 +4168,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/rocket/6DoF_pdg/" class="md-nav__link">
+      <a href="../Examples/rocket/6DoF_pdg/" class="md-nav__link">
         
   
   
@@ -4149,7 +4196,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/rocket/6DoF_pdg_batched_ic/" class="md-nav__link">
+      <a href="../Examples/rocket/6DoF_pdg_batched_ic/" class="md-nav__link">
         
   
   
@@ -4177,7 +4224,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/rocket/ascent_launch_vehicle/" class="md-nav__link">
+      <a href="../Examples/rocket/ascent_launch_vehicle/" class="md-nav__link">
         
   
   
@@ -4240,10 +4287,10 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_4_14" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_14" >
         
           
-          <label class="md-nav__link" for="__nav_4_14" id="__nav_4_14_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5_14" id="__nav_5_14_label" tabindex="0">
             
   
   
@@ -4261,8 +4308,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_4_14_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_4_14">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_14_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5_14">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4279,7 +4326,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/spacecraft/halo_orbit/" class="md-nav__link">
+      <a href="../Examples/spacecraft/halo_orbit/" class="md-nav__link">
         
   
   
@@ -4307,7 +4354,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/spacecraft/hohmann_transfer/" class="md-nav__link">
+      <a href="../Examples/spacecraft/hohmann_transfer/" class="md-nav__link">
         
   
   
@@ -4335,7 +4382,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/spacecraft/let_transfer/" class="md-nav__link">
+      <a href="../Examples/spacecraft/let_transfer/" class="md-nav__link">
         
   
   
@@ -4363,7 +4410,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/spacecraft/proxops_cw/" class="md-nav__link">
+      <a href="../Examples/spacecraft/proxops_cw/" class="md-nav__link">
         
   
   
@@ -4391,7 +4438,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Examples/spacecraft/relative_loitering/" class="md-nav__link">
+      <a href="../Examples/spacecraft/relative_loitering/" class="md-nav__link">
         
   
   
@@ -4485,11 +4532,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../" class="md-nav__link ">
+            <a href="../Reference/" class="md-nav__link ">
               
   
   
@@ -4507,14 +4554,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4570,11 +4617,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_2" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_2" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../algorithms/" class="md-nav__link ">
+            <a href="../Reference/algorithms/" class="md-nav__link ">
               
   
   
@@ -4592,14 +4639,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_2" id="__nav_5_2_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_2" id="__nav_6_2_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_2">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4645,11 +4692,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_2_1" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_2_1" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../algorithms/autotuner/" class="md-nav__link ">
+            <a href="../Reference/algorithms/autotuner/" class="md-nav__link ">
               
   
   
@@ -4667,14 +4714,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_2_1" id="__nav_5_2_1_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_2_1" id="__nav_6_2_1_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_2_1_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_2_1">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_6_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2_1">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -4691,7 +4738,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/autotuner/acceptance_ratio/" class="md-nav__link">
+      <a href="../Reference/algorithms/autotuner/acceptance_ratio/" class="md-nav__link">
         
   
   
@@ -4719,7 +4766,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/autotuner/adaptive_proximal_weight/" class="md-nav__link">
+      <a href="../Reference/algorithms/autotuner/adaptive_proximal_weight/" class="md-nav__link">
         
   
   
@@ -4747,7 +4794,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/autotuner/augmented_lagrangian/" class="md-nav__link">
+      <a href="../Reference/algorithms/autotuner/augmented_lagrangian/" class="md-nav__link">
         
   
   
@@ -4775,7 +4822,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/autotuner/base/" class="md-nav__link">
+      <a href="../Reference/algorithms/autotuner/base/" class="md-nav__link">
         
   
   
@@ -4803,7 +4850,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/autotuner/constant_proximal_weight/" class="md-nav__link">
+      <a href="../Reference/algorithms/autotuner/constant_proximal_weight/" class="md-nav__link">
         
   
   
@@ -4831,7 +4878,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/autotuner/ramp_proximal_weight/" class="md-nav__link">
+      <a href="../Reference/algorithms/autotuner/ramp_proximal_weight/" class="md-nav__link">
         
   
   
@@ -4867,7 +4914,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/base/" class="md-nav__link">
+      <a href="../Reference/algorithms/base/" class="md-nav__link">
         
   
   
@@ -4895,7 +4942,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/history/" class="md-nav__link">
+      <a href="../Reference/algorithms/history/" class="md-nav__link">
         
   
   
@@ -4923,7 +4970,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/hyperparams/" class="md-nav__link">
+      <a href="../Reference/algorithms/hyperparams/" class="md-nav__link">
         
   
   
@@ -4951,7 +4998,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/loop/" class="md-nav__link">
+      <a href="../Reference/algorithms/loop/" class="md-nav__link">
         
   
   
@@ -4979,7 +5026,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/optimization_results/" class="md-nav__link">
+      <a href="../Reference/algorithms/optimization_results/" class="md-nav__link">
         
   
   
@@ -5007,7 +5054,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/penalty/" class="md-nav__link">
+      <a href="../Reference/algorithms/penalty/" class="md-nav__link">
         
   
   
@@ -5056,11 +5103,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_2_8" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_2_8" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../algorithms/scvx/" class="md-nav__link ">
+            <a href="../Reference/algorithms/scvx/" class="md-nav__link ">
               
   
   
@@ -5078,14 +5125,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_2_8" id="__nav_5_2_8_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_2_8" id="__nav_6_2_8_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_2_8_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_2_8">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_6_2_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_2_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5102,7 +5149,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/scvx/iteration/" class="md-nav__link">
+      <a href="../Reference/algorithms/scvx/iteration/" class="md-nav__link">
         
   
   
@@ -5130,7 +5177,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/scvx/penalized_trust_region/" class="md-nav__link">
+      <a href="../Reference/algorithms/scvx/penalized_trust_region/" class="md-nav__link">
         
   
   
@@ -5166,7 +5213,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/state/" class="md-nav__link">
+      <a href="../Reference/algorithms/state/" class="md-nav__link">
         
   
   
@@ -5194,7 +5241,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../algorithms/weights/" class="md-nav__link">
+      <a href="../Reference/algorithms/weights/" class="md-nav__link">
         
   
   
@@ -5230,7 +5277,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../config/" class="md-nav__link">
+      <a href="../Reference/config/" class="md-nav__link">
         
   
   
@@ -5285,11 +5332,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_4" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_4" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../discretization/" class="md-nav__link ">
+            <a href="../Reference/discretization/" class="md-nav__link ">
               
   
   
@@ -5307,14 +5354,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_4" id="__nav_5_4_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_4" id="__nav_6_4_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_4">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5331,7 +5378,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../discretization/base/" class="md-nav__link">
+      <a href="../Reference/discretization/base/" class="md-nav__link">
         
   
   
@@ -5359,7 +5406,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../discretization/discretize_linearize/" class="md-nav__link">
+      <a href="../Reference/discretization/discretize_linearize/" class="md-nav__link">
         
   
   
@@ -5387,7 +5434,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../discretization/linearize_discretize/" class="md-nav__link">
+      <a href="../Reference/discretization/linearize_discretize/" class="md-nav__link">
         
   
   
@@ -5415,7 +5462,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../discretization/linearize_discretize_sparse/" class="md-nav__link">
+      <a href="../Reference/discretization/linearize_discretize_sparse/" class="md-nav__link">
         
   
   
@@ -5464,11 +5511,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_4_5" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_4_5" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../discretization/sparse_utils/" class="md-nav__link ">
+            <a href="../Reference/discretization/sparse_utils/" class="md-nav__link ">
               
   
   
@@ -5486,14 +5533,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_4_5" id="__nav_5_4_5_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_4_5" id="__nav_6_4_5_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_4_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_4_5">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_6_4_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_4_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5510,7 +5557,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../discretization/sparse_utils/bcoo_helpers/" class="md-nav__link">
+      <a href="../Reference/discretization/sparse_utils/bcoo_helpers/" class="md-nav__link">
         
   
   
@@ -5538,7 +5585,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../discretization/sparse_utils/sparse_jacobian/" class="md-nav__link">
+      <a href="../Reference/discretization/sparse_utils/sparse_jacobian/" class="md-nav__link">
         
   
   
@@ -5605,11 +5652,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_5" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_5" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../expert/" class="md-nav__link ">
+            <a href="../Reference/expert/" class="md-nav__link ">
               
   
   
@@ -5627,14 +5674,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_5" id="__nav_5_5_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_5" id="__nav_6_5_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_5_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_5">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_5">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5651,7 +5698,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../expert/byof/" class="md-nav__link">
+      <a href="../Reference/expert/byof/" class="md-nav__link">
         
   
   
@@ -5679,7 +5726,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../expert/lowering/" class="md-nav__link">
+      <a href="../Reference/expert/lowering/" class="md-nav__link">
         
   
   
@@ -5707,7 +5754,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../expert/validation/" class="md-nav__link">
+      <a href="../Reference/expert/validation/" class="md-nav__link">
         
   
   
@@ -5764,11 +5811,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_6" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_6" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../init/" class="md-nav__link ">
+            <a href="../Reference/init/" class="md-nav__link ">
               
   
   
@@ -5786,14 +5833,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_6" id="__nav_5_6_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_6" id="__nav_6_6_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_6">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_6">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5810,7 +5857,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../init/interpolation/" class="md-nav__link">
+      <a href="../Reference/init/interpolation/" class="md-nav__link">
         
   
   
@@ -5838,7 +5885,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../init/inverse_kinematics/" class="md-nav__link">
+      <a href="../Reference/init/inverse_kinematics/" class="md-nav__link">
         
   
   
@@ -5899,11 +5946,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_7" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_7" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../integrations/" class="md-nav__link ">
+            <a href="../Reference/integrations/" class="md-nav__link ">
               
   
   
@@ -5921,14 +5968,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_7" id="__nav_5_7_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_7" id="__nav_6_7_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_7">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -5945,7 +5992,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integrations/base/" class="md-nav__link">
+      <a href="../Reference/integrations/base/" class="md-nav__link">
         
   
   
@@ -5973,7 +6020,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integrations/frax/" class="md-nav__link">
+      <a href="../Reference/integrations/frax/" class="md-nav__link">
         
   
   
@@ -6001,7 +6048,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integrations/menagerie/" class="md-nav__link">
+      <a href="../Reference/integrations/menagerie/" class="md-nav__link">
         
   
   
@@ -6029,7 +6076,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integrations/mjx/" class="md-nav__link">
+      <a href="../Reference/integrations/mjx/" class="md-nav__link">
         
   
   
@@ -6086,11 +6133,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_8" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_8" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../integrators/" class="md-nav__link ">
+            <a href="../Reference/integrators/" class="md-nav__link ">
               
   
   
@@ -6108,14 +6155,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_8" id="__nav_5_8_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_8" id="__nav_6_8_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_8_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_8">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -6132,7 +6179,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integrators/diffrax/" class="md-nav__link">
+      <a href="../Reference/integrators/diffrax/" class="md-nav__link">
         
   
   
@@ -6160,7 +6207,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../integrators/runge_kutta/" class="md-nav__link">
+      <a href="../Reference/integrators/runge_kutta/" class="md-nav__link">
         
   
   
@@ -6196,7 +6243,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../loader/" class="md-nav__link">
+      <a href="../Reference/loader/" class="md-nav__link">
         
   
   
@@ -6255,11 +6302,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_10" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_10" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../lowered/" class="md-nav__link ">
+            <a href="../Reference/lowered/" class="md-nav__link ">
               
   
   
@@ -6277,14 +6324,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_10" id="__nav_5_10_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_10" id="__nav_6_10_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_10">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -6301,7 +6348,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lowered/cvxpy_constraints/" class="md-nav__link">
+      <a href="../Reference/lowered/cvxpy_constraints/" class="md-nav__link">
         
   
   
@@ -6329,7 +6376,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lowered/cvxpy_variables/" class="md-nav__link">
+      <a href="../Reference/lowered/cvxpy_variables/" class="md-nav__link">
         
   
   
@@ -6357,7 +6404,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lowered/dynamics/" class="md-nav__link">
+      <a href="../Reference/lowered/dynamics/" class="md-nav__link">
         
   
   
@@ -6385,7 +6432,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lowered/jax_constraints/" class="md-nav__link">
+      <a href="../Reference/lowered/jax_constraints/" class="md-nav__link">
         
   
   
@@ -6413,7 +6460,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lowered/parameters/" class="md-nav__link">
+      <a href="../Reference/lowered/parameters/" class="md-nav__link">
         
   
   
@@ -6441,7 +6488,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lowered/problem/" class="md-nav__link">
+      <a href="../Reference/lowered/problem/" class="md-nav__link">
         
   
   
@@ -6469,7 +6516,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lowered/unified/" class="md-nav__link">
+      <a href="../Reference/lowered/unified/" class="md-nav__link">
         
   
   
@@ -6530,11 +6577,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_11" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_11" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../plotting/" class="md-nav__link ">
+            <a href="../Reference/plotting/" class="md-nav__link ">
               
   
   
@@ -6552,14 +6599,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_11" id="__nav_5_11_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_11" id="__nav_6_11_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_11_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_11">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -6576,7 +6623,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../plotting/plotting/" class="md-nav__link">
+      <a href="../Reference/plotting/plotting/" class="md-nav__link">
         
   
   
@@ -6604,7 +6651,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../plotting/publication/" class="md-nav__link">
+      <a href="../Reference/plotting/publication/" class="md-nav__link">
         
   
   
@@ -6632,7 +6679,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../plotting/scp_iteration/" class="md-nav__link">
+      <a href="../Reference/plotting/scp_iteration/" class="md-nav__link">
         
   
   
@@ -6691,11 +6738,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_11_4" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_11_4" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../plotting/viser/" class="md-nav__link ">
+            <a href="../Reference/plotting/viser/" class="md-nav__link ">
               
   
   
@@ -6713,14 +6760,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_11_4" id="__nav_5_11_4_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_11_4" id="__nav_6_11_4_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_11_4_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_11_4">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_6_11_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_11_4">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -6737,7 +6784,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../plotting/viser/animated/" class="md-nav__link">
+      <a href="../Reference/plotting/viser/animated/" class="md-nav__link">
         
   
   
@@ -6765,7 +6812,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../plotting/viser/coordinates/" class="md-nav__link">
+      <a href="../Reference/plotting/viser/coordinates/" class="md-nav__link">
         
   
   
@@ -6793,7 +6840,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../plotting/viser/orbits/" class="md-nav__link">
+      <a href="../Reference/plotting/viser/orbits/" class="md-nav__link">
         
   
   
@@ -6821,7 +6868,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../plotting/viser/plotly_integration/" class="md-nav__link">
+      <a href="../Reference/plotting/viser/plotly_integration/" class="md-nav__link">
         
   
   
@@ -6849,7 +6896,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../plotting/viser/primitives/" class="md-nav__link">
+      <a href="../Reference/plotting/viser/primitives/" class="md-nav__link">
         
   
   
@@ -6877,7 +6924,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../plotting/viser/scp/" class="md-nav__link">
+      <a href="../Reference/plotting/viser/scp/" class="md-nav__link">
         
   
   
@@ -6905,7 +6952,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../plotting/viser/server/" class="md-nav__link">
+      <a href="../Reference/plotting/viser/server/" class="md-nav__link">
         
   
   
@@ -6949,7 +6996,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../problem/" class="md-nav__link">
+      <a href="../Reference/problem/" class="md-nav__link">
         
   
   
@@ -6998,11 +7045,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_13" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_13" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../propagation/" class="md-nav__link ">
+            <a href="../Reference/propagation/" class="md-nav__link ">
               
   
   
@@ -7020,14 +7067,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_13" id="__nav_5_13_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_13" id="__nav_6_13_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_13_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_13">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_13">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -7044,7 +7091,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../propagation/post_processing/" class="md-nav__link">
+      <a href="../Reference/propagation/post_processing/" class="md-nav__link">
         
   
   
@@ -7072,7 +7119,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../propagation/propagation/" class="md-nav__link">
+      <a href="../Reference/propagation/propagation/" class="md-nav__link">
         
   
   
@@ -7137,11 +7184,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_14" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_14" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../solvers/" class="md-nav__link ">
+            <a href="../Reference/solvers/" class="md-nav__link ">
               
   
   
@@ -7159,14 +7206,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_14" id="__nav_5_14_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_14" id="__nav_6_14_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_14_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_14">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_14_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_14">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -7183,7 +7230,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../solvers/base/" class="md-nav__link">
+      <a href="../Reference/solvers/base/" class="md-nav__link">
         
   
   
@@ -7211,7 +7258,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../solvers/cones/" class="md-nav__link">
+      <a href="../Reference/solvers/cones/" class="md-nav__link">
         
   
   
@@ -7239,7 +7286,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../solvers/cvxpy_ptr_solver/" class="md-nav__link">
+      <a href="../Reference/solvers/cvxpy_ptr_solver/" class="md-nav__link">
         
   
   
@@ -7267,7 +7314,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../solvers/moreau_ptr_solver/" class="md-nav__link">
+      <a href="../Reference/solvers/moreau_ptr_solver/" class="md-nav__link">
         
   
   
@@ -7295,7 +7342,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../solvers/ptr_solver/" class="md-nav__link">
+      <a href="../Reference/solvers/ptr_solver/" class="md-nav__link">
         
   
   
@@ -7323,7 +7370,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../solvers/qpax_ptr_solver/" class="md-nav__link">
+      <a href="../Reference/solvers/qpax_ptr_solver/" class="md-nav__link">
         
   
   
@@ -7404,11 +7451,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_15" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../symbolic/" class="md-nav__link ">
+            <a href="../Reference/symbolic/" class="md-nav__link ">
               
   
   
@@ -7426,14 +7473,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_15" id="__nav_5_15_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_15" id="__nav_6_15_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_15_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_15">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_15_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_15">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -7450,7 +7497,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/affine/" class="md-nav__link">
+      <a href="../Reference/symbolic/affine/" class="md-nav__link">
         
   
   
@@ -7478,7 +7525,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/augmentation/" class="md-nav__link">
+      <a href="../Reference/symbolic/augmentation/" class="md-nav__link">
         
   
   
@@ -7506,7 +7553,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/builder/" class="md-nav__link">
+      <a href="../Reference/symbolic/builder/" class="md-nav__link">
         
   
   
@@ -7534,7 +7581,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/canonicalize/" class="md-nav__link">
+      <a href="../Reference/symbolic/canonicalize/" class="md-nav__link">
         
   
   
@@ -7562,7 +7609,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/constraint_set/" class="md-nav__link">
+      <a href="../Reference/symbolic/constraint_set/" class="md-nav__link">
         
   
   
@@ -7641,11 +7688,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15_6" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_15_6" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../symbolic/expr/" class="md-nav__link ">
+            <a href="../Reference/symbolic/expr/" class="md-nav__link ">
               
   
   
@@ -7663,14 +7710,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_15_6" id="__nav_5_15_6_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_15_6" id="__nav_6_15_6_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_15_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_15_6">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_6_15_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_15_6">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -7687,7 +7734,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/arithmetic/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/arithmetic/" class="md-nav__link">
         
   
   
@@ -7715,7 +7762,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/array/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/array/" class="md-nav__link">
         
   
   
@@ -7743,7 +7790,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/constraint/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/constraint/" class="md-nav__link">
         
   
   
@@ -7771,7 +7818,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/control/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/control/" class="md-nav__link">
         
   
   
@@ -7799,7 +7846,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/expr/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/expr/" class="md-nav__link">
         
   
   
@@ -7850,11 +7897,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15_6_6" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_15_6_6" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../symbolic/expr/lie/" class="md-nav__link ">
+            <a href="../Reference/symbolic/expr/lie/" class="md-nav__link ">
               
   
   
@@ -7872,14 +7919,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_15_6_6" id="__nav_5_15_6_6_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_15_6_6" id="__nav_6_15_6_6_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_5_15_6_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_15_6_6">
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_6_15_6_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_15_6_6">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -7896,7 +7943,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/lie/adjoint/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/lie/adjoint/" class="md-nav__link">
         
   
   
@@ -7924,7 +7971,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/lie/se3/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/lie/se3/" class="md-nav__link">
         
   
   
@@ -7952,7 +7999,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/lie/so3/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/lie/so3/" class="md-nav__link">
         
   
   
@@ -7988,7 +8035,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/linalg/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/linalg/" class="md-nav__link">
         
   
   
@@ -8016,7 +8063,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/logic/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/logic/" class="md-nav__link">
         
   
   
@@ -8044,7 +8091,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/math/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/math/" class="md-nav__link">
         
   
   
@@ -8072,7 +8119,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/parameter/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/parameter/" class="md-nav__link">
         
   
   
@@ -8100,7 +8147,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/spatial/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/spatial/" class="md-nav__link">
         
   
   
@@ -8128,7 +8175,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/state/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/state/" class="md-nav__link">
         
   
   
@@ -8156,7 +8203,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/stl/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/stl/" class="md-nav__link">
         
   
   
@@ -8184,7 +8231,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/stljax/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/stljax/" class="md-nav__link">
         
   
   
@@ -8212,7 +8259,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/time/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/time/" class="md-nav__link">
         
   
   
@@ -8240,7 +8287,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/variable/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/variable/" class="md-nav__link">
         
   
   
@@ -8268,7 +8315,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/expr/vmap/" class="md-nav__link">
+      <a href="../Reference/symbolic/expr/vmap/" class="md-nav__link">
         
   
   
@@ -8304,7 +8351,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/hashing/" class="md-nav__link">
+      <a href="../Reference/symbolic/hashing/" class="md-nav__link">
         
   
   
@@ -8332,7 +8379,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lower/" class="md-nav__link">
+      <a href="../Reference/symbolic/lower/" class="md-nav__link">
         
   
   
@@ -8383,11 +8430,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15_9" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_15_9" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../symbolic/lowerers/" class="md-nav__link ">
+            <a href="../Reference/symbolic/lowerers/" class="md-nav__link ">
               
   
   
@@ -8405,14 +8452,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_15_9" id="__nav_5_15_9_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_15_9" id="__nav_6_15_9_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_15_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_15_9">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_6_15_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_15_9">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -8464,11 +8511,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15_9_1" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_15_9_1" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../symbolic/lowerers/cvxpy/" class="md-nav__link ">
+            <a href="../Reference/symbolic/lowerers/cvxpy/" class="md-nav__link ">
               
   
   
@@ -8486,14 +8533,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_15_9_1" id="__nav_5_15_9_1_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_15_9_1" id="__nav_6_15_9_1_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_5_15_9_1_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_15_9_1">
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_6_15_9_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_15_9_1">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -8510,7 +8557,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/cvxpy/arithmetic/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/cvxpy/arithmetic/" class="md-nav__link">
         
   
   
@@ -8538,7 +8585,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/cvxpy/array/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/cvxpy/array/" class="md-nav__link">
         
   
   
@@ -8566,7 +8613,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/cvxpy/constraint/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/cvxpy/constraint/" class="md-nav__link">
         
   
   
@@ -8594,7 +8641,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/cvxpy/control/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/cvxpy/control/" class="md-nav__link">
         
   
   
@@ -8622,7 +8669,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/cvxpy/expr/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/cvxpy/expr/" class="md-nav__link">
         
   
   
@@ -8650,7 +8697,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/cvxpy/linalg/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/cvxpy/linalg/" class="md-nav__link">
         
   
   
@@ -8678,7 +8725,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/cvxpy/logic/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/cvxpy/logic/" class="md-nav__link">
         
   
   
@@ -8706,7 +8753,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/cvxpy/math/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/cvxpy/math/" class="md-nav__link">
         
   
   
@@ -8734,7 +8781,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/cvxpy/state/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/cvxpy/state/" class="md-nav__link">
         
   
   
@@ -8815,11 +8862,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15_9_2" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_15_9_2" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../symbolic/lowerers/jax/" class="md-nav__link ">
+            <a href="../Reference/symbolic/lowerers/jax/" class="md-nav__link ">
               
   
   
@@ -8837,14 +8884,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_15_9_2" id="__nav_5_15_9_2_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_15_9_2" id="__nav_6_15_9_2_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_5_15_9_2_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_15_9_2">
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_6_15_9_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_15_9_2">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -8861,7 +8908,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/arithmetic/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/arithmetic/" class="md-nav__link">
         
   
   
@@ -8889,7 +8936,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/array/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/array/" class="md-nav__link">
         
   
   
@@ -8917,7 +8964,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/constraint/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/constraint/" class="md-nav__link">
         
   
   
@@ -8945,7 +8992,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/control/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/control/" class="md-nav__link">
         
   
   
@@ -8973,7 +9020,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/expr/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/expr/" class="md-nav__link">
         
   
   
@@ -9001,7 +9048,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/lie/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/lie/" class="md-nav__link">
         
   
   
@@ -9029,7 +9076,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/linalg/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/linalg/" class="md-nav__link">
         
   
   
@@ -9057,7 +9104,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/logic/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/logic/" class="md-nav__link">
         
   
   
@@ -9085,7 +9132,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/math/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/math/" class="md-nav__link">
         
   
   
@@ -9113,7 +9160,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/spatial/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/spatial/" class="md-nav__link">
         
   
   
@@ -9141,7 +9188,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/state/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/state/" class="md-nav__link">
         
   
   
@@ -9169,7 +9216,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/stl/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/stl/" class="md-nav__link">
         
   
   
@@ -9197,7 +9244,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/stljax/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/stljax/" class="md-nav__link">
         
   
   
@@ -9225,7 +9272,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/jax/vmap/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/jax/vmap/" class="md-nav__link">
         
   
   
@@ -9306,11 +9353,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15_9_3" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_15_9_3" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../symbolic/lowerers/latex/" class="md-nav__link ">
+            <a href="../Reference/symbolic/lowerers/latex/" class="md-nav__link ">
               
   
   
@@ -9328,14 +9375,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_15_9_3" id="__nav_5_15_9_3_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_15_9_3" id="__nav_6_15_9_3_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_5_15_9_3_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_15_9_3">
+        <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_6_15_9_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_15_9_3">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -9352,7 +9399,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/arithmetic/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/arithmetic/" class="md-nav__link">
         
   
   
@@ -9380,7 +9427,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/array/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/array/" class="md-nav__link">
         
   
   
@@ -9408,7 +9455,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/constraint/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/constraint/" class="md-nav__link">
         
   
   
@@ -9436,7 +9483,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/control/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/control/" class="md-nav__link">
         
   
   
@@ -9464,7 +9511,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/expr/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/expr/" class="md-nav__link">
         
   
   
@@ -9492,7 +9539,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/formulation/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/formulation/" class="md-nav__link">
         
   
   
@@ -9520,7 +9567,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/lie/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/lie/" class="md-nav__link">
         
   
   
@@ -9548,7 +9595,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/linalg/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/linalg/" class="md-nav__link">
         
   
   
@@ -9576,7 +9623,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/logic/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/logic/" class="md-nav__link">
         
   
   
@@ -9604,7 +9651,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/math/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/math/" class="md-nav__link">
         
   
   
@@ -9632,7 +9679,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/spatial/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/spatial/" class="md-nav__link">
         
   
   
@@ -9660,7 +9707,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/state/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/state/" class="md-nav__link">
         
   
   
@@ -9688,7 +9735,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/stl/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/stl/" class="md-nav__link">
         
   
   
@@ -9716,7 +9763,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/lowerers/latex/vmap/" class="md-nav__link">
+      <a href="../Reference/symbolic/lowerers/latex/vmap/" class="md-nav__link">
         
   
   
@@ -9799,11 +9846,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_15_10" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_15_10" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../symbolic/parser/" class="md-nav__link ">
+            <a href="../Reference/symbolic/parser/" class="md-nav__link ">
               
   
   
@@ -9821,14 +9868,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_15_10" id="__nav_5_15_10_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_15_10" id="__nav_6_15_10_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_5_15_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_15_10">
+        <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_6_15_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_15_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -9845,7 +9892,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/parser/array/" class="md-nav__link">
+      <a href="../Reference/symbolic/parser/array/" class="md-nav__link">
         
   
   
@@ -9873,7 +9920,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/parser/constraint/" class="md-nav__link">
+      <a href="../Reference/symbolic/parser/constraint/" class="md-nav__link">
         
   
   
@@ -9901,7 +9948,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/parser/lie/" class="md-nav__link">
+      <a href="../Reference/symbolic/parser/lie/" class="md-nav__link">
         
   
   
@@ -9929,7 +9976,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/parser/linalg/" class="md-nav__link">
+      <a href="../Reference/symbolic/parser/linalg/" class="md-nav__link">
         
   
   
@@ -9957,7 +10004,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/parser/logic/" class="md-nav__link">
+      <a href="../Reference/symbolic/parser/logic/" class="md-nav__link">
         
   
   
@@ -9985,7 +10032,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/parser/math/" class="md-nav__link">
+      <a href="../Reference/symbolic/parser/math/" class="md-nav__link">
         
   
   
@@ -10013,7 +10060,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/parser/parser/" class="md-nav__link">
+      <a href="../Reference/symbolic/parser/parser/" class="md-nav__link">
         
   
   
@@ -10041,7 +10088,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/parser/spatial/" class="md-nav__link">
+      <a href="../Reference/symbolic/parser/spatial/" class="md-nav__link">
         
   
   
@@ -10069,7 +10116,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/parser/stl/" class="md-nav__link">
+      <a href="../Reference/symbolic/parser/stl/" class="md-nav__link">
         
   
   
@@ -10097,7 +10144,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/parser/stljax/" class="md-nav__link">
+      <a href="../Reference/symbolic/parser/stljax/" class="md-nav__link">
         
   
   
@@ -10125,7 +10172,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/parser/tokenizer/" class="md-nav__link">
+      <a href="../Reference/symbolic/parser/tokenizer/" class="md-nav__link">
         
   
   
@@ -10161,7 +10208,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/preprocessing/" class="md-nav__link">
+      <a href="../Reference/symbolic/preprocessing/" class="md-nav__link">
         
   
   
@@ -10189,7 +10236,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/problem/" class="md-nav__link">
+      <a href="../Reference/symbolic/problem/" class="md-nav__link">
         
   
   
@@ -10217,7 +10264,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/sparsity/" class="md-nav__link">
+      <a href="../Reference/symbolic/sparsity/" class="md-nav__link">
         
   
   
@@ -10245,7 +10292,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../symbolic/unified/" class="md-nav__link">
+      <a href="../Reference/symbolic/unified/" class="md-nav__link">
         
   
   
@@ -10308,11 +10355,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5_16" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6_16" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../utils/" class="md-nav__link ">
+            <a href="../Reference/utils/" class="md-nav__link ">
               
   
   
@@ -10330,14 +10377,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_5_16" id="__nav_5_16_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_6_16" id="__nav_6_16_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_5_16_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_5_16">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_6_16_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6_16">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -10354,7 +10401,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../utils/cache/" class="md-nav__link">
+      <a href="../Reference/utils/cache/" class="md-nav__link">
         
   
   
@@ -10382,7 +10429,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../utils/caching/" class="md-nav__link">
+      <a href="../Reference/utils/caching/" class="md-nav__link">
         
   
   
@@ -10410,7 +10457,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../utils/printing/" class="md-nav__link">
+      <a href="../Reference/utils/printing/" class="md-nav__link">
         
   
   
@@ -10438,7 +10485,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../utils/profiling/" class="md-nav__link">
+      <a href="../Reference/utils/profiling/" class="md-nav__link">
         
   
   
@@ -10466,7 +10513,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../utils/utils/" class="md-nav__link">
+      <a href="../Reference/utils/utils/" class="md-nav__link">
         
   
   
@@ -10536,11 +10583,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../Foundations/scvx/" class="md-nav__link ">
+            <a href="../Foundations/scvx/" class="md-nav__link ">
               
   
   
@@ -10558,14 +10605,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -10582,7 +10629,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Foundations/ocp/" class="md-nav__link">
+      <a href="../Foundations/ocp/" class="md-nav__link">
         
   
   
@@ -10610,14 +10657,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Foundations/constraint_reformulation/" class="md-nav__link">
+      <a href="../Foundations/constraint_reformulation/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Isoperimetric Constraint Reformulation
+    Constraint Reformulation (CTCS)
   
 
     
@@ -10638,7 +10685,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Foundations/control_parameterization/" class="md-nav__link">
+      <a href="../Foundations/control_parameterization/" class="md-nav__link">
         
   
   
@@ -10666,7 +10713,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Foundations/time_dilation/" class="md-nav__link">
+      <a href="../Foundations/time_dilation/" class="md-nav__link">
         
   
   
@@ -10694,7 +10741,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../Foundations/discretization/" class="md-nav__link">
+      <a href="../Foundations/discretization/" class="md-nav__link">
         
   
   
@@ -10752,11 +10799,11 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../UnderTheHood/vectorization_and_vmapping/" class="md-nav__link ">
+            <a href="../UnderTheHood/vectorization_and_vmapping/" class="md-nav__link ">
               
   
   
@@ -10774,14 +10821,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_7">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -10798,7 +10845,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../UnderTheHood/lowering_architecture/" class="md-nav__link">
+      <a href="../UnderTheHood/lowering_architecture/" class="md-nav__link">
         
   
   
@@ -10826,7 +10873,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../UnderTheHood/batching_jit_grad/" class="md-nav__link">
+      <a href="../UnderTheHood/batching_jit_grad/" class="md-nav__link">
         
   
   
@@ -10854,7 +10901,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../UnderTheHood/custom_algorithms_autotuners/" class="md-nav__link">
+      <a href="../UnderTheHood/custom_algorithms_autotuners/" class="md-nav__link">
         
   
   
@@ -10899,6 +10946,8 @@
   
   
   
+    
+  
   
 </nav>
                   </div>
@@ -10914,225 +10963,35 @@
                   
 
 
+  
+    <a href="https://github.com/OpenSCvx/OpenSCvx/edit/master/docs/changelog.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+    
+      
+    
+    <a href="https://github.com/OpenSCvx/OpenSCvx/raw/master/docs/changelog.md" title="View source of this page" class="md-content__button md-icon">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M17 18c.56 0 1 .44 1 1s-.44 1-1 1-1-.44-1-1 .44-1 1-1m0-3c-2.73 0-5.06 1.66-6 4 .94 2.34 3.27 4 6 4s5.06-1.66 6-4c-.94-2.34-3.27-4-6-4m0 6.5a2.5 2.5 0 0 1-2.5-2.5 2.5 2.5 0 0 1 2.5-2.5 2.5 2.5 0 0 1 2.5 2.5 2.5 2.5 0 0 1-2.5 2.5M9.27 20H6V4h7v5h5v4.07c.7.08 1.36.25 2 .49V8l-6-6H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h4.5a8.2 8.2 0 0 1-1.23-2"/></svg>
+    </a>
+  
 
-  <h1>SUMMARY</h1>
 
+<h1 id="changelog">Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
+<p>OpenSCvx follows <a href="https://semver.org/">semantic versioning</a>. Every tagged release ships its own
+snapshot of these docs (selectable from the version picker in the header) and a full set of
+release notes on GitHub.</p>
 <ul>
-<li><a href="../">API reference</a></li>
-<li><a href="../algorithms/">algorithms</a><ul>
-<li><a href="../algorithms/autotuner/">autotuner</a><ul>
-<li><a href="../algorithms/autotuner/acceptance_ratio/">acceptance_ratio</a></li>
-<li><a href="../algorithms/autotuner/adaptive_proximal_weight/">adaptive_proximal_weight</a></li>
-<li><a href="../algorithms/autotuner/augmented_lagrangian/">augmented_lagrangian</a></li>
-<li><a href="../algorithms/autotuner/base/">base</a></li>
-<li><a href="../algorithms/autotuner/constant_proximal_weight/">constant_proximal_weight</a></li>
-<li><a href="../algorithms/autotuner/ramp_proximal_weight/">ramp_proximal_weight</a></li>
+<li><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m21.41 11.58-9-9A2 2 0 0 0 11 2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 .59 1.42l9 9A2 2 0 0 0 13 22a2 2 0 0 0 1.41-.59l7-7A2 2 0 0 0 22 13a2 2 0 0 0-.59-1.42M13 20l-9-9V4h7l9 9M6.5 5A1.5 1.5 0 1 1 5 6.5 1.5 1.5 0 0 1 6.5 5"/></svg></span> <strong><a href="https://github.com/OpenSCvx/OpenSCvx/releases">Release notes on GitHub</a></strong>
+  — the authoritative, per-version changelog with highlights, fixes, and upgrade notes.</li>
+<li><span class="twemoji"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M2 10.96a.985.985 0 0 1-.37-1.37L3.13 7c.11-.2.28-.34.47-.42l7.83-4.4c.16-.12.36-.18.57-.18s.41.06.57.18l7.9 4.44c.19.1.35.26.44.46l1.45 2.52c.28.48.11 1.09-.36 1.36l-1 .58v4.96c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18s-.41-.06-.57-.18l-7.9-4.44A.99.99 0 0 1 3 16.5v-5.54c-.3.17-.68.18-1 0m10-6.81v6.7l5.96-3.35zM5 15.91l6 3.38v-6.71L5 9.21zm14 0v-3.22l-5 2.9c-.33.18-.7.17-1 .01v3.69zm-5.15-2.55 6.28-3.63-.58-1.01-6.28 3.63z"/></svg></span> <strong><a href="https://pypi.org/project/openscvx/#history">Releases on PyPI</a></strong>
+  — published wheels and source distributions.</li>
 </ul>
-</li>
-<li><a href="../algorithms/base/">base</a></li>
-<li><a href="../algorithms/history/">history</a></li>
-<li><a href="../algorithms/hyperparams/">hyperparams</a></li>
-<li><a href="../algorithms/loop/">loop</a></li>
-<li><a href="../algorithms/optimization_results/">optimization_results</a></li>
-<li><a href="../algorithms/penalty/">penalty</a></li>
-<li><a href="../algorithms/scvx/">scvx</a><ul>
-<li><a href="../algorithms/scvx/iteration/">iteration</a></li>
-<li><a href="../algorithms/scvx/penalized_trust_region/">penalized_trust_region</a></li>
-</ul>
-</li>
-<li><a href="../algorithms/state/">state</a></li>
-<li><a href="../algorithms/weights/">weights</a></li>
-</ul>
-</li>
-<li><a href="../config/">config</a></li>
-<li><a href="../discretization/">discretization</a><ul>
-<li><a href="../discretization/base/">base</a></li>
-<li><a href="../discretization/discretize_linearize/">discretize_linearize</a></li>
-<li><a href="../discretization/linearize_discretize/">linearize_discretize</a></li>
-<li><a href="../discretization/linearize_discretize_sparse/">linearize_discretize_sparse</a></li>
-<li><a href="../discretization/sparse_utils/">sparse_utils</a><ul>
-<li><a href="../discretization/sparse_utils/bcoo_helpers/">bcoo_helpers</a></li>
-<li><a href="../discretization/sparse_utils/sparse_jacobian/">sparse_jacobian</a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a href="../expert/">expert</a><ul>
-<li><a href="../expert/byof/">byof</a></li>
-<li><a href="../expert/lowering/">lowering</a></li>
-<li><a href="../expert/validation/">validation</a></li>
-</ul>
-</li>
-<li><a href="../init/">init</a><ul>
-<li><a href="../init/interpolation/">interpolation</a></li>
-<li><a href="../init/inverse_kinematics/">inverse_kinematics</a></li>
-</ul>
-</li>
-<li><a href="../integrations/">integrations</a><ul>
-<li><a href="../integrations/base/">base</a></li>
-<li><a href="../integrations/frax/">frax</a></li>
-<li><a href="../integrations/menagerie/">menagerie</a></li>
-<li><a href="../integrations/mjx/">mjx</a></li>
-</ul>
-</li>
-<li><a href="../integrators/">integrators</a><ul>
-<li><a href="../integrators/diffrax/">diffrax</a></li>
-<li><a href="../integrators/runge_kutta/">runge_kutta</a></li>
-</ul>
-</li>
-<li><a href="../loader/">loader</a></li>
-<li><a href="../lowered/">lowered</a><ul>
-<li><a href="../lowered/cvxpy_constraints/">cvxpy_constraints</a></li>
-<li><a href="../lowered/cvxpy_variables/">cvxpy_variables</a></li>
-<li><a href="../lowered/dynamics/">dynamics</a></li>
-<li><a href="../lowered/jax_constraints/">jax_constraints</a></li>
-<li><a href="../lowered/parameters/">parameters</a></li>
-<li><a href="../lowered/problem/">problem</a></li>
-<li><a href="../lowered/unified/">unified</a></li>
-</ul>
-</li>
-<li><a href="../plotting/">plotting</a><ul>
-<li><a href="../plotting/plotting/">plotting</a></li>
-<li><a href="../plotting/publication/">publication</a></li>
-<li><a href="../plotting/scp_iteration/">scp_iteration</a></li>
-<li><a href="../plotting/viser/">viser</a><ul>
-<li><a href="../plotting/viser/animated/">animated</a></li>
-<li><a href="../plotting/viser/coordinates/">coordinates</a></li>
-<li><a href="../plotting/viser/orbits/">orbits</a></li>
-<li><a href="../plotting/viser/plotly_integration/">plotly_integration</a></li>
-<li><a href="../plotting/viser/primitives/">primitives</a></li>
-<li><a href="../plotting/viser/scp/">scp</a></li>
-<li><a href="../plotting/viser/server/">server</a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a href="../problem/">problem</a></li>
-<li><a href="../propagation/">propagation</a><ul>
-<li><a href="../propagation/post_processing/">post_processing</a></li>
-<li><a href="../propagation/propagation/">propagation</a></li>
-</ul>
-</li>
-<li><a href="../solvers/">solvers</a><ul>
-<li><a href="../solvers/base/">base</a></li>
-<li><a href="../solvers/cones/">cones</a></li>
-<li><a href="../solvers/cvxpy_ptr_solver/">cvxpy_ptr_solver</a></li>
-<li><a href="../solvers/moreau_ptr_solver/">moreau_ptr_solver</a></li>
-<li><a href="../solvers/ptr_solver/">ptr_solver</a></li>
-<li><a href="../solvers/qpax_ptr_solver/">qpax_ptr_solver</a></li>
-</ul>
-</li>
-<li><a href="../symbolic/">symbolic</a><ul>
-<li><a href="../symbolic/affine/">affine</a></li>
-<li><a href="../symbolic/augmentation/">augmentation</a></li>
-<li><a href="../symbolic/builder/">builder</a></li>
-<li><a href="../symbolic/canonicalize/">canonicalize</a></li>
-<li><a href="../symbolic/constraint_set/">constraint_set</a></li>
-<li><a href="../symbolic/expr/">expr</a><ul>
-<li><a href="../symbolic/expr/arithmetic/">arithmetic</a></li>
-<li><a href="../symbolic/expr/array/">array</a></li>
-<li><a href="../symbolic/expr/constraint/">constraint</a></li>
-<li><a href="../symbolic/expr/control/">control</a></li>
-<li><a href="../symbolic/expr/expr/">expr</a></li>
-<li><a href="../symbolic/expr/lie/">lie</a><ul>
-<li><a href="../symbolic/expr/lie/adjoint/">adjoint</a></li>
-<li><a href="../symbolic/expr/lie/se3/">se3</a></li>
-<li><a href="../symbolic/expr/lie/so3/">so3</a></li>
-</ul>
-</li>
-<li><a href="../symbolic/expr/linalg/">linalg</a></li>
-<li><a href="../symbolic/expr/logic/">logic</a></li>
-<li><a href="../symbolic/expr/math/">math</a></li>
-<li><a href="../symbolic/expr/parameter/">parameter</a></li>
-<li><a href="../symbolic/expr/spatial/">spatial</a></li>
-<li><a href="../symbolic/expr/state/">state</a></li>
-<li><a href="../symbolic/expr/stl/">stl</a></li>
-<li><a href="../symbolic/expr/stljax/">stljax</a></li>
-<li><a href="../symbolic/expr/time/">time</a></li>
-<li><a href="../symbolic/expr/variable/">variable</a></li>
-<li><a href="../symbolic/expr/vmap/">vmap</a></li>
-</ul>
-</li>
-<li><a href="../symbolic/hashing/">hashing</a></li>
-<li><a href="../symbolic/lower/">lower</a></li>
-<li><a href="../symbolic/lowerers/">lowerers</a><ul>
-<li><a href="../symbolic/lowerers/cvxpy/">cvxpy</a><ul>
-<li><a href="../symbolic/lowerers/cvxpy/arithmetic/">arithmetic</a></li>
-<li><a href="../symbolic/lowerers/cvxpy/array/">array</a></li>
-<li><a href="../symbolic/lowerers/cvxpy/constraint/">constraint</a></li>
-<li><a href="../symbolic/lowerers/cvxpy/control/">control</a></li>
-<li><a href="../symbolic/lowerers/cvxpy/expr/">expr</a></li>
-<li><a href="../symbolic/lowerers/cvxpy/linalg/">linalg</a></li>
-<li><a href="../symbolic/lowerers/cvxpy/logic/">logic</a></li>
-<li><a href="../symbolic/lowerers/cvxpy/math/">math</a></li>
-<li><a href="../symbolic/lowerers/cvxpy/state/">state</a></li>
-</ul>
-</li>
-<li><a href="../symbolic/lowerers/jax/">jax</a><ul>
-<li><a href="../symbolic/lowerers/jax/arithmetic/">arithmetic</a></li>
-<li><a href="../symbolic/lowerers/jax/array/">array</a></li>
-<li><a href="../symbolic/lowerers/jax/constraint/">constraint</a></li>
-<li><a href="../symbolic/lowerers/jax/control/">control</a></li>
-<li><a href="../symbolic/lowerers/jax/expr/">expr</a></li>
-<li><a href="../symbolic/lowerers/jax/lie/">lie</a></li>
-<li><a href="../symbolic/lowerers/jax/linalg/">linalg</a></li>
-<li><a href="../symbolic/lowerers/jax/logic/">logic</a></li>
-<li><a href="../symbolic/lowerers/jax/math/">math</a></li>
-<li><a href="../symbolic/lowerers/jax/spatial/">spatial</a></li>
-<li><a href="../symbolic/lowerers/jax/state/">state</a></li>
-<li><a href="../symbolic/lowerers/jax/stl/">stl</a></li>
-<li><a href="../symbolic/lowerers/jax/stljax/">stljax</a></li>
-<li><a href="../symbolic/lowerers/jax/vmap/">vmap</a></li>
-</ul>
-</li>
-<li><a href="../symbolic/lowerers/latex/">latex</a><ul>
-<li><a href="../symbolic/lowerers/latex/arithmetic/">arithmetic</a></li>
-<li><a href="../symbolic/lowerers/latex/array/">array</a></li>
-<li><a href="../symbolic/lowerers/latex/constraint/">constraint</a></li>
-<li><a href="../symbolic/lowerers/latex/control/">control</a></li>
-<li><a href="../symbolic/lowerers/latex/expr/">expr</a></li>
-<li><a href="../symbolic/lowerers/latex/formulation/">formulation</a></li>
-<li><a href="../symbolic/lowerers/latex/lie/">lie</a></li>
-<li><a href="../symbolic/lowerers/latex/linalg/">linalg</a></li>
-<li><a href="../symbolic/lowerers/latex/logic/">logic</a></li>
-<li><a href="../symbolic/lowerers/latex/math/">math</a></li>
-<li><a href="../symbolic/lowerers/latex/spatial/">spatial</a></li>
-<li><a href="../symbolic/lowerers/latex/state/">state</a></li>
-<li><a href="../symbolic/lowerers/latex/stl/">stl</a></li>
-<li><a href="../symbolic/lowerers/latex/vmap/">vmap</a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li><a href="../symbolic/parser/">parser</a><ul>
-<li><a href="../symbolic/parser/array/">array</a></li>
-<li><a href="../symbolic/parser/constraint/">constraint</a></li>
-<li><a href="../symbolic/parser/lie/">lie</a></li>
-<li><a href="../symbolic/parser/linalg/">linalg</a></li>
-<li><a href="../symbolic/parser/logic/">logic</a></li>
-<li><a href="../symbolic/parser/math/">math</a></li>
-<li><a href="../symbolic/parser/parser/">parser</a></li>
-<li><a href="../symbolic/parser/spatial/">spatial</a></li>
-<li><a href="../symbolic/parser/stl/">stl</a></li>
-<li><a href="../symbolic/parser/stljax/">stljax</a></li>
-<li><a href="../symbolic/parser/tokenizer/">tokenizer</a></li>
-</ul>
-</li>
-<li><a href="../symbolic/preprocessing/">preprocessing</a></li>
-<li><a href="../symbolic/problem/">problem</a></li>
-<li><a href="../symbolic/sparsity/">sparsity</a></li>
-<li><a href="../symbolic/unified/">unified</a></li>
-</ul>
-</li>
-<li><a href="../utils/">utils</a><ul>
-<li><a href="../utils/cache/">cache</a></li>
-<li><a href="../utils/caching/">caching</a></li>
-<li><a href="../utils/printing/">printing</a></li>
-<li><a href="../utils/profiling/">profiling</a></li>
-<li><a href="../utils/utils/">utils</a></li>
-</ul>
-</li>
-</ul>
+<p>The documentation you are reading tracks the <code>latest</code> release. Use the version selector to browse
+the docs for an earlier tag, or switch to <code>nightly</code> for the in-development build from <code>main</code>.</p>
 
 
 
@@ -11140,6 +10999,38 @@
 
 
 
+  
+    
+  
+  
+    
+  
+
+
+  <aside class="md-source-file">
+    
+      
+  <span class="md-source-file__fact">
+    <span class="md-icon" title="Last update">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
+    </span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="July 15, 2026 06:18:13 UTC">July 15, 2026</span>
+  </span>
+
+    
+    
+      
+  <span class="md-source-file__fact">
+    <span class="md-icon" title="Created">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M14.47 15.08 11 13V7h1.5v5.25l3.08 1.83c-.41.28-.79.62-1.11 1m-1.39 4.84c-.36.05-.71.08-1.08.08-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8c0 .37-.03.72-.08 1.08.69.1 1.33.32 1.92.64.1-.56.16-1.13.16-1.72 0-5.5-4.5-10-10-10S2 6.5 2 12s4.47 10 10 10c.59 0 1.16-.06 1.72-.16-.32-.59-.54-1.23-.64-1.92M18 15v3h-3v2h3v3h2v-3h3v-2h-3v-3z"/></svg>
+    </span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="July 15, 2026 06:18:13 UTC">July 15, 2026</span>
+  </span>
+
+    
+    
+    
+  </aside>
 
 
 
@@ -11163,6 +11054,44 @@
       
         <footer class="md-footer">
   
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../citation/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Resources">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Resources
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../UsersGuide/00_introduction/" class="md-footer__link md-footer__link--next" aria-label="Next: Users Guide">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Users Guide
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
     
   
   <div class="md-footer-meta md-typeset">
@@ -11212,12 +11141,12 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["announce.dismiss", "content.action.edit", "content.action.view", "content.code.annotate", "content.code.copy", "content.code.select", "content.footnote.tooltips", "content.tooltips", "header.autohide", "navigation.expand", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["announce.dismiss", "content.action.edit", "content.action.view", "content.code.annotate", "content.code.copy", "content.code.select", "content.footnote.tooltips", "content.tooltips", "header.autohide", "navigation.expand", "navigation.footer", "navigation.indexes", "navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.sections", "navigation.tabs", "navigation.top", "search.highlight", "search.share", "search.suggest", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
       
-        <script src="../../javascripts/mathjax.js"></script>
+        <script src="../javascripts/mathjax.js"></script>
       
         <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
       
