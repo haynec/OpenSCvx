@@ -61,6 +61,7 @@ jobs:
       run: |
         uv pip install --system "mkdocs-material[imaging]" mkdocstrings-python
         uv pip install --system mkdocs-gen-files mkdocs-literate-nav mkdocs-section-index
+        uv pip install --system mkdocs-git-revision-date-localized-plugin
         uv pip install --system mike
 
     - name: Install package

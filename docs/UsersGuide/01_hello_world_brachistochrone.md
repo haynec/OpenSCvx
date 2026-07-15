@@ -1,3 +1,8 @@
+---
+description: >-
+  A hello-world OpenSCvx tutorial that solves the brachistochrone minimum-time problem: states, controls, dynamics, time, and CTCS constraints.
+---
+
 # 01 Hello Brachistochrone
 
 In this _hello world_ tutorial we will introduce the reader to the fundamental concepts and API needed to define and solve a problem using OpenSCvx as well as how the results can be accessed.

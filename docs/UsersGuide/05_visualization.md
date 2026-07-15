@@ -1,3 +1,8 @@
+---
+description: >-
+  Plot and inspect OpenSCvx results with Matplotlib and interactive Viser visualization.
+---
+
 # 05 Visualizing Results
 
 Once you've solved a trajectory optimization problem, you'll want to see the results. OpenSCvx provides two complementary visualization systems:

@@ -1,6 +1,11 @@
 """Parser handlers for spatial / 6-DOF operations.
 
 Handlers: QDCM, SSM, SSMP
+
+Each handler is registered under its function name via ``@function`` and turns the
+call-syntax form (e.g. ``QDCM(q)``) that the Pratt parser encounters in an
+expression string into the corresponding 6-DOF ``Expr`` node — the
+quaternion-to-DCM conversion and the skew-symmetric matrices.
 """
 
 from openscvx.symbolic.expr.spatial import QDCM, SSM, SSMP

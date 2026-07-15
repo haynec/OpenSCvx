@@ -1,6 +1,14 @@
 """CVXPy visitors for core expression types.
 
 Visitors: Constant, Parameter, NodeReference
+
+Lowers the leaf value nodes that bottom out expression recursion. ``Constant``
+wraps its value in a ``cp.Constant``; ``Parameter`` resolves by name through the
+lowerer's ``variable_map``, which may bind it to a ``cp.Parameter`` for
+recompilation-free parameter sweeps or to a fixed constant; ``NodeReference``
+indexes a full-trajectory variable ``(N, n_x)`` / ``(N, n_u)`` at a fixed node,
+which is how cross-node constraints reach across the time grid. Unlike the JAX
+backend, compound-expression node references are not yet supported here.
 """
 
 import cvxpy as cp

@@ -3,6 +3,12 @@
 Visitors: Sin, Cos, Tan, Asin, Acos, Atan, Atan2, Square, Sqrt, Exp, Log, Abs,
           Max, Min, PositivePart, Huber, SmoothReLU, LogSumExp, Linterp,
           Cinterp, Bilerp
+
+Renders the scalar math AST nodes to LaTeX math strings. The elementary functions
+render as ordinary function applications (``\\sin\\left( ... \\right)`` via
+``_call``), and the penalty/interpolation atoms render as named operators. Unlike
+the CVXPy backend, which admits only the DCP-representable subset, every math node
+has a valid LaTeX form, since rendering imposes no convexity requirement.
 """
 
 from openscvx.symbolic.expr.arithmetic import Power

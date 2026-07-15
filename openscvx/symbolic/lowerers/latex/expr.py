@@ -1,6 +1,11 @@
 """LaTeX visitors for core expression types.
 
 Visitors: Constant, Parameter, NodeReference
+
+Renders the leaf value nodes to LaTeX math strings: ``Constant`` via
+``format_constant`` (scalars, vectors, and matrices), ``Parameter`` as its
+symbol via ``latex_symbol``, and ``NodeReference`` as its base carrying a node
+superscript ``x^{(k)}`` — the notation for "this variable at trajectory node k".
 """
 
 from openscvx.symbolic.expr.expr import Constant, NodeReference

@@ -8,7 +8,9 @@
 <section class="osc-home-hero" data-osc-hero-bg="mesh" aria-labelledby="osc-home-hero-title">
   <div class="osc-home-hero__inner md-typeset">
     <p class="osc-home-hero__kicker">Nonconvex trajectory optimization</p>
-    <h1 id="osc-home-hero-title" class="osc-home-hero__title">{{ config.site_name }}</h1>
+    {#- Brand text only, not a heading: the page's single H1 is the keyword-carrying
+        title in the article body (docs/index.md). -#}
+    <p id="osc-home-hero-title" class="osc-home-hero__title">{{ config.site_name }}</p>
     <p class="osc-home-hero__tagline">
       {% if page.meta and page.meta.description %}
         {{ page.meta.description }}

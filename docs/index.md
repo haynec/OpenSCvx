@@ -5,11 +5,23 @@ hide:
   - navigation
   - toc
 description: >-
-  An Open-Source Modular and Extensible Nonlinear Trajectory Optimization Package
+  OpenSCvx is an open-source Python library for nonlinear trajectory
+  optimization built on successive convexification (SCvx), with a composable
+  problem API and a JAX backend.
 social:
   cards_layout_options:
     title: Fast and Easy Nonconvex Trajectory Optimization
 ---
+
+# OpenSCvx — Trajectory Optimization via Successive Convexification in Python/JAX
+
+OpenSCvx is an open-source Python library for nonlinear trajectory optimization
+built on successive convexification (SCvx). You write dynamics, costs, and
+constraints as a single composable problem object; the library lowers that
+symbolic definition to JAX, discretizes it on a time grid, and solves the
+resulting nonconvex problem through a sequence of convex subproblems. The same
+problem definition runs on CPU and GPU, and vectorizes across decision nodes and
+scenario batches.
 
 ## Why OpenSCvx
 
@@ -30,9 +42,8 @@ for every outer loop (see [Obstacle avoidance with Vmap](UsersGuide/03_obstacle_
 
 <div class="grid cards" markdown>
 
-- :material-rocket-launch: __[Run examples](examples.md)__ — locate scripts in the repo, run them locally, and browse problem categories.
 - :material-book-open-variant: __[Users guide](UsersGuide/00_introduction.md)__ — modeling, constraints, and visualization.
 - :material-code-braces: __[API reference](Reference/index.md)__ — modules and functions generated from source with docstrings.
-- :material-view-dashboard: __[Examples](Examples/index.md)__ — runnable scripts organized by topic.
+- :material-view-dashboard: __[Examples](Examples/index.md)__ — runnable scripts organized by topic, run them locally and browse problem categories.
 
 </div>

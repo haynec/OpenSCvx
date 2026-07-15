@@ -1,3 +1,16 @@
+"""Fixed-step Runge-Kutta integration in pure JAX.
+
+Provides a self-contained RK45 (Runge-Kutta-Fehlberg) integrator that needs no
+external ODE library: :func:`rk45_step` takes a single Dormand-Prince step and
+:func:`solve_ivp_rk45` rolls it forward over a fixed grid via ``jax.lax.fori_loop``
+(or a Python loop when tracing is disabled). Integration runs over the normalized
+pseudo-time ``tau``.
+
+This is the lightweight, always-differentiable alternative to the Diffrax backend
+(:mod:`openscvx.integrators.diffrax`): fixed-step and dependency-free, at the cost
+of the adaptive step-size control and implicit solvers Diffrax offers.
+"""
+
 from typing import Any, Callable
 
 import jax

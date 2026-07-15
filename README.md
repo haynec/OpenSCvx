@@ -167,7 +167,7 @@ Check out the OpenSCvx documentation:
 
 - [Users Guide](https://openscvx.github.io/OpenSCvx/latest/UsersGuide/00_introduction/)
 - [API Reference](https://openscvx.github.io/OpenSCvx/latest/Reference/)
-- [Examples overview](https://openscvx.github.io/OpenSCvx/latest/examples/)
+- [Examples overview](https://openscvx.github.io/OpenSCvx/latest/Examples/)
 
 ### Running the Examples
 

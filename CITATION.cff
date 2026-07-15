@@ -1,0 +1,42 @@
+cff-version: 1.2.0
+message: >-
+  If you use OpenSCvx in your research, please cite the software and the
+  preferred citation (Hayner et al., IEEE RA-L 2025) below.
+title: "OpenSCvx: Nonlinear Trajectory Optimization via Successive Convexification"
+abstract: >-
+  OpenSCvx is an open-source Python library for nonlinear trajectory optimization
+  built on successive convexification (SCvx). It compiles a composable symbolic
+  problem definition into JAX/CVXPY code and solves nonconvex trajectory problems
+  through sequential convex programming.
+type: software
+authors:
+  - family-names: Hayner
+    given-names: Christopher R.
+  - family-names: Norris
+    given-names: Griffin
+repository-code: "https://github.com/OpenSCvx/OpenSCvx"
+url: "https://openscvx.github.io/OpenSCvx/"
+license: Apache-2.0
+keywords:
+  - trajectory optimization
+  - successive convexification
+  - optimal control
+  - JAX
+  - Python
+preferred-citation:
+  type: article
+  title: >-
+    Continuous-Time Line-of-Sight Constrained Trajectory Planning for
+    6-Degree of Freedom Systems
+  authors:
+    - family-names: Hayner
+      given-names: Christopher R.
+    - family-names: Carson III
+      given-names: John M.
+    - family-names: Açıkmeşe
+      given-names: Behçet
+    - family-names: Leung
+      given-names: Karen
+  journal: IEEE Robotics and Automation Letters
+  year: 2025
+  doi: 10.1109/LRA.2025.3545299

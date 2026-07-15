@@ -2,6 +2,15 @@
 
 Visitors: AdjointDual, Adjoint, SE3Adjoint, SE3AdjointDual,
           SO3Exp, SO3Log, SE3Exp, SE3Log
+
+Lowers the SO(3)/SE(3) Lie-group primitives used in rigid-body dynamics to JAX
+functions. The little adjoint ``Adjoint`` (Lie bracket) and its dual
+``AdjointDual`` (coadjoint) compute the twist- and wrench-space operators behind
+the Coriolis/centrifugal terms of the Newton-Euler equations; ``SE3Adjoint`` /
+``SE3AdjointDual`` build the 6x6 matrices that transport twists and wrenches
+between frames. The exp/log maps (``SO3Exp``/``SO3Log``, ``SE3Exp``/``SE3Log``)
+defer to :mod:`jaxlie` for numerically robust, differentiable implementations,
+with the twist convention ``[v; omega]`` matching jaxlie's SE(3) tangent.
 """
 
 import jax.numpy as jnp

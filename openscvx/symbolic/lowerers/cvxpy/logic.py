@@ -1,6 +1,12 @@
 """CVXPy visitors for logic expressions.
 
 Visitors: All, Any, Cond
+
+Registers the logic AST nodes for CVXPy, but every one raises
+``NotImplementedError``: boolean reductions (``All``, ``Any``) and conditional
+branching (``Cond``) are non-convex and have no disciplined-convex encoding. The
+visitors exist so that misusing a logic node in a convex constraint fails with a
+message pointing at the JAX backend rather than an opaque dispatch error.
 """
 
 import cvxpy as cp

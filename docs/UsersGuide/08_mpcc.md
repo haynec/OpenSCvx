@@ -1,3 +1,8 @@
+---
+description: >-
+  Build receding-horizon model predictive contouring control (MPCC) in OpenSCvx to track a reference path through gates at speed.
+---
+
 # 08 Receding Horizon Drone Racing: Model Predictive Contouring Control
 
 In this tutorial we step away from single-shot trajectory optimization and into the world of receding-horizon control.

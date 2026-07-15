@@ -1,6 +1,17 @@
 """JAX visitors for constraint expressions.
 
 Visitors: Equality, Inequality, NodalConstraint, CrossNodeConstraint, CTCS
+
+Lowers constraint AST nodes to residual functions in the ``g <= 0`` / ``h = 0``
+convention: ``Equality`` and ``Inequality`` both return ``lhs - rhs``.
+``NodalConstraint`` merely unwraps to its inner constraint (which nodes it applies
+to is handled elsewhere), while ``CrossNodeConstraint`` exposes a trajectory-level
+``(X, U, params) -> scalar`` signature for constraints that reference several
+nodes at once (e.g. rate limits). ``CTCS`` produces the penalty integrand for
+continuous-time constraint satisfaction, gated to its node range by wrapping the
+penalty in a :class:`~openscvx.symbolic.expr.logic.Cond`; unlike CVXPy, this
+backend can lower CTCS because the penalty is enforced through dynamics
+augmentation, not a convex constraint.
 """
 
 # Expression types to handle — uncomment as you paste visitors:

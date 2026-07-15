@@ -1,6 +1,14 @@
 """LaTeX visitors for constraint expressions.
 
 Visitors: Equality, Inequality, NodalConstraint, CrossNodeConstraint, CTCS
+
+Renders constraint AST nodes to LaTeX relational rows. ``Equality`` and
+``Inequality`` render as ``lhs = rhs`` / ``lhs \\le rhs``; ``NodalConstraint`` adds
+a node-set annotation (``k = a``, a contiguous ``k \\in \\{a, \\dots, b\\}``, or an
+explicit set elided past six entries); ``CrossNodeConstraint`` renders its inner
+constraint with its node-referencing operands; and ``CTCS`` renders as the
+continuous-time path constraint it stands for (``\\forall t``), which is how the
+Mayer-form formulation presents it.
 """
 
 from openscvx.symbolic.expr.constraint import (

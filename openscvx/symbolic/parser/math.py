@@ -3,6 +3,12 @@
 Handlers: Sin, Cos, Tan, Asin, Acos, Atan, Atan2, Sqrt, Square, Exp, Log, Abs,
           Max, Min, PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Cinterp,
           Bilerp
+
+Each handler is registered under its function name via ``@function`` and turns the
+call-syntax form (e.g. ``Huber(x, 0.1)``) that the Pratt parser encounters in an
+expression string into the corresponding math ``Expr`` node. Scalar options such
+as a penalty width or smoothing constant are coerced to Python floats (via
+``_as_float``) so a constant literal and a bare number parse the same way.
 """
 
 from openscvx.symbolic.expr.expr import Constant

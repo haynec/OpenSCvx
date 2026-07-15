@@ -1,3 +1,23 @@
+"""Adaptive-step ODE integration through the Diffrax backend.
+
+Wraps :mod:`diffrax` to integrate continuous-time dynamics for the two roles the
+pipeline needs, both over the normalized pseudo-time ``tau`` rather than physical
+time:
+
+- :func:`solve_ivp_diffrax` saves the solution on a fixed grid of substeps and is
+  the workhorse behind discretization, where the augmented dynamics are
+  propagated between trajectory nodes.
+- :func:`solve_ivp_diffrax_prop` retains the dense interpolant and evaluates it at
+  arbitrary ``save_time`` points (with masking); post-optimization propagation
+  uses it to reconstruct a high-resolution trajectory from the optimized nodes.
+
+The solver, tolerances, and step count are configurable; ``SOLVER_MAP`` names the
+available explicit and implicit Diffrax schemes (Dopri5/8, Tsit5, KenCarp3/4/5,
+...). At import time the module registers Diffrax's ``DenseInterpolation`` as a
+JAX pytree node so dense solution objects survive ``jit``/``vmap`` and can be
+returned from transformed functions.
+"""
+
 import os
 from typing import Any, Callable
 

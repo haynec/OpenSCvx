@@ -1,6 +1,14 @@
 """JAX visitors for core expression types.
 
 Visitors: Constant, Parameter, NodeReference
+
+Lowers the leaf value nodes that bottom out expression recursion. ``Constant``
+bakes its value into the closure (squeezing singletons to true scalars);
+``Parameter`` defers to a runtime lookup in the ``params`` dict, so parameters can
+be updated between SCP iterations without recompiling; ``NodeReference`` extracts
+a state/control value at a fixed trajectory node (the index is resolved at
+construction time), which is what lets cross-node constraints reach across the
+time grid.
 """
 
 import jax.numpy as jnp

@@ -1,5 +1,7 @@
 {#-
-  This file was automatically generated - do not edit
+  Site-wide theme override: extends Material's base to add web fonts, custom styles, and the
+  SEO head block below (noindex for nightly, homepage JSON-LD). Homepage-specific blocks live
+  in home.html, which extends this file.
 -#}
 {% extends "base.html" %}
 {% block styles %}
@@ -8,4 +10,49 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=League+Spartan:wght@500;600;700&display=swap">
   <link rel="stylesheet" href="{{ 'assets/stylesheets/custom.css' | url }}">
+{% endblock %}
+
+{#-
+  SEO head extensions shared across every page. `config.extra.mike_version` carries the
+  deployed mike version (populated from $MIKE_DOCS_VERSION via mkdocs.yml); it is empty on
+  a plain `mkdocs build`. The canonical URL itself is unified onto `latest/` by mike's
+  `canonical_version` option (see the mike plugin config in mkdocs.yml), so no rewrite is
+  needed here.
+-#}
+{% block extrahead %}
+  {{ super() }}
+  {%- if config.extra.mike_version == "nightly" or (page and page.meta and page.meta.noindex) %}
+  <!-- Nightly is a moving development build, and pages front-mattered `noindex: true`
+       (e.g. work-in-progress tutorials) are unfinished; keep both out of the index so
+       they do not compete with the released docs served from latest/. Noindexed pages
+       are also dropped from sitemap.xml (see the sitemap.xml override). -->
+  <meta name="robots" content="noindex">
+  {%- endif %}
+  {#- Twitter/X card metas are emitted by Material's social plugin (twitter:card/title/
+      description/image); no override needed here. -#}
+  {%- if page.is_homepage %}
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareSourceCode",
+      "name": "OpenSCvx",
+      "description": {{ (page.meta.description or config.site_description) | tojson }},
+      "url": "https://openscvx.github.io/OpenSCvx/latest/",
+      "codeRepository": "https://github.com/OpenSCvx/OpenSCvx",
+      "programmingLanguage": "Python",
+      "license": "https://www.apache.org/licenses/LICENSE-2.0",
+      "author": {
+        "@type": "Person",
+        "name": "Chris Hayner"
+      }{% if config.extra.mike_version and config.extra.mike_version != "nightly" %},
+      "softwareVersion": {{ config.extra.mike_version | tojson }}{% endif %},
+      "sameAs": [
+        "https://github.com/OpenSCvx/OpenSCvx",
+        "https://pypi.org/project/openscvx/",
+        "https://arxiv.org/abs/2404.16826",
+        "https://doi.org/10.1109/LRA.2025.3545299"
+      ]
+    }
+  </script>
+  {%- endif %}
 {% endblock %}

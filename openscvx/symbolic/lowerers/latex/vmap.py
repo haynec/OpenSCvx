@@ -1,6 +1,13 @@
 """LaTeX visitors for vmap expressions.
 
 Visitors: _Placeholder, Vmap
+
+Renders a ``Vmap`` node as ``\\operatorname{vmap}\\left( <body> \\right)`` — the
+symbolic analogue of ``jax.vmap`` — by lowering its body once and showing the
+mapped expression rather than an opaque repr. Each ``_Placeholder`` (a single
+batch element) renders as a neutral ``\\square``; with multiple batch arguments
+every placeholder shares that box, so distinct batch sources are not visually
+disambiguated.
 """
 
 from openscvx.symbolic.expr.vmap import Vmap, _Placeholder
