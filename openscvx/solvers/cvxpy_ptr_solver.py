@@ -319,6 +319,7 @@ class CVXPyPTRSolver(PTRSolver):
             S_u=S_u,
             c_u=c_u,
             n_nodal_constraints=len(jax_constraints.nodal),
+            n_cvx_slacked=len(jax_constraints.convex_slack),
             n_cross_node_constraints=len(jax_constraints.cross_node),
             A_d_sparsity=A_d_sp,
             B_d_sparsity=B_d_sp,
@@ -346,12 +347,14 @@ class CVXPyPTRSolver(PTRSolver):
                 "create_variables(); the CVXPy variables it needs don't "
                 "exist yet."
             )
-        return lower_cvxpy_constraints(
+        cvxpy_list, all_params = lower_cvxpy_constraints(
             constraints,
             self._ocp_vars.x_nonscaled,
             self._ocp_vars.u_nonscaled,
             parameters,
+            cvx_vb=self._ocp_vars.cvx_vb,
         )
+        return cvxpy_list, all_params
 
     def initialize(
         self,
@@ -457,6 +460,8 @@ class CVXPyPTRSolver(PTRSolver):
         lam_vc = ocp_vars.lam_vc
         lam_vb_nodal = ocp_vars.lam_vb_nodal
         lam_vb_cross = ocp_vars.lam_vb_cross
+        lam_vb_cvx = ocp_vars.lam_vb_cvx
+        cvx_vb = ocp_vars.cvx_vb
         x = ocp_vars.x
         u = ocp_vars.u
         nu = ocp_vars.nu
@@ -466,6 +471,7 @@ class CVXPyPTRSolver(PTRSolver):
         cost = cp.sum(lam_cost) * 0
         cost += cp.sum(lam_vb_nodal) * 0
         cost += cp.sum(lam_vb_cross) * 0
+        cost += cp.sum(lam_vb_cvx) * 0
 
         # Boundary condition cost terms (use scaled x for numerical conditioning)
         for i in range(settings.sim.true_state_slice.start, settings.sim.true_state_slice.stop):
@@ -506,6 +512,11 @@ class CVXPyPTRSolver(PTRSolver):
                 pen = cp.abs if constraint.is_equality else cp.pos
                 cost += lam_vb_cross[idx_cross] * pen(nu_vb_cross[idx_cross])
                 idx_cross += 1
+
+        # Soft convex constraint slack penalty
+        for idx, c in enumerate(jax_constraints.convex_slack):
+            nodes = c.nodes if c.nodes is not None else list(range(settings.sim.n))
+            cost += cp.sum(cp.multiply(lam_vb_cvx[nodes, idx], cvx_vb[idx][nodes]))
 
         return cost
 
@@ -900,6 +911,7 @@ class CVXPyPTRSolver(PTRSolver):
         lam_vc: np.ndarray,
         lam_vb_nodal: np.ndarray,
         lam_vb_cross: np.ndarray,
+        lam_vb_cvx: np.ndarray,
     ) -> None:
         """Update SCP penalty weights.
 
@@ -915,6 +927,8 @@ class CVXPyPTRSolver(PTRSolver):
                 shape ``(N, n_nodal_constraints)``.
             lam_vb_cross: Virtual buffer penalty weights for cross-node
                 constraints, shape ``(n_cross_node_constraints,)``.
+            lam_vb_cvx: Virtual buffer penalty weights for convex constraints,
+                shape ``(n_convex_constraints,)``.
         """
         lam_prox_arr = np.asarray(lam_prox)
         self._set_param("lam_prox", lam_prox_arr)
@@ -922,6 +936,8 @@ class CVXPyPTRSolver(PTRSolver):
         self._set_param("lam_vc", lam_vc)
         self._set_param("lam_vb_nodal", lam_vb_nodal)
         self._set_param("lam_vb_cross", lam_vb_cross)
+        if lam_vb_cvx is not None:
+            self._set_param("lam_vb_cvx", np.asarray(lam_vb_cvx))
 
     def proximal_cost_terms(
         self,
@@ -1189,6 +1205,7 @@ class CVXPyPTRSolver(PTRSolver):
                 lam_vc=np.asarray(data.lam_vc),
                 lam_vb_nodal=np.asarray(data.lam_vb_nodal),
                 lam_vb_cross=np.asarray(data.lam_vb_cross),
+                lam_vb_cvx=np.asarray(data.lam_vb_cvx),
             )
             # Set the proximal-term parameter (``prox_c``) from the freshly
             # updated penalties; the legacy ``_subproblem`` called this between

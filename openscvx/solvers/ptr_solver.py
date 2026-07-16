@@ -161,6 +161,7 @@ class SubproblemData:
         lam_vc: Virtual-control penalty weights, shape ``(N-1, n_x)``.
         lam_vb_nodal: Nodal virtual-buffer weights, shape ``(N, n_nodal)``.
         lam_vb_cross: Cross-node virtual-buffer weights, shape ``(n_cross,)``.
+        lam_vb_cvx: Convex constraint virtual-buffer weights, shape ``(N, n_cvx)``.
         x_init: Initial state, shape ``(n_x,)``. ``jnp.nan`` sentinel where free.
         x_term: Terminal state, shape ``(n_x,)``. ``jnp.nan`` sentinel where free.
         params: Runtime parameters dict from the outer solve loop.  Threaded
@@ -189,6 +190,7 @@ class SubproblemData:
     lam_vc: jnp.ndarray
     lam_vb_nodal: jnp.ndarray
     lam_vb_cross: jnp.ndarray
+    lam_vb_cvx: jnp.ndarray
     x_init: jnp.ndarray
     x_term: jnp.ndarray
     #: Runtime parameters dict forwarded from the outer solve loop so that
@@ -479,6 +481,7 @@ class PTRSolver(ConvexSolver):
         lam_vc: np.ndarray,
         lam_vb_nodal: np.ndarray,
         lam_vb_cross: np.ndarray,
+        lam_vb_cvx: np.ndarray,
     ) -> None:
         """Update SCP penalty weights.
 
@@ -490,6 +493,8 @@ class PTRSolver(ConvexSolver):
                 shape (N, n_nodal_constraints).
             lam_vb_cross: Virtual buffer penalty weights for cross-node
                 constraints, shape (n_cross_node_constraints,).
+            lam_vb_cvx: Virtual buffer penalty weights for slacked convex
+                constraints, shape (N, n_cvx).
         """
         raise NotImplementedError
 

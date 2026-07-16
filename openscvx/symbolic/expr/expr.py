@@ -249,6 +249,16 @@ class Expr:
 
         return Index(self, idx)
 
+    def __rshift__(self, other):  # A >> B  means A - B ≽ 0
+        from .constraint import MatrixInequality
+
+        return MatrixInequality(self, to_expr(other))
+
+    def __lshift__(self, other):  # A << B  means B - A ≽ 0
+        from .constraint import MatrixInequality
+
+        return MatrixInequality(to_expr(other), self)
+
     @property
     def T(self) -> "Transpose":
         """Transpose property for matrix expressions.

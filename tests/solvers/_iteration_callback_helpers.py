@@ -273,6 +273,7 @@ def subproblem_data_from_numpy_stash(solver) -> SubproblemData:
         lam_vc=jnp.asarray(pen["lam_vc"]),
         lam_vb_nodal=jnp.asarray(pen["lam_vb_nodal"]),
         lam_vb_cross=jnp.zeros((0,)),
+        lam_vb_cvx=jnp.asarray(pen["lam_vb_cvx"]),
         x_init=jnp.asarray(x_init),
         x_term=jnp.asarray(x_term),
         params=solver._parameters_dict,

@@ -112,6 +112,11 @@ def _subproblem_data_from_solver(prob) -> SubproblemData:
     lam_vc = np.asarray(ocp.lam_vc.value)
     lam_vb_nodal = np.asarray(ocp.lam_vb_nodal.value)
     lam_vb_cross = np.asarray(ocp.lam_vb_cross.value)
+    lam_vb_cvx = (
+        np.asarray(ocp.lam_vb_cvx.value)
+        if getattr(ocp, "lam_vb_cvx", None) is not None and ocp.lam_vb_cvx.value is not None
+        else np.zeros((N, 1))
+    )
 
     x_init = (
         np.asarray(lowered.x_unified.initial, dtype=float)
@@ -145,6 +150,7 @@ def _subproblem_data_from_solver(prob) -> SubproblemData:
         lam_vc=jnp.asarray(lam_vc),
         lam_vb_nodal=jnp.asarray(lam_vb_nodal),
         lam_vb_cross=jnp.asarray(lam_vb_cross),
+        lam_vb_cvx=jnp.asarray(lam_vb_cvx),
         x_init=jnp.asarray(x_init),
         x_term=jnp.asarray(x_term),
         params={},

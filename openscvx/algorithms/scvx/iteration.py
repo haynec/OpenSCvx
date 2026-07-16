@@ -287,6 +287,7 @@ def make_scp_iteration(
             lam_vc=state.lam_vc,
             lam_vb_nodal=state.lam_vb_nodal,
             lam_vb_cross=state.lam_vb_cross,
+            lam_vb_cvx=state.lam_vb_cvx,
             x_init=state.x_init_pin,
             x_term=state.x_term_pin,
             params=params,

@@ -19,6 +19,7 @@ from openscvx.symbolic.expr.constraint import (
     CrossNodeConstraint,
     Equality,
     Inequality,
+    MatrixInequality,
 )
 from openscvx.symbolic.lowerers.cvxpy._registry import visitor  # noqa: F401
 
@@ -64,6 +65,13 @@ def _visit_inequality(lowerer, node: Inequality) -> cp.Constraint:
     left = lowerer.lower(node.lhs)
     right = lowerer.lower(node.rhs)
     return left <= right
+
+
+@visitor(MatrixInequality)
+def _visit_matrix_inequality(lowerer, node: MatrixInequality) -> cp.Constraint:
+    left = lowerer.lower(node.lhs)
+    right = lowerer.lower(node.rhs)
+    return left >> right
 
 
 @visitor(CrossNodeConstraint)

@@ -5,6 +5,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from openscvx.algorithms import OptimizationResults
+from openscvx.algorithms.history import AlgorithmHistory
 
 from .plotting import _get_var
 from .publication import (
@@ -605,4 +606,175 @@ def plot_scp_convergence_histories(result: OptimizationResults) -> go.Figure:
     fig.update_xaxes(title_text="Iteration", row=3, col=1)
     fig.update_yaxes(title_text="Acceptance Ratio (ρ)", row=3, col=1, range=[-0.5, 1.5])
 
+    return fig
+
+
+def _node_profile(arr, reduce_fn, N: int):
+    """Reduce one recorded weight array to a per-node profile (length = #nodes).
+
+    Weight arrays are laid out with nodes on axis 0 (``lam_prox`` is
+    ``(N, n_x+n_u)``, ``lam_vc`` is ``(N-1, n_x)``, ``lam_vb_*`` is ``(N, k)``).
+    The trailing component axis is collapsed with ``reduce_fn`` so each node maps
+    to a single weight value. Returns ``None`` for arrays that have no node axis
+    (e.g. ``lam_vb_cross`` is ``(n_cross,)`` — per constraint, not per node).
+    """
+    a = np.asarray(arr, dtype=float)
+    if a.ndim == 0:
+        return None
+    n_nodes = a.shape[0]
+    if n_nodes not in (N, N - 1):
+        return None
+    if a.ndim == 1:
+        return a
+    return reduce_fn(a.reshape(n_nodes, -1), axis=1)
+
+
+def plot_weight_history(
+    history: AlgorithmHistory,
+    reduce: str = "mean",
+) -> go.Figure:
+    """Plot each weight's profile across the time horizon, one line per SCP iteration.
+
+    One stacked subplot per weight (trust region ``lam_prox`` plus the multiplier
+    weights ``lam_vc`` / ``lam_vb_nodal`` / ``lam_vb_cvx``). In every subplot the
+    **x-axis is the discretized node index (time horizon)** and the **y-axis is the
+    weight value**. Each SCP iteration contributes one line showing that weight's
+    profile across the nodes, and lines are colored by outcome:
+
+    * **green** — accepted iteration,
+    * **red** — rejected iteration.
+
+    Because each weight array carries a trailing component axis (per state/control
+    for ``lam_prox`` / ``lam_vc``, per constraint for ``lam_vb_*``), that axis is
+    collapsed to one value per node with ``reduce`` (``"mean"`` by default, or
+    ``"max"``). ``lam_vb_cross`` is per-constraint (no node axis) and is skipped.
+
+    Note on data availability: ``lam_prox`` is recorded on *every* iteration, so it
+    shows both green and red lines. The multiplier weights are recorded *only on
+    accepted iterations*, so those panels contain green lines only (rejected
+    iterations don't store them).
+
+    Args:
+        history: The per-iteration :class:`~openscvx.algorithms.history.AlgorithmHistory`
+            (available as ``problem.history`` after ``solve()``).
+        reduce: Component-axis reduction to one value per node, ``"mean"`` (default)
+            or ``"max"``.
+
+    Returns:
+        Plotly figure with one row per weight.
+
+    Example:
+        >>> problem.initialize()
+        >>> problem.solve()
+        >>> plot_weight_history(problem.history).show()
+    """
+    if not isinstance(history, AlgorithmHistory):
+        raise TypeError(f"Expected AlgorithmHistory (e.g. problem.history), got {type(history)}")
+    if reduce not in ("max", "mean"):
+        raise ValueError(f"reduce must be 'max' or 'mean', got {reduce!r}")
+    _reduce = np.max if reduce == "max" else np.mean
+
+    states = list(history.adaptive_state)
+    n_iters = len(states)
+    if n_iters == 0:
+        raise ValueError("No iteration history to plot (history.adaptive_state is empty).")
+
+    is_reject = np.array([s.startswith("Reject") for s in states])
+    accept_idx = np.where(~is_reject)[0]
+    reject_idx = np.where(is_reject)[0]
+    N = int(history.N)
+
+    # (title, list-of-arrays, recorded_every_iteration). lam_prox is recorded on
+    # every iteration; the multiplier weights only on accepted iterations.
+    candidates = [
+        ("Trust Region — lam_prox", history.lam_prox, True),
+        ("Virtual Control — lam_vc", history.lam_vc, False),
+        ("Virtual Buffer, Nodal — lam_vb_nodal", history.lam_vb_nodal, False),
+        ("Virtual Buffer, Convex — lam_vb_cvx", history.lam_vb_cvx, False),
+    ]
+    panels = []
+    for title, lst, is_full in candidates:
+        if len(lst) == 0 or _node_profile(lst[0], _reduce, N) is None:
+            continue  # empty, or no node axis (e.g. lam_vb_cross)
+        first = np.asarray(lst[0], dtype=float)
+        multi = first.ndim > 1 and int(np.prod(first.shape[1:])) > 1
+        ttl = title + (f"  [{reduce} over components]" if multi else "")
+        panels.append((ttl, lst, is_full))
+    if not panels:
+        raise ValueError("No per-node weight histories recorded to plot.")
+
+    n_rows = len(panels)
+    fig = make_subplots(
+        rows=n_rows,
+        cols=1,
+        subplot_titles=[p[0] for p in panels],
+        vertical_spacing=min(0.08, 0.4 / n_rows),
+    )
+
+    green = "rgba(50,205,50,{a})"
+    red = "rgba(255,99,71,{a})"
+    legend_shown = {"acc": False, "rej": False}
+
+    for row_i, (_ttl, lst, is_full) in enumerate(panels, start=1):
+        # (global_iter_index, array) pairs. Full-length weights map 1:1 to every
+        # iteration; accept-only weights map to the accepted iteration indices.
+        if is_full:
+            pairs = [(i, lst[i]) for i in range(min(len(lst), n_iters))]
+        else:
+            pairs = [(int(accept_idx[k]), lst[k]) for k in range(min(len(lst), len(accept_idx)))]
+
+        all_positive = True
+        for gi, arr in pairs:
+            y = _node_profile(arr, _reduce, N)
+            if y is None:
+                continue
+            if np.any(y <= 0):
+                all_positive = False
+            rejected = bool(is_reject[gi])
+            grp = "rej" if rejected else "acc"
+            color = (red if rejected else green).format(a=0.35 if rejected else 0.7)
+            fig.add_trace(
+                go.Scatter(
+                    x=np.arange(len(y)),
+                    y=y,
+                    mode="lines",
+                    line={"color": color, "width": 1},
+                    name="Rejected" if rejected else "Accepted",
+                    legendgroup=grp,
+                    showlegend=not legend_shown[grp],
+                    hovertemplate=(
+                        f"iter {gi} ({'reject' if rejected else 'accept'})"
+                        "<br>node %{x}<br>weight %{y:.3g}<extra></extra>"
+                    ),
+                ),
+                row=row_i,
+                col=1,
+            )
+            legend_shown[grp] = True
+
+        # Log scale only when strictly positive across all lines (weights hit 0).
+        fig.update_yaxes(
+            title_text="weight value",
+            type="log" if all_positive else "linear",
+            row=row_i,
+            col=1,
+        )
+
+    fig.update_xaxes(title_text="Node (time horizon)", row=n_rows, col=1)
+    fig.update_layout(
+        title_text=(
+            f"Autotuner Weight Profiles across Nodes  "
+            f"({len(accept_idx)} accepted, {len(reject_idx)} rejected of {n_iters} iters)"
+        ),
+        template="plotly_dark",
+        height=max(300, 260 * n_rows),
+        showlegend=True,
+        legend={
+            "yanchor": "top",
+            "y": 0.99,
+            "xanchor": "left",
+            "x": 1.02,
+            "bgcolor": "rgba(0, 0, 0, 0.5)",
+        },
+    )
     return fig

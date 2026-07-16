@@ -29,7 +29,7 @@ from openscvx.solvers.ptr_solver import (
 # ============================================================================
 
 
-def _dummy_subproblem_data(N=4, n_x=3, n_u=2, n_nodal=2, n_cross=1):
+def _dummy_subproblem_data(N=4, n_x=3, n_u=2, n_nodal=2, n_cross=1, n_cvx=1):
     """Fill a SubproblemData with deterministic, shape-correct test values."""
     return SubproblemData(
         x_bar=jnp.ones((N, n_x)),
@@ -52,6 +52,7 @@ def _dummy_subproblem_data(N=4, n_x=3, n_u=2, n_nodal=2, n_cross=1):
         lam_vc=jnp.ones((N - 1, n_x)),
         lam_vb_nodal=jnp.ones((N, n_nodal)),
         lam_vb_cross=jnp.ones((n_cross,)),
+        lam_vb_cvx=jnp.ones((N, n_cvx)),
         x_init=jnp.array([0.0, jnp.nan, 1.0]),
         x_term=jnp.full((n_x,), jnp.nan),
         params={},

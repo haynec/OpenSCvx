@@ -271,6 +271,7 @@ class AlgorithmHistory:
     lam_vc: List[Union[float, np.ndarray]] = field(default_factory=list)
     lam_cost: List[Union[float, np.ndarray]] = field(default_factory=list)
     lam_vb_nodal: List[np.ndarray] = field(default_factory=list)
+    lam_vb_cvx: List[np.ndarray] = field(default_factory=list)
     lam_vb_cross: List[np.ndarray] = field(default_factory=list)
     J_nonlin: List[float] = field(default_factory=list)
     J_lin: List[float] = field(default_factory=list)
@@ -364,6 +365,7 @@ class AlgorithmHistory:
                 state.lam_cost,
                 state.lam_vb_nodal,
                 state.lam_vb_cross,
+                state.lam_vb_cvx,
             )
         )
         (
@@ -382,6 +384,7 @@ class AlgorithmHistory:
             lam_cost_np,
             lam_vb_nodal_np,
             lam_vb_cross_np,
+            lam_vb_cvx_np,
         ) = leaves
 
         adaptive_code = int(asc_np)
@@ -441,6 +444,7 @@ class AlgorithmHistory:
         self.lam_cost.append(np.asarray(lam_cost_np))
         self.lam_vb_nodal.append(np.asarray(lam_vb_nodal_np))
         self.lam_vb_cross.append(np.asarray(lam_vb_cross_np))
+        self.lam_vb_cvx.append(np.asarray(lam_vb_cvx_np))
 
         self.J_nonlin.append(scalars["J_nonlin"])
         if J_lin is not None:

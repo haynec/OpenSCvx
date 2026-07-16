@@ -30,7 +30,7 @@ Design notes
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
 
 @dataclass
@@ -78,6 +78,7 @@ class NonnegConeConstraint(ConeConstraint):
 
     jax_fn: Callable
     m: int
+    slack_weight: Optional[float] = None
 
 
 @dataclass
@@ -98,3 +99,14 @@ class SOCConstraint(ConeConstraint):
     arg_fn: Callable
     bound_fn: Callable
     m_arg: int
+
+
+@dataclass
+class PSDConeConstraint(ConeConstraint):
+    """Generic PSD / LMI constraint: matrix_fn(x, u) ≽ 0.
+    CVXPY-only. JAX-native backends raise NotImplementedError.
+    """
+
+    matrix_fn: Callable  # (x_cvxpy_at_node, u_cvxpy_at_node) -> (n,n) cp.Expression
+    n: int
+    slack_weight: Optional[float] = None

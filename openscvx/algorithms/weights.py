@@ -35,6 +35,8 @@ class Weights:
     ``{name: weight}`` dicts). Use :meth:`build_vb_arrays` to populate
     ``lam_vb_nodal`` and ``lam_vb_cross`` once symbolic constraints are
     available.
+    Use :meth:`build_cvx_arrays` to populate ``lam_vb_cvx`` once symbolic constraints are
+    available.
 
     Attributes:
         lam_prox: Trust region (proximal) weight. Scalar (uniform) or
@@ -53,6 +55,8 @@ class Weights:
             ``(N, n_nodal)``. Built by :meth:`build_vb_arrays`.
         lam_vb_cross: Weights for cross-node constraints, shape
             ``(n_cross,)``. Built by :meth:`build_vb_arrays`.
+        lam_vb_cvx: Weights for soft convex constraints, shape
+            ``(N, n_cvx)``. Built by :meth:`build_cvx_arrays`.
     """
 
     lam_prox: Union[float, np.ndarray] = 1e-1
@@ -61,6 +65,7 @@ class Weights:
     lam_vb: float = 0.0
     lam_vb_nodal: Optional[np.ndarray] = None
     lam_vb_cross: Optional[np.ndarray] = None
+    lam_vb_cvx: Optional[np.ndarray] = None  # Added for soft convex constraints
 
     def __post_init__(self):
         # Coerce lists/lists-of-lists to numpy arrays.
@@ -491,3 +496,21 @@ class Weights:
 
         self.lam_vb_nodal = lam_vb_nodal
         self.lam_vb_cross = lam_vb_cross
+
+    def build_cvx_arrays(
+        self,
+        N: int,
+        nodal_convex_constraints: list,
+    ) -> None:
+        """Build per-constraint weight arrays for soft convex constraints.
+
+        Each convex constraint whose .slack_weight is not None gets a column
+        in lam_vb_cvx. Shape: (N, max(n_cvx_slacked, 1)).
+        """
+        slacked = [nc for nc in nodal_convex_constraints if nc.constraint.slack_weight is not None]
+        n_cvx = max(len(slacked), 1)  # avoid size-0 CVXPY parameters
+        lam_cvx = np.full((N, n_cvx), float(self.lam_vb))
+        for idx, nc in enumerate(slacked):
+            nodes = nc.nodes if nc.nodes is not None else list(range(N))
+            lam_cvx[nodes, idx] = float(nc.constraint.slack_weight)
+        self.lam_vb_cvx = lam_cvx

@@ -705,6 +705,7 @@ class MoreauPTRSolver(PTRSolver):
         lam_vc: np.ndarray,
         lam_vb_nodal: np.ndarray,
         lam_vb_cross: np.ndarray,
+        lam_vb_cvx: np.ndarray,
     ) -> None:
         del lam_vb_cross  # cross-node rejected at initialize()
         self._pen = {
@@ -712,6 +713,7 @@ class MoreauPTRSolver(PTRSolver):
             "lam_cost": np.asarray(lam_cost, dtype=float),
             "lam_vc": np.asarray(lam_vc, dtype=float),
             "lam_vb_nodal": np.asarray(lam_vb_nodal, dtype=float),
+            "lam_vb_cvx": np.asarray(lam_vb_cvx, dtype=float),
         }
 
     def update_boundary_conditions(

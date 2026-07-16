@@ -85,7 +85,11 @@ from .publication import (
     publication_trace_colors,
     show_plotly_with_latin_modern,
 )
-from .scp_iteration import plot_scp_convergence_histories, plot_scp_iterations
+from .scp_iteration import (
+    plot_scp_convergence_histories,
+    plot_scp_iterations,
+    plot_weight_history,
+)
 
 __all__ = [
     # 2D plotting functions (plotly)
@@ -99,6 +103,7 @@ __all__ = [
     "plot_virtual_control_heatmap",
     "plot_scp_iterations",
     "plot_scp_convergence_histories",
+    "plot_weight_history",
     "PublicationFigure",
     "PlotStyle",
     "VarSpec",

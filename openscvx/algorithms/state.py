@@ -128,6 +128,7 @@ class AlgorithmState:
             update_weights.
         lam_vb_nodal: Nodal virtual-buffer weights, shape ``(N, n_nodal)``.
         lam_vb_cross: Cross-node virtual-buffer weights, shape ``(n_cross,)``.
+        lam_vb_cvx: Virtual-buffer weights for soft convex constraints, shape ``(N, n_cvx)``.
         k: Iteration counter (starts at 1).
         J_tr: Current trust-region cost (scalar).
         J_vb: Current virtual-buffer cost (scalar).
@@ -176,6 +177,7 @@ class AlgorithmState:
     lam_cost_init: jnp.ndarray
     lam_vb_nodal: jnp.ndarray
     lam_vb_cross: jnp.ndarray
+    lam_vb_cvx: jnp.ndarray  # Added for soft convex constraints
     k: jnp.ndarray
     J_tr: jnp.ndarray
     J_vb: jnp.ndarray
@@ -288,6 +290,15 @@ class AlgorithmState:
         final_fixed = np.asarray(settings.sim.x.final_type) == "Fix"
         x_init_pin = np.where(init_fixed, x_initial, np.nan)
         x_term_pin = np.where(final_fixed, x_final, np.nan)
+        # lam_vb_cvx is populated by Weights.build_cvx_arrays, which
+        # Problem.initialize calls once the symbolic constraints are known. A
+        # Weights that never went through that step — constructed directly, or
+        # a problem with no slacked convex constraints — leaves it None. Fall
+        # back to the scalar lam_vb over one column, matching
+        # build_cvx_arrays' own ``n_cvx = max(len(slacked), 1)`` convention.
+        lam_vb_cvx_array = weights.lam_vb_cvx
+        if lam_vb_cvx_array is None:
+            lam_vb_cvx_array = np.full((n, 1), float(weights.lam_vb))
 
         return cls(
             x=put(jnp.asarray(settings.sim.x.guess, dtype=f)),
@@ -300,6 +311,7 @@ class AlgorithmState:
             lam_cost_init=put(jnp.asarray(lam_cost_init, dtype=f)),
             lam_vb_nodal=put(jnp.asarray(weights.lam_vb_nodal, dtype=f)),
             lam_vb_cross=put(jnp.asarray(weights.lam_vb_cross, dtype=f)),
+            lam_vb_cvx=put(jnp.asarray(lam_vb_cvx_array, dtype=f)),
             k=put(jnp.asarray(1, dtype=i)),
             J_tr=put(jnp.asarray(1e2, dtype=f)),
             J_vb=put(jnp.asarray(1e2, dtype=f)),

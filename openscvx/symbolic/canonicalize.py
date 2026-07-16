@@ -78,7 +78,7 @@ def canonicalize_nodal_constraint(
     """
     from openscvx.solvers.cones import NonnegConeConstraint, SOCConstraint, ZeroConeConstraint
     from openscvx.symbolic.affine import is_affine_in_state_control, is_constant
-    from openscvx.symbolic.expr.constraint import Equality, Inequality
+    from openscvx.symbolic.expr.constraint import Equality, Inequality, MatrixInequality
     from openscvx.symbolic.expr.linalg import Norm
     from openscvx.symbolic.lower import lower_to_jax
 
@@ -106,6 +106,15 @@ def canonicalize_nodal_constraint(
         jax_fn = lower_to_jax(constraint)  # returns lhs − rhs
         m = _m(constraint)
         return [ZeroConeConstraint(nodes=nodes, jax_fn=jax_fn, m=m)]
+
+    # ==================================================================
+    # MATRIX INEQUALITY  →  PSDConeConstraint
+    # ==================================================================
+    if isinstance(constraint, MatrixInequality):
+        raise NotImplementedError(
+            "PSD/LMI constraints (>>, <<) require CVXPyPTRSolver — "
+            "JAX-native backends (QPAX, Moreau) do not support SDP."
+        )
 
     # ==================================================================
     # INEQUALITY  →  varies by pattern
@@ -190,6 +199,11 @@ def canonicalize_nodal_constraint(
 
                     return _jnp.reshape(_fn(x, u, node, params), ())
 
+                if getattr(constraint, "slack_weight", None) is not None:
+                    raise NotImplementedError(
+                        "slack() is not yet supported for SOC (norm) constraints."
+                        "Use it on affine inequality constraints only."
+                    )
                 return [
                     SOCConstraint(
                         nodes=nodes,
@@ -217,7 +231,12 @@ def canonicalize_nodal_constraint(
                     t = _jnp.reshape(_bfn(x, u, node, params), ())
                     return _jnp.concatenate([v - t, -v - t])
 
-                return [NonnegConeConstraint(nodes=nodes, jax_fn=_inf_fn, m=2 * dim_v)]
+                slack_weight = getattr(constraint, "slack_weight", None)
+                return [
+                    NonnegConeConstraint(
+                        nodes=nodes, jax_fn=_inf_fn, m=2 * dim_v, slack_weight=slack_weight
+                    )
+                ]
 
             # Unknown norm order.
             raise NotImplementedError(
@@ -236,7 +255,8 @@ def canonicalize_nodal_constraint(
             )
         jax_fn = lower_to_jax(constraint)  # returns lhs − rhs  (≤ 0)
         m = _m(constraint)
-        return [NonnegConeConstraint(nodes=nodes, jax_fn=jax_fn, m=m)]
+        slack_weight = getattr(constraint, "slack_weight", None)
+        return [NonnegConeConstraint(nodes=nodes, jax_fn=jax_fn, m=m, slack_weight=slack_weight)]
 
     # ==================================================================
     # Unsupported inner constraint type

@@ -79,6 +79,7 @@ class CVXPyVariables:
     lam_cost: "cp.Parameter"
     lam_vc: "cp.Parameter"
     lam_vb_nodal: "cp.Parameter"
+    lam_vb_cvx: "cp.Parameter"
     lam_vb_cross: "cp.Parameter"
     prox_c: "cp.Parameter"
     prox_cc: "cp.Parameter"
@@ -106,6 +107,7 @@ class CVXPyVariables:
     grad_g_x: List["cp.Parameter"] = field(default_factory=list)
     grad_g_u: List["cp.Parameter"] = field(default_factory=list)
     nu_vb: List["cp.Variable"] = field(default_factory=list)
+    cvx_vb: List["cp.Variable"] = field(default_factory=list)
 
     # Cross-node constraint linearization (lists, one per constraint)
     g_cross: List["cp.Parameter"] = field(default_factory=list)

@@ -286,6 +286,7 @@ def create_cvxpy_variables(
     c_u: np.ndarray,
     n_nodal_constraints: int,
     n_cross_node_constraints: int,
+    n_cvx_slacked: int,
     A_d_sparsity: Optional[tuple] = None,
     B_d_sparsity: Optional[tuple] = None,
     C_d_sparsity: Optional[tuple] = None,
@@ -326,6 +327,7 @@ def create_cvxpy_variables(
     lam_cost = cp.Parameter(n_states, nonneg=True, name="lam_cost")
     lam_vc = cp.Parameter((N - 1, n_states), nonneg=True, name="lam_vc")
     lam_vb_nodal = cp.Parameter((N, max(n_nodal_constraints, 1)), nonneg=True, name="lam_vb_nodal")
+    lam_vb_cvx = cp.Parameter((N, max(n_cvx_slacked, 1)), nonneg=True, name="lam_vb_cvx")
     lam_vb_cross = cp.Parameter(max(n_cross_node_constraints, 1), nonneg=True, name="lam_vb_cross")
 
     # State
@@ -352,6 +354,7 @@ def create_cvxpy_variables(
     grad_g_x = []
     grad_g_u = []
     nu_vb = []
+    cvx_vb = []
     for idx_ncvx in range(n_nodal_constraints):
         g_x_sp = None
         g_u_sp = None
@@ -367,6 +370,10 @@ def create_cvxpy_variables(
             cp.Parameter((N, n_controls), name="grad_g_u_" + str(idx_ncvx), sparsity=g_u_sp)
         )
         nu_vb.append(cp.Variable(N, name="nu_vb_" + str(idx_ncvx)))  # Virtual Control for VB
+
+    # For convex slack constraints
+    for idx_cvx in range(n_cvx_slacked):
+        cvx_vb.append(cp.Variable(N, nonneg=True, name="cvx_vb_" + str(idx_cvx)))
 
     # Linearized Cross-Node Constraints
     g_cross = []
@@ -396,6 +403,7 @@ def create_cvxpy_variables(
         lam_cost=lam_cost,
         lam_vc=lam_vc,
         lam_vb_nodal=lam_vb_nodal,
+        lam_vb_cvx=lam_vb_cvx,
         lam_vb_cross=lam_vb_cross,
         prox_c=prox_c,
         prox_cc=prox_cc,
@@ -416,6 +424,7 @@ def create_cvxpy_variables(
         grad_g_x=grad_g_x,
         grad_g_u=grad_g_u,
         nu_vb=nu_vb,
+        cvx_vb=cvx_vb,
         g_cross=g_cross,
         grad_g_X_cross=grad_g_X_cross,
         grad_g_U_cross=grad_g_U_cross,
@@ -432,10 +441,7 @@ def create_cvxpy_variables(
 
 
 def lower_cvxpy_constraints(
-    constraints: ConstraintSet,
-    x_cvxpy: List,
-    u_cvxpy: List,
-    parameters: dict = None,
+    constraints: ConstraintSet, x_cvxpy: List, u_cvxpy: List, parameters: dict = None, cvx_vb=None
 ) -> Tuple[List, dict]:
     """Lower symbolic convex constraints to CVXPy constraints.
 
@@ -458,6 +464,7 @@ def lower_cvxpy_constraints(
         - List of CVXPy constraint objects ready for the OCP
         - Dict mapping parameter names to their CVXPy Parameter objects
 
+
     Example:
         After creating CVXPy variables::
 
@@ -477,6 +484,7 @@ def lower_cvxpy_constraints(
     import cvxpy as cp
 
     from openscvx.symbolic.expr import Parameter, traverse
+    from openscvx.symbolic.expr.constraint import MatrixInequality
     from openscvx.symbolic.expr.control import Control
     from openscvx.symbolic.expr.state import State
     from openscvx.symbolic.lowerers.cvxpy import lower_to_cvxpy
@@ -506,7 +514,7 @@ def lower_cvxpy_constraints(
         traverse(constraint.constraint, collect_params)
 
     cvxpy_constraints = []
-
+    cvx_idx = 0
     # Process nodal constraints
     for constraint in constraints.nodal_convex:
         # nodes should already be validated and normalized in preprocessing
@@ -523,6 +531,12 @@ def lower_cvxpy_constraints(
                 control_vars[expr.name] = expr
 
         traverse(constraint.constraint, collect_vars)
+
+        # For soft convex conststraints
+        # For soft convex constraints: relax with the pre-declared slack variable
+        is_soft = constraint.constraint.slack_weight is not None
+        is_matrix = isinstance(constraint.constraint, MatrixInequality)
+        n_mat = constraint.constraint.lhs.check_shape()[0] if is_matrix else None
 
         # Regular nodal constraint: apply at each specified node
         for node in nodes:
@@ -553,9 +567,20 @@ def lower_cvxpy_constraints(
                         f"This indicates a bug in the preprocessing pipeline."
                     )
 
-            # Lower the constraint to CVXPy
-            cvxpy_constraint = lower_to_cvxpy(constraint.constraint, variable_map)
-            cvxpy_constraints.append(cvxpy_constraint)
+            # Lower the constraint to CVXPy (relaxed with slack if soft)
+            if is_soft:
+                s = cvx_vb[cvx_idx]
+                lhs_c = lower_to_cvxpy(constraint.constraint.lhs, variable_map)
+                rhs_c = lower_to_cvxpy(constraint.constraint.rhs, variable_map)
+                if is_matrix:
+                    cvxpy_constraints.append(lhs_c - rhs_c + s[node] * np.eye(n_mat) >> 0)
+                else:
+                    cvxpy_constraints.append(lhs_c <= rhs_c + s[node])
+            else:
+                cvxpy_constraints.append(lower_to_cvxpy(constraint.constraint, variable_map))
+
+        if is_soft:
+            cvx_idx += 1
 
     # Process cross-node constraints
     for constraint in constraints.cross_node_convex:
@@ -656,6 +681,7 @@ def _lower_jax_constraints(
     """
     lowered_nodal: List[LoweredNodalConstraint] = []
     lowered_cross_node: List[LoweredCrossNodeConstraint] = []
+    lowered_convex_slack: List[LoweredNodalConstraint] = []
 
     # Lower regular nodal constraints
     if len(constraints.nodal) > 0:
@@ -673,6 +699,20 @@ def _lower_jax_constraints(
                 is_equality=isinstance(constraints.nodal[i].constraint, Equality),
             )
             lowered_nodal.append(constraint)
+
+    # Convex nodal slack constraints
+    for c in constraints.nodal_convex:
+        if getattr(c.constraint, "slack_weight", None) is None:
+            continue  # only slacked convex constraints
+        vfn = _build_violation_fn(c.constraint)
+        lowered_convex_slack.append(
+            LoweredNodalConstraint(
+                func=jax.vmap(vfn, in_axes=(0, 0, None, None)),  # same convention as nodal func
+                grad_g_x=None,
+                grad_g_u=None,  # convex -> no linearization -> no grads
+                nodes=c.nodes,
+            )
+        )
 
     # Lower cross-node constraints (trajectory-level)
     for cross_node_constraint in constraints.cross_node:
@@ -695,6 +735,7 @@ def _lower_jax_constraints(
         nodal=lowered_nodal,
         cross_node=lowered_cross_node,
         ctcs=list(constraints.ctcs),  # Copy the list
+        convex_slack=lowered_convex_slack,  # new field for convex slack constraints
     )
 
 
@@ -898,3 +939,28 @@ def lower_symbolic_problem(
         cvxpy_params=cvxpy_params,
         algebraic_prop=algebraic_prop_lowered,
     )
+
+
+def _build_violation_fn(constraint):
+    """Signed constraint violation g(x,u,node,params); positive == violated.
+    Both branches return the RAW signed residual — the autotuner applies
+    max(0, .) uniformly (matching the nonconvex `func` convention).
+
+    Inequality       -> reuse @visitor(Inequality): lower_to_jax(constraint) == lhs - rhs.
+    MatrixInequality -> no JAX visitor exists, so lower the operand matrices
+                        (which DO have visitors) and reduce to -lambda_min(lhs - rhs).
+    """
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr.constraint import MatrixInequality
+
+    if isinstance(constraint, MatrixInequality):
+        lhs_fn = lower_to_jax(constraint.lhs)
+        rhs_fn = lower_to_jax(constraint.rhs)
+
+        def vfn(x, u, node, params, _l=lhs_fn, _r=rhs_fn):
+            M = _l(x, u, node, params) - _r(x, u, node, params)
+            return -jnp.linalg.eigvalsh(M).min()  # > 0 when M is not PSD
+
+        return vfn
+    return lower_to_jax(constraint)  # Inequality -> lhs - rhs directly

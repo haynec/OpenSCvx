@@ -72,6 +72,7 @@ class Constraint(Expr):
         self.lhs = lhs
         self.rhs = rhs
         self.is_convex = False
+        self.slack_weight : Optional[float] = None # None implies hard constraint, otherwise soft constraint with slack weight
 
     def children(self) -> List["Expr"]:
         return [self.lhs, self.rhs]
@@ -86,6 +87,7 @@ class Constraint(Expr):
         canon_diff = diff.canonicalize()
         new_constraint = type(self)(canon_diff, Constant(np.array(0)))
         new_constraint.is_convex = self.is_convex  # Preserve convex flag
+        new_constraint.slack_weight = self.slack_weight # Preserve slack weight
         return new_constraint
 
     def check_shape(self) -> Tuple[int, ...]:
@@ -165,6 +167,19 @@ class Constraint(Expr):
         self.is_convex = True
         return self
 
+    def slack(self, weight: float = 1.0)-> "Constraint":
+        """ Allow the convex constraint to be violated, penalized by a slack weight.
+        
+        Args:
+            weight: The slack weight to apply to the constraint.
+        
+        Returns:
+            Self with slack weight set to the given value (enables method chaining)
+        """
+        
+        self.slack_weight = weight
+        return self
+
 
 class Equality(Constraint):
     """Equality constraint for optimization problems.
@@ -198,6 +213,27 @@ class Inequality(Constraint):
 
     def __repr__(self) -> str:
         return f"{self.lhs!r} <= {self.rhs!r}"
+
+class MatrixInequality(Constraint):
+    """Matrix inequality: lhs ≽ rhs  (lhs - rhs is PSD).
+    Created by >> and << operators on matrix Expr objects.
+    Always convex — do not call .convex() separately.
+    """
+    def __init__(self, lhs: Expr, rhs: Expr):
+        super().__init__(lhs, rhs)
+        self.is_convex = True   # override: PSD is always convex
+
+    def check_shape(self):
+        L = self.lhs.check_shape()
+        R = self.rhs.check_shape()
+        if len(L) != 2 or L[0] != L[1]:
+            raise ValueError(f"MatrixInequality lhs must be square 2D, got {L}")
+        if L != R:
+            raise ValueError(f"MatrixInequality lhs shape {L} != rhs shape {R}")
+        return L
+
+    def __repr__(self):
+        return f"{self.lhs!r} >> {self.rhs!r}"
 
 
 class NodalConstraint(Expr):
@@ -396,6 +432,18 @@ class NodalConstraint(Expr):
                 constraint = (x <= 10).at([0, 5, 10]).convex()
         """
         self.constraint.convex()
+        return self
+
+    def slack(self, weight: float = 1.0) -> "NodalConstraint":
+        """ Allow the convex constraint to be violated, penalized by a slack weight.
+        
+        Args:
+            weight: The slack weight to apply to the constraint.
+        
+        Returns:
+            Self with slack weight set to the given value (enables method chaining)
+        """
+        self.constraint.slack(weight)
         return self
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:

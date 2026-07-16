@@ -1272,6 +1272,11 @@ class Problem:
             n_byof_cross=n_byof_cross,
         )
 
+        self._algorithm.weights.build_cvx_arrays(
+            N=self.symbolic.N,
+            nodal_convex_constraints=self.symbolic.constraints.nodal_convex,
+        )
+
         # Build the fused JAX-pure SCP iteration body: it discretizes, linearizes
         # the constraints, solves the convex subproblem (via the backend's
         # iteration_callback), and folds the result through the autotuner — one

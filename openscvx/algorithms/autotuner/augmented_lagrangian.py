@@ -161,6 +161,9 @@ class AugmentedLagrangian(AcceptanceRatioAutotuner):
             "lam_vb_cross": self._update_virtual_buffer_cross_weights(
                 state, candidate, nodal_constraints, params, new_lam_prox
             ),
+            "lam_vb_cvx": self._update_convex_slack_weights(
+                state, candidate, nodal_constraints, params, new_lam_prox
+            ),
         }
 
     def _update_virtual_control_weights(
@@ -185,6 +188,11 @@ class AugmentedLagrangian(AcceptanceRatioAutotuner):
         case2 = state.lam_vc + (nu**2) / state.hyper.ep * scale
         vc_new = jnp.where(nu > state.hyper.ep, case1, case2)
         return jnp.minimum(state.hyper.lam_vc_max, vc_new)
+
+    def _piecewise_weight(self, current, nu_slice, scale, ep):
+        case1 = current + nu_slice * scale
+        case2 = current + (nu_slice**2) / ep * scale
+        return jnp.where(nu_slice > ep, case1, case2)
 
     def _update_virtual_buffer_nodal_weights(
         self,
@@ -254,6 +262,32 @@ class AugmentedLagrangian(AcceptanceRatioAutotuner):
 
         # Intentional: shares the virtual-control cap ``lam_vc_max`` — see
         # :py:meth:`_update_virtual_buffer_nodal_weights`.
+        return jnp.minimum(state.hyper.lam_vc_max, lam_vb_new)
+
+    def _update_convex_slack_weights(
+        self,
+        state: "AlgorithmState",
+        candidate: "CandidateIterate",
+        nodal_constraints: "LoweredJaxConstraints",
+        params: dict,
+        lam_prox: jnp.ndarray,
+    ) -> jnp.ndarray:
+        """Update virtual-buffer weights for convex slack constraints."""
+        lam_vb_new = state.lam_vb_cvx
+        scale = state.hyper.eta_lambda * (1.0 / (2.0 * jnp.max(lam_prox)))
+        for idx, constraint in enumerate(nodal_constraints.convex_slack):
+            nu = jnp.maximum(0.0, constraint.func(candidate.x, candidate.u, 0, params))
+            if constraint.nodes is not None:
+                na = jnp.asarray(constraint.nodes)
+                updated = self._piecewise_weight(
+                    state.lam_vb_cvx[na, idx], nu[na], scale, state.hyper.ep
+                )
+                lam_vb_new = lam_vb_new.at[na, idx].set(updated)
+            else:
+                updated = self._piecewise_weight(
+                    state.lam_vb_cvx[:, idx], nu, scale, state.hyper.ep
+                )
+                lam_vb_new = lam_vb_new.at[:, idx].set(updated)
         return jnp.minimum(state.hyper.lam_vc_max, lam_vb_new)
 
 
