@@ -11,7 +11,6 @@ effect on the next solve.
 """
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 
 from tests.e2e.test_solve_batched_brachistochrone import _build_brachistochrone_with_params
@@ -46,9 +45,7 @@ def test_initialize_reads_boundary_condition_edited_after_construction():
 
     prob.initialize()
 
-    np.testing.assert_allclose(
-        np.asarray(prob.state.x_init_pin[position._slice]), new_initial
-    )
+    np.testing.assert_allclose(np.asarray(prob.state.x_init_pin[position._slice]), new_initial)
 
     jax.clear_caches()
 
