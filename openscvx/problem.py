@@ -1113,6 +1113,8 @@ class Problem:
 
         This method vmaps dynamics, JIT-compiles constraints, builds the convex
         subproblem, and initializes the solver state. Must be called before solve().
+        The solver state is seeded from the current `.guess` and `.initial`/`.final`
+        on the State/Control objects; to re-seed after `initialize()`, use :meth:`reset`.
 
         Example:
             Prior to calling the `.solve()` method it is necessary to initialize the problem
@@ -1331,6 +1333,11 @@ class Problem:
         else:
             # Printing was disabled after __init__, disable emitter to avoid queue buildup
             self.emitter_function = lambda data: None
+
+        # Re-read guesses and boundary conditions off the State/Control objects
+        # before seeding the state, so post-construction edits take effect (as reset() does).
+        self._sync_guesses()
+        self._sync_boundary_conditions()
 
         # Create fresh solver state + history pair.
         self._state = self._default_state()
