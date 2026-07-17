@@ -6,10 +6,19 @@ Run with no arguments from anywhere inside a checkout of this branch:
     python examples/drone/verify_foh_fix.py
 
 It compares two codebases:
-  - "after"  = THIS checkout (wherever this script currently lives -- the
-               fix, since this script ships on fix/fohinterpolation_offbyone_correction)
-  - "before" = origin/main's current tip, fetched and checked out into a
-               throwaway git worktree at runtime, removed when done
+  - "after"  = THIS checkout (wherever this script currently lives)
+  - "before" = the exact pre-fix commit (BEFORE_COMMIT below -- the parent of
+               the interpolation-fix commit, i.e. the last commit before it
+               was applied), checked out into a throwaway git worktree at
+               runtime and removed when done.
+
+BEFORE_COMMIT is a fixed commit SHA, not a branch pointer, deliberately --
+"origin/main" would stop being useful the moment this branch merges into
+main (main would then equal "after", making the comparison vacuous). Pinning
+to the exact pre-fix commit keeps this comparison meaningful forever,
+regardless of where main goes afterward. That commit is an ancestor of this
+branch's own history, so it's always present locally -- no network fetch
+needed.
 
 No files are copied by hand: the "before" codebase is obtained by asking git
 for it directly at run time. Each codebase is solved and verified in its own
@@ -26,6 +35,10 @@ import tempfile
 from pathlib import Path
 
 THIS_FILE = Path(__file__).resolve()
+
+# Last commit before the FOH interpolation fix (parent of the fix commit).
+# Pinned to an exact SHA -- see module docstring for why.
+BEFORE_COMMIT = "56a68269b050d6df6d2fa9faff4807eb6ce711ae"
 
 # --- parameters (validated in the earlier investigation) ---
 LICQ_MAX = 1e-6
@@ -198,20 +211,27 @@ def main() -> None:
         print("WORKER_RESULT " + json.dumps(result))
         return
 
-    # Orchestrator: "after" = this checkout; "before" = origin/main, fetched
-    # into a throwaway worktree and removed when done.
+    # Orchestrator: "after" = this checkout; "before" = the pinned pre-fix
+    # commit (BEFORE_COMMIT), checked out into a throwaway worktree and
+    # removed when done. See module docstring for why this is a fixed SHA
+    # rather than origin/main.
     repo_root = subprocess.run(
         ["git", "-C", str(THIS_FILE.parent), "rev-parse", "--show-toplevel"],
         capture_output=True, text=True, check=True,
     ).stdout.strip()
 
-    subprocess.run(["git", "-C", repo_root, "fetch", "origin", "main"], check=True)
+    verify = subprocess.run(
+        ["git", "-C", repo_root, "cat-file", "-e", BEFORE_COMMIT], capture_output=True,
+    )
+    if verify.returncode != 0:
+        # not present locally (e.g. a shallow clone) -- fetch it directly, no branch needed
+        subprocess.run(["git", "-C", repo_root, "fetch", "origin", BEFORE_COMMIT], check=True)
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="foh_verify_before_"))
     tmp_dir.rmdir()  # git worktree add requires the path not exist yet
     try:
         subprocess.run(
-            ["git", "-C", repo_root, "worktree", "add", "--detach", str(tmp_dir), "origin/main"],
+            ["git", "-C", repo_root, "worktree", "add", "--detach", str(tmp_dir), BEFORE_COMMIT],
             check=True,
         )
         before_commit = subprocess.run(
