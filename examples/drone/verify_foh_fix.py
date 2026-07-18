@@ -197,6 +197,10 @@ def run_worker(openscvx_root: str) -> dict:
         "J_tr": float(state.J_tr),
         "true_max_violation": float(viol.max()),
         "final_pos_err": final_err,
+        "flown_position": y[0:3, :].T.tolist(),
+        "certified_nodes": x[:, 0:3].tolist(),
+        "obstacle_centers": [c.tolist() for c in obstacle_center_positions],
+        "obstacle_A": [A.tolist() for A in A_obs],
     }
 
 
@@ -266,6 +270,79 @@ def main() -> None:
         b_str = f"{b:.4e}" if isinstance(b, float) else str(b)
         a_str = f"{a:.4e}" if isinstance(a, float) else str(a)
         print(f"{key:22}{b_str:>20}{a_str:>20}")
+
+    make_plots(before, after, THIS_FILE.parent)
+
+
+def make_plots(before: dict, after: dict, out_dir: Path) -> None:
+    import matplotlib
+    matplotlib.use("Agg")
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    centers = before["obstacle_centers"]
+    A_list = [np.array(A) for A in before["obstacle_A"]]
+
+    def violation(pos):
+        return max(1.0 - (np.array(pos) - np.array(c)) @ A @ (np.array(pos) - np.array(c))
+                   for c, A in zip(centers, A_list))
+
+    fb = np.array(before["flown_position"])
+    fa = np.array(after["flown_position"])
+    cb = np.array(before["certified_nodes"])
+    ca = np.array(after["certified_nodes"])
+
+    fig, axes = plt.subplots(1, 2, figsize=(13, 6))
+    for ax, title in zip(axes, ["XY (top view)", "XZ (side view)"]):
+        sel = (0, 1) if "XY" in title else (0, 2)
+        for center, A in zip(centers, A_list):
+            Asub = A[np.ix_(list(sel), list(sel))]
+            w, v = np.linalg.eigh(Asub)
+            r = 1 / np.sqrt(w)
+            theta = np.linspace(0, 2 * np.pi, 100)
+            pts = v @ np.diag(r) @ np.array([np.cos(theta), np.sin(theta)])
+            ax.fill(pts[0] + center[sel[0]], pts[1] + center[sel[1]], color="gray", alpha=0.4, zorder=0)
+        ax.plot(fb[:, sel[0]], fb[:, sel[1]], "r-", lw=2, label="flown (buggy, before)")
+        ax.plot(fa[:, sel[0]], fa[:, sel[1]], "b-", lw=2, label="flown (fixed, after)")
+        ax.plot(cb[:, sel[0]], cb[:, sel[1]], "rx", ms=8, label="certified nodes (before)")
+        ax.plot(ca[:, sel[0]], ca[:, sel[1]], "b+", ms=10, mew=2, label="certified nodes (after)")
+        ax.set_title(title)
+        ax.set_xlabel("xyz"[sel[0]]); ax.set_ylabel("xyz"[sel[1]])
+        ax.axis("equal"); ax.grid(alpha=0.3)
+    axes[0].legend(loc="upper center", fontsize=8)
+    plt.tight_layout()
+    plt.savefig(out_dir / "trajectory_comparison.png", dpi=130)
+    plt.close(fig)
+
+    vb = np.array([violation(p) for p in fb])
+    worst_k = int(np.argmax(vb))
+    worst_idx = int(np.argmax([1.0 - (fb[worst_k] - np.array(c)) @ A @ (fb[worst_k] - np.array(c))
+                                for c, A in zip(centers, A_list)]))
+    c = np.array(centers[worst_idx]); A = A_list[worst_idx]
+
+    fig, ax = plt.subplots(figsize=(7, 7))
+    Asub = A[np.ix_([0, 2], [0, 2])]
+    w, v = np.linalg.eigh(Asub)
+    r = 1 / np.sqrt(w)
+    theta = np.linspace(0, 2 * np.pi, 200)
+    pts = v @ np.diag(r) @ np.array([np.cos(theta), np.sin(theta)])
+    ax.fill(pts[0] + c[0], pts[1] + c[2], color="gray", alpha=0.5, label="obstacle boundary (XZ slice)", zorder=0)
+    margin = 3.5
+    mask_b = np.abs(fb[:, 0] - c[0]) < margin
+    mask_a = np.abs(fa[:, 0] - c[0]) < margin
+    ax.plot(fb[mask_b, 0], fb[mask_b, 2], "r-", lw=2.5, label=f"flown (buggy) max viol={vb.max():.3f}")
+    ax.plot(fa[mask_a, 0], fa[mask_a, 2], "b-", lw=2.5, label="flown (fixed)")
+    ax.plot([fb[worst_k, 0]], [fb[worst_k, 2]], "ko", ms=8, label="worst point (buggy)")
+    ax.set_xlim(c[0] - margin, c[0] + margin); ax.set_ylim(c[2] - margin, c[2] + margin)
+    ax.set_aspect("equal"); ax.set_xlabel("x"); ax.set_ylabel("z")
+    ax.set_title(f"Zoom on obstacle {worst_idx + 1}, XZ slice")
+    ax.legend(fontsize=9); ax.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_dir / "trajectory_zoom_xz.png", dpi=140)
+    plt.close(fig)
+
+    print(f"\nwrote {out_dir / 'trajectory_comparison.png'}")
+    print(f"wrote {out_dir / 'trajectory_zoom_xz.png'}")
 
 
 if __name__ == "__main__":
