@@ -1,6 +1,11 @@
 """Parser handlers for linear algebra operations.
 
 Handlers: Norm, Sum, Diag, Inv, Transpose
+
+Each handler is registered under its function name via ``@function`` and turns the
+call-syntax form (e.g. ``Norm(x, 2)``) that the Pratt parser encounters in an
+expression string into the corresponding linear-algebra ``Expr`` node, forwarding
+options such as the norm order.
 """
 
 from openscvx.symbolic.expr.expr import Constant

@@ -149,7 +149,7 @@
  * Hero title: Material's .md-typeset h1 beats a lone class — use h1 + id + .md-typeset
  * so OpenSCvx actually renders at display size.
  */
-.osc-home-hero__inner.md-typeset h1#osc-home-hero-title.osc-home-hero__title {
+.osc-home-hero__inner.md-typeset p#osc-home-hero-title.osc-home-hero__title {
   margin: 0 0 1rem;
   font-family: "League Spartan", var(--md-text-font-family), system-ui, sans-serif;
   font-weight: 600 !important;
@@ -161,7 +161,7 @@
 }
 
 /* Slate: hero copy in white (light mode keeps warm custom palette above). */
-[data-md-color-scheme="slate"] .osc-home-hero__inner.md-typeset h1#osc-home-hero-title.osc-home-hero__title {
+[data-md-color-scheme="slate"] .osc-home-hero__inner.md-typeset p#osc-home-hero-title.osc-home-hero__title {
   color: var(--osc-palette-4) !important;
 }
 
@@ -443,7 +443,7 @@
 
 /* Light hero title = same fill as .md-button--primary (“Getting started”) */
 [data-md-color-scheme="default"][data-md-color-primary="custom"][data-md-color-accent="custom"]
-  .osc-home-hero__inner.md-typeset h1#osc-home-hero-title.osc-home-hero__title {
+  .osc-home-hero__inner.md-typeset p#osc-home-hero-title.osc-home-hero__title {
   color: var(--md-primary-bg-color) !important;
 }
 

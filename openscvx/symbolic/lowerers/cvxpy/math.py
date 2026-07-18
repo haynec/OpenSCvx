@@ -2,6 +2,14 @@
 
 Visitors: Sin, Cos, Tan, Tanh, Exp, Log, Abs, PositivePart, Square, Huber,
           SmoothReLU, Sqrt, Max, Min, LogSumExp, Linterp, Cinterp, Bilerp
+
+Lowers the scalar math AST nodes to CVXPy expressions, but only the subset with a
+disciplined-convex form: the convex atoms (``Exp``, ``Abs``, ``Square``,
+``PositivePart``, ``Huber``, ``SmoothReLU``, ``Max``, ``LogSumExp``), the concave
+atoms (``Log``, ``Sqrt``, ``Min``), and the DCP curvature they carry. The nodes
+with no convex representation — the trigonometric functions and the interpolators
+(``Linterp``, ``Cinterp``, ``Bilerp``) — raise ``NotImplementedError`` with a
+message steering the user to a piecewise-linear reformulation or the JAX layer.
 """
 
 import cvxpy as cp

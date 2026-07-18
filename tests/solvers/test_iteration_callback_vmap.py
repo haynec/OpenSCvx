@@ -22,12 +22,13 @@ import numpy as np
 import pytest
 
 from openscvx.solvers.ptr_solver import SubproblemData, SubproblemSolution
-from tests._marks import requires_moreau
 from tests.solvers._iteration_callback_helpers import (
     build_brachistochrone,
     populate_numpy_stash,
     subproblem_data_from_numpy_stash,
 )
+
+pytestmark = pytest.mark.e2e
 
 
 def _make_batch(data: SubproblemData, scales) -> SubproblemData:
@@ -63,9 +64,7 @@ def _make_batch(data: SubproblemData, scales) -> SubproblemData:
 # ============================================================================
 
 
-pytest.importorskip("qpax")
-
-
+@pytest.mark.qpax
 def test_qpax_iteration_callback_composes_with_vmap():
     """``jax.vmap(cb)`` over a batch of distinct ``SubproblemData`` must
     yield per-element-correct ``SubproblemSolution`` slices.
@@ -112,7 +111,7 @@ def test_qpax_iteration_callback_composes_with_vmap():
 # ============================================================================
 
 
-@requires_moreau
+@pytest.mark.moreau
 def test_moreau_iteration_callback_composes_with_vmap():
     """Same contract as the QPAX variant — ``jax.vmap`` over distinct
     ``SubproblemData`` instances yields per-element-correct solutions.

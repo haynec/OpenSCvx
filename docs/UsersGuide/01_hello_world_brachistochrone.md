@@ -1,3 +1,8 @@
+---
+description: >-
+  A hello-world OpenSCvx tutorial that solves the brachistochrone minimum-time problem: states, controls, dynamics, time, and CTCS constraints.
+---
+
 # 01 Hello Brachistochrone
 
 In this _hello world_ tutorial we will introduce the reader to the fundamental concepts and API needed to define and solve a problem using OpenSCvx as well as how the results can be accessed.
@@ -58,7 +63,7 @@ $$
 t_f^* = \sqrt{\frac{r}{g}} \phi_f
 $$
 
-Because of these advantageous properties the Brachistochrone problem is extensively leveraged as a [unit test](https://github.com/OpenSCvx/OpenSCvx/blob/main/tests/test_brachistochrone.py).
+Because of these advantageous properties the Brachistochrone problem is extensively leveraged as a [unit test](https://github.com/OpenSCvx/OpenSCvx/blob/main/tests/e2e/test_brachistochrone.py).
 We would highly recommend that anyone setting out to develop some kind of optimization software do the same.
 It may not be necessary _nor_ sufficient, but a lot of things have to be working properly to solve Brachistochrone problem.
 

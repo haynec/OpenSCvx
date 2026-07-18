@@ -1,3 +1,8 @@
+---
+description: >-
+  Optimize a 7-DOF redundant arm pick-and-place in OpenSCvx using Lie-group forward kinematics on SE(3) and algebraic propagated states.
+---
+
 # 07 Multi-Link Arms: Lie Algebra and Propagated States
 
 In this tutorial we leave the world of free-flying rigid bodies and step into manipulation.

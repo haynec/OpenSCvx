@@ -1,7 +1,11 @@
-# Exact Discretization
+---
+title: Exact Discretization
+description: >-
+  How OpenSCvx discretizes and linearizes continuous-time dynamics by
+  integrating an augmented state vector to build the ZOH/FOH transition matrices.
+---
 
-!!! Warning
-    This page is still under development :construction:.
+# Exact Discretization
 
 ``` py title="dVdt.py"
 def dVdt(self,

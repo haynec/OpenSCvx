@@ -1,3 +1,8 @@
+---
+description: >-
+  Add continuous line-of-sight viewpoint constraints to a 6-DOF OpenSCvx trajectory optimization problem.
+---
+
 # 04 Looking Back: Viewpoint Constraints
 
 In this tutorial we will combine what we have learned in the past several exercises while introducing a new viewplanning constraint formulation.

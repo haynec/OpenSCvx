@@ -1,3 +1,8 @@
+---
+description: >-
+  Solve 6-DOF obstacle avoidance in OpenSCvx using parameters and ox.Vmap to batch many obstacles without hand-written Python loops.
+---
+
 # 03 Obstacle Avoidance: 6-DOF Dynamics, Parameters, and Vmap
 
 In this tutorial we tackle a more realistic drone control problem: navigating through obstacles with full 6-DOF rigid body dynamics.

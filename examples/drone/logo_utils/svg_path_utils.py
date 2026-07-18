@@ -1,3 +1,5 @@
+"""SVG path extraction utilities for the logo-tracing drone examples."""
+
 import jax.numpy as jnp
 import numpy as np
 from svgpathtools import svg2paths2

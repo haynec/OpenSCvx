@@ -1,6 +1,17 @@
 """JAX visitors for logic expressions.
 
 Visitors: All, Any, Cond
+
+Lowers the logic AST nodes to traceable JAX functions: ``All``/``Any`` reduce
+predicate residuals (satisfied when ``<= 0``) with ``jnp.all``/``jnp.any``, and
+``Cond`` wraps ``jax.lax.cond`` so a predicate selects between two lowered
+branches at runtime, optionally gated to a set of node ranges. These
+branching/boolean nodes have no disciplined-convex form, so they are lowered only
+by this JAX backend, never by CVXPy.
+
+Both ``cond`` branches are cast to a shared default float dtype
+(:func:`set_default_float_dtype`, configured by ``Problem.__init__``) to avoid
+dtype-mismatch errors when JAX traces the two branches separately.
 """
 
 import jax.numpy as jnp
@@ -8,6 +19,7 @@ from jax.lax import cond
 
 # Expression types to handle — uncomment as you paste visitors:
 from openscvx.symbolic.expr.logic import All, Any, Cond
+from openscvx.symbolic.lowerers.jax._lowerer import pause_memo, resume_memo
 from openscvx.symbolic.lowerers.jax._registry import visitor  # noqa: F401
 
 # Module-level default dtype for conditional branches
@@ -189,11 +201,20 @@ def _visit_cond(lowerer, node: Cond):
         def _false_branch(_):
             return jnp.asarray(false_fn(x, u, node_arg, params), dtype=default_dtype)
 
-        return cond(
-            pred_bool,
-            _true_branch,
-            _false_branch,
-            operand=None,
-        )
+        # lax.cond traces each branch separately, but both branch closures see
+        # the same captured (x, u, node, params). Pause the memo so shared
+        # subexpressions are recomputed inside each branch: a value cached in
+        # one trace is not valid in another.
+        pause_memo()
+        try:
+            result = cond(
+                pred_bool,
+                _true_branch,
+                _false_branch,
+                operand=None,
+            )
+        finally:
+            resume_memo()
+        return result
 
     return cond_fn

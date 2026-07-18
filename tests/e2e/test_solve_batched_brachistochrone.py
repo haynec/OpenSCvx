@@ -7,7 +7,7 @@ spellings of the same batched solve, so over a stack of boundary pins or
 parameter values each batch element must agree with the corresponding
 ``solve_jax`` result. CVXPy runs the ``B`` solves sequentially (host CVXPy
 isn't thread-safe); QPAX runs them in parallel under vmap. Parallels
-``tests/test_solve_jax_vmap_brachistochrone.py``.
+``tests/e2e/test_solve_jax_vmap_brachistochrone.py``.
 """
 
 import jax
@@ -26,11 +26,8 @@ from tests.solvers._iteration_callback_helpers import build_brachistochrone
 # === Boundary-pin batching ===
 
 
-@pytest.mark.parametrize("backend", ["cvxpy", "qpax"])
+@pytest.mark.parametrize("backend", ["cvxpy", pytest.param("qpax", marks=pytest.mark.qpax)])
 def test_solve_batched_matches_solve_jax_over_x_initial(backend):
-    if backend == "qpax":
-        pytest.importorskip("qpax")
-
     prob = build_brachistochrone(backend, n=8, k_max=20)
     prob.initialize()
 
@@ -129,9 +126,8 @@ def _build_brachistochrone_with_params(backend: str, n: int = 8, k_max: int = 20
     return prob
 
 
+@pytest.mark.qpax
 def test_solve_batched_mixed_shared_and_batched_parameters():
-    pytest.importorskip("qpax")
-
     prob = _build_brachistochrone_with_params("qpax", n=8, k_max=20)
     prob.initialize()
 
@@ -155,9 +151,8 @@ def test_solve_batched_mixed_shared_and_batched_parameters():
     jax.clear_caches()
 
 
+@pytest.mark.qpax
 def test_solve_batched_in_axes_prefix_matches_inference():
-    pytest.importorskip("qpax")
-
     prob = _build_brachistochrone_with_params("qpax", n=8, k_max=8)
     prob.initialize()
 
@@ -179,9 +174,8 @@ def test_solve_batched_in_axes_prefix_matches_inference():
 # === Hyperparameter sweeps ===
 
 
+@pytest.mark.qpax
 def test_solve_batched_max_iters_sweep_matches_solve_jax():
-    pytest.importorskip("qpax")
-
     prob = build_brachistochrone("qpax", n=8, k_max=20)
     prob.initialize()
 
@@ -207,9 +201,8 @@ def test_solve_batched_max_iters_sweep_matches_solve_jax():
     jax.clear_caches()
 
 
+@pytest.mark.qpax
 def test_solve_batched_ep_tr_sweep_matches_solve_jax():
-    pytest.importorskip("qpax")
-
     prob = build_brachistochrone("qpax", n=8, k_max=20)
     prob.initialize()
 
@@ -230,9 +223,8 @@ def test_solve_batched_ep_tr_sweep_matches_solve_jax():
     jax.clear_caches()
 
 
+@pytest.mark.qpax
 def test_solve_batched_lam_prox_fill_sweep_matches_solve_jax():
-    pytest.importorskip("qpax")
-
     prob = build_brachistochrone("qpax", n=8, k_max=20)
     prob.initialize()
 
@@ -259,9 +251,8 @@ def test_solve_batched_lam_prox_fill_sweep_matches_solve_jax():
     jax.clear_caches()
 
 
+@pytest.mark.qpax
 def test_solve_batched_algorithm_k_max_matches_max_iters_kwarg():
-    pytest.importorskip("qpax")
-
     prob = build_brachistochrone("qpax", n=8, k_max=20)
     prob.initialize()
 
@@ -315,9 +306,8 @@ class _ProxRampAutotuner(AutotuningBase):
         )
 
 
+@pytest.mark.qpax
 def test_user_autotuner_knob_sweeps_through_solve_batched():
-    pytest.importorskip("qpax")
-
     prob = build_brachistochrone("qpax", n=8, k_max=10, autotuner=_ProxRampAutotuner())
     prob.initialize()
 
@@ -340,6 +330,7 @@ def test_user_autotuner_knob_sweeps_through_solve_batched():
     jax.clear_caches()
 
 
+@pytest.mark.qpax
 def test_solve_batched_gamma_1_sweep_diverges():
     """Sweeping the trust-region growth factor ``gamma_1`` steers the solve.
 
@@ -350,7 +341,6 @@ def test_solve_batched_gamma_1_sweep_diverges():
     elements genuinely diverge (different iterate trajectories), and each
     element matches its single ``solve_jax`` reference.
     """
-    pytest.importorskip("qpax")
 
     prob = build_brachistochrone("qpax", n=8, k_max=20, autotuner=AugmentedLagrangian())
     prob.initialize()
@@ -371,9 +361,8 @@ def test_solve_batched_gamma_1_sweep_diverges():
     jax.clear_caches()
 
 
+@pytest.mark.qpax
 def test_augmented_lagrangian_declared_knobs_are_overridable():
-    pytest.importorskip("qpax")
-
     # AugmentedLagrangian declares rho_init / rho_max / lam_cost_drop on its
     # HyperParams container, so the override channel accepts them by name. rho_init
     # and rho_max currently have no read sites in update_weights (vestigial

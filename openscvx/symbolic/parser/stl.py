@@ -1,6 +1,13 @@
 """Parser handlers for GMSR-based Signal Temporal Logic operations.
 
 Handlers: Or, And, Not, IfThen, IntegerVariable, Always, Eventually, Until
+
+Each handler is registered under its function name via ``@function`` and turns the
+call-syntax form (e.g. ``Always(pred, interval)``) that the Pratt parser
+encounters in an expression string into the corresponding GMSR STL ``Expr`` node —
+the propositional connectives and the interval-carrying temporal operators. This
+is the in-house GMSR STL family, distinct from the external-library
+:mod:`openscvx.symbolic.parser.stljax` handlers.
 """
 
 from openscvx.symbolic.expr.expr import Constant

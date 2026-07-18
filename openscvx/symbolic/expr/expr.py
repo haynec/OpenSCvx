@@ -63,14 +63,50 @@ Example:
         canonical = expr.canonicalize()  # Simplifies to: x + x
 """
 
+import functools
 import hashlib
 import struct
+import threading
 from typing import TYPE_CHECKING, Callable, List, Tuple, Union
 
 if TYPE_CHECKING:
     from .linalg import Transpose
 
 import numpy as np
+
+# Per-thread memo for canonicalize(). The memo canonicalizes each node once and
+# returns the same object to every parent, preserving sharing.
+_canon_state = threading.local()
+
+
+def _memoized_canonicalize(fn: Callable) -> Callable:
+    """Wrap a subclass ``canonicalize`` so shared subexpressions are reused.
+
+    Keyed by ``id(self)``; the node is held alive in the memo for the duration of
+    the pass so its id cannot be recycled, with an identity guard on lookup. The
+    top-level call owns the memo and clears it on exit, so each independent
+    canonicalize pass starts fresh.
+    """
+
+    @functools.wraps(fn)
+    def wrapper(self):
+        memo = getattr(_canon_state, "memo", None)
+        owns = memo is None
+        if owns:
+            memo = {}
+            _canon_state.memo = memo
+        try:
+            entry = memo.get(id(self))
+            if entry is not None and entry[0] is self:
+                return entry[1]
+            result = fn(self)
+            memo[id(self)] = (self, result)
+            return result
+        finally:
+            if owns:
+                _canon_state.memo = None
+
+    return wrapper
 
 
 class Expr:
@@ -100,6 +136,13 @@ class Expr:
 
     # Give Expr objects higher priority than numpy arrays in operations
     __array_priority__ = 1000
+
+    def __init_subclass__(cls, **kwargs):
+        # Wrap each subclass's own canonicalize() with identity memoization so a
+        # shared DAG node is canonicalized once rather than re-expanded per parent.
+        super().__init_subclass__(**kwargs)
+        if "canonicalize" in cls.__dict__:
+            cls.canonicalize = _memoized_canonicalize(cls.__dict__["canonicalize"])
 
     def __le__(self, other):
         from .constraint import Inequality
@@ -376,6 +419,25 @@ class Expr:
         for child in self.children():
             lines.append(child.pretty(indent + 1))
         return "\n".join(lines)
+
+    def _repr_latex_(self) -> Union[str, None]:
+        """Render this expression as inline LaTeX for Jupyter.
+
+        Jupyter calls this hook to display an object as math. The expression
+        is lowered to LaTeX and wrapped in ``$...$``. Nodes without a
+        registered LaTeX visitor return ``None`` so Jupyter falls back to the
+        plain ``__repr__``.
+
+        Returns:
+            The inline-math string ``"$...$"``, or ``None`` when the
+            expression contains a node the LaTeX backend does not support.
+        """
+        from openscvx.symbolic.lower import to_latex
+
+        try:
+            return f"${to_latex(self)}$"
+        except NotImplementedError:
+            return None
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Contribute this expression's structural identity to a hash.

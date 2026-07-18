@@ -1,6 +1,13 @@
 """Parser handlers for Signal Temporal Logic operations.
 
 Handlers: stljax.Or
+
+Registers the ``stljax``-backed disjunction under its namespaced name
+``"stljax.Or"`` via ``@function``, turning the call-syntax form the Pratt parser
+encounters in an expression string into an
+:class:`openscvx.symbolic.expr.stljax.Or` node. The ``stljax.`` prefix keeps this
+external-library operator distinct from the in-house GMSR ``Or`` handled in
+:mod:`openscvx.symbolic.parser.stl`.
 """
 
 from openscvx.symbolic.expr.stljax import Or

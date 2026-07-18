@@ -353,7 +353,6 @@ def build_relative_loitering_problem(
         time=time,
         constraints=constraints,
         N=n_nodes,
-        licq_min=0.0,
         licq_max=1e-8,
         discretizer={
             "ode_solver": "Dopri8",

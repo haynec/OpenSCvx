@@ -1,6 +1,12 @@
-# What is Succesive Convexification?
-!!! Warning
-    This page is still under development :construction:.
+---
+title: What is Successive Convexification?
+description: >-
+  Successive convexification (SCvx) solves nonconvex trajectory optimization by
+  repeatedly linearizing the problem and solving the convex subproblem until
+  convergence.
+---
+
+# What is Successive Convexification?
 
 *Successive Convexification* is an approach to solve infinite dimensional nonconvex trajectory optimization problems. It works by *successively* convexifying or linearizing a problem and solving the convex subproblem. The solution to the convex subproblem is then used to update the original problem, and the process is repeated until convergence.
 
@@ -9,7 +15,7 @@
 
 
 ## Problem Formulation
-In this repository, the user will likely find it most useful specify there problem in the Mayer Form order to take full advantage of the features of this repo, but not worry this is quite easy.
+In this repository, the user will likely find it most useful to specify their problem in the Mayer Form in order to take full advantage of the features of this repo, but do not worry, this is quite easy.
 
 $$
 \begin{align}

@@ -73,14 +73,21 @@ theme:
   icon:
     logo: logo
 
-# Copy Viser's bundled ``client/build`` into ``docs/assets/viser-client`` so home-page embeds resolve.
+# Copy Viser's bundled ``client/build`` into ``docs/assets/viser-client`` so home-page embeds
+# resolve; drop the literate-nav SUMMARY.md files from the built site and sitemap.
 hooks:
   - scripts/mkdocs_copy_viser_client_hook.py
+  - scripts/mkdocs_seo_hook.py
 
 # Plugin choices preserve API docs from docstrings (mkdocstrings + gen-files). Before moving to
 # Zensical, confirm parity for mkdocstrings, mkdocs-gen-files, literate-nav, section-index, and mike.
 # Plugins
 plugins:
+  # Declared (not just injected at deploy) so `canonical_version` unifies every deployed
+  # version's canonical URL onto `latest/`. Without a deploy, $MIKE_DOCS_VERSION is unset and
+  # this plugin is a no-op. Keep it first to match mike's own injection position.
+  - mike:
+      canonical_version: latest
   - meta
   # Social cards render via Pillow + fonts from Google Fonts only (not self-hosted CMU).
   - social:
@@ -107,11 +114,28 @@ plugins:
               show_docstring: true
             docstring_style: google
             filters: ["!^_[^_]", "!^__(?!init)"]
+  # Real per-page last-modified dates from git, surfaced in the footer and sitemap <lastmod>.
+  - git-revision-date-localized:
+      enable_creation_date: true
+      fallback_to_build_date: true
+      # --follow across gen-files renames produces out-of-order timestamps on a few
+      # Reference pages; plain path history is correct for this repo.
+      enable_git_follow: false
+
+# Drop the stale hand-written examples.md (superseded by the generated Examples/ index, and a
+# case-colliding duplicate of its URL) from the built site and sitemap. The generated
+# SUMMARY.md files are removed by scripts/mkdocs_seo_hook.py (exclude_docs only filters the
+# docs_dir scan, not gen-files output).
+exclude_docs: |
+  examples.md
 
 
 # Additional configuration
 extra:
   favicon: assets/favicon.png
+  # Deployed mike version name (e.g. "nightly", "v0.5.2"); empty on a plain build. Read by
+  # material/overrides/main.html to noindex nightly and stamp softwareVersion in the homepage JSON-LD.
+  mike_version: !ENV [MIKE_DOCS_VERSION, ""]
   version:
     provider: mike
     default: latest
@@ -172,9 +196,10 @@ extra_javascript:
 # Page tree
 nav:
     - Home: index.md
+    - Installation: installation.md
     - Resources:
-      - 'examples.md'
       - 'citation.md'
+      - 'changelog.md'
     - Users Guide:
       - 'UsersGuide/00_introduction.md'
       - 'UsersGuide/01_hello_world_brachistochrone.md'
@@ -182,7 +207,6 @@ nav:
       - 'UsersGuide/03_obstacle_avoidance_vmap.md'
       - 'UsersGuide/04_viewpoint_constraints.md'
       - 'UsersGuide/05_visualization.md'
-      - 'UsersGuide/06_logic.md'
       - 'UsersGuide/07_lie.md'
       - 'UsersGuide/08_mpcc.md'
       - 'UsersGuide/09_mjx_dynamics.md'

@@ -1,6 +1,14 @@
 """CVXPy visitors for constraint expressions.
 
 Visitors: Equality, Inequality, CrossNodeConstraint, CTCS
+
+Lowers constraint AST nodes to CVXPy ``Constraint`` objects for the convex
+subproblem. ``Equality`` (``lhs == rhs``) and ``Inequality`` (``lhs <= rhs``)
+become the corresponding relational constraints, admissible when their sides obey
+DCP; ``CrossNodeConstraint`` simply lowers its inner constraint, relying on the
+full-trajectory ``x`` / ``u`` in ``variable_map`` so its node references resolve.
+``CTCS`` is continuous-time and non-convex, enforced through dynamics
+augmentation in the JAX backend, so it raises ``NotImplementedError`` here.
 """
 
 import cvxpy as cp

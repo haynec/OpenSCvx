@@ -1,3 +1,9 @@
+---
+description: >-
+  How OpenSCvx lowers symbolic problem definitions into executable JAX and CVXPy
+  code — the second of its preprocessing, lowering, solving, and post-processing phases.
+---
+
 # Lowering Architecture
 
 This document explains how OpenSCvx converts symbolic problem definitions into executable code for optimization.

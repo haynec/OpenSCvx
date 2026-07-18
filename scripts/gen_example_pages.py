@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import ast
-from collections import defaultdict
+import json
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import mkdocs_gen_files
@@ -123,12 +124,35 @@ def _category_section_title(category: str) -> str:
 
 
 def _docstring_teaser(docstring: str | None, max_len: int = 120) -> str:
-    if not docstring:
+    first = _docstring_summary(docstring)
+    if first is None:
         return "Runnable script; full source on the detail page."
-    first = docstring.strip().split("\n", 1)[0].strip()
     if len(first) > max_len:
         return first[: max_len - 1].rstrip() + "…"
     return first
+
+
+def _docstring_summary(docstring: str | None) -> str | None:
+    """First non-empty line of a module docstring, or ``None`` when absent."""
+    if not docstring:
+        return None
+    first = docstring.strip().splitlines()[0].strip()
+    return first or None
+
+
+def _page_description(docstring: str | None, rel_path: Path) -> str:
+    """Per-page ``description`` meta text for an example page.
+
+    Sourced from the example script's module docstring so the SEO description, the
+    index-card teaser, and the rendered docstring all agree. Mirrors the reference
+    pages (``gen_ref_pages.py``): every page gets a distinct one-liner instead of
+    inheriting the site-wide tagline. Falls back to the repo-relative path for the
+    rare script that carries no docstring.
+    """
+    summary = _docstring_summary(docstring)
+    if summary is not None:
+        return summary
+    return f"Runnable OpenSCvx trajectory optimization example: examples/{rel_path.as_posix()}."
 
 
 def _examples_index_markdown(
@@ -177,16 +201,26 @@ helpers) are omitted from this index.
 """
 
 
+def _is_example_page(path: Path) -> bool:
+    """Whether a discovered ``.py`` file becomes an example page (vs a utility module)."""
+    rel_path = path.relative_to(examples_dir)
+    if len(rel_path.parts) < 2:  # Must live in a category subdirectory
+        return False
+    return path.name not in SKIP_FILES and not path.name.startswith("_")
+
+
+example_paths = [p for p in sorted(examples_dir.rglob("*.py")) if _is_example_page(p)]
+
+# Leaf file names recur across categories (the animations/ demos mirror arm/ and
+# drone/ examples), so bare titles collide. Qualify only the colliding ones with
+# their category to keep every page's <title> tag and search entry distinct.
+_title_counts = Counter(format_title(p.stem) for p in example_paths)
+
 # (category, doc_path, page_title, teaser) for the landing page
 _index_entries: list[tuple[str, Path, str, str]] = []
 
-for path in sorted(examples_dir.rglob("*.py")):
-    # Skip files in the root examples/ directory and skip utility files
+for path in example_paths:
     rel_path = path.relative_to(examples_dir)
-    if len(rel_path.parts) < 2:  # Must be in a subdirectory
-        continue
-    if path.name in SKIP_FILES or path.name.startswith("_"):
-        continue
 
     # Create the documentation path
     module_path = rel_path.with_suffix("")
@@ -204,10 +238,20 @@ for path in sorted(examples_dir.rglob("*.py")):
     source_code = get_source_without_docstring(path)
     page_title = format_title(path.stem)
     category = rel_path.parts[0]
+    meta_title = page_title
+    if _title_counts[page_title] > 1:
+        meta_title = f"{page_title} ({_category_section_title(category)})"
     _index_entries.append((category, doc_path, page_title, _docstring_teaser(docstring)))
 
     # Generate the markdown content
     with mkdocs_gen_files.open(full_doc_path, "w") as fd:
+        # Front matter carries a unique title and a per-page description so the page
+        # stops inheriting the site-wide tagline; the H1 keeps the clean, unqualified
+        # title. json.dumps yields a double-quoted, escaped scalar that is valid YAML.
+        fd.write("---\n")
+        fd.write(f"title: {json.dumps(meta_title)}\n")
+        fd.write(f"description: {json.dumps(_page_description(docstring, rel_path))}\n")
+        fd.write("---\n\n")
         fd.write(f"# {page_title}\n\n")
 
         if docstring:

@@ -3,8 +3,8 @@
 <img src="figures/openscvx_logo.svg" width="1200"/>
 <p align="center">
     <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/lint.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/lint.yml/badge.svg"/></a>
-    <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-unit.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-unit.yml/badge.svg"/></a>
-    <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-integration.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-integration.yml/badge.svg"/></a>
+    <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests.yml/badge.svg"/></a>
+    <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-examples.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-examples.yml/badge.svg"/></a>
     <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/nightly.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/nightly.yml/badge.svg"/></a>
     <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/release.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/release.yml/badge.svg?event=release"/></a>
 </p>
@@ -167,7 +167,7 @@ Check out the OpenSCvx documentation:
 
 - [Users Guide](https://openscvx.github.io/OpenSCvx/latest/UsersGuide/00_introduction/)
 - [API Reference](https://openscvx.github.io/OpenSCvx/latest/Reference/)
-- [Examples overview](https://openscvx.github.io/OpenSCvx/latest/examples/)
+- [Examples overview](https://openscvx.github.io/OpenSCvx/latest/Examples/)
 
 ### Running the Examples
 
@@ -200,6 +200,22 @@ This repo has the following features:
 4. FOH and ZOH exact discretization (`t` is a state so you can bring your own scheme)
 6. Vectorized and Ahead-of-Time (AOT) Compiled Multishooting Discretization
 7. JAX Autodiff for Jacobians
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+## Third-Party Integrations
+
+OpenSCvx integrates with several optional third-party packages. Each installs as a pip extra (`pip install openscvx[<extra>]`); without it, the library and its tests degrade gracefully — the corresponding tests simply skip. Integrations with a badge are tested against `main` on every push and re-checked weekly against the latest upstream releases.
+
+| Integration | Extra | Provides | Status |
+| --- | --- | --- | --- |
+| [MuJoCo MJX](https://mujoco.readthedocs.io/en/stable/mjx.html) | `mjx` | MJX dynamics adapter (`openscvx.integrations`) | [![mjx](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-mjx.yml/badge.svg?branch=main)](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-mjx.yml) |
+| [jaxlie](https://github.com/brentyi/jaxlie) | `lie` | SO(3)/SE(3) Lie-group operations and IK initialization | [![jaxlie](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-lie.yml/badge.svg?branch=main)](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-lie.yml) |
+| [qpax](https://github.com/qpax-solver/qpax) | `qpax` | JAX-native QP solver backend | [![qpax](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-qpax.yml/badge.svg?branch=main)](https://github.com/OpenSCvx/OpenSCvx/issues/550) |
+| [CVXPYGen](https://github.com/cvxgrp/cvxpygen) | `cvxpygen` | Generated C solver code for the convex subproblem | [![cvxpygen](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-cvxpygen.yml/badge.svg?branch=main)](https://github.com/OpenSCvx/OpenSCvx/issues/551) |
+| [moreau](https://pypi.org/project/moreau/) | `moreau` | Licensed QP solver backend | ![moreau](https://img.shields.io/badge/moreau-license%20required-lightgrey) |
+| [stljax](https://github.com/UW-CTRL/stljax) | `stl` | Signal Temporal Logic robustness bridge | ![stljax](https://img.shields.io/badge/stljax-no%20tests%20yet-lightgrey) |
+| [frax](https://github.com/danielpmorton/frax) | `frax` | Robot dynamics for the manipulator examples | [![frax](https://img.shields.io/badge/frax-weekly%20examples%20sweep-blue)](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-examples.yml) |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

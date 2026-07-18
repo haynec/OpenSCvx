@@ -14,22 +14,6 @@ import pytest
 import openscvx as ox
 from openscvx.integrations.base import DynamicsAdapter, _merge_byof
 
-# ===========================================================================
-# Availability flag
-# ===========================================================================
-
-try:
-    import mujoco.mjx as _mjx  # noqa: F401
-
-    _MUJOCO_AVAILABLE = True
-except ImportError:
-    _MUJOCO_AVAILABLE = False
-
-requires_mujoco = pytest.mark.skipif(
-    not _MUJOCO_AVAILABLE, reason="mujoco / mujoco.mjx not installed"
-)
-
-
 _CARTPOLE_XML = """
 <mujoco model="test_cartpole">
   <option gravity="0 0 -9.81" timestep="0.01" integrator="Euler"/>
@@ -126,13 +110,13 @@ def test_merge_byof_raises_on_dynamics_key_collision():
 # ===========================================================================
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_subclasses_dynamics_adapter(cartpole_mjx_model):
     dyn = ox.MjxDynamics(cartpole_mjx_model)
     assert isinstance(dyn, DynamicsAdapter)
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_states_and_controls_match_model_dims(cartpole_mjx_model):
     dyn = ox.MjxDynamics(cartpole_mjx_model)
     assert len(dyn.states) == 2
@@ -145,7 +129,7 @@ def test_mjx_dynamics_states_and_controls_match_model_dims(cartpole_mjx_model):
     assert ctrl.name == "ctrl" and ctrl.shape == (cartpole_mjx_model.nu,)
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_expand_returns_qpos_kinematics_symbolic_when_nq_eq_nv(
     cartpole_mjx_model,
 ):
@@ -160,7 +144,7 @@ def test_mjx_dynamics_expand_returns_qpos_kinematics_symbolic_when_nq_eq_nv(
     assert callable(byof_dict["dynamics"]["qvel"])
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_expand_routes_both_through_byof_when_nq_gt_nv(
     free_body_mjx_model,
 ):
@@ -197,7 +181,7 @@ def _set_simple_bounds(state, lo, hi, init, final):
     state.final = np.asarray(final)
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_problem_accepts_mjx_dynamics_adapter_for_cartpole(cartpole_mjx_model):
     """Construct a Problem with an MjxDynamics in the dynamics= slot (nq == nv)."""
     dyn = ox.MjxDynamics(cartpole_mjx_model)
@@ -237,7 +221,7 @@ def test_problem_accepts_mjx_dynamics_adapter_for_cartpole(cartpole_mjx_model):
     assert {"qpos", "qvel"}.issubset(state_names)
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_problem_accepts_mjx_dynamics_adapter_for_free_joint(free_body_mjx_model):
     """nq > nv free-joint model: both qpos and qvel must be in byof."""
     dyn = ox.MjxDynamics(free_body_mjx_model)
@@ -279,7 +263,7 @@ def test_problem_accepts_mjx_dynamics_adapter_for_free_joint(free_body_mjx_model
     assert {"qpos", "qvel"}.issubset(problem._byof.dynamics)
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_problem_accepts_mjx_dynamics_with_extra_prop_state(cartpole_mjx_model):
     """User can layer an extra propagation-only state on top of the adapter."""
     dyn = ox.MjxDynamics(cartpole_mjx_model)
@@ -326,7 +310,7 @@ def test_problem_accepts_mjx_dynamics_with_extra_prop_state(cartpole_mjx_model):
 # ===========================================================================
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_callables_run_after_slice_assignment(cartpole_mjx_model):
     """After Problem construction wires slices, the byof callables run."""
     dyn = ox.MjxDynamics(cartpole_mjx_model)
@@ -411,27 +395,27 @@ def _put_model(xml: str):
     return mjx.put_model(mj_model)
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_rejects_ball_joint():
     mjx_model = _put_model(_BALL_JOINT_XML)
     with pytest.raises(NotImplementedError, match="ball joints"):
         ox.MjxDynamics(mjx_model)
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_rejects_free_joint_after_hinge():
     mjx_model = _put_model(_FREE_AFTER_HINGE_XML)
     with pytest.raises(NotImplementedError, match="free joints to come before"):
         ox.MjxDynamics(mjx_model)
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_accepts_slide_plus_hinge(cartpole_mjx_model):
     # No exception — the cartpole has slide + hinge joints in that order.
     ox.MjxDynamics(cartpole_mjx_model)
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_accepts_pure_free_joint(free_body_mjx_model):
     # No exception — a single free joint is supported.
     ox.MjxDynamics(free_body_mjx_model)
@@ -476,7 +460,7 @@ _UNLIMITED_ACTUATOR_XML = """
 """
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_populates_qpos_bounds_from_jnt_range():
     """Slide joint with `limited="true" range="-2.5 4.0"` flows into qpos.min/max."""
     mjx_model = _put_model(_LIMITED_SLIDER_XML)
@@ -490,7 +474,7 @@ def test_mjx_dynamics_populates_qpos_bounds_from_jnt_range():
     assert qpos.max[1] == np.inf
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_populates_ctrl_bounds_from_actuator_ctrlrange():
     """Actuator with `ctrlrange="-1.5 2.0" ctrllimited="true"` flows into ctrl.min/max."""
     mjx_model = _put_model(_LIMITED_SLIDER_XML)
@@ -501,7 +485,7 @@ def test_mjx_dynamics_populates_ctrl_bounds_from_actuator_ctrlrange():
     assert ctrl.max[0] == pytest.approx(2.0)
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_unlimited_actuator_defaults_to_inf():
     """Actuator without ctrllimited gets ±inf ctrl bounds."""
     mjx_model = _put_model(_UNLIMITED_ACTUATOR_XML)
@@ -511,7 +495,7 @@ def test_mjx_dynamics_unlimited_actuator_defaults_to_inf():
     assert ctrl.max[0] == np.inf
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_qvel_defaults_to_inf(cartpole_mjx_model):
     """qvel always defaults to ±inf since MuJoCo has no per-joint velocity limits."""
     dyn = ox.MjxDynamics(cartpole_mjx_model)
@@ -520,7 +504,7 @@ def test_mjx_dynamics_qvel_defaults_to_inf(cartpole_mjx_model):
     assert np.all(np.isposinf(qvel.max))
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_free_joint_qpos_bounds_are_inf(free_body_mjx_model):
     """Free joints have jnt_limited=False, so all 7 qpos slots stay at ±inf."""
     dyn = ox.MjxDynamics(free_body_mjx_model)
@@ -529,7 +513,7 @@ def test_mjx_dynamics_free_joint_qpos_bounds_are_inf(free_body_mjx_model):
     assert np.all(np.isposinf(qpos.max))
 
 
-@requires_mujoco
+@pytest.mark.mjx
 def test_mjx_dynamics_user_can_override_auto_bounds():
     """Users can replace the auto-populated bounds after construction."""
     mjx_model = _put_model(_LIMITED_SLIDER_XML)

@@ -1,3 +1,9 @@
+---
+description: >-
+  How to swap OpenSCvx's SCP iteration and penalty-weight schedule by subclassing
+  the `Algorithm` and `AutotuningBase` bases without forking the solver.
+---
+
 # Custom Algorithms and Autotuners
 
 OpenSCvx solves through a pluggable SCP loop: an **algorithm** owns the

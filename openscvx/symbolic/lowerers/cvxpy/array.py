@@ -1,6 +1,13 @@
 """CVXPy visitors for array expressions.
 
 Visitors: Index, Concat, Stack, Hstack, Vstack, Block
+
+Lowers the array construction and indexing AST nodes to CVXPy expressions via
+``cp.hstack``/``cp.vstack``/``cp.bmat``, all of which preserve DCP curvature.
+``Concat`` promotes scalars to 1-D before joining, and ``Hstack``/``Block`` route
+2-D+ inputs through ``cp.bmat`` to match NumPy stacking semantics. CVXPy's
+``bmat`` is 2-D only, so ``Block`` raises for 3-D+ tensors, which must go through
+the JAX backend instead.
 """
 
 import cvxpy as cp

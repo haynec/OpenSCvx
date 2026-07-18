@@ -16,21 +16,7 @@ import jax
 import numpy as np
 import pytest
 
-from tests._marks import _MOREAU_OK
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
-
-try:
-    import cvxpygen  # noqa: F401
-    import qocogen  # noqa: F401
-
-    HAS_CVXPYGEN = True
-except Exception:
-    HAS_CVXPYGEN = False
-
-requires_cvxpygen = pytest.mark.skipif(
-    not HAS_CVXPYGEN,
-    reason="cvxpygen and qocogen not installed (pip install openscvx[cvxpygen])",
-)
 
 _BRACHISTOCHRONE_ALGORITHM = {
     "autotuner": "ConstantProximalWeight",
@@ -128,9 +114,10 @@ def _assert_brachistochrone_accuracy(comparison, problem, result, solve_budget=1
         num_iters = len(result["discretization_history"])
         assert num_iters < 27, f"Took {num_iters} SCP iterations (expected < 15)"
 
-    # Check timing - these are generous limits for a simple problem like brachistochrone
-    assert problem.timing_init < 15.0, (
-        f"Initialization took {problem.timing_init:.2f}s (expected < 15s)"
+    # Check timing - these are generous limits for a simple problem like brachistochrone,
+    # sized for a loaded CI runner compiling several problems in parallel under xdist
+    assert problem.timing_init < 30.0, (
+        f"Initialization took {problem.timing_init:.2f}s (expected < 30s)"
     )
     assert problem.timing_solve < solve_budget, (
         f"Solve took {problem.timing_solve:.2f}s (expected < {solve_budget}s)"
@@ -190,12 +177,10 @@ def test_example():
     jax.clear_caches()
 
 
-@requires_cvxpygen
+@pytest.mark.cvxpygen
 def test_cvxpygen(tmp_path, monkeypatch):
     """Brachistochrone with CVXPyGen + qocogen code generation."""
     monkeypatch.chdir(tmp_path)
-
-    from tests.test_examples import sync_jax_float_config_for_problem
 
     solver = {
         "cvx_solver": "qocogen",
@@ -204,7 +189,6 @@ def test_cvxpygen(tmp_path, monkeypatch):
         "solver_args": {"abstol": 1e-8, "reltol": 1e-10},
     }
     problem = _make_brachistochrone_problem(solver)
-    sync_jax_float_config_for_problem(problem)
 
     if hasattr(problem.settings, "dev"):
         problem.settings.dev.printing = False
@@ -320,7 +304,14 @@ def test_monolithic():
 
 @pytest.mark.parametrize("with_parameters", [False, True], ids=["literal-g", "param-g"])
 @pytest.mark.parametrize("constraint_type", ["ctcs", "nodal"])
-@pytest.mark.parametrize("backend", ["cvxpy", "qpax", "moreau"])
+@pytest.mark.parametrize(
+    "backend",
+    [
+        "cvxpy",
+        pytest.param("qpax", marks=pytest.mark.qpax),
+        pytest.param("moreau", marks=pytest.mark.moreau),
+    ],
+)
 def test_backend(backend, constraint_type, with_parameters):
     """End-to-end brachistochrone with each PTRSolver backend, across
     constraint formulations (CTCS box vs nodal) and parameter usage
@@ -337,11 +328,6 @@ def test_backend(backend, constraint_type, with_parameters):
 
     import openscvx as ox
     from openscvx import Problem
-
-    if backend == "qpax":
-        pytest.importorskip("qpax")
-    if backend == "moreau" and not _MOREAU_OK:
-        pytest.skip("moreau not installed or license key not found (pip install openscvx[moreau])")
 
     # Problem parameters — mirrors test_monolithic so we cover the same
     # boundary conditions and analytical reference both ways.
@@ -450,6 +436,7 @@ def test_backend(backend, constraint_type, with_parameters):
     jax.clear_caches()
 
 
+@pytest.mark.qpax
 def test_backend_float32_raises():
     """QPAX should raise — not silently return NaN — when ``qpax.solve_qp``
     fails to converge.
@@ -470,8 +457,6 @@ def test_backend_float32_raises():
 
     import openscvx as ox
     from openscvx import Problem
-
-    pytest.importorskip("qpax")
 
     n = 2
     total_time = 2.0

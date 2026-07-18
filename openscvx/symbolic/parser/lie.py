@@ -2,6 +2,11 @@
 
 Handlers: AdjointDual, Adjoint, SE3Adjoint, SE3AdjointDual,
           SO3Exp, SO3Log, SE3Exp, SE3Log
+
+Each handler is registered under its function name via ``@function`` and turns the
+call-syntax form (e.g. ``SE3Exp(twist)``) that the Pratt parser encounters in an
+expression string into the corresponding SO(3)/SE(3) ``Expr`` node — the group
+exp/log maps and the (co)adjoint operators used in rigid-body dynamics.
 """
 
 from openscvx.symbolic.expr.lie import (

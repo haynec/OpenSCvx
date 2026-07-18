@@ -10,7 +10,7 @@ Covers:
   * End-to-end ``solve()`` returns a :class:`PTRSolveResult`.
   * Round-trip parity vs ``CVXPyPTRSolver`` on a small double-integrator.
 
-The brachistochrone parametrized-backend test in ``tests/test_brachistochrone.py``
+The brachistochrone parametrized-backend test in ``tests/e2e/test_brachistochrone.py``
 exercises Moreau on a richer nonlinear CTCS problem; the unit-style tests here
 focus on the API contract and the assembly machinery.
 """
@@ -22,11 +22,9 @@ from scipy import sparse as sp
 import openscvx as ox
 from openscvx import Problem
 from openscvx.solvers import MoreauPTRSolver, PTRSolver, PTRSolveResult
-from tests._marks import requires_moreau
 from tests.solvers._iteration_callback_helpers import populate_numpy_stash
 
-# Skip the whole module when moreau is absent or unlicensed.
-pytestmark = requires_moreau
+pytestmark = [pytest.mark.e2e, pytest.mark.moreau]
 
 # ============================================================================
 # Helpers

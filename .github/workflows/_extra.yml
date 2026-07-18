@@ -1,0 +1,41 @@
+name: 🔌 Third-Party Extra
+
+# Reusable workflow behind the per-integration badge workflows (tests-mjx.yml,
+# tests-lie.yml, ...). Installs one optional extra and runs exactly the tests
+# carrying its marker — marker name == extra name, so one input drives both.
+
+on:
+  workflow_call:
+    inputs:
+      extra:
+        description: 'pyproject optional extra to install; also the pytest marker to select'
+        required: true
+        type: string
+
+jobs:
+  test:
+    name: ${{ inputs.extra }} (Python 3.13, ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.13'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+
+    - name: Install dependencies
+      run: |
+        uv pip install --system -e ".[test,${{ inputs.extra }}]"
+
+    - name: Run ${{ inputs.extra }} tests
+      run: |
+        pytest -v -m "${{ inputs.extra }} and not examples" --durations=10 --tb=short -n auto

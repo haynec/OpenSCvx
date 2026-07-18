@@ -1,3 +1,8 @@
+---
+description: >-
+  Drive OpenSCvx trajectory optimization with MuJoCo MJX dynamics for contact-rich robotic systems.
+---
+
 # 09 MuJoCo MJX Dynamics
 
 In earlier tutorials we wrote dynamics by hand as symbolic expressions. Many real systems already have a MuJoCo model — articulated robots, cartpoles, quadrotors — and re-deriving those equations is tedious and error-prone.

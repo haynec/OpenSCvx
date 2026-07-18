@@ -1,8 +1,22 @@
+---
+title: Citation
+description: >-
+  How to cite OpenSCvx and the successive-convexification methods it implements,
+  including Hayner et al., IEEE RA-L 2025, in BibTeX.
+---
+
 # Citation
 
-If you use OpenSCvx in your research, please cite the following works:
+If you use OpenSCvx in your research, please cite Hayner et al., *Continuous-Time
+Line-of-Sight Constrained Trajectory Planning for 6-Degree of Freedom Systems*,
+IEEE Robotics and Automation Letters (RA-L), 2025
+([DOI: 10.1109/LRA.2025.3545299](https://doi.org/10.1109/LRA.2025.3545299)),
+along with the methodological and solver references below.
 
 ## Primary Citation
+
+Hayner et al., IEEE RA-L 2025 — DOI:
+[10.1109/LRA.2025.3545299](https://doi.org/10.1109/LRA.2025.3545299).
 
 ```bibtex
 @ARTICLE{hayner2025los,
@@ -19,6 +33,10 @@ If you use OpenSCvx in your research, please cite the following works:
 
 ## Methodological Foundation
 
+Elango et al., *Successive Convexification for Trajectory Optimization with
+Continuous-Time Constraint Satisfaction*, 2024 — preprint:
+[arXiv:2404.16826](https://arxiv.org/abs/2404.16826).
+
 ```bibtex
 @misc{elango2024ctscvx,
       title={Successive Convexification for Trajectory Optimization with Continuous-Time Constraint Satisfaction}, 
@@ -33,6 +51,10 @@ If you use OpenSCvx in your research, please cite the following works:
 
 ## Solver Technology
 
+Chari and Açıkmeşe, *QOCO: A Quadratic Objective Conic Optimizer with Custom
+Solver Generation*, 2025 — preprint:
+[arXiv:2503.12658](https://arxiv.org/abs/2503.12658).
+
 ```bibtex
 @misc{chari2025qoco,
   title = {QOCO: A Quadratic Objective Conic Optimizer with Custom Solver Generation},
@@ -43,6 +65,14 @@ If you use OpenSCvx in your research, please cite the following works:
   primaryclass = {math.OC},
 }
 ```
+
+## Citing the software
+
+To cite the OpenSCvx software itself, use the
+[`CITATION.cff`](https://github.com/OpenSCvx/OpenSCvx/blob/main/CITATION.cff) file
+at the repository root — GitHub's "Cite this repository" widget reads it directly.
+It points to the RA-L paper above as the preferred citation. A dedicated software
+DOI (Zenodo) is planned for the 1.0 release.
 
 ## Acknowledgments
 

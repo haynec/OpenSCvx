@@ -41,21 +41,6 @@ _CARTPOLE_XML = """
 </mujoco>
 """
 
-# ---------------------------------------------------------------------------
-# Availability flags (used as skip decorators on MuJoCo-dependent classes)
-# ---------------------------------------------------------------------------
-try:
-    import mujoco.mjx as _mjx  # noqa: F401
-
-    _MUJOCO_AVAILABLE = True
-except ImportError:
-    _MUJOCO_AVAILABLE = False
-
-requires_mujoco = pytest.mark.skipif(
-    not _MUJOCO_AVAILABLE, reason="mujoco / mujoco.mjx not installed"
-)
-
-
 # ===========================================================================
 # _resolve_slice
 # ===========================================================================
@@ -119,7 +104,7 @@ def cartpole_mjx_model():
     return mjx.put_model(mj_model)
 
 
-@requires_mujoco
+@pytest.mark.mjx
 class TestMjxDynamics:
     """Tests for ``mjx_dynamics``."""
 

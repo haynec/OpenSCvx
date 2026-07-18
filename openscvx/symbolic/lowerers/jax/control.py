@@ -1,6 +1,11 @@
 """JAX visitors for control expressions.
 
 Visitors: Control
+
+Lowers a ``Control`` leaf to a JAX function that slices the corresponding entries
+out of the unified control vector ``u``. The slice is the one assigned during
+unification; lowering a control whose slice is still unset is a usage error and
+raises.
 """
 
 # Expression types to handle — uncomment as you paste visitors:

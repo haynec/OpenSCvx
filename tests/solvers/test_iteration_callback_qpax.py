@@ -19,14 +19,14 @@ except impulsive coupling.
 import numpy as np
 import pytest
 
-pytest.importorskip("qpax")
-
 from openscvx.solvers.ptr_solver import StatusCode, SubproblemSolution
 from tests.solvers._iteration_callback_helpers import (
     build_brachistochrone,
     populate_numpy_stash,
     subproblem_data_from_numpy_stash,
 )
+
+pytestmark = [pytest.mark.e2e, pytest.mark.qpax]
 
 # ============================================================================
 # Assembly parity (Phase 2)

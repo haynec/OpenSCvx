@@ -1,6 +1,11 @@
 """CVXPy visitors for control expressions.
 
 Visitors: Control
+
+Lowers a ``Control`` leaf to a slice of the unified control variable ``u`` held in
+the lowerer's ``variable_map``, using the slice assigned during unification. If
+the control carries no slice the whole ``u`` is returned; a missing ``u`` in the
+map is a usage error and raises.
 """
 
 import cvxpy as cp

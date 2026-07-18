@@ -1,6 +1,12 @@
 """CVXPy visitors for state/time expressions.
 
 Visitors: State, Time
+
+Lowers a ``State`` leaf to a slice of the unified state variable ``x`` held in the
+lowerer's ``variable_map``, using the slice assigned during unification. ``Time``
+is a ``State`` subclass and shares the visitor; if the state carries no slice the
+whole ``x`` is returned, and a missing ``x`` in the map is a usage error and
+raises.
 """
 
 import cvxpy as cp

@@ -3,6 +3,14 @@
 Visitors: Sin, Cos, Tan, Tanh, Asin, Acos, Atan, Atan2, Square, Sqrt, Exp, Log, Abs,
           Max, Min, PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Cinterp,
           Bilerp
+
+Lowers the scalar math AST nodes to JAX functions over ``jnp`` and
+``jax.scipy``. Unlike the CVXPy backend, every node here is admissible: the
+trigonometric, elementary, and reduction functions map straight onto their
+``jnp`` counterparts, the smooth penalties (``PositivePart``, ``Huber``,
+``SmoothReLU``, ``LogSumExp``) are the differentiable surrogates the SCP loop
+relies on, and the interpolators (``Linterp``, ``Cinterp``, ``Bilerp``) evaluate
+baked tabulated data while staying differentiable through JAX autodiff.
 """
 
 import jax

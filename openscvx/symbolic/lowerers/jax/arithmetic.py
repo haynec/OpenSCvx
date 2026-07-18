@@ -1,6 +1,12 @@
 """JAX visitors for arithmetic expressions.
 
 Visitors: Add, Sub, Mul, Div, MatMul, Neg, Power
+
+Lowers the arithmetic AST nodes to JAX functions ``(x, u, node, params) -> array``.
+``Add``, ``Sub``, ``Mul`` (Hadamard), ``Div``, and ``Power`` are element-wise and
+broadcast following NumPy/JAX rules; ``MatMul`` lowers to ``jnp.matmul``. Each
+visitor recursively lowers its operands and composes their functions, so nothing
+here evaluates until the returned closure is called with concrete arrays.
 """
 
 import jax.numpy as jnp

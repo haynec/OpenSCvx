@@ -789,7 +789,7 @@ def test_equality_constraint_penalty():
 
 
 def test_augmented_state_bounds():
-    """Test that augmented state has correct min/max bounds."""
+    """Augmented state is bounded to [0, licq_max] from the constraint."""
     x = State("x", (1,))
     x.final = np.array([0.0])
     time = State("time", (1,))
@@ -800,7 +800,7 @@ def test_augmented_state_bounds():
     N = 5
     time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
-    constraint = ctcs(x <= 1.0, penalty="squared_relu")
+    constraint = ctcs(x <= 1.0, penalty="squared_relu", licq_max=0.01)
 
     xdot_aug, _, states_aug, controls_aug = augment_dynamics_with_ctcs(
         xdot,
@@ -808,21 +808,19 @@ def test_augmented_state_bounds():
         controls,
         [constraint],
         N,
-        licq_min=0.001,
-        licq_max=0.01,
     )
 
     # Check augmented state bounds (third state after time and x)
     aug_state = states_aug[2]  # third state is the augmented one
-    assert aug_state.min[0] == 0.001, "Augmented state min should match licq_min"
+    assert aug_state.min[0] == 0.0, "Augmented state min should be 0"
     assert aug_state.max[0] == 0.01, "Augmented state max should match licq_max"
-    assert aug_state.initial[0] == 0.001, "Augmented state initial should be licq_min"
+    assert aug_state.initial[0] == 0.0, "Augmented state initial should be 0"
     assert aug_state.guess.shape == (N, 1), "Augmented state guess should have correct shape"
-    assert np.allclose(aug_state.guess, 0.001), "Augmented state guess should be licq_min"
+    assert np.allclose(aug_state.guess, 0.0), "Augmented state guess should be 0"
 
 
-def test_augmented_state_bounds_per_group_dict():
-    """Per-group LICQ bounds via dict keyed by idx."""
+def test_augmented_state_bounds_per_group():
+    """Each group takes its licq_max from its member constraints."""
     x = State("x", (1,))
     time = State("time", (1,))
     time.final = np.array([10.0])
@@ -833,8 +831,8 @@ def test_augmented_state_bounds_per_group_dict():
     time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
 
     # Two constraints with different node intervals → two groups (idx 0 and 1)
-    c0 = ctcs(x <= 1.0, penalty="squared_relu", nodes=(0, 3))
-    c1 = ctcs(x <= 2.0, penalty="squared_relu", nodes=(3, 5))
+    c0 = ctcs(x <= 1.0, penalty="squared_relu", nodes=(0, 3), licq_max=1e-8)
+    c1 = ctcs(x <= 2.0, penalty="squared_relu", nodes=(3, 5), licq_max=0.01)
 
     _, _, states_aug, _ = augment_dynamics_with_ctcs(
         xdot,
@@ -842,8 +840,6 @@ def test_augmented_state_bounds_per_group_dict():
         controls,
         [c0, c1],
         N,
-        licq_min={0: 0.0, 1: 0.001},
-        licq_max={0: 1e-8, 1: 0.01},
     )
 
     aug0 = states_aug[2]  # _ctcs_aug_0
@@ -854,14 +850,14 @@ def test_augmented_state_bounds_per_group_dict():
     assert aug0.initial[0] == 0.0
     assert np.allclose(aug0.guess, 0.0)
 
-    assert aug1.min[0] == 0.001
+    assert aug1.min[0] == 0.0
     assert aug1.max[0] == 0.01
-    assert aug1.initial[0] == 0.001
-    assert np.allclose(aug1.guess, 0.001)
+    assert aug1.initial[0] == 0.0
+    assert np.allclose(aug1.guess, 0.0)
 
 
-def test_augmented_state_bounds_scalar_with_multiple_groups():
-    """Scalar LICQ bounds broadcast to all groups."""
+def test_licq_max_defaults_when_unspecified():
+    """Groups without an explicit licq_max fall back to the 1e-4 default."""
     x = State("x", (1,))
     time = State("time", (1,))
     time.final = np.array([10.0])
@@ -880,44 +876,88 @@ def test_augmented_state_bounds_scalar_with_multiple_groups():
         controls,
         [c0, c1],
         N,
-        licq_min=0.002,
-        licq_max=0.05,
     )
 
     for i in [2, 3]:
         aug = states_aug[i]
-        assert aug.min[0] == 0.002
-        assert aug.max[0] == 0.05
-        assert aug.initial[0] == 0.002
+        assert aug.min[0] == 0.0
+        assert aug.max[0] == 1e-4
+        assert aug.initial[0] == 0.0
 
 
-def test_licq_dict_unknown_idx_raises():
-    """Dict licq with unknown idx raises helpful error."""
+def test_licq_max_problem_default_and_override():
+    """A problem-wide licq_max applies to groups without an explicit value;
+    per-constraint values override it."""
     x = State("x", (1,))
     time = State("time", (1,))
     time.final = np.array([10.0])
     states = [time, x]
     N = 5
     time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
-    c0 = ctcs(x <= 1.0, penalty="squared_relu", nodes=(0, 5))
 
-    with pytest.raises(ValueError, match="unknown CTCS group idx.*5"):
-        augment_dynamics_with_ctcs(x, states, [], [c0], N, licq_max={0: 1e-8, 5: 1e-4})
-
-
-def test_licq_dict_missing_idx_raises():
-    """Dict licq missing a group idx raises helpful error."""
-    x = State("x", (1,))
-    time = State("time", (1,))
-    time.final = np.array([10.0])
-    states = [time, x]
-    N = 5
-    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
-    c0 = ctcs(x <= 1.0, penalty="squared_relu", nodes=(0, 3))
+    c0 = ctcs(x <= 1.0, penalty="squared_relu", nodes=(0, 3), licq_max=1e-8)
     c1 = ctcs(x <= 2.0, penalty="squared_relu", nodes=(3, 5))
 
-    with pytest.raises(ValueError, match="missing entries for CTCS group idx.*1"):
-        augment_dynamics_with_ctcs(x, states, [], [c0, c1], N, licq_max={0: 1e-8})
+    _, _, states_aug, _ = augment_dynamics_with_ctcs(x, states, [], [c0, c1], N, licq_max=0.05)
+
+    assert states_aug[2].max[0] == 1e-8, "Per-constraint licq_max should override"
+    assert states_aug[3].max[0] == 0.05, "Unspecified group should use problem-wide default"
+
+
+def test_licq_max_explicit_wins_within_group():
+    """A single explicit licq_max applies to the whole group, even if other
+    members leave it unspecified."""
+    x = State("x", (1,))
+    time = State("time", (1,))
+    time.final = np.array([10.0])
+    states = [time, x]
+    N = 5
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
+
+    # Same interval → same group; only one constraint specifies licq_max
+    c0 = ctcs(x <= 1.0, penalty="squared_relu", nodes=(0, 5), licq_max=1e-8)
+    c1 = ctcs(x <= 2.0, penalty="squared_relu", nodes=(0, 5))
+
+    _, _, states_aug, _ = augment_dynamics_with_ctcs(x, states, [], [c0, c1], N)
+
+    aug = states_aug[2]
+    assert aug.max[0] == 1e-8
+
+
+def test_licq_max_conflict_raises():
+    """Conflicting licq_max values within a group raise a helpful error."""
+    x = State("x", (1,))
+    time = State("time", (1,))
+    time.final = np.array([10.0])
+    states = [time, x]
+    N = 5
+    time.guess = np.linspace(0, time.final[0], N).reshape(-1, 1)
+
+    # Same interval → same group, but conflicting licq_max values
+    c0 = ctcs(x <= 1.0, penalty="squared_relu", nodes=(0, 5), licq_max=1e-8)
+    c1 = ctcs(x <= 2.0, penalty="squared_relu", nodes=(0, 5), licq_max=1e-4)
+
+    with pytest.raises(ValueError, match="conflicting licq_max"):
+        augment_dynamics_with_ctcs(x, states, [], [c0, c1], N)
+
+
+def test_licq_max_nonpositive_raises():
+    """Non-positive licq_max is rejected, per-constraint and problem-wide."""
+    x = State("x", (1,))
+
+    with pytest.raises(ValueError, match="licq_max must be a positive number"):
+        ctcs(x <= 1.0, licq_max=0.0)
+
+    with pytest.raises(ValueError, match="licq_max must be a positive number"):
+        (x <= 1.0).over((0, 5), licq_max=-1e-4)
+
+    time = State("time", (1,))
+    time.final = np.array([10.0])
+    time.guess = np.linspace(0, time.final[0], 5).reshape(-1, 1)
+    c0 = ctcs(x <= 1.0)
+
+    with pytest.raises(ValueError, match="licq_max must be a positive number"):
+        augment_dynamics_with_ctcs(x, [time, x], [], [c0], 5, licq_max=0.0)
 
 
 def test_time_dilation_control_bounds():

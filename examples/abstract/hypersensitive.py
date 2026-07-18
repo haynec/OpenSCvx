@@ -1,3 +1,5 @@
+"""Hypersensitive optimal control benchmark: minimize ½∫(x²+u²) over a long horizon."""
+
 import os
 import sys
 
