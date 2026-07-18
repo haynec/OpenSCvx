@@ -181,8 +181,7 @@ def _dVdt_sparse(
 
     V = V.reshape(-1, aug_dim)
 
-    # Per-control interpolation weights: segments integrate over tau in
-    # [0, 1/(N-1)], so (N-1) makes beta reach exactly 1 at the segment end.
+    # Per-control interpolation weights
     beta = tau * (N - 1) * foh_mask
     alpha = 1 - beta
 

@@ -237,8 +237,6 @@ def _dVdt(
     V = V.reshape(-1, i4)
 
     # Per-control interpolation weights: beta_i = tau*(N-1) for FOH, 0 for ZOH.
-    # Segments are integrated over tau in [0, 1/(N-1)], so (N-1) makes beta
-    # reach exactly 1 at the segment end (tau*N overshoots u_next by 1/(N-1)).
     beta = tau * (N - 1) * foh_mask
     alpha = 1 - beta
 
