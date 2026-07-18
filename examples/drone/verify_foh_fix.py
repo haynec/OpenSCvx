@@ -28,11 +28,15 @@ between the two solves), using this same script re-invoked with --worker.
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 THIS_FILE = Path(__file__).resolve()
 
@@ -246,9 +250,10 @@ def main() -> None:
         ).stdout.strip()
 
         def run_and_parse(openscvx_root: str) -> dict:
+            env = dict(os.environ, PYTHONIOENCODING="utf-8")
             proc = subprocess.run(
                 [sys.executable, str(THIS_FILE), "--worker", "--openscvx-root", openscvx_root],
-                capture_output=True, text=True,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
             )
             for line in proc.stdout.splitlines():
                 if line.startswith("WORKER_RESULT "):
