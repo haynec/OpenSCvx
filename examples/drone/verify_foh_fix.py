@@ -29,7 +29,6 @@ between the two solves), using this same script re-invoked with --worker.
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -183,11 +182,21 @@ def run_worker(openscvx_root: str) -> dict:
         beta = ((T - k * dtau) * (N - 1)) * foh_mask
         return np.asarray(f_jit(xx, u[k] + beta * (u[k + 1] - u[k]), k, params))
 
-    sol = solve_ivp(rhs, (0.0, 1.0), x[0].copy(), method="RK45",
-                     rtol=1e-10, atol=1e-10, dense_output=True, max_step=0.0005)
+    sol = solve_ivp(
+        rhs,
+        (0.0, 1.0),
+        x[0].copy(),
+        method="RK45",
+        rtol=1e-10,
+        atol=1e-10,
+        dense_output=True,
+        max_step=0.0005,
+    )
 
     def violation(pos):
-        return max(1.0 - (pos - c) @ A @ (pos - c) for c, A in zip(obstacle_center_positions, A_obs))
+        return max(
+            1.0 - (pos - c) @ A @ (pos - c) for c, A in zip(obstacle_center_positions, A_obs)
+        )
 
     s = np.linspace(0, 1.0, 2000)
     y = sol.sol(s)
@@ -225,11 +234,14 @@ def main() -> None:
     # rather than origin/main.
     repo_root = subprocess.run(
         ["git", "-C", str(THIS_FILE.parent), "rev-parse", "--show-toplevel"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.strip()
 
     verify = subprocess.run(
-        ["git", "-C", repo_root, "cat-file", "-e", BEFORE_COMMIT], capture_output=True,
+        ["git", "-C", repo_root, "cat-file", "-e", BEFORE_COMMIT],
+        capture_output=True,
     )
     if verify.returncode != 0:
         # not present locally (e.g. a shallow clone) -- fetch it directly, no branch needed
@@ -243,30 +255,43 @@ def main() -> None:
             check=True,
         )
         before_commit = subprocess.run(
-            ["git", "-C", str(tmp_dir), "rev-parse", "HEAD"], capture_output=True, text=True, check=True,
+            ["git", "-C", str(tmp_dir), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.strip()
         after_commit = subprocess.run(
-            ["git", "-C", repo_root, "rev-parse", "HEAD"], capture_output=True, text=True, check=True,
+            ["git", "-C", repo_root, "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.strip()
 
         def run_and_parse(openscvx_root: str) -> dict:
             env = dict(os.environ, PYTHONIOENCODING="utf-8")
             proc = subprocess.run(
                 [sys.executable, str(THIS_FILE), "--worker", "--openscvx-root", openscvx_root],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=env,
             )
             for line in proc.stdout.splitlines():
                 if line.startswith("WORKER_RESULT "):
-                    return json.loads(line[len("WORKER_RESULT "):])
-            raise RuntimeError(f"worker failed (root={openscvx_root}):\n{proc.stdout}\n{proc.stderr}")
+                    return json.loads(line[len("WORKER_RESULT ") :])
+            raise RuntimeError(
+                f"worker failed (root={openscvx_root}):\n{proc.stdout}\n{proc.stderr}"
+            )
 
         print(f"after  = {repo_root}  @ {after_commit}")
         after = run_and_parse(repo_root)
         print(f"before = {tmp_dir}  @ {before_commit}")
         before = run_and_parse(str(tmp_dir))
     finally:
-        subprocess.run(["git", "-C", repo_root, "worktree", "remove", "--force", str(tmp_dir)],
-                        check=False)
+        subprocess.run(
+            ["git", "-C", repo_root, "worktree", "remove", "--force", str(tmp_dir)], check=False
+        )
 
     print()
     print(f"{'':22}{'before (main)':>20}{'after (fix)':>20}")
@@ -281,16 +306,19 @@ def main() -> None:
 
 def make_plots(before: dict, after: dict, out_dir: Path) -> None:
     import matplotlib
+
     matplotlib.use("Agg")
-    import numpy as np
     import matplotlib.pyplot as plt
+    import numpy as np
 
     centers = before["obstacle_centers"]
     A_list = [np.array(A) for A in before["obstacle_A"]]
 
     def violation(pos):
-        return max(1.0 - (np.array(pos) - np.array(c)) @ A @ (np.array(pos) - np.array(c))
-                   for c, A in zip(centers, A_list))
+        return max(
+            1.0 - (np.array(pos) - np.array(c)) @ A @ (np.array(pos) - np.array(c))
+            for c, A in zip(centers, A_list)
+        )
 
     fb = np.array(before["flown_position"])
     fa = np.array(after["flown_position"])
@@ -306,14 +334,18 @@ def make_plots(before: dict, after: dict, out_dir: Path) -> None:
             r = 1 / np.sqrt(w)
             theta = np.linspace(0, 2 * np.pi, 100)
             pts = v @ np.diag(r) @ np.array([np.cos(theta), np.sin(theta)])
-            ax.fill(pts[0] + center[sel[0]], pts[1] + center[sel[1]], color="gray", alpha=0.4, zorder=0)
+            ax.fill(
+                pts[0] + center[sel[0]], pts[1] + center[sel[1]], color="gray", alpha=0.4, zorder=0
+            )
         ax.plot(fb[:, sel[0]], fb[:, sel[1]], "r-", lw=2, label="flown (buggy, before)")
         ax.plot(fa[:, sel[0]], fa[:, sel[1]], "b-", lw=2, label="flown (fixed, after)")
         ax.plot(cb[:, sel[0]], cb[:, sel[1]], "rx", ms=8, label="certified nodes (before)")
         ax.plot(ca[:, sel[0]], ca[:, sel[1]], "b+", ms=10, mew=2, label="certified nodes (after)")
         ax.set_title(title)
-        ax.set_xlabel("xyz"[sel[0]]); ax.set_ylabel("xyz"[sel[1]])
-        ax.axis("equal"); ax.grid(alpha=0.3)
+        ax.set_xlabel("xyz"[sel[0]])
+        ax.set_ylabel("xyz"[sel[1]])
+        ax.axis("equal")
+        ax.grid(alpha=0.3)
     axes[0].legend(loc="upper center", fontsize=8)
     plt.tight_layout()
     plt.savefig(out_dir / "trajectory_comparison.png", dpi=130)
@@ -321,9 +353,16 @@ def make_plots(before: dict, after: dict, out_dir: Path) -> None:
 
     vb = np.array([violation(p) for p in fb])
     worst_k = int(np.argmax(vb))
-    worst_idx = int(np.argmax([1.0 - (fb[worst_k] - np.array(c)) @ A @ (fb[worst_k] - np.array(c))
-                                for c, A in zip(centers, A_list)]))
-    c = np.array(centers[worst_idx]); A = A_list[worst_idx]
+    worst_idx = int(
+        np.argmax(
+            [
+                1.0 - (fb[worst_k] - np.array(c)) @ A @ (fb[worst_k] - np.array(c))
+                for c, A in zip(centers, A_list)
+            ]
+        )
+    )
+    c = np.array(centers[worst_idx])
+    A = A_list[worst_idx]
 
     fig, ax = plt.subplots(figsize=(7, 7))
     Asub = A[np.ix_([0, 2], [0, 2])]
@@ -331,17 +370,30 @@ def make_plots(before: dict, after: dict, out_dir: Path) -> None:
     r = 1 / np.sqrt(w)
     theta = np.linspace(0, 2 * np.pi, 200)
     pts = v @ np.diag(r) @ np.array([np.cos(theta), np.sin(theta)])
-    ax.fill(pts[0] + c[0], pts[1] + c[2], color="gray", alpha=0.5, label="obstacle boundary (XZ slice)", zorder=0)
+    ax.fill(
+        pts[0] + c[0],
+        pts[1] + c[2],
+        color="gray",
+        alpha=0.5,
+        label="obstacle boundary (XZ slice)",
+        zorder=0,
+    )
     margin = 3.5
     mask_b = np.abs(fb[:, 0] - c[0]) < margin
     mask_a = np.abs(fa[:, 0] - c[0]) < margin
-    ax.plot(fb[mask_b, 0], fb[mask_b, 2], "r-", lw=2.5, label=f"flown (buggy) max viol={vb.max():.3f}")
+    ax.plot(
+        fb[mask_b, 0], fb[mask_b, 2], "r-", lw=2.5, label=f"flown (buggy) max viol={vb.max():.3f}"
+    )
     ax.plot(fa[mask_a, 0], fa[mask_a, 2], "b-", lw=2.5, label="flown (fixed)")
     ax.plot([fb[worst_k, 0]], [fb[worst_k, 2]], "ko", ms=8, label="worst point (buggy)")
-    ax.set_xlim(c[0] - margin, c[0] + margin); ax.set_ylim(c[2] - margin, c[2] + margin)
-    ax.set_aspect("equal"); ax.set_xlabel("x"); ax.set_ylabel("z")
+    ax.set_xlim(c[0] - margin, c[0] + margin)
+    ax.set_ylim(c[2] - margin, c[2] + margin)
+    ax.set_aspect("equal")
+    ax.set_xlabel("x")
+    ax.set_ylabel("z")
     ax.set_title(f"Zoom on obstacle {worst_idx + 1}, XZ slice")
-    ax.legend(fontsize=9); ax.grid(alpha=0.3)
+    ax.legend(fontsize=9)
+    ax.grid(alpha=0.3)
     plt.tight_layout()
     plt.savefig(out_dir / "trajectory_zoom_xz.png", dpi=140)
     plt.close(fig)

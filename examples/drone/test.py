@@ -1,4 +1,5 @@
 """cd into before/examples/drone or after/examples/drone and run: python test.py"""
+
 import os
 import sys
 import time
@@ -21,8 +22,19 @@ DISCRETIZER_TOL = {"rtol": 1e-9, "atol": 1e-9}
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "obstacle_avoidance.py")
 src = open(SRC, encoding="utf-8").read().split("if __name__ ==")[0]
-old = "problem = Problem(\n    dynamics=dynamics,\n    states=states,\n    controls=controls,\n    time=time,\n    constraints=constraints,\n    N=n,\n)"
-src = src.replace(old, old.replace("N=n,\n)", f"N=n,\n    licq_max={LICQ_MAX!r},\n)"))
+old = (
+    "problem = Problem(\n"
+    "    dynamics=dynamics,\n"
+    "    states=states,\n"
+    "    controls=controls,\n"
+    "    time=time,\n"
+    "    constraints=constraints,\n"
+    "    N=n,\n"
+    ")"
+)
+src = src.replace(
+    old, old.replace("N=n,\n)", f"N=n,\n    licq_max={LICQ_MAX!r},\n)")
+)
 
 ns = {"__name__": "test", "__file__": SRC}
 exec(compile(src, SRC, "exec"), ns)
@@ -40,8 +52,10 @@ problem.discretizer.diffrax_kwargs = DISCRETIZER_TOL
 problem.initialize()
 t0 = time.time()
 results = problem.solve()
-print(f"licq_max={LICQ_MAX:.1e} converged={results.converged} "
-      f"iters={len(results.acceptance_ratio_history)} solve_time={time.time()-t0:.2f}s")
+print(
+    f"licq_max={LICQ_MAX:.1e} converged={results.converged} "
+    f"iters={len(results.acceptance_ratio_history)} solve_time={time.time() - t0:.2f}s"
+)
 
 state = problem._state
 x, u = np.asarray(state.x), np.asarray(state.u)
@@ -59,8 +73,16 @@ def rhs(T, xx):
     return np.asarray(f_jit(xx, u[k] + beta * (u[k + 1] - u[k]), k, params))
 
 
-sol = solve_ivp(rhs, (0.0, 1.0), x[0].copy(), method="RK45",
-                 rtol=1e-10, atol=1e-10, dense_output=True, max_step=0.0005)
+sol = solve_ivp(
+    rhs,
+    (0.0, 1.0),
+    x[0].copy(),
+    method="RK45",
+    rtol=1e-10,
+    atol=1e-10,
+    dense_output=True,
+    max_step=0.0005,
+)
 
 
 def violation(pos):
@@ -72,5 +94,7 @@ y = sol.sol(s)
 viol = np.array([violation(y[0:3, i]) for i in range(y.shape[1])])
 final_err = np.linalg.norm(sol.y[0:3, -1] - np.array([-10.0, 0.0, 2.0]))
 
-print(f"RESULT licq_max={LICQ_MAX:.1e} converged={results.converged} "
-      f"true_max_violation={viol.max():.5f} final_pos_err={final_err:.5f}")
+print(
+    f"RESULT licq_max={LICQ_MAX:.1e} converged={results.converged} "
+    f"true_max_violation={viol.max():.5f} final_pos_err={final_err:.5f}"
+)
