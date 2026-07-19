@@ -369,6 +369,70 @@ def boresight_trace(positions, attitudes):
     return np.array(points)
 
 
+def trace_figure(traced, times):
+    """Plotly figure: the SVG reference path against the drawn trace, colored by pen speed."""
+    import plotly.graph_objects as go
+
+    speed = np.linalg.norm(np.gradient(traced, times, axis=0), axis=1)
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=path_points[:, 1],
+            y=path_points[:, 2],
+            mode="lines",
+            name="reference path",
+            line=dict(color="black", dash="dash", width=1),
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=traced[:, 1],
+            y=traced[:, 2],
+            mode="markers",
+            name="pen trace",
+            marker=dict(
+                color=speed,
+                colorscale="Rainbow",
+                size=4,
+                colorbar=dict(title="pen speed [m/s]"),
+                showscale=True,
+            ),
+        )
+    )
+    fig.update_layout(
+        title=f"Boresight pen trace — {os.path.basename(svg_file)}",
+        xaxis=dict(title="y [m]", scaleanchor="y"),
+        yaxis=dict(title="z [m]"),
+        legend=dict(x=0.01, y=0.99),
+        height=600,
+    )
+    return fig
+
+
+def deviation_figure(progress_dense, trace_err):
+    """Plotly figure: trace deviation against arc length along the path."""
+    import plotly.graph_objects as go
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=progress_dense,
+            y=trace_err * 100,
+            mode="lines",
+            name="trace error",
+            line=dict(color="black", width=1),
+        )
+    )
+    fig.update_layout(
+        title=f"Trace deviation — {os.path.basename(svg_file)}",
+        xaxis=dict(title="path length [m]"),
+        yaxis=dict(title="trace error [cm]"),
+        height=400,
+    )
+    return fig
+
+
 ###############################################################################
 # Main: receding-horizon loop
 ###############################################################################
@@ -428,6 +492,9 @@ if __name__ == "__main__":
         f"Trace error vs reference: mean {trace_err.mean() * 100:.2f} cm, "
         f"max {trace_err.max() * 100:.2f} cm"
     )
+
+    trace_figure(traced, times).show()
+    deviation_figure(progress_dense, trace_err).show()
 
     # --- Visualization ---
     from examples.drone.logo_utils.quadrotor_mesh import make_quadrotor_mesh
