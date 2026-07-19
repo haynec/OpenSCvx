@@ -446,6 +446,11 @@ if __name__ == "__main__":
         server, positions, flight_colors, point_size=0.03, name="/flight_path"
     )
 
+    # Show the finished drawing on load; pressing Play still animates it being
+    # drawn (the trails rewind to the scrubber position)
+    update_ink(len(traced) - 1)
+    update_flight(len(positions) - 1)
+
     # The artist: posed quadrotor mesh with its boresight beam to the pen
     mesh_vertices, mesh_faces = make_quadrotor_mesh()
     drone_handle = server.scene.add_mesh_simple(
