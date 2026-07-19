@@ -94,8 +94,8 @@ tilt_max = np.deg2rad(30.0)  # max pen tilt from the surface normal
 # Discretization and time
 # =============================================================================
 
-n = 40
-total_time = 10.0  # target completes the path exactly once
+n = 150
+total_time = 45.0  # target completes the path exactly once (~3.3 m of drawing)
 
 time = ox.Time(initial=0.0, final=total_time, min=0.0, max=total_time)
 
@@ -106,20 +106,31 @@ time = ox.Time(initial=0.0, final=total_time, min=0.0, max=total_time)
 # outline is scaled uniformly into a ``path_size`` box centred on
 # ``path_center`` in front of the base.
 
-trace_svg = os.path.join(current_dir, "ur5e_assets", "circle.svg")
+# The OpenSCvx wordmark (single continuous outline, path 0 of the SVG the
+# drone logo example uses; paths 1-2 are its frame). Laid across the table —
+# long axis on y — via the 90 degree rotation. Swap in any other SVG
+# (e.g. ur5e_assets/circle.svg with default indices/rotation) to trace it.
+trace_svg = os.path.join(
+    grandparent_dir, "examples", "drone", "logo_utils", "openscvx_logo_single.svg"
+)
+path_indices = [0]
+rotation_deg = 90.0
 path_center = np.array([0.45, 0.0])
-path_size = 0.30  # bounding-box size of the drawing on the surface [m]
+path_size = 0.50  # bounding-box size of the drawing on the surface [m]
 
 
-def svg_polyline(svg_file: str, n_points: int = 2000) -> np.ndarray:
+def svg_polyline(svg_file: str, n_points: int = 4000) -> np.ndarray:
     """Uniform-arc-length polyline through the SVG's paths, fitted to the drawing box.
 
-    Concatenates all paths in the file in order, samples them densely, then
-    resamples by cumulative arc length so equal index steps cover equal
-    distances. The result is y-flipped (SVG y points down), scaled uniformly
-    to fit ``path_size``, and centred on ``path_center``.
+    Concatenates the selected ``path_indices`` (all paths when None) in order,
+    samples them densely, then resamples by cumulative arc length so equal
+    index steps cover equal distances. The result is y-flipped (SVG y points
+    down), rotated by ``rotation_deg``, scaled uniformly to fit ``path_size``,
+    and centred on ``path_center``.
     """
     paths, _ = svgpathtools.svg2paths(svg_file)
+    if path_indices is not None:
+        paths = [paths[i] for i in path_indices]
     dense = []
     for path in paths:
         for seg in path:
@@ -128,6 +139,9 @@ def svg_polyline(svg_file: str, n_points: int = 2000) -> np.ndarray:
                 pt = seg.point(t)
                 dense.append([pt.real, -pt.imag])
     dense = np.asarray(dense + [dense[0]] if _is_closed(paths) else dense)
+    ang = np.deg2rad(rotation_deg)
+    rot = np.array([[np.cos(ang), -np.sin(ang)], [np.sin(ang), np.cos(ang)]])
+    dense = dense @ rot.T
 
     arc = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(dense, axis=0), axis=1))])
     s_uniform = np.linspace(0.0, arc[-1], n_points)
@@ -144,23 +158,52 @@ def _is_closed(paths) -> bool:
     return abs(end - start) < 1e-6 * sum(p.length() for p in paths)
 
 
-def path_progress(t_frac):
-    """Eased path progress s(t/T): zero target speed at both path ends.
+def path_progress(t_frac, ramp: float = 0.08):
+    """Eased time progress: smoothstep speed ramps at both ends of the trace.
 
-    The arm starts and ends at rest, so an easing profile lets it track the
-    target through the whole trace instead of chasing a step in target speed.
+    The arm starts and ends at rest, so the target speed ramps from and to
+    zero over the first and last ``ramp`` fraction of the mission — and stays
+    near-constant in between, where curvature pacing governs the speed. (A
+    full-trace sine ease would double the mid-trace speed instead.)
     """
-    return t_frac - np.sin(2.0 * np.pi * t_frac) / (2.0 * np.pi)
+    up = np.clip(t_frac / ramp, 0.0, 1.0)
+    down = np.clip((1.0 - t_frac) / ramp, 0.0, 1.0)
+    speed = (3 * up**2 - 2 * up**3) * (3 * down**2 - 2 * down**3)
+    progress = np.concatenate([[0.0], np.cumsum(0.5 * (speed[1:] + speed[:-1]))])
+    return progress / progress[-1]
+
+
+def curvature_pacing(polyline: np.ndarray, kappa_ref: float = 50.0, w_max: float = 8.0):
+    """Map time fraction -> path progress, slowing the target through corners.
+
+    Allocates trace time in proportion to a curvature weight ``1 + |kappa| /
+    kappa_ref`` (clipped at ``w_max``), so sharp glyph corners get up to
+    ``w_max`` times more time per unit arc length than straight strokes. With
+    uniform pacing the tightest corners dominate the tracking error budget.
+
+    Returns (time_fraction, progress) tables: monotone arrays mapping the
+    fraction of trace time spent to the fraction of arc length covered.
+    """
+    xp, yp = np.gradient(polyline[:, 0]), np.gradient(polyline[:, 1])
+    xpp, ypp = np.gradient(xp), np.gradient(yp)
+    # Per-index derivatives suffice: on a uniform-arc-length polyline the
+    # sample spacing cancels out of the curvature formula.
+    kappa = np.abs(xp * ypp - yp * xpp) / np.maximum((xp**2 + yp**2) ** 1.5, 1e-12)
+    window = np.ones(31) / 31.0  # ~8 mm smoothing at 0.5 m path size
+    kappa = np.convolve(kappa, window, mode="same")
+    weight = np.clip(1.0 + kappa / kappa_ref, 1.0, w_max)
+    time_frac = np.concatenate([[0.0], np.cumsum(weight[:-1])])
+    return time_frac / time_frac[-1], np.linspace(0.0, 1.0, len(polyline))
 
 
 # Tabulate the target as a function of mission time: uniform time breakpoints,
-# eased progress, positions read off the arc-length polyline. Cubic splines
-# through this table give the solver a C2-smooth moving target regardless of
-# how the SVG itself is sampled.
+# eased and curvature-paced progress, positions read off the arc-length
+# polyline. Cubic splines through this table give the solver a C2-smooth
+# moving target regardless of how the SVG itself is sampled.
 _polyline = svg_polyline(trace_svg)
-_t_table = np.linspace(0.0, total_time, 400)
-_s_polyline = np.linspace(0.0, 1.0, len(_polyline))
-_s_table = path_progress(_t_table / total_time)
+_time_frac, _s_polyline = curvature_pacing(_polyline)
+_t_table = np.linspace(0.0, total_time, 1000)
+_s_table = np.interp(path_progress(_t_table / total_time), _time_frac, _s_polyline)
 _xy_table = np.column_stack(
     [np.interp(_s_table, _s_polyline, _polyline[:, i]) for i in range(2)]
 )
@@ -252,7 +295,10 @@ tau.guess = np.array([np.asarray(robot.gravity_vector(qi)) for qi in q_guess])
 
 tip_error = ox.State("tip_error", shape=(1,))
 tip_error.min = np.array([0.0])
-tip_error.max = np.array([1e-3])  # over the mission; 1e-3 ~= 10 mm RMS
+# Loose guard only — Minimize provides the tracking pressure. A tight cap
+# that the true integral cannot meet forces the solver into defect-cheating
+# (it "erases" the metric through virtual control instead of steering).
+tip_error.max = np.array([1e-2])
 tip_error.initial = np.array([0.0])
 tip_error.final = [ox.Minimize(0.0)]
 tip_error.guess = np.zeros((n, 1))
