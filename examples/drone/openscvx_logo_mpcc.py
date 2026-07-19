@@ -431,34 +431,35 @@ if __name__ == "__main__":
 
     # --- Visualization ---
     from examples.drone.logo_utils.quadrotor_mesh import make_quadrotor_mesh
-    from openscvx.plotting.viser import (
-        add_animated_trail,
-        add_animation_controls,
-        create_server,
-    )
+    from openscvx.plotting.viser import add_animation_controls, create_server
 
     server = create_server(positions)
 
-    # The canvas: reference path as a continuous grey line, gold ink laid down
-    # on top of it as the animation plays (colors chosen for the dark theme)
+    # The canvas: reference path as a continuous grey line, gold ink stroked on
+    # top of it as the animation plays (all trails are line segments — point
+    # clouds fail to render on some browser/GPU combinations)
     server.scene.add_line_segments(
         "/reference_path",
         points=np.stack([path_points[:-1], path_points[1:]], axis=1).astype(np.float32),
         colors=(140, 140, 145),
         line_width=2.0,
     )
-    ink_colors = np.full((len(traced), 3), [255, 200, 60], dtype=np.uint8)
-    _, update_ink = add_animated_trail(server, traced, ink_colors, point_size=0.08, name="/ink")
 
-    flight_colors = np.full((len(positions), 3), [120, 170, 255], dtype=np.uint8)
-    _, update_flight = add_animated_trail(
-        server, positions, flight_colors, point_size=0.03, name="/flight_path"
-    )
+    def add_line_trail(name, trail, color, line_width):
+        """Growing line-strip trail; returns an update callback for the animation."""
+        segments = np.stack([trail[:-1], trail[1:]], axis=1).astype(np.float32)
+        handle = server.scene.add_line_segments(
+            name, points=segments, colors=color, line_width=line_width
+        )
 
-    # Show the finished drawing on load; pressing Play still animates it being
-    # drawn (the trails rewind to the scrubber position)
-    update_ink(len(traced) - 1)
-    update_flight(len(positions) - 1)
+        def update(frame_idx: int) -> None:
+            handle.points = segments[: max(frame_idx, 1)]
+
+        return update
+
+    # Trails load fully drawn; pressing Play rewinds and animates the drawing
+    update_ink = add_line_trail("/ink", traced, (255, 200, 60), line_width=5.0)
+    update_flight = add_line_trail("/flight_path", positions, (120, 170, 255), line_width=2.0)
 
     # The artist: posed quadrotor mesh with its boresight beam to the pen
     mesh_vertices, mesh_faces = make_quadrotor_mesh()
