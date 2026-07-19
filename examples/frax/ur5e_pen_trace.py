@@ -469,13 +469,13 @@ problem = ox.Problem(
 
 
 def pen_tip_path(q_traj: np.ndarray) -> np.ndarray:
-    """World-frame pen tip positions along a joint trajectory."""
-    length = float(pen_length.value[0])
-    tips = np.zeros((len(q_traj), 3))
-    for k, q_val in enumerate(np.asarray(q_traj)):
-        T = np.asarray(robot.ee_transform(q_val))
-        tips[k] = T[:3, 3] + length * T[:3, 2]
-    return tips
+    """World-frame pen tip positions along a joint trajectory.
+
+    FK is batched through ``jax.vmap`` — per-frame python calls cost ~7 ms of
+    dispatch each, which at multishot resolution adds up to minutes.
+    """
+    T = np.asarray(jax.vmap(robot.ee_transform)(jnp.asarray(q_traj)))
+    return T[:, :3, 3] + float(pen_length.value[0]) * T[:, :3, 2]
 
 
 # =============================================================================
@@ -602,15 +602,21 @@ def visualize(results) -> None:
     if prop is not None:
         q_traj, t_vec = prop.state("q")
 
+    # ~30 fps of animation is plenty; full multishot resolution just slows
+    # the precompute and the client down.
+    stride = max(1, len(q_traj) // 1500)
+    q_traj = np.asarray(q_traj)[::stride]
+    t_vec = np.asarray(t_vec).flatten()[::stride]
+
     n_frames = len(q_traj)
     tips = pen_tip_path(q_traj)
     target_path = np.column_stack([_polyline, np.zeros(len(_polyline))])
 
+    links = np.asarray(jax.vmap(robot.link_to_world_transforms)(jnp.asarray(q_traj)))
+    ee_T = np.asarray(jax.vmap(robot.ee_transform)(jnp.asarray(q_traj)))
     keypoints = np.zeros((n_frames, n_j + 2, 3))
-    for k in range(n_frames):
-        links = np.asarray(robot.link_to_world_transforms(q_traj[k]))
-        keypoints[k, 1 : 1 + n_j] = links[:, :3, 3]
-        keypoints[k, -1] = np.asarray(robot.ee_transform(q_traj[k]))[:3, 3]
+    keypoints[:, 1 : 1 + n_j] = links[:, :, :3, 3]
+    keypoints[:, -1] = ee_T[:, :3, 3]
 
     server = create_server(keypoints[:, -1], show_grid=False)
     server.scene.add_grid("/table", width=1.6, height=1.6, cell_size=0.2)
@@ -696,7 +702,7 @@ if __name__ == "__main__":
     prop = results.multishot_propagation()
     q_traj, t_traj = prop.state("q")
     tips = pen_tip_path(q_traj)
-    targets = np.array([target_at_time(t) for t in t_traj])
+    targets = np.asarray(_target_spline(np.clip(t_traj, 0.0, total_time)))
     engaged = target_engaged(t_traj)
     tip_err = np.linalg.norm(tips[:, :2] - targets[:, :2], axis=1)[engaged]
     tips_down = tips[engaged]

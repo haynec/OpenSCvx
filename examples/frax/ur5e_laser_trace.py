@@ -332,14 +332,6 @@ def _misalignment_dynamics(x, u, node, params):
     return jnp.array([1.0 - jnp.dot(to_target, laser) / jnp.linalg.norm(to_target)])
 
 
-def laser_angle_to_target(q_val, t_val):
-    """Pointing angle in radians (for reporting; not used in the optimization)."""
-    T = np.asarray(robot.ee_transform(q_val))
-    to_target = target_at_time(t_val) - T[:3, 3]
-    cos_angle = np.dot(to_target, T[:3, 2]) / np.linalg.norm(to_target)
-    return np.arccos(np.clip(cos_angle, -1.0, 1.0))
-
-
 # --- CTCS: EE stays above the work surface ----------------------------------
 def _table_clearance_ctcs(x, u, node, params):
     ee_z = jnp.asarray(robot.ee_transform(x[q.slice]))[2, 3]
@@ -398,16 +390,26 @@ problem = ox.Problem(
 def laser_trace(q_traj: np.ndarray) -> np.ndarray:
     """Intersect the laser ray with the work surface (z = 0) along a trajectory.
 
-    Points where the laser is parallel to the surface or pointing away from it
-    are returned as NaN so plots show a gap rather than a spurious dot.
+    FK is batched through ``jax.vmap`` — per-frame python calls cost ~7 ms of
+    dispatch each, which at multishot resolution adds up to minutes. Points
+    where the laser is parallel to the surface or pointing away from it are
+    returned as NaN so plots show a gap rather than a spurious dot.
     """
+    T = np.asarray(jax.vmap(robot.ee_transform)(jnp.asarray(q_traj)))
+    p_ee, laser = T[:, :3, 3], T[:, :3, 2]
     trace = np.full((len(q_traj), 3), np.nan)
-    for k, q_val in enumerate(np.asarray(q_traj)):
-        T = np.asarray(robot.ee_transform(q_val))
-        p_ee, laser = T[:3, 3], T[:3, 2]
-        if laser[2] < -1e-8:
-            trace[k] = p_ee - (p_ee[2] / laser[2]) * laser
+    hit = laser[:, 2] < -1e-8
+    trace[hit] = p_ee[hit] - (p_ee[hit, 2] / laser[hit, 2])[:, None] * laser[hit]
     return trace
+
+
+def laser_angles(q_traj: np.ndarray, t: np.ndarray) -> np.ndarray:
+    """Pointing angles to the moving target along a trajectory (for reporting)."""
+    T = np.asarray(jax.vmap(robot.ee_transform)(jnp.asarray(q_traj)))
+    tgt = np.column_stack([_target_spline(np.clip(t, 0.0, total_time)), np.zeros(len(t))])
+    to_target = tgt - T[:, :3, 3]
+    cos_angle = np.einsum("ij,ij->i", to_target, T[:, :3, 2]) / np.linalg.norm(to_target, axis=1)
+    return np.arccos(np.clip(cos_angle, -1.0, 1.0))
 
 
 # =============================================================================
@@ -534,17 +536,21 @@ def visualize(results) -> None:
     if prop is not None:
         q_traj, t_vec = prop.state("q")
 
+    # ~30 fps of animation is plenty; full multishot resolution just slows
+    # the precompute and the client down.
+    stride = max(1, len(q_traj) // 1500)
+    q_traj = np.asarray(q_traj)[::stride]
+    t_vec = np.asarray(t_vec).flatten()[::stride]
+
     n_frames = len(q_traj)
     trace = laser_trace(q_traj)
     target_path = np.column_stack([_polyline, np.zeros(len(_polyline))])
 
+    links = np.asarray(jax.vmap(robot.link_to_world_transforms)(jnp.asarray(q_traj)))
+    ee_T = np.asarray(jax.vmap(robot.ee_transform)(jnp.asarray(q_traj)))
     keypoints = np.zeros((n_frames, n_j + 2, 3))
-    ee_T = np.zeros((n_frames, 4, 4))
-    for k in range(n_frames):
-        links = np.asarray(robot.link_to_world_transforms(q_traj[k]))
-        ee_T[k] = np.asarray(robot.ee_transform(q_traj[k]))
-        keypoints[k, 1 : 1 + n_j] = links[:, :3, 3]
-        keypoints[k, -1] = ee_T[k][:3, 3]
+    keypoints[:, 1 : 1 + n_j] = links[:, :, :3, 3]
+    keypoints[:, -1] = ee_T[:, :3, 3]
 
     server = create_server(keypoints[:, -1], show_grid=False)
     server.scene.add_grid("/table", width=1.6, height=1.6, cell_size=0.2)
@@ -634,10 +640,10 @@ if __name__ == "__main__":
     prop = results.multishot_propagation()
     q_traj, t_traj = prop.state("q")
     trace = laser_trace(q_traj)
-    targets = np.array([target_at_time(t) for t in t_traj])
+    targets = _target_spline(np.clip(t_traj, 0.0, total_time))
     engaged = target_engaged(t_traj)
     trace_err = np.linalg.norm(trace[:, :2] - targets[:, :2], axis=1)[engaged]
-    angles = np.array([laser_angle_to_target(qk, tk) for qk, tk in zip(q_traj, t_traj)])
+    angles = laser_angles(q_traj, t_traj)
 
     print("\nResults:")
     print(f"  Pointing angle: mean {np.degrees(angles.mean()):.2f} deg, "
