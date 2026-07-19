@@ -70,6 +70,26 @@ import openscvx as ox
 from openscvx.symbolic.lower import lower_to_jax
 
 # =============================================================================
+# Tuning knobs
+# =============================================================================
+
+# Drawing: which SVG to trace and where it sits on the work surface (z = 0).
+trace_svg = os.path.join(
+    grandparent_dir, "examples", "drone", "logo_utils", "openscvx_logo_single.svg"
+)
+path_indices = [0]  # SVG paths to trace (None = all; the wordmark outline is path 0)
+rotation_deg = 90.0  # lay the figure across the table, long axis on y
+path_center = np.array([0.45, 0.0])  # centre of the drawing on the surface [m]
+path_size = 0.50  # larger bounding-box dimension of the drawing [m]
+
+# Mission: trajectory nodes and the (fixed) duration of the single traversal.
+n = 300
+total_time = 45.0  # [s] — the default wordmark is ~3.3 m of drawing
+
+# Laser: hover height of the EE above the moving target in the initial guess.
+standoff = 0.25  # [m]
+
+# =============================================================================
 # Robot and dynamics
 # =============================================================================
 
@@ -80,11 +100,8 @@ q, qd = dyn.states
 n_j = robot.num_joints  # 6
 
 # =============================================================================
-# Discretization and time
+# Time
 # =============================================================================
-
-n = 300
-total_time = 45.0  # target completes the path exactly once (~3.3 m of drawing)
 
 time = ox.Time(initial=0.0, final=total_time, min=0.0, max=total_time)
 
@@ -94,19 +111,6 @@ time = ox.Time(initial=0.0, final=total_time, min=0.0, max=total_time)
 # The work surface is the plane z = 0 (the robot is mounted on it). The SVG
 # outline is scaled uniformly into a ``path_size`` box centred on
 # ``path_center`` in front of the base.
-
-# The OpenSCvx wordmark (single continuous outline, path 0 of the SVG the
-# drone logo example uses; paths 1-2 are its frame). Laid across the table —
-# long axis on y — via the 90 degree rotation. Swap in any other SVG
-# (e.g. ur5e_assets/circle.svg with default indices/rotation) to trace it.
-trace_svg = os.path.join(
-    grandparent_dir, "examples", "drone", "logo_utils", "openscvx_logo_single.svg"
-)
-path_indices = [0]
-rotation_deg = 90.0
-path_center = np.array([0.45, 0.0])
-path_size = 0.50  # bounding-box size of the drawing on the surface [m]
-
 
 def svg_polyline(svg_file: str, n_points: int = 4000) -> tuple[np.ndarray, np.ndarray]:
     """Uniform-arc-length polyline through the SVG's strokes, fitted to the drawing box.
@@ -235,7 +239,6 @@ def target_engaged(t) -> np.ndarray:
 # (each node seeded by the previous solution) through frax FK turns those
 # poses into a smooth joint-space trajectory on a single IK branch.
 
-standoff = 0.25
 _R_down = jnp.array([[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]])
 _q_seed = np.array([0.0, -np.pi / 2, np.pi / 2, -np.pi / 2, -np.pi / 2, 0.0])
 

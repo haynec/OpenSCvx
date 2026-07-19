@@ -78,6 +78,32 @@ import openscvx as ox
 from openscvx.symbolic.lower import lower_to_jax
 
 # =============================================================================
+# Tuning knobs
+# =============================================================================
+
+# Drawing: which SVG to trace and where it sits on the work surface (z = 0).
+trace_svg = os.path.join(
+    grandparent_dir, "examples", "drone", "logo_utils", "openscvx_logo_single.svg"
+)
+path_indices = [0]  # SVG paths to trace (None = all; the wordmark outline is path 0)
+rotation_deg = 90.0  # lay the figure across the table, long axis on y
+path_center = np.array([0.45, 0.0])  # centre of the drawing on the surface [m]
+path_size = 0.50  # larger bounding-box dimension of the drawing [m]
+
+# Mission: trajectory nodes and the (fixed) duration of the single traversal.
+n = 300
+total_time = 45.0  # [s] — the default wordmark is ~3.3 m of drawing
+
+# Pen. The length is an ox.Parameter: assign a new ``pen_length.value`` and
+# re-solve to fit whatever pen ends up in the gripper — no rebuild (the IK
+# guess is built for the current value, so re-run it too if the length
+# changes a lot).
+pen_length = ox.Parameter("pen_length", shape=(1,), value=np.array([0.15]))
+contact_tol = 0.0005  # tip-to-surface contact band while drawing [m]
+tilt_max = np.deg2rad(30.0)  # max pen tilt from the surface normal
+lift_height = 0.03  # pen-up clearance over transits between strokes [m]
+
+# =============================================================================
 # Robot and dynamics
 # =============================================================================
 
@@ -88,24 +114,8 @@ q, qd = dyn.states
 n_j = robot.num_joints  # 6
 
 # =============================================================================
-# Pen
+# Time
 # =============================================================================
-# Rigid pen of length ``pen_length`` held along the tool axis. The Parameter
-# reaches the BYOF functions as ``params["pen_length"]``; assign a new
-# ``pen_length.value`` and re-solve to change pens without rebuilding the
-# problem (the IK guess below is built for the current value, so re-run it
-# too if the length changes a lot).
-
-pen_length = ox.Parameter("pen_length", shape=(1,), value=np.array([0.15]))
-contact_tol = 0.0005  # tip-to-surface band [m]
-tilt_max = np.deg2rad(30.0)  # max pen tilt from the surface normal
-
-# =============================================================================
-# Discretization and time
-# =============================================================================
-
-n = 300
-total_time = 45.0  # target completes the path exactly once (~3.3 m of drawing)
 
 time = ox.Time(initial=0.0, final=total_time, min=0.0, max=total_time)
 
@@ -115,19 +125,6 @@ time = ox.Time(initial=0.0, final=total_time, min=0.0, max=total_time)
 # The work surface is the plane z = 0 (the robot is mounted on it). The SVG
 # outline is scaled uniformly into a ``path_size`` box centred on
 # ``path_center`` in front of the base.
-
-# The OpenSCvx wordmark (single continuous outline, path 0 of the SVG the
-# drone logo example uses; paths 1-2 are its frame). Laid across the table —
-# long axis on y — via the 90 degree rotation. Swap in any other SVG
-# (e.g. ur5e_assets/circle.svg with default indices/rotation) to trace it.
-trace_svg = os.path.join(
-    grandparent_dir, "examples", "drone", "logo_utils", "openscvx_logo_single.svg"
-)
-path_indices = [0]
-rotation_deg = 90.0
-path_center = np.array([0.45, 0.0])
-path_size = 0.50  # bounding-box size of the drawing on the surface [m]
-
 
 def svg_polyline(svg_file: str, n_points: int = 4000) -> tuple[np.ndarray, np.ndarray]:
     """Uniform-arc-length polyline through the SVG's strokes, fitted to the drawing box.
@@ -224,8 +221,6 @@ def curvature_pacing(polyline: np.ndarray, kappa_ref: float = 50.0, w_max: float
 # smooth bump of height ``lift_height``, so tracking it carries the pen up,
 # across, and back down. Cubic splines through this table give the solver a
 # C2-smooth moving target regardless of how the SVG itself is sampled.
-lift_height = 0.03  # pen-up clearance over transits [m]
-
 _polyline, _on_stroke = svg_polyline(trace_svg)
 _time_frac, _s_polyline = curvature_pacing(_polyline)
 _t_table = np.linspace(0.0, total_time, 1000)
