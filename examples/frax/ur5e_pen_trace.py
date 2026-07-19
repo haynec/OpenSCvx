@@ -18,10 +18,12 @@ Formulation
   and re-solve to fit whatever pen ends up in the gripper — no rebuild.
 - Contact: a CTCS band keeps the tip within ``contact_tol`` of the surface,
   and a tilt cone keeps the pen within ``tilt_max`` of the surface normal.
-- Tracking: a ``tip_error`` state integrates the squared in-plane distance
-  between the pen tip and the target (BYOF dynamics, since it needs frax FK).
-  Its upper bound caps the average tracking error through CTCS, and its final
-  value is minimized.
+- Tracking: a ``tip_error`` state integrates the squared distance between
+  the pen tip and the target point on the surface (BYOF dynamics, since it
+  needs frax FK) — including the vertical component, so the tip presses
+  toward the surface instead of wandering inside the contact band. Its upper
+  bound caps the average tracking error through CTCS, and its final value is
+  minimized.
 - Initial guess: sequential damped-least-squares IK through frax's own FK
   places the tip exactly on the moving target with the pen vertical, so the
   guess writes the figure perfectly and SCP only has to trade tracking
@@ -88,7 +90,7 @@ n_j = robot.num_joints  # 6
 # too if the length changes a lot).
 
 pen_length = ox.Parameter("pen_length", shape=(1,), value=np.array([0.15]))
-contact_tol = 0.002  # tip-to-surface band [m]
+contact_tol = 0.0005  # tip-to-surface band [m]
 tilt_max = np.deg2rad(30.0)  # max pen tilt from the surface normal
 
 # =============================================================================
@@ -288,11 +290,14 @@ tau.guess = np.array([np.asarray(robot.gravity_vector(qi)) for qi in q_guess])
 # =============================================================================
 # Tip tracking metric state
 # =============================================================================
-# d(tip_error)/dt = || tip_xy - target_xy ||^2, so the state accumulates the
-# squared in-plane tracking error of the pen tip over the mission [m^2 s].
-# The upper bound caps it continuously (CTCS) and the final value is
-# minimized. The squared distance is smooth at zero error, so the
-# linearization stays well conditioned on the (exact) IK guess.
+# d(tip_error)/dt = || tip - target ||^2 with the target on the surface
+# (z = 0), so the state accumulates the squared 3D tracking error of the pen
+# tip over the mission [m^2 s]. Including the vertical component keeps the
+# tip from wandering inside the contact band — the band is the hard
+# guarantee, the metric supplies continuous pressure toward z = 0. The upper
+# bound caps the state through CTCS and the final value is minimized. The
+# squared distance is smooth at zero error, so the linearization stays well
+# conditioned on the (exact) IK guess.
 
 tip_error = ox.State("tip_error", shape=(1,))
 tip_error.min = np.array([0.0])
@@ -325,8 +330,9 @@ def _tip_position(x, params):
 
 
 def _tip_error_dynamics(x, u, node, params):
-    tip_xy = _tip_position(x, params)[:2]
-    return jnp.array([jnp.sum((tip_xy - _target_fn(x, u, node, params)) ** 2)])
+    tip = _tip_position(x, params)
+    err = jnp.concatenate([tip[:2] - _target_fn(x, u, node, params), tip[2:]])
+    return jnp.array([jnp.sum(err**2)])
 
 
 # --- Contact: pen tip stays on the surface -----------------------------------
@@ -472,8 +478,78 @@ def trace_figure(tips: np.ndarray, t: np.ndarray):
     return fig
 
 
+# The menagerie MJCF mounts the UR5e base rotated 180 degrees about z
+# relative to the URDF frame frax uses; every mesh pose is premultiplied by
+# this to put the CAD model in the trajectory's world frame.
+_RZ180 = np.diag([-1.0, -1.0, 1.0])
+
+
+def _ur5e_mesh_scene(server, q_traj: np.ndarray):
+    """Add the menagerie UR5e CAD meshes and return a per-frame pose updater.
+
+    Everything is read from the MuJoCo model itself — visual mesh geoms,
+    vertices/faces, and material colours — so no asset bookkeeping is needed.
+    Returns None when the menagerie assets are unavailable (the caller falls
+    back to the stick model); see openscvx.integrations.menagerie for how the
+    asset directory is located.
+    """
+    try:
+        import mujoco
+        from openscvx.integrations.menagerie import get_model_dir
+
+        xml = get_model_dir("universal_robots_ur5e") / "ur5e.xml"
+        model = mujoco.MjModel.from_xml_path(str(xml))
+    except Exception as exc:
+        print(
+            f"[viser] UR5e CAD meshes unavailable ({type(exc).__name__}: {exc}); "
+            "falling back to line segments."
+        )
+        return None
+    from scipy.spatial.transform import Rotation
+
+    data = mujoco.MjData(model)
+    geoms = [g for g in range(model.ngeom) if model.geom_type[g] == mujoco.mjtGeom.mjGEOM_MESH]
+
+    n_frames = len(q_traj)
+    pos = np.zeros((n_frames, len(geoms), 3))
+    rot = np.zeros((n_frames, len(geoms), 3, 3))
+    for k in range(n_frames):
+        data.qpos[:6] = q_traj[k]
+        mujoco.mj_kinematics(model, data)
+        for j, g in enumerate(geoms):
+            pos[k, j] = _RZ180 @ data.geom_xpos[g]
+            rot[k, j] = _RZ180 @ data.geom_xmat[g].reshape(3, 3)
+    quat_xyzw = Rotation.from_matrix(rot.reshape(-1, 3, 3)).as_quat().reshape(n_frames, -1, 4)
+    wxyz = quat_xyzw[..., [3, 0, 1, 2]]
+
+    handles = []
+    for j, g in enumerate(geoms):
+        mesh_id = model.geom_dataid[g]
+        v0, nv = model.mesh_vertadr[mesh_id], model.mesh_vertnum[mesh_id]
+        f0, nf = model.mesh_faceadr[mesh_id], model.mesh_facenum[mesh_id]
+        rgba = model.mat_rgba[model.geom_matid[g]] if model.geom_matid[g] >= 0 else [0.8] * 4
+        handles.append(
+            server.scene.add_mesh_simple(
+                f"/ur5e/geom_{j}",
+                vertices=model.mesh_vert[v0 : v0 + nv].astype(np.float32),
+                faces=model.mesh_face[f0 : f0 + nf].astype(np.uint32),
+                color=tuple(int(255 * c) for c in rgba[:3]),
+                position=pos[0, j],
+                wxyz=wxyz[0, j],
+            )
+        )
+    print(f"[viser] Loaded {len(handles)} UR5e CAD mesh geoms from menagerie.")
+
+    def update(frame: int) -> None:
+        for j, handle in enumerate(handles):
+            handle.position = pos[frame, j]
+            handle.wxyz = wxyz[frame, j]
+
+    return update
+
+
 def visualize(results) -> None:
-    """Animate in Viser: stick-model arm, pen, and the line it draws."""
+    """Animate in Viser: CAD-mesh arm (menagerie), pen, and the line it draws."""
     from openscvx.plotting.viser import add_animation_controls, create_server
 
     t_vec = np.asarray(results.trajectory["time"]).flatten()
@@ -493,63 +569,59 @@ def visualize(results) -> None:
         keypoints[k, -1] = np.asarray(robot.ee_transform(q_traj[k]))[:3, 3]
 
     server = create_server(keypoints[:, -1], show_grid=False)
-    grid_handle = server.scene.add_grid("/table", width=1.6, height=1.6, cell_size=0.2)
+    server.scene.add_grid("/table", width=1.6, height=1.6, cell_size=0.2)
     server.scene.add_frame("/origin", axes_length=0.08, axes_radius=0.003)
 
     # Target path (thin line) drawn on the surface
-    target_handle = server.scene.add_line_segments(
+    server.scene.add_line_segments(
         "/target_path",
         points=np.stack([target_path[:-1], target_path[1:]], axis=1),
         colors=np.full((len(target_path) - 1, 2, 3), (90, 200, 120), dtype=np.uint8),
         line_width=2.0,
     )
 
-    link_rgb = np.linspace([80, 100, 180], [255, 120, 80], n_j + 1).astype(np.uint8)
-    link_colors = np.stack([link_rgb, link_rgb], axis=1)
+    update_robot = _ur5e_mesh_scene(server, q_traj)
+    if update_robot is None:
+        link_rgb = np.linspace([80, 100, 180], [255, 120, 80], n_j + 1).astype(np.uint8)
+        link_colors = np.stack([link_rgb, link_rgb], axis=1)
 
-    def _arm_segments(frame: int) -> np.ndarray:
-        pts = np.zeros((n_j + 1, 2, 3), dtype=np.float32)
-        for k in range(n_j + 1):
-            pts[k] = [keypoints[frame, k], keypoints[frame, k + 1]]
-        return pts
+        def _arm_segments(frame: int) -> np.ndarray:
+            pts = np.zeros((n_j + 1, 2, 3), dtype=np.float32)
+            for k in range(n_j + 1):
+                pts[k] = [keypoints[frame, k], keypoints[frame, k + 1]]
+            return pts
 
-    arm_handle = server.scene.add_line_segments(
-        "/ur5e_links", points=_arm_segments(0), colors=link_colors, line_width=6.0
-    )
+        arm_handle = server.scene.add_line_segments(
+            "/ur5e_links", points=_arm_segments(0), colors=link_colors, line_width=6.0
+        )
+
+        def update_robot(frame: int) -> None:
+            arm_handle.points = _arm_segments(frame)
+
     pen_handle = server.scene.add_line_segments(
         "/pen",
         points=np.array([[keypoints[0, -1], tips[0]]], dtype=np.float32),
         colors=np.full((1, 2, 3), (40, 40, 40), dtype=np.uint8),
         line_width=4.0,
     )
-    # The ink line drawn so far: consecutive pen-tip positions.
+    # The ink line drawn so far. Viser keeps line-segment points and colors as
+    # separate fixed-shape buffers, so animate inside a full-size buffer with
+    # the not-yet-drawn segments collapsed to a point (zero-length segments
+    # are invisible) instead of resizing per frame.
     ink_segs = np.stack([tips[:-1], tips[1:]], axis=1).astype(np.float32)
     ink_handle = server.scene.add_line_segments(
         "/ink",
-        points=ink_segs[:1],
-        colors=np.full((1, 2, 3), (200, 30, 30), dtype=np.uint8),
+        points=np.broadcast_to(ink_segs[0, 0], ink_segs.shape).copy(),
+        colors=np.full(ink_segs.shape, (200, 30, 30), dtype=np.uint8),
         line_width=3.0,
     )
 
     def update(frame: int) -> None:
-        arm_handle.points = _arm_segments(frame)
+        update_robot(frame)
         pen_handle.points = np.array([[keypoints[frame, -1], tips[frame]]], dtype=np.float32)
-        drawn = ink_segs[: max(frame, 1)]
+        drawn = ink_segs.copy()
+        drawn[frame:] = drawn[frame, 0] if frame < len(drawn) else drawn[-1, 1]
         ink_handle.points = drawn
-        ink_handle.colors = np.full((len(drawn), 2, 3), (200, 30, 30), dtype=np.uint8)
-
-    # First-class visibility toggles (the built-in scene tree offers the same
-    # under the gear icon, but a GUI folder puts them front and centre).
-    with server.gui.add_folder("Visibility"):
-        for label, handle in [
-            ("Arm", arm_handle),
-            ("Pen", pen_handle),
-            ("Ink", ink_handle),
-            ("Target path", target_handle),
-            ("Grid", grid_handle),
-        ]:
-            checkbox = server.gui.add_checkbox(label, initial_value=True)
-            checkbox.on_update(lambda event, h=handle: setattr(h, "visible", event.target.value))
 
     add_animation_controls(server, t_vec, [update], loop=True)
     server.sleep_forever()
@@ -564,7 +636,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"Nodes: {n}  |  Mission time: {total_time} s")
     print(f"Pen length: {float(pen_length.value[0]) * 100:.0f} cm  |  "
-          f"contact band: +/-{contact_tol * 1000:.0f} mm")
+          f"contact band: +/-{contact_tol * 1000:.1f} mm")
     print(f"Path: {os.path.basename(trace_svg)}, {path_size} m wide at {list(path_center)}")
     print()
 
@@ -584,7 +656,7 @@ if __name__ == "__main__":
     print(f"  Tip tracking error: mean {tip_err.mean() * 1000:.1f} mm, "
           f"max {tip_err.max() * 1000:.1f} mm")
     print(f"  Tip height: min {tips[:, 2].min() * 1000:.1f} mm, "
-          f"max {tips[:, 2].max() * 1000:.1f} mm (band +/-{contact_tol * 1000:.0f} mm)")
+          f"max {tips[:, 2].max() * 1000:.1f} mm (band +/-{contact_tol * 1000:.1f} mm)")
     trace_figure(tips, t_traj).show()
 
     print()
