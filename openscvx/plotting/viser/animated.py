@@ -37,6 +37,7 @@ def add_animated_trail(
     pos: np.ndarray,
     colors: np.ndarray,
     point_size: float = 0.15,
+    name: str = "/trail",
 ) -> tuple[viser.PointCloudHandle, UpdateCallback]:
     """Add an animated trail that grows with the animation.
 
@@ -45,12 +46,14 @@ def add_animated_trail(
         pos: Position array of shape (N, 3)
         colors: RGB color array of shape (N, 3)
         point_size: Size of trail points
+        name: Scene name for the trail — give each trail a distinct name when
+            adding more than one
 
     Returns:
         Tuple of (handle, update_callback)
     """
     handle = server.scene.add_point_cloud(
-        "/trail",
+        name,
         points=pos[:1],
         colors=colors[:1],
         point_size=point_size,
