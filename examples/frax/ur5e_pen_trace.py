@@ -7,8 +7,13 @@ directly — the pen tip must stay on the work surface (the plane z = 0) while
 tracking a target that sweeps the drawing path.
 
 Formulation:
-    - ``FraxDynamics`` — full rigid-body joint-space dynamics from the UR5e
-      URDF.
+    - Joint-space rigid-body dynamics from the UR5e URDF via frax — the one
+      raw JAX function in the problem; everything else is symbolic.
+    - The EE pose is symbolic Product-of-Exponentials forward kinematics:
+      screw axes extracted from frax at the zero configuration, chained with
+      ``ox.lie.SE3Exp``. The pen tip is ``T[:3, 3] + pen_length * T[:3, 2]``
+      — a symbolic expression the tracking metric and contact constraints
+      are written with directly.
     - The drawing path comes from an SVG file (the OpenSCvx wordmark by
       default; swap in any SVG), resampled by arc length, paced by curvature
       (corners get more time), eased in time, and baked into per-coordinate
@@ -28,11 +33,10 @@ Formulation:
       the target leaves the surface during transits. A tilt cone keeps the
       pen within ``tilt_max`` of the surface normal.
     - Tracking: a ``tip_error`` state integrates the squared distance
-      between the pen tip and the target point on the surface (BYOF
-      dynamics, since it needs frax FK) — including the vertical component,
-      so the tip presses toward the surface instead of wandering inside the
-      contact band. Its upper bound caps the average tracking error through
-      CTCS, and its final value is minimized.
+      between the pen tip and the moving target — including the vertical
+      component, so the tip presses toward the surface instead of wandering
+      inside the contact band. Its upper bound caps the average tracking
+      error through CTCS, and its final value is minimized.
     - Initial guess: sequential damped-least-squares IK through frax's own
       FK places the tip exactly on the moving target with the pen vertical,
       so the guess writes the figure perfectly and SCP only has to trade
@@ -76,7 +80,7 @@ except ImportError:
 from scipy.interpolate import CubicSpline
 
 import openscvx as ox
-from openscvx.symbolic.lower import lower_to_jax
+from openscvx.integrations import frax_dynamics
 
 # =============================================================================
 # Tuning knobs
@@ -113,6 +117,32 @@ dyn = ox.FraxDynamics(robot)
 q, qd = dyn.states
 (tau,) = dyn.controls
 n_j = robot.num_joints  # 6
+
+# =============================================================================
+# Symbolic forward kinematics (Product of Exponentials)
+# =============================================================================
+# Screw axes are extracted from frax at the zero configuration
+# (dT/dq_i |_{q=0} = hat(xi_i) T_home) and the EE pose becomes the symbolic
+# chain T = exp(xi_1 q_1) ... exp(xi_6 q_6) T_home via ``ox.lie.SE3Exp``.
+# With the pose symbolic, the pen tip, contact band, tilt cone, and tracking
+# metric below are all plain symbolic expressions; the only raw JAX function
+# left in the problem is the frax joint-space forward dynamics.
+
+_T_home = np.asarray(robot.ee_transform(jnp.zeros(n_j)))
+_dT0 = np.asarray(jax.jacfwd(robot.ee_transform)(jnp.zeros(n_j)))
+_screws = []
+for _i in range(n_j):
+    _xi_hat = _dT0[:, :, _i] @ np.linalg.inv(_T_home)
+    _screws.append(
+        np.array([*_xi_hat[:3, 3], _xi_hat[2, 1], _xi_hat[0, 2], _xi_hat[1, 0]])
+    )
+
+T_ee = ox.lie.SE3Exp(ox.Constant(_screws[0]) * q[0])
+for _i in range(1, n_j):
+    T_ee = T_ee @ ox.lie.SE3Exp(ox.Constant(_screws[_i]) * q[_i])
+T_ee = T_ee @ ox.Constant(_T_home)
+
+pen_tip = T_ee[:3, 3] + pen_length[0] * T_ee[:3, 2]  # tip of the pen, world frame
 
 # =============================================================================
 # Time
@@ -339,86 +369,7 @@ tip_error.initial = np.array([0.0])
 tip_error.final = [ox.Minimize(0.0)]
 tip_error.guess = np.zeros((n, 1))
 
-# The Cinterp target lowers to JAX callables with the BYOF signature. Lowering
-# resolves state slices, which exist only after Problem preprocessing — so
-# lower lazily on the first call.
-_lowered_target: list = []
-
-
-def _target_fn(x, u, node, params):
-    """Symbolic Cinterp target evaluated inside BYOF: (x, u, node, params) -> (3,)."""
-    if not _lowered_target:
-        _lowered_target.extend(lower_to_jax(_target_exprs))
-    fx, fy, fz = _lowered_target
-    return jnp.array([fx(x, u, node, params), fy(x, u, node, params), fz(x, u, node, params)])
-
-
-def _tip_position(x, params):
-    """Pen tip in world frame: EE position + pen_length along the tool axis."""
-    T = jnp.asarray(robot.ee_transform(x[q.slice]))
-    return T[:3, 3] + params["pen_length"][0] * T[:3, 2]
-
-
-def _tip_error_dynamics(x, u, node, params):
-    err = _tip_position(x, params) - _target_fn(x, u, node, params)
-    return jnp.array([jnp.sum(err**2)])
-
-
-# --- Contact: pen tip stays on the surface while drawing ---------------------
-# Enforced twice: hard nodal inequalities at every node (linear in tip z, so
-# they linearize exactly), plus a CTCS penalty for the segments in between.
-# The CTCS residual is scaled to millimetres: the raw square penalty of a
-# metre-scale residual has a ~1e-3 gradient at mm violations — far too flat
-# to push back against the proximal term.
-#
-# The surface is solid, so "never below" is active always. "Never above the
-# band" instead follows the target's lift profile: the allowed ceiling rises
-# with the target during pen-up transits, deactivating the band exactly when
-# — and as smoothly as — the target leaves the surface. No node-window
-# bookkeeping is needed, and a single-stroke SVG reduces to a fixed band.
-_CONTACT_SCALE = 1e3  # residual in mm
-
-
-def _tip_above_surface(x, u, node, params):
-    return -_tip_position(x, params)[2] - contact_tol
-
-
-def _tip_below_ceiling(x, u, node, params):
-    ceiling = contact_tol + 2.0 * _target_fn(x, u, node, params)[2]
-    return _tip_position(x, params)[2] - ceiling
-
-
-def _contact_ctcs(x, u, node, params):
-    return _CONTACT_SCALE * jnp.maximum(
-        _tip_above_surface(x, u, node, params), _tip_below_ceiling(x, u, node, params)
-    )
-
-
-_tilt_cos_max = float(np.cos(tilt_max))
-
-
-def _tilt_ctcs(x, u, node, params):
-    # Tool axis z-component is -1 when the pen points straight down; satisfied
-    # (<= 0) while the pen tilts less than tilt_max from the surface normal.
-    tool_z = jnp.asarray(robot.ee_transform(x[q.slice]))[2, 2]
-    return tool_z + _tilt_cos_max
-
-
-byof: ox.ByofSpec = {
-    "parameters": [pen_length],
-    "dynamics": {"tip_error": _tip_error_dynamics},
-    "nodal_constraints": [
-        {"constraint_fn": _tip_above_surface, "nodes": list(range(n))},
-        {"constraint_fn": _tip_below_ceiling, "nodes": list(range(n))},
-    ],
-    "ctcs_constraints": [
-        # The contact band gets its own augmented state (idx 1) with a tight
-        # violation budget — sharing the box-constraint channel would let the
-        # tip drift millimetres off the surface within the shared budget.
-        {"constraint_fn": _contact_ctcs, "idx": 1, "bounds": (0.0, 1e-4)},
-        {"constraint_fn": _tilt_ctcs},
-    ],
-}
+target_x, target_y, target_z = _target_exprs
 
 # =============================================================================
 # Constraints and Problem
@@ -432,8 +383,43 @@ for state in states:
 for control in dyn.controls:
     constraints.extend([ox.ctcs(control <= control.max), ox.ctcs(control.min <= control)])
 
+# Contact: the surface is solid, so "never below" is active always. "Never
+# above the band" instead follows the target's lift profile: the allowed
+# ceiling rises with the target during pen-up transits, deactivating the band
+# exactly when — and as smoothly as — the target leaves the surface. No
+# node-window bookkeeping is needed, and a single-stroke SVG reduces to a
+# fixed band. Both constraints get their own augmented state (idx 1) with a
+# tight violation budget, are written in millimetres (the square penalty of a
+# metre-scale residual is too flat at mm violations to resist the proximal
+# term), and are additionally enforced at every node (``check_nodally``).
+_MM = 1e3
+constraints.extend(
+    [
+        ox.ctcs(_MM * pen_tip[2] >= -_MM * contact_tol, idx=1, licq_max=1e-4, check_nodally=True),
+        ox.ctcs(
+            _MM * pen_tip[2] <= _MM * (contact_tol + 2.0 * target_z),
+            idx=1,
+            licq_max=1e-4,
+            check_nodally=True,
+        ),
+        # Tool-axis z is -1 when the pen points straight down; this cone keeps
+        # the pen within tilt_max of the surface normal.
+        ox.ctcs(T_ee[2, 2] <= -float(np.cos(tilt_max))),
+    ]
+)
+
+# d(tip_error)/dt = || tip - target ||^2; the frax joint-space forward
+# dynamics is the one function the symbolic layer cannot express.
+dynamics = {
+    "q": qd,
+    "tip_error": (pen_tip[0] - target_x) ** 2
+    + (pen_tip[1] - target_y) ** 2
+    + (pen_tip[2] - target_z) ** 2,
+}
+byof: ox.ByofSpec = {"dynamics": {"qd": frax_dynamics(robot, q=q, qd=qd, tau=tau)}}
+
 problem = ox.Problem(
-    dynamics=dyn,
+    dynamics=dynamics,
     states=states,
     controls=dyn.controls,
     time=time,
