@@ -19,6 +19,9 @@ Formulation
   sight to the target (BYOF dynamics, since it needs frax FK). Its state
   upper bound caps the average pointing error through CTCS, and its final
   value is minimized.
+- SVG paths may contain implicit pen-up moves between disconnected strokes;
+  the laser keeps pointing at the target across those transits but is
+  blanked, so no line is drawn between strokes.
 - The initial guess is the "clever" part: sequential damped-least-squares IK
   through frax's own FK tracks the path at a standoff height with the tool
   axis normal to the surface, so the guess already points at the target and
@@ -105,14 +108,20 @@ path_center = np.array([0.45, 0.0])
 path_size = 0.50  # bounding-box size of the drawing on the surface [m]
 
 
-def svg_polyline(svg_file: str, n_points: int = 4000) -> np.ndarray:
-    """Uniform-arc-length polyline through the SVG's paths, fitted to the drawing box.
+def svg_polyline(svg_file: str, n_points: int = 4000) -> tuple[np.ndarray, np.ndarray]:
+    """Uniform-arc-length polyline through the SVG's strokes, fitted to the drawing box.
 
     Concatenates the selected ``path_indices`` (all paths when None) in order,
     samples them densely, then resamples by cumulative arc length so equal
-    index steps cover equal distances. The result is y-flipped (SVG y points
-    down), rotated by ``rotation_deg``, scaled uniformly to fit ``path_size``,
-    and centred on ``path_center``.
+    index steps cover equal distances. SVG paths may contain implicit pen-up
+    moves (disconnected subpaths packed into one path); the straight bridges
+    the resampling draws across those gaps are flagged as transits. The
+    result is y-flipped (SVG y points down), rotated by ``rotation_deg``,
+    scaled uniformly to fit ``path_size``, and centred on ``path_center``.
+
+    Returns:
+        points: (n_points, 2) polyline in table coordinates.
+        on_stroke: (n_points,) bool mask, False on pen-up transit samples.
     """
     paths, _ = svgpathtools.svg2paths(svg_file)
     if path_indices is not None:
@@ -129,13 +138,19 @@ def svg_polyline(svg_file: str, n_points: int = 4000) -> np.ndarray:
     rot = np.array([[np.cos(ang), -np.sin(ang)], [np.sin(ang), np.cos(ang)]])
     dense = dense @ rot.T
 
-    arc = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(dense, axis=0), axis=1))])
+    step = np.linalg.norm(np.diff(dense, axis=0), axis=1)
+    arc = np.concatenate([[0.0], np.cumsum(step)])
     s_uniform = np.linspace(0.0, arc[-1], n_points)
     pts = np.column_stack([np.interp(s_uniform, arc, dense[:, i]) for i in range(2)])
 
+    # Samples that fall inside an implicit pen-up move are transits.
+    on_stroke = np.ones(n_points, dtype=bool)
+    for i in np.nonzero(step > 10.0 * np.median(step))[0]:
+        on_stroke &= ~((s_uniform > arc[i]) & (s_uniform < arc[i + 1]))
+
     lo, hi = pts.min(axis=0), pts.max(axis=0)
     pts = (pts - 0.5 * (lo + hi)) * (path_size / (hi - lo).max())
-    return pts + path_center
+    return pts + path_center, on_stroke
 
 
 def _is_closed(paths) -> bool:
@@ -186,10 +201,11 @@ def curvature_pacing(polyline: np.ndarray, kappa_ref: float = 50.0, w_max: float
 # eased and curvature-paced progress, positions read off the arc-length
 # polyline. Cubic splines through this table give the solver a C2-smooth
 # moving target regardless of how the SVG itself is sampled.
-_polyline = svg_polyline(trace_svg)
+_polyline, _on_stroke = svg_polyline(trace_svg)
 _time_frac, _s_polyline = curvature_pacing(_polyline)
 _t_table = np.linspace(0.0, total_time, 1000)
 _s_table = np.interp(path_progress(_t_table / total_time), _time_frac, _s_polyline)
+_stroke_table = np.interp(_s_table, _s_polyline, _on_stroke.astype(float)) > 0.5
 _xy_table = np.column_stack(
     [np.interp(_s_table, _s_polyline, _polyline[:, i]) for i in range(2)]
 )
@@ -204,6 +220,11 @@ def target_at_time(t) -> np.ndarray:
     """Moving laser target on the work surface at mission time t."""
     x_t, y_t = _target_spline(np.clip(t, 0.0, total_time))
     return np.array([x_t, y_t, 0.0])
+
+
+def target_engaged(t) -> np.ndarray:
+    """True where the target is drawing (laser on), False on pen-up transits."""
+    return np.interp(np.clip(t, 0.0, total_time), _t_table, _stroke_table.astype(float)) > 0.5
 
 
 # =============================================================================
@@ -402,7 +423,7 @@ def trace_figure(traced: np.ndarray, t: np.ndarray):
     """
     import plotly.graph_objects as go
 
-    ok = np.isfinite(traced).all(axis=1)
+    ok = np.isfinite(traced).all(axis=1) & target_engaged(t)
     traced, t = traced[ok], t[ok]
     speed = np.linalg.norm(np.gradient(traced[:, :2], t, axis=0), axis=1)
 
@@ -565,11 +586,14 @@ def visualize(results) -> None:
     # separate fixed-shape buffers, so animate inside a full-size buffer with
     # the not-yet-drawn segments collapsed to a point (zero-length segments
     # are invisible) instead of resizing per frame. Segments where the laser
-    # misses the surface are collapsed permanently.
+    # misses the surface or is blanked for a pen-up transit are collapsed
+    # permanently.
     trace_segs = np.stack([trace[:-1], trace[1:]], axis=1).astype(np.float32)
     finite_hits = trace[np.isfinite(trace).all(axis=1)]
     fill = (finite_hits[0] if len(finite_hits) else np.zeros(3)).astype(np.float32)
     trace_segs[~np.isfinite(trace_segs).all(axis=(1, 2))] = fill
+    engaged = target_engaged(t_vec)
+    trace_segs[~(engaged[:-1] & engaged[1:])] = fill
     trace_handle = server.scene.add_line_segments(
         "/laser_trace",
         points=np.broadcast_to(fill, trace_segs.shape).copy(),
@@ -611,7 +635,8 @@ if __name__ == "__main__":
     q_traj, t_traj = prop.state("q")
     trace = laser_trace(q_traj)
     targets = np.array([target_at_time(t) for t in t_traj])
-    trace_err = np.linalg.norm(trace[:, :2] - targets[:, :2], axis=1)
+    engaged = target_engaged(t_traj)
+    trace_err = np.linalg.norm(trace[:, :2] - targets[:, :2], axis=1)[engaged]
     angles = np.array([laser_angle_to_target(qk, tk) for qk, tk in zip(q_traj, t_traj)])
 
     print("\nResults:")

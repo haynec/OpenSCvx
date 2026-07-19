@@ -16,8 +16,15 @@ Formulation
 - The pen is a rigid stick of length ``pen_length`` along the tool axis
   (EE local +z). ``pen_length`` is an ``ox.Parameter``: update its ``value``
   and re-solve to fit whatever pen ends up in the gripper — no rebuild.
-- Contact: a CTCS band keeps the tip within ``contact_tol`` of the surface,
-  and a tilt cone keeps the pen within ``tilt_max`` of the surface normal.
+- Pen-up handling: SVG paths may contain implicit pen-up moves between
+  disconnected strokes. During those transits the target lifts off the
+  surface on a smooth ``lift_height`` bump; the arm follows it up, across,
+  and back down, and no ink is drawn.
+- Contact: the tip never goes below the surface, and a CTCS band keeps it
+  within ``contact_tol`` while drawing — the band's ceiling follows the
+  target's lift profile, so it releases exactly (and as smoothly) as the
+  target leaves the surface during transits. A tilt cone keeps the pen
+  within ``tilt_max`` of the surface normal.
 - Tracking: a ``tip_error`` state integrates the squared distance between
   the pen tip and the target point on the surface (BYOF dynamics, since it
   needs frax FK) — including the vertical component, so the tip presses
@@ -122,14 +129,20 @@ path_center = np.array([0.45, 0.0])
 path_size = 0.50  # bounding-box size of the drawing on the surface [m]
 
 
-def svg_polyline(svg_file: str, n_points: int = 4000) -> np.ndarray:
-    """Uniform-arc-length polyline through the SVG's paths, fitted to the drawing box.
+def svg_polyline(svg_file: str, n_points: int = 4000) -> tuple[np.ndarray, np.ndarray]:
+    """Uniform-arc-length polyline through the SVG's strokes, fitted to the drawing box.
 
     Concatenates the selected ``path_indices`` (all paths when None) in order,
     samples them densely, then resamples by cumulative arc length so equal
-    index steps cover equal distances. The result is y-flipped (SVG y points
-    down), rotated by ``rotation_deg``, scaled uniformly to fit ``path_size``,
-    and centred on ``path_center``.
+    index steps cover equal distances. SVG paths may contain implicit pen-up
+    moves (disconnected subpaths packed into one path); the straight bridges
+    the resampling draws across those gaps are flagged as transits. The
+    result is y-flipped (SVG y points down), rotated by ``rotation_deg``,
+    scaled uniformly to fit ``path_size``, and centred on ``path_center``.
+
+    Returns:
+        points: (n_points, 2) polyline in table coordinates.
+        on_stroke: (n_points,) bool mask, False on pen-up transit samples.
     """
     paths, _ = svgpathtools.svg2paths(svg_file)
     if path_indices is not None:
@@ -146,13 +159,19 @@ def svg_polyline(svg_file: str, n_points: int = 4000) -> np.ndarray:
     rot = np.array([[np.cos(ang), -np.sin(ang)], [np.sin(ang), np.cos(ang)]])
     dense = dense @ rot.T
 
-    arc = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(dense, axis=0), axis=1))])
+    step = np.linalg.norm(np.diff(dense, axis=0), axis=1)
+    arc = np.concatenate([[0.0], np.cumsum(step)])
     s_uniform = np.linspace(0.0, arc[-1], n_points)
     pts = np.column_stack([np.interp(s_uniform, arc, dense[:, i]) for i in range(2)])
 
+    # Samples that fall inside an implicit pen-up move are transits.
+    on_stroke = np.ones(n_points, dtype=bool)
+    for i in np.nonzero(step > 10.0 * np.median(step))[0]:
+        on_stroke &= ~((s_uniform > arc[i]) & (s_uniform < arc[i + 1]))
+
     lo, hi = pts.min(axis=0), pts.max(axis=0)
     pts = (pts - 0.5 * (lo + hi)) * (path_size / (hi - lo).max())
-    return pts + path_center
+    return pts + path_center, on_stroke
 
 
 def _is_closed(paths) -> bool:
@@ -201,26 +220,41 @@ def curvature_pacing(polyline: np.ndarray, kappa_ref: float = 50.0, w_max: float
 
 # Tabulate the target as a function of mission time: uniform time breakpoints,
 # eased and curvature-paced progress, positions read off the arc-length
-# polyline. Cubic splines through this table give the solver a C2-smooth
-# moving target regardless of how the SVG itself is sampled.
-_polyline = svg_polyline(trace_svg)
+# polyline. During pen-up transits the target lifts off the surface on a
+# smooth bump of height ``lift_height``, so tracking it carries the pen up,
+# across, and back down. Cubic splines through this table give the solver a
+# C2-smooth moving target regardless of how the SVG itself is sampled.
+lift_height = 0.03  # pen-up clearance over transits [m]
+
+_polyline, _on_stroke = svg_polyline(trace_svg)
 _time_frac, _s_polyline = curvature_pacing(_polyline)
 _t_table = np.linspace(0.0, total_time, 1000)
 _s_table = np.interp(path_progress(_t_table / total_time), _time_frac, _s_polyline)
-_xy_table = np.column_stack(
-    [np.interp(_s_table, _s_polyline, _polyline[:, i]) for i in range(2)]
+_stroke_table = np.interp(_s_table, _s_polyline, _on_stroke.astype(float)) > 0.5
+
+_z_table = np.zeros(len(_t_table))
+_transit_edges = np.flatnonzero(np.diff(np.concatenate([[1.0], _stroke_table, [1.0]])))
+for _i0, _i1 in _transit_edges.reshape(-1, 2):
+    _z_table[_i0:_i1] = lift_height * np.sin(np.pi * np.linspace(0, 1, _i1 - _i0)) ** 2
+
+_xyz_table = np.column_stack(
+    [np.interp(_s_table, _s_polyline, _polyline[:, i]) for i in range(2)] + [_z_table]
 )
 
 # Numpy-side spline (initial guess, post-processing, plots) and its symbolic
 # twin (Cinterp, same not-a-knot cubic through the same table) for the solver.
-_target_spline = CubicSpline(_t_table, _xy_table)
-_target_exprs = [ox.Cinterp(time[0], _t_table, _xy_table[:, i]) for i in range(2)]
+_target_spline = CubicSpline(_t_table, _xyz_table)
+_target_exprs = [ox.Cinterp(time[0], _t_table, _xyz_table[:, i]) for i in range(3)]
 
 
 def target_at_time(t) -> np.ndarray:
-    """Moving pen target on the work surface at mission time t."""
-    x_t, y_t = _target_spline(np.clip(t, 0.0, total_time))
-    return np.array([x_t, y_t, 0.0])
+    """Moving pen target at mission time t (lifted during pen-up transits)."""
+    return np.asarray(_target_spline(np.clip(t, 0.0, total_time)))
+
+
+def target_engaged(t) -> np.ndarray:
+    """True where the target is drawing (pen down), False on transits."""
+    return np.interp(np.clip(t, 0.0, total_time), _t_table, _stroke_table.astype(float)) > 0.5
 
 
 # =============================================================================
@@ -316,11 +350,11 @@ _lowered_target: list = []
 
 
 def _target_fn(x, u, node, params):
-    """Symbolic Cinterp target evaluated inside BYOF: (x, u, node, params) -> (2,)."""
+    """Symbolic Cinterp target evaluated inside BYOF: (x, u, node, params) -> (3,)."""
     if not _lowered_target:
         _lowered_target.extend(lower_to_jax(_target_exprs))
-    fx, fy = _lowered_target
-    return jnp.array([fx(x, u, node, params), fy(x, u, node, params)])
+    fx, fy, fz = _lowered_target
+    return jnp.array([fx(x, u, node, params), fy(x, u, node, params), fz(x, u, node, params)])
 
 
 def _tip_position(x, params):
@@ -330,17 +364,22 @@ def _tip_position(x, params):
 
 
 def _tip_error_dynamics(x, u, node, params):
-    tip = _tip_position(x, params)
-    err = jnp.concatenate([tip[:2] - _target_fn(x, u, node, params), tip[2:]])
+    err = _tip_position(x, params) - _target_fn(x, u, node, params)
     return jnp.array([jnp.sum(err**2)])
 
 
-# --- Contact: pen tip stays on the surface -----------------------------------
+# --- Contact: pen tip stays on the surface while drawing ---------------------
 # Enforced twice: hard nodal inequalities at every node (linear in tip z, so
 # they linearize exactly), plus a CTCS penalty for the segments in between.
 # The CTCS residual is scaled to millimetres: the raw square penalty of a
 # metre-scale residual has a ~1e-3 gradient at mm violations — far too flat
 # to push back against the proximal term.
+#
+# The surface is solid, so "never below" is active always. "Never above the
+# band" instead follows the target's lift profile: the allowed ceiling rises
+# with the target during pen-up transits, deactivating the band exactly when
+# — and as smoothly as — the target leaves the surface. No node-window
+# bookkeeping is needed, and a single-stroke SVG reduces to a fixed band.
 _CONTACT_SCALE = 1e3  # residual in mm
 
 
@@ -348,12 +387,15 @@ def _tip_above_surface(x, u, node, params):
     return -_tip_position(x, params)[2] - contact_tol
 
 
-def _tip_below_surface(x, u, node, params):
-    return _tip_position(x, params)[2] - contact_tol
+def _tip_below_ceiling(x, u, node, params):
+    ceiling = contact_tol + 2.0 * _target_fn(x, u, node, params)[2]
+    return _tip_position(x, params)[2] - ceiling
 
 
 def _contact_ctcs(x, u, node, params):
-    return _CONTACT_SCALE * (jnp.abs(_tip_position(x, params)[2]) - contact_tol)
+    return _CONTACT_SCALE * jnp.maximum(
+        _tip_above_surface(x, u, node, params), _tip_below_ceiling(x, u, node, params)
+    )
 
 
 _tilt_cos_max = float(np.cos(tilt_max))
@@ -371,7 +413,7 @@ byof: ox.ByofSpec = {
     "dynamics": {"tip_error": _tip_error_dynamics},
     "nodal_constraints": [
         {"constraint_fn": _tip_above_surface, "nodes": list(range(n))},
-        {"constraint_fn": _tip_below_surface, "nodes": list(range(n))},
+        {"constraint_fn": _tip_below_ceiling, "nodes": list(range(n))},
     ],
     "ctcs_constraints": [
         # The contact band gets its own augmented state (idx 1) with a tight
@@ -450,6 +492,8 @@ def trace_figure(tips: np.ndarray, t: np.ndarray):
     import plotly.graph_objects as go
 
     speed = np.linalg.norm(np.gradient(tips[:, :2], t, axis=0), axis=1)
+    engaged = target_engaged(t)
+    tips, speed = tips[engaged], speed[engaged]
 
     fig = go.Figure()
     fig.add_trace(
@@ -607,8 +651,11 @@ def visualize(results) -> None:
     # The ink line drawn so far. Viser keeps line-segment points and colors as
     # separate fixed-shape buffers, so animate inside a full-size buffer with
     # the not-yet-drawn segments collapsed to a point (zero-length segments
-    # are invisible) instead of resizing per frame.
+    # are invisible) instead of resizing per frame. Pen-up transit segments
+    # leave no ink and stay collapsed permanently.
     ink_segs = np.stack([tips[:-1], tips[1:]], axis=1).astype(np.float32)
+    engaged = target_engaged(t_vec)
+    ink_segs[~(engaged[:-1] & engaged[1:])] = ink_segs[0, 0]
     ink_handle = server.scene.add_line_segments(
         "/ink",
         points=np.broadcast_to(ink_segs[0, 0], ink_segs.shape).copy(),
@@ -650,13 +697,17 @@ if __name__ == "__main__":
     q_traj, t_traj = prop.state("q")
     tips = pen_tip_path(q_traj)
     targets = np.array([target_at_time(t) for t in t_traj])
-    tip_err = np.linalg.norm(tips[:, :2] - targets[:, :2], axis=1)
+    engaged = target_engaged(t_traj)
+    tip_err = np.linalg.norm(tips[:, :2] - targets[:, :2], axis=1)[engaged]
+    tips_down = tips[engaged]
 
     print("\nResults:")
-    print(f"  Tip tracking error: mean {tip_err.mean() * 1000:.1f} mm, "
+    print(f"  Strokes: {len(_transit_edges) // 2 + 1}  |  pen-up transits: "
+          f"{len(_transit_edges) // 2}")
+    print(f"  Tip tracking error (pen down): mean {tip_err.mean() * 1000:.1f} mm, "
           f"max {tip_err.max() * 1000:.1f} mm")
-    print(f"  Tip height: min {tips[:, 2].min() * 1000:.1f} mm, "
-          f"max {tips[:, 2].max() * 1000:.1f} mm (band +/-{contact_tol * 1000:.1f} mm)")
+    print(f"  Tip height (pen down): min {tips_down[:, 2].min() * 1000:.1f} mm, "
+          f"max {tips_down[:, 2].max() * 1000:.1f} mm (band +/-{contact_tol * 1000:.1f} mm)")
     trace_figure(tips, t_traj).show()
 
     print()
