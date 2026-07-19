@@ -1,9 +1,10 @@
 """UR5e pen tracing — drawing on a work surface with a tool-mounted pen via frax.
 
-The contact companion of ``examples/frax/ur5e_laser_trace.py``: instead of
-pointing a laser at the moving target, the arm holds a pen of length
-``pen_length`` along the tool axis and draws the path directly — the pen tip
-must stay on the work surface (the plane z = 0) while tracking the target.
+The arm counterpart of ``examples/drone/openscvx_logo.py``: instead of a
+quadrotor aiming its boresight at a logo target in the air, a UR5e holds a
+pen of length ``pen_length`` along the tool axis and draws the figure
+directly — the pen tip must stay on the work surface (the plane z = 0) while
+tracking a target that sweeps the drawing path.
 
 Formulation
 -----------
