@@ -536,9 +536,9 @@ def visualize(results) -> None:
     if prop is not None:
         q_traj, t_vec = prop.state("q")
 
-    # ~30 fps of animation is plenty; full multishot resolution just slows
+    # ~60 fps of animation is plenty; full multishot resolution just slows
     # the precompute and the client down.
-    stride = max(1, len(q_traj) // 1500)
+    stride = max(1, len(q_traj) // 3000)
     q_traj = np.asarray(q_traj)[::stride]
     t_vec = np.asarray(t_vec).flatten()[::stride]
 
