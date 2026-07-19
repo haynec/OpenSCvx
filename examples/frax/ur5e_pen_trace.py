@@ -476,6 +476,7 @@ def _ur5e_mesh_scene(server, q_traj: np.ndarray):
     """
     try:
         import mujoco
+
         from openscvx.integrations.menagerie import get_model_dir
 
         xml = get_model_dir("universal_robots_ur5e") / "ur5e.xml"
