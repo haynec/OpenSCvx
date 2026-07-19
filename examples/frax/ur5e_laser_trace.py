@@ -8,8 +8,11 @@ work surface the robot is mounted on (the plane z = 0).
 Formulation
 -----------
 - ``FraxDynamics`` — full rigid-body joint-space dynamics from the UR5e URDF.
-- A moving target ``p_target(t / T)`` sweeps the drawing path exactly once
-  over the (fixed) mission time.
+- The drawing path comes from an SVG file (a circle by default — swap in any
+  single-path SVG). The path is resampled by arc length, eased in time so the
+  target starts and ends at rest, and baked into per-coordinate ``Cinterp``
+  cubic splines, so inside the solver the moving target is a C2-smooth
+  symbolic function of the time state.
 - A ``misalignment`` state integrates ``1 - cos(theta)``, where ``theta`` is
   the angle between the tool axis (EE local +z, the laser) and the line of
   sight to the target (BYOF dynamics, since it needs frax FK). Its state
@@ -19,11 +22,11 @@ Formulation
   through frax's own FK tracks the path at a standoff height with the tool
   axis normal to the surface, so the guess already points at the target and
   SCP only has to trade pointing accuracy against the dynamics. The same
-  initialization works for any drawing path, not just the circle used here.
+  initialization works for any drawing path.
 
 Requires
 --------
-    pip install openscvx[frax]
+    pip install openscvx[frax] svgpathtools
 """
 
 from __future__ import annotations
@@ -48,7 +51,19 @@ except ImportError:
     )
     sys.exit(1)
 
+try:
+    import svgpathtools
+except ImportError:
+    print(
+        "svgpathtools is not installed. Install with: pip install svgpathtools",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+from scipy.interpolate import CubicSpline
+
 import openscvx as ox
+from openscvx.symbolic.lower import lower_to_jax
 
 # =============================================================================
 # Robot and dynamics
@@ -61,55 +76,91 @@ q, qd = dyn.states
 n_j = robot.num_joints  # 6
 
 # =============================================================================
-# Drawing path on the work surface
-# =============================================================================
-# The work surface is the plane z = 0 (the robot is mounted on it). The
-# drawing path is a closed circle in front of the base, parameterized by
-# normalized path progress s in [0, 1]. Swap ``path_xy`` for any other
-# arc-length-parameterized curve (e.g. an SVG outline) to trace a different
-# figure.
-
-path_center = np.array([0.45, 0.0])
-path_radius = 0.15
-
-
-def path_xy(s):
-    """Drawing path in table coordinates: s in [0, 1] -> (x, y) in metres."""
-    ang = 2.0 * jnp.pi * s
-    return jnp.stack(
-        [
-            path_center[0] + path_radius * jnp.cos(ang),
-            path_center[1] + path_radius * jnp.sin(ang),
-        ]
-    )
-
-
-def target_position(s):
-    """Moving laser target on the work surface at path progress s in [0, 1]."""
-    xy = path_xy(s)
-    return jnp.array([xy[0], xy[1], 0.0])
-
-
-def path_progress(t_frac):
-    """Eased path progress s(t/T): zero target speed at both lap ends.
-
-    The arm starts and ends at rest, so an easing profile lets it track the
-    target through the whole lap instead of chasing a step in target speed.
-    """
-    return t_frac - jnp.sin(2.0 * jnp.pi * t_frac) / (2.0 * jnp.pi)
-
-
-def target_at_time(t):
-    """Target position at mission time t (composition used everywhere below)."""
-    return target_position(path_progress(t / total_time))
-
-
-# =============================================================================
-# Discretization
+# Discretization and time
 # =============================================================================
 
 n = 40
 total_time = 10.0  # target completes the path exactly once
+
+time = ox.Time(initial=0.0, final=total_time, min=0.0, max=total_time)
+
+# =============================================================================
+# Drawing path: SVG -> arc-length polyline -> eased time table -> Cinterp
+# =============================================================================
+# The work surface is the plane z = 0 (the robot is mounted on it). The SVG
+# outline is scaled uniformly into a ``path_size`` box centred on
+# ``path_center`` in front of the base.
+
+trace_svg = os.path.join(current_dir, "ur5e_assets", "circle.svg")
+path_center = np.array([0.45, 0.0])
+path_size = 0.30  # bounding-box size of the drawing on the surface [m]
+
+
+def svg_polyline(svg_file: str, n_points: int = 2000) -> np.ndarray:
+    """Uniform-arc-length polyline through the SVG's paths, fitted to the drawing box.
+
+    Concatenates all paths in the file in order, samples them densely, then
+    resamples by cumulative arc length so equal index steps cover equal
+    distances. The result is y-flipped (SVG y points down), scaled uniformly
+    to fit ``path_size``, and centred on ``path_center``.
+    """
+    paths, _ = svgpathtools.svg2paths(svg_file)
+    dense = []
+    for path in paths:
+        for seg in path:
+            n_seg = max(2, int(4 * n_points * seg.length() / sum(p.length() for p in paths)))
+            for t in np.linspace(0.0, 1.0, n_seg, endpoint=False):
+                pt = seg.point(t)
+                dense.append([pt.real, -pt.imag])
+    dense = np.asarray(dense + [dense[0]] if _is_closed(paths) else dense)
+
+    arc = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(dense, axis=0), axis=1))])
+    s_uniform = np.linspace(0.0, arc[-1], n_points)
+    pts = np.column_stack([np.interp(s_uniform, arc, dense[:, i]) for i in range(2)])
+
+    lo, hi = pts.min(axis=0), pts.max(axis=0)
+    pts = (pts - 0.5 * (lo + hi)) * (path_size / (hi - lo).max())
+    return pts + path_center
+
+
+def _is_closed(paths) -> bool:
+    """True when the SVG traces a closed figure (end point returns to start)."""
+    start, end = paths[0].start, paths[-1].end
+    return abs(end - start) < 1e-6 * sum(p.length() for p in paths)
+
+
+def path_progress(t_frac):
+    """Eased path progress s(t/T): zero target speed at both path ends.
+
+    The arm starts and ends at rest, so an easing profile lets it track the
+    target through the whole trace instead of chasing a step in target speed.
+    """
+    return t_frac - np.sin(2.0 * np.pi * t_frac) / (2.0 * np.pi)
+
+
+# Tabulate the target as a function of mission time: uniform time breakpoints,
+# eased progress, positions read off the arc-length polyline. Cubic splines
+# through this table give the solver a C2-smooth moving target regardless of
+# how the SVG itself is sampled.
+_polyline = svg_polyline(trace_svg)
+_t_table = np.linspace(0.0, total_time, 400)
+_s_polyline = np.linspace(0.0, 1.0, len(_polyline))
+_s_table = path_progress(_t_table / total_time)
+_xy_table = np.column_stack(
+    [np.interp(_s_table, _s_polyline, _polyline[:, i]) for i in range(2)]
+)
+
+# Numpy-side spline (initial guess, post-processing, plots) and its symbolic
+# twin (Cinterp, same not-a-knot cubic through the same table) for the solver.
+_target_spline = CubicSpline(_t_table, _xy_table)
+_target_exprs = [ox.Cinterp(time[0], _t_table, _xy_table[:, i]) for i in range(2)]
+
+
+def target_at_time(t) -> np.ndarray:
+    """Moving laser target on the work surface at mission time t."""
+    x_t, y_t = _target_spline(np.clip(t, 0.0, total_time))
+    return np.array([x_t, y_t, 0.0])
+
 
 # =============================================================================
 # Initial guess: IK tracking of the path at a standoff height
@@ -155,7 +206,7 @@ def ik_track_path(n_nodes: int, iters: int = 50) -> np.ndarray:
     q_val = jnp.array(_q_seed)
     for k in range(n_nodes):
         t_k = total_time * k / (n_nodes - 1)
-        p_des = target_at_time(t_k) + jnp.array([0.0, 0.0, standoff])
+        p_des = jnp.array(target_at_time(t_k) + np.array([0.0, 0.0, standoff]))
         for _ in range(iters):
             q_val = _ik_step(q_val, p_des)
         q_traj[k] = np.asarray(q_val)
@@ -191,25 +242,34 @@ misalignment.initial = np.array([0.0])
 misalignment.final = [ox.Minimize(0.0)]
 misalignment.guess = np.zeros((n, 1))
 
-time = ox.Time(initial=0.0, final=total_time, min=0.0, max=total_time)
+# The Cinterp target lowers to JAX callables with the BYOF signature. Lowering
+# resolves state slices, which exist only after Problem preprocessing — so
+# lower lazily on the first call.
+_lowered_target: list = []
 
 
-def laser_cos_to_target(q_val, t_val):
-    """Cosine of the angle between the tool axis (EE local +z) and the sight line."""
-    T = robot.ee_transform(q_val)
+def _target_fn(x, u, node, params):
+    """Symbolic Cinterp target evaluated inside BYOF: (x, u, node, params) -> (3,)."""
+    if not _lowered_target:
+        _lowered_target.extend(lower_to_jax(_target_exprs))
+    fx, fy = _lowered_target
+    return jnp.array([fx(x, u, node, params), fy(x, u, node, params), 0.0])
+
+
+def _misalignment_dynamics(x, u, node, params):
+    T = robot.ee_transform(x[q.slice])
     p_ee = jnp.asarray(T)[:3, 3]
     laser = jnp.asarray(T)[:3, 2]
-    to_target = target_at_time(t_val) - p_ee
-    return jnp.dot(to_target, laser) / jnp.linalg.norm(to_target)
+    to_target = _target_fn(x, u, node, params) - p_ee
+    return jnp.array([1.0 - jnp.dot(to_target, laser) / jnp.linalg.norm(to_target)])
 
 
 def laser_angle_to_target(q_val, t_val):
     """Pointing angle in radians (for reporting; not used in the optimization)."""
-    return jnp.arccos(jnp.clip(laser_cos_to_target(q_val, t_val), -1.0, 1.0))
-
-
-def _misalignment_dynamics(x, u, node, params):
-    return jnp.array([1.0 - laser_cos_to_target(x[q.slice], x[time.slice][0])])
+    T = np.asarray(robot.ee_transform(q_val))
+    to_target = target_at_time(t_val) - T[:3, 3]
+    cos_angle = np.dot(to_target, T[:3, 2]) / np.linalg.norm(to_target)
+    return np.arccos(np.clip(cos_angle, -1.0, 1.0))
 
 
 # --- CTCS: EE stays above the work surface ----------------------------------
@@ -299,7 +359,7 @@ def visualize(results) -> None:
 
     n_frames = len(q_traj)
     trace = laser_trace(q_traj)
-    target_path = np.array([np.asarray(target_position(s)) for s in np.linspace(0, 1, 200)])
+    target_path = np.column_stack([_polyline, np.zeros(len(_polyline))])
 
     keypoints = np.zeros((n_frames, n_j + 2, 3))
     ee_T = np.zeros((n_frames, 4, 4))
@@ -369,24 +429,27 @@ if __name__ == "__main__":
     print("UR5e laser tracing via frax dynamics")
     print("=" * 60)
     print(f"Nodes: {n}  |  Mission time: {total_time} s")
-    print(f"Path: circle r={path_radius} m at {list(path_center)} on the surface z=0")
+    print(f"Path: {os.path.basename(trace_svg)}, {path_size} m wide at {list(path_center)}")
     print()
 
     problem.initialize()
     problem.solve()
     results = problem.post_process()
 
-    q_traj = np.asarray(results.trajectory["q"])
-    t_traj = np.asarray(results.trajectory["time"]).flatten()
+    # Measure on the multishot propagation: a single 10 s open-loop torque
+    # replay of an arm diverges, so results.trajectory is not meaningful here.
+    prop = results.multishot_propagation()
+    q_traj, t_traj = prop.state("q")
     trace = laser_trace(q_traj)
-    targets = np.array([np.asarray(target_at_time(t)) for t in t_traj])
+    targets = np.array([target_at_time(t) for t in t_traj])
     trace_err = np.linalg.norm(trace[:, :2] - targets[:, :2], axis=1)
+    angles = np.array([laser_angle_to_target(qk, tk) for qk, tk in zip(q_traj, t_traj)])
 
     print("\nResults:")
-    print(f"  Accumulated misalignment: {results.nodes['misalignment'][-1, 0]:.5f} s")
+    print(f"  Pointing angle: mean {np.degrees(angles.mean()):.2f} deg, "
+          f"max {np.degrees(angles.max()):.2f} deg")
     print(f"  Laser dot error on surface: mean {np.nanmean(trace_err) * 1000:.1f} mm, "
           f"max {np.nanmax(trace_err) * 1000:.1f} mm")
-    print(f"  CTCS violation: {results.ctcs_violation}")
     print()
     print("Launching Viser visualization (Ctrl+C to exit)...")
     visualize(results)
