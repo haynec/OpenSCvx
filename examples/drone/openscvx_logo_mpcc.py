@@ -199,8 +199,11 @@ trace_cost = ox.Sum(pen_error * pen_error)
 # --- Dynamics ---
 # The smoothness integrand prices acceleration (tilt-induced lurching that
 # drags the pen off the path) and velocity (damping that keeps the
-# receding-horizon loop from building oscillations step over step). Together
-# with the progress reward this sets the cruise pace of the pen.
+# receding-horizon loop from building oscillations step over step). Velocity is
+# weighted 3x: a becalmed airframe holds the pen on the line far more than it
+# slows the pen's pace, so the heavier damping cuts trace error without
+# stretching the flight. Together with the progress reward this sets the cruise
+# pace of the pen.
 J_b_diag = ox.linalg.Diag(J_b)
 acceleration = (1.0 / m) * ox.spatial.QDCM(attitude_normalized) @ thrust_force + np.array(
     [0.0, 0.0, g_const]
@@ -213,7 +216,7 @@ dynamics = {
     @ (torque - ox.spatial.SSM(angular_velocity) @ J_b_diag @ angular_velocity),
     "progress": trace_rate,
     "trace_error": trace_cost,
-    "smoothness": ox.Sum(acceleration * acceleration) + ox.Sum(velocity * velocity),
+    "smoothness": ox.Sum(acceleration * acceleration) + 3.0 * ox.Sum(velocity * velocity),
 }
 
 # --- Constraints ---
