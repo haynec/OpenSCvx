@@ -446,14 +446,21 @@ if __name__ == "__main__":
     )
 
     def add_line_trail(name, trail, color, line_width):
-        """Growing line-strip trail; returns an update callback for the animation."""
+        """Growing line-strip trail; returns an update callback for the animation.
+
+        The segment buffer keeps a constant size — not-yet-drawn segments are
+        collapsed to zero length instead of sliced away, because some clients
+        drop buffer updates that change size.
+        """
         segments = np.stack([trail[:-1], trail[1:]], axis=1).astype(np.float32)
         handle = server.scene.add_line_segments(
             name, points=segments, colors=color, line_width=line_width
         )
 
         def update(frame_idx: int) -> None:
-            handle.points = segments[: max(frame_idx, 1)]
+            shown = segments.copy()
+            shown[frame_idx:] = trail[min(frame_idx, len(trail) - 1)]
+            handle.points = shown
 
         return update
 
