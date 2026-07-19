@@ -6,39 +6,39 @@ pen of length ``pen_length`` along the tool axis and draws the figure
 directly — the pen tip must stay on the work surface (the plane z = 0) while
 tracking a target that sweeps the drawing path.
 
-Formulation
------------
-- ``FraxDynamics`` — full rigid-body joint-space dynamics from the UR5e URDF.
-- The drawing path comes from an SVG file (the OpenSCvx wordmark by default;
-  swap in any SVG), resampled by arc length, paced by curvature (corners get
-  more time), eased in time, and baked into per-coordinate ``Cinterp`` cubic
-  splines: inside the solver the moving target is a C2-smooth symbolic
-  function of the time state.
-- The pen is a rigid stick of length ``pen_length`` along the tool axis
-  (EE local +z). ``pen_length`` is an ``ox.Parameter``: update its ``value``
-  and re-solve to fit whatever pen ends up in the gripper — no rebuild.
-- Pen-up handling: SVG paths may contain implicit pen-up moves between
-  disconnected strokes. During those transits the target lifts off the
-  surface on a smooth ``lift_height`` bump; the arm follows it up, across,
-  and back down, and no ink is drawn.
-- Contact: the tip never goes below the surface, and a CTCS band keeps it
-  within ``contact_tol`` while drawing — the band's ceiling follows the
-  target's lift profile, so it releases exactly (and as smoothly) as the
-  target leaves the surface during transits. A tilt cone keeps the pen
-  within ``tilt_max`` of the surface normal.
-- Tracking: a ``tip_error`` state integrates the squared distance between
-  the pen tip and the target point on the surface (BYOF dynamics, since it
-  needs frax FK) — including the vertical component, so the tip presses
-  toward the surface instead of wandering inside the contact band. Its upper
-  bound caps the average tracking error through CTCS, and its final value is
-  minimized.
-- Initial guess: sequential damped-least-squares IK through frax's own FK
-  places the tip exactly on the moving target with the pen vertical, so the
-  guess writes the figure perfectly and SCP only has to trade tracking
-  against the dynamics.
+Formulation:
+    - ``FraxDynamics`` — full rigid-body joint-space dynamics from the UR5e
+      URDF.
+    - The drawing path comes from an SVG file (the OpenSCvx wordmark by
+      default; swap in any SVG), resampled by arc length, paced by curvature
+      (corners get more time), eased in time, and baked into per-coordinate
+      ``Cinterp`` cubic splines: inside the solver the moving target is a
+      C2-smooth symbolic function of the time state.
+    - The pen is a rigid stick of length ``pen_length`` along the tool axis
+      (EE local +z). ``pen_length`` is an ``ox.Parameter``: update its
+      ``value`` and re-solve to fit whatever pen ends up in the gripper — no
+      rebuild.
+    - Pen-up handling: SVG paths may contain implicit pen-up moves between
+      disconnected strokes. During those transits the target lifts off the
+      surface on a smooth ``lift_height`` bump; the arm follows it up,
+      across, and back down, and no ink is drawn.
+    - Contact: the tip never goes below the surface, and a CTCS band keeps
+      it within ``contact_tol`` while drawing — the band's ceiling follows
+      the target's lift profile, so it releases exactly (and as smoothly) as
+      the target leaves the surface during transits. A tilt cone keeps the
+      pen within ``tilt_max`` of the surface normal.
+    - Tracking: a ``tip_error`` state integrates the squared distance
+      between the pen tip and the target point on the surface (BYOF
+      dynamics, since it needs frax FK) — including the vertical component,
+      so the tip presses toward the surface instead of wandering inside the
+      contact band. Its upper bound caps the average tracking error through
+      CTCS, and its final value is minimized.
+    - Initial guess: sequential damped-least-squares IK through frax's own
+      FK places the tip exactly on the moving target with the pen vertical,
+      so the guess writes the figure perfectly and SCP only has to trade
+      tracking against the dynamics.
 
-Requires
---------
+Requires:
     pip install openscvx[frax] svgpathtools
 """
 
