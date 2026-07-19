@@ -388,18 +388,17 @@ for control in dyn.controls:
 # ceiling rises with the target during pen-up transits, deactivating the band
 # exactly when — and as smoothly as — the target leaves the surface. No
 # node-window bookkeeping is needed, and a single-stroke SVG reduces to a
-# fixed band. Both constraints get their own augmented state (idx 1) with a
-# tight violation budget, are written in millimetres (the square penalty of a
-# metre-scale residual is too flat at mm violations to resist the proximal
-# term), and are additionally enforced at every node (``check_nodally``).
-_MM = 1e3
+# fixed band. The constraints share their own augmented state (idx 1) whose
+# licq bound sets the violation the solver may spend per segment:
+# v_sustained ~= sqrt(licq_max / dt_seg), here ~26 micrometres. They are also
+# enforced at every node (``check_nodally``).
 constraints.extend(
     [
-        ox.ctcs(_MM * pen_tip[2] >= -_MM * contact_tol, idx=1, licq_max=1e-4, check_nodally=True),
+        ox.ctcs(pen_tip[2] >= -contact_tol, idx=1, licq_max=1e-10, check_nodally=True),
         ox.ctcs(
-            _MM * pen_tip[2] <= _MM * (contact_tol + 2.0 * target_z),
+            pen_tip[2] <= contact_tol + 2.0 * target_z,
             idx=1,
-            licq_max=1e-4,
+            licq_max=1e-10,
             check_nodally=True,
         ),
         # Tool-axis z is -1 when the pen points straight down; this cone keeps
