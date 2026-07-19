@@ -99,10 +99,8 @@ path_size = 0.50  # larger bounding-box dimension of the drawing [m]
 n = 300
 total_time = 45.0  # [s] — the default wordmark is ~3.3 m of drawing
 
-# Pen. The length is an ox.Parameter: assign a new ``pen_length.value`` and
-# re-solve to fit whatever pen ends up in the gripper — no rebuild (the IK
-# guess is built for the current value, so re-run it too if the length
-# changes a lot).
+# Pen. The length is an ox.Parameter: assign ``pen_length.value`` and
+# re-solve to change pens without rebuilding the problem.
 pen_length = ox.Parameter("pen_length", shape=(1,), value=np.array([0.15]))
 contact_tol = 0.0005  # tip-to-surface contact band while drawing [m]
 tilt_max = np.deg2rad(30.0)  # max pen tilt from the surface normal
@@ -121,12 +119,9 @@ n_j = robot.num_joints  # 6
 # =============================================================================
 # Symbolic forward kinematics (Product of Exponentials)
 # =============================================================================
-# Screw axes are extracted from frax at the zero configuration
-# (dT/dq_i |_{q=0} = hat(xi_i) T_home) and the EE pose becomes the symbolic
-# chain T = exp(xi_1 q_1) ... exp(xi_6 q_6) T_home via ``ox.lie.SE3Exp``.
-# With the pose symbolic, the pen tip, contact band, tilt cone, and tracking
-# metric below are all plain symbolic expressions; the only raw JAX function
-# left in the problem is the frax joint-space forward dynamics.
+# Screw axes come from frax at the zero configuration
+# (dT/dq_i |_{q=0} = hat(xi_i) T_home); the EE pose is the symbolic chain
+# T = exp(xi_1 q_1) ... exp(xi_6 q_6) T_home.
 
 _T_home = np.asarray(robot.ee_transform(jnp.zeros(n_j)))
 _dT0 = np.asarray(jax.jacfwd(robot.ee_transform)(jnp.zeros(n_j)))
@@ -160,13 +155,11 @@ time = ox.Time(initial=0.0, final=total_time, min=0.0, max=total_time)
 def svg_polyline(svg_file: str, n_points: int = 4000) -> tuple[np.ndarray, np.ndarray]:
     """Uniform-arc-length polyline through the SVG's strokes, fitted to the drawing box.
 
-    Concatenates the selected ``path_indices`` (all paths when None) in order,
-    samples them densely, then resamples by cumulative arc length so equal
-    index steps cover equal distances. SVG paths may contain implicit pen-up
-    moves (disconnected subpaths packed into one path); the straight bridges
-    the resampling draws across those gaps are flagged as transits. The
-    result is y-flipped (SVG y points down), rotated by ``rotation_deg``,
-    scaled uniformly to fit ``path_size``, and centred on ``path_center``.
+    Samples the selected ``path_indices`` in order and resamples by cumulative
+    arc length; the straight bridges across implicit pen-up moves are flagged
+    as transits. The result is y-flipped (SVG y points down), rotated by
+    ``rotation_deg``, scaled to fit ``path_size``, and centred on
+    ``path_center``.
 
     Returns:
         points: (n_points, 2) polyline in table coordinates.
@@ -212,9 +205,8 @@ def path_progress(t_frac, ramp: float = 0.08):
     """Eased time progress: smoothstep speed ramps at both ends of the trace.
 
     The arm starts and ends at rest, so the target speed ramps from and to
-    zero over the first and last ``ramp`` fraction of the mission — and stays
-    near-constant in between, where curvature pacing governs the speed. (A
-    full-trace sine ease would double the mid-trace speed instead.)
+    zero over the first and last ``ramp`` fraction of the mission and stays
+    near-constant in between, where curvature pacing governs the speed.
     """
     up = np.clip(t_frac / ramp, 0.0, 1.0)
     down = np.clip((1.0 - t_frac) / ramp, 0.0, 1.0)
@@ -226,13 +218,13 @@ def path_progress(t_frac, ramp: float = 0.08):
 def curvature_pacing(polyline: np.ndarray, kappa_ref: float = 50.0, w_max: float = 8.0):
     """Map time fraction -> path progress, slowing the target through corners.
 
-    Allocates trace time in proportion to a curvature weight ``1 + |kappa| /
-    kappa_ref`` (clipped at ``w_max``), so sharp glyph corners get up to
-    ``w_max`` times more time per unit arc length than straight strokes. With
-    uniform pacing the tightest corners dominate the tracking error budget.
+    Allocates trace time in proportion to the curvature weight ``1 + |kappa|
+    / kappa_ref`` (clipped at ``w_max``), so sharp corners get up to
+    ``w_max`` times more time per unit arc length than straight strokes.
 
-    Returns (time_fraction, progress) tables: monotone arrays mapping the
-    fraction of trace time spent to the fraction of arc length covered.
+    Returns:
+        (time_fraction, progress): monotone tables mapping the fraction of
+        trace time spent to the fraction of arc length covered.
     """
     xp, yp = np.gradient(polyline[:, 0]), np.gradient(polyline[:, 1])
     xpp, ypp = np.gradient(xp), np.gradient(yp)
@@ -246,12 +238,9 @@ def curvature_pacing(polyline: np.ndarray, kappa_ref: float = 50.0, w_max: float
     return time_frac / time_frac[-1], np.linspace(0.0, 1.0, len(polyline))
 
 
-# Tabulate the target as a function of mission time: uniform time breakpoints,
-# eased and curvature-paced progress, positions read off the arc-length
-# polyline. During pen-up transits the target lifts off the surface on a
-# smooth bump of height ``lift_height``, so tracking it carries the pen up,
-# across, and back down. Cubic splines through this table give the solver a
-# C2-smooth moving target regardless of how the SVG itself is sampled.
+# Target as a function of mission time: eased, curvature-paced progress along
+# the polyline, lifted on a smooth ``lift_height`` bump during pen-up
+# transits. Cubic splines through the table give a C2-smooth moving target.
 _polyline, _on_stroke = svg_polyline(trace_svg)
 _time_frac, _s_polyline = curvature_pacing(_polyline)
 _t_table = np.linspace(0.0, total_time, 1000)
@@ -286,11 +275,8 @@ def target_engaged(t) -> np.ndarray:
 # =============================================================================
 # Initial guess: IK writing of the path with the pen vertical
 # =============================================================================
-# Desired EE poses put the pen tip exactly on the moving target with the tool
-# axis pointing straight down, i.e. the EE hovers one pen length above the
-# surface. Sequential damped-least-squares IK (each node seeded by the
-# previous solution) through frax FK turns those poses into a smooth
-# joint-space trajectory on a single IK branch.
+# Damped-least-squares IK through frax FK, solved sequentially (each node
+# seeded by the previous solution) so the trajectory stays on one IK branch.
 
 _R_down = jnp.array([[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]])
 _q_seed = np.array([0.0, -np.pi / 2, np.pi / 2, -np.pi / 2, -np.pi / 2, 0.0])
@@ -350,20 +336,14 @@ tau.guess = np.array([np.asarray(robot.gravity_vector(qi)) for qi in q_guess])
 # =============================================================================
 # Tip tracking metric state
 # =============================================================================
-# d(tip_error)/dt = || tip - target ||^2 with the target on the surface
-# (z = 0), so the state accumulates the squared 3D tracking error of the pen
-# tip over the mission [m^2 s]. Including the vertical component keeps the
-# tip from wandering inside the contact band — the band is the hard
-# guarantee, the metric supplies continuous pressure toward z = 0. The upper
-# bound caps the state through CTCS and the final value is minimized. The
-# squared distance is smooth at zero error, so the linearization stays well
-# conditioned on the (exact) IK guess.
+# Accumulates || tip - target ||^2 over the mission [m^2 s]. The vertical
+# component is included so the tip presses toward the surface rather than
+# wandering inside the contact band.
 
 tip_error = ox.State("tip_error", shape=(1,))
 tip_error.min = np.array([0.0])
-# Loose guard only — Minimize provides the tracking pressure. A tight cap
-# that the true integral cannot meet forces the solver into defect-cheating
-# (it "erases" the metric through virtual control instead of steering).
+# Loose guard — Minimize supplies the pressure; a cap the true integral
+# cannot meet forces the solver into defect-cheating instead of steering.
 tip_error.max = np.array([1e-2])
 tip_error.initial = np.array([0.0])
 tip_error.final = [ox.Minimize(0.0)]
@@ -383,15 +363,10 @@ for state in states:
 for control in dyn.controls:
     constraints.extend([ox.ctcs(control <= control.max), ox.ctcs(control.min <= control)])
 
-# Contact: the surface is solid, so "never below" is active always. "Never
-# above the band" instead follows the target's lift profile: the allowed
-# ceiling rises with the target during pen-up transits, deactivating the band
-# exactly when — and as smoothly as — the target leaves the surface. No
-# node-window bookkeeping is needed, and a single-stroke SVG reduces to a
-# fixed band. The constraints share their own augmented state (idx 1) whose
-# licq bound sets the violation the solver may spend per segment:
-# v_sustained ~= sqrt(licq_max / dt_seg), here ~26 micrometres. They are also
-# enforced at every node (``check_nodally``).
+# Contact: "never below the surface" is always active; the ceiling follows
+# the target's lift profile, releasing the band during pen-up transits. The
+# pair shares augmented state idx 1, whose licq bound sets the allowed
+# violation per segment (v ~= sqrt(licq_max / dt_seg), here ~26 um).
 constraints.extend(
     [
         ox.ctcs(pen_tip[2] >= -contact_tol, idx=1, licq_max=1e-10, check_nodally=True),
@@ -401,14 +376,12 @@ constraints.extend(
             licq_max=1e-10,
             check_nodally=True,
         ),
-        # Tool-axis z is -1 when the pen points straight down; this cone keeps
-        # the pen within tilt_max of the surface normal.
+        # Tilt cone: tool-axis z is -1 with the pen straight down.
         ox.ctcs(T_ee[2, 2] <= -float(np.cos(tilt_max))),
     ]
 )
 
-# d(tip_error)/dt = || tip - target ||^2; the frax joint-space forward
-# dynamics is the one function the symbolic layer cannot express.
+# The frax forward dynamics is the one non-symbolic function in the problem.
 dynamics = {
     "q": qd,
     "tip_error": (pen_tip[0] - target_x) ** 2
@@ -426,21 +399,14 @@ problem = ox.Problem(
     byof=byof,
     N=n,
     algorithm={
-        # The terminal tip_error is O(1e-5) — the default lam_cost of 1e-2
-        # leaves it under-priced against the proximal term, and the solution
-        # lags the target at peak path speed.
-        "lam_cost": 1e1,
+        "lam_cost": 1e1,  # the default 1e-2 under-prices the O(1e-5) terminal metric
         "lam_vb": 1e0,
-        # lam_vc must price virtual control well above the tracking cost:
-        # otherwise the solver "erases" accumulated tip_error through defects
-        # instead of steering the arm.
-        "lam_vc": 1e4,
+        "lam_vc": 1e4,  # must price defects above the tracking reward
         "lam_prox": 1e1,
         "autotuner": ox.ConstantProximalWeight(),
     },
     float_dtype="float64",
-    # tip_error is O(1e-6..1e-3), far below the default diffrax atol of 1e-3 —
-    # tighten so the tracking metric is actually resolved between nodes.
+    # The default atol of 1e-3 would swallow the O(1e-6..1e-3) tip_error integrand.
     discretizer=ox.DiscretizeLinearizeVectorize(diffrax_kwargs={"atol": 1e-8, "rtol": 1e-8}),
 )
 
@@ -450,11 +416,7 @@ problem = ox.Problem(
 
 
 def pen_tip_path(q_traj: np.ndarray) -> np.ndarray:
-    """World-frame pen tip positions along a joint trajectory.
-
-    FK is batched through ``jax.vmap`` — per-frame python calls cost ~7 ms of
-    dispatch each, which at multishot resolution adds up to minutes.
-    """
+    """World-frame pen tip positions along a joint trajectory (batched FK)."""
     T = np.asarray(jax.vmap(robot.ee_transform)(jnp.asarray(q_traj)))
     return T[:, :3, 3] + float(pen_length.value[0]) * T[:, :3, 2]
 
@@ -465,11 +427,7 @@ def pen_tip_path(q_traj: np.ndarray) -> np.ndarray:
 
 
 def trace_figure(tips: np.ndarray, t: np.ndarray):
-    """Plotly figure comparing the drawn line against the SVG target path.
-
-    Same visual grammar as the race-car examples: the reference as a dashed
-    black line, the executed path as markers coloured by speed.
-    """
+    """Plotly figure: the SVG target path against the drawn line, coloured by speed."""
     import plotly.graph_objects as go
 
     speed = np.linalg.norm(np.gradient(tips[:, :2], t, axis=0), axis=1)
@@ -512,11 +470,9 @@ _RZ180 = np.diag([-1.0, -1.0, 1.0])
 def _ur5e_mesh_scene(server, q_traj: np.ndarray):
     """Add the menagerie UR5e CAD meshes and return a per-frame pose updater.
 
-    Everything is read from the MuJoCo model itself — visual mesh geoms,
-    vertices/faces, and material colours — so no asset bookkeeping is needed.
-    Returns None when the menagerie assets are unavailable (the caller falls
-    back to the stick model); see openscvx.integrations.menagerie for how the
-    asset directory is located.
+    Mesh geoms, vertices, colours, and poses all come from the MuJoCo model.
+    Returns None when the menagerie assets are unavailable (see
+    openscvx.integrations.menagerie); the caller falls back to a stick model.
     """
     try:
         import mujoco
@@ -583,8 +539,7 @@ def visualize(results) -> None:
     if prop is not None:
         q_traj, t_vec = prop.state("q")
 
-    # ~60 fps of animation is plenty; full multishot resolution just slows
-    # the precompute and the client down.
+    # Subsample to ~60 fps; full multishot resolution only slows the client.
     stride = max(1, len(q_traj) // 3000)
     q_traj = np.asarray(q_traj)[::stride]
     t_vec = np.asarray(t_vec).flatten()[::stride]
@@ -635,11 +590,8 @@ def visualize(results) -> None:
         colors=np.full((1, 2, 3), (40, 40, 40), dtype=np.uint8),
         line_width=4.0,
     )
-    # The ink line drawn so far. Viser keeps line-segment points and colors as
-    # separate fixed-shape buffers, so animate inside a full-size buffer with
-    # the not-yet-drawn segments collapsed to a point (zero-length segments
-    # are invisible) instead of resizing per frame. Pen-up transit segments
-    # leave no ink and stay collapsed permanently.
+    # Animate the ink inside a fixed-shape buffer (viser line-segment buffers
+    # must not be resized); undrawn and pen-up segments collapse to a point.
     ink_segs = np.stack([tips[:-1], tips[1:]], axis=1).astype(np.float32)
     engaged = target_engaged(t_vec)
     ink_segs[~(engaged[:-1] & engaged[1:])] = ink_segs[0, 0]
@@ -678,8 +630,8 @@ if __name__ == "__main__":
     problem.solve()
     results = problem.post_process()
 
-    # Measure on the multishot propagation: a single 10 s open-loop torque
-    # replay of an arm diverges, so results.trajectory is not meaningful here.
+    # Measure on the multishot propagation — an open-loop torque replay of an
+    # arm diverges, so results.trajectory is not meaningful here.
     prop = results.multishot_propagation()
     q_traj, t_traj = prop.state("q")
     tips = pen_tip_path(q_traj)
