@@ -128,9 +128,7 @@ _dT0 = np.asarray(jax.jacfwd(robot.ee_transform)(jnp.zeros(n_j)))
 _screws = []
 for _i in range(n_j):
     _xi_hat = _dT0[:, :, _i] @ np.linalg.inv(_T_home)
-    _screws.append(
-        np.array([*_xi_hat[:3, 3], _xi_hat[2, 1], _xi_hat[0, 2], _xi_hat[1, 0]])
-    )
+    _screws.append(np.array([*_xi_hat[:3, 3], _xi_hat[2, 1], _xi_hat[0, 2], _xi_hat[1, 0]]))
 
 T_ee = ox.lie.SE3Exp(ox.Constant(_screws[0]) * q[0])
 for _i in range(1, n_j):
@@ -151,6 +149,7 @@ time = ox.Time(initial=0.0, final=total_time, min=0.0, max=total_time)
 # The work surface is the plane z = 0 (the robot is mounted on it). The SVG
 # outline is scaled uniformly into a ``path_size`` box centred on
 # ``path_center`` in front of the base.
+
 
 def svg_polyline(svg_file: str, n_points: int = 4000) -> tuple[np.ndarray, np.ndarray]:
     """Uniform-arc-length polyline through the SVG's strokes, fitted to the drawing box.
@@ -437,18 +436,25 @@ def trace_figure(tips: np.ndarray, t: np.ndarray):
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
-            x=_polyline[:, 0], y=_polyline[:, 1],
-            mode="lines", name="target path",
+            x=_polyline[:, 0],
+            y=_polyline[:, 1],
+            mode="lines",
+            name="target path",
             line=dict(color="black", dash="dash", width=1),
         )
     )
     fig.add_trace(
         go.Scatter(
-            x=tips[:, 0], y=tips[:, 1],
-            mode="markers", name="pen trace",
+            x=tips[:, 0],
+            y=tips[:, 1],
+            mode="markers",
+            name="pen trace",
             marker=dict(
-                color=speed, colorscale="Rainbow", size=4,
-                colorbar=dict(title="tip speed [m/s]"), showscale=True,
+                color=speed,
+                colorscale="Rainbow",
+                size=4,
+                colorbar=dict(title="tip speed [m/s]"),
+                showscale=True,
             ),
         )
     )
@@ -622,8 +628,10 @@ if __name__ == "__main__":
     print("UR5e pen tracing via frax dynamics")
     print("=" * 60)
     print(f"Nodes: {n}  |  Mission time: {total_time} s")
-    print(f"Pen length: {float(pen_length.value[0]) * 100:.0f} cm  |  "
-          f"contact band: +/-{contact_tol * 1000:.1f} mm")
+    print(
+        f"Pen length: {float(pen_length.value[0]) * 100:.0f} cm  |  "
+        f"contact band: +/-{contact_tol * 1000:.1f} mm"
+    )
     print(f"Path: {os.path.basename(trace_svg)}, {path_size} m wide at {list(path_center)}")
     print()
 
@@ -642,12 +650,17 @@ if __name__ == "__main__":
     tips_down = tips[engaged]
 
     print("\nResults:")
-    print(f"  Strokes: {len(_transit_edges) // 2 + 1}  |  pen-up transits: "
-          f"{len(_transit_edges) // 2}")
-    print(f"  Tip tracking error (pen down): mean {tip_err.mean() * 1000:.1f} mm, "
-          f"max {tip_err.max() * 1000:.1f} mm")
-    print(f"  Tip height (pen down): min {tips_down[:, 2].min() * 1000:.1f} mm, "
-          f"max {tips_down[:, 2].max() * 1000:.1f} mm (band +/-{contact_tol * 1000:.1f} mm)")
+    print(
+        f"  Strokes: {len(_transit_edges) // 2 + 1}  |  pen-up transits: {len(_transit_edges) // 2}"
+    )
+    print(
+        f"  Tip tracking error (pen down): mean {tip_err.mean() * 1000:.1f} mm, "
+        f"max {tip_err.max() * 1000:.1f} mm"
+    )
+    print(
+        f"  Tip height (pen down): min {tips_down[:, 2].min() * 1000:.1f} mm, "
+        f"max {tips_down[:, 2].max() * 1000:.1f} mm (band +/-{contact_tol * 1000:.1f} mm)"
+    )
     trace_figure(tips, t_traj).show()
 
     print()
