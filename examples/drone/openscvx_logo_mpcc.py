@@ -277,18 +277,24 @@ def update_initial_conditions(nodes: dict):
 
 
 def shift_guess(nodes: dict):
-    """Shift the previous solution by one node; extend the tip along the path."""
+    """Shift the previous solution by one node; extend the tip with a hover prior.
+
+    The freshly revealed tip node points its attitude along the path at the
+    extended progress but is otherwise seeded as a calm hover — zero velocity,
+    hover thrust, zero torque, position held from the last node. Repeating the
+    last node's momentum instead extrapolates any drift into the new node,
+    which the receding-horizon loop can amplify step over step; a hover prior
+    lets the optimizer discover the motion the path actually needs.
+    """
     ext_progress = min(
         nodes["progress"][-1, 0] + nodes["trace_rate"][-1, 0] * dt_mpc, padded_arc_length
     )
     ext_attitude = look_at(nodes["position"][-1], ref_point(ext_progress))
 
     position.guess = np.vstack([nodes["position"][1:], nodes["position"][-1:]])
-    velocity.guess = np.vstack([nodes["velocity"][1:], nodes["velocity"][-1:]])
+    velocity.guess = np.vstack([nodes["velocity"][1:], np.zeros((1, 3))])
     attitude.guess = np.vstack([nodes["attitude"][1:], [ext_attitude]])
-    angular_velocity.guess = np.vstack(
-        [nodes["angular_velocity"][1:], nodes["angular_velocity"][-1:]]
-    )
+    angular_velocity.guess = np.vstack([nodes["angular_velocity"][1:], np.zeros((1, 3))])
     progress.guess = np.vstack([nodes["progress"][1:], [[ext_progress]]])
 
     for integrator, key in [(trace_error, "trace_error"), (smoothness, "smoothness")]:
@@ -297,8 +303,8 @@ def shift_guess(nodes: dict):
             np.vstack([nodes[key][1:] - offset, nodes[key][-1:] - offset]), 0.0
         )
 
-    thrust_force.guess = np.vstack([nodes["thrust_force"][1:], nodes["thrust_force"][-1:]])
-    torque.guess = np.vstack([nodes["torque"][1:], nodes["torque"][-1:]])
+    thrust_force.guess = np.vstack([nodes["thrust_force"][1:], [[0.0, 0.0, -m * g_const]]])
+    torque.guess = np.vstack([nodes["torque"][1:], np.zeros((1, 3))])
     trace_rate.guess = np.vstack([nodes["trace_rate"][1:], nodes["trace_rate"][-1:]])
 
     # Time: shift and renormalize so the horizon starts at t = 0
