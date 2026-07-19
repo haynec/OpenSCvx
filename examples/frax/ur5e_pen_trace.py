@@ -8,8 +8,9 @@ must stay on the work surface (the plane z = 0) while tracking the target.
 Formulation
 -----------
 - ``FraxDynamics`` — full rigid-body joint-space dynamics from the UR5e URDF.
-- The drawing path comes from an SVG file (a circle by default), resampled by
-  arc length, eased in time, and baked into per-coordinate ``Cinterp`` cubic
+- The drawing path comes from an SVG file (the OpenSCvx wordmark by default;
+  swap in any SVG), resampled by arc length, paced by curvature (corners get
+  more time), eased in time, and baked into per-coordinate ``Cinterp`` cubic
   splines: inside the solver the moving target is a C2-smooth symbolic
   function of the time state.
 - The pen is a rigid stick of length ``pen_length`` along the tool axis
@@ -94,7 +95,7 @@ tilt_max = np.deg2rad(30.0)  # max pen tilt from the surface normal
 # Discretization and time
 # =============================================================================
 
-n = 150
+n = 300
 total_time = 45.0  # target completes the path exactly once (~3.3 m of drawing)
 
 time = ox.Time(initial=0.0, final=total_time, min=0.0, max=total_time)
@@ -434,6 +435,43 @@ def pen_tip_path(q_traj: np.ndarray) -> np.ndarray:
 # =============================================================================
 
 
+def trace_figure(tips: np.ndarray, t: np.ndarray):
+    """Plotly figure comparing the drawn line against the SVG target path.
+
+    Same visual grammar as the race-car examples: the reference as a dashed
+    black line, the executed path as markers coloured by speed.
+    """
+    import plotly.graph_objects as go
+
+    speed = np.linalg.norm(np.gradient(tips[:, :2], t, axis=0), axis=1)
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=_polyline[:, 0], y=_polyline[:, 1],
+            mode="lines", name="target path",
+            line=dict(color="black", dash="dash", width=1),
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=tips[:, 0], y=tips[:, 1],
+            mode="markers", name="pen trace",
+            marker=dict(
+                color=speed, colorscale="Rainbow", size=4,
+                colorbar=dict(title="tip speed [m/s]"), showscale=True,
+            ),
+        )
+    )
+    fig.update_layout(
+        title=f"UR5e pen trace — {os.path.basename(trace_svg)}",
+        xaxis=dict(title="x [m]", scaleanchor="y"),
+        yaxis=dict(title="y [m]"),
+        height=600,
+    )
+    return fig
+
+
 def visualize(results) -> None:
     """Animate in Viser: stick-model arm, pen, and the line it draws."""
     from openscvx.plotting.viser import add_animation_controls, create_server
@@ -455,11 +493,11 @@ def visualize(results) -> None:
         keypoints[k, -1] = np.asarray(robot.ee_transform(q_traj[k]))[:3, 3]
 
     server = create_server(keypoints[:, -1], show_grid=False)
-    server.scene.add_grid("/table", width=1.6, height=1.6, cell_size=0.2)
+    grid_handle = server.scene.add_grid("/table", width=1.6, height=1.6, cell_size=0.2)
     server.scene.add_frame("/origin", axes_length=0.08, axes_radius=0.003)
 
     # Target path (thin line) drawn on the surface
-    server.scene.add_line_segments(
+    target_handle = server.scene.add_line_segments(
         "/target_path",
         points=np.stack([target_path[:-1], target_path[1:]], axis=1),
         colors=np.full((len(target_path) - 1, 2, 3), (90, 200, 120), dtype=np.uint8),
@@ -484,19 +522,34 @@ def visualize(results) -> None:
         colors=np.full((1, 2, 3), (40, 40, 40), dtype=np.uint8),
         line_width=4.0,
     )
-    ink_handle = server.scene.add_point_cloud(
+    # The ink line drawn so far: consecutive pen-tip positions.
+    ink_segs = np.stack([tips[:-1], tips[1:]], axis=1).astype(np.float32)
+    ink_handle = server.scene.add_line_segments(
         "/ink",
-        points=tips[:1],
-        colors=np.full((1, 3), (200, 30, 30), dtype=np.uint8),
-        point_size=0.004,
+        points=ink_segs[:1],
+        colors=np.full((1, 2, 3), (200, 30, 30), dtype=np.uint8),
+        line_width=3.0,
     )
 
     def update(frame: int) -> None:
         arm_handle.points = _arm_segments(frame)
         pen_handle.points = np.array([[keypoints[frame, -1], tips[frame]]], dtype=np.float32)
-        drawn = tips[: frame + 1]
+        drawn = ink_segs[: max(frame, 1)]
         ink_handle.points = drawn
-        ink_handle.colors = np.full((len(drawn), 3), (200, 30, 30), dtype=np.uint8)
+        ink_handle.colors = np.full((len(drawn), 2, 3), (200, 30, 30), dtype=np.uint8)
+
+    # First-class visibility toggles (the built-in scene tree offers the same
+    # under the gear icon, but a GUI folder puts them front and centre).
+    with server.gui.add_folder("Visibility"):
+        for label, handle in [
+            ("Arm", arm_handle),
+            ("Pen", pen_handle),
+            ("Ink", ink_handle),
+            ("Target path", target_handle),
+            ("Grid", grid_handle),
+        ]:
+            checkbox = server.gui.add_checkbox(label, initial_value=True)
+            checkbox.on_update(lambda event, h=handle: setattr(h, "visible", event.target.value))
 
     add_animation_controls(server, t_vec, [update], loop=True)
     server.sleep_forever()
@@ -532,6 +585,8 @@ if __name__ == "__main__":
           f"max {tip_err.max() * 1000:.1f} mm")
     print(f"  Tip height: min {tips[:, 2].min() * 1000:.1f} mm, "
           f"max {tips[:, 2].max() * 1000:.1f} mm (band +/-{contact_tol * 1000:.0f} mm)")
+    trace_figure(tips, t_traj).show()
+
     print()
     print("Launching Viser visualization (Ctrl+C to exit)...")
     visualize(results)

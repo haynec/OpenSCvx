@@ -8,11 +8,12 @@ work surface the robot is mounted on (the plane z = 0).
 Formulation
 -----------
 - ``FraxDynamics`` — full rigid-body joint-space dynamics from the UR5e URDF.
-- The drawing path comes from an SVG file (a circle by default — swap in any
-  single-path SVG). The path is resampled by arc length, eased in time so the
-  target starts and ends at rest, and baked into per-coordinate ``Cinterp``
-  cubic splines, so inside the solver the moving target is a C2-smooth
-  symbolic function of the time state.
+- The drawing path comes from an SVG file (the OpenSCvx wordmark by default;
+  swap in any SVG). The path is resampled by arc length, paced by curvature
+  (corners get more time), eased in time so the target starts and ends at
+  rest, and baked into per-coordinate ``Cinterp`` cubic splines, so inside
+  the solver the moving target is a C2-smooth symbolic function of the time
+  state.
 - A ``misalignment`` state integrates ``1 - cos(theta)``, where ``theta`` is
   the angle between the tool axis (EE local +z, the laser) and the line of
   sight to the target (BYOF dynamics, since it needs frax FK). Its state
@@ -79,7 +80,7 @@ n_j = robot.num_joints  # 6
 # Discretization and time
 # =============================================================================
 
-n = 150
+n = 300
 total_time = 45.0  # target completes the path exactly once (~3.3 m of drawing)
 
 time = ox.Time(initial=0.0, final=total_time, min=0.0, max=total_time)
@@ -393,6 +394,45 @@ def laser_trace(q_traj: np.ndarray) -> np.ndarray:
 # =============================================================================
 
 
+def trace_figure(traced: np.ndarray, t: np.ndarray):
+    """Plotly figure comparing the drawn trace against the SVG target path.
+
+    Same visual grammar as the race-car examples: the reference as a dashed
+    black line, the executed path as markers coloured by speed.
+    """
+    import plotly.graph_objects as go
+
+    ok = np.isfinite(traced).all(axis=1)
+    traced, t = traced[ok], t[ok]
+    speed = np.linalg.norm(np.gradient(traced[:, :2], t, axis=0), axis=1)
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=_polyline[:, 0], y=_polyline[:, 1],
+            mode="lines", name="target path",
+            line=dict(color="black", dash="dash", width=1),
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=traced[:, 0], y=traced[:, 1],
+            mode="markers", name="laser trace",
+            marker=dict(
+                color=speed, colorscale="Rainbow", size=4,
+                colorbar=dict(title="dot speed [m/s]"), showscale=True,
+            ),
+        )
+    )
+    fig.update_layout(
+        title=f"UR5e laser trace — {os.path.basename(trace_svg)}",
+        xaxis=dict(title="x [m]", scaleanchor="y"),
+        yaxis=dict(title="y [m]"),
+        height=600,
+    )
+    return fig
+
+
 def visualize(results) -> None:
     """Animate in Viser: stick-model arm, laser ray, and the trace it draws."""
     from openscvx.plotting.viser import add_animation_controls, create_server
@@ -416,11 +456,11 @@ def visualize(results) -> None:
         keypoints[k, -1] = ee_T[k][:3, 3]
 
     server = create_server(keypoints[:, -1], show_grid=False)
-    server.scene.add_grid("/table", width=1.6, height=1.6, cell_size=0.2)
+    grid_handle = server.scene.add_grid("/table", width=1.6, height=1.6, cell_size=0.2)
     server.scene.add_frame("/origin", axes_length=0.08, axes_radius=0.003)
 
     # Target path (thin line) drawn on the surface
-    server.scene.add_line_segments(
+    target_handle = server.scene.add_line_segments(
         "/target_path",
         points=np.stack([target_path[:-1], target_path[1:]], axis=1),
         colors=np.full((len(target_path) - 1, 2, 3), (90, 200, 120), dtype=np.uint8),
@@ -445,11 +485,15 @@ def visualize(results) -> None:
         colors=np.full((1, 2, 3), (255, 40, 40), dtype=np.uint8),
         line_width=3.0,
     )
-    trace_handle = server.scene.add_point_cloud(
+    # The line drawn so far: consecutive laser hits, skipping frames where the
+    # ray misses the surface.
+    trace_segs = np.stack([trace[:-1], trace[1:]], axis=1).astype(np.float32)
+    seg_valid = np.isfinite(trace_segs).all(axis=(1, 2))
+    trace_handle = server.scene.add_line_segments(
         "/laser_trace",
-        points=trace[:1],
-        colors=np.full((1, 3), (255, 40, 40), dtype=np.uint8),
-        point_size=0.004,
+        points=trace_segs[:1],
+        colors=np.full((1, 2, 3), (255, 40, 40), dtype=np.uint8),
+        line_width=3.0,
     )
 
     def update(frame: int) -> None:
@@ -457,11 +501,23 @@ def visualize(results) -> None:
         p_ee = keypoints[frame, -1]
         hit = trace[frame] if np.isfinite(trace[frame]).all() else p_ee
         laser_handle.points = np.array([[p_ee, hit]], dtype=np.float32)
-        drawn = trace[: frame + 1]
-        drawn = drawn[np.isfinite(drawn).all(axis=1)]
+        drawn = trace_segs[: max(frame, 1)][seg_valid[: max(frame, 1)]]
         if len(drawn):
             trace_handle.points = drawn
-            trace_handle.colors = np.full((len(drawn), 3), (255, 40, 40), dtype=np.uint8)
+            trace_handle.colors = np.full((len(drawn), 2, 3), (255, 40, 40), dtype=np.uint8)
+
+    # First-class visibility toggles (the built-in scene tree offers the same
+    # under the gear icon, but a GUI folder puts them front and centre).
+    with server.gui.add_folder("Visibility"):
+        for label, handle in [
+            ("Arm", arm_handle),
+            ("Laser", laser_handle),
+            ("Drawn trace", trace_handle),
+            ("Target path", target_handle),
+            ("Grid", grid_handle),
+        ]:
+            checkbox = server.gui.add_checkbox(label, initial_value=True)
+            checkbox.on_update(lambda event, h=handle: setattr(h, "visible", event.target.value))
 
     add_animation_controls(server, t_vec, [update], loop=True)
     server.sleep_forever()
@@ -496,6 +552,8 @@ if __name__ == "__main__":
           f"max {np.degrees(angles.max()):.2f} deg")
     print(f"  Laser dot error on surface: mean {np.nanmean(trace_err) * 1000:.1f} mm, "
           f"max {np.nanmax(trace_err) * 1000:.1f} mm")
+    trace_figure(trace, t_traj).show()
+
     print()
     print("Launching Viser visualization (Ctrl+C to exit)...")
     visualize(results)
