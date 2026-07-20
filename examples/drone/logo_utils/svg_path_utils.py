@@ -2,7 +2,14 @@
 
 import jax.numpy as jnp
 import numpy as np
-from svgpathtools import svg2paths2
+
+try:
+    from svgpathtools import svg2paths2
+except ImportError:
+    raise ImportError(
+        "svgpathtools is required for the SVG-tracing examples. "
+        "Install it with: pip install svgpathtools"
+    ) from None
 
 
 def print_svg_path_attributes(svg_file_path):

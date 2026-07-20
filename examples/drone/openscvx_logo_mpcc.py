@@ -32,15 +32,8 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 import openscvx as ox
-from openscvx import Problem
-
-try:
-    import svgpathtools  # noqa: F401
-except ImportError:
-    print("svgpathtools not found. Please install it with: pip install svgpathtools")
-    sys.exit(1)
-
 from examples.drone.logo_utils.svg_path_utils import extract_svg_arc_length_path
+from openscvx import Problem
 
 ###############################################################################
 # Reference path: SVG -> arc-length-parametrized curve in a vertical plane
