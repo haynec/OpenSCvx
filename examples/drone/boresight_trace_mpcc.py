@@ -17,9 +17,12 @@ retraces the path chunk by chunk. The "pen" is the point where the camera
 boresight pierces the drawing plane, and the contouring cost — the pen's
 squared distance to the path point at the current progress — is fully
 symbolic, spline lookup included: no bring-your-own-function dynamics. Any
-single-path SVG works unchanged:
+single-path SVG works unchanged (the OpenSCvx wordmark by default):
 
-    python openscvx_logo_mpcc.py [path/to/drawing.svg]
+    python boresight_trace_mpcc.py [path/to/drawing.svg]
+
+Requires:
+    pip install svgpathtools
 """
 
 import os
@@ -436,6 +439,14 @@ def deviation_figure(progress_dense, trace_err):
 ###############################################################################
 
 if __name__ == "__main__":
+    print("Quadrotor boresight tracing via MPCC")
+    print("=" * 60)
+    print(
+        f"Path: {os.path.basename(svg_file)}, {total_arc_length:.1f} m of stroke "
+        f"at {path_width:.0f} m wide  |  Horizon: {n_mpc} nodes / {horizon_duration} s"
+    )
+    print()
+
     problem.initialize()
 
     max_steps = 600
