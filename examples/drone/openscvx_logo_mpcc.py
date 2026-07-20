@@ -451,12 +451,14 @@ if __name__ == "__main__":
     seg_attitudes = []
     seg_progress = []
     seg_times = []
+    solve_times = []
 
     for step in range(max_steps):
         problem.reset()
         results = problem.solve()
         results = problem.post_process()
         nodes = results.nodes
+        solve_times.append(problem.timing_solve)
 
         # The executed segment is the dense trajectory from node 0 to node 1
         traj_time = results.trajectory["time"].flatten()
@@ -496,6 +498,15 @@ if __name__ == "__main__":
     print(
         f"Trace error vs reference: mean {trace_err.mean() * 100:.2f} cm, "
         f"max {trace_err.max() * 100:.2f} cm"
+    )
+
+    # First step pays the JIT warmup, so report it separately
+    solve_ms = 1000 * np.array(solve_times[1:])
+    print(
+        f"Solve time per MPC step: mean {solve_ms.mean():.0f} ms, "
+        f"p50 {np.percentile(solve_ms, 50):.0f} ms, "
+        f"p99 {np.percentile(solve_ms, 99):.0f} ms, max {solve_ms.max():.0f} ms "
+        f"(first step {1000 * solve_times[0]:.0f} ms; replanning budget {1000 * dt_mpc:.0f} ms)"
     )
 
     trace_figure(traced, times).show()
