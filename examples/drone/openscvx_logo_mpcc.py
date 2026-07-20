@@ -63,18 +63,19 @@ path_points = path_center + np.column_stack(
     [np.zeros(len(s_path)), planar_points[:, 0], planar_points[:, 1]]
 )
 
-# Spline tables extend the reference straight past the end by more than one
-# horizon of pen travel — the same idea as lap-tiling in the racing example.
-# Without it the progress reward saturates as the horizon runs out of path and
-# the endgame dissolves into a hovering scribble; with it the pen crosses the
-# true finish at full pace (the loop stops there, so the extension is never
-# drawn).
+# Spline tables extend the reference past the true end by more than one horizon
+# of pen travel, holding it parked at the final path point. The progress reward
+# keeps pulling the progress state forward — without the extension it saturates
+# as the horizon runs out of table and the endgame dissolves into a hovering
+# scribble — but the reference *point* stays put, so the pen decelerates into
+# the endpoint and settles there instead of chasing a fictitious continuation
+# off the wordmark. The loop stops as the pen crosses the true finish, so the
+# parked tail collapses onto the endpoint rather than trailing ink past it.
 pad_length = 10.0  # [m]
 _ds = s_path[1] - s_path[0]
 _s_pad = np.arange(1, int(pad_length / _ds)) * _ds
-_tangent = (path_points[-1] - path_points[-2]) / _ds
 s_ref = np.concatenate([s_path, total_arc_length + _s_pad])
-ref_points = np.concatenate([path_points, path_points[-1] + np.outer(_s_pad, _tangent)])
+ref_points = np.concatenate([path_points, np.tile(path_points[-1], (len(_s_pad), 1))])
 padded_arc_length = s_ref[-1]
 
 
