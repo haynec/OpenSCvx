@@ -103,7 +103,7 @@ n_mpc = 13  # Horizon nodes
 horizon_duration = 2.4  # Horizon length [s]
 dt_mpc = horizon_duration / (n_mpc - 1)  # Executed step [s]
 
-Q_TRACE = 1e1  # Contouring error weight (squared trace-vs-path distance)
+Q_TRACE = 4e1  # Contouring error weight (squared trace-vs-path distance)
 Q_PROGRESS = 1e-1  # Progress reward
 Q_SMOOTH = 2e-1  # Acceleration (thrust tilt) penalty: calms the airframe
 
@@ -332,14 +332,18 @@ problem = Problem(
     algorithm={
         "autotuner": ox.ConstantProximalWeight(),
         "lam_cost": {"trace_error": Q_TRACE, "progress": Q_PROGRESS, "smoothness": Q_SMOOTH},
-        "lam_prox": 1e1,  # Strong anchoring: weak prox never converges here
+        "lam_prox": 3e1,  # Strong anchoring: weak prox never converges here
         "lam_vc": 1e4,  # Keep dynamics honest: far above the largest cost weight
         "k_max": 30,  # Warm-started horizons converge in a handful of iterations
     },
     float_dtype="float64",
-    # Tight tolerances: the trace-error integrand is O(1e-4) at cm accuracy,
-    # and looser integrator tolerances silently swallow it
-    discretizer=ox.DiscretizeLinearizeVectorize(diffrax_kwargs={"atol": 1e-8, "rtol": 1e-8}),
+    # Integrator tolerance must stay well below the O(1e-4) trace-error
+    # integrand or it silently swallows the cost signal; 1e-6 is the fastest
+    # setting that preserves tracking accuracy
+    discretizer=ox.DiscretizeLinearizeVectorize(diffrax_kwargs={"atol": 1e-6, "rtol": 1e-6}),
+    # Relaxed subproblem tolerances: corner subproblems otherwise grind toward
+    # QOCO's defaults and dominate the worst-case step time
+    solver={"solver_args": {"abstol": 3e-5, "reltol": 3e-7, "enforce_dpp": True}},
 )
 problem.settings.dev.printing = False
 
