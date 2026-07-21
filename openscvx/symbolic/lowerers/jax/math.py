@@ -41,6 +41,7 @@ from openscvx.symbolic.expr.math import (
     Square,
     Tan,
 )
+from openscvx.symbolic.expr.expr import Expr
 from openscvx.symbolic.lowerers.jax._registry import visitor  # noqa: F401
 
 
@@ -285,32 +286,45 @@ def _visit_linterp(lowerer, node: Linterp):
 
 @visitor(Cinterp)
 def _visit_cinterp(lowerer, node: Cinterp):
-    """Lower 1D cubic spline interpolation to JAX function.
+    """Lower 1D piecewise-cubic interpolation to a JAX function.
 
-    Evaluates a precomputed cubic spline via segment lookup and Horner's
-    method.  Coefficients are baked in as constants; only the query point
-    is symbolic.  For queries outside the data range the boundary segment
-    polynomial is extrapolated.
+    Evaluates the polynomial table via segment lookup on the fixed breakpoints
+    and Horner's method.  When ``node.coeffs`` is a numeric array it is baked in
+    as a constant; when it is a symbolic ``Expr`` (e.g. a ``Parameter``) it is
+    lowered too and gathered at run time, so the table can change between solves
+    without recompiling.  Either way only ``xp`` is fixed.  For queries outside
+    the data range the boundary segment polynomial is extrapolated.
 
     Args:
-        node: Cinterp expression node with precomputed coeffs and xp_np.
+        node: Cinterp expression node with xp_np and numeric-or-symbolic coeffs.
 
     Returns:
         Function (x, u, node_idx, params) -> interpolated value(s)
     """
     f_x = lowerer.lower(node.x)
     xp = jnp.asarray(node.xp_np)
-    coeffs = jnp.asarray(node.coeffs)  # (4, n_seg)
 
-    def cinterp_fn(x, u, node_idx, params):
-        x_val = f_x(x, u, node_idx, params)
-        # Segment index (clamp to valid range)
+    def evaluate(x_val, coeffs):
+        # Segment index (clamp to valid range), then Horner: c0 + t*(c1 + t*(c2 + t*c3)).
         idx = jnp.searchsorted(xp, x_val, side="right") - 1
         idx = jnp.clip(idx, 0, xp.shape[0] - 2)
         t = x_val - xp[idx]
-        # Horner evaluation: c0 + t*(c1 + t*(c2 + t*c3))
         c = coeffs[:, idx]
         return c[0] + t * (c[1] + t * (c[2] + t * c[3]))
+
+    if isinstance(node.coeffs, Expr):
+        f_coeffs = lowerer.lower(node.coeffs)
+
+        def cinterp_fn(x, u, node_idx, params):
+            coeffs = f_coeffs(x, u, node_idx, params)  # (4, n_seg)
+            return evaluate(f_x(x, u, node_idx, params), coeffs)
+
+        return cinterp_fn
+
+    coeffs = jnp.asarray(node.coeffs)  # (4, n_seg)
+
+    def cinterp_fn(x, u, node_idx, params):
+        return evaluate(f_x(x, u, node_idx, params), coeffs)
 
     return cinterp_fn
 

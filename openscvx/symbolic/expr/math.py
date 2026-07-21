@@ -1135,23 +1135,40 @@ _CINTERP_METHODS = {
 
 
 class Cinterp(Expr):
-    """1D cubic spline interpolation for symbolic expressions.
+    """1D piecewise-cubic interpolation for symbolic expressions.
 
-    Computes a cubic spline through data points (xp, fp) and evaluates it at
-    query point x.  Spline coefficients are precomputed at construction time
-    via scipy so that JAX evaluation reduces to a segment lookup and
-    polynomial eval.
+    Evaluates a piecewise-cubic polynomial at query point ``x`` by a segment
+    lookup on the fixed breakpoints ``xp`` followed by Horner evaluation.  The
+    polynomial table is held as ``coeffs`` of shape ``(4, n_segments)`` where
+    ``n_segments = len(xp) - 1``; row ``k`` holds the degree-``k`` coefficients,
+    so the value in segment ``i`` at local coordinate ``t = x - xp[i]`` is
+    ``coeffs[0, i] + coeffs[1, i]*t + coeffs[2, i]*t**2 + coeffs[3, i]*t**3``.
+
+    The table can be supplied two ways, and exactly one must be chosen:
+
+    - **Fit from data (default).** Pass ``fp`` (values at the breakpoints) and
+      an optional ``method``; scipy fits the spline once at construction and the
+      coefficients are baked into the compiled function as constants.
+    - **Coefficient override.** Pass ``coeffs`` directly — either a numeric
+      ``(4, n_segments)`` array or a symbolic :class:`~openscvx.Parameter` of
+      that shape.  A symbolic override is *not* baked in: the compiled function
+      gathers the current parameter value at run time, so the interpolated
+      function can be swapped **between solves** — with any host-side fitting
+      method you like — without recompiling.  ``method`` is meaningless with an
+      override and passing it is an error.
 
     Attributes:
         x: Query point at which to evaluate the spline (symbolic expression).
-        xp: 1D array of breakpoints (must be strictly increasing).
-        fp: 1D array of values at the breakpoints (same length as xp).
-        method: Spline method used — ``"cubic"`` (not-a-knot, C2),
+        xp: 1D array of breakpoints (must be strictly increasing). Fixed at
+            construction; it drives the segment lookup and cannot be symbolic.
+        fp: 1D array of values at the breakpoints (fit path only; ``None`` for a
+            coefficient override).
+        method: Spline method used to fit ``fp`` — ``"cubic"`` (not-a-knot, C2),
             ``"pchip"`` (monotonicity-preserving, C1), or ``"akima"`` (C1).
-        coeffs: Precomputed polynomial coefficients, shape (4, n_segments).
-            Row k contains the degree-k coefficients, so the value in segment i
-            at local coordinate t = x - xp[i] is
-            ``coeffs[0, i] + coeffs[1, i]*t + coeffs[2, i]*t**2 + coeffs[3, i]*t**3``.
+            ``None`` for a coefficient override.
+        coeffs: The polynomial table. A numeric ``(4, n_segments)`` array for
+            the fit and numeric-override paths, or the coefficient ``Expr`` for a
+            symbolic override.
 
     Example:
         Interpolate a discrete reference path::
@@ -1173,34 +1190,102 @@ class Cinterp(Expr):
             altitude = ox.State("altitude", shape=(1,))
             rho = ox.Cinterp(altitude[0], alt_data, rho_data, method="pchip")
 
+        Drive the table with a :class:`~openscvx.Parameter` so the interpolated
+        function can be retuned between solves without recompiling. Fit the
+        spline host-side with any scipy method and push its coefficients (scipy
+        stores them highest-degree-first, so reverse to this class's
+        ascending-degree layout)::
+
+            from scipy.interpolate import PchipInterpolator
+
+            xp = np.linspace(0, 1, 11)
+            n_seg = len(xp) - 1
+
+            cs = PchipInterpolator(xp, fp_data)
+            coeffs = ox.Parameter("spline_coeffs", shape=(4, n_seg),
+                                  value=cs.c[::-1])
+
+            progress = ox.State("progress", shape=(1,))
+            ref = ox.Cinterp(progress[0], xp, coeffs=coeffs)
+
+            # ... build and solve the problem, then before the next solve:
+            cs = PchipInterpolator(xp, new_fp_data)
+            problem.parameters["spline_coeffs"] = cs.c[::-1]
+
     !!! note
         `xp` must be strictly increasing.
 
     !!! warning "Extrapolation behavior"
         For query points outside `[xp[0], xp[-1]]`, boundary segment
         polynomials are extrapolated (consistent with scipy defaults).
+
+    !!! warning "Continuity is the caller's responsibility"
+        With a coefficient override the library no longer guarantees that the
+        table describes a continuous function — that is now the caller's job.
+        A table whose segment polynomials disagree at a breakpoint yields a
+        discontinuous dynamics function, which the discretizer will linearize
+        and integrate without complaint, silently degrading accuracy.
     """
 
     def __init__(
         self,
         x: Union[Expr, float, int, np.ndarray],
         xp: Union[np.ndarray, list],
-        fp: Union[np.ndarray, list],
+        fp: Union[np.ndarray, list, None] = None,
         *,
-        method: str = "cubic",
+        coeffs: Union[Expr, np.ndarray, list, None] = None,
+        method: Union[str, None] = None,
         _coeffs: Union[np.ndarray, None] = None,
     ):
         self.x = to_expr(x)
         xp = np.asarray(xp, dtype=float)
-        fp = np.asarray(fp, dtype=float)
+        if xp.ndim != 1:
+            raise ValueError(f"Cinterp xp must be 1D, got shape {xp.shape}")
+        self.xp_np = xp
+        n_seg = xp.shape[0] - 1
 
+        if (fp is None) == (coeffs is None):
+            raise ValueError(
+                "Cinterp requires exactly one of fp or coeffs: pass fp to fit a "
+                "spline through breakpoint values, or coeffs to supply the "
+                "polynomial table directly."
+            )
+
+        if coeffs is not None:
+            # --- Coefficient-override path (numeric array or symbolic Expr). ---
+            if method is not None:
+                raise ValueError(
+                    "Cinterp method is meaningless with a coeffs override "
+                    "(the table is supplied, not fit); drop the method argument."
+                )
+            expected = (4, n_seg)
+            if isinstance(coeffs, Expr):
+                got = coeffs.check_shape()
+                if got != expected:
+                    raise ValueError(
+                        f"Cinterp coeffs must have shape {expected} "
+                        f"(4 by len(xp) - 1), got {got}"
+                    )
+                self.coeffs = coeffs
+            else:
+                arr = np.asarray(coeffs, dtype=float)
+                if arr.shape != expected:
+                    raise ValueError(
+                        f"Cinterp coeffs must have shape {expected} "
+                        f"(4 by len(xp) - 1), got {arr.shape}"
+                    )
+                self.coeffs = arr
+            self.fp_np = None
+            self.method = None
+            return
+
+        # --- Fit path: precompute spline coefficients via scipy. ---
+        method = "cubic" if method is None else method
         if method not in _CINTERP_METHODS:
             raise ValueError(
                 f"Cinterp method must be one of {set(_CINTERP_METHODS)}, got {method!r}"
             )
-
-        if xp.ndim != 1:
-            raise ValueError(f"Cinterp xp must be 1D, got shape {xp.shape}")
+        fp = np.asarray(fp, dtype=float)
         if fp.ndim != 1:
             raise ValueError(f"Cinterp fp must be 1D, got shape {fp.shape}")
         if xp.shape != fp.shape:
@@ -1208,38 +1293,53 @@ class Cinterp(Expr):
                 f"Cinterp xp and fp must have same length, got {xp.shape} vs {fp.shape}"
             )
 
-        self.xp_np = xp
         self.fp_np = fp
         self.method = method
 
         if _coeffs is not None:
             self.coeffs = _coeffs
         else:
-            # Precompute spline coefficients via scipy.
             # scipy returns shape (4, n_seg) with c[0]=cubic, c[1]=quadratic, ...
             # We reorder to ascending-degree layout for Horner evaluation.
             cs = _CINTERP_METHODS[method](xp, fp)
             self.coeffs = cs.c[::-1].copy()  # row 0 = const, row 3 = cubic
 
     def children(self):
+        if isinstance(self.coeffs, Expr):
+            return [self.x, self.coeffs]
         return [self.x]
 
     def canonicalize(self) -> "Expr":
         x = self.x.canonicalize()
-        return Cinterp(x, self.xp_np, self.fp_np, method=self.method, _coeffs=self.coeffs)
+        if isinstance(self.coeffs, Expr):
+            return Cinterp(x, self.xp_np, coeffs=self.coeffs.canonicalize())
+        if self.fp_np is not None:
+            return Cinterp(x, self.xp_np, self.fp_np, method=self.method, _coeffs=self.coeffs)
+        return Cinterp(x, self.xp_np, coeffs=self.coeffs)
 
     def check_shape(self) -> Tuple[int, ...]:
         return self.x.check_shape()
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         hasher.update(b"Cinterp")
-        hasher.update(self.method.encode())
-        hasher.update(self.xp_np.tobytes())
-        hasher.update(self.fp_np.tobytes())
+        if isinstance(self.coeffs, Expr):
+            hasher.update(b"coeffs_expr")
+            hasher.update(self.xp_np.tobytes())
+            self.coeffs._hash_into(hasher)
+        elif self.fp_np is not None:
+            hasher.update(self.method.encode())
+            hasher.update(self.xp_np.tobytes())
+            hasher.update(self.fp_np.tobytes())
+        else:
+            hasher.update(b"coeffs_num")
+            hasher.update(self.xp_np.tobytes())
+            hasher.update(np.asarray(self.coeffs).tobytes())
         self.x._hash_into(hasher)
 
     def __repr__(self) -> str:
-        if self.method == "cubic":
+        if isinstance(self.coeffs, Expr):
+            return f"cinterp({self.x!r}, coeffs={self.coeffs!r})"
+        if self.method == "cubic" or self.method is None:
             return f"cinterp({self.x!r})"
         return f"cinterp({self.x!r}, method={self.method!r})"
 
