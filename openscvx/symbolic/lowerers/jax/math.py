@@ -17,6 +17,8 @@ import jax
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 
+from openscvx.symbolic.expr.expr import Expr
+
 # Expression types to handle — uncomment as you paste visitors:
 from openscvx.symbolic.expr.math import (
     Abs,
@@ -41,7 +43,6 @@ from openscvx.symbolic.expr.math import (
     Square,
     Tan,
 )
-from openscvx.symbolic.expr.expr import Expr
 from openscvx.symbolic.lowerers.jax._registry import visitor  # noqa: F401
 
 

@@ -1263,8 +1263,7 @@ class Cinterp(Expr):
                 got = coeffs.check_shape()
                 if got != expected:
                     raise ValueError(
-                        f"Cinterp coeffs must have shape {expected} "
-                        f"(4 by len(xp) - 1), got {got}"
+                        f"Cinterp coeffs must have shape {expected} (4 by len(xp) - 1), got {got}"
                     )
                 self.coeffs = coeffs
             else:
