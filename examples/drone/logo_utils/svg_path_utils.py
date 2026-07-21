@@ -2,7 +2,14 @@
 
 import jax.numpy as jnp
 import numpy as np
-from svgpathtools import svg2paths2
+
+try:
+    from svgpathtools import svg2paths2
+except ImportError:
+    raise ImportError(
+        "svgpathtools is required for the SVG-tracing examples. "
+        "Install it with: pip install svgpathtools"
+    ) from None
 
 
 def print_svg_path_attributes(svg_file_path):
@@ -79,3 +86,61 @@ def get_svg_path_function(svg_file_path, path_indices=None, preserve_aspect_rati
         path_indices=path_indices,
         preserve_aspect_ratio=preserve_aspect_ratio,
     )
+
+
+def extract_svg_arc_length_path(svg_file_path, n_samples=1000, path_indices=None, width=20.0):
+    """Sample an SVG path uniformly in arc length for progress-parametrized tracing.
+
+    Unlike :func:`extract_svg_path`, which parametrizes the path by a normalized
+    time in ``[0, 1]``, this returns the cumulative arc length ``s`` alongside
+    the sampled points, so a contouring (MPCC-style) problem can use ``s``
+    directly as its progress coordinate. Expects a single continuous path — a
+    pen lift between subpaths would be traced as a straight-line jump.
+
+    Args:
+        svg_file_path: Path to the SVG file.
+        n_samples: Number of arc-length-uniform samples to return.
+        path_indices: Optional indices selecting which SVG paths to use.
+        width: Uniform scale target — the larger bounding-box dimension of the
+            returned points spans this many meters (aspect ratio preserved).
+
+    Returns:
+        Tuple ``(s, points)`` where ``s`` is a strictly increasing
+        ``(n_samples,)`` array of arc length starting at 0, and ``points`` is
+        an ``(n_samples, 2)`` array of planar coordinates centered at the
+        origin with y up.
+    """
+    paths, _, _ = svg2paths2(svg_file_path)
+    if path_indices is not None:
+        paths = [paths[i] for i in path_indices]
+
+    # Dense parameter-space sampling, allocated per segment by segment length
+    dense = []
+    total_length = sum(path.length() for path in paths)
+    for path in paths:
+        for seg in path:
+            n_seg = max(2, int(4 * n_samples * seg.length() / total_length))
+            for t in np.linspace(0, 1, n_seg, endpoint=False):
+                pt = seg.point(t)
+                dense.append([pt.real, pt.imag])
+    end = paths[-1][-1].point(1.0)
+    dense.append([end.real, end.imag])
+    dense = np.array(dense)
+
+    # Center at the origin with y up, then scale uniformly to the target width
+    dense[:, 1] = -dense[:, 1]
+    dense -= 0.5 * (dense.min(axis=0) + dense.max(axis=0))
+    dense *= width / (dense.max(axis=0) - dense.min(axis=0)).max()
+
+    # Cumulative arc length; drop stationary points so s is strictly increasing
+    step = np.linalg.norm(np.diff(dense, axis=0), axis=1)
+    keep = np.concatenate([[True], step > 1e-9])
+    dense = dense[keep]
+    s_dense = np.concatenate([[0.0], np.cumsum(step[step > 1e-9])])
+
+    # Resample uniformly in arc length
+    s = np.linspace(0.0, s_dense[-1], n_samples)
+    points = np.column_stack(
+        [np.interp(s, s_dense, dense[:, 0]), np.interp(s, s_dense, dense[:, 1])]
+    )
+    return s, points
