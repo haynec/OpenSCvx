@@ -419,7 +419,7 @@ For further information about visualization with viser see [Tutorial 05 Visualiz
 ## Further Reading
 
 - [Complete 6-DOF Obstacle Avoidance Example](../Examples/drone/obstacle_avoidance.md)
-- [Complete Vmap Obstacle Avoidance Example](../Examples/drone/obstacle_avoidance_vmap.md)
+- [Complete Vmap Obstacle Avoidance Example](../Examples/double_integrator/obstacle_avoidance_vmap.md)
 - [Real-Time Obstacle Avoidance Example](https://github.com/OpenSCvx/OpenSCvx/blob/main/examples/realtime/obstacle_avoidance_realtime.py)
 - [Real-Time Drone Racing Example](https://github.com/OpenSCvx/OpenSCvx/blob/main/examples/realtime/drone_racing_realtime.py)
 - [API Reference: Spatial Utilities](../Reference/symbolic/expr/spatial.md)

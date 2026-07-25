@@ -1,4 +1,9 @@
-"""Lunar heightfield helpers for drone examples (SENNS DEM + procedural)."""
+"""Lunar heightfield helpers for drone examples.
+
+Load the SENNS lunar DEM onto a regular world-XY grid, sample that grid on the
+host (mirroring ``ox.Bilerp``, so guesses and diagnostics agree with what the
+constraints see), and triangulate it into a viser mesh.
+"""
 
 from __future__ import annotations
 
@@ -63,68 +68,6 @@ def load_senns_dem(
     # Transpose so H[i, j] sits at (x_grid[i], y_grid[j]).
     H = dem_yx.T * float(elev_scale) + float(z_offset)
     H = H - float(H.min())  # floor at zero; AGL is relative
-    return x_grid, y_grid, H
-
-
-def synthesize_lunar_terrain(
-    x_min: float,
-    x_max: float,
-    y_min: float,
-    y_max: float,
-    nx: int,
-    ny: int,
-    *,
-    seed: int = 7,
-    n_large: int = 5,
-    n_small: int = 32,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Build a smooth multi-scale height grid (large hills + Fourier + small features).
-
-    Returns
-    -------
-    x_grid : (nx,) strictly increasing
-    y_grid : (ny,) strictly increasing
-    H : (nx, ny) with ``H[i, j]`` = height at ``(x_grid[i], y_grid[j])``
-        (matches ``ox.Bilerp`` ``fp`` layout).
-    """
-    rng = np.random.default_rng(seed)
-    x_grid = np.linspace(x_min, x_max, nx, dtype=np.float64)
-    y_grid = np.linspace(y_min, y_max, ny, dtype=np.float64)
-    XX, YY = np.meshgrid(x_grid, y_grid, indexing="ij")
-    H = np.zeros((nx, ny), dtype=np.float64)
-
-    lx = float(x_max - x_min)
-    ly = float(y_max - y_min)
-
-    for _ in range(n_large):
-        amp = float(rng.uniform(8.0, 35.0))
-        cx = float(rng.uniform(x_min, x_max))
-        cy = float(rng.uniform(y_min, y_max))
-        sx = float(rng.uniform(40.0, 120.0))
-        sy = float(rng.uniform(40.0, 120.0))
-        H += amp * np.exp(-(((XX - cx) / sx) ** 2) - (((YY - cy) / sy) ** 2))
-
-    for kx in range(0, 4):
-        for ky in range(0, 4):
-            if kx == 0 and ky == 0:
-                continue
-            knorm2 = float(kx * kx + ky * ky)
-            if knorm2 > 9.0:
-                continue
-            amp = float(rng.uniform(1.5, 6.0) / (1.0 + knorm2))
-            phase = float(rng.uniform(0.0, 2.0 * np.pi))
-            H += amp * np.cos(
-                2.0 * np.pi * (kx * (XX - x_min) / lx + ky * (YY - y_min) / ly) + phase
-            )
-
-    for _ in range(n_small):
-        amp = float(rng.uniform(-4.0, 4.0))
-        cx = float(rng.uniform(x_min, x_max))
-        cy = float(rng.uniform(y_min, y_max))
-        s = float(rng.uniform(3.0, 12.0))
-        H += amp * np.exp(-(((XX - cx) / s) ** 2) - (((YY - cy) / s) ** 2))
-
-    H -= float(H.min())
     return x_grid, y_grid, H
 
 

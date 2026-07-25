@@ -11,6 +11,8 @@ Compare with:
 
 import os
 import sys
+from functools import partial
+from pathlib import Path
 
 import numpy as np
 
@@ -21,6 +23,15 @@ sys.path.append(grandparent_dir)
 
 import openscvx as ox
 from openscvx import Problem
+from openscvx.plotting import (
+    LM_PLOTLY_FONT,
+    LM_PLOTLY_TICK_FONT,
+    PublicationFigure,
+    apply_latin_modern_to_axis,
+    apply_publication_plotly_layout,
+    latin_modern_fontproperties,
+    publication_trace_colors,
+)
 
 n = 50  # Number of nodes
 total_time = 220.0  # Total time for the simulation
@@ -154,13 +165,16 @@ def plot_obstacle_avoidance_vmap_2d(
     *,
     width: int = 640,
     height: int = 640,
-):
-    """Static Plotly view of the planar trajectory and circular obstacles."""
+) -> PublicationFigure:
+    """Static publication view of the planar trajectory and circular obstacles.
+
+    Returns a :class:`~openscvx.plotting.PublicationFigure`: ``show()`` opens the
+    Plotly figure with Latin Modern embedded, ``save_pdf(path)`` renders the same
+    scene through matplotlib (Plotly's PDF export cannot embed the font).
+    """
     import plotly.graph_objects as go
 
-    from openscvx.plotting.publication import LM_PLOTLY_FONT as _LM_PLOTLY_FONT
-    from openscvx.plotting.publication import LM_PLOTLY_TICK_FONT as _LM_PLOTLY_TICK_FONT
-
+    colors = publication_trace_colors()
     fig = go.Figure()
     centers = np.asarray(obstacle_centers, dtype=np.float64)
     radii = np.asarray(obstacle_radii, dtype=np.float64).reshape(-1)
@@ -189,14 +203,14 @@ def plot_obstacle_avoidance_vmap_2d(
                 y=position[:, 1],
                 mode="lines+markers",
                 showlegend=False,
-                line={"color": "rgba(200, 200, 200, 0.35)", "width": 0.5},
+                line={"color": "rgba(120, 120, 120, 0.45)", "width": 0.5},
                 marker={
                     "color": speed,
                     "colorscale": "Viridis",
                     "size": 4,
                     "colorbar": {
-                        "title": {"text": r"$\|v\|_2$", "font": _LM_PLOTLY_FONT},
-                        "tickfont": _LM_PLOTLY_TICK_FONT,
+                        "title": {"text": r"$\|v\|_2$", "font": LM_PLOTLY_FONT},
+                        "tickfont": LM_PLOTLY_TICK_FONT,
                     },
                     "showscale": True,
                 },
@@ -219,7 +233,7 @@ def plot_obstacle_avoidance_vmap_2d(
             y=[position[0, 1]],
             mode="markers",
             showlegend=False,
-            marker={"color": "white", "size": 10, "symbol": "circle"},
+            marker={"color": colors["nodes"], "size": 10, "symbol": "circle"},
         )
     )
     fig.add_trace(
@@ -228,70 +242,59 @@ def plot_obstacle_avoidance_vmap_2d(
             y=[position[-1, 1]],
             mode="markers",
             showlegend=False,
-            marker={"color": "white", "size": 10, "symbol": "x"},
+            marker={"color": colors["bounds"], "size": 10, "symbol": "x"},
         )
     )
 
+    # Square, aspect-locked planar view: the size comes from the data, not from a
+    # panel grid, so pass width/height explicitly.
+    apply_publication_plotly_layout(fig, width=width, height=height)
     fig.update_layout(
         xaxis_title=r"$x$",
         yaxis_title=r"$y$",
         yaxis={"scaleanchor": "x", "scaleratio": 1},
         showlegend=False,
-        template="plotly_dark",
-        paper_bgcolor="#111111",
-        plot_bgcolor="#111111",
-        font=_LM_PLOTLY_FONT,
-        autosize=False,
-        width=width,
-        height=height,
-        margin={"l": 60, "r": 90, "t": 24, "b": 60},
     )
-    fig.update_xaxes(
-        title_font=_LM_PLOTLY_FONT,
-        tickfont=_LM_PLOTLY_TICK_FONT,
-        gridcolor="#2c2e33",
-        zerolinecolor="#2c2e33",
+    return PublicationFigure(
+        fig,
+        partial(
+            save_obstacle_avoidance_vmap_2d_pdf,
+            results,
+            obstacle_centers=obstacle_centers,
+            obstacle_radii=obstacle_radii,
+            width=width,
+            height=height,
+        ),
     )
-    fig.update_yaxes(
-        title_font=_LM_PLOTLY_FONT,
-        tickfont=_LM_PLOTLY_TICK_FONT,
-        gridcolor="#2c2e33",
-        zerolinecolor="#2c2e33",
-    )
-    return fig
 
 
 def save_obstacle_avoidance_vmap_2d_pdf(
     results,
-    path,
+    path=None,
     obstacle_centers=obstacle_centers,
     obstacle_radii=obstacle_radii,
     *,
     width: int = 640,
     height: int = 640,
 ) -> None:
-    """Save the planar obstacle-avoidance figure as a PDF (Latin Modern via matplotlib)."""
-    from pathlib import Path
+    """Save the planar obstacle-avoidance figure as a PDF (Latin Modern via matplotlib).
 
+    Mirrors :func:`plot_obstacle_avoidance_vmap_2d` on the matplotlib backend,
+    which is the only one that can embed Latin Modern in a PDF. ``path`` defaults
+    to ``figures/obstacle_avoidance_vmap_2d.pdf``.
+    """
     import matplotlib.pyplot as plt
     from matplotlib.patches import Circle
 
-    from openscvx.plotting.publication import (
-        latin_modern_fontproperties as _latin_modern_fontproperties,
-    )
-
-    lm_fp = _latin_modern_fontproperties()
+    lm_fp = latin_modern_fontproperties()
     if lm_fp is None:
         print("[plot] Latin Modern OTF not found; PDF will use matplotlib default serif.")
 
-    bg = "#111111"
-    fg = "#e0e0e0"
-    grid = "#2c2e33"
-
+    colors = publication_trace_colors()
     dpi = 100
     fig, ax = plt.subplots(figsize=(width / dpi, height / dpi), dpi=dpi)
-    fig.patch.set_facecolor(bg)
-    ax.set_facecolor(bg)
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
 
     centers = np.asarray(obstacle_centers, dtype=np.float64)
     radii = np.asarray(obstacle_radii, dtype=np.float64).reshape(-1)
@@ -315,7 +318,7 @@ def save_obstacle_avoidance_vmap_2d_pdf(
         ax.plot(
             position[:, 0],
             position[:, 1],
-            color=(200 / 255, 200 / 255, 200 / 255, 0.35),
+            color=(120 / 255, 120 / 255, 120 / 255, 0.45),
             linewidth=0.5,
             zorder=2,
         )
@@ -329,10 +332,7 @@ def save_obstacle_avoidance_vmap_2d_pdf(
             zorder=3,
         )
         cbar = fig.colorbar(sc, ax=ax, fraction=0.046, pad=0.04)
-        cbar.set_label(r"$\|v\|_2$", fontproperties=lm_fp, color=fg)
-        cbar.ax.yaxis.set_tick_params(color=fg)
-        cbar.outline.set_edgecolor(grid)
-        plt.setp(cbar.ax.get_yticklabels(), color=fg)
+        cbar.set_label(r"$\|v\|_2$", fontproperties=lm_fp)
         if lm_fp is not None:
             for lbl in cbar.ax.get_yticklabels():
                 lbl.set_fontproperties(lm_fp)
@@ -349,7 +349,7 @@ def save_obstacle_avoidance_vmap_2d_pdf(
         position[0, 0],
         position[0, 1],
         marker="o",
-        color="white",
+        color=colors["nodes"],
         markersize=6,
         linestyle="None",
         zorder=4,
@@ -358,81 +358,24 @@ def save_obstacle_avoidance_vmap_2d_pdf(
         position[-1, 0],
         position[-1, 1],
         marker="x",
-        color="white",
+        color=colors["bounds"],
         markersize=7,
         linestyle="None",
         zorder=4,
     )
 
     ax.set_aspect("equal", adjustable="box")
-    ax.set_xlabel(r"$x$", fontproperties=lm_fp, color=fg)
-    ax.set_ylabel(r"$y$", fontproperties=lm_fp, color=fg)
-    ax.tick_params(colors=fg)
-    ax.spines[:].set_color(grid)
-    if lm_fp is not None:
-        for lbl in ax.get_xticklabels() + ax.get_yticklabels():
-            lbl.set_fontproperties(lm_fp)
+    ax.set_xlabel(r"$x$", fontproperties=lm_fp)
+    ax.set_ylabel(r"$y$", fontproperties=lm_fp)
+    apply_latin_modern_to_axis(ax, lm_fp)
 
     fig.subplots_adjust(left=0.10, right=0.86, bottom=0.10, top=0.98)
 
-    out = Path(path)
+    out = Path(path) if path is not None else Path("figures/obstacle_avoidance_vmap_2d.pdf")
     out.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out, format="pdf", bbox_inches="tight", facecolor=bg, edgecolor=bg)
+    fig.savefig(out, format="pdf", bbox_inches="tight", facecolor="white")
     plt.close(fig)
     print(f"[plot] Saved 2D obstacle avoidance figure to {out.resolve()}")
-
-
-class ObstacleAvoidanceVmap2dFigure:
-    """Plotly figure with Latin Modern ``show()`` and matplotlib ``save_pdf()``."""
-
-    __slots__ = ("_fig", "_results", "_obstacle_centers", "_obstacle_radii", "_width", "_height")
-
-    def __init__(self, fig, results, obstacle_centers, obstacle_radii, width, height) -> None:
-        self._fig = fig
-        self._results = results
-        self._obstacle_centers = obstacle_centers
-        self._obstacle_radii = obstacle_radii
-        self._width = width
-        self._height = height
-
-    def show(self, *args, **kwargs) -> None:
-        from openscvx.plotting.publication import show_plotly_with_latin_modern
-
-        show_plotly_with_latin_modern(self._fig)
-
-    def save_pdf(self, path) -> None:
-        save_obstacle_avoidance_vmap_2d_pdf(
-            self._results,
-            path,
-            obstacle_centers=self._obstacle_centers,
-            obstacle_radii=self._obstacle_radii,
-            width=self._width,
-            height=self._height,
-        )
-
-    def __getattr__(self, name: str):
-        return getattr(self._fig, name)
-
-
-def plot_obstacle_avoidance_vmap_2d_figure(
-    results,
-    obstacle_centers=obstacle_centers,
-    obstacle_radii=obstacle_radii,
-    *,
-    width: int = 640,
-    height: int = 640,
-) -> ObstacleAvoidanceVmap2dFigure:
-    """Build the static Plotly figure wrapper for show/save_pdf."""
-    fig = plot_obstacle_avoidance_vmap_2d(
-        results,
-        obstacle_centers=obstacle_centers,
-        obstacle_radii=obstacle_radii,
-        width=width,
-        height=height,
-    )
-    return ObstacleAvoidanceVmap2dFigure(
-        fig, results, obstacle_centers, obstacle_radii, width, height
-    )
 
 
 if __name__ == "__main__":
@@ -440,6 +383,6 @@ if __name__ == "__main__":
     results = problem.solve()
     results = problem.post_process()
 
-    vmap_fig = plot_obstacle_avoidance_vmap_2d_figure(results)
+    vmap_fig = plot_obstacle_avoidance_vmap_2d(results)
     vmap_fig.show()
     vmap_fig.save_pdf("figures/obstacle_avoidance_vmap_2d.pdf")

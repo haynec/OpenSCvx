@@ -32,7 +32,6 @@ if project_root not in sys.path:
 
 import openscvx as ox
 from openscvx import Problem
-from openscvx.plotting import plot_controls, plot_states
 
 # ── Hector / aligator actuator parameters ─────────────────────────────────────
 D_COG = 0.1525  # m, motor arm length
@@ -268,7 +267,7 @@ def build_problem(
         },
     )
 
-    plotting = {
+    plotting_dict = {
         "x_tar1": X_TAR1,
         "x_tar2": X_TAR2,
         "x_tar3": X_TAR3,
@@ -277,7 +276,19 @@ def build_problem(
         "obstacle_radius": CYL_RADIUS + QUAD_RADIUS,
         "obstacles": obstacles,
     }
-    return problem, plotting
+    return problem, plotting_dict
+
+
+def body_thrust_from_rotors(rotors: np.ndarray) -> np.ndarray:
+    """Body-frame thrust ``(N, 3)`` from the four rotor forces ``(N, 4)``.
+
+    Every rotor pushes along body +z, so collective thrust is their sum. The
+    viser templates draw a ``thrust_force`` vector; this example's control is
+    ``rotors``, so the two are bridged explicitly rather than implicitly.
+    """
+    rotors = np.asarray(rotors, dtype=np.float64)
+    zeros = np.zeros(len(rotors))
+    return np.column_stack([zeros, zeros, rotors.sum(axis=1)])
 
 
 def parse_args() -> argparse.Namespace:
@@ -289,8 +300,6 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Hard terminal position constraint (default: soft terminal cost).",
     )
-    parser.add_argument("--plot", action="store_true", default=True, help="Show matplotlib plots.")
-    parser.add_argument("--no-plot", action="store_false", dest="plot", help="Skip plots.")
     return parser.parse_args()
 
 
@@ -298,7 +307,7 @@ if __name__ == "__main__":
     args = parse_args()
     print(args)
 
-    problem, plotting = build_problem(
+    problem, plotting_dict = build_problem(
         obstacles=args.obstacles,
         bounds=args.bounds,
         term_cstr=args.term_cstr,
@@ -307,13 +316,13 @@ if __name__ == "__main__":
     problem.initialize()
     results = problem.solve()
     results = problem.post_process()
-    results.update(plotting)
+    results.update(plotting_dict)
+    results.trajectory["thrust_force"] = body_thrust_from_rotors(results.trajectory["rotors"])
 
     nodes = results.nodes
+    target_key = "x_tar3" if args.obstacles else "x_tar2"
     print(f"nsteps = {N - 1}, dt = {DT:.3f} s, tf = {TF:.1f} s")
-    print(
-        f"Final position: {nodes['position'][-1]} (target {plotting['x_tar3' if args.obstacles else 'x_tar2']})"
-    )
+    print(f"Final position: {nodes['position'][-1]} (target {plotting_dict[target_key]})")
     print(f"Integrated cost: {nodes['stage_cost'][-1, 0]:.6f}")
 
     try:
@@ -322,20 +331,9 @@ if __name__ == "__main__":
             create_scp_animated_plotting_server,
         )
 
-        waypoint_positions = [plotting["x_tar1"], plotting["x_tar2"]]
+        waypoint_positions = [plotting_dict["x_tar1"], plotting_dict["x_tar2"]]
         if args.obstacles:
-            waypoint_positions = [plotting["x_tar3"]]
-
-        # Map four rotors to body-frame thrust for the 3D viewer.
-        rotors_traj = np.asarray(results.trajectory["rotors"])
-        results.trajectory["thrust_force"] = np.stack(
-            [
-                np.zeros(len(rotors_traj)),
-                np.zeros(len(rotors_traj)),
-                rotors_traj.sum(axis=1),
-            ],
-            axis=1,
-        )
+            waypoint_positions = [plotting_dict["x_tar3"]]
 
         traj_server = create_animated_plotting_server(
             results,

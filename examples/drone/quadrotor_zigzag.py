@@ -2,11 +2,13 @@
 
 Port of the ``RobotZoo.Quadrotor`` ``:zigzag`` scenario from TrajOptMethods /
 RobotDynamics.jl. The vehicle flies from ``[0, -10, 1]`` through three
-position waypoints in a fixed ``5`` s horizon:
+position waypoints in a fixed ``5`` s horizon. The Julia reference discretizes
+with ``N = 101`` and puts the waypoints on nodes 33 / 66 / 101; this port runs
+the coarser ``N = 10`` grid, so the waypoints land on nodes 3 / 6 / 9:
 
-- node 33  → ``[10, 0, 1]``
-- node 66  → ``[-10, 0, 1]``
-- node 101 → ``[0, 10, 1]``
+- node 3 → ``[10, 0, 1]``
+- node 6 → ``[-10, 0, 1]``
+- node 9 → ``[0, 10, 1]``
 
 Dynamics use the default ``RobotZoo.Quadrotor`` parameters (``0.5`` kg,
 diagonal inertia, ``0.175`` m motor span). Controls are the body-frame
@@ -30,7 +32,6 @@ from openscvx import Problem
 from openscvx.plotting import plot_controls, plot_states
 
 # ── Horizon (Julia: N = 101, tf = 5.0) ─────────────────────────────────────
-# n = 101
 n = 10
 total_time = 5.0
 
@@ -184,14 +185,6 @@ problem = Problem(
     constraints=constraints,
     N=n,
     float_dtype="float64",
-    algorithm={
-        # # Julia SolverOptions: penalty_scaling=100, penalty_initial=0.1
-        # "lam_prox": 0.1,
-        # "lam_vc": 1e2,
-        # "lam_cost": 1e-4,
-        # "autotuner": {"type": "RampProximalWeight", "ramp_factor": 1.04},
-        # "k_max": 250,
-    },
 )
 
 plotting_dict = {
@@ -222,7 +215,6 @@ if __name__ == "__main__":
             show_viewcone=False,
             show_control_plot="thrust_force",
             show_control_norm_plot="thrust_force",
-            waypoint_positions=waypoints,
         )
         create_scp_animated_plotting_server(
             results,
@@ -231,7 +223,6 @@ if __name__ == "__main__":
         )
         create_snapshot_plotting_server(
             results,
-            waypoint_positions=waypoints,
             initial_n_snapshots=5,
         )
         traj_server.sleep_forever()

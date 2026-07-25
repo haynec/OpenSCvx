@@ -67,9 +67,10 @@ def plot_scp_iterations(
             Component selection uses the same syntax as ``state_names``.
         cmap_name: Matplotlib colormap name (default: "viridis")
         show_propagation: If True, show multi-shot propagation lines (default: True)
-        style: ``"dark"`` for the default Plotly theme, or ``"publication"`` for
-            a white theme with Latin Modern fonts, LaTeX labels, and automatic
-            PDF export.
+        style: ``"dark"`` for the default Plotly theme, ``"publication"`` for a
+            white theme with Latin Modern fonts, LaTeX labels, and automatic PDF
+            export, or ``"publication_dark"`` for the same figure on the dark
+            palette (the exported PDF stays white for print).
         pdf_path: Output path for the PDF when ``style="publication"``. Defaults
             to ``figures/scp_iterations.pdf``.
 
@@ -159,7 +160,7 @@ def plot_scp_iterations(
     if not expanded_states and not expanded_controls:
         raise ValueError("No states or controls to plot")
 
-    publication = style == "publication"
+    publication = style in ("publication", "publication_dark")
 
     # Grid layout
     n_states = len(expanded_states)
@@ -331,6 +332,7 @@ def plot_scp_iterations(
             n_rows=total_rows,
             n_cols=max_cols,
             extra_legend_width=PUBLICATION_LEGEND_EXTRA_W,
+            dark=style == "publication_dark",
         )
         fig.update_layout(
             showlegend=True,

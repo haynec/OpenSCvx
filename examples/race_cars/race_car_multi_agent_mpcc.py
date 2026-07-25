@@ -327,9 +327,7 @@ def _solve_reference_laps() -> dict:
         ]
     )
     # Flying-lap periodicity, including the battery (charge sustain).
-    rconstraints.extend(
-        (x.at(0) == x.at(N - 1)).convex() for x in [rn, ralpha, rv, rD, rdelta, rE]
-    )
+    rconstraints.extend((x.at(0) == x.at(N - 1)).convex() for x in [rn, ralpha, rv, rD, rdelta, rE])
     ra_lat = (
         ox.Constant(C2) * rv[0] ** 2 * rdelta[0]
         + rFxd * ox.Sin(ox.Constant(C1) * rdelta[0]) / rm_car
@@ -837,31 +835,17 @@ def plot_race(log: RaceLog) -> None:
     from plotly.subplots import make_subplots
     from time2spatial import transformProj2Orig
 
+    from examples.race_cars._plotting import stack_height, track_figure
+
     css = [f"rgb{spec['color']}" for spec in AGENTS]
     laps_x = log.dense_x[:, :, COL["s"]] / pathlength  # (K, Td) race distance in laps
 
     # ── Track projection ───────────────────────────────────────────────────────
-    sref_d, xref_d, yref_d, psiref_d, _ = getTrack(TRACK_FILE)
-    fig1 = go.Figure()
-    fig1.add_trace(
-        go.Scatter(
-            x=xref_d,
-            y=yref_d,
-            mode="lines",
-            line=dict(color="black", dash="dash", width=1),
-            name="centreline",
-        )
+    fig1 = track_figure(
+        TRACK_FILE,
+        LANE_HALF_WIDTH,
+        title=f"Tracking race — propagated closed-loop trajectories  ({len(log.sim)} steps)",
     )
-    for sign in (-1.0, 1.0):
-        fig1.add_trace(
-            go.Scatter(
-                x=xref_d + sign * LANE_HALF_WIDTH * np.sin(psiref_d),
-                y=yref_d - sign * LANE_HALF_WIDTH * np.cos(psiref_d),
-                mode="lines",
-                line=dict(color="black", width=1.5),
-                showlegend=False,
-            )
-        )
     for i, spec in enumerate(AGENTS):
         x_i = log.dense_x[i]
         cart_x, cart_y, _, _ = transformProj2Orig(
@@ -886,12 +870,6 @@ def plot_race(log: RaceLog) -> None:
                 showlegend=False,
             )
         )
-    fig1.update_layout(
-        title=f"Tracking race — propagated closed-loop trajectories  ({len(log.sim)} steps)",
-        xaxis=dict(title="x [m]", scaleanchor="y"),
-        yaxis=dict(title="y [m]"),
-        height=600,
-    )
     fig1.show()
 
     # ── Speed and battery striplines against race distance ────────────────────
@@ -932,7 +910,8 @@ def plot_race(log: RaceLog) -> None:
         fig2.add_vline(x=float(lap), line=dict(color="black", dash="dot", width=1))
     fig2.update_xaxes(title_text="race distance [laps]", row=2, col=1)
     fig2.update_layout(
-        title="Speed and battery state of charge vs the shared reference lap", height=600
+        title="Speed and battery state of charge vs the shared reference lap",
+        height=stack_height(2),
     )
     fig2.show()
 
@@ -940,67 +919,17 @@ def plot_race(log: RaceLog) -> None:
 def build_viser_panels(log: RaceLog) -> list[dict]:
     """Live plot panels for the race replay: speed, battery, and g-g.
 
-    Each panel is a compact Plotly figure whose last ``K`` traces are
-    one-point markers, plus an ``update(t)`` closure that moves those markers
-    to the cars' state at race time ``t``. The striplines run against race
-    distance in laps; every car's series is trimmed at its own flag crossing
-    so its marker parks with the car.
+    Every car's series is trimmed at its own flag crossing, so its live marker
+    parks with the car once it has finished. The panels themselves are built by
+    ``_plotting``; what this example contributes is *which* telemetry the
+    sidebar shows.
     """
-    import plotly.graph_objects as go
+    from examples.race_cars._plotting import gg_panel, stripline_panel
 
     css = [f"rgb{spec['color']}" for spec in AGENTS]
     end = [crossing_index(log.dense_x[i, :, COL["s"]]) for i in range(K)]
     t_car = [log.dense_t[: end[i]] for i in range(K)]
     lap_car = [log.dense_x[i, : end[i], COL["s"]] / pathlength for i in range(K)]
-
-    def compact(fig: go.Figure, title: str, xaxis: str, yaxis: str) -> go.Figure:
-        # Dark styling matched to viser's control-panel grey so the panels
-        # read as part of the sidebar rather than white cutouts.
-        panel_bg = "#1a1b1e"
-        fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor=panel_bg,
-            plot_bgcolor=panel_bg,
-            title=dict(text=title, font=dict(size=13, color="#c1c2c5")),
-            xaxis_title=xaxis,
-            yaxis_title=yaxis,
-            margin=dict(l=45, r=10, t=30, b=35),
-            font=dict(size=10, color="#909296"),
-            showlegend=False,
-        )
-        fig.update_xaxes(gridcolor="#2c2e33", zerolinecolor="#2c2e33")
-        fig.update_yaxes(gridcolor="#2c2e33", zerolinecolor="#2c2e33")
-        return fig
-
-    def stripline_panel(signal: list[np.ndarray], title: str, yaxis: str) -> dict:
-        fig = go.Figure()
-        for i in range(K):
-            stride = max(1, len(t_car[i]) // 500)
-            fig.add_trace(
-                go.Scatter(
-                    x=lap_car[i][::stride],
-                    y=signal[i][::stride],
-                    mode="lines",
-                    line=dict(color=css[i], width=1.5),
-                )
-            )
-        for i in range(K):
-            fig.add_trace(
-                go.Scatter(
-                    x=lap_car[i][:1],
-                    y=signal[i][:1],
-                    mode="markers",
-                    marker=dict(color=css[i], size=10, line=dict(color="white", width=1)),
-                )
-            )
-        compact(fig, title, "race distance [laps]", yaxis)
-
-        def update(t: float) -> None:
-            for i in range(K):
-                fig.data[K + i].x = (float(np.interp(t, t_car[i], lap_car[i])),)
-                fig.data[K + i].y = (float(np.interp(t, t_car[i], signal[i])),)
-
-        return {"figure": fig, "update": update, "aspect": 1.9}
 
     v_car = [log.dense_x[i, : end[i], COL["v"]] for i in range(K)]
     e_car = [log.dense_x[i, : end[i], COL["E"]] for i in range(K)]
@@ -1009,49 +938,10 @@ def build_viser_panels(log: RaceLog) -> list[dict]:
         for i, spec in enumerate(AGENTS)
     ]
 
-    # g-g panel: friction circle, a faint cloud per car, and one live dot each.
-    theta = np.linspace(0.0, 2.0 * np.pi, 90)
-    gg_fig = go.Figure()
-    gg_fig.add_trace(
-        go.Scatter(
-            x=A_MAX * np.cos(theta),
-            y=A_MAX * np.sin(theta),
-            mode="lines",
-            line=dict(color="gray", dash="dash", width=1),
-        )
-    )
-    for i in range(K):
-        a_lat, a_long = gg_car[i]
-        stride = max(1, len(a_lat) // 200)
-        gg_fig.add_trace(
-            go.Scatter(
-                x=a_lat[::stride],
-                y=a_long[::stride],
-                mode="markers",
-                marker=dict(color=css[i], size=3, opacity=0.2),
-            )
-        )
-    for i in range(K):
-        gg_fig.add_trace(
-            go.Scatter(
-                x=gg_car[i][0][:1],
-                y=gg_car[i][1][:1],
-                mode="markers",
-                marker=dict(color=css[i], size=10, line=dict(color="white", width=1)),
-            )
-        )
-    compact(gg_fig, "g-g vs friction ellipse", "a_lat [m/s²]", "a_long [m/s²]")
-    gg_fig.update_yaxes(scaleanchor="x")
-
-    def update_gg(t: float) -> None:
-        for i in range(K):
-            gg_fig.data[1 + K + i].x = (float(np.interp(t, t_car[i], gg_car[i][0])),)
-            gg_fig.data[1 + K + i].y = (float(np.interp(t, t_car[i], gg_car[i][1])),)
-
     return [
-        stripline_panel(v_car, "speed", "v [m/s]"),
-        stripline_panel(e_car, "battery", "E [J]"),
-        {"figure": gg_fig, "update": update_gg, "aspect": 1.0},
+        stripline_panel(lap_car, v_car, t_car, css, title="speed", yaxis="v [m/s]"),
+        stripline_panel(lap_car, e_car, t_car, css, title="battery", yaxis="E [J]"),
+        gg_panel(gg_car, t_car, css, a_max=A_MAX),
     ]
 
 
@@ -1246,7 +1136,7 @@ if __name__ == "__main__":
     if os.environ.get("OPENSCVX_NO_PLOT") is None:
         plot_race(log)
 
-        from race_car_viser import create_race_car_comparison_viser_server
+        from examples.race_cars._viser import create_race_car_comparison_viser_server
 
         # Trim each car's dense log at its own flag crossing so the replay
         # parks it at the line and the finishing gaps stay visible.

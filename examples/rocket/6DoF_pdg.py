@@ -22,7 +22,7 @@ from examples.plotting_viser import (
     create_snapshot_plotting_server,
 )
 from openscvx import Problem
-from openscvx.plotting.viser.coordinates import model_vec_to_viser_xyz
+from openscvx.plotting.viser import model_vec_to_viser_xyz
 
 # Position components live at indices 1:4 in the state vector (mass is index 0).
 _POSITION_STATE_SLICE = slice(1, 4)

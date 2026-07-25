@@ -49,8 +49,10 @@ from openscvx.plotting.viser import (
     compute_velocity_colors,
     create_server,
     extract_propagation_positions,
+    normalize_wxyz,
+    place_body_frame,
+    place_viewcone,
 )
-from openscvx.plotting.viser.animated import _normalize_wxyz, place_body_frame, place_viewcone
 
 # =============================================================================
 # Manual-stepping handle (for offline rendering)
@@ -1071,7 +1073,7 @@ def create_snapshot_plotting_server(
     max_n_snapshots: int | None = None,
     background_color: tuple[int, int, int] | None = None,
     show_grid: bool = False,
-    ghost_point_size: float = 0.08,
+    ghost_line_width: float = 2.0,
     ghost_opacity: float = 0.35,
     folder_name: str = "Snapshots",
     show_targets: bool = True,
@@ -1124,8 +1126,8 @@ def create_snapshot_plotting_server(
         background_color: RGB canvas background. Defaults to black when
             ``dark_mode`` is True and white when False.
         show_grid: Whether to draw the ground grid.
-        ghost_point_size: Point size for the ghost trajectory.
-        ghost_opacity: Opacity multiplier on velocity-colored ghost points (1.0 matches the
+        ghost_line_width: Width of the ghost trajectory path, in pixels.
+        ghost_opacity: Opacity multiplier on the velocity-colored ghost path (1.0 matches the
             animated trail brightness).
         folder_name: viser GUI folder name for the snapshot slider.
         show_targets: Draw moving/static target markers and per-snapshot target spheres.
@@ -1243,7 +1245,7 @@ def create_snapshot_plotting_server(
             radii=[np.full(3, 1.0 / float(obs_radius) / scene_scale)],
         )
 
-    add_ghost_trajectory(server, pos, colors, opacity=ghost_opacity, point_size=ghost_point_size)
+    add_ghost_trajectory(server, pos, colors, opacity=ghost_opacity, line_width=ghost_line_width)
 
     traj_time = np.asarray(results.trajectory["time"]).flatten()
     relative_vector = results.get("relative_vector", False)
@@ -1386,7 +1388,7 @@ def create_snapshot_plotting_server(
                     faces=mesh_faces,
                     color=vehicle_mesh_color,
                     position=tuple(float(x) for x in pos[frame_idx]),
-                    wxyz=tuple(float(x) for x in _normalize_wxyz(attitude[frame_idx])),
+                    wxyz=tuple(float(x) for x in normalize_wxyz(attitude[frame_idx])),
                 )
                 snapshot_state["handles"].append(mesh_handle)
 
@@ -1628,7 +1630,7 @@ def create_pdg_animated_plotting_server(
     glideslope_height: float | None = None,
     marker_radius: float = 0.3,
     trail_point_size: float = 0.15,
-    ghost_point_size: float = 0.05,
+    ghost_line_width: float = 2.0,
     scene_scale: float = 100.0,
 ) -> viser.ViserServer:
     """Create an animated visualization for Powered Descent Guidance problems.
@@ -1661,7 +1663,7 @@ def create_pdg_animated_plotting_server(
             If None, uses 10% of the initial altitude.
         marker_radius: Radius of position marker (in scaled scene units).
         trail_point_size: Size of trail points.
-        ghost_point_size: Size of ghost trajectory points.
+        ghost_line_width: Width of the ghost trajectory path, in pixels.
         scene_scale: Divide all positions by this factor. Default 100.0 brings
             km-scale trajectories into a ~10-20m range for viser.
 
@@ -1702,7 +1704,7 @@ def create_pdg_animated_plotting_server(
         )
 
     if show_ghost_trajectory:
-        add_ghost_trajectory(server, pos, colors, point_size=ghost_point_size)
+        add_ghost_trajectory(server, pos, colors, line_width=ghost_line_width)
 
     # Add animated elements
     update_callbacks = []
@@ -1870,38 +1872,6 @@ def build_scp_step_results(step_result: dict, solve_time_ms: float) -> dict:
     }
 
 
-def compute_velocity_colors_realtime(vel: np.ndarray, cmap) -> np.ndarray:
-    """Compute RGB colors based on velocity magnitude (pyplot-free version).
-
-    This version accepts a pre-loaded colormap to avoid importing matplotlib.pyplot,
-    which can cause issues with viser's web visualization in real-time examples.
-
-    Args:
-        vel: Velocity array of shape (N, 3)
-        cmap: Pre-loaded matplotlib colormap (e.g., matplotlib.colormaps["viridis"])
-
-    Returns:
-        Array of RGB colors with shape (N, 3), dtype uint8, values in [0, 255]
-
-    Example:
-        >>> import matplotlib
-        >>> _viridis = matplotlib.colormaps["viridis"]  # Load at module level
-        >>> colors = compute_velocity_colors_realtime(velocities, _viridis)
-    """
-    vel_norms = np.linalg.norm(vel, axis=1)
-    vel_range = vel_norms.max() - vel_norms.min()
-    if vel_range < 1e-8:
-        vel_normalized = np.zeros_like(vel_norms)
-    else:
-        vel_normalized = (vel_norms - vel_norms.min()) / vel_range
-
-    colors = np.array(
-        [[int(c * 255) for c in cmap(v)[:3]] for v in vel_normalized],
-        dtype=np.uint8,
-    )
-    return colors
-
-
 def _as_3d(points: np.ndarray) -> np.ndarray:
     """Ensure points are shape (..., 3) by appending z=0 when needed."""
     points = np.asarray(points, dtype=np.float64)
@@ -1974,7 +1944,7 @@ def create_hohmann_transfer_server(
     )
 
     # Static ghost + animated trail + marker
-    add_ghost_trajectory(server, pos_3d, colors, opacity=0.25, point_size=transfer_point_size)
+    add_ghost_trajectory(server, pos_3d, colors, opacity=0.25)
     _, update_trail = add_animated_trail(server, pos_3d, colors, point_size=transfer_point_size)
     _, update_marker = add_position_marker(server, pos_3d, radius=marker_radius)
 

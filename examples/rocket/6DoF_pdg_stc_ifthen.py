@@ -51,13 +51,22 @@ from examples.plotting_viser import (
     create_scp_animated_plotting_server,
     create_snapshot_plotting_server,
 )
-from openscvx import Problem
-from openscvx.plotting.viser import add_glideslope_cone, add_animation_controls
-from openscvx.plotting.viser.animated import (
-    _generate_viewcone_faces,
-    _generate_viewcone_vertices,
-    _sensor_pose_in_world,
+from examples.rocket._cstc_plotting import (
+    CstcLimits,
+    CstcScales,
+    add_altitude_trigger_discs,
+    add_cstc_phase_markers,
+    add_los_viewcone,
+    add_site_markers,
+    apply_panel_dark_theme,
+    node_trigger_indices,
+    plot_cstc_panel,
+    plot_cstc_trajectory_3d,
+    prepare_for_viser,
+    save_plotly_figure,
 )
+from openscvx import Problem
+from openscvx.plotting.viser import add_animation_controls, add_glideslope_cone
 
 # ── Physical parameters (notebook cell 16 / cell 33) ──────────────────────────
 G0  = 9.806    # m/s²
@@ -412,9 +421,10 @@ constraints.append((angular_velocity == W_FINAL).convex().at([N - 1]))
 
 # ── Always-on CTCS (entire trajectory) ────────────────────────────────────────
 constraints.append(ox.ctcs(tilt_sq - _tilt_sq_max <= 0))                 # tilt ≤ 90°
-constraints.append(ox.ctcs(omega_sq - W_B_MAX_RAD_S**2 <= 0, penalty="huber"))            # angular rate
-constraints.append(ox.ctcs(r_xy_norm * _tan_gs_max - pos_rel_z <= 0, penalty="huber"))    # glideslope 55°
-constraints.append(ox.ctcs(_m_dry_s - mass[0] <= 0, penalty="huber"))                     # dry-mass floor
+constraints.append(ox.ctcs(omega_sq - W_B_MAX_RAD_S**2 <= 0, penalty="huber"))  # angular rate
+# glideslope 55°
+constraints.append(ox.ctcs(r_xy_norm * _tan_gs_max - pos_rel_z <= 0, penalty="huber"))
+constraints.append(ox.ctcs(_m_dry_s - mass[0] <= 0, penalty="huber"))  # dry-mass floor
 
 # ── Compound state-triggered constraints via IfThen ───────────────────────────
 # lite=True: residual is non-negative and integrates under CTCS like the
@@ -503,231 +513,48 @@ VIEWCONE_SCALE = 4.0
 _VISER_UP_AXIS = (0.0, 0.0, 1.0)
 GS_HALFANGLE_DEG = 90.0 - GS_MAX_DEG
 GS_STC_HALFANGLE_DEG = 90.0 - GS_STC_DEG
-_POSITION_STATE_SLICE = slice(1, 4)
 
+SCALES = CstcScales(r_scale=R_SCALE, m_scale=M_SCALE)
+LIMITS = CstcLimits(
+    gs_apex_m=R_I_APEX,
+    los_apex_m=R_I_APEX,
+    pad_z_m=0.0,
+    alt_trigger_h1_m=ALT_TRIGGER_H1_M,
+    alt_trigger_h2_m=ALT_TRIGGER_H2_M,
+    spd_stc_trig=SPD_STC_TRIG,
+    theta_stc_trig_deg=THETA_STC_TRIG,
+    t_max=T_MAX,
+    t_min=T_MIN,
+    t_max_aft=T_MAX_AFT,
+    t_min_aft=T_MIN_AFT,
+    v_stc_cons=V_STC_CONS,
+    theta_max_deg=THETA_MAX_DEG,
+    theta_stc_deg=THETA_STC_DEG,
+    delta_engine_max_deg=DELTA_ENGINE_MAX_DEG,
+    delta_stc_deg=DELTA_STC_DEG,
+    w_b_max_rad_s=W_B_MAX_RAD_S,
+    omega_stc_rad_s=OMEGA_STC_RAD_S,
+    gs_max_deg=GS_MAX_DEG,
+    gs_stc_deg=GS_STC_DEG,
+    delta_boresight_max_deg=DELTA_BORESIGHT_MAX_DEG,
+    los_stc_deg=LOS_STC_DEG,
+    m_dry=M_DRY,
+)
 
-def cstc_model_to_viser_xyz(v: np.ndarray) -> np.ndarray:
-    """Map cSTC ENU vectors to Viser XYZ (both Z-up; no axis permutation)."""
-    return np.asarray(v, dtype=np.float64)
-
-
-def _horizontal_disc_mesh(
-    center: np.ndarray,
-    radius: float,
-    *,
-    n_segments: int = 48,
-    normal: tuple[float, float, float] = (0.0, 0.0, 1.0),
-) -> tuple[np.ndarray, np.ndarray]:
-    """Flat disc in the plane perpendicular to ``normal`` (for altitude triggers)."""
-    axis = np.asarray(normal, dtype=np.float32)
-    axis = axis / np.linalg.norm(axis)
-    ref = np.array([1.0, 0.0, 0.0], dtype=np.float32) if abs(axis[0]) < 0.9 else np.array(
-        [0.0, 1.0, 0.0], dtype=np.float32
-    )
-    u = ref - np.dot(ref, axis) * axis
-    u = u / np.linalg.norm(u)
-    v = np.cross(axis, u)
-
-    center = np.asarray(center, dtype=np.float32)
-    vertices = [center.copy()]
-    for i in range(n_segments):
-        angle = 2.0 * np.pi * i / n_segments
-        vertices.append(center + radius * (np.cos(angle) * u + np.sin(angle) * v))
-    vertices_arr = np.asarray(vertices, dtype=np.float32)
-
-    faces = [
-        [0, i + 1, ((i + 1) % n_segments) + 1]
-        for i in range(n_segments)
-    ]
-    return vertices_arr, np.asarray(faces, dtype=np.int32)
-
-
-def add_cstc_altitude_triggers(
-    server,
-    pos: np.ndarray,
-    *,
-    scene_scale_m: float = SCENE_SCALE,
-) -> None:
-    """Draw horizontal surfaces where altitude-based cSTC phases activate."""
-    xy_extent = float(np.max(np.linalg.norm(pos[:, :2], axis=1)))
-    radius = max(xy_extent * 1.25, 2.0)
-
-    triggers = [
-        (ALT_TRIGGER_H2_M, (80, 160, 255), "h < 200 m → LOS boresight cone"),
-        (ALT_TRIGGER_H1_M, (255, 80, 80),  "h < 100 m → tight gimbal/tilt/ω/speed/GS"),
-    ]
-    for alt_m, color, description in triggers:
-        z = alt_m / scene_scale_m
-        center = np.array([0.0, 0.0, z], dtype=np.float32)
-        verts, faces = _horizontal_disc_mesh(center, radius)
-        server.scene.add_mesh_simple(
-            f"/cstc_triggers/alt_{int(alt_m)}",
-            vertices=verts,
-            faces=faces,
-            color=color,
-            opacity=0.16,
-        )
-
-        ring = verts[1:]
-        ring_segments = np.stack(
-            [[ring[i], ring[(i + 1) % len(ring)]] for i in range(len(ring))],
-            axis=0,
-        )
-        server.scene.add_line_segments(
-            f"/cstc_triggers/alt_{int(alt_m)}_ring",
-            points=ring_segments.astype(np.float32),
-            colors=color,
-            line_width=2.5,
-        )
-
-        server.scene.add_label(
-            f"/cstc_triggers/alt_{int(alt_m)}_label",
-            text=description,
-            position=(radius * 0.85, 0.0, z + 0.05),
-        )
-
-        server.scene.add_line_segments(
-            f"/cstc_triggers/alt_{int(alt_m)}_stem",
-            points=np.array([[[-radius * 0.95, 0.0, 0.0], [-radius * 0.95, 0.0, z]]], dtype=np.float32),
-            colors=tuple(int(c * 0.7) for c in color),
-            line_width=1.5,
-        )
-
-
-def _xyzw_to_wxyz(q: np.ndarray) -> np.ndarray:
-    """Convert quaternion array from xyzw (model) to wxyz (viser)."""
-    q = np.asarray(q, dtype=np.float64)
-    if q.ndim == 1:
-        return np.array([q[3], q[0], q[1], q[2]], dtype=np.float64)
-    return np.stack([q[..., 3], q[..., 0], q[..., 1], q[..., 2]], axis=-1)
-
-
-def prepare_for_viser(result) -> None:
-    """Remap cSTC trajectory in-place for viser display."""
-    traj = result.trajectory
-
-    pos_m = np.asarray(traj["position"], dtype=np.float64) * R_SCALE
-    traj["position"] = cstc_model_to_viser_xyz(pos_m) / SCENE_SCALE
-
-    vel_ms = np.asarray(traj["velocity"], dtype=np.float64) * R_SCALE
-    traj["velocity"] = cstc_model_to_viser_xyz(vel_ms)
-
-    traj["attitude"] = _xyzw_to_wxyz(np.asarray(traj["attitude"], dtype=np.float64))
-
-    T_s = np.asarray(traj["thrust_mag"], dtype=np.float64).flatten()
-    d_e = np.asarray(traj["gimbal_elev"], dtype=np.float64).flatten()
-    phi_e = np.asarray(traj["gimbal_az"], dtype=np.float64).flatten()
-    traj["thrust_body"] = np.stack(
-        [
-            T_s * np.sin(d_e) * np.cos(phi_e),
-            T_s * np.sin(d_e) * np.sin(phi_e),
-            T_s * np.cos(d_e),
-        ],
-        axis=-1,
-    )
-
-    traj["los_elev"] = np.asarray(traj["los_elev"], dtype=np.float64).flatten()
-    traj["los_az"] = np.asarray(traj["los_az"], dtype=np.float64).flatten()
-
-    for i in range(len(result.X)):
-        X = np.asarray(result.X[i], dtype=np.float64, copy=True)
-        pos_cols = X[:, _POSITION_STATE_SLICE] * R_SCALE
-        X[:, _POSITION_STATE_SLICE] = cstc_model_to_viser_xyz(pos_cols) / SCENE_SCALE
-        result.X[i] = X
-
-
-def _los_body_to_sensor(de: float, pe: float) -> np.ndarray:
-    """Body-to-sensor DCM for los_elev/los_az spherical gimbal (neutral = identity)."""
-    los_b = np.array(
-        [np.sin(de) * np.cos(pe), np.sin(de) * np.sin(pe), np.cos(de)],
-        dtype=np.float64,
-    )
-    los_b = los_b / (np.linalg.norm(los_b) + 1e-12)
-    az_axis = np.array([0.0, 0.0, 1.0])
-    x_raw = np.cross(az_axis, los_b)
-    x_norm = np.linalg.norm(x_raw)
-    if x_norm < 1e-9:
-        x = np.array([1.0, 0.0, 0.0])
-    else:
-        x = x_raw / x_norm
-    y = np.cross(los_b, x)
-    return np.stack([x, y, los_b], axis=0)
-
-
-def add_cstc_los_viewcone(server, result):
-    """Animated LOS boresight viewcone (active below 200 m altitude trigger)."""
-    traj = result.trajectory
-    pos = np.asarray(traj["position"], dtype=np.float64)
-    attitude = np.asarray(traj["attitude"], dtype=np.float64)
-    los_elev = np.asarray(traj["los_elev"], dtype=np.float64).flatten()
-    los_az = np.asarray(traj["los_az"], dtype=np.float64).flatten()
-
-    half_angle = np.radians(LOS_STC_DEG)
-    base_vertices = _generate_viewcone_vertices(
-        half_angle, half_angle, VIEWCONE_SCALE, norm_type=2
-    )
-    base_vertices = base_vertices.copy()
-    base_vertices[1:, 2] *= -1.0
-    n_base = len(base_vertices) - 1
-    faces = _generate_viewcone_faces(n_base)[:, ::-1]
-    color = (80, 160, 255)
-
-    R_sb_series = [_los_body_to_sensor(de, pe) for de, pe in zip(los_elev, los_az)]
-    init_pos, init_wxyz = _sensor_pose_in_world(pos[0], attitude[0], R_sb_series[0])
-    frame = server.scene.add_frame(
-        "/los_viewcone",
-        wxyz=init_wxyz,
-        position=init_pos,
-        axes_length=0.0,
-        axes_radius=0.0,
-    )
-    server.scene.add_mesh_simple(
-        "/los_viewcone/mesh",
-        vertices=base_vertices,
-        faces=faces,
-        color=color,
-        wireframe=False,
-        opacity=0.4,
-    )
-
-    def update(frame_idx: int) -> None:
-        p, w = _sensor_pose_in_world(
-            pos[frame_idx], attitude[frame_idx], R_sb_series[frame_idx]
-        )
-        frame.position = p
-        frame.wxyz = w
-
-    return frame, update
-
-
-def _first_node_index(mask: np.ndarray) -> int | None:
-    """Index of the first True entry, or None if the trigger never activates."""
-    if not mask.any():
-        return None
-    return int(np.argmax(mask))
-
-
-def _node_trigger_indices(nodes) -> tuple[int | None, int | None, int | None]:
-    """Node indices where altitude / thrust STC triggers first activate."""
-    pos_m = np.asarray(nodes["position"]) * R_SCALE
-    vel_ms = np.asarray(nodes["velocity"]) * R_SCALE
-    q = np.asarray(nodes["attitude"])
-    alt = pos_m[:, 2]
-    spd = np.linalg.norm(vel_ms, axis=1)
-    tilt_deg = np.degrees(np.arccos(np.clip(1 - 2 * (q[:, 0] ** 2 + q[:, 1] ** 2), -1.0, 1.0)))
-
-    k_h1 = _first_node_index(alt < ALT_TRIGGER_H1_M)
-    k_h2 = _first_node_index(alt < ALT_TRIGGER_H2_M)
-    k_aft = _first_node_index((spd < SPD_STC_TRIG) & (tilt_deg < THETA_STC_TRIG))
-    return k_h1, k_h2, k_aft
+SITE_MARKERS = [
+    ("/cone_apex", R_I_APEX, (255, 220, 80), 0.08),
+    ("/landing_pad", R_I_FINAL, (50, 255, 80), 0.12),
+]
+ALT_TRIGGERS = [
+    (ALT_TRIGGER_H2_M, (80, 160, 255), "h < 200 m → LOS boresight cone"),
+    (ALT_TRIGGER_H1_M, (255, 80, 80), "h < 100 m → tight gimbal/tilt/ω/speed/GS"),
+]
 
 
 def launch_viser_servers(result) -> None:
     """Create trajectory, SCP convergence, and snapshot viser servers."""
     pos = np.asarray(result.trajectory["position"])
-    initial_alt_vis = float(np.max(pos[:, 2])) * 1.15
-
-    k_h1, k_h2, k_aft = _node_trigger_indices(result.nodes)
+    node_indices = node_trigger_indices(result.nodes, LIMITS, scales=SCALES)
 
     handle = create_animated_plotting_server(
         result,
@@ -748,21 +575,26 @@ def launch_viser_servers(result) -> None:
         controls="manual",
     )
     assert isinstance(handle, AnimatedServerHandle)
-    _, update_viewcone = add_cstc_los_viewcone(handle.server, result)
-    callbacks = handle.update_callbacks + [update_viewcone]
-    add_animation_controls(handle.server, handle.traj_time, callbacks, loop=True)
     traj_server = handle.server
+    _, update_viewcone = add_los_viewcone(
+        traj_server, result, half_angle_deg=LOS_STC_DEG, scale=VIEWCONE_SCALE
+    )
+    add_animation_controls(
+        traj_server, handle.traj_time, handle.update_callbacks + [update_viewcone], loop=True
+    )
 
+    # Two cones share the scene, so each needs its own scene path: the wide
+    # always-on glideslope and the tight one the h < 100 m cSTC switches to.
     apex_vis = tuple((R_I_APEX / SCENE_SCALE).tolist())
-    touchdown_vis = tuple((R_I_FINAL / SCENE_SCALE).tolist())
     add_glideslope_cone(
         traj_server,
         apex=apex_vis,
-        height=initial_alt_vis,
+        height=float(np.max(pos[:, 2])) * 1.15,
         glideslope_angle_deg=GS_HALFANGLE_DEG,
         axis=_VISER_UP_AXIS,
         color=(80, 200, 80),
         opacity=0.12,
+        name="/constraints/glideslope_wide",
     )
     add_glideslope_cone(
         traj_server,
@@ -772,54 +604,23 @@ def launch_viser_servers(result) -> None:
         axis=_VISER_UP_AXIS,
         color=(255, 180, 40),
         opacity=0.15,
+        name="/constraints/glideslope_tight",
     )
 
-    add_cstc_altitude_triggers(traj_server, pos, scene_scale_m=SCENE_SCALE)
-
-    traj_server.scene.add_icosphere(
-        "/cone_apex",
-        radius=0.08,
-        color=(255, 220, 80),
-        position=apex_vis,
+    add_altitude_trigger_discs(
+        traj_server,
+        pos,
+        center_xy=(0.0, 0.0),
+        base_z_m=0.0,
+        scene_scale=SCENE_SCALE,
+        triggers=ALT_TRIGGERS,
     )
-    traj_server.scene.add_icosphere(
-        "/landing_pad",
-        radius=0.12,
-        color=(50, 255, 80),
-        position=touchdown_vis,
-    )
-
-    for k, color in [
-        (k_aft, (255, 210, 50)),
-        (k_h2, (80, 160, 255)),
-        (k_h1, (255, 80, 80)),
-    ]:
-        if k is None:
-            continue
-        k = int(np.clip(k, 0, len(pos) - 1))
-        traj_server.scene.add_icosphere(
-            f"/phase_markers/k{k}",
-            radius=0.14,
-            color=color,
-            position=tuple(float(v) for v in pos[k]),
-        )
-
-    def _node_label(k: int | None) -> str:
-        return f"k={k}" if k is not None else "not crossed at nodes"
-
-    with traj_server.gui.add_folder("cSTC Phase Boundaries"):
-        traj_server.gui.add_markdown(
-            f"**Phase structure (N={N} nodes)**\n\n"
-            f"**Altitude triggers** (horizontal discs):\n"
-            f"- 🔵 h < {int(ALT_TRIGGER_H2_M)} m → {_node_label(k_h2)}: LOS boresight viewcone  \n"
-            f"- 🔴 h < {int(ALT_TRIGGER_H1_M)} m → {_node_label(k_h1)}: tight terminal  \n\n"
-            f"**Speed ∧ tilt trigger** (node marker only):\n"
-            f"- 🟡 {_node_label(k_aft)}: single-engine thrust (||v||<35 ∧ θ<60°)  \n"
-        )
+    add_site_markers(traj_server, SITE_MARKERS, scene_scale=SCENE_SCALE)
+    add_cstc_phase_markers(traj_server, pos, node_indices, n_nodes=N, limits=LIMITS)
 
     scp_server = create_scp_animated_plotting_server(
         result,
-        position_slice=_POSITION_STATE_SLICE,
+        position_slice=slice(1, 4),
         attitude_slice=slice(7, 11),
         show_attitudes=True,
         attitude_stride=3,
@@ -827,8 +628,6 @@ def launch_viser_servers(result) -> None:
         frame_duration_ms=80,
         scene_scale=1.0,
     )
-    add_cstc_altitude_triggers(scp_server, pos, scene_scale_m=SCENE_SCALE)
-
     snap_server = create_snapshot_plotting_server(
         result,
         attitude_axes_length=ATTITUDE_AXES_LENGTH,
@@ -837,118 +636,17 @@ def launch_viser_servers(result) -> None:
         show_grid=True,
         background_color=(240, 240, 245),
     )
-    add_cstc_altitude_triggers(snap_server, pos, scene_scale_m=SCENE_SCALE)
+    for server in (scp_server, snap_server):
+        add_altitude_trigger_discs(
+            server,
+            pos,
+            center_xy=(0.0, 0.0),
+            base_z_m=0.0,
+            scene_scale=SCENE_SCALE,
+            triggers=ALT_TRIGGERS,
+        )
 
     traj_server.sleep_forever()
-
-
-def _cbi_transpose(q_xyzw: np.ndarray) -> np.ndarray:
-    """Body-to-inertial DCM (CBI^T) from a quaternion in [qx, qy, qz, qw] order."""
-    qx, qy, qz, qw = q_xyzw
-    return np.array([
-        [qw**2 + qx**2 - qy**2 - qz**2, 2*(qx*qy - qw*qz),               2*(qw*qy + qx*qz)],
-        [2*(qw*qz + qx*qy),              qw**2 - qx**2 + qy**2 - qz**2,  2*(qy*qz - qw*qx)],
-        [2*(qx*qz - qw*qy),              2*(qw*qx + qy*qz),              qw**2 - qx**2 - qy**2 + qz**2],
-    ])
-
-
-def _compute_los_angle(pos_arr: np.ndarray, q_arr: np.ndarray,
-                       d_b_arr: np.ndarray, phi_b_arr: np.ndarray,
-                       apex: np.ndarray | None = None) -> np.ndarray:
-    """Angle (deg) between the apex-relative position and the LOS boresight."""
-    nk  = pos_arr.shape[0]
-    ang = np.zeros(nk)
-    apex = np.zeros(3) if apex is None else np.asarray(apex, dtype=np.float64)
-    for k in range(nk):
-        los_b = np.array([
-            np.sin(d_b_arr[k]) * np.cos(phi_b_arr[k]),
-            np.sin(d_b_arr[k]) * np.sin(phi_b_arr[k]),
-            np.cos(d_b_arr[k]),
-        ])
-        los_i = _cbi_transpose(q_arr[k]) @ los_b
-        r_k   = pos_arr[k] - apex
-        r_n   = np.linalg.norm(r_k)
-        if r_n > 1e-8:
-            cos_val = np.dot(r_k, los_i) / (r_n * (np.linalg.norm(los_i) + 1e-12))
-            ang[k] = np.degrees(np.arccos(np.clip(cos_val, -1.0, 1.0)))
-    return ang
-
-
-def _save_plotly_figure(fig, basename: str) -> None:
-    """Save a Plotly figure as HTML and, when kaleido is available, PNG/PDF."""
-    fig.write_html(f"{basename}.html")
-    print(f"  Saved {basename}.html")
-    try:
-        fig.write_image(f"{basename}.png", scale=2)
-        fig.write_image(f"{basename}.pdf")
-        print(f"  Saved {basename}.{{png,pdf}}")
-    except Exception as exc:
-        print(f"  Skipped PNG/PDF for {basename} ({exc}); install kaleido for static export.")
-
-
-def _apply_cstc_panel_dark_theme(fig) -> None:
-    """Restyle a states/controls panel figure for dark backgrounds."""
-    for tr in fig.data:
-        marker = getattr(tr, "marker", None)
-        if marker is not None and getattr(marker, "color", None) == "black":
-            tr.marker.color = "#e8e8e8"
-        line = getattr(tr, "line", None)
-        if line is None:
-            continue
-        color = getattr(line, "color", None)
-        if color == "blue":
-            tr.line.color = "#6eb5ff"
-        elif color == "green":
-            tr.line.color = "#3ddc84"
-        elif color == "purple":
-            tr.line.color = "#c084fc"
-        elif color == "burlywood":
-            tr.line.color = "#e0b878"
-
-    shapes = list(fig.layout.shapes) if fig.layout.shapes else []
-    new_shapes = []
-    for shape in shapes:
-        shape = dict(shape.to_plotly_json() if hasattr(shape, "to_plotly_json") else shape)
-        line = dict(shape.get("line") or {})
-        color = line.get("color")
-        if color == "green":
-            line["color"] = "#3ddc84"
-        elif color == "purple":
-            line["color"] = "#c084fc"
-        elif color == "burlywood":
-            line["color"] = "#e0b878"
-        shape["line"] = line
-        new_shapes.append(shape)
-
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#111111",
-        plot_bgcolor="#1a1a1a",
-        font={"color": "#e8e8e8"},
-        shapes=new_shapes,
-        legend={
-            "orientation": "h",
-            "yanchor": "bottom",
-            "y": 1.02,
-            "xanchor": "left",
-            "x": 0,
-            "font": {"size": 10, "color": "#e8e8e8"},
-        },
-    )
-    fig.update_xaxes(
-        gridcolor="#333333",
-        zerolinecolor="#444444",
-        linecolor="#666666",
-        tickfont={"color": "#e8e8e8"},
-        title_font={"color": "#e8e8e8"},
-    )
-    fig.update_yaxes(
-        gridcolor="#333333",
-        zerolinecolor="#444444",
-        linecolor="#666666",
-        tickfont={"color": "#e8e8e8"},
-        title_font={"color": "#e8e8e8"},
-    )
 
 
 def plot_cstc_results(
@@ -959,305 +657,35 @@ def plot_cstc_results(
     dark_mode: bool = False,
     save_dark: bool = True,
 ) -> tuple:
-    """Generate state/control panel and 3-D trajectory plots matching CT-cSTC notebook.
+    """Nine-panel states/controls figure and the speed-coloured 3-D path.
 
-    Trigger times are computed from where the actual trajectory first crosses each
-    trigger threshold, so the tightened bounds (drawn after the trigger) reflect
-    the *real* state-triggered behaviour rather than fixed node intervals.
-
-    When ``save_prefix`` is set and ``save_dark`` is True, also writes a dark-themed
-    copy of the states/controls panel as ``{save_prefix}_states_controls_dark``.
+    The panel is authored for print; ``save_dark`` additionally writes a
+    dark-themed copy as ``{save_prefix}_states_controls_dark`` for slides, and
+    ``dark_mode`` makes that copy the one returned and displayed.
     """
-    import plotly.graph_objects as go
-    from plotly.subplots import make_subplots
-
     from openscvx.plotting.publication import show_plotly_with_latin_modern
 
-    # ── Dense propagated trajectory (scaled) ──────────────────────────────────
-    traj   = result.trajectory
-    pos_s  = np.asarray(traj["position"])
-    vel_s  = np.asarray(traj["velocity"])
-    m_s    = np.asarray(traj["mass"]).flatten()
-    q      = np.asarray(traj["attitude"])
-    w      = np.asarray(traj["angular_velocity"])
-    T_s    = np.asarray(traj["thrust_mag"]).flatten()
-    d_e    = np.asarray(traj["gimbal_elev"]).flatten()
-    d_b    = np.asarray(traj["los_elev"]).flatten()
-    phi_b  = np.asarray(traj["los_az"]).flatten()
-    t_full = np.asarray(traj["time"]).flatten()
-
-    # ── Node-level data (for scatter) ─────────────────────────────────────────
-    nodes   = result.nodes
-    pos_n_s = np.asarray(nodes["position"])
-    vel_n_s = np.asarray(nodes["velocity"])
-    m_n_s   = np.asarray(nodes["mass"]).flatten()
-    q_n     = np.asarray(nodes["attitude"])
-    w_n     = np.asarray(nodes["angular_velocity"])
-    T_n_s   = np.asarray(nodes["thrust_mag"]).flatten()
-    d_e_n   = np.asarray(nodes["gimbal_elev"]).flatten()
-    d_b_n   = np.asarray(nodes["los_elev"]).flatten()
-    phi_b_n = np.asarray(nodes["los_az"]).flatten()
-
-    t_nodes = np.asarray(nodes["time"]).flatten()
-
-    # ── Unscale to physical units ─────────────────────────────────────────────
-    pos   = pos_s   * R_SCALE
-    vel   = vel_s   * R_SCALE
-    m     = m_s     * M_SCALE
-    T_N   = T_s     * M_SCALE * R_SCALE
-
-    pos_n = pos_n_s * R_SCALE
-    vel_n = vel_n_s * R_SCALE
-    m_n   = m_n_s   * M_SCALE
-    T_n_N = T_n_s   * M_SCALE * R_SCALE
-
-    # ── Derived quantities ────────────────────────────────────────────────────
-    speed_d   = np.linalg.norm(vel,   axis=1)
-    speed_n = np.linalg.norm(vel_n, axis=1)
-
-    tilt_deg   = np.degrees(np.arccos(np.clip(1 - 2*(q[:,0]**2   + q[:,1]**2),   -1.0, 1.0)))
-    tilt_deg_n = np.degrees(np.arccos(np.clip(1 - 2*(q_n[:,0]**2 + q_n[:,1]**2), -1.0, 1.0)))
-
-    omega_dps   = np.degrees(np.linalg.norm(w,   axis=1))
-    omega_dps_n = np.degrees(np.linalg.norm(w_n, axis=1))
-
-    pos_rel   = pos   - R_I_APEX
-    pos_rel_n = pos_n - R_I_APEX
-    r_xy   = np.linalg.norm(pos_rel[:,   :2], axis=1)
-    r_xy_n = np.linalg.norm(pos_rel_n[:, :2], axis=1)
-    gs_deg   = 90.0 - np.degrees(np.arctan2(pos_rel[:,   2], r_xy   + 1e-8))
-    gs_deg_n = 90.0 - np.degrees(np.arctan2(pos_rel_n[:, 2], r_xy_n + 1e-8))
-
-    los_ang   = _compute_los_angle(pos,   q,   d_b,   phi_b,   apex=R_I_APEX)
-    los_ang_n = _compute_los_angle(pos_n, q_n, d_b_n, phi_b_n, apex=R_I_APEX)
-
-    # ── Trigger times from actual trajectory crossings ────────────────────────
-    alt_d = pos[:, 2]
-
-    def _first_time(mask):
-        if mask.any():
-            return float(t_full[int(np.argmax(mask))])
-        return float(t_full[-1])
-
-    t_h1  = _first_time(alt_d < ALT_TRIGGER_H1_M)
-    t_h2  = _first_time(alt_d < ALT_TRIGGER_H2_M)
-    t_aft = _first_time((speed_d < SPD_STC_TRIG) & (tilt_deg < THETA_STC_TRIG))
-    t_end = float(t_nodes[-1])
-
-    print(f"  Trigger times:  h<100m @ {t_h1:.2f}s   h<200m @ {t_h2:.2f}s   "
-          f"(v<35 & θ<60) @ {t_aft:.2f}s")
-
-    # ── Colour palette (matches notebook) ────────────────────────────────────
-    c_node = "black"
-    c_plt  = "blue"
-    c_h1   = "red"
-    c_h2   = "orange"
-    c_aft  = "lightseagreen"
-    c_spd  = "burlywood"
-    c_up   = "green"
-    c_low  = "purple"
-
-    legend_seen: set[str] = set()
-
-    def _show(name: str) -> bool:
-        if name in legend_seen:
-            return False
-        legend_seen.add(name)
-        return True
-
-    def _seg(fig, x0, x1, y, *, row, col, color, dash="dash", name=None):
-        fig.add_trace(
-            go.Scatter(
-                x=[x0, x1], y=[y, y], mode="lines",
-                line={"color": color, "dash": dash, "width": 1.5},
-                name=name, showlegend=_show(name) if name else False, legendgroup=name,
-            ),
-            row=row, col=col,
-        )
-
-    def _line(fig, x, y, *, row, col, color, name=None, width=2):
-        fig.add_trace(
-            go.Scatter(
-                x=x, y=y, mode="lines",
-                line={"color": color, "width": width},
-                name=name, showlegend=_show(name) if name else False, legendgroup=name,
-            ),
-            row=row, col=col,
-        )
-
-    def _nodes(fig, x, y, *, row, col, name="Node point"):
-        fig.add_trace(
-            go.Scatter(
-                x=x, y=y, mode="markers",
-                marker={"color": c_node, "size": 7},
-                name=name, showlegend=_show(name), legendgroup=name,
-            ),
-            row=row, col=col,
-        )
-
-    def _vline(fig, x, *, row, col, color):
-        fig.add_vline(x=x, line={"color": color, "dash": "dash", "width": 1.5}, row=row, col=col)
-
-    # ── Figure 1: 9-panel state/control plot ─────────────────────────────────
-    fig_panel = make_subplots(rows=3, cols=3, vertical_spacing=0.10, horizontal_spacing=0.08)
-
-    # ── Thrust (row 1, col 1) ───────────────────────────────────────────────
-    T_kN   = T_N   * 1e-3
-    T_n_kN = T_n_N * 1e-3
-    _seg(fig_panel, 0, t_aft, T_MAX * 1e-3, row=1, col=1, color=c_up, name="Upper bound")
-    _seg(fig_panel, 0, t_aft, T_MIN * 1e-3, row=1, col=1, color=c_low, name="Lower bound")
-    _seg(fig_panel, t_aft, t_end, T_MAX_AFT * 1e-3, row=1, col=1, color=c_up)
-    _seg(fig_panel, t_aft, t_end, T_MIN_AFT * 1e-3, row=1, col=1, color=c_low)
-    _vline(fig_panel, t_aft, row=1, col=1, color=c_aft)
-    _line(fig_panel, t_full, T_kN, row=1, col=1, color="red", name="Control input")
-    _nodes(fig_panel, t_nodes, T_n_kN, row=1, col=1)
-    fig_panel.update_yaxes(title_text="Thrust, T [kN]", row=1, col=1)
-
-    # ── Speed (row 1, col 2) ────────────────────────────────────────────────
-    _line(fig_panel, t_full, speed_d, row=1, col=2, color=c_plt, name="State")
-    _nodes(fig_panel, t_nodes, speed_n, row=1, col=2)
-    _seg(fig_panel, 0, t_end, SPD_STC_TRIG, row=1, col=2, color=c_spd, name="$v^{\\mathrm{trig}}$")
-    _vline(fig_panel, t_h1, row=1, col=2, color=c_h1)
-    _vline(fig_panel, t_aft, row=1, col=2, color=c_aft)
-    _seg(fig_panel, t_h1, t_end, V_STC_CONS, row=1, col=2, color=c_up, name="STC bound")
-    fig_panel.update_yaxes(title_text="Speed, ||v||₂ [m s⁻¹]", range=[0, speed_d.max() + 5], row=1, col=2)
-
-    # ── Tilt (row 1, col 3) ─────────────────────────────────────────────────
-    _line(fig_panel, t_full, tilt_deg, row=1, col=3, color=c_plt)
-    _nodes(fig_panel, t_nodes, tilt_deg_n, row=1, col=3)
-    _seg(fig_panel, 0, t_h1, THETA_MAX_DEG, row=1, col=3, color=c_up)
-    _seg(fig_panel, t_h1, t_end, THETA_STC_DEG, row=1, col=3, color=c_up)
-    _seg(fig_panel, 0, t_end, THETA_STC_TRIG, row=1, col=3, color=c_spd, name="$\\theta^{\\mathrm{trig}}$")
-    _vline(fig_panel, t_h1, row=1, col=3, color=c_h1)
-    fig_panel.update_yaxes(title_text="Tilt angle, θ [deg]", row=1, col=3)
-
-    # ── Engine gimbal deflection (row 2, col 1) ─────────────────────────────
-    d_e_deg   = np.degrees(d_e)
-    d_e_deg_n = np.degrees(d_e_n)
-    _line(fig_panel, t_full, d_e_deg, row=2, col=1, color="red")
-    _nodes(fig_panel, t_nodes, d_e_deg_n, row=2, col=1)
-    _seg(fig_panel, 0, t_h1,  DELTA_ENGINE_MAX_DEG, row=2, col=1, color=c_up)
-    _seg(fig_panel, 0, t_h1, -DELTA_ENGINE_MAX_DEG, row=2, col=1, color=c_low)
-    _seg(fig_panel, t_h1, t_end,  DELTA_STC_DEG, row=2, col=1, color=c_up)
-    _seg(fig_panel, t_h1, t_end, -DELTA_STC_DEG, row=2, col=1, color=c_low)
-    _vline(fig_panel, t_h1, row=2, col=1, color=c_h1)
-    fig_panel.update_yaxes(title_text="Engine gimbal, δᵉ [deg]", row=2, col=1)
-
-    # ── Angular velocity (row 2, col 2) ─────────────────────────────────────
-    _line(fig_panel, t_full, omega_dps, row=2, col=2, color=c_plt)
-    _nodes(fig_panel, t_nodes, omega_dps_n, row=2, col=2)
-    _seg(fig_panel, 0, t_h1, np.degrees(W_B_MAX_RAD_S), row=2, col=2, color=c_up)
-    _seg(fig_panel, t_h1, t_end, np.degrees(OMEGA_STC_RAD_S), row=2, col=2, color=c_up)
-    _vline(fig_panel, t_h1, row=2, col=2, color=c_h1)
-    fig_panel.update_yaxes(title_text="Angular velocity, ω_B [deg s⁻¹]", row=2, col=2)
-
-    # ── Glideslope (row 2, col 3) ─────────────────────────────────────────────
-    gs_bound_pre = 90.0 - GS_MAX_DEG
-    gs_bound_stc = 90.0 - GS_STC_DEG
-    _line(fig_panel, t_full[:-1], gs_deg[:-1], row=2, col=3, color=c_plt)
-    _nodes(fig_panel, t_nodes[:-1], gs_deg_n[:-1], row=2, col=3)
-    _seg(fig_panel, 0, t_h1, gs_bound_pre, row=2, col=3, color=c_up)
-    _seg(fig_panel, t_h1, t_end, gs_bound_stc, row=2, col=3, color=c_up)
-    _vline(fig_panel, t_h1, row=2, col=3, color=c_h1)
-    fig_panel.update_yaxes(
-        title_text="Glideslope, γ [deg]",
-        range=[0, max(gs_bound_pre, gs_deg[:-1].max()) + 5], row=2, col=3,
+    fig_panel = plot_cstc_panel(result, LIMITS, scales=SCALES)
+    fig_3d = plot_cstc_trajectory_3d(
+        result,
+        scales=SCALES,
+        markers=[("Landing pad", R_I_FINAL, "lime")],
+        title="6-DoF PDG Trajectory (IfThen cSTC)",
     )
 
-    # ── LOS boresight elevation angle (row 3, col 1) ────────────────────────
-    d_b_deg   = np.degrees(d_b)
-    d_b_deg_n = np.degrees(d_b_n)
-    _line(fig_panel, t_full, d_b_deg, row=3, col=1, color="red")
-    _nodes(fig_panel, t_nodes, d_b_deg_n, row=3, col=1)
-    _seg(fig_panel, t_h2, t_end, DELTA_BORESIGHT_MAX_DEG, row=3, col=1, color=c_up)
-    _vline(fig_panel, t_h2, row=3, col=1, color=c_h2)
-    fig_panel.update_xaxes(title_text="Time [s]", row=3, col=1)
-    fig_panel.update_yaxes(title_text="Boresight deflection, δᵇ [deg]", row=3, col=1)
+    if save_prefix and not dark_mode:
+        save_plotly_figure(fig_panel, f"{save_prefix}_states_controls")
+    if dark_mode or (save_prefix and save_dark):
+        import plotly.graph_objects as go
 
-    # ── Mass (row 3, col 2) ─────────────────────────────────────────────────
-    _line(fig_panel, t_full, m / 1e3, row=3, col=2, color=c_plt)
-    _nodes(fig_panel, t_nodes, m_n / 1e3, row=3, col=2)
-    fig_panel.add_hline(y=M_DRY / 1e3, line={"color": c_low, "dash": "dash", "width": 1.5}, row=3, col=2)
-    fig_panel.update_xaxes(title_text="Time [s]", row=3, col=2)
-    fig_panel.update_yaxes(title_text="Mass, m [10³ kg]", row=3, col=2)
-
-    # ── LOS view angle (row 3, col 3) ───────────────────────────────────────
-    _line(fig_panel, t_full, los_ang, row=3, col=3, color=c_plt)
-    _nodes(fig_panel, t_nodes, los_ang_n, row=3, col=3)
-    _seg(fig_panel, t_h2, t_end, LOS_STC_DEG, row=3, col=3, color=c_up)
-    _vline(fig_panel, t_h2, row=3, col=3, color=c_h2)
-    fig_panel.update_xaxes(title_text="Time [s]", row=3, col=3)
-    fig_panel.update_yaxes(title_text="LOS angle, ψ [deg]", row=3, col=3)
-
-    for row in range(1, 4):
-        for col in range(1, 4):
-            fig_panel.update_xaxes(range=[0, t_end], row=row, col=col)
-
-    fig_panel.update_layout(
-        template="plotly_white", width=1100, height=650,
-        margin={"t": 80, "b": 40, "l": 50, "r": 30},
-        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02,
-                "xanchor": "left", "x": 0, "font": {"size": 10}},
-    )
-
-    need_dark = dark_mode or bool(save_prefix and save_dark)
-    fig_panel_dark = None
-    if need_dark:
-        fig_panel_dark = go.Figure(fig_panel)
-        _apply_cstc_panel_dark_theme(fig_panel_dark)
-        fig_panel_dark.update_layout(
-            width=1100, height=650, margin={"t": 80, "b": 40, "l": 50, "r": 30},
-        )
-
+        fig_dark = go.Figure(fig_panel)
+        apply_panel_dark_theme(fig_dark)
+        if save_prefix and save_dark:
+            save_plotly_figure(fig_dark, f"{save_prefix}_states_controls_dark")
+        if dark_mode:
+            fig_panel = fig_dark
     if save_prefix:
-        if not dark_mode:
-            _save_plotly_figure(fig_panel, f"{save_prefix}_states_controls")
-        if fig_panel_dark is not None:
-            _save_plotly_figure(fig_panel_dark, f"{save_prefix}_states_controls_dark")
-
-    if dark_mode and fig_panel_dark is not None:
-        fig_panel = fig_panel_dark
-
-    # ── Figure 2: 3-D trajectory coloured by speed ────────────────────────────
-    fig_3d = go.Figure()
-    fig_3d.add_trace(
-        go.Scatter3d(
-            x=pos[:, 0], y=pos[:, 1], z=pos[:, 2], mode="lines",
-            customdata=speed_d,
-            line={"color": speed_d, "colorscale": "Rainbow",
-                  "cmin": float(speed_d.min()), "cmax": float(speed_d.max()),
-                  "width": 4, "colorbar": {"title": "Speed [m/s]"}},
-            showlegend=False,
-            hovertemplate=("Crossrange: %{x:.1f} m<br>Downrange: %{y:.1f} m<br>"
-                           "Altitude: %{z:.1f} m<br>Speed: %{customdata:.1f} m/s<extra></extra>"),
-        )
-    )
-    fig_3d.add_trace(
-        go.Scatter3d(x=pos_n[:, 0], y=pos_n[:, 1], z=pos_n[:, 2], mode="markers",
-                     marker={"color": "black", "size": 4}, name="Node")
-    )
-    fig_3d.add_trace(
-        go.Scatter3d(x=[0.0], y=[0.0], z=[0.0], mode="markers",
-                     marker={"color": "lime", "size": 10, "symbol": "diamond"}, name="Landing pad")
-    )
-
-    all_xyz = np.vstack([pos, pos_n])
-    pad = 30.0
-    fig_3d.update_layout(
-        template="plotly_white", title={"text": "6-DoF PDG Trajectory (IfThen cSTC)", "x": 0.5},
-        width=900, height=800,
-        scene={
-            "xaxis_title": "Crossrange [m]", "yaxis_title": "Downrange [m]", "zaxis_title": "Altitude [m]",
-            "xaxis": {"range": [all_xyz[:, 0].min() - pad, all_xyz[:, 0].max() + pad]},
-            "yaxis": {"range": [all_xyz[:, 1].min() - pad, all_xyz[:, 1].max() + pad]},
-            "zaxis": {"range": [0, all_xyz[:, 2].max() + 30]},
-            "aspectmode": "data",
-        },
-        legend={"x": 0.02, "y": 0.98},
-    )
-
-    if save_prefix:
-        _save_plotly_figure(fig_3d, f"{save_prefix}_trajectory_3d")
+        save_plotly_figure(fig_3d, f"{save_prefix}_trajectory_3d")
 
     if show:
         show_plotly_with_latin_modern(fig_panel)
@@ -1284,7 +712,7 @@ if __name__ == "__main__":
     print(f"  Fuel used (kg):       {M_WET - m[-1, 0]:.1f}")
 
     print("\n── Generating plots ─────────────────────────────────────────────")
-    plot_cstc_results(result, show=True, save_prefix="cstc_ifthen")
+    plot_cstc_results(result, show=True)
 
-    prepare_for_viser(result)
+    prepare_for_viser(result, scales=SCALES, scene_scale=SCENE_SCALE)
     launch_viser_servers(result)

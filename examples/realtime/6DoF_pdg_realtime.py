@@ -23,12 +23,13 @@ _spec.loader.exec_module(pdg)
 
 from examples.plotting_viser import (
     build_scp_step_results,
-    compute_velocity_colors_realtime,
     extract_multishoot_trajectory,
     format_metrics_markdown,
     get_print_queue_data,
 )
+from openscvx.plotting.viser import compute_velocity_colors
 
+# Preloaded once so the per-frame recolor below does not repeat the lookup
 _viridis_cmap = matplotlib.colormaps["viridis"]
 VISER_SCENE_SCALE = 2.0
 
@@ -581,7 +582,7 @@ def create_realtime_server(optimization_problem) -> viser.ViserServer:
                 velocity_slice=slice(4, 7),
             )
             if len(positions) > 0:
-                colors = compute_velocity_colors_realtime(velocities, _viridis_cmap)
+                colors = compute_velocity_colors(velocities, cmap=_viridis_cmap)
                 trajectory_handle.points = (
                     pdg.model_vec_to_viser_xyz(np.asarray(positions, dtype=np.float64))
                     * VISER_SCENE_SCALE

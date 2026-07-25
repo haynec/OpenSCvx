@@ -130,6 +130,18 @@ The `openscvx.plotting.viser` module gives you:
 
 This approach means you're never fighting against our assumptions about what a "correct" visualization looks like.
 
+Every primitive that adds a node to the scene takes a keyword-only `name=` giving that
+node's scene path, defaulting to a sensible one (`"/trail"`, `"/current_pos"`,
+`"/body_frame"`, …). viser keys nodes by path, so pass distinct names when a scene holds
+more than one of something — two vehicles, two sensors, two constraint cones:
+
+```python
+add_animated_trail(server, pos_a, colors_a, name="/chaser/trail")
+add_animated_trail(server, pos_b, colors_b, name="/target/trail")
+```
+
+Leaving `name` alone gives you the single-vehicle default, which is what most problems want.
+
 ### Animation Mechanism
 
 The animation system uses a simple callback pattern. Understanding this upfront makes everything else click:
@@ -198,8 +210,23 @@ The templates demonstrate common patterns:
 | Template | Use Case |
 |----------|----------|
 | `create_animated_plotting_server()` | General 3D trajectory animation with trail, thrust vectors, attitude frames, viewcones |
+| `create_snapshot_plotting_server()` | Static multi-pose snapshot of a trajectory, for figures rather than playback |
 | `create_scp_animated_plotting_server()` | 3D SCP iteration convergence visualization |
 | `create_pdg_animated_plotting_server()` | Powered descent guidance (rockets) with glideslope cone |
+
+Unlike the primitives above, these templates are deliberately **monolithic**: each takes a
+long list of keyword arguments and builds an entire scene in one call, so that the common
+case is a single line and no thinking. That is a different design goal from
+`openscvx.plotting.viser`, and the two should not be confused — the primitives are what you
+compose when the template does not fit, and the template is only ever a starting point.
+
+!!! note "Contributing an example to OpenSCvx?"
+
+    The advice to *copy and customize* is for **your own project**. If you are adding an
+    example to this repository, do not copy a template into it — share the code instead,
+    via `examples/<family>/_plotting.py`. A copy inside the repo is not a customization;
+    it is a fork that has to be maintained forever, and it is how a family of examples ends
+    up with five near-identical thousand-line visualization blocks.
 
 The next section walks through exactly how `create_animated_plotting_server` is built, teaching you the pattern, so you can create your own.
 
@@ -222,7 +249,7 @@ from openscvx.plotting.viser import compute_velocity_colors, create_server
 # Extract trajectory arrays (handles JAX arrays automatically)
 pos = results.trajectory["position"]
 vel = results.trajectory["velocity"]
-thrust = results.trajectory.get("thrust_force")  # May be None
+thrust = results.trajectory.get("force")         # May be None; see `thrust_key`
 attitude = results.trajectory.get("attitude")    # May be None for 3-DOF
 traj_time = results.trajectory["time"]
 

@@ -311,9 +311,10 @@ def plot_states(
             ``("position", 0)``, ``"position:0"``, or ``"position[0]"``.
         include_private: Whether to include private states (names starting with '_')
         cols: Maximum number of columns in subplot grid
-        style: ``"dark"`` for the default Plotly theme, or ``"publication"`` for
-            a white theme with Latin Modern fonts, LaTeX labels, and automatic
-            PDF export.
+        style: ``"dark"`` for the default Plotly theme, ``"publication"`` for a
+            white theme with Latin Modern fonts, LaTeX labels, and automatic PDF
+            export, or ``"publication_dark"`` for the same figure on the dark
+            palette (the exported PDF stays white for print).
         pdf_path: Output path for the PDF when ``style="publication"``. Defaults
             to ``figures/state_trajectories.pdf``.
 
@@ -335,7 +336,7 @@ def plot_states(
         include_private=include_private,
     )
 
-    publication = style == "publication"
+    publication = style in ("publication", "publication_dark")
     colors = publication_trace_colors() if publication else None
 
     n_cols = min(cols, len(components))
@@ -348,7 +349,9 @@ def plot_states(
 
     fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=subplot_titles)
     if publication:
-        apply_publication_plotly_layout(fig, n_rows=n_rows, n_cols=n_cols)
+        apply_publication_plotly_layout(
+            fig, n_rows=n_rows, n_cols=n_cols, dark=style == "publication_dark"
+        )
     else:
         fig.update_layout(title_text="State Trajectories", template="plotly_dark")
 
@@ -527,9 +530,10 @@ def plot_controls(
             ``("thrust_force", 2)``, ``"thrust_force:2"``, or ``"thrust_force[2]"``.
         include_private: Whether to include private controls (names starting with '_')
         cols: Maximum number of columns in subplot grid
-        style: ``"dark"`` for the default Plotly theme, or ``"publication"`` for
-            a white theme with Latin Modern fonts, LaTeX labels, and automatic
-            PDF export.
+        style: ``"dark"`` for the default Plotly theme, ``"publication"`` for a
+            white theme with Latin Modern fonts, LaTeX labels, and automatic PDF
+            export, or ``"publication_dark"`` for the same figure on the dark
+            palette (the exported PDF stays white for print).
         pdf_path: Output path for the PDF when ``style="publication"``. Defaults
             to ``figures/control_trajectories.pdf``.
 
@@ -550,7 +554,7 @@ def plot_controls(
         include_private=include_private,
     )
 
-    publication = style == "publication"
+    publication = style in ("publication", "publication_dark")
     colors = publication_trace_colors() if publication else None
 
     n_cols = min(cols, len(components))
@@ -563,7 +567,9 @@ def plot_controls(
 
     fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=subplot_titles)
     if publication:
-        apply_publication_plotly_layout(fig, n_rows=n_rows, n_cols=n_cols)
+        apply_publication_plotly_layout(
+            fig, n_rows=n_rows, n_cols=n_cols, dark=style == "publication_dark"
+        )
     else:
         fig.update_layout(title_text="Control Trajectories", template="plotly_dark")
 

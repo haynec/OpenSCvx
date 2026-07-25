@@ -42,6 +42,7 @@ if project_root not in sys.path:
 
 import openscvx as ox
 from openscvx import Problem
+from openscvx.plotting import apply_publication_plotly_layout
 
 # ── Horizon (notebook: dt=0.05, 100 steps → T=5 s) ───────────────────────────
 N = 51
@@ -51,6 +52,11 @@ TF = 5.0
 DIFFDRIVE_GOAL = np.array([2.0, 0.0])
 POINT_GOAL = np.array([-2.0, 0.0])
 BICYCLE_GOAL = np.array([0.0, 2.0])
+
+# Diff-drive, point mass, bicycle — in that order, shared by the matplotlib
+# animation and the Plotly figure so an agent keeps one color across both.
+# These are matplotlib's "C0"/"C1"/"C2" spelled as hex, which Plotly also accepts.
+AGENT_COLORS = ("#1f77b4", "#ff7f0e", "#2ca02c")
 
 # ── Cost weights (match notebook structure) ──────────────────────────────────
 CTRL_WEIGHT = 0.1
@@ -273,7 +279,7 @@ def animate_ilqgames_three_agent(
     import matplotlib.animation as mpl_animation
     import matplotlib.pyplot as plt
 
-    colors = ("C0", "C1", "C2")
+    dd_color, pt_color, bc_color = AGENT_COLORS
     goals = (DIFFDRIVE_GOAL, POINT_GOAL, BICYCLE_GOAL)
     n_frames = len(diffdrive)
 
@@ -286,7 +292,7 @@ def animate_ilqgames_three_agent(
         ax.set_ylim(-2.5, 2.5)
         ax.axis("off")
 
-        for goal, color in zip(goals, colors):
+        for goal, color in zip(goals, AGENT_COLORS):
             ax.plot(
                 goal[0],
                 goal[1],
@@ -306,7 +312,7 @@ def animate_ilqgames_three_agent(
             diffdrive[: t + 1, 1],
             linestyle="-",
             linewidth=5,
-            color="C0",
+            color=dd_color,
             alpha=0.5,
         )
         ax.plot(
@@ -315,7 +321,7 @@ def animate_ilqgames_three_agent(
             linestyle="",
             marker=(4, 0, dd_angle + 45),
             markersize=30,
-            color="C0",
+            color=dd_color,
         )
         ax.plot(
             dd_xt[0] + np.cos(dd_theta) * 0.32,
@@ -323,7 +329,7 @@ def animate_ilqgames_three_agent(
             linestyle="",
             marker=(3, 0, dd_angle + 30),
             markersize=15,
-            color="C0",
+            color=dd_color,
         )
 
         # Point mass: circle body + velocity heading
@@ -335,7 +341,7 @@ def animate_ilqgames_three_agent(
             point[: t + 1, 1],
             linestyle="-",
             linewidth=5,
-            color="C1",
+            color=pt_color,
             alpha=0.5,
         )
         ax.plot(
@@ -344,7 +350,7 @@ def animate_ilqgames_three_agent(
             linestyle="",
             marker="o",
             markersize=25,
-            color="C1",
+            color=pt_color,
         )
         ax.plot(
             pt_xt[0] + np.cos(pt_theta) * 0.36,
@@ -352,7 +358,7 @@ def animate_ilqgames_three_agent(
             linestyle="",
             marker=(3, 0, pt_angle + 30),
             markersize=15,
-            color="C1",
+            color=pt_color,
         )
 
         # Bicycle: diamond body + heading tick
@@ -364,7 +370,7 @@ def animate_ilqgames_three_agent(
             bicycle[: t + 1, 1],
             linestyle="-",
             linewidth=5,
-            color="C2",
+            color=bc_color,
             alpha=0.5,
         )
         ax.plot(
@@ -373,7 +379,7 @@ def animate_ilqgames_three_agent(
             linestyle="",
             marker=(4, 0, bc_angle + 45),
             markersize=30,
-            color="C2",
+            color=bc_color,
         )
         ax.plot(
             bc_xt[0] + np.cos(bc_theta) * 0.33,
@@ -381,7 +387,7 @@ def animate_ilqgames_three_agent(
             linestyle="",
             marker=(3, 0, bc_angle + 30),
             markersize=15,
-            color="C2",
+            color=bc_color,
         )
         return []
 
@@ -410,18 +416,15 @@ def plot_ilqgames_three_agent(results, *, width: int = 720, height: int = 720):
     """Plot planar trajectories for all three agents."""
     import plotly.graph_objects as go
 
-    from openscvx.plotting.publication import LM_PLOTLY_FONT as _LM_PLOTLY_FONT
-    from openscvx.plotting.publication import LM_PLOTLY_TICK_FONT as _LM_PLOTLY_TICK_FONT
-
     traj = results.trajectory
     dd = np.asarray(traj["diffdrive_pos"], dtype=np.float64)
     pt = np.asarray(traj["point_pos"], dtype=np.float64)
     bc = np.asarray(traj["bicycle_pos"], dtype=np.float64)
 
     goals = [
-        (DIFFDRIVE_GOAL, "diff-drive", "#1f77b4"),
-        (POINT_GOAL, "point mass", "#ff7f0e"),
-        (BICYCLE_GOAL, "bicycle", "#2ca02c"),
+        (DIFFDRIVE_GOAL, "diff-drive", AGENT_COLORS[0]),
+        (POINT_GOAL, "point mass", AGENT_COLORS[1]),
+        (BICYCLE_GOAL, "bicycle", AGENT_COLORS[2]),
     ]
     paths = [dd, pt, bc]
 
@@ -455,23 +458,16 @@ def plot_ilqgames_three_agent(results, *, width: int = 720, height: int = 720):
             )
         )
 
+    # Square, aspect-locked planar view: the size comes from the data, not from a
+    # panel grid, so pass width/height explicitly.
+    apply_publication_plotly_layout(fig, width=width, height=height)
     fig.update_layout(
         title="Three-agent iLQGames scenario (OpenSCvx cooperative port)",
         xaxis_title=r"$x$",
         yaxis_title=r"$y$",
         yaxis={"scaleanchor": "x", "scaleratio": 1},
-        template="simple_white",
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=_LM_PLOTLY_FONT,
-        autosize=False,
-        width=width,
-        height=height,
-        margin={"l": 60, "r": 40, "t": 48, "b": 60},
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0.0},
     )
-    fig.update_xaxes(title_font=_LM_PLOTLY_FONT, tickfont=_LM_PLOTLY_TICK_FONT)
-    fig.update_yaxes(title_font=_LM_PLOTLY_FONT, tickfont=_LM_PLOTLY_TICK_FONT)
     return fig
 
 

@@ -666,9 +666,10 @@ if __name__ == "__main__":
         radii=[np.array([1 / obstacle_radius] * 3) for _ in obstacle_centers],
     )
 
-    # Ghost of all MPC horizons (faint background)
-    all_horizon_points = np.concatenate(horizon_trajectories, axis=0)
-    add_ghost_trajectory(server, all_horizon_points, all_horizon_colors)
+    # Ghost of all MPC horizons (faint background), one path per horizon so the last
+    # node of one plan is not joined to the first node of the next
+    for step_idx, (horizon, colors) in enumerate(zip(horizon_trajectories, horizon_colors)):
+        add_ghost_trajectory(server, horizon, colors, name=f"/ghost_horizon_{step_idx}")
 
     # Animated actual trail (grows as drone flies)
     _, update_trail = add_animated_trail(server, actual_path, actual_colors)

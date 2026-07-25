@@ -20,6 +20,8 @@ Discrete dynamics at impulsive nodes:
 
 import os
 import sys
+from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -34,8 +36,16 @@ if grandparent_dir not in sys.path:
     sys.path.append(grandparent_dir)
 
 import openscvx as ox
+from examples.animations._camera import look_at_wxyz
 from openscvx import Problem
-from openscvx.plotting import plot_controls, plot_states
+from openscvx.plotting import (
+    PublicationFigure,
+    apply_latin_modern_to_axis,
+    apply_publication_plotly_layout,
+    latin_modern_fontproperties,
+    plot_controls,
+    plot_states,
+)
 
 # Discretization
 n = 60
@@ -190,6 +200,11 @@ plotting_dict = {
     "v_x0": v_x0,
 }
 
+# The Plotly figure and the matplotlib PDF draw the same wide side-scroller, so
+# they share one geometry: inches for matplotlib, the same box in pixels for Plotly.
+FIGURE_DPI = 100
+FIGURE_SIZE_IN = (10.0, 3.2)
+
 
 def _extract_multishot_position_segments(results) -> list[np.ndarray]:
     """Extract per-segment propagated states from SCP discretization history."""
@@ -264,9 +279,6 @@ def _plot_flappy(
     """
     import plotly.graph_objects as go
 
-    from openscvx.plotting.publication import LM_PLOTLY_FONT as _LM_PLOTLY_FONT
-    from openscvx.plotting.publication import LM_PLOTLY_TICK_FONT as _LM_PLOTLY_TICK_FONT
-
     pos_nodes = np.asarray(results.nodes["position"])
     fig = go.Figure()
 
@@ -334,46 +346,46 @@ def _plot_flappy(
             opacity=0.45,
             line_width=0,
         )
+
+    # Wide, aspect-locked side-scroller: the size comes from the data, not from a
+    # panel grid, so pass the shared geometry explicitly.
+    apply_publication_plotly_layout(
+        fig,
+        width=int(FIGURE_SIZE_IN[0] * FIGURE_DPI),
+        height=int(FIGURE_SIZE_IN[1] * FIGURE_DPI),
+    )
     fig.update_layout(
         title="Flappy Bird trajectory (impulsive y flaps)",
         xaxis_title=r"$x$",
         yaxis_title=r"$y$",
         yaxis={"scaleanchor": "x", "scaleratio": 1},
         showlegend=True,
-        template="simple_white",
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=_LM_PLOTLY_FONT,
-        legend={"font": _LM_PLOTLY_FONT},
     )
-    fig.update_xaxes(title_font=_LM_PLOTLY_FONT, tickfont=_LM_PLOTLY_TICK_FONT)
-    fig.update_yaxes(title_font=_LM_PLOTLY_FONT, tickfont=_LM_PLOTLY_TICK_FONT)
     return fig
 
 
 def save_flappy_bird_pdf(
     results,
     pipes,
-    path,
+    path=None,
     pipe_width=pipe_width,
     pipe_buffer=pipe_buffer,
     world_y=world_y,
 ) -> None:
-    """Save the Flappy Bird trajectory figure as a PDF (Latin Modern via matplotlib)."""
-    from pathlib import Path
+    """Save the Flappy Bird trajectory figure as a PDF (Latin Modern via matplotlib).
 
+    Mirrors :func:`_plot_flappy` on the matplotlib backend, which is the only one
+    that can embed Latin Modern in a PDF. ``path`` defaults to
+    ``figures/flappy_bird.pdf``.
+    """
     import matplotlib.pyplot as plt
     from matplotlib.patches import Rectangle
 
-    from openscvx.plotting.publication import (
-        latin_modern_fontproperties as _latin_modern_fontproperties,
-    )
-
-    lm_fp = _latin_modern_fontproperties()
+    lm_fp = latin_modern_fontproperties()
     if lm_fp is None:
         print("[plot] Latin Modern OTF not found; PDF will use matplotlib default serif.")
 
-    fig, ax = plt.subplots(figsize=(10.0, 3.2), dpi=100)
+    fig, ax = plt.subplots(figsize=FIGURE_SIZE_IN, dpi=FIGURE_DPI)
     fig.patch.set_facecolor("white")
     ax.set_facecolor("white")
 
@@ -439,9 +451,7 @@ def save_flappy_bird_pdf(
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel(r"$x$", fontproperties=lm_fp)
     ax.set_ylabel(r"$y$", fontproperties=lm_fp)
-    if lm_fp is not None:
-        for lbl in ax.get_xticklabels() + ax.get_yticklabels():
-            lbl.set_fontproperties(lm_fp)
+    apply_latin_modern_to_axis(ax, lm_fp)
 
     leg = ax.legend(
         loc="upper center", bbox_to_anchor=(0.5, -0.18), ncol=1, frameon=False, prop=lm_fp
@@ -452,43 +462,11 @@ def save_flappy_bird_pdf(
 
     fig.subplots_adjust(left=0.08, right=0.98, bottom=0.28, top=0.98)
 
-    out = Path(path)
+    out = Path(path) if path is not None else Path("figures/flappy_bird.pdf")
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, format="pdf", bbox_inches="tight", facecolor="white")
     plt.close(fig)
     print(f"[plot] Saved Flappy Bird figure to {out.resolve()}")
-
-
-class FlappyBirdFigure:
-    """Plotly figure with Latin Modern ``show()`` and matplotlib ``save_pdf()``."""
-
-    __slots__ = ("_fig", "_results", "_pipes", "_pipe_width", "_pipe_buffer", "_world_y")
-
-    def __init__(self, fig, results, pipes, pipe_width, pipe_buffer, world_y) -> None:
-        self._fig = fig
-        self._results = results
-        self._pipes = pipes
-        self._pipe_width = pipe_width
-        self._pipe_buffer = pipe_buffer
-        self._world_y = world_y
-
-    def show(self, *args, **kwargs) -> None:
-        from openscvx.plotting.publication import show_plotly_with_latin_modern
-
-        show_plotly_with_latin_modern(self._fig)
-
-    def save_pdf(self, path) -> None:
-        save_flappy_bird_pdf(
-            self._results,
-            self._pipes,
-            path,
-            pipe_width=self._pipe_width,
-            pipe_buffer=self._pipe_buffer,
-            world_y=self._world_y,
-        )
-
-    def __getattr__(self, name: str):
-        return getattr(self._fig, name)
 
 
 def plot_flappy(
@@ -497,8 +475,14 @@ def plot_flappy(
     pipe_width=pipe_width,
     pipe_buffer=pipe_buffer,
     world_y=world_y,
-) -> FlappyBirdFigure:
-    """Plot Flappy Bird trajectory with pipes (white theme, Latin Modern, LaTeX labels)."""
+) -> PublicationFigure:
+    """Plot Flappy Bird trajectory with pipes (white theme, Latin Modern, LaTeX labels).
+
+    Returns a :class:`~openscvx.plotting.PublicationFigure`: ``show()`` opens the
+    Plotly figure with Latin Modern embedded, ``save_pdf(path)`` renders the same
+    scene through matplotlib (Plotly's PDF export cannot embed the font). Nothing
+    is written to disk until ``save_pdf`` is called.
+    """
     fig = _plot_flappy(
         results,
         pipes,
@@ -506,7 +490,17 @@ def plot_flappy(
         pipe_buffer=pipe_buffer,
         world_y=world_y,
     )
-    return FlappyBirdFigure(fig, results, pipes, pipe_width, pipe_buffer, world_y)
+    return PublicationFigure(
+        fig,
+        partial(
+            save_flappy_bird_pdf,
+            results,
+            pipes,
+            pipe_width=pipe_width,
+            pipe_buffer=pipe_buffer,
+            world_y=world_y,
+        ),
+    )
 
 
 def _xy_to_scene(xy: np.ndarray, z: float = 0.0) -> np.ndarray:
@@ -574,6 +568,39 @@ def _add_flappy_pipes(
         )
 
 
+def _flappy_scene(
+    pipes,
+    pipe_width: float,
+    pipe_buffer: float,
+    world_y: tuple[float, float],
+    x_final: float,
+) -> "viser.ViserServer":
+    """Fresh Viser server holding the static side-scroller scene: sky and pipes.
+
+    Both the trajectory animation and the SCP-iteration viewer start here and then
+    add their own dynamic content. ``openscvx.plotting.viser.create_server`` is
+    deliberately not used: this scene plays in the x–y plane, so it needs
+    ``set_up_direction("+y")`` and a painted sky rather than the ground grid
+    ``create_server`` derives from the trajectory.
+    """
+    import viser
+
+    server = viser.ViserServer()
+    server.scene.set_up_direction("+y")
+    server.gui.configure_theme(dark_mode=True, titlebar_content=None)
+
+    # Sky gradient backdrop (large thin quad behind the gameplay plane)
+    sky_w = max(x_final + 6.0, 40.0)
+    server.scene.add_box(
+        "/backdrop/sky",
+        dimensions=(sky_w, world_y[1] - world_y[0], 0.02),
+        position=(sky_w / 2 - 2.0, (world_y[0] + world_y[1]) / 2, -0.5),
+        color=(120, 190, 255),
+    )
+    _add_flappy_pipes(server, pipes, pipe_width, pipe_buffer, world_y)
+    return server
+
+
 def _flappy_follow_camera_pose(
     t: float,
     *,
@@ -588,11 +615,6 @@ def _flappy_follow_camera_pose(
     Camera x = ``x0 + v_x * t`` (no vertical motion). Look-at shares that x at a
     fixed mid-world y so orientation stays level while the bird flaps independently.
     """
-    examples_dir = os.path.dirname(current_dir)
-    if examples_dir not in sys.path:
-        sys.path.insert(0, examples_dir)
-    from animations._camera import look_at_wxyz
-
     cam_x = float(x0 + v_x * t)
     cam_y = 0.5 * (world_y[0] + world_y[1]) + cam_y_offset
     look_y = 0.5 * (world_y[0] + world_y[1])
@@ -619,7 +641,6 @@ def create_flappy_bird_viser_server(
     full route immediately; the cyan trace and point cloud grow during playback (press
     Play in the Animation folder). The camera scrolls at constant ``v_x`` with fixed height.
     """
-    import viser
     import viser.transforms as vtf
 
     from openscvx.algorithms import OptimizationResults
@@ -650,20 +671,7 @@ def create_flappy_bird_viser_server(
     vel3 = _xy_to_scene(vel_xy)
     colors = compute_velocity_colors(vel3)
 
-    server = viser.ViserServer()
-    server.scene.set_up_direction("+y")
-    server.gui.configure_theme(dark_mode=True, titlebar_content=None)
-
-    # Sky gradient backdrop (large thin quads)
-    sky_w = max(x_final + 6.0, 40.0)
-    server.scene.add_box(
-        "/backdrop/sky",
-        dimensions=(sky_w, world_y[1] - world_y[0], 0.02),
-        position=(sky_w / 2 - 2.0, (world_y[0] + world_y[1]) / 2, -0.5),
-        color=(120, 190, 255),
-    )
-
-    _add_flappy_pipes(server, pipes, pipe_width, pipe_buffer, world_y)
+    server = _flappy_scene(pipes, pipe_width, pipe_buffer, world_y, x_final)
 
     # Finish line
     server.scene.add_box(
@@ -781,9 +789,7 @@ def create_flappy_bird_viser_server(
 
     @server.on_client_connect
     def _on_client_connect(client) -> None:
-        cam_pos, cam_wxyz, look_at = _flappy_follow_camera_pose(
-            float(t_arr[0]), world_y=world_y
-        )
+        cam_pos, cam_wxyz, look_at = _flappy_follow_camera_pose(float(t_arr[0]), world_y=world_y)
         client.camera.position = tuple(float(x) for x in cam_pos)
         client.camera.wxyz = tuple(float(x) for x in cam_wxyz)
         client.camera.look_at = tuple(float(x) for x in look_at)
@@ -822,8 +828,6 @@ def create_flappy_bird_scp_viser_server(
     Steps through SCP iterations to show how the discrete trajectory and integrated
     segments converge. Uses a separate Viser port from ``create_flappy_bird_viser_server``.
     """
-    import viser
-
     from openscvx.algorithms import OptimizationResults
     from openscvx.plotting.viser import (
         add_scp_animation_controls,
@@ -851,18 +855,7 @@ def create_flappy_bird_scp_viser_server(
     positions = [_xy_to_scene(X[:, position_slice]) for X in X_history]
     n_iterations = len(positions)
 
-    server = viser.ViserServer()
-    server.scene.set_up_direction("+y")
-    server.gui.configure_theme(dark_mode=True, titlebar_content=None)
-
-    sky_w = max(x_final + 6.0, 40.0)
-    server.scene.add_box(
-        "/backdrop/sky",
-        dimensions=(sky_w, world_y[1] - world_y[0], 0.02),
-        position=(sky_w / 2 - 2.0, (world_y[0] + world_y[1]) / 2, -0.5),
-        color=(120, 190, 255),
-    )
-    _add_flappy_pipes(server, pipes, pipe_width, pipe_buffer, world_y)
+    server = _flappy_scene(pipes, pipe_width, pipe_buffer, world_y, x_final)
 
     update_callbacks = []
 

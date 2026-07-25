@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import numpy as np
+import trimesh
 import viser
 from scipy.interpolate import CubicSpline, PchipInterpolator
 
+from examples.drone._terrain import heightfield_mesh
 from examples.drone.logo_utils.quadrotor_mesh import make_quadrotor_mesh
 from openscvx.algorithms import OptimizationResults
 from openscvx.plotting.viser import compute_velocity_colors, create_server
@@ -131,10 +133,7 @@ def create_moving_safe_columns_server(
         xk = np.asarray(xk, dtype=float)
         yk = np.asarray(yk, dtype=float)
         centers = np.array(
-            [
-                _column_center_at(float(t), t_knots, xk, yk, method=interp_method)
-                for t in traj_time
-            ],
+            [_column_center_at(float(t), t_knots, xk, yk, method=interp_method) for t in traj_time],
             dtype=np.float64,
         )
         centers_over_time.append(centers)
@@ -199,5 +198,133 @@ def create_moving_safe_columns_server(
     @server.on_client_connect
     def _on_connect(client) -> None:
         client.camera.fov = float(np.radians(float(fov_slider.value)))
+
+    return server
+
+
+def create_lunar_terrain_agl_server(
+    results: OptimizationResults,
+    *,
+    mesh_grid: int = 256,
+    vehicle_scale: float = 20.0,
+    loop_animation: bool = True,
+    dark_mode: bool = True,
+) -> viser.ViserServer:
+    """Viser animation: quadrotor flying an AGL band over the SENNS lunar DEM.
+
+    Reads the terrain grid (``x_grid``, ``y_grid``, ``H``), the AGL band
+    (``agl_target``, ``agl_tol``) and the endpoints (``start``, ``goal``) that
+    ``lunar_terrain_agl.py`` stashes on ``results``, and renders the DEM as a
+    lit heightfield beneath the flown trajectory.
+
+    Args:
+        results: Post-processed results carrying the trajectory and the terrain
+            entries listed above.
+        mesh_grid: Cap on the terrain mesh resolution per axis. The DEM is
+            decimated by an integer stride to reach it, so a fine solver grid
+            stays cheap to render.
+        vehicle_scale: Uniform scale on the quadrotor mesh. The default makes the
+            vehicle readable against a few-hundred-metre terrain patch.
+        loop_animation: Restart playback at the end of the trajectory.
+        dark_mode: Use the dark viser theme.
+    """
+    traj = results.trajectory
+    pos = np.asarray(traj["position"], dtype=np.float64)
+    vel = np.asarray(traj["velocity"], dtype=np.float64)
+    att = np.asarray(traj["attitude"], dtype=np.float64)
+    traj_time = np.asarray(traj["time"], dtype=np.float64).reshape(-1)
+    if traj_time.size != len(pos):
+        traj_time = np.linspace(0.0, float(traj_time[-1]) if traj_time.size else 1.0, len(pos))
+
+    x_grid = np.asarray(results["x_grid"], dtype=np.float64)
+    y_grid = np.asarray(results["y_grid"], dtype=np.float64)
+    H = np.asarray(results["H"], dtype=np.float64)
+    agl_target = float(results["agl_target"])
+    agl_tol = float(results["agl_tol"])
+    start = np.asarray(results["start"], dtype=np.float64)
+    goal = np.asarray(results["goal"], dtype=np.float64)
+
+    server = create_server(pos, dark_mode=dark_mode, show_grid=False)
+    server.scene.set_up_direction("+z")
+    print(f"  Lunar terrain AGL → http://localhost:{server.get_port()}")
+    print("  Press Play in the Animation folder.  Ctrl-C to exit.")
+
+    stride = max(1, -(-max(H.shape) // int(mesh_grid)))
+    verts, faces, colors = heightfield_mesh(
+        x_grid[::stride], y_grid[::stride], H[::stride, ::stride]
+    )
+    server.scene.add_mesh_trimesh(
+        "/terrain",
+        trimesh.Trimesh(vertices=verts, faces=faces, vertex_colors=colors, process=False),
+    )
+
+    if len(pos) >= 2:
+        ghost_segs = np.stack([pos[:-1], pos[1:]], axis=1).astype(np.float32)
+        server.scene.add_line_segments(
+            "/trajectory/full",
+            ghost_segs,
+            np.tile(np.array([180, 180, 190], dtype=np.uint8), (len(ghost_segs), 2, 1)),
+            line_width=2.0,
+        )
+
+    trail_colors = compute_velocity_colors(vel, fallback_length=len(pos))
+    _, update_trail = add_animated_trail(server, pos.astype(np.float32), trail_colors)
+
+    server.scene.add_icosphere(
+        "/start",
+        radius=4.0,
+        color=(30, 200, 80),
+        position=tuple(float(x) for x in start),
+    )
+    server.scene.add_icosphere(
+        "/goal",
+        radius=4.0,
+        color=(220, 50, 50),
+        position=tuple(float(x) for x in goal),
+    )
+
+    mesh_verts, mesh_faces = make_quadrotor_mesh(scale=vehicle_scale)
+    mesh_handle = server.scene.add_mesh_simple(
+        "/vehicle_mesh",
+        vertices=np.asarray(mesh_verts, dtype=np.float32),
+        faces=np.asarray(mesh_faces, dtype=np.uint32),
+        color=(200, 200, 210),
+        position=tuple(float(x) for x in pos[0]),
+        wxyz=tuple(float(x) for x in att[0]),
+    )
+
+    def update_vehicle(frame_idx: int) -> None:
+        mesh_handle.position = tuple(float(x) for x in pos[frame_idx])
+        mesh_handle.wxyz = tuple(float(x) for x in att[frame_idx])
+
+    add_animation_controls(
+        server,
+        traj_time,
+        [update_trail, update_vehicle],
+        loop=loop_animation,
+    )
+    update_trail(0)
+    update_vehicle(0)
+
+    dx = float(x_grid[1] - x_grid[0]) * stride
+    with server.gui.add_folder("Legend"):
+        server.gui.add_markdown(
+            f"**Terrain** — SENNS lunar DEM, {H.shape[0]}² samples "
+            f"rendered at ~{dx:.1f} m spacing  \n"
+            f"**Mesh + trail** — 6DoF quadrotor, trail colored by speed (press Play)  \n"
+            f"**Green / red spheres** — start / goal  \n"
+            f"Spec: AGL ∈ [{agl_target - agl_tol:.0f}, {agl_target + agl_tol:.0f}] m "
+            f"enforced continuously (CTCS)"
+        )
+
+    mid = pos[len(pos) // 2]
+    span = float(x_grid[-1] - x_grid[0])
+    server.initial_camera.position = (
+        float(mid[0]),
+        float(mid[1] - 0.6 * span),
+        float(mid[2] + 0.35 * span),
+    )
+    server.initial_camera.look_at = (float(mid[0]), float(mid[1]), float(mid[2]))
+    server.initial_camera.up = (0.0, 0.0, 1.0)
 
     return server

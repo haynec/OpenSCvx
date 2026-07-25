@@ -317,40 +317,20 @@ def plot_mpc_results(
     from plotly.subplots import make_subplots
     from time2spatial import transformProj2Orig
 
+    from examples.race_cars._plotting import acceleration_figure, stack_height, track_figure
+
     # Convert closed-loop trajectory to Cartesian
     cart_x, cart_y, _, _ = transformProj2Orig(
         simX[:, 0], simX[:, 1], simX[:, 2], simX[:, 3], "LMS_Track.txt"
     )
 
-    # Track geometry
-    sref_d, xref_d, yref_d, psiref_d, _ = getTrack("LMS_Track.txt")
-    dist = 0.12
-    xbl = xref_d - dist * np.sin(psiref_d)
-    ybl = yref_d + dist * np.cos(psiref_d)
-    xbr = xref_d + dist * np.sin(psiref_d)
-    ybr = yref_d - dist * np.cos(psiref_d)
-
     # ── Figure 1: track projection ────────────────────────────────────────────
-    fig1 = go.Figure()
-    fig1.add_trace(
-        go.Scatter(
-            x=xref_d,
-            y=yref_d,
-            mode="lines",
-            line=dict(color="black", dash="dash", width=1),
-            name="centreline",
-        )
+    fig1 = track_figure(
+        "LMS_Track.txt",
+        LANE_WIDTH,
+        title=f"OpenSCvx MPC — track projection  ({len(simX)} steps, T={t_vec[-1]:.2f} s)",
+        distance_marker_step=1.0,
     )
-    for xb, yb in [(xbl, ybl), (xbr, ybr)]:
-        fig1.add_trace(
-            go.Scatter(
-                x=xb,
-                y=yb,
-                mode="lines",
-                line=dict(color="black", width=1.5),
-                showlegend=False,
-            )
-        )
 
     # MPC horizon roll-outs (faint background)
     first = True
@@ -387,68 +367,40 @@ def plot_mpc_results(
             name="closed-loop",
         )
     )
-
-    # Arc-length markers
-    for i in range(int(sref_d[-1]) + 1):
-        k = int(np.argmin(np.abs(sref_d - i)))
-        fig1.add_annotation(
-            x=xref_d[k],
-            y=yref_d[k],
-            text=f"{i}m",
-            showarrow=False,
-            font=dict(size=10),
-        )
-
-    fig1.update_layout(
-        title=f"OpenSCvx MPC — track projection  ({len(simX)} steps, T={t_vec[-1]:.2f} s)",
-        xaxis=dict(title="x [m]", scaleanchor="y"),
-        yaxis=dict(title="y [m]"),
-        height=600,
-    )
     fig1.show()
 
     # ── Figure 2: states & controls vs time ───────────────────────────────────
+    # ``plot_states``/``plot_controls`` cannot draw this one: they take an
+    # ``OptimizationResults``, and a closed-loop run has raw (N, 6) arrays
+    # instead. The layout mirrors theirs so the two read the same.
     labels_x = ["s [m]", "n [m]", "α [rad]", "v [m/s]", "D [-]", "δ [rad]"]
     labels_u = ["Ḋ [1/s]", "δ̇ [rad/s]"]
-    n_states = 6
+    rows = len(labels_x) + len(labels_u)
 
     fig2 = make_subplots(
-        rows=n_states + 2,
+        rows=rows,
         cols=1,
         shared_xaxes=True,
         subplot_titles=labels_x + labels_u,
         vertical_spacing=0.03,
     )
-    colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b"]
-    for i in range(n_states):
+    for i, name in enumerate(labels_x):
         fig2.add_trace(
-            go.Scatter(
-                x=t_vec,
-                y=simX[:, i],
-                mode="lines",
-                line=dict(color=colors[i]),
-                name=labels_x[i],
-                showlegend=False,
-            ),
+            go.Scatter(x=t_vec, y=simX[:, i], mode="lines", name=name, showlegend=False),
             row=i + 1,
             col=1,
         )
     for i, name in enumerate(labels_u):
         fig2.add_trace(
-            go.Scatter(
-                x=t_vec,
-                y=simU[:, i],
-                mode="lines",
-                name=name,
-                showlegend=False,
-            ),
-            row=n_states + i + 1,
+            go.Scatter(x=t_vec, y=simU[:, i], mode="lines", name=name, showlegend=False),
+            row=len(labels_x) + i + 1,
             col=1,
         )
-    fig2.update_xaxes(title_text="t [s]", row=n_states + 2, col=1)
+    fig2.update_xaxes(title_text="t [s]", row=rows, col=1)
     fig2.update_layout(
         title="OpenSCvx MPC — states & controls",
-        height=1000,
+        template="plotly_dark",
+        height=stack_height(rows),
     )
     fig2.show()
 
@@ -460,22 +412,13 @@ def plot_mpc_results(
     a_lat_np = C2 * vs**2 * dels + Fxd_np * np.sin(C1 * dels) / m
     a_long_np = Fxd_np / m
 
-    fig3 = go.Figure()
-    fig3.add_trace(go.Scatter(x=t_vec, y=a_lat_np, name="a_lat", line=dict(color="blue")))
-    fig3.add_trace(go.Scatter(x=t_vec, y=a_long_np, name="a_long", line=dict(color="orange")))
-    for sign, show in [(1, True), (-1, False)]:
-        fig3.add_hline(
-            y=sign * A_MAX,
-            line=dict(color="black", dash="dash", width=1),
-            annotation_text="±bound" if show else None,
-        )
-    fig3.update_layout(
+    acceleration_figure(
+        t_vec,
+        a_lat_np,
+        a_long_np,
+        a_max=A_MAX,
         title="OpenSCvx MPC — lateral & longitudinal acceleration",
-        xaxis_title="t [s]",
-        yaxis_title="acceleration [m/s²]",
-        height=400,
-    )
-    fig3.show()
+    ).show()
 
 
 # ── Main: closed-loop MPC simulation ──────────────────────────────────────────
@@ -571,7 +514,10 @@ if __name__ == "__main__":
     if os.environ.get("OPENSCVX_NO_PLOT") is None:
         plot_mpc_results(simX, simU, t_sim, horizon_snapshots)
 
-        from race_car_viser import create_race_car_chase_viser_server, create_race_car_viser_server
+        from examples.race_cars._viser import (
+            create_race_car_chase_viser_server,
+            create_race_car_viser_server,
+        )
 
         create_race_car_viser_server(
             simX=simX,

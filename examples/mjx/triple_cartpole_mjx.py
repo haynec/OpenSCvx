@@ -540,7 +540,7 @@ def visualize(results) -> None:
         target_radius=0.05,
         snapshot_builder=_cartpole_snapshot_builder,
         initial_n_snapshots=5,
-        ghost_point_size=0.02,
+        ghost_line_width=2.0,
         show_grid=True,
     )
     snapshot_server.scene.set_up_direction("+z")

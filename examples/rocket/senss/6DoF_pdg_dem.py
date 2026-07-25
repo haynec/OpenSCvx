@@ -23,7 +23,6 @@ from __future__ import annotations
 import contextlib
 import io
 import os
-import queue
 import sys
 import threading
 import time
@@ -34,9 +33,7 @@ jax.config.update("jax_enable_x64", True)
 
 import matplotlib
 import numpy as np
-import trimesh
 import viser
-from PIL import Image
 
 # ── Path setup ────────────────────────────────────────────────────────────────
 # File lives in examples/rocket/senss/ — three parents up is the repo root.
@@ -47,13 +44,21 @@ if _repo_root not in sys.path:
 import openscvx as ox
 from examples.plotting_viser import (
     build_scp_step_results,
-    compute_velocity_colors_realtime,
     extract_multishoot_trajectory,
     format_metrics_markdown,
     get_print_queue_data,
 )
+from examples.rocket.senss._dem import (
+    DemPlacement,
+    DemShading,
+    dem_center_norm,
+    dem_info_markdown,
+    dem_trimesh,
+    load_senns_dem,
+    terrain_vertex_normals,
+)
 from openscvx import Problem
-from openscvx.plotting.viser.coordinates import model_vec_to_viser_xyz
+from openscvx.plotting.viser import compute_velocity_colors, model_vec_to_viser_xyz
 from openscvx.utils import printing as _printing
 
 # ── Silence console noise ─────────────────────────────────────────────────────
@@ -65,29 +70,35 @@ _printing.print_results_summary = lambda *a, **k: None
 SCENE_SCALE: float = 2.0           # viser display units per model unit
 DEM_GRID: int = 2048                 # downsampled DEM resolution
 TERRAIN_HALF_EXTENT: float = 15.0  # model-space half-width of terrain patch
-GREY_BASE = np.array([148, 150, 152], dtype=np.float32) / 255.0
 DEFAULT_ELEV_SCALE: float = 6.0    # default DEM vertical exaggeration (model units)
 DEFAULT_Z_OFFSET: float = -3.0     # DEM Z-offset in model units
-_K_AMBIENT: float = 0.03
-_K_PRIMARY: float = 2.5
+DEFAULT_SHADING = DemShading(azimuth_deg=0.0, elevation_deg=5.0, strength=2.5, ambient=0.03)
 _viridis = matplotlib.colormaps["viridis"]
 
-# ── DEM loading ───────────────────────────────────────────────────────────────
-_DEM_PATH = os.path.join(os.path.dirname(__file__), "senns_dem.png")
+# The shared DEM patch measures everything in metres; this example measures the
+# scene in model units, so its "metres per viser unit" is 1 / SCENE_SCALE.
+_TERRAIN_SCENE_SCALE: float = 1.0 / SCENE_SCALE
 
 
-def _load_dem_normalized() -> np.ndarray:
-    img = Image.open(_DEM_PATH)
-    raw = np.array(img, dtype=np.uint16)
-    lo, hi = float(raw.min()), float(raw.max())
-    arr = np.array(img.resize((DEM_GRID, DEM_GRID), Image.BILINEAR), dtype=np.float32)
-    return (arr - lo) / max(hi - lo, 1.0)
+def _terrain_placement(elev_scale: float, z_offset: float) -> DemPlacement:
+    """DEM patch for this example's ``surface = norm * elev + z_offset`` convention.
 
+    The shared patch pins the DEM's *center pixel* to ``origin_m[2]``, so the
+    equivalent offset is ``z_offset`` plus that pixel's own relief.
+    """
+    return DemPlacement(
+        origin_m=(0.0, 0.0, z_offset + dem_center_norm(DEM_GRID) * elev_scale),
+        scale_xyz=(1.0, 1.0, 1.0),
+        yaw_deg=0.0,
+        mirror_xy=(False, False),
+        half_extent_m=TERRAIN_HALF_EXTENT,
+        base_relief_m=elev_scale,
+        grid=DEM_GRID,
+    )
 
-_dem_norm: np.ndarray = _load_dem_normalized()  # (DEM_GRID, DEM_GRID) float32
 
 # DEM height at the centre (default landing point) with default elevation scale
-_DEM_CENTER_H0 = float(_dem_norm[DEM_GRID // 2, DEM_GRID // 2]) * DEFAULT_ELEV_SCALE
+_DEM_CENTER_H0 = dem_center_norm(DEM_GRID) * DEFAULT_ELEV_SCALE
 
 
 def _dem_altitude_at(
@@ -98,6 +109,7 @@ def _dem_altitude_at(
     Row i  ↔  viser-Y  ↔  model-Y.
     Col j  ↔  viser-X  ↔  model-Z.
     """
+    dem = load_senns_dem(DEM_GRID)
     half = TERRAIN_HALF_EXTENT
     frac_i = (model_y + half) / (2.0 * half) * (DEM_GRID - 1)
     frac_j = (model_z + half) / (2.0 * half) * (DEM_GRID - 1)
@@ -107,10 +119,10 @@ def _dem_altitude_at(
     fi = float(np.clip(frac_i - i0, 0.0, 1.0))
     fj = float(np.clip(frac_j - j0, 0.0, 1.0))
     h = (
-        (1 - fi) * (1 - fj) * _dem_norm[i0, j0]
-        + fi * (1 - fj) * _dem_norm[i1, j0]
-        + (1 - fi) * fj * _dem_norm[i0, j1]
-        + fi * fj * _dem_norm[i1, j1]
+        (1 - fi) * (1 - fj) * dem[i0, j0]
+        + fi * (1 - fj) * dem[i1, j0]
+        + (1 - fi) * fj * dem[i0, j1]
+        + fi * fj * dem[i1, j1]
     )
     return float(h) * elev_scale + z_offset
 
@@ -296,83 +308,6 @@ problem = Problem(
 problem.solver.solver_args = {"abstol": 1e-7, "reltol": 1e-7}
 problem.settings.dev.printing = True
 
-# ── Terrain geometry ──────────────────────────────────────────────────────────
-_terrain_faces: np.ndarray  # computed after imports (below)
-
-
-def _make_terrain_faces() -> np.ndarray:
-    N = DEM_GRID
-    r = np.arange(N - 1, dtype=np.int32)
-    c = np.arange(N - 1, dtype=np.int32)
-    i = (r[:, None] * N + c[None, :]).ravel()
-    tris_a = np.stack([i, i + 1, i + N], axis=-1)
-    tris_b = np.stack([i + 1, i + N + 1, i + N], axis=-1)
-    return np.concatenate([tris_a, tris_b], axis=0).astype(np.int32)
-
-
-_terrain_faces = _make_terrain_faces()
-
-
-def _make_terrain_vertices(elev_scale: float, z_offset: float = 0.0) -> np.ndarray:
-    """(N*N, 3) float32 vertex positions including optional vertical offset."""
-    N = DEM_GRID
-    ext = TERRAIN_HALF_EXTENT * SCENE_SCALE
-    xs = np.linspace(-ext, ext, N, dtype=np.float32)
-    ys = np.linspace(-ext, ext, N, dtype=np.float32)
-    XX, YY = np.meshgrid(xs, ys, indexing="xy")
-    ZZ = ((_dem_norm * float(elev_scale) + float(z_offset)) * SCENE_SCALE).astype(np.float32)
-    return np.stack([XX.ravel(), YY.ravel(), ZZ.ravel()], axis=-1)
-
-
-def _compute_vertex_normals(elev_scale: float) -> np.ndarray:
-    """(N*N, 3) unit normals from DEM gradient (normals don't depend on z_offset)."""
-    N = DEM_GRID
-    ext = TERRAIN_HALF_EXTENT * SCENE_SCALE
-    cell = 2.0 * ext / (N - 1)
-    ZZ = _dem_norm * float(elev_scale) * SCENE_SCALE
-    dz_dx = np.gradient(ZZ, cell, axis=1).astype(np.float32)
-    dz_dy = np.gradient(ZZ, cell, axis=0).astype(np.float32)
-    normals = np.stack([-dz_dx.ravel(), -dz_dy.ravel(), np.ones(N * N, dtype=np.float32)], axis=-1)
-    norms = np.linalg.norm(normals, axis=-1, keepdims=True)
-    return normals / np.maximum(norms, 1e-8)
-
-
-def _light_dir(az_deg: float, el_deg: float) -> np.ndarray:
-    az, el = np.radians(az_deg), np.radians(el_deg)
-    return np.array([np.cos(az) * np.cos(el), np.sin(az) * np.cos(el), np.sin(el)], dtype=np.float32)
-
-
-def _bake_vertex_colors(
-    normals: np.ndarray,
-    k_ambient: float,
-    k_primary: float,
-    primary_az: float,
-    primary_el: float,
-    primary_on: bool,
-) -> np.ndarray:
-    L = _light_dir(primary_az, primary_el) if primary_on else None
-    d = np.maximum(0.0, normals @ L) if L is not None else 0.0
-    intensity = np.clip(k_ambient + k_primary * d, 0.0, 1.0)
-    rgb = (GREY_BASE[None, :] * intensity[:, None]).clip(0.0, 1.0)
-    alpha = np.ones((len(rgb), 1), dtype=np.float32)
-    return (np.hstack([rgb, alpha]) * 255).astype(np.uint8)
-
-
-def _build_terrain_trimesh(
-    elev_scale: float,
-    z_offset: float,
-    normals: np.ndarray,
-    k_ambient: float,
-    k_primary: float,
-    primary_az: float,
-    primary_el: float,
-    primary_on: bool,
-) -> trimesh.Trimesh:
-    verts = _make_terrain_vertices(elev_scale, z_offset)
-    colors = _bake_vertex_colors(normals, k_ambient, k_primary, primary_az, primary_el, primary_on)
-    return trimesh.Trimesh(vertices=verts, faces=_terrain_faces, vertex_colors=colors, process=False)
-
-
 # ── Problem parameter sync ────────────────────────────────────────────────────
 
 def _sync_params() -> None:
@@ -416,12 +351,10 @@ def create_dem_realtime_server() -> viser.ViserServer:
     _st: dict = {
         "elev_scale": DEFAULT_ELEV_SCALE,
         "z_offset": DEFAULT_Z_OFFSET,
-        "primary_az": 0.0,
-        "primary_el": 5.0,
-        "primary_on": True,
-        "k_ambient": _K_AMBIENT,
-        "k_primary": _K_PRIMARY,
-        "normals": _compute_vertex_normals(DEFAULT_ELEV_SCALE),
+        "shading": DEFAULT_SHADING,
+        "normals": terrain_vertex_normals(
+            _terrain_placement(DEFAULT_ELEV_SCALE, DEFAULT_Z_OFFSET)
+        ),
         "_lock": threading.Lock(),
         "running": True,
         "reset_requested": False,
@@ -453,16 +386,13 @@ def create_dem_realtime_server() -> viser.ViserServer:
                 _st["target_drag"].position = new_pos
 
     def _refresh_terrain() -> None:
+        placement = _terrain_placement(_st["elev_scale"], _st["z_offset"])
         with _st["_lock"]:
-            mesh = _build_terrain_trimesh(
-                _st["elev_scale"],
-                _st["z_offset"],
-                _st["normals"],
-                _st["k_ambient"],
-                _st["k_primary"],
-                _st["primary_az"],
-                _st["primary_el"],
-                _st["primary_on"],
+            mesh = dem_trimesh(
+                placement,
+                _st["shading"],
+                scene_scale=_TERRAIN_SCENE_SCALE,
+                normals=_st["normals"],
             )
         server.scene.add_mesh_trimesh("/terrain", mesh)
         _update_final_altitude()
@@ -588,7 +518,9 @@ def create_dem_realtime_server() -> viser.ViserServer:
         @elev_sl.on_update
         def _(_e=None) -> None:
             _st["elev_scale"] = float(elev_sl.value)
-            _st["normals"] = _compute_vertex_normals(_st["elev_scale"])
+            _st["normals"] = terrain_vertex_normals(
+                _terrain_placement(_st["elev_scale"], _st["z_offset"])
+            )
             _refresh_terrain()
             _st["reset_requested"] = True
 
@@ -596,36 +528,122 @@ def create_dem_realtime_server() -> viser.ViserServer:
         server.gui.add_markdown("_Lights are baked into DEM vertex colours only._")
         p_on = server.gui.add_checkbox("Primary Light Enabled", initial_value=True)
         p_az = server.gui.add_slider("Azimuth (°)", min=0.0, max=360.0, step=1.0, initial_value=0.0)
-        p_el = server.gui.add_slider("Elevation (°)", min=0.5, max=89.0, step=0.5, initial_value=5.0)
-        p_str = server.gui.add_slider("Strength", min=0.0, max=5.0, step=0.05, initial_value=_K_PRIMARY)
-        amb_sl = server.gui.add_slider("Ambient Level", min=0.0, max=0.5, step=0.005, initial_value=_K_AMBIENT)
+        p_el = server.gui.add_slider(
+            "Elevation (°)",
+            min=0.5,
+            max=89.0,
+            step=0.5,
+            initial_value=5.0,
+        )
+        p_str = server.gui.add_slider(
+            "Strength", min=0.0, max=5.0, step=0.05, initial_value=DEFAULT_SHADING.strength
+        )
+        amb_sl = server.gui.add_slider(
+            "Ambient Level", min=0.0, max=0.5, step=0.005, initial_value=DEFAULT_SHADING.ambient
+        )
 
         def _sync_light(_e=None) -> None:
-            _st["primary_on"] = bool(p_on.value)
-            _st["primary_az"] = float(p_az.value)
-            _st["primary_el"] = float(p_el.value)
-            _st["k_primary"] = float(p_str.value)
-            _st["k_ambient"] = float(amb_sl.value)
+            _st["shading"] = DemShading(
+                azimuth_deg=float(p_az.value),
+                elevation_deg=float(p_el.value),
+                strength=float(p_str.value),
+                ambient=float(amb_sl.value),
+                enabled=bool(p_on.value),
+            )
             _refresh_terrain()
 
         for _ctrl in (p_on, p_az, p_el, p_str, amb_sl):
             _ctrl.on_update(_sync_light)
 
     with server.gui.add_folder("Dynamics / Constraint Parameters"):
-        gI_in = server.gui.add_number("gI", initial_value=float(gI.value), min=0.01, max=20.0, step=0.01)
-        g0_in = server.gui.add_number("g0", initial_value=float(g0.value), min=0.01, max=20.0, step=0.01)
-        isp_in = server.gui.add_number("Isp", initial_value=float(Isp.value), min=1.0, max=500.0, step=1.0)
-        m_dry_in = server.gui.add_number("m_dry", initial_value=float(m_dry.value), min=0.5, max=2.0, step=0.01)
-        v_max_in = server.gui.add_number("v_max", initial_value=float(v_max.value), min=0.1, max=20.0, step=0.05)
-        w_max_in = server.gui.add_number("w_max", initial_value=float(w_max.value), min=0.01, max=5.0, step=0.01)
-        del_max_in = server.gui.add_number("del_max (deg)", initial_value=float(del_max.value), min=1.0, max=89.0, step=0.5)
-        theta_max_in = server.gui.add_number("theta_max (deg)", initial_value=float(theta_max.value), min=1.0, max=89.0, step=0.5)
-        t_min_in = server.gui.add_number("T_min", initial_value=float(T_min.value), min=0.1, max=20.0, step=0.1)
-        t_max_in = server.gui.add_number("T_max", initial_value=float(T_max.value), min=0.1, max=20.0, step=0.1)
-        gamma_in = server.gui.add_number("gamma (deg)", initial_value=float(gamma.value), min=1.0, max=89.0, step=0.5)
-        beta_in = server.gui.add_number("beta", initial_value=float(beta.value), min=0.0, max=1.0, step=0.001)
+        gI_in = server.gui.add_number(
+            "gI",
+            initial_value=float(gI.value),
+            min=0.01,
+            max=20.0,
+            step=0.01,
+        )
+        g0_in = server.gui.add_number(
+            "g0",
+            initial_value=float(g0.value),
+            min=0.01,
+            max=20.0,
+            step=0.01,
+        )
+        isp_in = server.gui.add_number(
+            "Isp",
+            initial_value=float(Isp.value),
+            min=1.0,
+            max=500.0,
+            step=1.0,
+        )
+        m_dry_in = server.gui.add_number(
+            "m_dry",
+            initial_value=float(m_dry.value),
+            min=0.5,
+            max=2.0,
+            step=0.01,
+        )
+        v_max_in = server.gui.add_number(
+            "v_max",
+            initial_value=float(v_max.value),
+            min=0.1,
+            max=20.0,
+            step=0.05,
+        )
+        w_max_in = server.gui.add_number(
+            "w_max",
+            initial_value=float(w_max.value),
+            min=0.01,
+            max=5.0,
+            step=0.01,
+        )
+        del_max_in = server.gui.add_number(
+            "del_max (deg)",
+            initial_value=float(del_max.value),
+            min=1.0,
+            max=89.0,
+            step=0.5,
+        )
+        theta_max_in = server.gui.add_number(
+            "theta_max (deg)",
+            initial_value=float(theta_max.value),
+            min=1.0,
+            max=89.0,
+            step=0.5,
+        )
+        t_min_in = server.gui.add_number(
+            "T_min",
+            initial_value=float(T_min.value),
+            min=0.1,
+            max=20.0,
+            step=0.1,
+        )
+        t_max_in = server.gui.add_number(
+            "T_max",
+            initial_value=float(T_max.value),
+            min=0.1,
+            max=20.0,
+            step=0.1,
+        )
+        gamma_in = server.gui.add_number(
+            "gamma (deg)",
+            initial_value=float(gamma.value),
+            min=1.0,
+            max=89.0,
+            step=0.5,
+        )
+        beta_in = server.gui.add_number(
+            "beta",
+            initial_value=float(beta.value),
+            min=0.0,
+            max=1.0,
+            step=0.001,
+        )
         init_pos_in = server.gui.add_vector3(
-            "initial_position", initial_value=tuple(float(v) for v in initial_position.value), step=0.1
+            "initial_position",
+            initial_value=tuple(float(v) for v in initial_position.value),
+            step=0.1,
         )
 
         def _set(name: str, val) -> None:
@@ -633,40 +651,52 @@ def create_dem_realtime_server() -> viser.ViserServer:
 
         @gI_in.on_update
         def _(_) -> None:
-            gI.value = float(gI_in.value); _set("gI", gI.value)
+            gI.value = float(gI_in.value)
+            _set("gI", gI.value)
         @g0_in.on_update
         def _(_) -> None:
-            g0.value = float(g0_in.value); _set("g0", g0.value)
+            g0.value = float(g0_in.value)
+            _set("g0", g0.value)
         @isp_in.on_update
         def _(_) -> None:
-            Isp.value = float(isp_in.value); _set("Isp", Isp.value)
+            Isp.value = float(isp_in.value)
+            _set("Isp", Isp.value)
         @m_dry_in.on_update
         def _(_) -> None:
-            m_dry.value = float(m_dry_in.value); _set("m_dry", m_dry.value)
+            m_dry.value = float(m_dry_in.value)
+            _set("m_dry", m_dry.value)
         @v_max_in.on_update
         def _(_) -> None:
-            v_max.value = float(v_max_in.value); _set("v_max", v_max.value)
+            v_max.value = float(v_max_in.value)
+            _set("v_max", v_max.value)
         @w_max_in.on_update
         def _(_) -> None:
-            w_max.value = float(w_max_in.value); _set("w_max", w_max.value)
+            w_max.value = float(w_max_in.value)
+            _set("w_max", w_max.value)
         @del_max_in.on_update
         def _(_) -> None:
-            del_max.value = float(del_max_in.value); _set("del_max", del_max.value)
+            del_max.value = float(del_max_in.value)
+            _set("del_max", del_max.value)
         @theta_max_in.on_update
         def _(_) -> None:
-            theta_max.value = float(theta_max_in.value); _set("theta_max", theta_max.value)
+            theta_max.value = float(theta_max_in.value)
+            _set("theta_max", theta_max.value)
         @t_min_in.on_update
         def _(_) -> None:
-            T_min.value = float(t_min_in.value); _set("T_min", T_min.value)
+            T_min.value = float(t_min_in.value)
+            _set("T_min", T_min.value)
         @t_max_in.on_update
         def _(_) -> None:
-            T_max.value = float(t_max_in.value); _set("T_max", T_max.value)
+            T_max.value = float(t_max_in.value)
+            _set("T_max", T_max.value)
         @gamma_in.on_update
         def _(_) -> None:
-            gamma.value = float(gamma_in.value); _set("gamma", gamma.value)
+            gamma.value = float(gamma_in.value)
+            _set("gamma", gamma.value)
         @beta_in.on_update
         def _(_) -> None:
-            beta.value = float(beta_in.value); _set("beta", beta.value)
+            beta.value = float(beta_in.value)
+            _set("beta", beta.value)
 
         @init_pos_in.on_update
         def _(_) -> None:
@@ -679,9 +709,9 @@ def create_dem_realtime_server() -> viser.ViserServer:
 
     @start_drag.on_update
     def _(_) -> None:
-        from openscvx.plotting.viser.coordinates import model_vec_to_viser_xyz as _m2v
         raw = np.asarray(start_drag.position, dtype=np.float64) / SCENE_SCALE
-        new_init = _m2v(raw)  # invert: viser→model (same permutation, involutory)
+        # The remap is its own inverse, so the same call takes viser back to model.
+        new_init = model_vec_to_viser_xyz(raw)
         initial_position.value = new_init
         problem.parameters["initial_position"] = new_init
         position.initial = list(float(v) for v in new_init)
@@ -690,9 +720,9 @@ def create_dem_realtime_server() -> viser.ViserServer:
 
     with server.gui.add_folder("Info"):
         server.gui.add_markdown(
-            f"**6DoF PDG on DEM**  \n"
-            f"DEM: {DEM_GRID}×{DEM_GRID} · {_terrain_faces.shape[0]:,} tris  \n"
-            f"Terminal altitude auto-locked to DEM surface."
+            "**6DoF PDG on DEM**  \n"
+            + dem_info_markdown(_terrain_placement(DEFAULT_ELEV_SCALE, DEFAULT_Z_OFFSET))
+            + "  \nTerminal altitude auto-locked to DEM surface."
         )
 
     # ── Apply edits + reset ───────────────────────────────────────────────────
@@ -724,7 +754,8 @@ def create_dem_realtime_server() -> viser.ViserServer:
             np.asarray(velocity.final, dtype=np.float64),
             n,
         )
-        attitude.guess = np.linspace(np.array([0.0, 0.0, 0.0, 1.0]), np.array([0.0, 0.0, 0.0, 1.0]), n)
+        _upright = np.array([0.0, 0.0, 0.0, 1.0])
+        attitude.guess = np.linspace(_upright, _upright, n)
         angular_velocity.guess = np.linspace(
             np.asarray(angular_velocity.initial, dtype=np.float64),
             np.asarray(angular_velocity.final, dtype=np.float64),
@@ -740,8 +771,28 @@ def create_dem_realtime_server() -> viser.ViserServer:
         _sync_params()
 
     # ── Trajectory update ─────────────────────────────────────────────────────
+    def _show_node_positions() -> None:
+        """Draw the current SCP iterate's node positions, unpropagated.
+
+        The fallback for both ways the propagated trajectory can be missing:
+        before ``V_history`` is first populated, and when extracting it fails.
+        """
+        try:
+            x_traj = np.asarray(problem.state.x)
+            if x_traj.size and x_traj.shape[1] >= 4:
+                pts = (
+                    model_vec_to_viser_xyz(np.asarray(x_traj[:, 1:4], dtype=np.float64))
+                    * SCENE_SCALE
+                ).astype(np.float32)
+                trajectory_handle.points = pts
+                trajectory_handle.colors = np.tile(
+                    np.array([[255, 200, 80]], dtype=np.uint8), (pts.shape[0], 1)
+                )
+        except Exception:
+            pass
+
     def _update_trajectory(V_ms: np.ndarray) -> None:
-        """Extract propagated multishot trajectory and push to the point cloud."""
+        """Extract the propagated multishot trajectory and push it to the point cloud."""
         try:
             nx = problem.settings.sim.n_states
             nu = problem.settings.sim.n_controls
@@ -749,28 +800,14 @@ def create_dem_realtime_server() -> viser.ViserServer:
                 V_ms, nx, nu, position_slice=slice(1, 4), velocity_slice=slice(4, 7)
             )
             if len(positions) > 0:
-                colors = compute_velocity_colors_realtime(velocities, _viridis)
                 pts = (
                     model_vec_to_viser_xyz(np.asarray(positions, dtype=np.float64)) * SCENE_SCALE
                 ).astype(np.float32)
                 trajectory_handle.points = pts
-                trajectory_handle.colors = colors
+                trajectory_handle.colors = compute_velocity_colors(velocities, cmap=_viridis)
         except Exception as exc:
-            # Fall back to current SCP iterate (node states only, no propagation)
             print(f"[trajectory] multishot extraction failed: {exc}")
-            try:
-                x_traj = np.asarray(problem.state.x)
-                if x_traj.size and x_traj.shape[1] >= 4:
-                    pos = x_traj[:, 1:4]
-                    pts = (
-                        model_vec_to_viser_xyz(np.asarray(pos, dtype=np.float64)) * SCENE_SCALE
-                    ).astype(np.float32)
-                    trajectory_handle.points = pts
-                    trajectory_handle.colors = np.tile(
-                        np.array([[255, 200, 80]], dtype=np.uint8), (pts.shape[0], 1)
-                    )
-            except Exception:
-                pass
+            _show_node_positions()
 
     # ── Optimization loop ─────────────────────────────────────────────────────
     def _opt_loop() -> None:
@@ -793,21 +830,7 @@ def create_dem_realtime_server() -> viser.ViserServer:
                 if problem.history.V_history:
                     _update_trajectory(np.asarray(problem.history.V_history[-1]))
                 else:
-                    # V_history not yet populated — show node-level positions directly
-                    try:
-                        x_traj = np.asarray(problem.state.x)
-                        if x_traj.size and x_traj.shape[1] >= 4:
-                            pos = x_traj[:, 1:4]
-                            pts = (
-                                model_vec_to_viser_xyz(np.asarray(pos, dtype=np.float64))
-                                * SCENE_SCALE
-                            ).astype(np.float32)
-                            trajectory_handle.points = pts
-                            trajectory_handle.colors = np.tile(
-                                np.array([[255, 200, 80]], dtype=np.uint8), (pts.shape[0], 1)
-                            )
-                    except Exception:
-                        pass
+                    _show_node_positions()
 
                 time.sleep(0.05)
             except Exception as exc:
