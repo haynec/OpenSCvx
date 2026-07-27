@@ -61,7 +61,7 @@ def prop_aug_dy(
     """
     x = x[None, :]
 
-    beta = (tau - tau_init) * N * foh_mask
+    beta = (tau - tau_init) * (N - 1) * foh_mask
     u = u_current + beta * (u_next - u_current)
 
     return state_dot(x, u, node, params).squeeze()
