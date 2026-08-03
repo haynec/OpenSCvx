@@ -89,9 +89,9 @@ Q_TRACE = 1e1  # Contouring error weight (squared tip-vs-path distance, x1e3 sca
 Q_PROGRESS = 2e0  # Progress reward
 Q_SMOOTH = 1e-1  # Joint-velocity damping: calms the arm between steps
 
-# The raw squared tip error is O(1e-6) [m^2] at mm accuracy — vanishingly
-# small next to every other integrand. The trace_error state integrates the
-# error in mm^2-like units instead so the discretization resolves it.
+# The raw squared tip error is O(1e-6) [m^2] at mm accuracy — below any
+# integrator tolerance a receding-horizon loop can afford. The trace_error
+# state integrates the error in mm^2-like units so the integrator sees it.
 TRACE_SCALE = 1e3
 
 trace_rate_max = 0.3  # Max speed of the traced point along the path [m/s]
@@ -414,15 +414,16 @@ problem = ox.Problem(
         "lam_cost": {"trace_error": Q_TRACE, "progress": Q_PROGRESS, "smoothness": Q_SMOOTH},
         "lam_prox": 3e1,  # Strong anchoring: weak prox never converges here
         "lam_vc": 1e4,  # Keep dynamics honest: far above the largest cost weight
-        "k_max": 10,  # A real-time loop cannot grind: accept and move on
-        "ep_tr": 3e-3,  # Corner horizons stall near the default 1e-4; exit early
+        "k_max": 30,  # Warm-started horizons converge in a handful of iterations
+        # The latency/accuracy dial: the default 1e-4 polishes each horizon to
+        # sub-mm tracking at ~10x the iterations per step; 1e-3 accepts the
+        # first iterate that lands within the pen's line width.
+        "ep_tr": 1e-3,
     },
     float_dtype="float64",
-    # Fixed-step integration: a real-time loop needs deterministic per-iteration
-    # cost — adaptive stepping can grind for minutes on a bad SCP iterate.
-    discretizer=ox.DiscretizeLinearizeVectorize(
-        custom_integrator=True, diffrax_kwargs={"num_substeps": 10}
-    ),
+    # Integrator tolerance must stay below the O(1e-3) scaled trace-error
+    # integrand or it silently swallows the cost signal (see TRACE_SCALE).
+    discretizer=ox.DiscretizeLinearizeVectorize(diffrax_kwargs={"atol": 1e-6, "rtol": 1e-6}),
     solver={"solver_args": {"abstol": 3e-5, "reltol": 3e-7, "enforce_dpp": True}},
 )
 problem.settings.dev.printing = False
