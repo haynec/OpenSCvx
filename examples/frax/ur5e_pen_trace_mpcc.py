@@ -416,9 +416,10 @@ problem = ox.Problem(
         "lam_vc": 1e4,  # Keep dynamics honest: far above the largest cost weight
         "k_max": 30,  # Warm-started horizons converge in a handful of iterations
         # The latency/accuracy dial: the default 1e-4 polishes each horizon to
-        # sub-mm tracking at ~10x the iterations per step; 1e-3 accepts the
-        # first iterate that lands within the pen's line width.
-        "ep_tr": 1e-3,
+        # sub-mm tracking at ~10x the iterations per step, while 1e-3 accepts
+        # the first iterate that lands within the pen's line width; the extra
+        # polish below that mostly buys vertical (contact) accuracy.
+        "ep_tr": 5e-4,
     },
     float_dtype="float64",
     # Integrator tolerance must stay below the O(1e-3) scaled trace-error
