@@ -582,6 +582,29 @@ def test_inequality_constraint_penalty_activation():
                 )
 
 
+def test_callable_penalty_matches_hand_built_expression():
+    """A callable penalty lowers to the same values as the expression it builds."""
+    limit = 1.0
+    x = jnp.array([-2.0, 0.0, 1.0, 1.5, 4.0])
+
+    state = State("x", (5,))
+    state._slice = slice(0, 5)
+
+    constraint = state - limit <= 0
+
+    ctcs_constraint = CTCS(constraint, penalty=lambda r: Huber(PositivePart(r), delta=0.5))
+    from_callable = lower_to_jax(ctcs_constraint.penalty_expr())(x, None, None, None)
+
+    hand_built = lower_to_jax(Sum(Huber(PositivePart(constraint.lhs), delta=0.5)))(
+        x, None, None, None
+    )
+
+    assert jnp.allclose(from_callable, hand_built)
+    # And it is genuinely a different penalty from the built-in huber
+    built_in = lower_to_jax(CTCS(constraint, penalty="huber").penalty_expr())(x, None, None, None)
+    assert not jnp.allclose(from_callable, built_in)
+
+
 def test_reverse_inequality_constraint_penalty():
     """Test penalties for x >= limit (satisfied when x >= limit)."""
     # Constraint: x >= 2.0, equivalent to 2.0 <= x
@@ -1552,9 +1575,12 @@ def test_ctcs_equality_rejected():
     with pytest.raises(ValueError) as exc_info:
         separate_constraints(constraint_set, n_nodes=n_nodes)
 
-    # Check error message is helpful
+    # Check error message is helpful: it names the cause and the alternative,
+    # without enumerating penalty names (penalties may be user-defined)
     msg = str(exc_info.value)
     assert "CTCS constraints cannot be equality" in msg
+    assert "violation of an inequality" in msg
+    assert ".convex()" in msg
 
 
 def test_nonconvex_inequality_still_accepted():

@@ -37,7 +37,7 @@ Example:
 
 import hashlib
 import struct
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -124,7 +124,7 @@ class Constraint(Expr):
     def over(
         self,
         interval: tuple[int, int],
-        penalty: str = "squared_relu",
+        penalty: Union[str, Callable[[Expr], "Expr"]] = "squared_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
         licq_max: Optional[float] = None,
@@ -133,7 +133,10 @@ class Constraint(Expr):
 
         Args:
             interval: Tuple of (start, end) node indices for the continuous interval
-            penalty: Penalty function type ("squared_relu", "huber", "smooth_relu")
+            penalty: Built-in penalty name ("squared_relu", "huber", "smooth_relu")
+                or a callable that receives the constraint residual as an ``Expr``
+                and returns the penalty ``Expr``, e.g.
+                ``lambda r: ox.Huber(ox.PositivePart(r), delta=0.5)``.
             idx: Optional grouping index for multiple augmented states
             check_nodally: Whether to also enforce this constraint nodally
             licq_max: Optional upper bound on the augmented state that accumulates
@@ -611,9 +614,20 @@ class CTCS(Expr):
     - **huber**: Huber(PositivePart(lhs)) - less sensitive to outliers than squared
     - **smooth_relu**: SmoothReLU(lhs) - smooth approximation of ReLU
 
+    A penalty may also be written as a callable that receives the constraint
+    residual ``r`` (the canonical left-hand side, satisfying ``r <= 0``) as a
+    symbolic ``Expr`` and returns the penalty ``Expr``. This is how penalty
+    parameters are tuned::
+
+        ox.ctcs(altitude >= 10, penalty=lambda r: ox.Huber(ox.PositivePart(r), delta=0.5))
+
+    The callable is applied once, at problem-build time; the resulting
+    expression is summed and integrated exactly like a built-in penalty.
+
     Attributes:
         constraint: The wrapped Constraint (typically Inequality) to enforce continuously
-        penalty: Penalty function type ('squared_relu', 'huber', or 'smooth_relu')
+        penalty: Penalty function name ('squared_relu', 'huber', or 'smooth_relu')
+            or a callable ``Expr -> Expr`` applied to the constraint residual
         nodes: Optional (start, end) tuple specifying the interval for enforcement,
             or None to enforce over the entire trajectory
         idx: Optional grouping index for managing multiple augmented states.
@@ -655,7 +669,7 @@ class CTCS(Expr):
     def __init__(
         self,
         constraint: Constraint,
-        penalty: str = "squared_relu",
+        penalty: Union[str, Callable[[Expr], Expr]] = "squared_relu",
         nodes: Optional[Tuple[int, int]] = None,
         idx: Optional[int] = None,
         check_nodally: bool = False,
@@ -665,10 +679,14 @@ class CTCS(Expr):
 
         Args:
             constraint: The Constraint to enforce continuously (typically an Inequality)
-            penalty: Penalty function type. Options:
+            penalty: Penalty function name. Options:
                 - 'squared_relu': Square(PositivePart(lhs)) - default, smooth, differentiable
                 - 'huber': Huber(PositivePart(lhs)) - robust to outliers
                 - 'smooth_relu': SmoothReLU(lhs) - smooth ReLU approximation
+
+                Alternatively a callable ``Expr -> Expr`` that receives the
+                constraint residual and returns the penalty expression, e.g.
+                ``lambda r: ox.Huber(ox.PositivePart(r), delta=0.5)``.
             nodes: Optional (start, end) tuple of node indices defining the enforcement interval.
                 None means enforce over the entire trajectory. Must satisfy start < end.
                 CTCS constraints with the same nodes are automatically grouped together.
@@ -780,12 +798,16 @@ class CTCS(Expr):
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash CTCS including all its parameters.
 
+        The penalty is hashed through the expression it builds rather than
+        through its spelling, so callable and named penalties hash alike and
+        two problems agree exactly when the same penalty tree gets lowered.
+
         Args:
             hasher: A hashlib hash object to update
         """
         hasher.update(b"CTCS")
-        # Hash penalty type
-        hasher.update(self.penalty.encode())
+        # Hash the penalty by what it builds, not how it was spelled
+        self.penalty_expr()._hash_into(hasher)
         # Hash nodes interval
         if self.nodes is not None:
             hasher.update(struct.pack(">ii", self.nodes[0], self.nodes[1]))
@@ -837,9 +859,14 @@ class CTCS(Expr):
         """String representation of the CTCS constraint.
 
         Returns:
-            str: String showing constraint, penalty type, and optional parameters
+            str: String showing constraint, penalty, and optional parameters
         """
-        parts = [f"{self.constraint!r}", f"penalty={self.penalty!r}"]
+        penalty = (
+            repr(self.penalty)
+            if isinstance(self.penalty, str)
+            else getattr(self.penalty, "__name__", repr(self.penalty))
+        )
+        parts = [f"{self.constraint!r}", f"penalty={penalty}"]
         if self.nodes is not None:
             parts.append(f"nodes={self.nodes}")
         if self.idx is not None:
@@ -863,11 +890,15 @@ class CTCS(Expr):
         s_aug_i(t) = 0 for all t, we ensure all penalties in the group are zero,
         which strictly enforces all constraints in the group continuously.
 
+        A callable penalty is applied here, once, to the residual expression; the
+        result is an ordinary Expr and rides the rest of the pipeline unchanged.
+
         Returns:
             Expr: Sum of the penalty function applied to the constraint violation
 
         Raises:
-            ValueError: If an unknown penalty type is specified
+            ValueError: If an unknown penalty name is given, or if a callable
+                penalty returns something other than an Expr
 
         Note:
             This method is used internally during problem compilation to create
@@ -876,7 +907,18 @@ class CTCS(Expr):
         """
         lhs = self.constraint.lhs
 
-        if self.penalty == "squared_relu":
+        if callable(self.penalty):
+            penalty = self.penalty(lhs)
+            if not isinstance(penalty, Expr):
+                raise ValueError(
+                    f"CTCS penalty callable returned {type(penalty).__name__}, not a "
+                    f"symbolic expression. The callable receives the constraint residual "
+                    f"as an Expr and must return one built from openscvx operations, e.g. "
+                    f"lambda r: ox.Square(ox.PositivePart(r)). Computing on the residual "
+                    f"with jax.numpy or numpy will not work — the penalty is composed "
+                    f"symbolically and only lowered to JAX later."
+                )
+        elif self.penalty == "squared_relu":
             from openscvx.symbolic.expr.math import PositivePart, Square
 
             penalty = Square(PositivePart(lhs))
@@ -896,7 +938,7 @@ class CTCS(Expr):
 
 def ctcs(
     constraint: Constraint,
-    penalty: str = "squared_relu",
+    penalty: Union[str, Callable[[Expr], Expr]] = "squared_relu",
     nodes: Optional[Tuple[int, int]] = None,
     idx: Optional[int] = None,
     check_nodally: bool = False,
@@ -909,7 +951,8 @@ def ctcs(
 
     Args:
         constraint: The Constraint to enforce continuously
-        penalty: Penalty function type ('squared_relu', 'huber', or 'smooth_relu').
+        penalty: Penalty function name ('squared_relu', 'huber', or 'smooth_relu'),
+            or a callable ``Expr -> Expr`` receiving the constraint residual.
             Defaults to 'squared_relu'.
         nodes: Optional (start, end) tuple of node indices for enforcement interval.
             None enforces over entire trajectory.
@@ -942,5 +985,12 @@ def ctcs(
         Also equivalent to using .over() method on constraint:
 
             altitude_constraint = (altitude >= 10).over((0, 100), penalty="huber")
+
+        Tuning a penalty with a callable:
+
+            altitude_constraint = ctcs(
+                altitude >= 10,
+                penalty=lambda r: ox.Huber(ox.PositivePart(r), delta=0.5),
+            )
     """
     return CTCS(constraint, penalty, nodes, idx, check_nodally, licq_max)
