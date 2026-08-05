@@ -11503,12 +11503,12 @@
 <p>After preprocessing, all symbolic definitions are collected into a <code>SymbolicProblem</code>:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@dataclass</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">SymbolicProblem</span><span class="p">:</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">dynamics</span><span class="p">:</span> <span class="n">Expr</span>              <span class="c1"># Symbolic dx/dt = f(x, u)</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">states</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">State</span><span class="p">]</span>         <span class="c1"># All state variables (including augmented)</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">controls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Control</span><span class="p">]</span>     <span class="c1"># All control variables (including virtual)</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">dynamics</span><span class="p">:</span> <span class="n">Expr</span>  <span class="c1"># Symbolic dx/dt = f(x, u)</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    <span class="n">states</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">State</span><span class="p">]</span>  <span class="c1"># All state variables (including augmented)</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="n">controls</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Control</span><span class="p">]</span>  <span class="c1"># All control variables (including virtual)</span>
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">constraints</span><span class="p">:</span> <span class="n">ConstraintSet</span>  <span class="c1"># Categorized constraints</span>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">parameters</span><span class="p">:</span> <span class="nb">dict</span>            <span class="c1"># User-defined parameters</span>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">N</span><span class="p">:</span> <span class="nb">int</span>                      <span class="c1"># Discretization nodes</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    <span class="n">parameters</span><span class="p">:</span> <span class="nb">dict</span>  <span class="c1"># User-defined parameters</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    <span class="n">N</span><span class="p">:</span> <span class="nb">int</span>  <span class="c1"># Discretization nodes</span>
 </span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="c1"># ... plus propagation variants</span>
 </span></code></pre></div>
 <h3 id="output-loweredproblem">Output: <code>LoweredProblem</code><a class="headerlink" href="#output-loweredproblem" title="Permanent link">&para;</a></h3>
@@ -11516,20 +11516,20 @@
 <div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nd">@dataclass</span>
 </span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">LoweredProblem</span><span class="p">:</span>
 </span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="c1"># JAX dynamics (callable functions with Jacobians)</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">dynamics</span><span class="p">:</span> <span class="n">Dynamics</span>           <span class="c1"># f, A=df/dx, B=df/du</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">dynamics_prop</span><span class="p">:</span> <span class="n">Dynamics</span>      <span class="c1"># For forward propagation</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">dynamics</span><span class="p">:</span> <span class="n">Dynamics</span>  <span class="c1"># f, A=df/dx, B=df/du</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">dynamics_prop</span><span class="p">:</span> <span class="n">Dynamics</span>  <span class="c1"># For forward propagation</span>
 </span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="c1"># Lowered constraints (by backend)</span>
 </span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="n">jax_constraints</span><span class="p">:</span> <span class="n">LoweredJaxConstraints</span>
 </span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="n">cvxpy_constraints</span><span class="p">:</span> <span class="n">LoweredCvxpyConstraints</span>
 </span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>
 </span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="c1"># Unified state/control interfaces</span>
-</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="n">x_unified</span><span class="p">:</span> <span class="n">UnifiedState</span>      <span class="c1"># Aggregates all states into one vector</span>
-</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="n">u_unified</span><span class="p">:</span> <span class="n">UnifiedControl</span>    <span class="c1"># Aggregates all controls into one vector</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="n">x_unified</span><span class="p">:</span> <span class="n">UnifiedState</span>  <span class="c1"># Aggregates all states into one vector</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="n">u_unified</span><span class="p">:</span> <span class="n">UnifiedControl</span>  <span class="c1"># Aggregates all controls into one vector</span>
 </span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>
 </span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    <span class="c1"># CVXPy optimization variables</span>
-</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>    <span class="n">ocp_vars</span><span class="p">:</span> <span class="n">OCPVariables</span>       <span class="c1"># x, u, dx, du, nu, etc.</span>
-</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="n">cvxpy_params</span><span class="p">:</span> <span class="nb">dict</span>           <span class="c1"># User parameters as cp.Parameter</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>    <span class="n">ocp_vars</span><span class="p">:</span> <span class="n">OCPVariables</span>  <span class="c1"># x, u, dx, du, nu, etc.</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>    <span class="n">cvxpy_params</span><span class="p">:</span> <span class="nb">dict</span>  <span class="c1"># User parameters as cp.Parameter</span>
 </span></code></pre></div>
 <h2 id="constraint-routing">Constraint Routing<a class="headerlink" href="#constraint-routing" title="Permanent link">&para;</a></h2>
 <p>Constraints take different paths based on convexity:</p>
@@ -11573,9 +11573,9 @@
 <p>Non-convex constraints become JAX functions with gradients:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nd">@dataclass</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">LoweredJaxConstraints</span><span class="p">:</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">nodal</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">LoweredNodalConstraint</span><span class="p">]</span>      <span class="c1"># func, grad_g_x, grad_g_u</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">nodal</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">LoweredNodalConstraint</span><span class="p">]</span>  <span class="c1"># func, grad_g_x, grad_g_u</span>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">cross_node</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">LoweredCrossNodeConstraint</span><span class="p">]</span>  <span class="c1"># func, grad_g_X, grad_g_U</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">ctcs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CTCS</span><span class="p">]</span>                         <span class="c1"># Handled via dynamics augmentation</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">ctcs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CTCS</span><span class="p">]</span>  <span class="c1"># Handled via dynamics augmentation</span>
 </span></code></pre></div>
 <h3 id="cvxpy-lowered-constraints">CVXPy-Lowered Constraints<a class="headerlink" href="#cvxpy-lowered-constraints" title="Permanent link">&para;</a></h3>
 <p>Convex constraints become CVXPy constraint objects:</p>
@@ -11710,7 +11710,7 @@ many problems but caps the QP's conditioning.</p>
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="July 15, 2026 06:18:13 UTC">July 15, 2026</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="August 5, 2026 07:59:26 UTC">August 5, 2026</span>
   </span>
 
     
