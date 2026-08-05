@@ -164,6 +164,35 @@ Here, we do _not_ specify an initial or final value for the control but we _do_ 
 The initial guess must be of shape $(n_u \times n_{\mathrm{nodes}})$, providing an initial guess for each control at every node.
 Technically, we can also provide a `.guess` for states. However, these default to a linear interpolation between initial and final conditions which is sufficient in most cases.
 
+#### Symbolic initial guesses
+
+`.guess` accepts three forms, on both states and controls:
+
+- an array of shape $(n_{\mathrm{nodes}} \times n)$, as above;
+- a **symbolic expression** in other states and controls;
+- a **callable of `tau`**, the normalized node coordinate, returning a symbolic expression.
+
+A guess expression is evaluated at every node, with each referenced variable at its guess value and `tau` running $0 \to 1$ across the grid — the same per-node mental model as dynamics and constraints.
+
+```python
+# Cross-variable: the speed guess follows whatever velocity's guess is
+speed.guess = ox.linalg.Norm(velocity)
+
+# Along the grid: a straight line from p0 to pf
+position.guess = lambda tau: p0 + (pf - p0) * tau
+```
+
+References between guesses are the dependency graph: `speed` above is resolved after `velocity`, and a circular reference raises. Everything is evaluated once, when the `Problem` is built (and again on `reset()` if you assign a new expression between solves), so the solver only ever sees ordinary arrays.
+
+Because evaluation is per node, guess expressions cannot express trajectory-level constructions such as finite differences or cumulative sums. Build those eagerly with NumPy instead:
+
+```python
+velocity.guess = np.gradient(position.guess, axis=0)
+```
+
+!!! Note
+    `time.guess` accepts all three forms, but `time_dilation_guess` remains array-only.
+
 ### Dynamics
 
 Dynamics are defined as a dictionary mapping state names to their time derivatives using symbolic expressions:

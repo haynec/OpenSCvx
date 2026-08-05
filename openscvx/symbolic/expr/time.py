@@ -1,10 +1,56 @@
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional, Tuple, Union
 
 import numpy as np
 from pydantic import ConfigDict, field_validator
 
+from openscvx.symbolic.expr.expr import Expr, Leaf
 from openscvx.symbolic.expr.state import State, StateSpec
 from openscvx.symbolic.expr.variable import Variable
+
+#: Key under which the normalized node grid is passed to a lowered guess expression.
+TAU_PARAM = "__tau__"
+
+
+class Tau(Leaf):
+    """Normalized node coordinate, running 0 at the first node to 1 at the last.
+
+    ``Tau`` is internal plumbing for initial guesses, not part of the user-facing
+    vocabulary. A user who needs the node coordinate writes their guess as a
+    callable of one argument::
+
+        pos.guess = lambda tau: p0 + (pf - p0) * tau
+
+    and the library applies that callable once, at assignment, with a ``Tau``
+    instance. The result is an ordinary expression that the guess-resolution pass
+    evaluates node by node (see
+    :func:`openscvx.symbolic.preprocessing.resolve_guess_exprs`).
+
+    Physical time is a ``Time`` state; ``Tau`` is the dimensionless grid
+    coordinate the trajectory is discretized on, and is meaningful only while
+    building a guess.
+    """
+
+    def __init__(self):
+        super().__init__("tau", shape=())
+
+    def check_shape(self) -> Tuple[int, ...]:
+        """Reject tau outside of an initial-guess expression.
+
+        Raises:
+            ValueError: Always. Dynamics, constraints, and costs are shape-checked
+                eagerly, so this fires exactly when a captured ``tau`` has leaked
+                out of the guess it was created for.
+        """
+        raise ValueError(
+            "tau is only meaningful inside initial-guess expressions. It was received "
+            "by a `guess = lambda tau: ...` callable and then used in dynamics, a "
+            "constraint, or a cost, where there is no node grid to evaluate it on. "
+            "Use the `time` state for physical time, or index nodes explicitly with "
+            "`.at(k)`."
+        )
+
+    def __repr__(self) -> str:
+        return "Tau()"
 
 
 class Time(State):
@@ -92,15 +138,17 @@ class Time(State):
             min: Minimum time bound.
             max: Maximum time bound.
             guess: Initial guess for the time trajectory. 1D array of shape
-                (N,) or 2D of shape (N, 1). If not provided, a linear
+                (N,), 2D of shape (N, 1), or any symbolic form accepted by
+                :attr:`Variable.guess`. If not provided, a linear
                 interpolation from initial to final is generated.
             time_dilation_min: Absolute minimum bound for time dilation.
                 Defaults to `0.3 * time_final` if not set.
             time_dilation_max: Absolute maximum bound for time dilation.
                 Defaults to `3.0 * time_final` if not set.
             time_dilation_guess: Initial guess for time dilation.
-                1D array of shape (N,) or 2D of shape (N, 1). Overrides
-                the default finite-difference computation.
+                1D array of shape (N,) or 2D of shape (N, 1) — arrays only,
+                symbolic guesses are not accepted here. Overrides the default
+                finite-difference computation.
             uniform_time_grid: If True, constrain the time dilation to be
                 the same across all nodes (uniform time steps). Defaults
                 to False.
@@ -125,11 +173,7 @@ class Time(State):
 
         super().__init__("time", shape=(1,), min=min, max=max, initial=initial, final=final)
 
-        # guess: normalize 1D → 2D before assigning
         if guess is not None:
-            guess = np.asarray(guess, dtype=float)
-            if guess.ndim == 1:
-                guess = guess.reshape(-1, 1)
             self.guess = guess
         if time_dilation_min is not None:
             self.time_dilation_min = time_dilation_min
@@ -167,12 +211,25 @@ class Time(State):
         State.final.fset(self, val)
 
     @Variable.guess.setter
-    def guess(self, arr):
-        """Set the time guess. Accepts 1D (N,) or 2D (N, 1) arrays."""
-        arr = np.asarray(arr, dtype=float)
-        if arr.ndim == 1:
-            arr = arr.reshape(-1, 1)
-        Variable.guess.fset(self, arr)
+    def guess(self, value):
+        """Set the time guess.
+
+        Accepts everything :attr:`Variable.guess` accepts — an array, a symbolic
+        expression, or a callable of tau — and additionally reshapes a 1D ``(N,)``
+        array to ``(N, 1)`` since Time is always shape ``(1,)``. A symbolic guess
+        resolving to one value per node is reshaped the same way at build time::
+
+            time.guess = lambda tau: t0 + (tf - t0) * tau**2
+
+        Note:
+            ``time_dilation_guess`` is a separate, array-only setting; it is not
+            resolved from expressions.
+        """
+        if not isinstance(value, Expr) and not callable(value):
+            value = np.asarray(value, dtype=float)
+            if value.ndim == 1:
+                value = value.reshape(-1, 1)
+        Variable.guess.fset(self, value)
 
     @property
     def time_dilation_min(self) -> Optional[float]:
@@ -199,7 +256,7 @@ class Time(State):
 
     @property
     def time_dilation_guess(self) -> Optional[np.ndarray]:
-        """Initial guess for time dilation, shape (N, 1)."""
+        """Initial guess for time dilation, shape (N, 1). Arrays only."""
         return self._time_dilation_guess
 
     @time_dilation_guess.setter
