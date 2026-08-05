@@ -44,8 +44,9 @@ discretizer:
 import openscvx as ox
 
 problem = ox.Problem(
-    dynamics, ...,
-    discretizer={"dis_type": "ZOH"},   # or "FOH" (default)
+    dynamics,
+    ...,
+    discretizer={"dis_type": "ZOH"},  # or "FOH" (default)
 )
 ```
 

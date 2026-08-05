@@ -114,8 +114,8 @@ Set initial and final values on the adapter's states like any other `ox.State`:
 ```python
 qpos.min = np.array([-3.0, -2.0 * np.pi])
 qpos.max = np.array([3.0, 2.0 * np.pi])
-qpos.initial = np.array([0.0, np.pi])   # cart at origin, pole hanging
-qpos.final = np.array([0.0, 0.0])     # upright
+qpos.initial = np.array([0.0, np.pi])  # cart at origin, pole hanging
+qpos.final = np.array([0.0, 0.0])  # upright
 
 qvel.initial = np.zeros(2)
 qvel.final = np.zeros(2)

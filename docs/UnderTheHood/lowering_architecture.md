@@ -71,12 +71,12 @@ After preprocessing, all symbolic definitions are collected into a `SymbolicProb
 ```python
 @dataclass
 class SymbolicProblem:
-    dynamics: Expr              # Symbolic dx/dt = f(x, u)
-    states: List[State]         # All state variables (including augmented)
-    controls: List[Control]     # All control variables (including virtual)
+    dynamics: Expr  # Symbolic dx/dt = f(x, u)
+    states: List[State]  # All state variables (including augmented)
+    controls: List[Control]  # All control variables (including virtual)
     constraints: ConstraintSet  # Categorized constraints
-    parameters: dict            # User-defined parameters
-    N: int                      # Discretization nodes
+    parameters: dict  # User-defined parameters
+    N: int  # Discretization nodes
     # ... plus propagation variants
 ```
 
@@ -88,20 +88,20 @@ Lowering produces a `LoweredProblem` containing everything needed for optimizati
 @dataclass
 class LoweredProblem:
     # JAX dynamics (callable functions with Jacobians)
-    dynamics: Dynamics           # f, A=df/dx, B=df/du
-    dynamics_prop: Dynamics      # For forward propagation
+    dynamics: Dynamics  # f, A=df/dx, B=df/du
+    dynamics_prop: Dynamics  # For forward propagation
 
     # Lowered constraints (by backend)
     jax_constraints: LoweredJaxConstraints
     cvxpy_constraints: LoweredCvxpyConstraints
 
     # Unified state/control interfaces
-    x_unified: UnifiedState      # Aggregates all states into one vector
-    u_unified: UnifiedControl    # Aggregates all controls into one vector
+    x_unified: UnifiedState  # Aggregates all states into one vector
+    u_unified: UnifiedControl  # Aggregates all controls into one vector
 
     # CVXPy optimization variables
-    ocp_vars: OCPVariables       # x, u, dx, du, nu, etc.
-    cvxpy_params: dict           # User parameters as cp.Parameter
+    ocp_vars: OCPVariables  # x, u, dx, du, nu, etc.
+    cvxpy_params: dict  # User parameters as cp.Parameter
 ```
 
 ## Constraint Routing
@@ -123,9 +123,9 @@ Non-convex constraints become JAX functions with gradients:
 ```python
 @dataclass
 class LoweredJaxConstraints:
-    nodal: List[LoweredNodalConstraint]      # func, grad_g_x, grad_g_u
+    nodal: List[LoweredNodalConstraint]  # func, grad_g_x, grad_g_u
     cross_node: List[LoweredCrossNodeConstraint]  # func, grad_g_X, grad_g_U
-    ctcs: List[CTCS]                         # Handled via dynamics augmentation
+    ctcs: List[CTCS]  # Handled via dynamics augmentation
 ```
 
 ### CVXPy-Lowered Constraints
