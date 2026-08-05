@@ -22,6 +22,7 @@ Example::
 from openscvx.symbolic.lowerers.cvxpy import (
     arithmetic,  # noqa: F401
     array,  # noqa: F401
+    autodiff,  # noqa: F401
     constraint,  # noqa: F401
     control,  # noqa: F401
     expr,  # noqa: F401
