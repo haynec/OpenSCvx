@@ -152,11 +152,10 @@ attitude_normalized = attitude / q_norm
 dynamics = {
     "position": velocity,
     "velocity": (1.0 / m) * ox.spatial.QDCM(attitude_normalized) @ thrust_force
-                + np.array([0, 0, g_const]),
+    + np.array([0, 0, g_const]),
     "attitude": 0.5 * ox.spatial.SSMP(angular_velocity) @ attitude_normalized,
-    "angular_velocity": ox.linalg.Diag(1.0 / J_b) @ (
-        torque - ox.spatial.SSM(angular_velocity) @ ox.linalg.Diag(J_b) @ angular_velocity
-    ),
+    "angular_velocity": ox.linalg.Diag(1.0 / J_b)
+    @ (torque - ox.spatial.SSM(angular_velocity) @ ox.linalg.Diag(J_b) @ angular_velocity),
 }
 ```
 
@@ -169,25 +168,31 @@ First, we define our camera parameters and target locations:
 # Camera field-of-view parameters
 alpha_x = 6.0  # Horizontal half-angle (pi/6 radians)
 alpha_y = 6.0  # Vertical half-angle
-A_cone = np.diag([
-    1 / np.tan(np.pi / alpha_x),
-    1 / np.tan(np.pi / alpha_y),
-    0,
-])
+A_cone = np.diag(
+    [
+        1 / np.tan(np.pi / alpha_x),
+        1 / np.tan(np.pi / alpha_y),
+        0,
+    ]
+)
 c_boresight = jnp.array([0, 0, 1])  # Camera points along +z in sensor frame
-R_sensor_body = jnp.array([         # Sensor mounting rotation
-    [0, 1, 0],
-    [0, 0, 1],
-    [1, 0, 0]
-])
+R_sensor_body = jnp.array(
+    [  # Sensor mounting rotation
+        [0, 1, 0],
+        [0, 0, 1],
+        [1, 0, 0],
+    ]
+)
 
 # Generate random target positions
 n_targets = 10
 np.random.seed(0)
-target_positions = np.array([
-    [100.0 + np.random.random() * 20, -60.0 + np.random.random() * 20, 20.0]
-    for _ in range(n_targets)
-])
+target_positions = np.array(
+    [
+        [100.0 + np.random.random() * 20, -60.0 + np.random.random() * 20, 20.0]
+        for _ in range(n_targets)
+    ]
+)
 ```
 
 ### Custom Symbolic Constraint Functions
@@ -226,7 +231,8 @@ visibility = ox.ctcs(
     ox.Vmap(
         lambda target: visibility_constraint(target, position, attitude),
         batch=target_positions,
-    ) <= 0.0
+    )
+    <= 0.0
 )
 ```
 
@@ -258,10 +264,7 @@ constraints = []
 
 # Box constraints on states
 for state in states:
-    constraints.extend([
-        ox.ctcs(state <= state.max),
-        ox.ctcs(state.min <= state)
-    ])
+    constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
 # Visibility constraint (all targets, all time)
 constraints.append(visibility)
@@ -269,8 +272,8 @@ constraints.append(visibility)
 # Gate passage constraints (specific nodes)
 for node, center in zip(gate_nodes, gate_centers):
     gate_constraint = (
-        ox.linalg.Norm(A_gate @ position - A_gate @ center, ord="inf") <= 1.0
-    ).convex().at([node])
+        (ox.linalg.Norm(A_gate @ position - A_gate @ center, ord="inf") <= 1.0).convex().at([node])
+    )
     constraints.append(gate_constraint)
 ```
 
@@ -301,10 +304,7 @@ for k in range(n):
     # Quaternion that rotates camera_axis to point at target
     cross = np.cross(camera_axis, to_target)
     dot = np.dot(camera_axis, to_target)
-    q = np.array([
-        np.sqrt(la.norm(to_target)**2 + la.norm(camera_axis)**2) + dot,
-        *cross
-    ])
+    q = np.array([np.sqrt(la.norm(to_target) ** 2 + la.norm(camera_axis) ** 2) + dot, *cross])
     attitude_guess[k] = q / la.norm(q)
 
 attitude.guess = attitude_guess

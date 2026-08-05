@@ -183,7 +183,7 @@ the rule:
 
 ```python
 def converged(self, state):
-    return state.J_vc < state.ep_vc   # custom: virtual control alone
+    return state.J_vc < state.ep_vc  # custom: virtual control alone
 ```
 
 The default — every metric below its threshold — is algorithm-agnostic, since

@@ -311,10 +311,12 @@ controls = [speed, angular_rate, progress_rate]
 
 constraints = []
 for state in [position, heading]:
-    constraints.extend([
-        ox.ctcs(state <= state.max),
-        ox.ctcs(state.min <= state),
-    ])
+    constraints.extend(
+        [
+            ox.ctcs(state <= state.max),
+            ox.ctcs(state.min <= state),
+        ]
+    )
 
 t = ox.Time(
     initial=0.0,
@@ -369,15 +371,15 @@ For the analytical circle we assume a constant speed along the reference and com
 ```python
 def set_initial_guess(theta_start: float = 0.0):
     ref_speed = 5.0
-    arc_guess = np.linspace(
-        theta_start, theta_start + ref_speed * horizon_duration, n_mpc
-    )
+    arc_guess = np.linspace(theta_start, theta_start + ref_speed * horizon_duration, n_mpc)
     angle_guess = arc_guess / R_circle
 
-    position.guess = np.column_stack([
-        R_circle * np.cos(angle_guess),
-        R_circle * np.sin(angle_guess),
-    ])
+    position.guess = np.column_stack(
+        [
+            R_circle * np.cos(angle_guess),
+            R_circle * np.sin(angle_guess),
+        ]
+    )
     heading.guess = (-angle_guess + np.pi / 2).reshape(-1, 1)
     progress.guess = arc_guess.reshape(-1, 1)
     lag_sum.guess = np.zeros((n_mpc, 1))
@@ -400,7 +402,7 @@ For this initial example we will simply repeat this `max_steps` times:
 problem_mpc.initialize()
 
 for step in range(max_steps):
-    problem_mpc.reset() # Clear SCP history
+    problem_mpc.reset()  # Clear SCP history
     results = problem_mpc.solve()
     results = problem_mpc.post_process()
     nodes = results.nodes
@@ -475,9 +477,7 @@ def shift_guess(nodes: dict):
     ar_last = nodes["angular_rate"][-1, 0]
     pr_last = nodes["progress_rate"][-1, 0]
 
-    ext_pos = pos_last + dt * spd_last * np.array([
-        np.sin(hdg_last), np.cos(hdg_last)
-    ])
+    ext_pos = pos_last + dt * spd_last * np.array([np.sin(hdg_last), np.cos(hdg_last)])
     ext_hdg = hdg_last + dt * ar_last
     ext_prog = nodes["progress"][-1, 0] + dt * pr_last
 
@@ -497,26 +497,22 @@ def shift_guess(nodes: dict):
     # Cost integrators: shift and re-zero to preserve the accumulated profile
     lag_offset = nodes["lag_sum"][1]
     lag_sum.guess = np.maximum(
-        np.vstack([nodes["lag_sum"][1:] - lag_offset,
-                    nodes["lag_sum"][-1:] - lag_offset]),
+        np.vstack([nodes["lag_sum"][1:] - lag_offset, nodes["lag_sum"][-1:] - lag_offset]),
         0.0,
     )
 
     contour_offset = nodes["contour_sum"][1]
     contour_sum.guess = np.maximum(
-        np.vstack([nodes["contour_sum"][1:] - contour_offset,
-                    nodes["contour_sum"][-1:] - contour_offset]),
+        np.vstack(
+            [nodes["contour_sum"][1:] - contour_offset, nodes["contour_sum"][-1:] - contour_offset]
+        ),
         0.0,
     )
 
     # Controls: shift forward, repeat last value for the new final node
     speed.guess = np.vstack([nodes["speed"][1:], nodes["speed"][-1:]])
-    angular_rate.guess = np.vstack([
-        nodes["angular_rate"][1:], nodes["angular_rate"][-1:]
-    ])
-    progress_rate.guess = np.vstack([
-        nodes["progress_rate"][1:], nodes["progress_rate"][-1:]
-    ])
+    angular_rate.guess = np.vstack([nodes["angular_rate"][1:], nodes["angular_rate"][-1:]])
+    progress_rate.guess = np.vstack([nodes["progress_rate"][1:], nodes["progress_rate"][-1:]])
 ```
 
 The wrap offsets are computed from node 1 of the previous solution (which becomes node 0 of the new problem) so the whole horizon shifts consistently.
@@ -602,23 +598,25 @@ With a discrete reference we instead interpolate the reference data arrays direc
 
 ```python
 def set_initial_guess(theta_start: float = 0.0, ref_speed: float = 5.0):
-    arc_guess = np.linspace(
-        theta_start, theta_start + ref_speed * horizon_duration, n_mpc
-    )
+    arc_guess = np.linspace(theta_start, theta_start + ref_speed * horizon_duration, n_mpc)
 
     # Position: interpolate from reference sample arrays
-    position.guess = np.column_stack([
-        np.interp(arc_guess, s_data, px_data),
-        np.interp(arc_guess, s_data, py_data),
-    ])
+    position.guess = np.column_stack(
+        [
+            np.interp(arc_guess, s_data, px_data),
+            np.interp(arc_guess, s_data, py_data),
+        ]
+    )
 
     # Heading: infer from reference segment directions
     seg_idx = np.searchsorted(s_data, arc_guess, side="right") - 1
     seg_idx = np.clip(seg_idx, 0, len(s_data) - 2)
-    seg_dp = np.column_stack([
-        px_data[seg_idx + 1] - px_data[seg_idx],
-        py_data[seg_idx + 1] - py_data[seg_idx],
-    ])
+    seg_dp = np.column_stack(
+        [
+            px_data[seg_idx + 1] - px_data[seg_idx],
+            py_data[seg_idx + 1] - py_data[seg_idx],
+        ]
+    )
     hdg_guess = np.arctan2(seg_dp[:, 0], seg_dp[:, 1])
     heading.guess = hdg_guess.reshape(-1, 1)
     heading.initial = np.array([hdg_guess[0]])
@@ -653,8 +651,8 @@ problem_traj.initialize()
 results_traj = problem_traj.solve()
 results_traj = problem_traj.post_process()
 
-ref_pos = results_traj.trajectory["position"]   # (N_dense, 3)
-ref_vel = results_traj.trajectory["velocity"]   # (N_dense, 3)
+ref_pos = results_traj.trajectory["position"]  # (N_dense, 3)
+ref_vel = results_traj.trajectory["velocity"]  # (N_dense, 3)
 ref_time = results_traj.trajectory["time"].flatten()
 ```
 
@@ -700,16 +698,20 @@ def set_initial_guess(theta_start: float = 0.0):
     t_guess = np.linspace(t_start, t_start + horizon_duration, n_mpc)
     arc_guess = np.interp(t_guess, t_data, s_data)
 
-    position.guess = np.column_stack([
-        np.interp(arc_guess, s_data, px_data),
-        np.interp(arc_guess, s_data, py_data),
-        np.interp(arc_guess, s_data, pz_data),
-    ])
-    velocity.guess = np.column_stack([
-        np.interp(arc_guess, s_data, vx_data),
-        np.interp(arc_guess, s_data, vy_data),
-        np.interp(arc_guess, s_data, vz_data),
-    ])
+    position.guess = np.column_stack(
+        [
+            np.interp(arc_guess, s_data, px_data),
+            np.interp(arc_guess, s_data, py_data),
+            np.interp(arc_guess, s_data, pz_data),
+        ]
+    )
+    velocity.guess = np.column_stack(
+        [
+            np.interp(arc_guess, s_data, vx_data),
+            np.interp(arc_guess, s_data, vy_data),
+            np.interp(arc_guess, s_data, vz_data),
+        ]
+    )
     # ... similarly for force, progress_rate
 ```
 
@@ -727,16 +729,20 @@ def shift_guess(nodes: dict):
     ext_prog = np.interp(t_last + dt_mpc, t_data, s_data)
 
     # Look up reference state at the extrapolated progress
-    ext_pos = np.array([
-        np.interp(ext_prog, s_data, px_data),
-        np.interp(ext_prog, s_data, py_data),
-        np.interp(ext_prog, s_data, pz_data),
-    ])
-    ext_vel = np.array([
-        np.interp(ext_prog, s_data, vx_data),
-        np.interp(ext_prog, s_data, vy_data),
-        np.interp(ext_prog, s_data, vz_data),
-    ])
+    ext_pos = np.array(
+        [
+            np.interp(ext_prog, s_data, px_data),
+            np.interp(ext_prog, s_data, py_data),
+            np.interp(ext_prog, s_data, pz_data),
+        ]
+    )
+    ext_vel = np.array(
+        [
+            np.interp(ext_prog, s_data, vx_data),
+            np.interp(ext_prog, s_data, vy_data),
+            np.interp(ext_prog, s_data, vz_data),
+        ]
+    )
     # ... similarly for force, progress_rate
 
     # Shift and wrap as before
@@ -762,9 +768,7 @@ Because we are now running a closed-loop controller we can include additional co
 
 ```python
 for obs_center in obstacle_centers:
-    constraints.append(
-        ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obs_center))
-    )
+    constraints.append(ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obs_center)))
 ```
 
 #### Progress-Dependent Gate Constraints
@@ -795,11 +799,13 @@ Putting all this together results in our cone constraints:
 ```python
 cone_constraints = ox.Vmap(
     lambda apex, R_gate, n_hat, s_gate, s_prev: ox.Cond(
-        ox.All([
-            progress[0] >= s_prev,
-            progress[0] <= s_gate,
-            ox.Sum(velocity * n_hat) <= 0.0,
-        ]),
+        ox.All(
+            [
+                progress[0] >= s_prev,
+                progress[0] <= s_gate,
+                ox.Sum(velocity * n_hat) <= 0.0,
+            ]
+        ),
         g_gate_cone(apex, R_gate, position),
         -1.0,  # Inactive: return feasible value
     ),
@@ -816,16 +822,14 @@ To ensure a consistent loop rate, we constrain that time at node 1 is always $t_
 ```python
 t = ox.Time(
     initial=0.0,
-    final=horizon_duration, # Still fixed!
+    final=horizon_duration,  # Still fixed!
     min=0.0,
     max=horizon_duration,
     # Note: uniform_time_grid is NOT set, allowing non-uniform spacing
 )
 
 # Pin node 1 at a fixed dt so the MPC loop rate is constant
-constraints.append(
-    (t == horizon_duration / (n_mpc - 1)).convex().at(1)
-)
+constraints.append((t == horizon_duration / (n_mpc - 1)).convex().at(1))
 ```
 
 We also shift the time and time dilation guesses identically to the other states and controls:
@@ -870,9 +874,7 @@ The obstacle avoidance constraints reference these parameters in the usual way:
 
 ```python
 for obs_center in obstacle_centers:
-    constraints.append(
-        ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obs_center))
-    )
+    constraints.append(ox.ctcs(obstacle_radius <= ox.linalg.Norm(position - obs_center)))
 ```
 
 When the user clicks and drags an obstacle in the viser 3D view, a callback updates both the parameter value and the problem's parameter store:

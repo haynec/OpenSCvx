@@ -25,9 +25,7 @@ result = problem.solve()
 result = problem.solve_jax()
 
 # Batched — standard jax.vmap, no library-specific API.
-batched = jax.vmap(problem.solve_jax, in_axes=(0, 0, None))(
-    x_initial_stack, x_final_stack, params
-)
+batched = jax.vmap(problem.solve_jax, in_axes=(0, 0, None))(x_initial_stack, x_final_stack, params)
 
 # JIT-compile once, solve forever (e.g. MPC inner loop).
 fast_solve = jax.jit(problem.solve_jax)
@@ -101,10 +99,10 @@ batched inputs agree.)
 
 ```python
 results = problem.solve_batched(
-    x_initial=x0_batch,                  # (B, n_x): rank = declared+1 -> batched
+    x_initial=x0_batch,  # (B, n_x): rank = declared+1 -> batched
     parameters={
-        "gate_center": centers,          # (B, 3) vs declared (3,)  -> batched
-        "gate_radius": 0.5,              # declared shape           -> shared
+        "gate_center": centers,  # (B, 3) vs declared (3,)  -> batched
+        "gate_radius": 0.5,  # declared shape           -> shared
     },
 )
 ```
@@ -117,7 +115,7 @@ fall back to the rank rule):
 
 ```python
 results = problem.solve_batched(
-    parameters={"weights": w},           # (B,) is also w's declared shape...
+    parameters={"weights": w},  # (B,) is also w's declared shape...
     in_axes={"parameters": {"weights": 0}},  # ...so say "batched" explicitly
 )
 
@@ -157,7 +155,7 @@ kwarg's field. Construction-only keys of the constructor dict — `autotuner`,
 
 ```python
 B = 8  # batch size. Just an int for building the arrays below — there is no
-       # B argument; solve_batched infers it from the leading-axis lengths.
+# B argument; solve_batched infers it from the leading-axis lengths.
 sweep = problem.solve_batched(algorithm={"ep_tr": jnp.logspace(-6, -3, B)})
 weights = problem.solve_batched(algorithm={"lam_prox": jnp.array([0.5, 1.0, 4.0])})
 budgets = problem.solve_batched(max_iters=jnp.array([5, 10, 20]))  # per-element caps
