@@ -214,12 +214,7 @@ To mark these as CTCS constraints we simply wrap them in `ox.ctcs(...)`
 # Generate box constraints for all states
 constraints = []
 for state in states:
-    constraints.extend(
-        [
-            ox.ctcs(state <= state.max),
-            ox.ctcs(state.min <= state)
-        ]
-    )
+    constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 ```
 
 This style of constraint definition as a list should feel familiar to CVXPY users.

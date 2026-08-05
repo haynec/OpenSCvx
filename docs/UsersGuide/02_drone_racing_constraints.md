@@ -97,10 +97,7 @@ As before, we enforce box constraints on states continuously:
 ```python
 constraints = []
 for state in states:
-    constraints.extend([
-        ox.ctcs(state <= state.max),
-        ox.ctcs(state.min <= state)
-    ])
+    constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 ```
 
 With our states now in 3D it becomes clear to us why such constraints are also referred to as _path constraints_; we are enforcing the entire path to follow the constraints, not just the discrete nodes.
@@ -114,9 +111,7 @@ We use the `.at([node])` method to specify which nodes the constraint applies to
 
 ```python
 # Gate passage constraint at a specific node
-gate_constraint = (
-    ox.linalg.Norm(A_gate @ position - c_gate, ord="inf") <= 1.0
-).at([node])
+gate_constraint = (ox.linalg.Norm(A_gate @ position - c_gate, ord="inf") <= 1.0).at([node])
 ```
 
 The infinity norm $\lVert \cdot \rVert_\infty$ defines a box-shaped region, which when combined with the scaling matrix `A_gate` creates an ellipsoidal gate region.
@@ -124,9 +119,7 @@ The infinity norm $\lVert \cdot \rVert_\infty$ defines a box-shaped region, whic
 It should be noted that by default constraints are interpreted as nodal constraints, however they are applied to _all_ nodes when not otherwise noted. Writing
 
 ```python
-gate_constraint = (
-    ox.linalg.Norm(A_gate @ position - c_gate, ord="inf") <= 1.0
-)
+gate_constraint = ox.linalg.Norm(A_gate @ position - c_gate, ord="inf") <= 1.0
 ```
 
 would result in all nodes being constrained to lie within the gate.
@@ -164,9 +157,7 @@ The `.over()` method also accepts optional parameters for the penalty function t
 When a constraint is convex, we can mark it with `.convex()`:
 
 ```python
-gate_constraint = (
-    ox.linalg.Norm(A_gate @ position - c_gate, ord="inf") <= 1.0
-).convex().at([node])
+gate_constraint = (ox.linalg.Norm(A_gate @ position - c_gate, ord="inf") <= 1.0).convex().at([node])
 ```
 
 This tells OpenSCvx that no successive convexification is needed for this constraint, it is then lowered directly as a CVXPY constraint when the problem is lowered.
@@ -192,8 +183,8 @@ gate_nodes = np.arange(nodes_per_gate, n, nodes_per_gate)
 for node, center in zip(gate_nodes, gate_centers):
     A_gate_scaled = A_gate @ center  # Pre-scaled center
     gate_constraint = (
-        ox.linalg.Norm(A_gate @ position - A_gate_scaled, ord="inf") <= 1.0
-    ).convex().at([node])
+        (ox.linalg.Norm(A_gate @ position - A_gate_scaled, ord="inf") <= 1.0).convex().at([node])
+    )
     constraints.append(gate_constraint)
 ```
 
@@ -254,11 +245,7 @@ from openscvx.plotting import plot_states, plot_projections_2d
 plot_states(results, ["position", "velocity"]).show()
 
 # 2D projections colored by velocity
-plot_projections_2d(
-    results,
-    var_name="position",
-    velocity_var_name="velocity"
-).show()
+plot_projections_2d(results, var_name="position", velocity_var_name="velocity").show()
 ```
 
 For fully interactive 3D visualization with animated playback, gates, and thrust vectors, OpenSCvx integrates with [viser](https://viser.studio/). See [Tutorial 05: Visualization](05_visualization.md) for details on building rich 3D visualizations.

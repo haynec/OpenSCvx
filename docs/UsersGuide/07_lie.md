@@ -115,15 +115,17 @@ a3 = 0.250  # elbow -> wrist
 a4 = 0.150  # wrist -> end-effector
 
 # Screw axes [v; omega] for each joint, in the base frame at q = 0
-screw_axes = np.array([
-    [0.0,        0.0,        0.0, 0.0, 0.0, 1.0],  # J1 z at origin
-    [-d1,        0.0,        0.0, 0.0, 1.0, 0.0],  # J2 y at [0, 0, d1]
-    [0.0,       -a2,         0.0, 0.0, 0.0, 1.0],  # J3 z at [a2, 0, d1]
-    [-d1,        0.0,         a2, 0.0, 1.0, 0.0],  # J4 y at [a2, 0, d1]
-    [0.0, -(a2 + a3),         0.0, 0.0, 0.0, 1.0],  # J5 z at [a2+a3, ...]
-    [-d1,        0.0,    a2 + a3, 0.0, 1.0, 0.0],  # J6 y
-    [0.0, -(a2 + a3 + a4),    0.0, 0.0, 0.0, 1.0],  # J7 z
-])
+screw_axes = np.array(
+    [
+        [0.0, 0.0, 0.0, 0.0, 0.0, 1.0],  # J1 z at origin
+        [-d1, 0.0, 0.0, 0.0, 1.0, 0.0],  # J2 y at [0, 0, d1]
+        [0.0, -a2, 0.0, 0.0, 0.0, 1.0],  # J3 z at [a2, 0, d1]
+        [-d1, 0.0, a2, 0.0, 1.0, 0.0],  # J4 y at [a2, 0, d1]
+        [0.0, -(a2 + a3), 0.0, 0.0, 0.0, 1.0],  # J5 z at [a2+a3, ...]
+        [-d1, 0.0, a2 + a3, 0.0, 1.0, 0.0],  # J6 y
+        [0.0, -(a2 + a3 + a4), 0.0, 0.0, 0.0, 1.0],  # J7 z
+    ]
+)
 
 # End-effector pose at q = 0
 T_home = np.eye(4)
@@ -207,20 +209,20 @@ q_down = np.array([np.cos(np.pi / 4), 0.0, np.sin(np.pi / 4), 0.0])
 q_identity = np.array([1.0, 0.0, 0.0, 0.0])
 
 pre_height = 0.15
-grasp_pos     = np.array([0.35, -0.25, 0.05])
-place_pos     = np.array([0.35,  0.25, 0.05])
-home_pos      = np.array([a2 + a3 + a4 - 0.01, 0.0, d1])
+grasp_pos = np.array([0.35, -0.25, 0.05])
+place_pos = np.array([0.35, 0.25, 0.05])
+home_pos = np.array([a2 + a3 + a4 - 0.01, 0.0, d1])
 pre_grasp_pos = grasp_pos + np.array([0.0, 0.0, pre_height])
 pre_place_pos = place_pos + np.array([0.0, 0.0, pre_height])
 
-waypoint_names        = ["home", "pre_grasp", "grasp", "pre_grasp", "pre_place", "place"]
-waypoint_positions    = [home_pos, pre_grasp_pos, grasp_pos, pre_grasp_pos, pre_place_pos, place_pos]
+waypoint_names = ["home", "pre_grasp", "grasp", "pre_grasp", "pre_place", "place"]
+waypoint_positions = [home_pos, pre_grasp_pos, grasp_pos, pre_grasp_pos, pre_place_pos, place_pos]
 waypoint_orientations = [q_identity, q_down, q_down, q_down, q_down, q_down]
 
 nodes_per_segment = 2
-n_segments        = len(waypoint_positions) - 1
-n                 = nodes_per_segment * n_segments + 1   # 11 nodes total
-waypoint_nodes    = [i * nodes_per_segment for i in range(len(waypoint_positions))]
+n_segments = len(waypoint_positions) - 1
+n = nodes_per_segment * n_segments + 1  # 11 nodes total
+waypoint_nodes = [i * nodes_per_segment for i in range(len(waypoint_positions))]
 ```
 
 ### Task-Space Constraints
@@ -228,15 +230,17 @@ waypoint_nodes    = [i * nodes_per_segment for i in range(len(waypoint_positions
 Because `p_ee` and `R_ee` are symbolic, we can constrain them directly. We start with the standard box constraints on each state, then enforce a tight position tolerance at each waypoint:
 
 ```python
-states   = [angle, velocity]
+states = [angle, velocity]
 controls = [torque]
 
 constraints = []
 for state in states:
-    constraints.extend([
-        ox.ctcs(state <= state.max),
-        ox.ctcs(state.min <= state),
-    ])
+    constraints.extend(
+        [
+            ox.ctcs(state <= state.max),
+            ox.ctcs(state.min <= state),
+        ]
+    )
 
 # Keep the EE above the table everywhere
 constraints.append(ox.ctcs(p_ee[2] >= 0.0))
@@ -245,9 +249,7 @@ constraints.append(ox.ctcs(p_ee[2] >= 0.0))
 ee_tolerance = 0.01
 for name, wp, node in zip(waypoint_names, waypoint_positions, waypoint_nodes):
     wp_param = ox.Parameter(f"waypoint_{name}", shape=(3,), value=wp)
-    constraints.append(
-        (ox.linalg.Norm(p_ee - wp_param, ord=2) <= ee_tolerance).at([node])
-    )
+    constraints.append((ox.linalg.Norm(p_ee - wp_param, ord=2) <= ee_tolerance).at([node]))
 ```
 
 For orientation we use the $SO(3)$ logarithm, `ox.lie.SO3Log`, which maps a rotation matrix to its $\mathbb{R}^3$ axis–angle representation. The norm of $\log(R_{\text{des}}^\top R_{\text{ee}})$ is the geodesic angle error:
@@ -255,25 +257,21 @@ For orientation we use the $SO(3)$ logarithm, `ox.lie.SO3Log`, which maps a rota
 ```python
 # Build R_des from q_down (the desired downward gripper orientation)
 w, x, y, z = q_down
-R_des = np.array([
-    [1 - 2*(y*y + z*z), 2*(x*y - w*z),     2*(x*z + w*y)],
-    [2*(x*y + w*z),     1 - 2*(x*x + z*z), 2*(y*z - w*x)],
-    [2*(x*z - w*y),     2*(y*z + w*x),     1 - 2*(x*x + y*y)],
-])
+R_des = np.array(
+    [
+        [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+        [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+        [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
+    ]
+)
 
 ori_error = ox.lie.SO3Log(R_des.T @ R_ee)
-ori_norm  = ox.linalg.Norm(ori_error, ord=2)
+ori_norm = ox.linalg.Norm(ori_error, ord=2)
 
 # Loose tolerance for the entire task region; tight near grasp/place
-constraints.append(
-    (ori_norm <= np.deg2rad(5.0)).over((waypoint_nodes[1], waypoint_nodes[-1]))
-)
-constraints.append(
-    (ori_norm <= np.deg2rad(0.1)).over((waypoint_nodes[1], waypoint_nodes[3]))
-)
-constraints.append(
-    (ori_norm <= np.deg2rad(0.1)).over((waypoint_nodes[4], waypoint_nodes[5]))
-)
+constraints.append((ori_norm <= np.deg2rad(5.0)).over((waypoint_nodes[1], waypoint_nodes[-1])))
+constraints.append((ori_norm <= np.deg2rad(0.1)).over((waypoint_nodes[1], waypoint_nodes[3])))
+constraints.append((ori_norm <= np.deg2rad(0.1)).over((waypoint_nodes[4], waypoint_nodes[5])))
 ```
 
 These are *continuous-time* constraints: the geodesic error is bounded everywhere along the indicated trajectory segment, not just at the discrete nodes.
@@ -319,9 +317,9 @@ angle.guess = ox.init.ik_interpolation(
     angles_max=angle.max,
     sequential=True,
 )
-angle.initial   = np.clip(angle.guess[0], angle.min, angle.max)
-velocity.guess  = np.zeros((n, N_JOINTS))
-torque.guess    = np.zeros((n, N_JOINTS))
+angle.initial = np.clip(angle.guess[0], angle.min, angle.max)
+velocity.guess = np.zeros((n, N_JOINTS))
+torque.guess = np.zeros((n, N_JOINTS))
 ```
 
 The `sequential=True` flag seeds each node's IK solve from the previous node's solution, producing a coherent joint-space path. The default (`sequential=False`) solves all nodes in parallel from the same seed via `jax.vmap`, giving each node its own independent shot at finding a good local minimum.
@@ -382,16 +380,18 @@ First, lift each keypoint from its home position into the world frame using the 
 
 ```python
 keypoint_home_pos = {
-    "base":     np.array([0.0,          0.0, 0.0, 1.0]),
-    "shoulder": np.array([0.0,          0.0, d1,  1.0]),
-    "elbow":    np.array([a2,           0.0, d1,  1.0]),
-    "wrist":    np.array([a2 + a3,      0.0, d1,  1.0]),
-    "ee":       np.array([a2 + a3 + a4, 0.0, d1,  1.0]),
+    "base": np.array([0.0, 0.0, 0.0, 1.0]),
+    "shoulder": np.array([0.0, 0.0, d1, 1.0]),
+    "elbow": np.array([a2, 0.0, d1, 1.0]),
+    "wrist": np.array([a2 + a3, 0.0, d1, 1.0]),
+    "ee": np.array([a2 + a3 + a4, 0.0, d1, 1.0]),
 }
+
 
 def _keypoint_world(name):
     p_hom = joint_transforms[name] @ ox.Constant(keypoint_home_pos[name])
     return ox.Concat(p_hom[0], p_hom[1], p_hom[2])
+
 
 kp = {name: _keypoint_world(name) for name in joint_names}
 ```
@@ -400,10 +400,10 @@ Then describe each link as `(start, end, radius)`:
 
 ```python
 link_specs = [
-    ("base",     "shoulder", 0.06),
-    ("shoulder", "elbow",    0.05),
-    ("elbow",    "wrist",    0.04),
-    ("wrist",    "ee",       0.035),
+    ("base", "shoulder", 0.06),
+    ("shoulder", "elbow", 0.05),
+    ("elbow", "wrist", 0.04),
+    ("wrist", "ee", 0.035),
 ]
 ```
 
@@ -426,8 +426,7 @@ for i in range(len(link_specs)):
 
         dists = ox.Vmap(
             lambda t, pa0=pa0, pa1=pa1, pb0=pb0, pb1=pb1: ox.linalg.Norm(
-                ((1 - t[0]) * pa0 + t[0] * pa1)
-                - ((1 - t[1]) * pb0 + t[1] * pb1)
+                ((1 - t[0]) * pa0 + t[0] * pa1) - ((1 - t[1]) * pb0 + t[1] * pb1)
             ),
             batch=tt,
         )

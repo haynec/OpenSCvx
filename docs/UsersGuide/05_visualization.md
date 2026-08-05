@@ -71,10 +71,7 @@ plot_projections_2d(results, var_name="position").show()
 
 # Color by velocity magnitude
 plot_projections_2d(
-    results,
-    var_name="position",
-    velocity_var_name="velocity",
-    cmap="viridis"
+    results, var_name="position", velocity_var_name="velocity", cmap="viridis"
 ).show()
 ```
 
@@ -223,7 +220,7 @@ from openscvx.plotting.viser import compute_velocity_colors, create_server
 pos = results.trajectory["position"]
 vel = results.trajectory["velocity"]
 thrust = results.trajectory.get("thrust_force")  # May be None
-attitude = results.trajectory.get("attitude")    # May be None for 3-DOF
+attitude = results.trajectory.get("attitude")  # May be None for 3-DOF
 traj_time = results.trajectory["time"]
 
 # Map velocity magnitude to viridis colormap
@@ -292,21 +289,14 @@ update_callbacks.append(update_trail)
 
 # Current position indicator: use attitude frame for 6-DOF, sphere for 3-DOF
 if attitude is not None:
-    _, update_attitude = add_attitude_frame(
-        server, pos, attitude,
-        axes_length=2.0
-    )
+    _, update_attitude = add_attitude_frame(server, pos, attitude, axes_length=2.0)
     update_callbacks.append(update_attitude)
 else:
     _, update_marker = add_position_marker(server, pos)
     update_callbacks.append(update_marker)
 
 # Thrust vector arrow (body-frame thrust needs attitude)
-_, update_thrust = add_thrust_vector(
-    server, pos, thrust,
-    attitude=attitude,
-    scale=0.3
-)
+_, update_thrust = add_thrust_vector(server, pos, thrust, attitude=attitude, scale=0.3)
 if update_thrust is not None:  # None if thrust data wasn't provided
     update_callbacks.append(update_thrust)
 ```
@@ -317,7 +307,9 @@ For viewplanning problems, you can add a camera viewcone and target markers:
 # Camera field-of-view cone (requires sensor parameters)
 if attitude is not None and "R_sb" in results:
     _, update_viewcone = add_viewcone(
-        server, pos, attitude,
+        server,
+        pos,
+        attitude,
         half_angle_x=np.pi / 6,  # 30 degree half-angle
         half_angle_y=np.pi / 6,
         scale=10.0,
@@ -343,10 +335,12 @@ from openscvx.plotting.viser import add_animated_vector_norm_plot
 
 # Add thrust magnitude plot with bounds and custom folder
 _, update_norm = add_animated_vector_norm_plot(
-    server, results, "thrust_force",
+    server,
+    results,
+    "thrust_force",
     title="Thrust Magnitude",
     bounds=(0.0, max_thrust),  # Show constraint bounds
-    folder_name="Control Plots"  # Organize in GUI folder
+    folder_name="Control Plots",  # Organize in GUI folder
 )
 if update_norm is not None:
     update_callbacks.append(update_norm)
@@ -362,8 +356,10 @@ Finally, connect all the update callbacks to the animation system. This adds pla
 from openscvx.plotting.viser import add_animation_controls
 
 add_animation_controls(
-    server, traj_time, update_callbacks,
-    loop=True  # Loop when animation reaches the end
+    server,
+    traj_time,
+    update_callbacks,
+    loop=True,  # Loop when animation reaches the end
 )
 ```
 
@@ -430,11 +426,13 @@ update_callbacks.append(cb)
 _, cb = add_attitude_frame(server, pos, attitude)
 update_callbacks.append(cb)
 _, cb = add_thrust_vector(server, pos, thrust, attitude=attitude, scale=0.3)
-if cb: update_callbacks.append(cb)
+if cb:
+    update_callbacks.append(cb)
 
 # 5. Embedded Plotly panels (optional)
 _, cb = add_animated_vector_norm_plot(server, results, "thrust_force")
-if cb: update_callbacks.append(cb)
+if cb:
+    update_callbacks.append(cb)
 
 # 6. Wire up controls
 add_animation_controls(server, traj_time, update_callbacks, loop=True)

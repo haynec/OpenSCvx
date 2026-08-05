@@ -159,11 +159,10 @@ attitude_normalized = attitude / q_norm
 dynamics = {
     "position": velocity,
     "velocity": (1.0 / m) * ox.spatial.QDCM(attitude_normalized) @ thrust_force
-                + np.array([0, 0, g_const]),
+    + np.array([0, 0, g_const]),
     "attitude": 0.5 * ox.spatial.SSMP(angular_velocity) @ attitude_normalized,
-    "angular_velocity": ox.linalg.Diag(1.0 / J_b) @ (
-        torque - ox.spatial.SSM(angular_velocity) @ ox.linalg.Diag(J_b) @ angular_velocity
-    ),
+    "angular_velocity": ox.linalg.Diag(1.0 / J_b)
+    @ (torque - ox.spatial.SSM(angular_velocity) @ ox.linalg.Diag(J_b) @ angular_velocity),
 }
 ```
 
@@ -225,10 +224,7 @@ constraints = []
 
 # Box constraints on states (as before)
 for state in states:
-    constraints.extend([
-        ox.ctcs(state <= state.max),
-        ox.ctcs(state.min <= state)
-    ])
+    constraints.extend([ox.ctcs(state <= state.max), ox.ctcs(state.min <= state)])
 
 # Obstacle constraints
 for center, A in zip(obstacle_centers, A_obs):
@@ -258,11 +254,11 @@ problem = ox.Problem(
     constraints=constraints,
     N=n,
     algorithm={
-        "lam_prox": 1e1,       # Trust region weight
-        "lam_cost": 1e1,       # Cost objective weight
-        "lam_vc": 1e2,         # Virtual control weight
+        "lam_prox": 1e1,  # Trust region weight
+        "lam_cost": 1e1,  # Cost objective weight
+        "lam_vc": 1e2,  # Virtual control weight
         "autotuner": ox.AugmentedLagrangian(
-            lam_cost_drop=4,     # Iteration to start relaxing cost
+            lam_cost_drop=4,  # Iteration to start relaxing cost
             lam_cost_relax=0.5,  # Cost relaxation factor
         ),
     },
@@ -292,7 +288,7 @@ Consider a 3D grid of obstacles:
 ```python
 n_obstacles = 64  # 4 x 4 x 4 grid
 obstacle_centers = np.array([...])  # Shape: (64, 3)
-obstacle_radii = np.array([...])    # Shape: (64,)
+obstacle_radii = np.array([...])  # Shape: (64,)
 ```
 
 The naive approach creates 64 separate constraints:
@@ -302,9 +298,7 @@ The naive approach creates 64 separate constraints:
 for i in range(n_obstacles):
     center = obstacle_centers[i]
     radius = obstacle_radii[i]
-    constraints.append(
-        ox.ctcs(radius <= ox.linalg.Norm(position - center))
-    )
+    constraints.append(ox.ctcs(radius <= ox.linalg.Norm(position - center)))
 ```
 
 This creates N separate constraint objects, each processed independently. For 64 obstacles this adds overhead; for 2000+ it becomes impractical.
@@ -316,7 +310,8 @@ This creates N separate constraint objects, each processed independently. For 64
 ```python
 # Approach 2: Vmap (vectorized, efficient)
 obstacle_avoidance = ox.ctcs(
-    obstacle_radii <= ox.Vmap(
+    obstacle_radii
+    <= ox.Vmap(
         lambda center: ox.linalg.Norm(position - center),
         batch=obstacle_centers,
     )
