@@ -10819,6 +10819,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#custom-penalties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom penalties
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#related-reading" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -11138,6 +11149,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#custom-penalties" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Custom penalties
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#related-reading" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -11199,8 +11221,8 @@ accumulates a non-negative penalty of the constraint violations:</p>
   = s(\tau)\, \sum_j \mathrm{penalty}\big(g_j(x, u)\big),
 \]</div>
 <p>where the default penalty is the squared ReLU <span class="arithmatex">\(\max(0, g_j)^2\)</span> (Huber and smooth
-ReLU are also available), and <span class="arithmatex">\(s\)</span> is the <a href="../time_dilation/">time-dilation</a>
-factor. Because the integrand is non-negative, <span class="arithmatex">\(y\)</span> is monotonically
+ReLU are also available, or you can <a href="#custom-penalties">write your own</a>), and <span class="arithmatex">\(s\)</span>
+is the <a href="../time_dilation/">time-dilation</a> factor. Because the integrand is non-negative, <span class="arithmatex">\(y\)</span> is monotonically
 non-decreasing and accumulates <em>any</em> violation occurring between nodes.</p>
 <p>Enforcing <span class="arithmatex">\(y \equiv 0\)</span> then drives every penalty — and hence every constraint —
 to zero continuously. In practice the convex subproblem (i) resets <span class="arithmatex">\(y\)</span> to <span class="arithmatex">\(0\)</span> at
@@ -11227,6 +11249,32 @@ different intervals get separate states. The bound <span class="arithmatex">\(y_
 <code>licq_max</code> (default <span class="arithmatex">\(10^{-4}\)</span>); tighten it for stricter between-node enforcement.
 After solving, the achieved continuous-time violation is reported as
 <code>results.ctcs_violation</code>.</p>
+<h2 id="custom-penalties">Custom penalties<a class="headerlink" href="#custom-penalties" title="Permanent link">&para;</a></h2>
+<p>The built-in penalties are selected by name — <code>"squared_relu"</code> (the default),
+<code>"huber"</code>, and <code>"smooth_relu"</code> — which fixes their shape and their internal
+constants. When you want to tune those constants or shape the penalty yourself,
+pass a callable instead:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Widen Huber&#39;s quadratic region — not expressible with the string form.</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">ox</span><span class="o">.</span><span class="n">ctcs</span><span class="p">(</span><span class="n">altitude</span> <span class="o">&gt;=</span> <span class="mi">10</span><span class="p">,</span> <span class="n">penalty</span><span class="o">=</span><span class="k">lambda</span> <span class="n">r</span><span class="p">:</span> <span class="n">ox</span><span class="o">.</span><span class="n">Huber</span><span class="p">(</span><span class="n">ox</span><span class="o">.</span><span class="n">PositivePart</span><span class="p">(</span><span class="n">r</span><span class="p">),</span> <span class="n">delta</span><span class="o">=</span><span class="mf">0.5</span><span class="p">))</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># Quadratic near the boundary, with a linear tail that keeps pushing far out.</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="n">ox</span><span class="o">.</span><span class="n">ctcs</span><span class="p">(</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">speed</span> <span class="o">&lt;=</span> <span class="n">v_max</span><span class="p">,</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="n">penalty</span><span class="o">=</span><span class="k">lambda</span> <span class="n">r</span><span class="p">:</span> <span class="n">ox</span><span class="o">.</span><span class="n">Square</span><span class="p">(</span><span class="n">ox</span><span class="o">.</span><span class="n">PositivePart</span><span class="p">(</span><span class="n">r</span><span class="p">))</span> <span class="o">+</span> <span class="mf">0.1</span> <span class="o">*</span> <span class="n">ox</span><span class="o">.</span><span class="n">PositivePart</span><span class="p">(</span><span class="n">r</span><span class="p">),</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>The callable receives the canonicalized residual <span class="arithmatex">\(g_j(x, u)\)</span> — the constraint
+already rearranged into <span class="arithmatex">\(g_j \le 0\)</span> form, so <code>speed &lt;= v_max</code> arrives as
+<code>speed - v_max</code> — and returns the expression to integrate. That result is summed
+to a scalar, so a vector-valued residual may produce a vector-valued penalty. The
+callable runs once, when the problem is built; from there its expression is
+differentiated, sparsified, and cached exactly like a built-in penalty.</p>
+<p>The body must be built from openscvx operations: <code>ox.PositivePart</code>, <code>ox.Square</code>,
+<code>ox.Huber</code> (tunable <code>delta</code>), <code>ox.SmoothReLU</code> (tunable <code>c</code>), and ordinary
+arithmetic on expressions. Reaching for <code>jax.numpy</code> instead — <code>jnp.maximum(r, 0)</code>
+— returns an array rather than an expression and is rejected when the problem is
+built: the penalty has to stay symbolic to be lowered into the augmented
+dynamics.</p>
 <h2 id="related-reading">Related reading<a class="headerlink" href="#related-reading" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../ocp/">Optimal Control Problem</a> — where the CTCS reset-and-bound constraints
@@ -11256,7 +11304,7 @@ After solving, the achieved continuous-time violation is reported as
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="July 15, 2026 06:18:13 UTC">July 15, 2026</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="August 10, 2026 20:41:39 UTC">August 10, 2026</span>
   </span>
 
     
