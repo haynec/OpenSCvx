@@ -15,6 +15,15 @@ pip install "openscvx[rl]"
 pip install -e ".[rl]"
 ```
 
+## Static figures
+
+Both examples write mobile-friendly PNGs to `assets/figures/` (override with
+`--save-dir`). Shipped previews:
+
+![RL warm-start trajectory](assets/figures/rl_warmstart_trajectory.png)
+
+![Learned-dynamics trajectory](assets/figures/rl_learned_dynamics_trajectory.png)
+
 ## Example A — policy warm-start: `rl_warmstart_obstacle.py`
 
 1. A PureJaxRL-style **PPO** policy (`_ppo_double_integrator.py`) is trained on an

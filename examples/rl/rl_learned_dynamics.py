@@ -49,6 +49,7 @@ from _learned_dynamics import (  # noqa: E402
     save_dynamics,
     true_step,
 )
+from _plotting import plot_controls_png, plot_learned_dynamics_png  # noqa: E402
 
 N = HORIZON
 TF = DT * (N - 1)
@@ -233,6 +234,12 @@ if __name__ == "__main__":
     parser.add_argument("--retrain", action="store_true")
     parser.add_argument("--updates", type=int, default=300)
     parser.add_argument("--no-show", action="store_true")
+    parser.add_argument(
+        "--save-dir",
+        type=Path,
+        default=Path(current_dir) / "assets" / "figures",
+        help="Directory for static PNG figures (mobile-friendly).",
+    )
     args = parser.parse_args()
 
     if args.retrain:
@@ -256,6 +263,25 @@ if __name__ == "__main__":
         f"penetration={_obstacle_penetration(true_traj[:, :2]):.4f}  "
         f"goal error={np.linalg.norm(true_traj[-1, :2] - GOAL):.4f}"
     )
+
+    t = np.linspace(0.0, TF, N)
+    traj_png = plot_learned_dynamics_png(
+        pos,
+        true_traj,
+        start=X0[:2],
+        goal=GOAL,
+        obstacle_center=OBSTACLE_CENTER,
+        obstacle_radius=OBSTACLE_RADIUS,
+        out=args.save_dir / "rl_learned_dynamics_trajectory.png",
+    )
+    ctrl_png = plot_controls_png(
+        t,
+        u_star,
+        out=args.save_dir / "rl_learned_dynamics_controls.png",
+        title="OpenSCvx controls (learned dynamics)",
+    )
+    print(f"Wrote {traj_png}")
+    print(f"Wrote {ctrl_png}")
 
     if not args.no_show:
         plot_learned_dynamics_solution(results, true_rollout=true_traj).show()

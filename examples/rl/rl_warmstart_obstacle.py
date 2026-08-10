@@ -33,6 +33,7 @@ from openscvx import Problem
 # Local PPO helper (same directory); keep import robust for script + pytest discovery.
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
+from _plotting import plot_controls_png, plot_warmstart_png  # noqa: E402
 from _ppo_double_integrator import (  # noqa: E402
     A_MAX,
     DT,
@@ -213,6 +214,12 @@ if __name__ == "__main__":
     )
     parser.add_argument("--updates", type=int, default=400)
     parser.add_argument("--no-show", action="store_true", help="Skip Plotly display.")
+    parser.add_argument(
+        "--save-dir",
+        type=Path,
+        default=Path(current_dir) / "assets" / "figures",
+        help="Directory for static PNG figures (mobile-friendly).",
+    )
     args = parser.parse_args()
 
     if args.retrain:
@@ -233,11 +240,31 @@ if __name__ == "__main__":
     results = problem_local.post_process()
 
     pos = np.asarray(results.nodes["position"])
+    u_star = np.asarray(results.nodes["force"])
     print(f"SCvx converged={results['converged']}")
     print(
         f"SCvx final pos={pos[-1]}, "
         f"obstacle penetration={_rl_obstacle_penetration(np.hstack([pos, np.zeros((N, 2))])):.4f}"
     )
+
+    t = np.linspace(0.0, TF, N)
+    traj_png = plot_warmstart_png(
+        X_rl,
+        pos,
+        start=X0[:2],
+        goal=GOAL,
+        obstacle_center=OBSTACLE_CENTER,
+        obstacle_radius=OBSTACLE_RADIUS,
+        out=args.save_dir / "rl_warmstart_trajectory.png",
+    )
+    ctrl_png = plot_controls_png(
+        t,
+        u_star,
+        out=args.save_dir / "rl_warmstart_controls.png",
+        title="OpenSCvx controls (RL warm-start)",
+    )
+    print(f"Wrote {traj_png}")
+    print(f"Wrote {ctrl_png}")
 
     if not args.no_show:
         plot_rl_vs_scvx(results, x_rl=X_rl).show()
