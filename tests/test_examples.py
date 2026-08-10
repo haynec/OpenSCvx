@@ -41,7 +41,12 @@ _MJX_EXAMPLES = frozenset(
     }
 )
 _QPAX_EXAMPLES = frozenset({"abstract/brachistochrone_batched.py"})
-_RL_EXAMPLES = frozenset({"rl/rl_warmstart_obstacle.py"})
+_RL_EXAMPLES = frozenset(
+    {
+        "rl/rl_warmstart_obstacle.py",
+        "rl/rl_learned_dynamics.py",
+    }
+)
 
 # Timing bounds for specific examples (in seconds)
 # Format: "relative/path/to/example.py": {"init": max_init, "solve": max_solve, "post": max_post}
