@@ -59,6 +59,7 @@ Extras are installed with the `openscvx[extra1,extra2]` syntax shown above.
 | `lie` | Lie-group operators via `jaxlie`. |
 | `mjx` | MuJoCo MJX dynamics (`mujoco`, `mujoco-mjx`). |
 | `frax` | Fractal / `frax` dynamics support. |
+| `rl` | Optax for the PureJaxRL-style PPO warm-start example (`examples/rl/`). |
 
 ## Next steps
 

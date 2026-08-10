@@ -62,6 +62,11 @@ mjx = [
 frax = [
     "frax>=0.0.4",
 ]
+rl = [
+    # Optax powers the PureJaxRL-style PPO helper in examples/rl/.
+    # Flax is optional for users who prefer module-style policies.
+    "optax>=0.2.0",
+]
 test = [
     "pytest",
     "pytest-xdist",
@@ -159,4 +164,5 @@ markers = [
     "cvxpygen: requires cvxpygen + qocogen (openscvx[cvxpygen])",
     "lie: requires jaxlie (openscvx[lie])",
     "moreau: requires a licensed moreau install (openscvx[moreau])",
+    "rl: requires optax (openscvx[rl])",
 ]

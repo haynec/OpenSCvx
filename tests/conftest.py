@@ -58,6 +58,7 @@ OPTIONAL_DEPS = {
     "cvxpygen": lambda: _installed("cvxpygen") and _installed("qocogen"),
     "lie": lambda: _installed("jaxlie"),
     "moreau": _check_moreau,
+    "rl": lambda: _installed("optax"),
 }
 
 _E2E_DIR = Path(__file__).parent / "e2e"

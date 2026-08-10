@@ -41,6 +41,7 @@ _MJX_EXAMPLES = frozenset(
     }
 )
 _QPAX_EXAMPLES = frozenset({"abstract/brachistochrone_batched.py"})
+_RL_EXAMPLES = frozenset({"rl/rl_warmstart_obstacle.py"})
 
 # Timing bounds for specific examples (in seconds)
 # Format: "relative/path/to/example.py": {"init": max_init, "solve": max_solve, "post": max_post}
@@ -77,6 +78,9 @@ def _excluded(rel_path: Path) -> bool:
     """Return True if ``rel_path`` (relative to examples/) should not be tested."""
     if rel_path.name in IGNORED_FILES:
         return True
+    # Local helpers / private modules (e.g. examples/rl/_ppo_*.py)
+    if rel_path.name.startswith("_"):
+        return True
     # Realtime examples require special event loop handling
     if "realtime" in rel_path.parts:
         return True
@@ -95,6 +99,8 @@ def discover_example_paths() -> list:
             marks.append(pytest.mark.mjx)
         if rel.as_posix() in _QPAX_EXAMPLES:
             marks.append(pytest.mark.qpax)
+        if rel.as_posix() in _RL_EXAMPLES:
+            marks.append(pytest.mark.rl)
         params.append(
             pytest.param(py_file, id=str(rel.with_suffix("")).replace("/", "_"), marks=marks)
         )

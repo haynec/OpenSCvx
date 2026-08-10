@@ -216,6 +216,7 @@ OpenSCvx integrates with several optional third-party packages. Each installs as
 | [moreau](https://pypi.org/project/moreau/) | `moreau` | Licensed QP solver backend | ![moreau](https://img.shields.io/badge/moreau-license%20required-lightgrey) |
 | [stljax](https://github.com/UW-CTRL/stljax) | `stl` | Signal Temporal Logic robustness bridge | ![stljax](https://img.shields.io/badge/stljax-no%20tests%20yet-lightgrey) |
 | [frax](https://github.com/danielpmorton/frax) | `frax` | Robot dynamics for the manipulator examples | [![frax](https://img.shields.io/badge/frax-weekly%20examples%20sweep-blue)](https://github.com/OpenSCvx/OpenSCvx/actions/workflows/tests-examples.yml) |
+| [Optax](https://github.com/google-deepmind/optax) | `rl` | JAX RL warm-start example (`examples/rl/`, PureJaxRL-style PPO) | ![rl](https://img.shields.io/badge/rl-optional%20extra-lightgrey) |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
