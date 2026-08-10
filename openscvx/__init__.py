@@ -60,6 +60,7 @@ from openscvx.symbolic.expr import (
     Fixed,
     Free,
     Hstack,
+    Huber,
     Index,
     Inequality,
     Inv,
@@ -76,9 +77,12 @@ from openscvx.symbolic.expr import (
     Neg,
     NodalConstraint,
     Parameter,
+    PositivePart,
     Power,
     Sin,
+    SmoothReLU,
     Sqrt,
+    Square,
     Stack,
     State,
     Sub,
@@ -185,6 +189,11 @@ __all__ = [
     "NodalConstraint",
     "CTCS",
     "ctcs",
+    # Penalty function building blocks
+    "PositivePart",
+    "Square",
+    "Huber",
+    "SmoothReLU",
     # Data parallelism
     "Vmap",
     # LaTeX rendering

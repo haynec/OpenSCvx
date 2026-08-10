@@ -215,13 +215,15 @@ def separate_constraints(constraint_set: ConstraintSet, n_nodes: int) -> Constra
                     "Cross-node constraints should be specified as bare Constraint objects. "
                     f"Constraint: {c.constraint}"
                 )
-            # Validate that CTCS constraints are not equality constraints
-            # CTCS penalty functions (squared_relu, huber, smooth_relu) are designed
-            # for inequality constraints only
+            # Validate that CTCS constraints are not equality constraints: the
+            # augmented state integrates a one-sided violation penalty, which
+            # only certifies satisfaction of an inequality
             if isinstance(c.constraint, Equality):
                 raise ValueError(
                     f"CTCS constraints cannot be equality constraints. "
-                    f"CTCS uses penalty functions designed for inequality constraints. "
+                    f"A CTCS penalty measures violation of an inequality (how far the "
+                    f"residual is above zero), so it cannot detect an equality being "
+                    f"missed from below. "
                     f"For equality constraints, use nodal constraints with .convex() instead.\n"
                     f"Constraint: {c.constraint}"
                 )

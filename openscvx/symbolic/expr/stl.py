@@ -57,7 +57,7 @@ See also:
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Optional, Tuple, Union
 
 import numpy as np
 
@@ -307,7 +307,7 @@ class STLExpr(Expr):
     def over(
         self,
         interval: "IntervalLike",
-        penalty: str = "smooth_relu",
+        penalty: Union[str, Callable[[Expr], Expr]] = "smooth_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
         licq_max: Optional[float] = None,
@@ -321,7 +321,8 @@ class STLExpr(Expr):
                 discretization indices and produces a :class:`NodeInterval`;
                 ``"seconds"`` treats them as wall-time and produces a
                 :class:`TimeInterval` (lowering not yet implemented).
-            penalty: Penalty function type for CTCS
+            penalty: CTCS penalty function name, or a callable ``Expr -> Expr``
+                receiving the constraint residual (see :class:`CTCS`)
             idx: Optional grouping index for multiple augmented states
             check_nodally: Whether to also enforce at discrete nodes
             licq_max: Optional upper bound on the augmented state accumulating

@@ -138,6 +138,7 @@ obstacle_constraint = (diff.T @ diff >= safe_distance**2).over((5, 10))
 ```
 
 The `.over()` method also accepts optional parameters for the penalty function type (`penalty`), grouping index (`idx`), and whether to also check nodally (`check_nodally`).
+`penalty` takes one of the built-in names (`"squared_relu"`, `"huber"`, `"smooth_relu"`) or a callable that builds a penalty of your own from the constraint residual; see [Custom penalties](../Foundations/constraint_reformulation.md#custom-penalties).
 
 !!! note
     You can also directly instantiate `NodalConstraint` or `CTCS` objects if you prefer:

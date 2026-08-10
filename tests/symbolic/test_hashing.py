@@ -22,7 +22,7 @@ from openscvx.symbolic.expr import (
 )
 from openscvx.symbolic.expr.constraint import CTCS
 from openscvx.symbolic.expr.linalg import Norm
-from openscvx.symbolic.expr.math import Cos, Huber, Sin, SmoothReLU
+from openscvx.symbolic.expr.math import Cos, Huber, PositivePart, Sin, SmoothReLU, Square
 from openscvx.symbolic.hashing import hash_symbolic_problem
 
 
@@ -528,8 +528,8 @@ def test_ctcs_same_params():
     y = State("y", (2,))
     y._slice = slice(0, 2)
 
-    ctcs1 = CTCS(x <= 5, penalty="l2")
-    ctcs2 = CTCS(y <= 5, penalty="l2")
+    ctcs1 = CTCS(x <= 5, penalty="huber")
+    ctcs2 = CTCS(y <= 5, penalty="huber")
 
     assert hash_expr(ctcs1) == hash_expr(ctcs2)
 
@@ -539,10 +539,48 @@ def test_ctcs_different_penalty():
     x = State("x", (2,))
     x._slice = slice(0, 2)
 
-    ctcs_l2 = CTCS(x <= 5, penalty="l2")
-    ctcs_l1 = CTCS(x <= 5, penalty="l1")
+    ctcs_squared = CTCS(x <= 5, penalty="squared_relu")
+    ctcs_huber = CTCS(x <= 5, penalty="huber")
 
-    assert hash_expr(ctcs_l2) != hash_expr(ctcs_l1)
+    assert hash_expr(ctcs_squared) != hash_expr(ctcs_huber)
+
+
+def test_ctcs_same_callable_penalty():
+    """CTCS with the same callable penalty should hash the same."""
+    x = State("x", (2,))
+    x._slice = slice(0, 2)
+
+    y = State("y", (2,))
+    y._slice = slice(0, 2)
+
+    ctcs1 = CTCS(x <= 5, penalty=lambda r: Huber(PositivePart(r), delta=0.5))
+    ctcs2 = CTCS(y <= 5, penalty=lambda r: Huber(PositivePart(r), delta=0.5))
+
+    assert hash_expr(ctcs1) == hash_expr(ctcs2)
+
+
+def test_ctcs_different_callable_penalty():
+    """CTCS callable penalties that build different trees should hash differently."""
+    x = State("x", (2,))
+    x._slice = slice(0, 2)
+
+    ctcs_wide = CTCS(x <= 5, penalty=lambda r: Huber(PositivePart(r), delta=0.5))
+    ctcs_narrow = CTCS(x <= 5, penalty=lambda r: Huber(PositivePart(r), delta=0.1))
+    ctcs_squared = CTCS(x <= 5, penalty=lambda r: Square(PositivePart(r)))
+
+    assert hash_expr(ctcs_wide) != hash_expr(ctcs_narrow)
+    assert hash_expr(ctcs_wide) != hash_expr(ctcs_squared)
+
+
+def test_ctcs_callable_penalty_matches_equivalent_name():
+    """A callable that rebuilds a named penalty hashes like the named penalty."""
+    x = State("x", (2,))
+    x._slice = slice(0, 2)
+
+    ctcs_named = CTCS(x <= 5, penalty="squared_relu")
+    ctcs_callable = CTCS(x <= 5, penalty=lambda r: Square(PositivePart(r)))
+
+    assert hash_expr(ctcs_named) == hash_expr(ctcs_callable)
 
 
 def test_ctcs_with_nodes():
@@ -932,9 +970,9 @@ def test_problem_ctcs_constraint_order_invariant():
 
         # Create CTCS constraints in the specified order
         constraints_map = {
-            "ctcs_norm": CTCS(Norm(x) <= 3.0, penalty="l2"),
-            "ctcs_x0": CTCS(x[0] >= -1.0, penalty="l1"),
-            "ctcs_x1": CTCS(x[1] <= 2.0, penalty="l2"),
+            "ctcs_norm": CTCS(Norm(x) <= 3.0, penalty="squared_relu"),
+            "ctcs_x0": CTCS(x[0] >= -1.0, penalty="huber"),
+            "ctcs_x1": CTCS(x[1] <= 2.0, penalty="squared_relu"),
         }
         ordered_constraints = [constraints_map[name] for name in constraint_order]
 

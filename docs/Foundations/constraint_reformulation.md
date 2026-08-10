@@ -29,8 +29,8 @@ $$
 $$
 
 where the default penalty is the squared ReLU $\max(0, g_j)^2$ (Huber and smooth
-ReLU are also available), and $s$ is the [time-dilation](time_dilation.md)
-factor. Because the integrand is non-negative, $y$ is monotonically
+ReLU are also available, or you can [write your own](#custom-penalties)), and $s$
+is the [time-dilation](time_dilation.md) factor. Because the integrand is non-negative, $y$ is monotonically
 non-decreasing and accumulates *any* violation occurring between nodes.
 
 Enforcing $y \equiv 0$ then drives every penalty — and hence every constraint —
@@ -65,6 +65,38 @@ different intervals get separate states. The bound $y_{\max}$ is the constraint'
 `licq_max` (default $10^{-4}$); tighten it for stricter between-node enforcement.
 After solving, the achieved continuous-time violation is reported as
 `results.ctcs_violation`.
+
+## Custom penalties
+
+The built-in penalties are selected by name — `"squared_relu"` (the default),
+`"huber"`, and `"smooth_relu"` — which fixes their shape and their internal
+constants. When you want to tune those constants or shape the penalty yourself,
+pass a callable instead:
+
+```python
+# Widen Huber's quadratic region — not expressible with the string form.
+ox.ctcs(altitude >= 10, penalty=lambda r: ox.Huber(ox.PositivePart(r), delta=0.5))
+
+# Quadratic near the boundary, with a linear tail that keeps pushing far out.
+ox.ctcs(
+    speed <= v_max,
+    penalty=lambda r: ox.Square(ox.PositivePart(r)) + 0.1 * ox.PositivePart(r),
+)
+```
+
+The callable receives the canonicalized residual $g_j(x, u)$ — the constraint
+already rearranged into $g_j \le 0$ form, so `speed <= v_max` arrives as
+`speed - v_max` — and returns the expression to integrate. That result is summed
+to a scalar, so a vector-valued residual may produce a vector-valued penalty. The
+callable runs once, when the problem is built; from there its expression is
+differentiated, sparsified, and cached exactly like a built-in penalty.
+
+The body must be built from openscvx operations: `ox.PositivePart`, `ox.Square`,
+`ox.Huber` (tunable `delta`), `ox.SmoothReLU` (tunable `c`), and ordinary
+arithmetic on expressions. Reaching for `jax.numpy` instead — `jnp.maximum(r, 0)`
+— returns an array rather than an expression and is rejected when the problem is
+built: the penalty has to stay symbolic to be lowered into the augmented
+dynamics.
 
 ## Related reading
 

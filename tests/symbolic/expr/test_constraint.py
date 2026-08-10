@@ -1121,6 +1121,94 @@ def test_ctcs_unknown_penalty():
         ctcs_constraint.penalty_expr()
 
 
+# --- CTCS: Callable Penalties ---
+
+
+def test_ctcs_callable_penalty_builds_expected_ast():
+    """A callable penalty is applied to the residual and summed."""
+    x = Variable("x", shape=(2,))
+    constraint = x <= 1.0
+
+    ctcs_constraint = CTCS(constraint, penalty=lambda r: Square(PositivePart(r)))
+    penalty = ctcs_constraint.penalty_expr()
+
+    assert isinstance(penalty, Sum)
+    assert isinstance(penalty.operand, Square)
+    assert isinstance(penalty.operand.x, PositivePart)
+    assert penalty.operand.x.x is constraint.lhs
+
+
+def test_ctcs_callable_penalty_carries_parameters():
+    """A callable penalty can tune parameters the named penalties hardcode."""
+    x = Variable("x", shape=(2,))
+    constraint = x <= 1.0
+
+    ctcs_constraint = CTCS(constraint, penalty=lambda r: Huber(PositivePart(r), delta=0.5))
+    penalty = ctcs_constraint.penalty_expr()
+
+    assert isinstance(penalty.operand, Huber)
+    assert penalty.operand.delta == 0.5
+    # The named 'huber' penalty leaves delta at its default
+    assert CTCS(constraint, penalty="huber").penalty_expr().operand.delta != 0.5
+
+
+def test_ctcs_callable_penalty_must_return_expr():
+    """A callable penalty returning a non-Expr should say how to fix it."""
+    import jax.numpy as jnp
+
+    x = Variable("x", shape=(1,))
+    constraint = x <= 0.0
+
+    with pytest.raises(ValueError, match="must return one built from openscvx operations"):
+        CTCS(constraint, penalty=lambda r: 42.0).penalty_expr()
+
+    with pytest.raises(ValueError, match="jax.numpy or numpy will not work"):
+        CTCS(constraint, penalty=lambda r: jnp.maximum(0.0, 1.0)).penalty_expr()
+
+
+def test_ctcs_callable_penalty_rejected_at_build_time():
+    """Shape checking surfaces a bad callable penalty when the problem is built."""
+    x = State("x", (3,))
+    constraint = x <= np.ones((3,))
+
+    with pytest.raises(ValueError, match="penalty expression validation failed"):
+        ctcs(constraint, penalty=lambda r: 42.0).check_shape()
+
+
+def test_ctcs_callable_penalty_repr():
+    """CTCS repr should name a callable penalty rather than dumping its address."""
+    x = Variable("x", shape=(3,))
+    constraint = x <= 1.5
+
+    def wide_huber(r):
+        return Huber(PositivePart(r), delta=0.5)
+
+    assert repr(CTCS(constraint, penalty=wide_huber)) == (
+        "CTCS(Var('x') <= Const(1.5), penalty=wide_huber)"
+    )
+    assert repr(CTCS(constraint, penalty=lambda r: Square(r))) == (
+        "CTCS(Var('x') <= Const(1.5), penalty=<lambda>)"
+    )
+
+
+def test_ctcs_over_preserves_callable_penalty():
+    """A callable penalty survives .over() on both Constraint and CTCS."""
+    x = Variable("x", shape=(2,))
+
+    def wide_huber(r):
+        return Huber(PositivePart(r), delta=0.5)
+
+    ctcs_constraint = (x <= 1.0).over((0, 10), penalty=wide_huber)
+    assert ctcs_constraint.penalty is wide_huber
+    assert ctcs_constraint.nodes == (0, 10)
+
+    retimed = ctcs_constraint.over((10, 20))
+    assert retimed.penalty is wide_huber
+    assert retimed.nodes == (10, 20)
+
+    assert ctcs_constraint.canonicalize().penalty is wide_huber
+
+
 # --- CTCS: Shape Checking ---
 
 
