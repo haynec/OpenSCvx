@@ -573,11 +573,11 @@ _POSITION_STATE_SLICE = slice(1, 4)
 TERRAIN_HALF_EXTENT_M: float = 400.0   # m — base patch half-width (× Scale X/Y)
 DEM_BASE_RELIEF_M: float = 150.0       # m — base relief peak-to-peak at Scale Z = 1
 DEM_POS_X_M: float = 39.0              # m — patch center (adjust in Viser GUI)
-DEM_POS_Y_M: float = -175.0
+DEM_POS_Y_M: float = 75.0
 DEM_POS_Z_M: float = -244.0            # m — elevation at DEM center pixel
-DEM_SCALE_X: float = 0.5
-DEM_SCALE_Y: float = 0.5
-DEM_SCALE_Z: float = 0.65
+DEM_SCALE_X: float = 0.65
+DEM_SCALE_Y: float = 0.65
+DEM_SCALE_Z: float = 0.7
 DEM_YAW_DEG: float = 180.0            # ° — rotation about +z through patch center
 DEM_MIRROR_X: bool = True            # flip patch across local y-axis
 DEM_MIRROR_Y: bool = False           # flip patch across local x-axis

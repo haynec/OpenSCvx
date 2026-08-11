@@ -10,6 +10,7 @@ from __future__ import annotations
 import threading
 from typing import Callable, Optional
 
+import matplotlib.pyplot as plt
 import numpy as np
 import viser
 
@@ -25,7 +26,7 @@ LIDAR_NOISE_3SIG_M: float = 0.05
 LIDAR_DEM_GRID: int = 512
 LIDAR_MAX_KEYFRAMES: int = 160
 LIDAR_POINT_SIZE: float = 0.12
-LIDAR_COLOR: tuple[int, int, int] = (80, 220, 255)
+LIDAR_CMAP: str = "turbo"
 
 
 def _R_bw_from_wxyz(q_wxyz: np.ndarray) -> np.ndarray:
@@ -155,7 +156,7 @@ def add_body_fixed_lidar_overlay(
     noise_3sig_at_ref: float = LIDAR_NOISE_3SIG_M,
     max_keyframes: int = LIDAR_MAX_KEYFRAMES,
     point_size: float = LIDAR_POINT_SIZE,
-    color: tuple[int, int, int] = LIDAR_COLOR,
+    cmap_name: str = LIDAR_CMAP,
     name: str = "/lidar_pcd",
     gui_folder: str = "LiDAR (body-fixed)",
 ) -> Callable[[int], None]:
@@ -164,8 +165,9 @@ def add_body_fixed_lidar_overlay(
     ``pos_vis`` / ``attitude_wxyz`` must already be in the hop viser frame
     (position in display units, attitude ``[w,x,y,z]``). Scans are computed
     lazily on a strided keyframe grid and **accumulated** as the animation
-    advances (persistent map). Changing DEM pose via ``get_terrain_params``
-    invalidates the cache.
+    advances (persistent map). Points are colored by altitude (``z``) with a
+    fixed DEM-derived scale so the colormap stays stable as the map grows.
+    Changing DEM pose via ``get_terrain_params`` invalidates the cache.
 
     Returns an animation callback ``update(frame_idx)``.
     """
@@ -176,6 +178,7 @@ def add_body_fixed_lidar_overlay(
     keyframes = list(range(0, n_frames, stride))
     if keyframes[-1] != n_frames - 1:
         keyframes.append(n_frames - 1)
+    cmap = plt.get_cmap(cmap_name)
 
     state = {
         "enabled": True,
@@ -183,6 +186,7 @@ def add_body_fixed_lidar_overlay(
         "prefix": {},  # keyframe_idx -> accumulated points up to that keyframe
         "dem": None,
         "dem_key": None,
+        "z_range": None,  # (z_lo, z_hi) in viser units for altitude coloring
         "handle": None,
         "lock": threading.Lock(),
         "status": "idle",
@@ -218,6 +222,18 @@ def add_body_fixed_lidar_overlay(
         )
         state["dem"] = dem
         state["dem_key"] = key
+        # Stable altitude colormap from in-patch DEM heights (exclude sentinel lows).
+        h = np.asarray(dem.heights, dtype=np.float64)
+        valid = h > (float(params["origin"][2]) - 5.0e3)
+        if np.any(valid):
+            z_lo = float(h[valid].min()) / float(scene_scale)
+            z_hi = float(h[valid].max()) / float(scene_scale)
+        else:
+            z_lo = float(np.min(pos_vis[:, 2]))
+            z_hi = float(np.max(pos_vis[:, 2]))
+        if z_hi <= z_lo:
+            z_hi = z_lo + 1.0
+        state["z_range"] = (z_lo, z_hi)
         _clear_caches()
         return dem
 
@@ -270,9 +286,22 @@ def add_body_fixed_lidar_overlay(
         return state["prefix"].get(key, acc)
 
     def _colors_for(pts: np.ndarray) -> np.ndarray:
+        """RGB colors from point altitude (``z``), low→high along ``cmap_name``."""
         if pts.shape[0] == 0:
             return np.zeros((0, 3), dtype=np.uint8)
-        return np.tile(np.asarray(color, dtype=np.uint8), (pts.shape[0], 1))
+        z = pts[:, 2].astype(np.float64)
+        z_range = state.get("z_range")
+        if z_range is None:
+            z_lo, z_hi = float(z.min()), float(z.max())
+        else:
+            z_lo, z_hi = z_range
+        span = z_hi - z_lo
+        if span < 1e-9:
+            t = np.full(z.shape, 0.5, dtype=np.float64)
+        else:
+            t = np.clip((z - z_lo) / span, 0.0, 1.0)
+        rgba = cmap(t)
+        return (np.asarray(rgba[:, :3]) * 255.0).astype(np.uint8)
 
     init_pts = _empty_pcd()
     handle = server.scene.add_point_cloud(
@@ -297,7 +326,7 @@ def add_body_fixed_lidar_overlay(
         en_cb = server.gui.add_checkbox("Show point cloud", initial_value=True)
         clear_btn = server.gui.add_button("Clear accumulated map")
         status_md = server.gui.add_markdown(
-            "_Body-fixed nadir LiDAR (post-process only). "
+            "_Body-fixed nadir LiDAR (post-process only), colored by altitude. "
             "Scans accumulate into a persistent map as the animation plays._"
         )
 
@@ -315,7 +344,7 @@ def add_body_fixed_lidar_overlay(
             _set_points(_empty_pcd())
             try:
                 status_md.content = (
-                    "_Body-fixed nadir LiDAR (post-process only)._  \n"
+                    "_Body-fixed nadir LiDAR (post-process only), colored by altitude._  \n"
                     "Cleared — play again to rebuild the map."
                 )
             except Exception:
@@ -343,7 +372,8 @@ def add_body_fixed_lidar_overlay(
         _set_points(pts)
         try:
             status_md.content = (
-                f"_Body-fixed nadir LiDAR (post-process only)._  \n"
+                f"_Body-fixed nadir LiDAR (post-process only), colored by altitude "
+                f"({cmap_name})._  \n"
                 f"{state['status']}  ·  n_det={n_det}  ·  stride={stride}"
             )
         except Exception:
