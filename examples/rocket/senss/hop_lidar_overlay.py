@@ -135,6 +135,78 @@ def build_terrain_dem(
     return DEM.from_array(heights, res=float(res), x0=float(xmin), y0=float(ymin))
 
 
+def lidar_half_fov_rad(
+    footprint_m: float = LIDAR_FOOTPRINT_M,
+    ref_range_m: float = LIDAR_REF_RANGE_M,
+) -> float:
+    """Angular half-FOV matching ``simulate_scan_body`` (square detector)."""
+    return float(np.arctan2(0.5 * float(footprint_m), float(ref_range_m)))
+
+
+def dem_altitude_range_m(dem: DEM, origin_z_m: float) -> tuple[float, float]:
+    """In-patch DEM height bounds (m), excluding far-below sentinel cells."""
+    h = np.asarray(dem.heights, dtype=np.float64)
+    valid = h > (float(origin_z_m) - 5.0e3)
+    if not np.any(valid):
+        return float(h.min()), float(h.max()) + 1.0
+    z_lo = float(h[valid].min())
+    z_hi = float(h[valid].max())
+    if z_hi <= z_lo:
+        z_hi = z_lo + 1.0
+    return z_lo, z_hi
+
+
+def render_nadir_camera_rgb(
+    dem: DEM,
+    sensor_pos_m: np.ndarray,
+    R_body_to_world: np.ndarray,
+    *,
+    z_lo_m: float,
+    z_hi_m: float,
+    n_det: int = 256,
+    footprint_m: float = LIDAR_FOOTPRINT_M,
+    ref_range_m: float = LIDAR_REF_RANGE_M,
+    cmap_name: str = LIDAR_CMAP,
+    seed: int = 0,
+    miss_rgb: tuple[int, int, int] = (0, 0, 0),
+) -> np.ndarray:
+    """Render one body-fixed nadir camera frame through the LiDAR FOV.
+
+    Uses the same detector angular footprint as ``simulate_scan_body``
+    (``footprint_m`` at ``ref_range_m``) but with zero range noise so the
+    image reads as a clean camera view. Hits are colored by world altitude.
+
+    Returns:
+        ``(n_det, n_det, 3)`` uint8 RGB image (row 0 = camera-up).
+    """
+    pos_m = np.asarray(sensor_pos_m, dtype=np.float64).reshape(3)
+    R_bw = np.asarray(R_body_to_world, dtype=np.float64).reshape(3, 3)
+    z_ground = float(dem.sample(np.asarray(pos_m[:2])))
+    slant = max(float(pos_m[2] - z_ground), 5.0)
+    pts, hit = simulate_scan_body(
+        dem,
+        sensor_pos=pos_m,
+        R_body_to_world=R_bw,
+        n_det=int(n_det),
+        footprint_m=float(footprint_m),
+        ref_range_m=float(ref_range_m),
+        noise_3sig_at_ref=0.0,
+        seed=int(seed),
+        boresight_body=(0.0, 0.0, -1.0),
+        t_max=max(3.0 * slant, 50.0),
+        return_full=True,
+    )
+    pts = np.asarray(pts, dtype=np.float64)
+    hit = np.asarray(hit, dtype=bool)
+    z = pts[..., 2]
+    span = max(float(z_hi_m) - float(z_lo_m), 1e-9)
+    t = np.clip((z - float(z_lo_m)) / span, 0.0, 1.0)
+    cmap = plt.get_cmap(cmap_name)
+    rgb = (np.asarray(cmap(t)[..., :3]) * 255.0).astype(np.uint8)
+    miss = np.asarray(miss_rgb, dtype=np.uint8).reshape(1, 1, 3)
+    return np.where(hit[..., None], rgb, miss)
+
+
 def _empty_pcd() -> np.ndarray:
     return np.zeros((0, 3), dtype=np.float32)
 
