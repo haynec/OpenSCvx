@@ -22,11 +22,15 @@ Compound state-triggered constraints
 
 When run as a script, launches four viser windows after solving:
   1. Animated trajectory – thrust plume, attitude frame, velocity-colored
-     trail, DEM terrain patch (position adjustable in Viser GUI)
+     trail, DEM terrain patch (position adjustable in Viser GUI), and a
+     body-fixed nadir LiDAR point cloud overlaid on the map
   2. Onboard sensor FPV – camera locked to the LOS gimbal sensor with
-     matched DEM placement and an adjustable sensor FOV slider
+     matched DEM placement, adjustable sensor FOV, and the same LiDAR overlay
   3. SCP convergence – node positions across iterations
   4. Snapshot grid – evenly-spaced body poses along the final path
+
+LiDAR is post-process / visualization only (``halo.lidar.simulate_scan_body``);
+it does not enter the SCP problem.
 
 Viser scene uses the same ENU frame as the model (x, y horizontal; z = altitude up).
 """
@@ -61,6 +65,10 @@ from openscvx.plotting.viser.animated import (
     _sensor_pose_in_world,
 )
 from openscvx.plotting.viser.primitives import _generate_cone_mesh
+from examples.rocket.senss.hop_lidar_overlay import (
+    add_body_fixed_lidar_overlay,
+    attach_terrain_param_getter,
+)
 
 # ── Physical parameters (notebook cell 16 / cell 33) ──────────────────────────
 G0  = 9.806    # m/s²
@@ -573,7 +581,7 @@ DEM_SCALE_Z: float = 0.65
 DEM_YAW_DEG: float = 180.0            # ° — rotation about +z through patch center
 DEM_MIRROR_X: bool = True            # flip patch across local y-axis
 DEM_MIRROR_Y: bool = False           # flip patch across local x-axis
-DEM_GRID: int = 3938                 # downsampled DEM resolution
+DEM_GRID: int = 300 #3938                 # downsampled DEM resolution
 _DEM_PATH = os.path.join(os.path.dirname(__file__), "senns_dem.png")
 
 
@@ -821,10 +829,11 @@ def _add_dem_to_server(
     fov_folder_name: str = "Camera",
     fov_initial_deg: float = CAMERA_FOV_DEG,
     default_k_ambient: float = _K_AMBIENT,
-) -> viser.GuiInputHandle | None:
+) -> tuple[viser.GuiInputHandle | None, dict]:
     """Overlay DEM terrain and lighting/elevation GUI onto an existing server.
 
-    Returns the FOV slider handle when ``fov_slider`` is True, else None.
+    Returns ``(fov_slider, dem_state)``. ``dem_state`` exposes the live terrain
+    pose used by the post-process body-fixed LiDAR overlay.
     """
     server.scene.configure_default_lights(enabled=False)
     server.scene.add_light_ambient("/lights/ambient", color=(255, 255, 255), intensity=1.0)
@@ -942,7 +951,7 @@ def _add_dem_to_server(
             f"DEM: {DEM_GRID}×{DEM_GRID} · {_terrain_faces.shape[0]:,} tris"
         )
 
-    return fov_sl
+    return fov_sl, _st
 
 
 def _los_sensor_fpv_pose(
@@ -1001,7 +1010,7 @@ def create_cstc_sensor_fpv_server(
     R_sb_series = [_los_body_to_sensor(de, pe) for de, pe in zip(los_elev, los_az)]
 
     server = create_server(pos, dark_mode=True, show_grid=False)
-    fov_sl = _add_dem_to_server(
+    fov_sl, dem_state = _add_dem_to_server(
         server,
         fov_folder_name="Sensor",
         fov_initial_deg=CAMERA_FOV_DEG,
@@ -1069,11 +1078,27 @@ def create_cstc_sensor_fpv_server(
         for client in server.get_clients().values():
             _apply_sensor_camera(client, frame_state["idx"])
 
+    update_lidar = add_body_fixed_lidar_overlay(
+        server,
+        pos_vis=pos,
+        attitude_wxyz=attitude,
+        scene_scale=SCENE_SCALE,
+        dem_norm=_dem_norm,
+        dem_center_norm=_dem_center_norm,
+        get_terrain_params=attach_terrain_param_getter(dem_state),
+        terrain_half_extent_m=TERRAIN_HALF_EXTENT_M,
+        base_relief_m=DEM_BASE_RELIEF_M,
+        name="/lidar_pcd_fpv",
+        gui_folder="LiDAR (body-fixed)",
+    )
+
     @server.on_client_connect
     def _(client: viser.ClientHandle) -> None:
         _apply_sensor_camera(client, frame_state["idx"])
 
-    add_animation_controls(server, traj_time, [update_sensor_camera], loop=True)
+    add_animation_controls(
+        server, traj_time, [update_sensor_camera, update_lidar], loop=True
+    )
 
     return server
 
@@ -1233,12 +1258,26 @@ def launch_viser_servers(result) -> None:
     )
     assert isinstance(handle, AnimatedServerHandle)
     _, update_viewcone = add_cstc_los_viewcone(handle.server, result)
-    callbacks = handle.update_callbacks + [update_viewcone]
-    add_animation_controls(handle.server, handle.traj_time, callbacks, loop=True)
     traj_server = handle.server
 
     _srv: viser.ViserServer = getattr(traj_server, "server", traj_server)  # type: ignore[assignment]
-    _add_dem_to_server(_srv)
+    _, dem_state = _add_dem_to_server(_srv)
+
+    update_lidar = add_body_fixed_lidar_overlay(
+        _srv,
+        pos_vis=np.asarray(result.trajectory["position"], dtype=np.float64),
+        attitude_wxyz=np.asarray(result.trajectory["attitude"], dtype=np.float64),
+        scene_scale=SCENE_SCALE,
+        dem_norm=_dem_norm,
+        dem_center_norm=_dem_center_norm,
+        get_terrain_params=attach_terrain_param_getter(dem_state),
+        terrain_half_extent_m=TERRAIN_HALF_EXTENT_M,
+        base_relief_m=DEM_BASE_RELIEF_M,
+        name="/lidar_pcd",
+        gui_folder="LiDAR (body-fixed)",
+    )
+    callbacks = handle.update_callbacks + [update_viewcone, update_lidar]
+    add_animation_controls(handle.server, handle.traj_time, callbacks, loop=True)
 
     def _add_gs_cone(name: str, apex, height: float, angle_deg: float, color, opacity: float) -> None:
         verts, faces = _generate_cone_mesh(
