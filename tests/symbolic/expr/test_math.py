@@ -3611,8 +3611,10 @@ def test_cinterp_symbolic_coeffs_update_between_evals_no_recompile():
     result_a = fn(None, None, None, {"c": _reverse_coeffs(cs_a)})
     result_b = fn(None, None, None, {"c": _reverse_coeffs(cs_b)})
 
-    assert jnp.allclose(result_a, cs_a(query))
-    assert jnp.allclose(result_b, cs_b(query))
+    # float32 evaluation cannot pin the fp_b endpoint (exactly 0) tighter than
+    # ~1 ulp of the O(1) coefficients, so the default atol=1e-8 is unattainable.
+    assert jnp.allclose(result_a, cs_a(query), atol=1e-6)
+    assert jnp.allclose(result_b, cs_b(query), atol=1e-6)
     assert not jnp.allclose(result_a, result_b)
 
 
