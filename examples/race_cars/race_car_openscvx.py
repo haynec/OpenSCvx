@@ -143,7 +143,6 @@ time = ox.Time(
     min=0.0,
     max=10.0,
     guess=np.linspace(0.0, T_guess, N).reshape(-1, 1),
-    # uniform_time_grid=True,
 )
 
 # ── Dynamics ───────────────────────────────────────────────────────────────────
@@ -179,16 +178,10 @@ controls = [derD, derDelta]
 
 constraints: list = []
 
-# Lane-keeping: enforce n ∈ [-0.12, 0.12] continuously along the trajectory.
-# These are the primary safety constraints — the car must stay within the track
-# width at every instant, not just at node points.
-# LANE_WIDTH = 0.12   # half-width of the track [m]
-# constraints.extend([
-#     ox.ctcs(n[0] <=  LANE_WIDTH, penalty="huber"),
-#     ox.ctcs(-LANE_WIDTH <= n[0], penalty="huber"),
-# ])
-
-# Path constraints on all other states
+# Continuous-time (CTCS) box constraints. Lane keeping is the exception: the
+# lateral deviation n is bounded at the nodes by n.min / n.max alone, so the
+# track edge is the one limit this example does not enforce between them.
+# (race_car_mpc.py shows the CTCS spelling of the same lane constraint.)
 for state in [s, alpha, v, D_throt, delta]:
     constraints.extend(
         [
@@ -227,7 +220,6 @@ problem = ox.Problem(
     float_dtype="float64",
     licq_max=1e-12,
     algorithm={
-        # "lam_prox": 1e0,
         "lam_cost": 1e-1,
         "lam_vc": 1e2,
         "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
@@ -242,13 +234,15 @@ problem.settings.prp.rtol = 1e-10
 
 
 def plot_race_results(results) -> None:
-    """Three Plotly figures mirroring the acados benchmark plots.
+    """Two Plotly figures mirroring the acados benchmark plots.
 
     All signals come from ``results.trajectory`` (dense single-shot propagation
     from post_process), not from the sparse optimisation nodes.
     """
     import plotly.graph_objects as go
     from time2spatial import transformProj2Orig
+
+    from examples.race_cars._plotting import acceleration_figure, track_figure
 
     traj = results.trajectory
     t = results.t_full  # (n_times,)  dense time vector
@@ -273,45 +267,11 @@ def plot_race_results(results) -> None:
     # Convert path-parametric (s, n) → Cartesian (x, y) via track geometry
     cart_x, cart_y, _, _ = transformProj2Orig(s_sol, n_sol, alpha_sol, v_sol, "LMS_Track.txt")
 
-    # Track boundaries (±0.12 m from centreline)
-    sref_d, xref_d, yref_d, psiref_d, _ = getTrack("LMS_Track.txt")
-    dist = 0.12
-    xbl = xref_d - dist * np.sin(psiref_d)
-    ybl = yref_d + dist * np.cos(psiref_d)
-    xbr = xref_d + dist * np.sin(psiref_d)
-    ybr = yref_d - dist * np.cos(psiref_d)
-
-    fig2 = go.Figure()
-
-    # Centreline
-    fig2.add_trace(
-        go.Scatter(
-            x=xref_d,
-            y=yref_d,
-            mode="lines",
-            line=dict(color="black", dash="dash", width=1),
-            name="centreline",
-        )
-    )
-    # Left / right boundaries
-    fig2.add_trace(
-        go.Scatter(
-            x=xbl,
-            y=ybl,
-            mode="lines",
-            line=dict(color="black", width=1.5),
-            name="boundary",
-            showlegend=False,
-        )
-    )
-    fig2.add_trace(
-        go.Scatter(
-            x=xbr,
-            y=ybr,
-            mode="lines",
-            line=dict(color="black", width=1.5),
-            showlegend=False,
-        )
+    fig2 = track_figure(
+        "LMS_Track.txt",
+        n.max[0],
+        title=f"OpenSCvx — track projection  (T = {t[-1]:.2f} s)",
+        distance_marker_step=1.0,
     )
 
     # ── Multishot segments ────────────────────────────────────────────────────
@@ -358,43 +318,20 @@ def plot_race_results(results) -> None:
             name="single-shot (post_process)",
         )
     )
-
-    # Arc-length distance markers
-    for i in range(int(sref_d[-1]) + 1):
-        k = int(np.argmin(np.abs(sref_d - i)))
-        fig2.add_annotation(
-            x=xref_d[k], y=yref_d[k], text=f"{i}m", showarrow=False, font=dict(size=10)
-        )
-
-    fig2.update_layout(
-        title=f"OpenSCvx — track projection  (T = {t[-1]:.2f} s)",
-        xaxis=dict(title="x [m]", scaleanchor="y"),
-        yaxis=dict(title="y [m]"),
-        height=600,
-    )
     fig2.show()
 
-    # ── Plot 3: lateral & longitudinal acceleration vs bounds ──────────────────
+    # ── Plot 2: lateral & longitudinal acceleration vs bounds ──────────────────
     Fxd_sol = (Cm1 - Cm2 * v_sol) * D_sol - Cr2 * v_sol**2 - Cr0 * np.tanh(5.0 * v_sol)
     a_lat_sol = C2 * v_sol**2 * delta_sol + Fxd_sol * np.sin(C1 * delta_sol) / m
     a_long_sol = Fxd_sol / m
 
-    fig3 = go.Figure()
-    fig3.add_trace(go.Scatter(x=t, y=a_lat_sol, name="a_lat", line=dict(color="blue")))
-    fig3.add_trace(go.Scatter(x=t, y=a_long_sol, name="a_long", line=dict(color="orange")))
-    for sign, show in [(1, True), (-1, False)]:
-        fig3.add_hline(
-            y=sign * A_MAX,
-            line=dict(color="black", dash="dash", width=1),
-            annotation_text="±bound" if show else None,
-        )
-    fig3.update_layout(
+    acceleration_figure(
+        t,
+        a_lat_sol,
+        a_long_sol,
+        a_max=A_MAX,
         title="OpenSCvx — lateral & longitudinal acceleration",
-        xaxis_title="t [s]",
-        yaxis_title="acceleration [m/s²]",
-        height=400,
-    )
-    fig3.show()
+    ).show()
 
 
 if __name__ == "__main__":
@@ -409,21 +346,25 @@ if __name__ == "__main__":
     print(f"  Max speed    : {nodes['v'].max():.3f} m/s")
     print(f"  Converged    : {results.converged}")
 
-    plot_states(results).show()
-    plot_controls(results).show()
-    plot_race_results(results)
+    if os.environ.get("OPENSCVX_NO_PLOT") is None:
+        plot_states(results).show()
+        plot_controls(results).show()
+        plot_race_results(results)
 
-    from race_car_viser import create_race_car_chase_viser_server, create_race_car_viser_server
+        from examples.race_cars._viser import (
+            create_race_car_chase_viser_server,
+            create_race_car_viser_server,
+        )
 
-    overview_server = create_race_car_viser_server(
-        results,
-        track_file="LMS_Track.txt",
-        lane_width=n.max[0],
-    )
-    chase_server = create_race_car_chase_viser_server(
-        results,
-        track_file="LMS_Track.txt",
-        lane_width=n.max[0],
-    )
-    print("Overview camera and chase camera are on separate Viser ports (two browser tabs).")
-    chase_server.sleep_forever()
+        overview_server = create_race_car_viser_server(
+            results,
+            track_file="LMS_Track.txt",
+            lane_width=n.max[0],
+        )
+        chase_server = create_race_car_chase_viser_server(
+            results,
+            track_file="LMS_Track.txt",
+            lane_width=n.max[0],
+        )
+        print("Overview camera and chase camera are on separate Viser ports (two browser tabs).")
+        chase_server.sleep_forever()

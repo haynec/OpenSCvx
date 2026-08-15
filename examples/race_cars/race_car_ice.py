@@ -278,6 +278,8 @@ def plot_race_results(results) -> None:
     import plotly.graph_objects as go
     from time2spatial import transformProj2Orig
 
+    from examples.race_cars._plotting import gg_figure, track_figure
+
     traj = results.trajectory
     t = results.t_full  # (n_times,)  dense time vector
 
@@ -297,33 +299,12 @@ def plot_race_results(results) -> None:
     # ── Plot 1: track projection coloured by throttle/braking ─────────────────
     cart_x, cart_y, _, _ = transformProj2Orig(s_sol, n_sol, alpha_sol, v_sol, TRACK_FILE)
 
-    sref_d, xref_d, yref_d, psiref_d, _ = getTrack(TRACK_FILE)
-    dist = 0.12
-    xbl = xref_d - dist * np.sin(psiref_d)
-    ybl = yref_d + dist * np.cos(psiref_d)
-    xbr = xref_d + dist * np.sin(psiref_d)
-    ybr = yref_d - dist * np.cos(psiref_d)
-
-    fig1 = go.Figure()
-    fig1.add_trace(
-        go.Scatter(
-            x=xref_d,
-            y=yref_d,
-            mode="lines",
-            line=dict(color="black", dash="dash", width=1),
-            name="centreline",
-        )
+    fig1 = track_figure(
+        TRACK_FILE,
+        n.max[0],
+        title=f"OpenSCvx — pure-ICE minimum-time lap  (T = {t[-1]:.2f} s)",
+        distance_marker_step=4.0,
     )
-    for xb, yb in [(xbl, ybl), (xbr, ybr)]:
-        fig1.add_trace(
-            go.Scatter(
-                x=xb,
-                y=yb,
-                mode="lines",
-                line=dict(color="black", width=1.5),
-                showlegend=False,
-            )
-        )
     fig1.add_trace(
         go.Scatter(
             x=cart_x,
@@ -340,17 +321,6 @@ def plot_race_results(results) -> None:
             name="single-shot (post_process)",
         )
     )
-    for i in range(0, int(sref_d[-1]) + 1, 4):
-        k = int(np.argmin(np.abs(sref_d - i)))
-        fig1.add_annotation(
-            x=xref_d[k], y=yref_d[k], text=f"{i}m", showarrow=False, font=dict(size=10)
-        )
-    fig1.update_layout(
-        title=f"OpenSCvx — pure-ICE minimum-time lap  (T = {t[-1]:.2f} s)",
-        xaxis=dict(title="x [m]", scaleanchor="y"),
-        yaxis=dict(title="y [m]"),
-        height=600,
-    )
     fig1.show()
 
     # ── Plot 2: g-g diagram against the friction ellipse ──────────────────────
@@ -358,39 +328,7 @@ def plot_race_results(results) -> None:
     a_lat_sol = C2 * v_sol**2 * delta_sol + Fxd_sol * np.sin(C1 * delta_sol) / m
     a_long_sol = Fxd_sol / m
 
-    theta = np.linspace(0.0, 2.0 * np.pi, 200)
-    fig2 = go.Figure()
-    fig2.add_trace(
-        go.Scatter(
-            x=A_MAX * np.cos(theta),
-            y=A_MAX * np.sin(theta),
-            mode="lines",
-            line=dict(color="black", dash="dash", width=1),
-            name="friction ellipse",
-        )
-    )
-    fig2.add_trace(
-        go.Scatter(
-            x=a_lat_sol,
-            y=a_long_sol,
-            mode="markers",
-            marker=dict(
-                color=v_sol,
-                colorscale="Rainbow",
-                size=4,
-                colorbar=dict(title="v [m/s]"),
-                showscale=True,
-            ),
-            name="trajectory",
-        )
-    )
-    fig2.update_layout(
-        title="OpenSCvx — g-g diagram",
-        xaxis=dict(title="a_lat [m/s²]", scaleanchor="y"),
-        yaxis=dict(title="a_long [m/s²]"),
-        height=600,
-    )
-    fig2.show()
+    gg_figure(a_lat_sol, a_long_sol, v_sol, a_max=A_MAX).show()
 
 
 if __name__ == "__main__":
@@ -405,29 +343,30 @@ if __name__ == "__main__":
     print(f"  Max speed : {nodes['v'].max():.3f} m/s")
     print(f"  Converged : {results.converged}")
 
-    plot_states(results).show()
-    plot_controls(results).show()
-    plot_race_results(results)
+    if os.environ.get("OPENSCVX_NO_PLOT") is None:
+        plot_states(results).show()
+        plot_controls(results).show()
+        plot_race_results(results)
 
-    from race_car_viser import (
-        create_race_car_chase_viser_server,
-        create_race_car_comparison_viser_server,
-    )
+        from examples.race_cars._viser import (
+            create_race_car_chase_viser_server,
+            create_race_car_comparison_viser_server,
+        )
 
-    overview_server = create_race_car_comparison_viser_server(
-        [results],
-        labels=["pure ICE"],
-        colors=[(220, 35, 45)],
-        track_file=TRACK_FILE,
-        lane_width=n.max[0],
-        distance_marker_step=None,  # clean look — set "auto" to bring markers back
-    )
-    chase_server = create_race_car_chase_viser_server(
-        results,
-        track_file=TRACK_FILE,
-        lane_width=n.max[0],
-        distance_marker_step=None,
-        title="Pure ICE",
-    )
-    print("Track overview and chase camera are on separate Viser ports.")
-    chase_server.sleep_forever()
+        overview_server = create_race_car_comparison_viser_server(
+            [results],
+            labels=["pure ICE"],
+            colors=[(220, 35, 45)],
+            track_file=TRACK_FILE,
+            lane_width=n.max[0],
+            distance_marker_step=None,  # clean look — set "auto" to bring markers back
+        )
+        chase_server = create_race_car_chase_viser_server(
+            results,
+            track_file=TRACK_FILE,
+            lane_width=n.max[0],
+            distance_marker_step=None,
+            title="Pure ICE",
+        )
+        print("Track overview and chase camera are on separate Viser ports.")
+        chase_server.sleep_forever()

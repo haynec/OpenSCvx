@@ -223,7 +223,7 @@ problem = Problem(
     float_dtype="float64",
 )
 
-plotting_data = {
+plotting_dict = {
     "column_radius": COLUMN_RADIUS,
     "t_knots": T_KNOTS,
     "column_paths": COLUMN_PATHS,
@@ -245,7 +245,7 @@ if __name__ == "__main__":
     problem.initialize()
     results = problem.solve()
     results = problem.post_process()
-    results.update(plotting_data)
+    results.update(plotting_dict)
 
     converged = getattr(results, "converged", "?")
     print(f"Converged: {converged}")

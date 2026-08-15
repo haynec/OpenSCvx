@@ -43,13 +43,14 @@ import openscvx as ox
 from examples.plotting_viser import create_animated_plotting_server
 from openscvx import Problem
 from openscvx.plotting import plot_controls, plot_states
-from openscvx.plotting.viser import compute_velocity_colors
-from openscvx.plotting.viser.animated import (
-    _generate_viewcone_faces,
-    _generate_viewcone_vertices,
-    _normalize_wxyz,
-    _sensor_pose_in_world,
+from openscvx.plotting.viser import (
+    add_animated_trail,
     add_animation_controls,
+    add_attitude_frame,
+    add_ghost_trajectory,
+    add_position_marker,
+    add_viewcone,
+    compute_velocity_colors,
 )
 from openscvx.solvers.cvxpy_ptr_solver import CVXPyPTRSolver
 
@@ -566,93 +567,6 @@ def _print_summary(results) -> None:
     print(f"max r1·r2: {np.sum(pos1 * pos2, axis=1).max():.6e} m^2")
 
 
-def _add_animated_deputy(
-    server,
-    *,
-    prefix: str,
-    pos: np.ndarray,
-    attitude: np.ndarray,
-    vel: np.ndarray,
-    R_sb: np.ndarray,
-    half_angle_x: float,
-    half_angle_y: float,
-    viewcone_scale: float,
-    norm_type: float | int,
-    marker_color: tuple[int, int, int],
-    viewcone_color: tuple[int, int, int],
-    trail_point_size: float = 0.25,
-    marker_radius: float = 1.2,
-    axes_length: float = 3.0,
-):
-    """Register trail / marker / body frame / viewcone for one deputy.
-
-    Paths are namespaced under ``prefix`` so two deputies can coexist on one
-    server (the stock helpers hard-code ``/trail``, ``/viewcone_sensor``, etc.).
-    """
-    pos = np.asarray(pos, dtype=np.float64)
-    attitude = np.asarray(attitude, dtype=np.float64)
-    colors = compute_velocity_colors(vel)
-
-    trail = server.scene.add_point_cloud(
-        f"{prefix}/trail",
-        points=pos[:1],
-        colors=colors[:1],
-        point_size=trail_point_size,
-    )
-    # Full-path ghost in the same palette
-    server.scene.add_point_cloud(
-        f"{prefix}/ghost",
-        points=pos,
-        colors=(colors * 0.35).astype(np.uint8),
-        point_size=trail_point_size * 0.6,
-    )
-    marker = server.scene.add_icosphere(
-        f"{prefix}/marker",
-        radius=marker_radius,
-        color=marker_color,
-        position=tuple(float(x) for x in pos[0]),
-    )
-    body = server.scene.add_frame(
-        f"{prefix}/body",
-        wxyz=tuple(float(x) for x in _normalize_wxyz(attitude[0])),
-        position=tuple(float(x) for x in pos[0]),
-        axes_length=axes_length,
-        axes_radius=0.08,
-    )
-
-    base_vertices = _generate_viewcone_vertices(
-        half_angle_x, half_angle_y, viewcone_scale, norm_type
-    )
-    init_position, init_wxyz = _sensor_pose_in_world(pos[0], attitude[0], R_sb)
-    cone_frame = server.scene.add_frame(
-        f"{prefix}/viewcone",
-        wxyz=init_wxyz,
-        position=init_position,
-        axes_length=0.0,
-        axes_radius=0.0,
-    )
-    server.scene.add_mesh_simple(
-        f"{prefix}/viewcone/mesh",
-        vertices=base_vertices,
-        faces=_generate_viewcone_faces(len(base_vertices) - 1),
-        color=viewcone_color,
-        opacity=0.35,
-    )
-
-    def update(frame_idx: int) -> None:
-        idx = frame_idx + 1
-        trail.points = pos[:idx]
-        trail.colors = colors[:idx]
-        marker.position = tuple(float(x) for x in pos[frame_idx])
-        body.position = tuple(float(x) for x in pos[frame_idx])
-        body.wxyz = tuple(float(x) for x in _normalize_wxyz(attitude[frame_idx]))
-        cone_pos, cone_wxyz = _sensor_pose_in_world(pos[frame_idx], attitude[frame_idx], R_sb)
-        cone_frame.position = cone_pos
-        cone_frame.wxyz = cone_wxyz
-
-    return update
-
-
 if __name__ == "__main__":
     problem.initialize()
     results = problem.solve()
@@ -679,29 +593,49 @@ if __name__ == "__main__":
         controls="manual",
     )
 
-    half_angle_x = np.pi / alpha_x
-    half_angle_y = np.pi / alpha_y
-    R_sb_np = np.asarray(R_sb, dtype=np.float64)
+    # Deputy 2 shares the server with deputy 1, so each primitive gets its own scene path.
+    pos2_traj = np.asarray(results.trajectory["position_2"], dtype=np.float64)
+    att2_traj = np.asarray(results.trajectory["attitude_2"], dtype=np.float64)
+    vel2_traj = np.asarray(results.trajectory["velocity_2"], dtype=np.float64)
+    colors_2 = compute_velocity_colors(vel2_traj)
 
-    update_deputy_2 = _add_animated_deputy(
-        handle.server,
-        prefix="/deputy_2",
-        pos=np.asarray(results.trajectory["position_2"], dtype=np.float64),
-        attitude=np.asarray(results.trajectory["attitude_2"], dtype=np.float64),
-        vel=np.asarray(results.trajectory["velocity_2"], dtype=np.float64),
-        R_sb=R_sb_np,
-        half_angle_x=half_angle_x,
-        half_angle_y=half_angle_y,
-        viewcone_scale=R_max,
-        norm_type=norm_type,
-        marker_color=(255, 160, 60),
-        viewcone_color=(255, 140, 40),
+    add_ghost_trajectory(handle.server, pos2_traj, colors_2, opacity=0.35, name="/deputy_2/ghost")
+    _, update_trail_2 = add_animated_trail(
+        handle.server, pos2_traj, colors_2, point_size=0.25, name="/deputy_2/trail"
     )
-    handle.update_callbacks.append(update_deputy_2)
+    _, update_marker_2 = add_position_marker(
+        handle.server, pos2_traj, radius=1.2, color=(255, 160, 60), name="/deputy_2/marker"
+    )
+    _, update_body_2 = add_attitude_frame(
+        handle.server,
+        pos2_traj,
+        att2_traj,
+        axes_length=3.0,
+        axes_radius=0.08,
+        name="/deputy_2/body",
+    )
+    _, update_viewcone_2 = add_viewcone(
+        handle.server,
+        pos2_traj,
+        att2_traj,
+        half_angle_x=np.pi / alpha_x,
+        half_angle_y=np.pi / alpha_y,
+        scale=R_max,
+        norm_type=norm_type,
+        R_sb=np.asarray(R_sb, dtype=np.float64),
+        color=(255, 140, 40),
+        opacity=0.35,
+        name="/deputy_2/viewcone",
+    )
+    handle.update_callbacks += [
+        update_trail_2,
+        update_marker_2,
+        update_body_2,
+        update_viewcone_2,
+    ]
 
     # Collinear diameter through the chief (deputy 1 ↔ origin ↔ deputy 2)
     pos1_traj = np.asarray(results.trajectory["position_1"], dtype=np.float64)
-    pos2_traj = np.asarray(results.trajectory["position_2"], dtype=np.float64)
     diameter = handle.server.scene.add_line_segments(
         "/diameter",
         points=np.array([[pos1_traj[0], pos2_traj[0]]], dtype=np.float32),

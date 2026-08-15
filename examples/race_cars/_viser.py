@@ -1,4 +1,18 @@
-"""3D Viser animation for the LMS race-car minimum-lap-time example."""
+"""3D Viser scenes shared by the race-car examples.
+
+The LMS track, the low-poly car, and the playback wiring are the same whether
+the trajectory came from one minimum-time solve, a closed-loop MPC log, or a
+whole field racing wheel to wheel, so every example in this directory builds
+its scene here rather than re-rolling one. Three entry points differ only in
+the camera and the number of cars:
+:func:`create_race_car_viser_server` (one lap, overview camera),
+:func:`create_race_car_chase_viser_server` (one lap, chase camera), and
+:func:`create_race_car_comparison_viser_server` (several cars on one clock,
+optionally with the live telemetry panels from ``_plotting``).
+
+Everything here composes ``openscvx.plotting.viser`` primitives; the 2D
+Plotly side of the same examples lives in ``_plotting.py``.
+"""
 
 from __future__ import annotations
 
@@ -11,12 +25,14 @@ import numpy as np
 if TYPE_CHECKING:
     import viser
 
+# The vendored acados helper imports ``tracks.readDataFcn`` as a top-level
+# module, so this directory has to be importable before it is.
 _current_dir = os.path.dirname(os.path.abspath(__file__))
 if _current_dir not in sys.path:
     sys.path.insert(0, _current_dir)
 
-from time2spatial import transformProj2Orig
-from tracks.readDataFcn import getTrack
+from examples.race_cars.time2spatial import transformProj2Orig
+from examples.race_cars.tracks.readDataFcn import getTrack
 
 # Body sits slightly above the asphalt strip (m).
 CAR_RIDE_HEIGHT = 0.012
@@ -339,10 +355,7 @@ def _chase_camera_pose(
     vertical_offset: float = 0.09,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Return ``(cam_pos, cam_wxyz, look_at)`` for a chase cam behind the car."""
-    _examples_dir = os.path.dirname(_current_dir)
-    if _examples_dir not in sys.path:
-        sys.path.insert(0, _examples_dir)
-    from animations._camera import chase_pose
+    from examples.animations._camera import chase_pose
 
     forward = np.array([np.cos(yaw), np.sin(yaw), 0.0], dtype=np.float64)
     focus = np.asarray(car_pos, dtype=np.float64) + look_ahead * forward
@@ -406,6 +419,66 @@ def _attach_chase_camera(
     return update_chase_camera
 
 
+def _create_track_server() -> "viser.ViserServer":
+    """Dark, gridless viser server for the track scenes.
+
+    The origin triad is switched off deliberately: its 0.5 m axes would dwarf a
+    kart track only 0.24 m wide and sit right on the start/finish line. The
+    track outline itself is the orienting feature here.
+    """
+    from openscvx.plotting.viser import create_server
+
+    return create_server(None, dark_mode=True, show_grid=False, show_origin=False)
+
+
+def _frame_overview_camera(server: "viser.ViserServer", pos: np.ndarray) -> None:
+    """Point the initial camera at the bounding box of ``pos``.
+
+    One fixed three-quarter view scaled by the trajectory's own extent, so the
+    2 m kart track and the 4x-scaled circuit both fill the frame.
+    """
+    centre = np.mean(pos, axis=0)
+    span_xy = float(np.ptp(pos[:, :2], axis=0).max()) + 1e-6
+    server.initial_camera.position = tuple(
+        centre + np.array([-0.55 * span_xy, -0.75 * span_xy, 0.95 * span_xy])
+    )
+    server.initial_camera.look_at = tuple(float(x) for x in centre)
+    server.initial_camera.up = (0.0, 0.0, 1.0)
+
+
+def _add_ghost_and_trace(
+    server: "viser.ViserServer",
+    prefix: str,
+    pos: np.ndarray,
+    *,
+    ghost_color: tuple[int, int, int],
+    trace_color: tuple[int, int, int],
+) -> "viser.LineSegmentsHandle":
+    """Full-lap ghost line plus the empty trace line the animation fills in.
+
+    The ghost shows the whole lap from the first frame; the returned trace
+    handle starts empty and is extended to the current frame by the caller's
+    animation callback, so together they read as "where the car goes" and
+    "where it has been".
+    """
+    from openscvx.plotting.viser import add_ghost_trajectory
+
+    if len(pos) >= 2:
+        add_ghost_trajectory(
+            server,
+            pos,
+            np.broadcast_to(np.asarray(ghost_color, dtype=np.uint8), (len(pos), 3)),
+            opacity=1.0,
+            name=f"{prefix}/ghost",
+        )
+    return server.scene.add_line_segments(
+        f"{prefix}/trace",
+        points=np.zeros((1, 2, 3), dtype=np.float32),
+        colors=np.array(trace_color, dtype=np.uint8),
+        line_width=4.0,
+    )
+
+
 def _create_race_car_viser_server(
     results=None,
     *,
@@ -424,7 +497,6 @@ def _create_race_car_viser_server(
     title: str = "Race Car",
 ) -> "viser.ViserServer":
     """Build the race-car Viser scene; optionally enable a chase camera."""
-    import viser
     import viser.transforms as vtf
 
     from openscvx.plotting.viser import (
@@ -464,8 +536,7 @@ def _create_race_car_viser_server(
 
     colors = compute_velocity_colors(vel, cmap_name="turbo")
 
-    server = viser.ViserServer()
-    server.gui.configure_theme(dark_mode=True, titlebar_content=None)
+    server = _create_track_server()
 
     _add_lms_track_scene(
         server,
@@ -474,23 +545,15 @@ def _create_race_car_viser_server(
         distance_marker_step=distance_marker_step,
     )
 
-    if len(pos) >= 2:
-        ghost_segments = np.stack([pos[:-1], pos[1:]], axis=1)
-        server.scene.add_line_segments(
-            "/trajectory/ghost",
-            points=ghost_segments,
-            colors=np.array([70, 120, 200], dtype=np.uint8),
-            line_width=2.0,
-        )
+    trace_line = _add_ghost_and_trace(
+        server,
+        "/trajectory",
+        pos,
+        ghost_color=(70, 120, 200),
+        trace_color=(255, 180, 60),
+    )
 
     _, update_trail = add_animated_trail(server, pos, colors, point_size=0.018)
-
-    trace_line = server.scene.add_line_segments(
-        "/trajectory/trace",
-        points=np.zeros((1, 2, 3), dtype=np.float32),
-        colors=np.array([255, 180, 60], dtype=np.uint8),
-        line_width=4.0,
-    )
 
     car = _add_race_car(server)
     car_frame = car["frame"]
@@ -562,13 +625,7 @@ def _create_race_car_viser_server(
         )
         callbacks.append(update_chase_camera)
     else:
-        centre = np.mean(pos, axis=0)
-        span_xy = float(np.ptp(pos[:, :2], axis=0).max()) + 1e-6
-        server.initial_camera.position = tuple(
-            centre + np.array([-0.55 * span_xy, -0.75 * span_xy, 0.95 * span_xy])
-        )
-        server.initial_camera.look_at = tuple(float(x) for x in centre)
-        server.initial_camera.up = (0.0, 0.0, 1.0)
+        _frame_overview_camera(server, pos)
 
     add_animation_controls(server, t_arr, callbacks, loop=loop_animation)
 
@@ -701,7 +758,6 @@ def create_race_car_comparison_viser_server(
             an optional ``"aspect"`` ratio. Updates are throttled — Plotly
             panels re-serialize on every assignment.
     """
-    import viser
     import viser.transforms as vtf
 
     from openscvx.plotting.viser import add_animation_controls
@@ -730,8 +786,7 @@ def create_race_car_comparison_viser_server(
         colors = [palette[i % len(palette)] for i in range(len(datas))]
     t_common, laps = _resample_to_common_time(datas)
 
-    server = viser.ViserServer()
-    server.gui.configure_theme(dark_mode=True, titlebar_content=None)
+    server = _create_track_server()
 
     _add_lms_track_scene(
         server,
@@ -743,20 +798,12 @@ def create_race_car_comparison_viser_server(
     cars = []
     for lap, label, color in zip(laps, labels, colors):
         slug = label.replace(" ", "_").replace("/", "_")
-        pos = lap["pos"]
-
-        ghost_segments = np.stack([pos[:-1], pos[1:]], axis=1)
-        server.scene.add_line_segments(
-            f"/trajectory/{slug}/ghost",
-            points=ghost_segments,
-            colors=np.array([int(0.45 * c) for c in color], dtype=np.uint8),
-            line_width=2.0,
-        )
-        trace_line = server.scene.add_line_segments(
-            f"/trajectory/{slug}/trace",
-            points=np.zeros((1, 2, 3), dtype=np.float32),
-            colors=np.array(color, dtype=np.uint8),
-            line_width=4.0,
+        trace_line = _add_ghost_and_trace(
+            server,
+            f"/trajectory/{slug}",
+            lap["pos"],
+            ghost_color=tuple(int(0.45 * c) for c in color),  # the car's colour, dimmed
+            trace_color=color,
         )
         handles = _add_race_car(server, base_path=f"/cars/{slug}", body_color=color)
         cars.append({"lap": lap, "label": label, "trace": trace_line, **handles})
@@ -815,15 +862,7 @@ def create_race_car_comparison_viser_server(
             panel["update"](t)
             handle.figure = panel["figure"]
 
-    centre = np.mean(np.concatenate([lap["pos"] for lap in laps]), axis=0)
-    span_xy = (
-        float(np.ptp(np.concatenate([lap["pos"] for lap in laps])[:, :2], axis=0).max()) + 1e-6
-    )
-    server.initial_camera.position = tuple(
-        centre + np.array([-0.55 * span_xy, -0.75 * span_xy, 0.95 * span_xy])
-    )
-    server.initial_camera.look_at = tuple(float(x) for x in centre)
-    server.initial_camera.up = (0.0, 0.0, 1.0)
+    _frame_overview_camera(server, np.concatenate([lap["pos"] for lap in laps]))
 
     callbacks = [update_frame] + ([update_panels] if panel_handles else [])
     add_animation_controls(server, t_common, callbacks, loop=loop_animation)

@@ -44,8 +44,15 @@ handle every case.
       ``add_ghost_trajectory``
     - Animated: ``add_animated_trail``, ``add_position_marker``, ``add_thrust_vector``,
       ``add_attitude_frame``, ``add_viewcone``, ``add_target_marker(s)``
+    - Static poses: ``place_body_frame``, ``place_viewcone``
+    - Coordinates: ``model_vec_to_viser_xyz``, ``normalize_wxyz``
     - Plotly: ``add_animated_plotly_marker``, ``add_animated_vector_norm_plot``
     - SCP iteration: ``add_scp_animation_controls``, ``add_scp_iteration_nodes``, etc.
+
+Viser keys scene nodes by path, so adding two of anything under the same path
+replaces the first. Every primitive that creates a node therefore takes a
+keyword-only ``name=`` with the single-vehicle default; pass distinct names to
+put several vehicles, sensors, or constraint cones in one scene.
 
 For problem-specific examples (drones with viewcones, rockets with glideslope
 constraints, etc.), see the files under ``examples/``.
@@ -63,7 +70,11 @@ from .animated import (
     add_thrust_plume,
     add_thrust_vector,
     add_viewcone,
+    normalize_wxyz,
+    place_body_frame,
+    place_viewcone,
 )
+from .coordinates import model_vec_to_viser_xyz
 from .orbits import add_circular_orbit
 from .plotly_integration import (
     add_animated_plotly_marker,
@@ -108,6 +119,12 @@ __all__ = [
     "add_thrust_plume",
     "add_attitude_frame",
     "add_viewcone",
+    # Static poses (single-frame twins of the animated components)
+    "place_body_frame",
+    "place_viewcone",
+    # Coordinate helpers
+    "model_vec_to_viser_xyz",
+    "normalize_wxyz",
     # Animation controls
     "add_animation_controls",
     # Plotly integration

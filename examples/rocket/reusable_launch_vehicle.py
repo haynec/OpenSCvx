@@ -150,7 +150,8 @@ CD = (
 )  # Quadratic drag coefficient: CD = cd0 + cd1*α + cd2*α²
 
 # Atmospheric density: ρ = ρ0 * exp(-altitude/H)
-# Note: altitude = h - R_earth = r - R_earth, where r = h (since h is already r = altitude + R_earth)
+# Note: altitude = h - R_earth = r - R_earth, where r = h
+# (h is already r = altitude + R_earth)
 altitude = h  # Height above Earth surface
 rho = rho0 * ox.Exp(-altitude / H)  # kg/m^3
 
@@ -217,20 +218,10 @@ problem = ox.Problem(
 
 problem.algorithm.k_max = 500
 
-plotting_dict = {
-    "R_earth": R_earth,
-    "mu_earth": mu_earth,
-    "S": S,
-    "mass": mass,
-    "rho0": rho0,
-    "H": H,
-}
-
 if __name__ == "__main__":
     problem.initialize()
     results = problem.solve()
     results = problem.post_process()
-    results.update(plotting_dict)
 
     plot_scp_convergence_histories(results).show()
 

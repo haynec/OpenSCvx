@@ -15,7 +15,7 @@ import matplotlib
 import numpy as np
 import viser
 
-# Get viridis colormap without pyplot (avoids potential backend issues)
+# Preloaded once so the per-frame recolor below does not repeat the lookup
 _viridis_cmap = matplotlib.colormaps["viridis"]
 
 # Add grandparent directory to path to import examples
@@ -25,7 +25,6 @@ sys.path.append(grandparent_dir)
 
 from examples.plotting_viser import (
     build_scp_step_results,
-    compute_velocity_colors_realtime,
     extract_multishoot_trajectory,
     format_metrics_markdown,
     get_print_queue_data,
@@ -35,6 +34,7 @@ from examples.realtime.base_problems.obstacle_avoidance_realtime_base import (
     plotting_dict,
     problem,
 )
+from openscvx.plotting.viser import compute_velocity_colors
 
 # Initialize the problem
 problem.initialize()
@@ -289,7 +289,7 @@ def create_realtime_server(
             positions, velocities = extract_multishoot_trajectory(V_multi_shoot, n_x, n_u)
 
             if len(positions) > 0:
-                colors = compute_velocity_colors_realtime(velocities, _viridis_cmap)
+                colors = compute_velocity_colors(velocities, cmap=_viridis_cmap)
                 trajectory_handle.points = positions
                 trajectory_handle.colors = colors
 

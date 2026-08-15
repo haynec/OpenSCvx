@@ -37,6 +37,8 @@ def add_animated_trail(
     pos: np.ndarray,
     colors: np.ndarray,
     point_size: float = 0.15,
+    *,
+    name: str = "/trail",
 ) -> tuple[viser.PointCloudHandle, UpdateCallback]:
     """Add an animated trail that grows with the animation.
 
@@ -45,12 +47,14 @@ def add_animated_trail(
         pos: Position array of shape (N, 3)
         colors: RGB color array of shape (N, 3)
         point_size: Size of trail points
+        name: Scene path for this trail. Pass a distinct name per vehicle when
+            more than one shares a server.
 
     Returns:
         Tuple of (handle, update_callback)
     """
     handle = server.scene.add_point_cloud(
-        "/trail",
+        name,
         points=pos[:1],
         colors=colors[:1],
         point_size=point_size,
@@ -69,6 +73,8 @@ def add_position_marker(
     pos: np.ndarray,
     radius: float = 0.5,
     color: tuple[int, int, int] = (100, 200, 255),
+    *,
+    name: str = "/current_pos",
 ) -> tuple[viser.IcosphereHandle, UpdateCallback]:
     """Add an animated position marker (sphere at current position).
 
@@ -77,12 +83,14 @@ def add_position_marker(
         pos: Position array of shape (N, 3)
         radius: Marker radius
         color: RGB color tuple
+        name: Scene path for this marker. Pass a distinct name per vehicle when
+            more than one shares a server.
 
     Returns:
         Tuple of (handle, update_callback)
     """
     handle = server.scene.add_icosphere(
-        "/current_pos",
+        name,
         radius=radius,
         color=color,
         position=pos[0],
@@ -234,6 +242,8 @@ def add_thrust_vector(
     color: tuple[int, int, int] = (255, 100, 100),
     line_width: float = 4.0,
     remap_world_to_viser: bool = False,
+    *,
+    name: str = "/thrust_vector",
 ) -> tuple[viser.LineSegmentsHandle | None, UpdateCallback | None]:
     """Add an animated thrust/force vector visualization.
 
@@ -249,6 +259,8 @@ def add_thrust_vector(
         line_width: Line width
         remap_world_to_viser: If True, apply the PDG model (z, y, x) → Viser (x, y, z)
             permutation to the world-frame thrust vector (after body rotation).
+        name: Scene path for this vector. Pass a distinct name per vehicle when
+            more than one shares a server.
 
     Returns:
         Tuple of (handle, update_callback), or (None, None) if thrust is None
@@ -275,7 +287,7 @@ def add_thrust_vector(
     thrust_world = get_thrust_world(0)
     thrust_end = pos[0] + thrust_world * scale
     handle = server.scene.add_line_segments(
-        "/thrust_vector",
+        name,
         points=np.array([[pos[0], thrust_end]]),  # Shape (1, 2, 3)
         colors=color,
         line_width=line_width,
@@ -302,11 +314,14 @@ def add_thrust_plume(
     opacity: float = 0.45,
     n_segments: int = 24,
     remap_world_to_viser: bool = False,
+    *,
+    name: str = "/thrust_plume",
 ) -> tuple[viser.MeshHandle | None, UpdateCallback | None]:
     """Animated exhaust plume (cone) pointing opposite to the thrust vector.
 
     Thrust controls are assumed to be in the body frame when ``attitude`` is set.
     The plume opens along ``-thrust`` in the world frame (exhaust direction).
+    Pass a distinct ``name`` per vehicle when more than one shares a server.
     """
     if thrust is None:
         return None, None
@@ -347,7 +362,7 @@ def add_thrust_plume(
         axis=axis0,
     )
     handle = server.scene.add_mesh_simple(
-        "/thrust_plume",
+        name,
         vertices=vertices,
         faces=faces,
         color=color,
@@ -375,6 +390,8 @@ def add_attitude_frame(
     attitude: np.ndarray | None,
     axes_length: float = 2.0,
     axes_radius: float = 0.05,
+    *,
+    name: str = "/body_frame",
 ) -> tuple[viser.FrameHandle | None, UpdateCallback | None]:
     """Add an animated body coordinate frame showing attitude.
 
@@ -384,6 +401,8 @@ def add_attitude_frame(
         attitude: Quaternion array of shape (N, 4) in [w, x, y, z] format, or None to skip
         axes_length: Length of the coordinate axes
         axes_radius: Radius of the axes cylinders
+        name: Scene path for this frame. Pass a distinct name per vehicle when
+            more than one shares a server.
 
     Returns:
         Tuple of (handle, update_callback), or (None, None) if attitude is None
@@ -393,15 +412,15 @@ def add_attitude_frame(
 
     # Viser uses wxyz quaternion format
     handle = server.scene.add_frame(
-        "/body_frame",
-        wxyz=tuple(float(x) for x in _normalize_wxyz(attitude[0])),
+        name,
+        wxyz=tuple(float(x) for x in normalize_wxyz(attitude[0])),
         position=pos[0],
         axes_length=axes_length,
         axes_radius=axes_radius,
     )
 
     def update(frame_idx: int) -> None:
-        handle.wxyz = tuple(float(x) for x in _normalize_wxyz(attitude[frame_idx]))
+        handle.wxyz = tuple(float(x) for x in normalize_wxyz(attitude[frame_idx]))
         handle.position = pos[frame_idx]
 
     return handle, update
@@ -485,8 +504,13 @@ def _generate_viewcone_faces(n_base_vertices: int) -> np.ndarray:
     return np.array(faces, dtype=np.int32)
 
 
-def _normalize_wxyz(q: np.ndarray) -> np.ndarray:
-    """Return a unit quaternion in ``[w, x, y, z]`` order."""
+def normalize_wxyz(q: np.ndarray) -> np.ndarray:
+    """Return a unit quaternion in ``[w, x, y, z]`` order.
+
+    Viser rejects non-unit quaternions, while solver output drifts off the unit
+    sphere; use this on any attitude before handing it to a scene handle. A
+    degenerate (near-zero) quaternion maps to identity rather than raising.
+    """
     q = np.asarray(q, dtype=np.float64)
     n = float(np.linalg.norm(q))
     if n < 1e-12:
@@ -503,7 +527,7 @@ def _quaternion_to_rotation_matrix(q: np.ndarray) -> np.ndarray:
     Returns:
         3x3 rotation matrix
     """
-    w, x, y, z = _normalize_wxyz(q)
+    w, x, y, z = normalize_wxyz(q)
     return np.array(
         [
             [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
@@ -530,6 +554,26 @@ def _sensor_pose_in_world(
     )
 
 
+def _sensor_rotation_at(
+    R_sb: np.ndarray | None, n_frames: int
+) -> Callable[[int], np.ndarray | None]:
+    """Resolve a fixed ``(3, 3)`` or gimballed ``(N, 3, 3)`` mounting into a per-frame lookup."""
+    if R_sb is None:
+        return lambda frame_idx: None
+
+    R_sb = np.asarray(R_sb, dtype=np.float64)
+    if R_sb.shape == (3, 3):
+        return lambda frame_idx: R_sb
+    if R_sb.ndim == 3 and R_sb.shape[1:] == (3, 3):
+        if len(R_sb) != n_frames:
+            raise ValueError(
+                f"R_sb has {len(R_sb)} rotations but the trajectory has {n_frames} frames; "
+                "a time-varying R_sb must supply one rotation per frame."
+            )
+        return lambda frame_idx: R_sb[frame_idx]
+    raise ValueError(f"R_sb must have shape (3, 3) or (N, 3, 3), got {R_sb.shape}.")
+
+
 def _viewcone_ring_segments_sensor(base_vertices: np.ndarray) -> np.ndarray:
     """Closed base ring as line segments in the sensor frame (apex excluded)."""
     ring = base_vertices[1:]
@@ -553,6 +597,8 @@ def add_viewcone(
     ring_only: bool = False,
     line_width: float = 4.0,
     n_segments: int = 32,
+    *,
+    name: str = "/viewcone_sensor",
 ) -> tuple[viser.FrameHandle | None, UpdateCallback | None]:
     """Add an animated viewcone mesh that matches p-norm constraints.
 
@@ -575,7 +621,9 @@ def add_viewcone(
             For asymmetric constraints, this is pi/alpha_y.
         scale: Depth/length of the cone visualization
         norm_type: p-norm value (1, 2, 3, ..., or "inf" for infinity norm)
-        R_sb: Body-to-sensor rotation matrix (3x3). If None, sensor is aligned with body z-axis.
+        R_sb: Body-to-sensor rotation matrix, shape (3, 3) for a fixed sensor or
+            (N, 3, 3) for a gimballed one whose mounting rotates per frame.
+            If None, the sensor is aligned with the body z-axis.
         color: RGB color tuple
         opacity: Mesh opacity (0-1), ignored if wireframe=True
         wireframe: If True, render as wireframe instead of solid
@@ -583,6 +631,9 @@ def add_viewcone(
             instead of the full cone mesh.
         line_width: Line width for the ring (only used when ``ring_only=True``).
         n_segments: Number of segments for cone smoothness
+        name: Scene path for the sensor frame; the cone geometry is parented
+            under it. Pass a distinct name per sensor when more than one shares
+            a server.
 
     Returns:
         Tuple of (handle, update_callback), or (None, None) if attitude is None
@@ -593,8 +644,7 @@ def add_viewcone(
     # Convert inputs to numpy arrays (handles JAX arrays)
     pos = np.asarray(pos, dtype=np.float64)
     attitude = np.asarray(attitude, dtype=np.float64)
-    if R_sb is not None:
-        R_sb = np.asarray(R_sb, dtype=np.float64)
+    sensor_rotation = _sensor_rotation_at(R_sb, len(pos))
 
     # Rigid sensor-frame geometry; only the parent frame pose is updated each step.
     base_vertices = _generate_viewcone_vertices(
@@ -602,10 +652,10 @@ def add_viewcone(
     )
     n_base_verts = len(base_vertices) - 1  # Exclude apex
 
-    init_position, init_wxyz = _sensor_pose_in_world(pos[0], attitude[0], R_sb)
+    init_position, init_wxyz = _sensor_pose_in_world(pos[0], attitude[0], sensor_rotation(0))
     # Transform-only frame: no visible axes (pose is shown via viewcone mesh, not triads).
     frame = server.scene.add_frame(
-        "/viewcone_sensor",
+        name,
         wxyz=init_wxyz,
         position=init_position,
         axes_length=0.0,
@@ -614,7 +664,7 @@ def add_viewcone(
 
     if ring_only:
         server.scene.add_line_segments(
-            "/viewcone_sensor/ring",
+            f"{name}/ring",
             points=_viewcone_ring_segments_sensor(base_vertices),
             colors=color,
             line_width=line_width,
@@ -622,7 +672,7 @@ def add_viewcone(
     else:
         faces = _generate_viewcone_faces(n_base_verts)
         server.scene.add_mesh_simple(
-            "/viewcone_sensor/mesh",
+            f"{name}/mesh",
             vertices=base_vertices,
             faces=faces,
             color=color,
@@ -631,7 +681,9 @@ def add_viewcone(
         )
 
     def update(frame_idx: int) -> None:
-        position, wxyz = _sensor_pose_in_world(pos[frame_idx], attitude[frame_idx], R_sb)
+        position, wxyz = _sensor_pose_in_world(
+            pos[frame_idx], attitude[frame_idx], sensor_rotation(frame_idx)
+        )
         frame.position = position
         frame.wxyz = wxyz
 
@@ -649,7 +701,7 @@ def place_body_frame(
     """Place a static body coordinate frame at a single pose."""
     return server.scene.add_frame(
         path,
-        wxyz=tuple(float(x) for x in _normalize_wxyz(wxyz)),
+        wxyz=tuple(float(x) for x in normalize_wxyz(wxyz)),
         position=tuple(float(x) for x in position),
         axes_length=axes_length,
         axes_radius=axes_radius,

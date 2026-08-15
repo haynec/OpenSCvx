@@ -479,7 +479,7 @@ if __name__ == "__main__":
     )
 
     ee_colors = compute_velocity_colors(np.asarray(results.trajectory.get("velocity")))
-    add_ghost_trajectory(server, ee_pos, ee_colors, point_size=0.005)
+    add_ghost_trajectory(server, ee_pos, ee_colors)
     _, update_trail = add_animated_trail(server, ee_pos, ee_colors, point_size=0.008)
     _, update_marker = add_position_marker(server, ee_pos, radius=0.012)
 
@@ -578,7 +578,6 @@ if __name__ == "__main__":
         arm_keypoints=None if _use_cad_mesh else keypoints,
         snapshot_builder=_cad_snapshot_builder,
         initial_n_snapshots=5,
-        ghost_point_size=0.005,
     )
 
     server.sleep_forever()

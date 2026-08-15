@@ -175,7 +175,7 @@ def visualize(results, robot, q_start: np.ndarray, q_goal: np.ndarray) -> None:
         colors=[(100, 150, 255), (255, 80, 80)],
     )
 
-    add_ghost_trajectory(server, ee_pos, ee_colors, point_size=0.005)
+    add_ghost_trajectory(server, ee_pos, ee_colors)
     _, update_trail = add_animated_trail(server, ee_pos, ee_colors, point_size=0.008)
     _, update_marker = add_position_marker(server, ee_pos, radius=0.012)
 

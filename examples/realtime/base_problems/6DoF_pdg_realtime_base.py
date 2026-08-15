@@ -26,7 +26,7 @@ from examples.plotting_viser import (
     create_scp_animated_plotting_server,
 )
 from openscvx import Problem
-from openscvx.plotting.viser.coordinates import model_vec_to_viser_xyz
+from openscvx.plotting.viser import model_vec_to_viser_xyz
 from openscvx.utils import printing as _openscvx_printing
 
 

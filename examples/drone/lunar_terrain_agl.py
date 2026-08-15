@@ -2,8 +2,8 @@
 
 Fixed-horizon feasibility problem: fly from point A to point B in fixed time
 while staying inside a thin above-ground-level (AGL) band relative to the real
-SENNS lunar heightmap (``examples/rocket/senss/senns_dem.png``), sampled finely
-onto the mission domain.
+SENNS lunar heightmap (``examples/rocket/senss/senns_dem.png``), resampled onto
+the mission domain.
 
 Terrain height enters the CTCS constraints via ``ox.Bilerp``. Gravity and
 actuators match the other Earth-g quadrotor demos — the DEM supplies the
@@ -46,9 +46,11 @@ TERRAIN_HALF = 160.0
 TERRAIN_X_MIN, TERRAIN_X_MAX = -TERRAIN_HALF, TERRAIN_HALF
 TERRAIN_Y_MIN, TERRAIN_Y_MAX = -TERRAIN_HALF, TERRAIN_HALF
 
-# Fine SENNS DEM sample (rocket dem_static uses 2048). Native PNG is 3938² —
-# bump DEM_GRID toward that for even more detail (cost: compile / mesh size).
-DEM_GRID = 2048
+# SENNS DEM sample. The grid is resolved at import (the Bilerp lookup table is
+# part of the problem definition), so the shipped default stays modest; the
+# native PNG is 3938² and rocket dem_static uses 2048 — bump DEM_GRID toward
+# those for more terrain detail, at the cost of import time and mesh size.
+DEM_GRID = 256
 ELEV_SCALE = 50.0  # m — peak-to-peak relief after normalization
 
 x_grid, y_grid, H = load_senns_dem(
@@ -204,7 +206,7 @@ problem = Problem(
     float_dtype="float64",
 )
 
-plotting_data = {
+plotting_dict = {
     "x_grid": x_grid,
     "y_grid": y_grid,
     "H": H,
@@ -233,7 +235,7 @@ if __name__ == "__main__":
     problem.initialize()
     results = problem.solve()
     results = problem.post_process()
-    results.update(plotting_data)
+    results.update(plotting_dict)
 
     pos = np.asarray(results.trajectory["position"], dtype=np.float64)
     agl_traj = np.array(

@@ -1,11 +1,11 @@
 """Multi-agent planar double integrator: circle swap with collision avoidance.
 
-Ten point-mass agents start evenly spaced on a circle and must reach the
+``N_AGENTS`` point-mass agents start evenly spaced on a circle and must reach the
 antipodal points (swap sides) while maintaining a minimum separation. Per-agent
 double-integrator dynamics are evaluated in parallel via ``ox.Vmap``.
 
 Compare with:
-  - ``obstacle_avoidance_vmap_2d.py`` (single agent, Vmap over obstacles)
+  - ``double_integrator/obstacle_avoidance_vmap_2d.py`` (single agent, Vmap over obstacles)
   - ``2d_obstacle_avoidance_batched_ic.py`` (batched initial conditions)
 """
 
@@ -19,7 +19,13 @@ grandparent_dir = os.path.dirname(os.path.dirname(current_dir))
 sys.path.append(grandparent_dir)
 
 import openscvx as ox
+from examples.plotting import generate_subject_colors
 from openscvx import Problem
+from openscvx.plotting import (
+    LM_PLOTLY_FONT,
+    LM_PLOTLY_TICK_FONT,
+    apply_publication_plotly_layout,
+)
 
 # =============================================================================
 # Problem configuration
@@ -160,9 +166,6 @@ def plot_multi_agent_circle_swap(
     """Plot all agent trajectories in the plane."""
     import plotly.graph_objects as go
 
-    from openscvx.plotting.publication import LM_PLOTLY_FONT as _LM_PLOTLY_FONT
-    from openscvx.plotting.publication import LM_PLOTLY_TICK_FONT as _LM_PLOTLY_TICK_FONT
-
     px = np.asarray(results.trajectory["pos_x"], dtype=np.float64)
     py = np.asarray(results.trajectory["pos_y"], dtype=np.float64)
     vx = np.asarray(results.trajectory.get("vel_x"), dtype=np.float64)
@@ -194,21 +197,12 @@ def plot_multi_agent_circle_swap(
         )
     )
 
-    colors = [
-        "#1f77b4",
-        "#ff7f0e",
-        "#2ca02c",
-        "#d62728",
-        "#9467bd",
-        "#8c564b",
-        "#e377c2",
-        "#7f7f7f",
-        "#bcbd22",
-        "#17becf",
-    ]
+    # One distinct color per agent: a fixed palette would repeat once N_AGENTS
+    # exceeds its length, which is fatal for a per-agent trajectory plot.
+    colors = generate_subject_colors(N_AGENTS)
 
     for agent in range(N_AGENTS):
-        color = colors[agent % len(colors)]
+        color = colors[agent]
         if speed is not None:
             fig.add_trace(
                 go.Scatter(
@@ -223,8 +217,8 @@ def plot_multi_agent_circle_swap(
                         "size": 4,
                         "showscale": agent == 0,
                         "colorbar": {
-                            "title": {"text": r"$\|v\|_2$", "font": _LM_PLOTLY_FONT},
-                            "tickfont": _LM_PLOTLY_TICK_FONT,
+                            "title": {"text": r"$\|v\|_2$", "font": LM_PLOTLY_FONT},
+                            "tickfont": LM_PLOTLY_TICK_FONT,
                         },
                     },
                 )
@@ -259,23 +253,16 @@ def plot_multi_agent_circle_swap(
             )
         )
 
+    # Square, aspect-locked planar view: the size comes from the data, not from a
+    # panel grid, so pass width/height explicitly.
+    apply_publication_plotly_layout(fig, width=width, height=height)
     fig.update_layout(
         title=f"Multi-agent circle swap (d_min = {safe_distance:g})",
         xaxis_title=r"$x$",
         yaxis_title=r"$y$",
         yaxis={"scaleanchor": "x", "scaleratio": 1},
-        template="simple_white",
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=_LM_PLOTLY_FONT,
-        autosize=False,
-        width=width,
-        height=height,
-        margin={"l": 60, "r": 90, "t": 48, "b": 60},
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0.0},
     )
-    fig.update_xaxes(title_font=_LM_PLOTLY_FONT, tickfont=_LM_PLOTLY_TICK_FONT)
-    fig.update_yaxes(title_font=_LM_PLOTLY_FONT, tickfont=_LM_PLOTLY_TICK_FONT)
     return fig
 
 
@@ -284,4 +271,4 @@ if __name__ == "__main__":
     results = problem.solve()
     results = problem.post_process()
 
-    fig = plot_multi_agent_circle_swap(results).show()
+    plot_multi_agent_circle_swap(results).show()

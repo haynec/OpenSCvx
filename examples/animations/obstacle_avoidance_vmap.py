@@ -1,7 +1,7 @@
 """Cinematic offline render of the vmap obstacle-avoidance example.
 
 The trajectory optimization problem itself lives in
-``examples/drone/obstacle_avoidance_vmap.py``; this file imports that
+``examples/double_integrator/obstacle_avoidance_vmap.py``; this file imports that
 ``problem`` (plus obstacle metadata), solves it, and drives a viser scene
 frame-by-frame while piping raw RGB into ffmpeg to produce an mp4.
 
@@ -36,7 +36,7 @@ sys.path.append(grandparent_dir)
 
 from examples.animations._camera import chase_pose, overview_pose
 from examples.animations._render import render_animation_to_video
-from examples.drone.obstacle_avoidance_vmap import (
+from examples.double_integrator.obstacle_avoidance_vmap import (
     n_obstacles,
     obstacle_centers,
     obstacle_radii,

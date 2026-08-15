@@ -6,11 +6,15 @@ Tests the plotting functions:
 - plot_controls: Plot control trajectories in subplot grid
 - plot_state_component: Plot single state component
 - plot_control_component: Plot single control component
+- viser scene primitives: per-node naming and colormap helpers
 """
 
 from unittest.mock import Mock
 
+import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
+import plotly.io as pio
 import pytest
 
 from openscvx.algorithms import OptimizationResults
@@ -20,7 +24,25 @@ from openscvx.plotting.plotting import (
     plot_state_component,
     plot_states,
 )
-from openscvx.plotting.publication import PublicationFigure, parse_var_spec
+from openscvx.plotting.publication import (
+    PublicationFigure,
+    apply_publication_plotly_layout,
+    parse_var_spec,
+    publication_dark_colors,
+)
+from openscvx.plotting.viser import (
+    add_animated_trail,
+    add_attitude_frame,
+    add_ghost_trajectory,
+    add_glideslope_cone,
+    add_position_marker,
+    add_thrust_plume,
+    add_thrust_vector,
+    add_viewcone,
+    compute_velocity_colors,
+    create_server,
+)
+from openscvx.plotting.viser import server as viser_server_module
 
 
 class TestPlotStatesFunction:
@@ -558,3 +580,296 @@ class TestPlotControlComponentFunction:
         """Test that invalid control name raises error."""
         with pytest.raises(ValueError, match="not found"):
             plot_control_component(mock_result_basic, "nonexistent", 0)
+
+
+class TestPublicationDarkStyle:
+    """Test the dark publication style and the layout helper it shares."""
+
+    @pytest.fixture
+    def mock_result_basic(self):
+        """Create a basic mock OptimizationResults object."""
+        result = Mock(spec=OptimizationResults)
+
+        result.nodes = {
+            "time": np.linspace(0, 1, 10).reshape(-1, 1),
+            "state_x": np.random.randn(10, 3),
+        }
+
+        result.trajectory = {
+            "time": np.linspace(0, 1, 100).reshape(-1, 1),
+            "state_x": np.random.randn(100, 3),
+        }
+
+        state = Mock()
+        state.name = "state_x"
+        state._slice = slice(0, 3)
+        state.min = None
+        state.max = None
+        result._states = [state]
+        result._controls = []
+
+        return result
+
+    def test_publication_dark_keeps_geometry_and_darkens_surround(
+        self, mock_result_basic, tmp_path
+    ):
+        """publication_dark shares publication geometry but swaps the palette."""
+        dark = publication_dark_colors()
+        fig = plot_states(
+            mock_result_basic,
+            style="publication_dark",
+            pdf_path=tmp_path / "states.pdf",
+        )
+
+        assert isinstance(fig, PublicationFigure)
+        assert fig.layout.template == pio.templates["plotly_dark"]
+        assert fig.layout.paper_bgcolor == dark["background"]
+        assert fig.layout.plot_bgcolor == dark["background"]
+        assert fig.layout.font.color == dark["foreground"]
+        # Same fixed panel geometry as style="publication"
+        assert fig.layout.width == 1088
+        assert fig.layout.height == 400
+
+    def test_publication_style_stays_white(self, mock_result_basic, tmp_path):
+        """The default publication style is unaffected by the dark palette."""
+        fig = plot_states(
+            mock_result_basic,
+            style="publication",
+            pdf_path=tmp_path / "states.pdf",
+        )
+        assert fig.layout.paper_bgcolor == "white"
+        assert fig.layout.template == pio.templates["plotly_white"]
+
+    def test_layout_size_overrides(self):
+        """Aspect-locked figures can override the grid-derived size."""
+        fig = go.Figure()
+        apply_publication_plotly_layout(fig, n_rows=2, n_cols=3, width=420, height=420)
+        assert (fig.layout.width, fig.layout.height) == (420, 420)
+
+
+class TestCreateServerScene:
+    """``create_server`` is the only path that brands a scene, so it must fit every scene."""
+
+    @staticmethod
+    def _scene_nodes(monkeypatch, **kwargs) -> dict[str, str]:
+        """Build a server against a recording stand-in and return the nodes it added."""
+        server = _RecordingServer()
+        server.gui = Mock()
+        monkeypatch.setattr(viser_server_module.viser, "ViserServer", lambda **_: server)
+        monkeypatch.setattr(viser_server_module, "_localhost_port_available", lambda _p: True)
+        create_server(None, **kwargs)
+        return server.scene.nodes
+
+    def test_default_scene_keeps_grid_and_origin(self, monkeypatch):
+        """Callers that pass nothing get today's scene unchanged."""
+        nodes = self._scene_nodes(monkeypatch)
+        assert {"/grid", "/origin"} <= set(nodes)
+
+    def test_origin_can_be_suppressed(self, monkeypatch):
+        """A half-metre triad dwarfs a scale-model scene, so it has to be optional."""
+        nodes = self._scene_nodes(monkeypatch, show_grid=False, show_origin=False)
+        assert nodes == {}
+
+    def test_port_is_forwarded(self, monkeypatch):
+        """Examples that run several servers at once need to choose their ports."""
+        seen = {}
+
+        def fake_server(**kwargs):
+            seen.update(kwargs)
+            server = _RecordingServer()
+            server.gui = Mock()
+            return server
+
+        monkeypatch.setattr(viser_server_module.viser, "ViserServer", fake_server)
+        create_server(None, port=8129)
+        assert seen == {"port": 8129}
+
+    def test_port_defaults_to_a_resolved_free_port(self, monkeypatch):
+        """With no port requested, one is still resolved so the printed URL works."""
+        seen = {}
+
+        def fake_server(**kwargs):
+            seen.update(kwargs)
+            server = _RecordingServer()
+            server.gui = Mock()
+            return server
+
+        monkeypatch.setattr(viser_server_module.viser, "ViserServer", fake_server)
+        monkeypatch.setattr(viser_server_module, "_localhost_port_available", lambda _p: True)
+        create_server(None)
+        assert seen == {"port": 8080}
+
+
+class _RecordingScene:
+    """Stand-in for ``server.scene`` that records the path of every node added."""
+
+    def __init__(self) -> None:
+        self.nodes: dict[str, str] = {}
+
+    def __getattr__(self, attr: str):
+        if not attr.startswith("add_"):
+            raise AttributeError(attr)
+
+        def add(name: str, **kwargs) -> Mock:
+            self.nodes[name] = attr
+            return Mock()
+
+        return add
+
+
+class _RecordingServer:
+    """Stand-in for a ``viser.ViserServer`` with only a recording scene."""
+
+    def __init__(self) -> None:
+        self.scene = _RecordingScene()
+
+
+def _named_primitives() -> list:
+    """Parametrize cases pairing each node-creating primitive with its default scene path."""
+    n = 6
+    pos = np.linspace(0.0, 1.0, n)[:, None] * np.ones(3)
+    colors = np.tile(np.array([10, 20, 30], dtype=np.uint8), (n, 1))
+    attitude = np.tile(np.array([1.0, 0.0, 0.0, 0.0]), (n, 1))
+    thrust = np.tile(np.array([0.0, 0.0, 1.0]), (n, 1))
+
+    def case(add, default, label):
+        return pytest.param(add, default, id=label)
+
+    return [
+        case(lambda s, **kw: add_animated_trail(s, pos, colors, **kw), "/trail", "trail"),
+        case(lambda s, **kw: add_position_marker(s, pos, **kw), "/current_pos", "marker"),
+        case(lambda s, **kw: add_attitude_frame(s, pos, attitude, **kw), "/body_frame", "frame"),
+        case(lambda s, **kw: add_thrust_vector(s, pos, thrust, **kw), "/thrust_vector", "thrust"),
+        case(lambda s, **kw: add_thrust_plume(s, pos, thrust, **kw), "/thrust_plume", "plume"),
+        case(
+            lambda s, **kw: add_viewcone(s, pos, attitude, 0.3, **kw),
+            "/viewcone_sensor",
+            "viewcone",
+        ),
+        case(
+            lambda s, **kw: add_glideslope_cone(s, **kw),
+            "/constraints/glideslope_cone",
+            "glideslope",
+        ),
+        case(lambda s, **kw: add_ghost_trajectory(s, pos, colors, **kw), "/ghost_traj", "ghost"),
+    ]
+
+
+_NAMED_PRIMITIVES = _named_primitives()
+
+
+class TestViserSceneNames:
+    """Every primitive that creates a scene node must let the caller name it."""
+
+    @pytest.mark.parametrize(("add", "default"), _NAMED_PRIMITIVES)
+    def test_default_scene_path(self, add, default):
+        """Omitting name= reproduces the historical single-vehicle scene path."""
+        server = _RecordingServer()
+        add(server)
+        assert default in server.scene.nodes
+
+    @pytest.mark.parametrize(("add", "default"), _NAMED_PRIMITIVES)
+    def test_distinct_names_produce_distinct_nodes(self, add, default):
+        """Two vehicles in one scene must not clobber each other."""
+        server = _RecordingServer()
+        add(server, name="/vehicle_a")
+        add(server, name="/vehicle_b")
+
+        assert {"/vehicle_a", "/vehicle_b"} <= set(server.scene.nodes)
+        assert default not in server.scene.nodes
+        # Any child geometry is parented under the caller's name, not the default.
+        assert all(path.startswith(("/vehicle_a", "/vehicle_b")) for path in server.scene.nodes)
+
+
+class TestViewconeSensorRotation:
+    """``add_viewcone`` accepts a fixed or a gimballed sensor mounting."""
+
+    @staticmethod
+    def _pose(n: int) -> tuple[np.ndarray, np.ndarray]:
+        pos = np.zeros((n, 3))
+        attitude = np.tile(np.array([1.0, 0.0, 0.0, 0.0]), (n, 1))
+        return pos, attitude
+
+    @staticmethod
+    def _rotations_about_z(angles: np.ndarray) -> np.ndarray:
+        c, s = np.cos(angles), np.sin(angles)
+        zero, one = np.zeros_like(c), np.ones_like(c)
+        return np.stack(
+            [
+                np.stack([c, -s, zero], axis=-1),
+                np.stack([s, c, zero], axis=-1),
+                np.stack([zero, zero, one], axis=-1),
+            ],
+            axis=-2,
+        )
+
+    def test_per_frame_rotation_moves_the_sensor_frame(self):
+        """A gimballed mount reorients the cone even when the body pose is fixed."""
+        pos, attitude = self._pose(4)
+        R_sb = self._rotations_about_z(np.linspace(0.0, np.pi / 2, 4))
+
+        frame, update = add_viewcone(_RecordingServer(), pos, attitude, 0.3, R_sb=R_sb)
+        update(0)
+        wxyz_first = frame.wxyz
+        update(3)
+
+        assert not np.allclose(wxyz_first, frame.wxyz)
+
+    def test_constant_per_frame_rotation_matches_static(self):
+        """An (N, 3, 3) mount that never changes equals the (3, 3) mount."""
+        pos, attitude = self._pose(4)
+        R_static = self._rotations_about_z(np.array([0.4]))[0]
+
+        frame_static, update_static = add_viewcone(
+            _RecordingServer(), pos, attitude, 0.3, R_sb=R_static
+        )
+        frame_series, update_series = add_viewcone(
+            _RecordingServer(), pos, attitude, 0.3, R_sb=np.tile(R_static, (4, 1, 1))
+        )
+        update_static(2)
+        update_series(2)
+
+        assert np.allclose(frame_static.wxyz, frame_series.wxyz)
+
+    def test_wrong_frame_count_raises(self):
+        """A per-frame mount that does not cover the trajectory is a user error."""
+        pos, attitude = self._pose(4)
+        R_sb = self._rotations_about_z(np.zeros(3))
+
+        with pytest.raises(ValueError, match="one rotation per frame"):
+            add_viewcone(_RecordingServer(), pos, attitude, 0.3, R_sb=R_sb)
+
+    def test_wrong_rotation_shape_raises(self):
+        """Anything that is not (3, 3) or (N, 3, 3) is rejected up front."""
+        pos, attitude = self._pose(4)
+
+        with pytest.raises(ValueError, match=r"\(3, 3\) or \(N, 3, 3\)"):
+            add_viewcone(_RecordingServer(), pos, attitude, 0.3, R_sb=np.zeros((4, 2)))
+
+
+class TestComputeVelocityColors:
+    """Velocity colormapping is unchanged by passing a preloaded colormap."""
+
+    def test_preloaded_cmap_matches_lookup_by_name(self):
+        vel = np.linspace(0.0, 4.0, 12)[:, None] * np.ones(3)
+
+        by_name = compute_velocity_colors(vel, cmap_name="viridis")
+        preloaded = compute_velocity_colors(vel, cmap=plt.get_cmap("viridis"))
+
+        assert np.array_equal(by_name, preloaded)
+
+    def test_colors_span_the_colormap(self):
+        vel = np.linspace(0.0, 4.0, 12)[:, None] * np.ones(3)
+        cmap = plt.get_cmap("viridis")
+
+        colors = compute_velocity_colors(vel, cmap=cmap)
+
+        assert colors.shape == (12, 3)
+        assert np.array_equal(colors[0], (np.array(cmap(0.0)[:3]) * 255).astype(int))
+        assert np.array_equal(colors[-1], (np.array(cmap(1.0)[:3]) * 255).astype(int))
+
+    def test_fallback_length_used_when_velocity_missing(self):
+        colors = compute_velocity_colors(None, fallback_length=5)
+
+        assert colors.shape == (5, 3)
+        assert len(np.unique(colors, axis=0)) == 1

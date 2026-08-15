@@ -934,7 +934,6 @@ if __name__ == "__main__":
         snapshot_builder=_cad_snapshot_builder,
         initial_n_snapshots=5,
         target_radius=0.012,
-        ghost_point_size=0.005,
     )
 
     server.sleep_forever()
