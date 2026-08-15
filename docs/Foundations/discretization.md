@@ -106,7 +106,7 @@ crawls. The standard remedy is to linearize with a deliberately simplified
 
 ``` py
 drag = -0.5 * rho * ox.Norm(vel) * vel
-J_drag = -0.5 * rho * ox.Norm(vel) * np.eye(3)   # drops the d||v||/dv term
+J_drag = -0.5 * rho * ox.Norm(vel) * np.eye(3)  # drops the d||v||/dv term
 
 dynamics = {"pos": vel, "vel": thrust / m + drag.with_jacobian({vel: J_drag})}
 ```
