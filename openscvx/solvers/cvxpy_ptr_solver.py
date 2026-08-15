@@ -210,7 +210,7 @@ class CVXPyPTRSolver(PTRSolver):
         self.solver_args = (
             solver_args
             if solver_args is not None
-            else {"abstol": 1e-06, "reltol": 1e-09, "enforce_dpp": True}
+            else {"abstol": 1e-06, "reltol": 1e-09, "enforce_dpp": True, "warm_start": False}
         )
         self.cvxpygen = cvxpygen
         self.cvxpygen_override = cvxpygen_override

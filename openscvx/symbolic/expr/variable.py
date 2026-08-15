@@ -4,7 +4,7 @@ from typing import List, Optional, Tuple
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 
-from .expr import Leaf
+from .expr import Expr, Leaf
 
 
 class Variable(Leaf):
@@ -32,6 +32,8 @@ class Variable(Leaf):
         _min (np.ndarray | None): Minimum bounds for each element of the variable
         _max (np.ndarray | None): Maximum bounds for each element of the variable
         _guess (np.ndarray | None): Initial guess for the variable trajectory (n_points, n_vars)
+        _guess_expr (Expr | None): Symbolic initial guess awaiting resolution to an
+            array at problem-build time; None once resolved
 
     Example:
             # Typically, use State or Control instead of Variable directly:
@@ -51,9 +53,16 @@ class Variable(Leaf):
         self._min = None
         self._max = None
         self._guess = None
+        self._guess_expr = None
 
     def __repr__(self) -> str:
         return f"Var({self.name!r})"
+
+    # ``Expr.__eq__`` builds an Equality constraint rather than comparing, which
+    # makes Python drop the inherited ``__hash__``. Variables are identities, not
+    # values, so restore hashing by identity: it lets a variable key a dict, as in
+    # ``expr.with_jacobian({vel: J_vel})``.
+    __hash__ = object.__hash__
 
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash Variable using its slice (canonical position, name-invariant).
@@ -189,14 +198,16 @@ class Variable(Leaf):
 
     @property
     def guess(self) -> Optional[np.ndarray]:
-        """Get the initial guess for the variable trajectory.
+        """Get the initial guess for the variable trajectory, as an array.
 
         The guess provides a starting point for the optimizer. A good initial guess
         can significantly improve convergence speed and help avoid local minima.
 
         Returns:
             2D array of shape (n_points, n_vars) representing the variable trajectory
-            over time, or None if no guess is provided.
+            over time, or None if no guess is provided. A guess assigned symbolically
+            also reads back as None until the problem is built and the expression has
+            been evaluated on the node grid.
 
         Example:
                 x = Variable("x", shape=(2,))
@@ -207,20 +218,36 @@ class Variable(Leaf):
         return self._guess
 
     @guess.setter
-    def guess(self, arr):
+    def guess(self, value):
         """Set the initial guess for the variable trajectory.
 
-        The guess should be a 2D array where each row represents the variable value
-        at a particular time point or trajectory node.
+        Three forms are accepted:
+
+        - **Array** — a 2D ``(N, n)`` array, one row per trajectory node, validated
+          immediately.
+        - **Expression** — a symbolic expression in other states and controls. It is
+          evaluated once per node at build time, with every referenced variable at its
+          own guess value, so ``speed.guess = ox.linalg.Norm(vel)`` gives the per-node speed
+          of the velocity guess. The expression itself is the dependency graph:
+          referenced guesses are resolved first, and circular references raise.
+        - **Callable of tau** — a one-argument function returning an expression, called
+          once here with a symbolic normalized node coordinate running 0 → 1, for
+          guesses shaped along the grid rather than by other variables:
+          ``pos.guess = lambda tau: p0 + (pf - p0) * tau``.
+
+        Symbolic forms are evaluated node-by-node, so they cannot express
+        trajectory-level constructions (finite differences, cumulative sums). Build
+        those eagerly with numpy instead, e.g. ``vel.guess = np.gradient(pos.guess,
+        axis=0)``.
 
         Args:
-            arr: 2D array of shape (n_points, n_vars) where n_vars matches the
-                variable dimension. Can be fewer points than the final trajectory -
-                the solver will interpolate as needed.
+            value: An ``(N, n)`` array, an ``Expr``, or a callable taking tau and
+                returning an ``Expr``.
 
         Raises:
-            ValueError: If the array is not 2D or if the second dimension doesn't
-                match the variable dimension
+            ValueError: If an array guess is not 2D or its second dimension doesn't
+                match the variable dimension, or if a callable returns a non-Expr.
+                Shape errors in symbolic guesses surface when the problem is built.
 
         Example:
                 pos = Variable("pos", shape=(3,))
@@ -228,7 +255,29 @@ class Variable(Leaf):
                 n_points = 50
                 pos.guess = np.linspace([0, 0, 0], [10, 5, 3], n_points)
         """
-        arr = np.asarray(arr, dtype=float)
+        if callable(value):
+            from .time import Tau
+
+            expr = value(Tau())
+            if not isinstance(expr, Expr):
+                raise ValueError(
+                    f"{self.__class__.__name__} '{self.name}': guess callable returned "
+                    f"{type(expr).__name__}, not a symbolic expression. The callable "
+                    f"receives the normalized node coordinate as an Expr and must return "
+                    f"one built from openscvx operations, e.g. "
+                    f"lambda tau: p0 + (pf - p0) * tau. Computing on tau with numpy or "
+                    f"jax.numpy will not work — the guess is composed symbolically and "
+                    f"only evaluated on the node grid later. For a purely numeric guess, "
+                    f"assign the array itself."
+                )
+            value = expr
+
+        if isinstance(value, Expr):
+            self._guess_expr = value
+            self._guess = None
+            return
+
+        arr = np.asarray(value, dtype=float)
         if arr.ndim != 2:
             raise ValueError(
                 f"{self.__class__.__name__} '{self.name}': guess expected 2D array of shape"
@@ -240,6 +289,7 @@ class Variable(Leaf):
                 f" {self.shape[0]}, got {arr.shape[1]}"
             )
         self._guess = arr
+        self._guess_expr = None
 
     def append(
         self,
@@ -267,6 +317,9 @@ class Variable(Leaf):
             guess: Initial guess value for the new dimension (only used if other is None).
                 Defaults to 0.0.
 
+        Raises:
+            ValueError: If either variable still carries an unresolved symbolic guess.
+
         Example:
             Create a 2D variable and extend it to 3D:
 
@@ -284,6 +337,15 @@ class Variable(Leaf):
                 vel = Variable("vel", shape=(3,))
                 pos.append(vel)  # Now pos has shape (6,)
         """
+
+        for var in (self, other):
+            if isinstance(var, Variable) and var._guess_expr is not None:
+                raise ValueError(
+                    f"{var.__class__.__name__} '{var.name}' has a symbolic initial guess "
+                    f"that has not been evaluated yet, so it cannot be concatenated. "
+                    f"Symbolic guesses are resolved when the problem is built; append "
+                    f"dimensions first, or assign an array guess."
+                )
 
         def process_array(val, is_guess=False):
             """Process input array to ensure correct shape and type.

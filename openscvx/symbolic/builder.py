@@ -48,6 +48,7 @@ from openscvx.symbolic.preprocessing import (
     collect_and_assign_slices,
     convert_dynamics_dict_to_expr,
     fill_default_guesses,
+    resolve_guess_exprs,
     validate_and_normalize_constraint_nodes,
     validate_boundary_conditions,
     validate_bounds,
@@ -220,8 +221,9 @@ def preprocess_symbolic_problem(
         states = list(states) + [time]
         time_state = time
 
-    # Fill in default guess if needed (for Time instances)
-    if isinstance(time_state, Time) and time_state.guess is None:
+    # Fill in default guess if needed (for Time instances); a symbolic time guess
+    # is resolved in Phase 2, so it must not be overwritten here.
+    if isinstance(time_state, Time) and time_state.guess is None and time_state._guess_expr is None:
         time_state.guess = time_state._generate_default_guess(N)
 
     # Add CTCS constraints for time bounds
@@ -287,6 +289,9 @@ def preprocess_symbolic_problem(
     # ==================== PHASE 2: Expression Validation ====================
     # Validate all expressions (use unsorted constraints)
     collect_and_assign_slices(states, controls)
+    # Evaluate symbolic guesses now that slices exist and time has been added, and
+    # before augmentation derives the time-dilation guess from time's guess numerically.
+    resolve_guess_exprs(states, controls, N)
     validate_constraints_at_root(constraints.unsorted)
     validate_and_normalize_constraint_nodes(constraints.unsorted, N)
     validate_dynamics_dimension(dynamics_concat, states)
@@ -520,6 +525,17 @@ def add_propagation_states(
     parameters = dict(parameters)
 
     # ==================== PHASE 1: Validate Extra States ====================
+
+    # Propagation-only states are integrated from their initial condition, never
+    # seeded from a guess trajectory, so a symbolic guess has nothing to resolve on.
+    for state in states_extra:
+        if state._guess_expr is not None:
+            raise ValueError(
+                f"State '{state.name}': symbolic initial guesses are not supported for "
+                f"propagation-only states. These states are integrated forward from "
+                f"their initial condition after the solve, so they carry no guess "
+                f"trajectory."
+            )
 
     # Validate that extra states don't conflict with optimization state names
     opt_state_names = {s.name for s in states_opt}

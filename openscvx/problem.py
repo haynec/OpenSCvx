@@ -75,6 +75,7 @@ from openscvx.symbolic.expr.control import Control
 from openscvx.symbolic.expr.state import State
 from openscvx.symbolic.expr.time import Time
 from openscvx.symbolic.lower import lower_symbolic_problem
+from openscvx.symbolic.preprocessing import resolve_guess_exprs
 from openscvx.symbolic.problem import SymbolicProblem
 from openscvx.utils import printing, profiling
 from openscvx.utils.caching import (
@@ -958,7 +959,8 @@ class Problem:
         This method reads the current `.guess` values from the original State and
         Control objects and updates the unified representations. This enables warm-starting
         workflows where the initial trajectory guess is updated between solves (e.g., shifting
-        the previous solution).
+        the previous solution). Guesses re-assigned symbolically between solves are
+        evaluated on the node grid first.
 
         Note:
             This only updates the unified representation. The AlgorithmState is
@@ -967,6 +969,8 @@ class Problem:
         """
         if self._lowered is None:
             return
+
+        resolve_guess_exprs(self.symbolic.states, self.symbolic.controls, self.symbolic.N)
 
         # Sync optimization state guesses
         for state in self.symbolic.states:

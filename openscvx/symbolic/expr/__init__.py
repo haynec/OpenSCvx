@@ -33,6 +33,11 @@ Module Organization:
         Array manipulation operations including `Index`, `Concat`, `Stack`, `Hstack`,
         and `Vstack` for indexing, slicing, and combining arrays.
 
+    User-Supplied Jacobians (autodiff.py):
+        `WithJacobian`, built by `Expr.with_jacobian`, replaces a subexpression's
+        derivative with respect to chosen variables — the inexact-Jacobian knob for
+        SCP conditioning.
+
     Constraints (constraint.py):
         Constraint types including `Constraint`, `Equality`, `Inequality`,
         `NodalConstraint`, and `CTCS` (Continuous-Time Constraint Satisfaction).
@@ -79,6 +84,9 @@ from .arithmetic import Add, Div, MatMul, Mul, Neg, Power, Sub
 
 # Array operations
 from .array import Block, Concat, Hstack, Index, Stack, Vstack
+
+# User-supplied Jacobians
+from .autodiff import WithJacobian
 
 # Specialized constraints
 from .constraint import (
@@ -260,4 +268,6 @@ __all__ = [
     "ctcs",
     # Vmap
     "Vmap",
+    # User-supplied Jacobians
+    "WithJacobian",
 ]

@@ -171,14 +171,13 @@ def _visit_linterp(lowerer, node: Linterp):
 
 @visitor(Cinterp)
 def _visit_cinterp(lowerer, node: Cinterp):
-    """Render 1-D cubic-spline interpolation as ``\\operatorname{cinterp}(x)``.
+    """Render 1-D piecewise-cubic interpolation as ``\\operatorname{cinterp}(x)``.
 
-    Only the query point is a symbolic operand — the breakpoints and spline
-    coefficients are baked in at construction — so it is the only rendered
-    argument.
+    Only the query point is rendered; the breakpoints and the polynomial table
+    (whether baked-in coefficients or a symbolic override) are structural and
+    stay implicit.
     """
-    args = ", ".join(lowerer.lower(c) for c in node.children())
-    return _call(r"\operatorname{cinterp}", args)
+    return _call(r"\operatorname{cinterp}", lowerer.lower(node.x))
 
 
 @visitor(Bilerp)

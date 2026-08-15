@@ -80,16 +80,16 @@ The unification process (in `openscvx/symbolic/unified.py`) sorts variables (use
 For a problem with `N` decision nodes:
 
 ```python
-x_unified.shape = (n_x,)          # Sum of all state dimensions
-u_unified.shape = (n_u,)          # Sum of all control dimensions
+x_unified.shape = (n_x,)  # Sum of all state dimensions
+u_unified.shape = (n_u,)  # Sum of all control dimensions
 x_unified.guess.shape = (N, n_x)  # State trajectory
 u_unified.guess.shape = (N, n_u)  # Control trajectory
 ```
 
 **Concrete example** (brachistochrone with N=10, no CTCS constraints):
 ```python
-x_unified.shape = (4,)        # position(2) + velocity(1) + time(1)
-u_unified.shape = (2,)        # theta(1) + _time_dilation(1)
+x_unified.shape = (4,)  # position(2) + velocity(1) + time(1)
+u_unified.shape = (2,)  # theta(1) + _time_dilation(1)
 x_unified.guess.shape = (10, 4)
 u_unified.guess.shape = (10, 2)
 ```
@@ -116,9 +116,9 @@ dyn_fn = lower_to_jax(dynamics_aug)
 
 # Create Dynamics object with Jacobians
 dynamics_augmented = Dynamics(
-    f=dyn_fn,                      # State derivative function
-    A=jacfwd(dyn_fn, argnums=0),   # Jacobian df/dx
-    B=jacfwd(dyn_fn, argnums=1),   # Jacobian df/du
+    f=dyn_fn,  # State derivative function
+    A=jacfwd(dyn_fn, argnums=0),  # Jacobian df/dx
+    B=jacfwd(dyn_fn, argnums=1),  # Jacobian df/du
 )
 ```
 
@@ -158,10 +158,10 @@ constraints_nodal_fns = lower_to_jax(constraints_nodal)
 # Create LoweredNodalConstraint objects with Jacobians
 for i, fn in enumerate(constraints_nodal_fns):
     constraint = LoweredNodalConstraint(
-        func=fn,                          # Constraint function
+        func=fn,  # Constraint function
         grad_g_x=jacfwd(fn, argnums=0),  # Jacobian dg/dx
         grad_g_u=jacfwd(fn, argnums=1),  # Jacobian dg/du
-        nodes=constraints_nodal[i].nodes, # Node indices where constraint applies
+        nodes=constraints_nodal[i].nodes,  # Node indices where constraint applies
     )
 ```
 
@@ -239,18 +239,9 @@ Dynamics functions are vmapped to process all intervals in parallel (in `Problem
 
 ```python
 # Vectorize dynamics functions across decision nodes
-self.dynamics_augmented.f = jax.vmap(
-    self.dynamics_augmented.f,
-    in_axes=(0, 0, 0, None)
-)
-self.dynamics_augmented.A = jax.vmap(
-    self.dynamics_augmented.A,
-    in_axes=(0, 0, 0, None)
-)
-self.dynamics_augmented.B = jax.vmap(
-    self.dynamics_augmented.B,
-    in_axes=(0, 0, 0, None)
-)
+self.dynamics_augmented.f = jax.vmap(self.dynamics_augmented.f, in_axes=(0, 0, 0, None))
+self.dynamics_augmented.A = jax.vmap(self.dynamics_augmented.A, in_axes=(0, 0, 0, None))
+self.dynamics_augmented.B = jax.vmap(self.dynamics_augmented.B, in_axes=(0, 0, 0, None))
 ```
 
 **Dynamics Vmap Configuration: `in_axes=(0, 0, 0, None)`**
@@ -372,9 +363,9 @@ Cross-node constraints are **not vmapped** because they already operate on full 
 
 ```python
 # Each LoweredCrossNodeConstraint operates on full trajectories
-residual = constraint.func(X, U, params)      # scalar
-grad_X = constraint.grad_g_X(X, U, params)    # (N, n_x) - sparse, mostly zeros
-grad_U = constraint.grad_g_U(X, U, params)    # (N, n_u) - sparse, mostly zeros
+residual = constraint.func(X, U, params)  # scalar
+grad_X = constraint.grad_g_X(X, U, params)  # (N, n_x) - sparse, mostly zeros
+grad_U = constraint.grad_g_U(X, U, params)  # (N, n_u) - sparse, mostly zeros
 ```
 
 The Jacobians are dense arrays but exhibit sparsity patterns determined by which nodes the constraint couples.
@@ -385,23 +376,23 @@ The vmapped dynamics functions are called during discretization (in `calculate_d
 
 ```python
 # Setup batch inputs
-x = V[:, :n_x]                          # Shape: (N-1, n_x) - States at interval starts
-u = u[: x.shape[0]]                     # Shape: (N-1, n_u) - Controls (includes time dilation)
-nodes = jnp.arange(0, N-1)              # Shape: (N-1,) - Node indices
+x = V[:, :n_x]  # Shape: (N-1, n_x) - States at interval starts
+u = u[: x.shape[0]]  # Shape: (N-1, n_u) - Controls (includes time dilation)
+nodes = jnp.arange(0, N - 1)  # Shape: (N-1,) - Node indices
 
 # Extract time dilation (last control dimension)
-s = u[:, -1]                            # Shape: (N-1,) - Time dilation values
+s = u[:, -1]  # Shape: (N-1,) - Time dilation values
 
 # Call vmapped dynamics - evaluates all intervals in parallel
 # Note: dynamics receive u[:, :-1] (vehicle controls only, excluding time dilation)
 f = state_dot(x, u[:, :-1], nodes, params)  # Shape: (N-1, n_x)
-dfdx = A(x, u[:, :-1], nodes, params)       # Shape: (N-1, n_x, n_x)
-dfdu_veh = B(x, u[:, :-1], nodes, params)   # Shape: (N-1, n_x, n_u-1)
+dfdx = A(x, u[:, :-1], nodes, params)  # Shape: (N-1, n_x, n_x)
+dfdu_veh = B(x, u[:, :-1], nodes, params)  # Shape: (N-1, n_x, n_u-1)
 
 # Build full control Jacobian including time dilation
 dfdu = jnp.zeros((x.shape[0], n_x, n_u))
 dfdu = dfdu.at[:, :, :-1].set(s[:, None, None] * dfdu_veh)  # Vehicle control derivatives
-dfdu = dfdu.at[:, :, -1].set(f)                              # Time dilation derivative = f
+dfdu = dfdu.at[:, :, -1].set(f)  # Time dilation derivative = f
 ```
 
 **Why exclude time dilation from dynamics?** Time dilation is a meta-control that scales the entire dynamics (used for time-optimal problems). The actual vehicle dynamics are defined without it, and time dilation is applied as a scaling factor during discretization. This is why `n_u-1` appears in the vehicle dynamics Jacobians.

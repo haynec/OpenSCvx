@@ -3573,6 +3573,174 @@ def test_cvxpy_cinterp_not_implemented():
         lowerer.lower(expr)
 
 
+# --- Cinterp: Coefficient Override ---
+
+
+def _reverse_coeffs(cs):
+    """scipy stores coefficients highest-degree-first; Cinterp uses ascending."""
+    return np.asarray(cs.c[::-1], dtype=float)
+
+
+def test_cinterp_numeric_coeffs_override_matches_fit():
+    """A numeric coeffs override reproduces the fitted spline exactly."""
+    import jax.numpy as jnp
+    from scipy.interpolate import CubicSpline
+
+    from openscvx.symbolic.expr import Cinterp, Constant
+    from openscvx.symbolic.lower import lower_to_jax
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 2.0, 1.0, 3.0])
+    query = np.linspace(0.0, 3.0, 50)
+
+    coeffs = _reverse_coeffs(CubicSpline(xp, fp))
+
+    fitted = lower_to_jax(Cinterp(Constant(query), xp, fp))(None, None, None, None)
+    override = lower_to_jax(Cinterp(Constant(query), xp, coeffs=coeffs))(None, None, None, None)
+
+    assert jnp.allclose(fitted, override)
+
+
+def test_cinterp_symbolic_coeffs_matches_scipy():
+    """Symbolic coeffs (via a Parameter) evaluate to the host-side scipy spline.
+
+    Covers each host-side fitting method: cubic, pchip, akima.
+    """
+    import jax.numpy as jnp
+    from scipy.interpolate import Akima1DInterpolator, CubicSpline, PchipInterpolator
+
+    from openscvx.symbolic.expr import Cinterp, Constant, Parameter
+    from openscvx.symbolic.lower import lower_to_jax
+
+    xp = np.linspace(0.0, 5.0, 8)
+    fp = np.array([0.0, 1.5, 1.0, 2.0, 0.5, 2.5, 1.0, 3.0])
+    n_seg = len(xp) - 1
+    query = np.linspace(0.0, 5.0, 120)
+
+    for fitter in (CubicSpline, PchipInterpolator, Akima1DInterpolator):
+        cs = fitter(xp, fp)
+        coeffs = _reverse_coeffs(cs)
+        param = Parameter("spline_coeffs", shape=(4, n_seg), value=coeffs)
+
+        fn = lower_to_jax(Cinterp(Constant(query), xp, coeffs=param))
+        result = fn(None, None, None, {"spline_coeffs": coeffs})
+
+        assert jnp.allclose(result, cs(query)), fitter.__name__
+
+
+def test_cinterp_symbolic_coeffs_update_between_evals_no_recompile():
+    """Updating the parameter value changes the SAME lowered function's output."""
+    import jax.numpy as jnp
+    from scipy.interpolate import PchipInterpolator
+
+    from openscvx.symbolic.expr import Cinterp, Constant, Parameter
+    from openscvx.symbolic.lower import lower_to_jax
+
+    xp = np.linspace(0.0, 1.0, 6)
+    n_seg = len(xp) - 1
+    query = np.linspace(0.0, 1.0, 40)
+
+    fp_a = np.array([0.0, 0.4, 0.2, 0.9, 0.3, 1.0])
+    fp_b = np.array([1.0, 0.2, 0.7, 0.1, 0.8, 0.0])
+    cs_a = PchipInterpolator(xp, fp_a)
+    cs_b = PchipInterpolator(xp, fp_b)
+
+    param = Parameter("c", shape=(4, n_seg), value=_reverse_coeffs(cs_a))
+    fn = lower_to_jax(Cinterp(Constant(query), xp, coeffs=param))
+
+    result_a = fn(None, None, None, {"c": _reverse_coeffs(cs_a)})
+    result_b = fn(None, None, None, {"c": _reverse_coeffs(cs_b)})
+
+    # float32 evaluation cannot pin the fp_b endpoint (exactly 0) tighter than
+    # ~1 ulp of the O(1) coefficients, so the default atol=1e-8 is unattainable.
+    assert jnp.allclose(result_a, cs_a(query), atol=1e-6)
+    assert jnp.allclose(result_b, cs_b(query), atol=1e-6)
+    assert not jnp.allclose(result_a, result_b)
+
+
+def test_cinterp_symbolic_coeffs_children_and_canonicalize():
+    """Symbolic coeffs appear as a child (so the Parameter binds) and survive canonicalize."""
+    from openscvx.symbolic.expr import Cinterp, Parameter, State
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    n_seg = len(xp) - 1
+    param = Parameter("c", shape=(4, n_seg), value=np.ones((4, n_seg)))
+
+    state = State("s", shape=(1,))
+    interp = Cinterp(state[0], xp, coeffs=param)
+
+    children = interp.children()
+    assert len(children) == 2
+    assert param in children
+
+    canonical = interp.canonicalize()
+    assert isinstance(canonical, Cinterp)
+    assert isinstance(canonical.coeffs, Parameter)
+    assert canonical.coeffs.name == "c"
+    assert canonical.fp_np is None
+    assert canonical.method is None
+
+
+# --- Cinterp: Coefficient-Override Validation ---
+
+
+def test_cinterp_coeffs_wrong_shape():
+    """A coeffs table that is not (4, len(xp) - 1) raises, stating the expected shape."""
+    from openscvx.symbolic.expr import Cinterp, State
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])  # n_seg = 3, expected (4, 3)
+    x = State("s", shape=(1,))[0]
+
+    with pytest.raises(ValueError, match=r"Cinterp coeffs must have shape \(4, 3\)"):
+        Cinterp(x, xp, coeffs=np.ones((4, 5)))
+
+
+def test_cinterp_symbolic_coeffs_wrong_shape():
+    """A Parameter of the wrong shape raises, stating the expected shape."""
+    from openscvx.symbolic.expr import Cinterp, Parameter, State
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])  # expected (4, 3)
+    x = State("s", shape=(1,))[0]
+    param = Parameter("c", shape=(3, 3), value=np.ones((3, 3)))
+
+    with pytest.raises(ValueError, match=r"Cinterp coeffs must have shape \(4, 3\)"):
+        Cinterp(x, xp, coeffs=param)
+
+
+def test_cinterp_both_fp_and_coeffs():
+    """Passing both fp and coeffs is ambiguous and raises."""
+    from openscvx.symbolic.expr import Cinterp, State
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    fp = np.array([0.0, 1.0, 2.0, 3.0])
+    x = State("s", shape=(1,))[0]
+
+    with pytest.raises(ValueError, match="exactly one of fp or coeffs"):
+        Cinterp(x, xp, fp, coeffs=np.ones((4, 3)))
+
+
+def test_cinterp_neither_fp_nor_coeffs():
+    """Passing neither fp nor coeffs raises."""
+    from openscvx.symbolic.expr import Cinterp, State
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    x = State("s", shape=(1,))[0]
+
+    with pytest.raises(ValueError, match="exactly one of fp or coeffs"):
+        Cinterp(x, xp)
+
+
+def test_cinterp_method_with_coeffs_rejected():
+    """method is meaningless with a coeffs override and is rejected."""
+    from openscvx.symbolic.expr import Cinterp, State
+
+    xp = np.array([0.0, 1.0, 2.0, 3.0])
+    x = State("s", shape=(1,))[0]
+
+    with pytest.raises(ValueError, match="method is meaningless with a coeffs override"):
+        Cinterp(x, xp, coeffs=np.ones((4, 3)), method="pchip")
+
+
 # =============================================================================
 # Bilerp (2D Bilinear Interpolation)
 # =============================================================================

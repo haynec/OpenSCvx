@@ -9,7 +9,7 @@ STL operators accept Constraint objects (predicates) and extract robustness
 expressions which are lowered to STLJax during compilation.
 """
 
-from typing import TYPE_CHECKING, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Optional, Tuple, Union
 
 import numpy as np
 
@@ -56,7 +56,7 @@ class STLJaxExpr(Expr):
     def over(
         self,
         interval: tuple[int, int],
-        penalty: str = "squared_relu",
+        penalty: Union[str, Callable[[Expr], Expr]] = "squared_relu",
         idx: Optional[int] = None,
         check_nodally: bool = False,
         licq_max: Optional[float] = None,
@@ -68,7 +68,8 @@ class STLJaxExpr(Expr):
 
         Args:
             interval: Tuple of (start, end) node indices for enforcement interval
-            penalty: Penalty function type for CTCS
+            penalty: CTCS penalty function name, or a callable ``Expr -> Expr``
+                receiving the constraint residual (see :class:`CTCS`)
             idx: Optional grouping index for multiple augmented states
             check_nodally: Whether to also enforce at discrete nodes
             licq_max: Optional upper bound on the augmented state accumulating
