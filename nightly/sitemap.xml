@@ -369,7 +369,7 @@
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/latest/Foundations/discretization/</loc>
-         <lastmod>2026-08-05</lastmod>
+         <lastmod>2026-08-15</lastmod>
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/latest/Foundations/ocp/</loc>
@@ -748,6 +748,10 @@
          <lastmod>2026-08-15</lastmod>
     </url>
     <url>
+         <loc>https://openscvx.github.io/OpenSCvx/latest/Reference/symbolic/expr/autodiff/</loc>
+         <lastmod>2026-08-15</lastmod>
+    </url>
+    <url>
          <loc>https://openscvx.github.io/OpenSCvx/latest/Reference/symbolic/expr/constraint/</loc>
          <lastmod>2026-08-15</lastmod>
     </url>
@@ -836,6 +840,10 @@
          <lastmod>2026-08-15</lastmod>
     </url>
     <url>
+         <loc>https://openscvx.github.io/OpenSCvx/latest/Reference/symbolic/lowerers/cvxpy/autodiff/</loc>
+         <lastmod>2026-08-15</lastmod>
+    </url>
+    <url>
          <loc>https://openscvx.github.io/OpenSCvx/latest/Reference/symbolic/lowerers/cvxpy/constraint/</loc>
          <lastmod>2026-08-15</lastmod>
     </url>
@@ -873,6 +881,10 @@
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/latest/Reference/symbolic/lowerers/jax/array/</loc>
+         <lastmod>2026-08-15</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/latest/Reference/symbolic/lowerers/jax/autodiff/</loc>
          <lastmod>2026-08-15</lastmod>
     </url>
     <url>
@@ -933,6 +945,10 @@
     </url>
     <url>
          <loc>https://openscvx.github.io/OpenSCvx/latest/Reference/symbolic/lowerers/latex/array/</loc>
+         <lastmod>2026-08-15</lastmod>
+    </url>
+    <url>
+         <loc>https://openscvx.github.io/OpenSCvx/latest/Reference/symbolic/lowerers/latex/autodiff/</loc>
          <lastmod>2026-08-15</lastmod>
     </url>
     <url>
