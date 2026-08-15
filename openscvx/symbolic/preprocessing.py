@@ -687,7 +687,8 @@ def fill_default_guesses(states: List[State], N: int) -> None:
     """Fill in default linspace guesses for states with guess=None.
 
     For states with both initial and final conditions set, generates a linear
-    interpolation from initial to final values.
+    interpolation from initial to final values. States carrying a symbolic guess
+    are left alone — theirs is filled by :func:`resolve_guess_exprs`.
 
     This function modifies states in-place.
 
@@ -698,6 +699,8 @@ def fill_default_guesses(states: List[State], N: int) -> None:
     from openscvx.init import linspace
 
     for state in states:
+        if state._guess_expr is not None:
+            continue
         if state.guess is None and state.initial is not None and state.final is not None:
             # state.initial and state.final are already numpy arrays of values
             # (the setter handles parsing tuples like ("free", value))
@@ -705,6 +708,151 @@ def fill_default_guesses(states: List[State], N: int) -> None:
                 keyframes=[state.initial, state.final],
                 nodes=[0, N - 1],
             )
+
+
+def resolve_guess_exprs(states: List[State], controls: List[Control], N: int) -> None:
+    """Evaluate symbolic initial guesses on the node grid, in dependency order.
+
+    A symbolic guess (``speed.guess = ox.linalg.Norm(vel)``, ``pos.guess = lambda tau: ...``)
+    defines the guess *per node*: the expression is evaluated at every node with each
+    referenced variable at its own guess value and tau running 0 → 1 across the grid —
+    the same mental model as dynamics and constraints. Guesses that reference other
+    symbolic guesses are resolved first; the expressions themselves are the dependency
+    graph.
+
+    Each resolved variable has its ``_guess`` array filled and its pending expression
+    cleared, so everything downstream sees an ordinary eager guess. Variables without
+    a symbolic guess are untouched, and the function returns immediately when there
+    are none.
+
+    This function modifies variables in-place, and requires slices to have been
+    assigned (see :func:`collect_and_assign_slices`).
+
+    Args:
+        states: State objects whose guesses may be referenced or resolved
+        controls: Control objects whose guesses may be referenced or resolved
+        N: Number of discretization nodes
+
+    Raises:
+        ValueError: If a guess references a variable outside this problem, if the
+            guesses reference each other circularly, or if an evaluated guess does
+            not have shape ``(N, n)``.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr.parameter import Parameter
+    from openscvx.symbolic.expr.time import TAU_PARAM
+    from openscvx.symbolic.lower import lower_to_jax
+
+    variables = list(states) + list(controls)
+    pending = [var for var in variables if var._guess_expr is not None]
+    if not pending:
+        return
+
+    known = {id(var) for var in variables}
+    dependencies = {id(var): _guess_dependencies(var, known) for var in pending}
+
+    # Kahn's algorithm over the pending variables: a guess is ready once every
+    # pending variable it references has been resolved.
+    order, resolved, unordered = [], set(), list(pending)
+    while unordered:
+        ready = [
+            var
+            for var in unordered
+            if all(
+                id(dep) not in dependencies or id(dep) in resolved for dep in dependencies[id(var)]
+            )
+        ]
+        if not ready:
+            raise ValueError(
+                f"Circular initial-guess dependency among "
+                f"{sorted(var.name for var in unordered)}. Each guess expression is "
+                f"evaluated from the guesses it references, so the references cannot "
+                f"form a cycle — break it by giving one of them an array guess."
+            )
+        order.extend(ready)
+        resolved.update(id(var) for var in ready)
+        unordered = [var for var in unordered if id(var) not in resolved]
+
+    tau = jnp.linspace(0.0, 1.0, N)
+    nodes = jnp.arange(N)
+    for var in order:
+        expr = var._guess_expr
+        params = {TAU_PARAM: tau}
+
+        def bind_parameter(node, params=params):
+            if isinstance(node, Parameter):
+                params[node.name] = node.value
+
+        traverse(expr, bind_parameter)
+        fn = lower_to_jax(expr)
+        values = jax.vmap(fn, in_axes=(0, 0, 0, None))(
+            _guess_trajectory(states, N), _guess_trajectory(controls, N), nodes, params
+        )
+
+        guess = np.asarray(values, dtype=float)
+        if guess.ndim == 1 and var.shape[0] == 1:
+            guess = guess.reshape(-1, 1)
+        if guess.shape != (N, var.shape[0]):
+            raise ValueError(
+                f"{var.__class__.__name__} '{var.name}': guess expression evaluated to "
+                f"shape {guess.shape}, expected ({N}, {var.shape[0]}). The expression is "
+                f"evaluated once per node, so it must produce one row of "
+                f"{var.shape[0]} value(s) per node."
+            )
+        var._guess = guess
+        var._guess_expr = None
+
+
+def _guess_dependencies(var: Variable, known: Set[int]) -> List[Variable]:
+    """Collect the variables a symbolic guess reads, in first-seen order.
+
+    Args:
+        var: Variable carrying the pending guess expression
+        known: Ids of the variables belonging to this problem
+
+    Raises:
+        ValueError: If the expression references a variable outside the problem
+    """
+    dependencies = {}
+
+    def visit(node):
+        if not isinstance(node, Variable):
+            return
+        if id(node) not in known:
+            raise ValueError(
+                f"{var.__class__.__name__} '{var.name}': guess expression references "
+                f"{node.__class__.__name__} '{node.name}', which is not one of this "
+                f"problem's states or controls. Guess expressions may only reference "
+                f"variables passed to Problem."
+            )
+        dependencies.setdefault(id(node), node)
+
+    traverse(var._guess_expr, visit)
+    return list(dependencies.values())
+
+
+def _guess_trajectory(variables: List[Variable], N: int) -> np.ndarray:
+    """Assemble the (N, n) guess trajectory for a set of states or controls.
+
+    Columns of variables whose guess is not yet resolved are left at zero;
+    dependency ordering guarantees the columns a guess expression reads are filled.
+    """
+    n = max((var._slice.stop for var in variables), default=0)
+    trajectory = np.zeros((N, n))
+    for var in variables:
+        if var._guess is None:
+            continue
+        if var._guess.shape[0] != N:
+            raise ValueError(
+                f"{var.__class__.__name__} '{var.name}': guess spans "
+                f"{var._guess.shape[0]} nodes but the problem has N={N}. Guess "
+                f"expressions are evaluated node by node, so every guess they read "
+                f"must cover the whole grid."
+            )
+        trajectory[:, var._slice] = var._guess
+    return trajectory
 
 
 def validate_boundary_conditions(states: List[State]) -> None:
@@ -908,6 +1056,9 @@ def validate_propagation_input_types(
 def validate_guesses(variables: List[Variable]) -> None:
     """Validate that all variables have initial guesses set.
 
+    A guess assigned symbolically counts as set even though it has not been
+    evaluated to an array yet.
+
     Args:
         variables: List of Variable objects (State or Control) to validate
 
@@ -915,12 +1066,16 @@ def validate_guesses(variables: List[Variable]) -> None:
         ValueError: If any variable is missing a guess
     """
     for var in variables:
-        if var.guess is None:
+        if var.guess is None and var._guess_expr is None:
             if isinstance(var, Control):
                 raise ValueError(
                     f"Control '{var.name}' is missing initial guess. "
-                    f"Please set {var.name}.guess (controls require explicit guesses)"
+                    f"Please set {var.name}.guess to an array, an expression in other "
+                    f"states and controls, or a callable of tau "
+                    f"(controls require explicit guesses)"
                 )
             raise ValueError(
-                f"State '{var.name}' is missing initial guess. Please set {var.name}.guess"
+                f"State '{var.name}' is missing initial guess. Please set {var.name}.guess "
+                f"to an array, an expression in other states and controls, or a "
+                f"callable of tau"
             )
