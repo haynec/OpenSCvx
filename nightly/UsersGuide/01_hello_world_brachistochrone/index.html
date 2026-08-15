@@ -805,6 +805,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Variable Definition">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#symbolic-initial-guesses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Symbolic initial guesses
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -11241,6 +11258,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Variable Definition">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#symbolic-initial-guesses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Symbolic initial guesses
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -11490,16 +11524,38 @@ When only a value is specified as in the case of <code>position</code>, the valu
 <p>Here, we do <em>not</em> specify an initial or final value for the control but we <em>do</em> need to specify an initial guess.
 The initial guess must be of shape <span class="arithmatex">\((n_u \times n_{\mathrm{nodes}})\)</span>, providing an initial guess for each control at every node.
 Technically, we can also provide a <code>.guess</code> for states. However, these default to a linear interpolation between initial and final conditions which is sufficient in most cases.</p>
+<h4 id="symbolic-initial-guesses">Symbolic initial guesses<a class="headerlink" href="#symbolic-initial-guesses" title="Permanent link">&para;</a></h4>
+<p><code>.guess</code> accepts three forms, on both states and controls:</p>
+<ul>
+<li>an array of shape <span class="arithmatex">\((n_{\mathrm{nodes}} \times n)\)</span>, as above;</li>
+<li>a <strong>symbolic expression</strong> in other states and controls;</li>
+<li>a <strong>callable of <code>tau</code></strong>, the normalized node coordinate, returning a symbolic expression.</li>
+</ul>
+<p>A guess expression is evaluated at every node, with each referenced variable at its guess value and <code>tau</code> running <span class="arithmatex">\(0 \to 1\)</span> across the grid — the same per-node mental model as dynamics and constraints.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Cross-variable: the speed guess follows whatever velocity&#39;s guess is</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">speed</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">Norm</span><span class="p">(</span><span class="n">velocity</span><span class="p">)</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># Along the grid: a straight line from p0 to pf</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">position</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">tau</span><span class="p">:</span> <span class="n">p0</span> <span class="o">+</span> <span class="p">(</span><span class="n">pf</span> <span class="o">-</span> <span class="n">p0</span><span class="p">)</span> <span class="o">*</span> <span class="n">tau</span>
+</span></code></pre></div>
+<p>References between guesses are the dependency graph: <code>speed</code> above is resolved after <code>velocity</code>, and a circular reference raises. Everything is evaluated once, when the <code>Problem</code> is built (and again on <code>reset()</code> if you assign a new expression between solves), so the solver only ever sees ordinary arrays.</p>
+<p>Because evaluation is per node, guess expressions cannot express trajectory-level constructions such as finite differences or cumulative sums. Build those eagerly with NumPy instead:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">velocity</span><span class="o">.</span><span class="n">guess</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">gradient</span><span class="p">(</span><span class="n">position</span><span class="o">.</span><span class="n">guess</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</span></code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p><code>time.guess</code> accepts all three forms, but <code>time_dilation_guess</code> remains array-only.</p>
+</div>
 <h3 id="dynamics">Dynamics<a class="headerlink" href="#dynamics" title="Permanent link">&para;</a></h3>
 <p>Dynamics are defined as a dictionary mapping state names to their time derivatives using symbolic expressions:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># Define dynamics as dictionary mapping state names to their derivatives</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">dynamics</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="s2">&quot;position&quot;</span><span class="p">:</span> <span class="n">ox</span><span class="o">.</span><span class="n">Concat</span><span class="p">(</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>        <span class="n">velocity</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">ox</span><span class="o">.</span><span class="n">Sin</span><span class="p">(</span><span class="n">theta</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>  <span class="c1"># x_dot</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>        <span class="o">-</span><span class="n">velocity</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">ox</span><span class="o">.</span><span class="n">Cos</span><span class="p">(</span><span class="n">theta</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>  <span class="c1"># y_dot</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="p">),</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="s2">&quot;velocity&quot;</span><span class="p">:</span> <span class="n">g</span> <span class="o">*</span> <span class="n">ox</span><span class="o">.</span><span class="n">Cos</span><span class="p">(</span><span class="n">theta</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="p">}</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Define dynamics as dictionary mapping state names to their derivatives</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">dynamics</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="s2">&quot;position&quot;</span><span class="p">:</span> <span class="n">ox</span><span class="o">.</span><span class="n">Concat</span><span class="p">(</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>        <span class="n">velocity</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">ox</span><span class="o">.</span><span class="n">Sin</span><span class="p">(</span><span class="n">theta</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>  <span class="c1"># x_dot</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>        <span class="o">-</span><span class="n">velocity</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">ox</span><span class="o">.</span><span class="n">Cos</span><span class="p">(</span><span class="n">theta</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>  <span class="c1"># y_dot</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="p">),</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>    <span class="s2">&quot;velocity&quot;</span><span class="p">:</span> <span class="n">g</span> <span class="o">*</span> <span class="n">ox</span><span class="o">.</span><span class="n">Cos</span><span class="p">(</span><span class="n">theta</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="p">}</span>
 </span></code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -11531,10 +11587,10 @@ We call this continuous-time constraint-satisfaction (CTCS).
 While the full description of CTCS is beyond the scope of this tutorial, what's important is that this is handled internally without user interaction.</p>
 <p>We can define the boundary constraints as inequalities <em>i.e.</em> <code>state.min &lt;= state</code> and <code>state &lt;= state.max</code>.
 To mark these as CTCS constraints we simply wrap them in <code>ox.ctcs(...)</code></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="c1"># Generate box constraints for all states</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="n">constraints</span> <span class="o">=</span> <span class="p">[]</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">states</span><span class="p">:</span>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">constraints</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">ox</span><span class="o">.</span><span class="n">ctcs</span><span class="p">(</span><span class="n">state</span> <span class="o">&lt;=</span> <span class="n">state</span><span class="o">.</span><span class="n">max</span><span class="p">),</span> <span class="n">ox</span><span class="o">.</span><span class="n">ctcs</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">min</span> <span class="o">&lt;=</span> <span class="n">state</span><span class="p">)])</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Generate box constraints for all states</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="n">constraints</span> <span class="o">=</span> <span class="p">[]</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">states</span><span class="p">:</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="n">constraints</span><span class="o">.</span><span class="n">extend</span><span class="p">([</span><span class="n">ox</span><span class="o">.</span><span class="n">ctcs</span><span class="p">(</span><span class="n">state</span> <span class="o">&lt;=</span> <span class="n">state</span><span class="o">.</span><span class="n">max</span><span class="p">),</span> <span class="n">ox</span><span class="o">.</span><span class="n">ctcs</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">min</span> <span class="o">&lt;=</span> <span class="n">state</span><span class="p">)])</span>
 </span></code></pre></div>
 <p>This style of constraint definition as a list should feel familiar to CVXPY users.
 Note that we do not need to specify continuous box constraints for the controls.
@@ -11545,25 +11601,25 @@ Therefore, by constraining the discrete nodes to lie within the bounds we can tr
 <p>The last remaining piece we need is <code>Time</code>. OpenSCvx allows for free final-time problems with non-constant spacing.
 We can define our time object similar to a <code>State</code> object, including the initial and final values as well as the min. and max. bounds.
 Similar to the states the <code>final</code> value is defined as a tuple indicating that the final time is to be minimized as well as providing an initial guess for the total time.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">time</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Time</span><span class="p">(</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="n">initial</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="n">final</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;minimize&quot;</span><span class="p">,</span> <span class="n">total_time</span><span class="p">),</span>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="nb">min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="nb">max</span><span class="o">=</span><span class="n">total_time</span><span class="p">,</span>
-</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">time</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Time</span><span class="p">(</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="n">initial</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="n">final</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;minimize&quot;</span><span class="p">,</span> <span class="n">total_time</span><span class="p">),</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="nb">min</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="nb">max</span><span class="o">=</span><span class="n">total_time</span><span class="p">,</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>OpenSCvx treats the <code>Time</code> object like any other state; it can be used to formulate time-dependent dynamics or constraints.
 This is a more advanced subject for later tutorials.</p>
 <h3 id="defining-the-problem">Defining the Problem<a class="headerlink" href="#defining-the-problem" title="Permanent link">&para;</a></h3>
 <p>Now we have everything we need to instantiate the <code>Problem</code> with our <code>dynamics</code>, <code>states</code>, <code>controls</code>, <code>time</code>, <code>constraints</code>, as well as the number of nodes <code>N</code></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="n">dynamics</span><span class="o">=</span><span class="n">dynamics</span><span class="p">,</span>
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">states</span><span class="o">=</span><span class="n">states</span><span class="p">,</span>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="n">controls</span><span class="o">=</span><span class="n">controls</span><span class="p">,</span>
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="p">,</span>
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="n">constraints</span><span class="o">=</span><span class="n">constraints</span><span class="p">,</span>
-</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>    <span class="n">N</span><span class="o">=</span><span class="n">n</span><span class="p">,</span>
-</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">problem</span> <span class="o">=</span> <span class="n">ox</span><span class="o">.</span><span class="n">Problem</span><span class="p">(</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="n">dynamics</span><span class="o">=</span><span class="n">dynamics</span><span class="p">,</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="n">states</span><span class="o">=</span><span class="n">states</span><span class="p">,</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="n">controls</span><span class="o">=</span><span class="n">controls</span><span class="p">,</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="p">,</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="n">constraints</span><span class="o">=</span><span class="n">constraints</span><span class="p">,</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>    <span class="n">N</span><span class="o">=</span><span class="n">n</span><span class="p">,</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="solving-the-problem">Solving the Problem<a class="headerlink" href="#solving-the-problem" title="Permanent link">&para;</a></h3>
 <p>Solving the problem is split into three steps:</p>
@@ -11572,27 +11628,27 @@ This is a more advanced subject for later tutorials.</p>
 <li><code>problem.solve()</code> iteratively solves the OCP and generates the discrete state and control solution at the decision nodes.</li>
 <li><code>problem.post_process()</code> propagates the nodal solution at high temporal fidelity. This lets us generate high resolution trajectories decoupled from the number of optimization nodes.</li>
 </ol>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">problem</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">solve</span><span class="p">()</span>
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">post_process</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">problem</span><span class="o">.</span><span class="n">initialize</span><span class="p">()</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">solve</span><span class="p">()</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="n">results</span> <span class="o">=</span> <span class="n">problem</span><span class="o">.</span><span class="n">post_process</span><span class="p">()</span>
 </span></code></pre></div>
 <p>Both <code>.solve()</code> and <code>.post_process()</code> return an <code>OptimizationResults</code> object with the former containing only the nodal solution while the latter also includes the high-fidelity trajectories.</p>
 <h3 id="accessing-the-results">Accessing the results<a class="headerlink" href="#accessing-the-results" title="Permanent link">&para;</a></h3>
 <p>But how can we easily access the results? Could we <em>somehow</em> leverage the symbolic variables to make this easy?</p>
 <p>Fear not; once a problem has been solved and post-processed we can access the results using the exact same variable names we defined earlier for our states and controls.
 We can do so both for the discrete decision nodes in <code>results.nodes</code> and the high-resolution <code>results.trajectory</code> <em>e.g.</em></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">pos_nodes</span> <span class="o">=</span> <span class="n">results</span><span class="o">.</span><span class="n">nodes</span><span class="p">[</span><span class="s2">&quot;position&quot;</span><span class="p">]</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="n">theta_traj</span> <span class="o">=</span> <span class="n">results</span><span class="o">.</span><span class="n">trajectory</span><span class="p">[</span><span class="s2">&quot;theta&quot;</span><span class="p">]</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">pos_nodes</span> <span class="o">=</span> <span class="n">results</span><span class="o">.</span><span class="n">nodes</span><span class="p">[</span><span class="s2">&quot;position&quot;</span><span class="p">]</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="n">theta_traj</span> <span class="o">=</span> <span class="n">results</span><span class="o">.</span><span class="n">trajectory</span><span class="p">[</span><span class="s2">&quot;theta&quot;</span><span class="p">]</span>
 </span></code></pre></div>
 <h3 id="visualizing-the-results">Visualizing the Results<a class="headerlink" href="#visualizing-the-results" title="Permanent link">&para;</a></h3>
 <p>OpenSCvx provides built-in plotting utilities for quick visualization of your results. The simplest way to see your solution is with <code>plot_states()</code> and <code>plot_controls()</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">openscvx.plotting</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_states</span><span class="p">,</span> <span class="n">plot_controls</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="c1"># Plot all state trajectories in a subplot grid</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="n">plot_states</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;position&quot;</span><span class="p">,</span> <span class="s2">&quot;velocity&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
-</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>
-</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="c1"># Plot control trajectories</span>
-</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="n">plot_controls</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;theta&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">openscvx.plotting</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_states</span><span class="p">,</span> <span class="n">plot_controls</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="c1"># Plot all state trajectories in a subplot grid</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="n">plot_states</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;position&quot;</span><span class="p">,</span> <span class="s2">&quot;velocity&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="c1"># Plot control trajectories</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="n">plot_controls</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="p">[</span><span class="s2">&quot;theta&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>
 </span></code></pre></div>
 <p>These functions create interactive Plotly figures showing:</p>
 <ul>
@@ -11633,7 +11689,7 @@ For the interested reader, we will continue our guided tour of the various featu
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="August 5, 2026 07:59:26 UTC">August 5, 2026</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="August 15, 2026 17:28:30 UTC">August 15, 2026</span>
   </span>
 
     
