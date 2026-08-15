@@ -91,4 +91,41 @@ def dVdt(self, tau: float, V: jnp.ndarray, u_cur: np.ndarray, u_next: np.ndarray
     )
     return dVdt.flatten()
 ```
-    
+
+## Supplying your own Jacobian
+
+The state and control Jacobians above (`dfdx`, `dfdu`) come from automatic
+differentiation of the dynamics you wrote. Occasionally the exact Jacobian is
+not the one you want: a drag law, a contact model, or a lookup table can be
+smooth enough to integrate while its true derivative makes the convex
+subproblem badly conditioned, so the trust region collapses and the SCP loop
+crawls. The standard remedy is to linearize with a deliberately simplified
+(inexact) Jacobian.
+
+`Expr.with_jacobian` applies that remedy to a single term:
+
+``` py
+drag = -0.5 * rho * ox.Norm(vel) * vel
+J_drag = -0.5 * rho * ox.Norm(vel) * np.eye(3)  # drops the d||v||/dv term
+
+dynamics = {"pos": vel, "vel": thrust / m + drag.with_jacobian({vel: J_drag})}
+```
+
+The keys are the `State` or `Control` objects the derivative is taken with
+respect to, and each value is an expression (or constant array) of shape
+`(*term.shape, *variable.shape)`. Directions you do not name are still
+differentiated automatically, so the example above hands over `∂/∂vel` while
+`∂/∂thrust` still comes from autodiff.
+
+The *value* of the term is untouched — only the search direction changes — so a
+converged trajectory still satisfies the original nonlinear dynamics; the
+defect and the propagated solution are computed with the term as written. An
+inexact Jacobian trades linearization accuracy (and hence convergence rate) for
+conditioning, so reach for it when a term is a known source of stiffness, not
+as a default.
+
+The override lives inside the lowered JAX function, so every downstream
+derivative picks it up: the discretizer's `A`/`B`, nonconvex constraint
+linearization, and the sparsity pattern used for coloring. It has no meaning
+inside a constraint that is handed to the convex solver as written, and lowering
+one there raises.

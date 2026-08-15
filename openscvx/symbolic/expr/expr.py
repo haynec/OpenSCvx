@@ -308,6 +308,47 @@ class Expr:
         """
         return NodeReference(self, k)
 
+    def with_jacobian(self, jacobians: dict) -> "Expr":
+        """Override this expression's derivative w.r.t. chosen variables.
+
+        Successive convexification linearizes at every iteration, so the Jacobian
+        of a term — not its value — is what conditions the convex subproblem. A
+        deliberately simplified (inexact) Jacobian is a standard remedy for a term
+        that is smooth enough to integrate but whose true derivative makes the
+        subproblem badly conditioned. The value of the expression is untouched, so
+        the converged trajectory still satisfies the original nonlinear problem;
+        only the search direction changes.
+
+        Directions that are not overridden are still differentiated automatically,
+        so a single term can hand-specify its state Jacobian and let the control
+        Jacobian fall out of autodiff.
+
+        Args:
+            jacobians: Map from a ``State`` or ``Control`` to the Jacobian of this
+                expression with respect to it, shaped ``(*self.shape, *var.shape)``
+                (a variable of shape ``(n,)`` and a scalar expression give shape
+                ``(n,)``). Constant matrices are accepted alongside expressions.
+
+        Returns:
+            Expr: A ``WithJacobian`` node wrapping this expression.
+
+        Example:
+            Damp the drag Jacobian without changing the drag force:
+
+                drag = -0.5 * rho * ox.Norm(vel) * vel
+                J_drag = -0.5 * rho * ox.Norm(vel) * np.eye(3)  # drops the d|v|/dv term
+
+                dynamics = {"vel": thrust / m + drag.with_jacobian({vel: J_drag})}
+
+        Note:
+            The override applies on the JAX path — dynamics linearization and
+            constraint linearization. Inside a constraint lowered to CVXPy the
+            wrapper has no meaning and raises.
+        """
+        from .autodiff import WithJacobian
+
+        return WithJacobian(self, jacobians)
+
     def children(self) -> List["Expr"]:
         """Return the child expressions of this node.
 

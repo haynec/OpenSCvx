@@ -58,6 +58,12 @@ class Variable(Leaf):
     def __repr__(self) -> str:
         return f"Var({self.name!r})"
 
+    # ``Expr.__eq__`` builds an Equality constraint rather than comparing, which
+    # makes Python drop the inherited ``__hash__``. Variables are identities, not
+    # values, so restore hashing by identity: it lets a variable key a dict, as in
+    # ``expr.with_jacobian({vel: J_vel})``.
+    __hash__ = object.__hash__
+
     def _hash_into(self, hasher: "hashlib._Hash") -> None:
         """Hash Variable using its slice (canonical position, name-invariant).
 
