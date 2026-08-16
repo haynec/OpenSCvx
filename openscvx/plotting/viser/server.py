@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import socket
 import warnings
 
@@ -32,15 +31,10 @@ def _localhost_port_available(port: int) -> bool:
 def _resolve_viser_port(port: int | None) -> int:
     """Choose a port that is free on localhost.
 
-    Honors ``_VISER_PORT_OVERRIDE`` when ``port`` is None (used by examples
-    that need a fixed secondary port). If the preferred port is already taken
-    on ``127.0.0.1``, walk upward so the printed localhost URL actually works.
+    If the preferred port is already taken on ``127.0.0.1``, walk upward so
+    the printed localhost URL actually works.
     """
-    preferred = (
-        port
-        if port is not None
-        else int(os.environ.get("_VISER_PORT_OVERRIDE", "8080"))
-    )
+    preferred = port if port is not None else 8080
     if _localhost_port_available(preferred):
         return preferred
     for candidate in range(preferred + 1, preferred + 50):
@@ -135,8 +129,8 @@ def create_server(
         pos: Position array for computing grid size, or None to use default grid size
         dark_mode: Whether to use dark theme
         show_grid: Whether to show the grid (default True)
-        port: Preferred HTTP port. Defaults to 8080 (or ``_VISER_PORT_OVERRIDE``).
-            If that port is already bound on localhost, the next free port is used.
+        port: Preferred HTTP port. Defaults to 8080. If that port is already
+            bound on localhost, the next free port is used.
         show_origin: Whether to draw the origin triad. The frame is half a metre
             across, so switch it off for scenes whose whole extent is on that
             order (a scale-model track, a tabletop workspace) where it would

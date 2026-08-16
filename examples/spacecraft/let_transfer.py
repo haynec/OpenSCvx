@@ -215,30 +215,6 @@ def _set_projection_speed_colorbar_kms(fig) -> None:
             marker.colorbar.title = "‖velocity‖ (km/s)"
 
 
-def _create_viser_server_compat(ox_viser, pos: np.ndarray, show_grid: bool, port: int):
-    """Create a viser server across both create_server() API variants.
-
-    Some branches expose create_server(..., port=...), while others do not.
-    For the latter, use viser's `_VISER_PORT_OVERRIDE` env hook so we can still
-    bind to the requested port without changing the plotting module.
-    """
-    try:
-        return ox_viser.create_server(pos, show_grid=show_grid, port=port)
-    except TypeError as exc:
-        if "unexpected keyword argument 'port'" not in str(exc):
-            raise
-
-        previous_port_override = os.environ.get("_VISER_PORT_OVERRIDE")
-        os.environ["_VISER_PORT_OVERRIDE"] = str(port)
-        try:
-            return ox_viser.create_server(pos, show_grid=show_grid)
-        finally:
-            if previous_port_override is None:
-                os.environ.pop("_VISER_PORT_OVERRIDE", None)
-            else:
-                os.environ["_VISER_PORT_OVERRIDE"] = previous_port_override
-
-
 def _server_local_url(server, fallback_port: int) -> str:
     """Build a localhost URL from a viser server handle, with fallback."""
     try:
@@ -275,9 +251,7 @@ def _create_let_viser_server(
         moon_radius_vis = (float(moon_radius) / scale) * VISER_VISUAL_SCALE
 
         colors = ox_viser.compute_velocity_colors(vel, fallback_length=pos.shape[0])
-        server = _create_viser_server_compat(
-            ox_viser=ox_viser, pos=pos_vis, show_grid=True, port=port
-        )
+        server = ox_viser.create_server(pos_vis, show_grid=True, port=port)
 
         ox_viser.add_circular_orbit(
             server,
@@ -454,9 +428,7 @@ def _create_let_viser_server_inertial(
         sun_vis = np.zeros(3, dtype=np.float64)
 
         colors = ox_viser.compute_velocity_colors(vel_rot, fallback_length=pos_vis.shape[0])
-        server = _create_viser_server_compat(
-            ox_viser=ox_viser, pos=pos_vis, show_grid=True, port=port
-        )
+        server = ox_viser.create_server(pos_vis, show_grid=True, port=port)
 
         sun_radius = max(0.04 * VISER_VISUAL_SCALE, 0.2)
         earth_radius = max(0.0018 * VISER_VISUAL_SCALE, 0.035)
