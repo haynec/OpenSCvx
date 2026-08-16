@@ -33,7 +33,7 @@ _EXAMPLES_CATEGORY_BLURB: dict[str, tuple[str, str]] = {
     ),
     "car": (
         ":material-car:",
-        "Dubins and car-like models with obstacles, waypoints, and STL logic.",
+        "Dubins models with obstacles and STL logic, plus the minimum-lap-time racing family.",
     ),
     "drone": (
         ":material-quadcopter:",
@@ -202,11 +202,18 @@ helpers) are omitted from this index.
 
 
 def _is_example_page(path: Path) -> bool:
-    """Whether a discovered ``.py`` file becomes an example page (vs a utility module)."""
+    """Whether a discovered ``.py`` file becomes an example page (vs a utility module).
+
+    An underscore prefix marks support code at any level: ``_plotting.py`` is a
+    helper module, and everything under ``_tracks/`` or ``_halo/`` is a helper
+    package, not an example.
+    """
     rel_path = path.relative_to(examples_dir)
     if len(rel_path.parts) < 2:  # Must live in a category subdirectory
         return False
-    return path.name not in SKIP_FILES and not path.name.startswith("_")
+    if any(part.startswith("_") for part in rel_path.parts):
+        return False
+    return path.name not in SKIP_FILES
 
 
 example_paths = [p for p in sorted(examples_dir.rglob("*.py")) if _is_example_page(p)]

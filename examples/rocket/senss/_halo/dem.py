@@ -12,7 +12,7 @@ batch-safe.
 
 Loaders
 -------
-* :meth:`DEM.from_png`  - grayscale heightmap (default: bundled ``senns_dem.png``).
+* :meth:`DEM.from_png`  - grayscale heightmap (default: bundled ``senss_dem.png``).
 * :meth:`DEM.from_array` - any elevation array.
 * :meth:`DEM.synthetic_rocky` - Tomita-Ho testbed (flat plane + random rocks),
   optionally superimposed on a base DEM via the complexity factor ``c``
@@ -22,7 +22,7 @@ Loaders
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from typing import Optional, Tuple
 
 import jax
@@ -30,7 +30,7 @@ import jax.numpy as jnp
 import numpy as np
 
 # Path to the bundled default DEM (the "SENSS" grayscale heightmap).
-DEFAULT_DEM_PATH = os.path.join(os.path.dirname(__file__), os.pardir, "senns_dem.png")
+DEFAULT_DEM_PATH = os.path.join(os.path.dirname(__file__), os.pardir, "senss_dem.png")
 
 
 @dataclass(frozen=True)
@@ -178,7 +178,7 @@ class DEM:
         ``x0``/``y0`` are given.
 
         Args:
-            path: Path to the grayscale PNG (default: bundled ``senns_dem.png``).
+            path: Path to the grayscale PNG (default: bundled ``senss_dem.png``).
             size_m: Physical side length of the (square) footprint in meters.
             height_m: Peak-to-trough relief in meters after normalization.
             res: Target resolution in meters per pixel.
@@ -247,7 +247,6 @@ class DEM:
         XX, YY = np.meshgrid(xs, ys)
 
         a = 0.5 * rock_diam  # semi-major axis (horizontal radius)
-        half = 0.5 * (n - 1) * res
         margin = a
         centers = []
         attempts = 0
@@ -305,9 +304,4 @@ def _bilinear_sample(
     g10 = grid[y1i, x0i]
     g11 = grid[y1i, x1i]
 
-    return (
-        g00 * (1 - dx) * (1 - dy)
-        + g01 * dx * (1 - dy)
-        + g10 * (1 - dx) * dy
-        + g11 * dx * dy
-    )
+    return g00 * (1 - dx) * (1 - dy) + g01 * dx * (1 - dy) + g10 * (1 - dx) * dy + g11 * dx * dy

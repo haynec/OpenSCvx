@@ -35,7 +35,7 @@ sys.path.append(project_root)
 hop = importlib.import_module("examples.rocket.senss.6DoF_pdg_stc_senss_hop")
 from examples.animations._render import render_animation_to_video  # noqa: E402
 from examples.plotting_viser import AnimatedServerHandle  # noqa: E402
-from examples.rocket.senss.hop_lidar_overlay import (  # noqa: E402
+from examples.rocket.senss._hop_lidar_overlay import (  # noqa: E402
     LIDAR_FOOTPRINT_M,
     LIDAR_REF_RANGE_M,
     lidar_half_fov_rad,
@@ -76,9 +76,7 @@ def _prepare_render_dem(grid_n: int) -> None:
         )
     hop._dem_norm = (arr - lo) / max(hi - lo, 1.0)
     hop._dem_center_i = hop._dem_center_j = (hop.DEM_GRID - 1) // 2
-    hop._dem_center_norm = float(
-        hop._dem_norm[hop._dem_center_i, hop._dem_center_j]
-    )
+    hop._dem_center_norm = float(hop._dem_norm[hop._dem_center_i, hop._dem_center_j])
     hop._terrain_faces = hop._make_terrain_faces()
 
 

@@ -14,9 +14,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import viser
 
-from examples.rocket.senss.halo.dem import DEM
-from examples.rocket.senss.halo.lidar import simulate_scan_body
-
+from examples.rocket.senss._halo.dem import DEM
+from examples.rocket.senss._halo.lidar import simulate_scan_body
 
 # Visualization-only LiDAR defaults (do not affect the SCP problem).
 LIDAR_N_DET: int = 48
@@ -122,12 +121,7 @@ def build_terrain_dem(
     z10 = src[v0, u1]
     z01 = src[v1, u0]
     z11 = src[v1, u1]
-    norm = (
-        z00 * (1 - du) * (1 - dv)
-        + z10 * du * (1 - dv)
-        + z01 * (1 - du) * dv
-        + z11 * du * dv
-    )
+    norm = z00 * (1 - du) * (1 - dv) + z10 * du * (1 - dv) + z01 * (1 - du) * dv + z11 * du * dv
     heights = oz + (norm - float(dem_center_norm)) * base_relief_m * sz
     # Outside the patch: push the surface far below so rays miss cleanly.
     heights = np.where(inside, heights, oz - 1.0e4)
@@ -435,9 +429,7 @@ def add_body_fixed_lidar_overlay(
                 pts = _accumulated_up_to(key, dem)
                 n_scans = sum(1 for k in keyframes if k <= key)
                 state["max_key_shown"] = max(state["max_key_shown"], key)
-                state["status"] = (
-                    f"{pts.shape[0]:,} pts from {n_scans} scans (through frame {key})"
-                )
+                state["status"] = f"{pts.shape[0]:,} pts from {n_scans} scans (through frame {key})"
             except Exception as exc:  # pragma: no cover - viz path
                 pts = _empty_pcd()
                 state["status"] = f"scan error: {exc}"

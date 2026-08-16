@@ -1,7 +1,7 @@
 """6DoF PDG on DEM terrain – realtime with viser.
 
 Same 6-DoF powered-descent dynamics; the flat ground plane is replaced by a
-realistic terrain surface from ``senns_dem.png``.
+realistic terrain surface from ``senss_dem.png``.
 
 Key differences vs the static ``6DoF_pdg.py`` + ``6DoF_pdg_realtime.py``:
   * Problem defined inline with two extra parameters: ``final_altitude`` (scalar)
@@ -54,7 +54,7 @@ from examples.rocket.senss._dem import (
     dem_center_norm,
     dem_info_markdown,
     dem_trimesh,
-    load_senns_dem,
+    load_senss_dem,
     terrain_vertex_normals,
 )
 from openscvx import Problem
@@ -67,11 +67,11 @@ _printing.print_problem_summary = lambda *a, **k: None
 _printing.print_results_summary = lambda *a, **k: None
 
 # ── Scene / DEM constants ─────────────────────────────────────────────────────
-SCENE_SCALE: float = 2.0           # viser display units per model unit
-DEM_GRID: int = 2048                 # downsampled DEM resolution
+SCENE_SCALE: float = 2.0  # viser display units per model unit
+DEM_GRID: int = 2048  # downsampled DEM resolution
 TERRAIN_HALF_EXTENT: float = 15.0  # model-space half-width of terrain patch
-DEFAULT_ELEV_SCALE: float = 6.0    # default DEM vertical exaggeration (model units)
-DEFAULT_Z_OFFSET: float = -3.0     # DEM Z-offset in model units
+DEFAULT_ELEV_SCALE: float = 6.0  # default DEM vertical exaggeration (model units)
+DEFAULT_Z_OFFSET: float = -3.0  # DEM Z-offset in model units
 DEFAULT_SHADING = DemShading(azimuth_deg=0.0, elevation_deg=5.0, strength=2.5, ambient=0.03)
 _viridis = matplotlib.colormaps["viridis"]
 
@@ -101,15 +101,13 @@ def _terrain_placement(elev_scale: float, z_offset: float) -> DemPlacement:
 _DEM_CENTER_H0 = dem_center_norm(DEM_GRID) * DEFAULT_ELEV_SCALE
 
 
-def _dem_altitude_at(
-    model_y: float, model_z: float, elev_scale: float, z_offset: float
-) -> float:
+def _dem_altitude_at(model_y: float, model_z: float, elev_scale: float, z_offset: float) -> float:
     """Model altitude (position[0]) of the DEM surface at horizontal (model_y, model_z).
 
     Row i  ↔  viser-Y  ↔  model-Y.
     Col j  ↔  viser-X  ↔  model-Z.
     """
-    dem = load_senns_dem(DEM_GRID)
+    dem = load_senss_dem(DEM_GRID)
     half = TERRAIN_HALF_EXTENT
     frac_i = (model_y + half) / (2.0 * half) * (DEM_GRID - 1)
     frac_j = (model_z + half) / (2.0 * half) * (DEM_GRID - 1)
@@ -231,7 +229,8 @@ dynamics = {
     "position": velocity,
     "velocity": CBI.T @ (thrust + A_aero) / mass[0] + ox.Concat(-gI, 0.0, 0.0),
     "attitude": attitude_dot,
-    "angular_velocity": J_inv_mat @ (
+    "angular_velocity": J_inv_mat
+    @ (
         _cross(r_arm, thrust)
         + _cross(r_cp, A_aero)
         - _cross(angular_velocity, J_mat @ angular_velocity)
@@ -260,9 +259,7 @@ constraint_exprs.append(ox.ctcs(1.0 * (mass - m_dry) >= 0))
 _alt_above = position[0] - final_altitude
 _horiz_off = position[1:3] - final_horiz
 constraint_exprs.append(
-    ox.ctcs(
-        0.1 * ox.linalg.Norm(_horiz_off) - ox.Tan(gamma * np.pi / 180.0) * _alt_above <= 0
-    )
+    ox.ctcs(0.1 * ox.linalg.Norm(_horiz_off) - ox.Tan(gamma * np.pi / 180.0) * _alt_above <= 0)
 )
 
 constraint_exprs.append(ox.ctcs(0.1 * ox.linalg.Norm(velocity) ** 2 - v_max**2 <= 0))
@@ -310,6 +307,7 @@ problem.settings.dev.printing = True
 
 # ── Problem parameter sync ────────────────────────────────────────────────────
 
+
 def _sync_params() -> None:
     """Push current ox.Parameter values into problem.parameters."""
     p = problem
@@ -339,6 +337,7 @@ def _sync_params() -> None:
 
 # ── Viser scene ───────────────────────────────────────────────────────────────
 
+
 def create_dem_realtime_server() -> viser.ViserServer:
     server = viser.ViserServer(port=8080)
     server.gui.configure_theme(dark_mode=True, brand_color=(220, 80, 40))
@@ -352,9 +351,7 @@ def create_dem_realtime_server() -> viser.ViserServer:
         "elev_scale": DEFAULT_ELEV_SCALE,
         "z_offset": DEFAULT_Z_OFFSET,
         "shading": DEFAULT_SHADING,
-        "normals": terrain_vertex_normals(
-            _terrain_placement(DEFAULT_ELEV_SCALE, DEFAULT_Z_OFFSET)
-        ),
+        "normals": terrain_vertex_normals(_terrain_placement(DEFAULT_ELEV_SCALE, DEFAULT_Z_OFFSET)),
         "_lock": threading.Lock(),
         "running": True,
         "reset_requested": False,
@@ -475,8 +472,16 @@ def create_dem_realtime_server() -> viser.ViserServer:
     with server.gui.add_folder("Optimization Metrics"):
         metrics_md = server.gui.add_markdown(
             format_metrics_markdown(
-                {"iter": 0, "J_tr": 0.0, "J_vb": 0.0, "J_vc": 0.0,
-                 "cost": 0.0, "dis_time": 0.0, "solve_time": 0.0, "prob_stat": "--"}
+                {
+                    "iter": 0,
+                    "J_tr": 0.0,
+                    "J_vb": 0.0,
+                    "J_vc": 0.0,
+                    "cost": 0.0,
+                    "dis_time": 0.0,
+                    "solve_time": 0.0,
+                    "prob_stat": "--",
+                }
             )
         )
 
@@ -653,46 +658,57 @@ def create_dem_realtime_server() -> viser.ViserServer:
         def _(_) -> None:
             gI.value = float(gI_in.value)
             _set("gI", gI.value)
+
         @g0_in.on_update
         def _(_) -> None:
             g0.value = float(g0_in.value)
             _set("g0", g0.value)
+
         @isp_in.on_update
         def _(_) -> None:
             Isp.value = float(isp_in.value)
             _set("Isp", Isp.value)
+
         @m_dry_in.on_update
         def _(_) -> None:
             m_dry.value = float(m_dry_in.value)
             _set("m_dry", m_dry.value)
+
         @v_max_in.on_update
         def _(_) -> None:
             v_max.value = float(v_max_in.value)
             _set("v_max", v_max.value)
+
         @w_max_in.on_update
         def _(_) -> None:
             w_max.value = float(w_max_in.value)
             _set("w_max", w_max.value)
+
         @del_max_in.on_update
         def _(_) -> None:
             del_max.value = float(del_max_in.value)
             _set("del_max", del_max.value)
+
         @theta_max_in.on_update
         def _(_) -> None:
             theta_max.value = float(theta_max_in.value)
             _set("theta_max", theta_max.value)
+
         @t_min_in.on_update
         def _(_) -> None:
             T_min.value = float(t_min_in.value)
             _set("T_min", T_min.value)
+
         @t_max_in.on_update
         def _(_) -> None:
             T_max.value = float(t_max_in.value)
             _set("T_max", T_max.value)
+
         @gamma_in.on_update
         def _(_) -> None:
             gamma.value = float(gamma_in.value)
             _set("gamma", gamma.value)
+
         @beta_in.on_update
         def _(_) -> None:
             beta.value = float(beta_in.value)

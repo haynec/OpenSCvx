@@ -18,12 +18,12 @@ _DEFAULT_SENNS_DEM = os.path.abspath(
         "..",
         "rocket",
         "senss",
-        "senns_dem.png",
+        "senss_dem.png",
     )
 )
 
 
-def load_senns_dem(
+def load_senss_dem(
     x_min: float,
     x_max: float,
     y_min: float,
@@ -53,7 +53,7 @@ def load_senns_dem(
     if not os.path.isfile(path):
         raise FileNotFoundError(
             f"SENNS DEM not found at {path}. Restore with:\n"
-            f"  git checkout HEAD -- examples/rocket/senss/senns_dem.png"
+            f"  git checkout HEAD -- examples/rocket/senss/senss_dem.png"
         )
 
     img = Image.open(path)

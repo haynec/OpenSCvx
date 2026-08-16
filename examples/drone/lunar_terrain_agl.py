@@ -2,7 +2,7 @@
 
 Fixed-horizon feasibility problem: fly from point A to point B in fixed time
 while staying inside a thin above-ground-level (AGL) band relative to the real
-SENNS lunar heightmap (``examples/rocket/senss/senns_dem.png``), resampled onto
+SENNS lunar heightmap (``examples/rocket/senss/senss_dem.png``), resampled onto
 the mission domain.
 
 Terrain height enters the CTCS constraints via ``ox.Bilerp``. Gravity and
@@ -29,7 +29,7 @@ if project_root not in sys.path:
 
 import openscvx as ox
 from examples.drone._plotting import create_lunar_terrain_agl_server
-from examples.drone._terrain import bilinear_height, load_senns_dem
+from examples.drone._terrain import bilinear_height, load_senss_dem
 from openscvx import Problem
 
 # ── Mission ───────────────────────────────────────────────────────────────────
@@ -53,7 +53,7 @@ TERRAIN_Y_MIN, TERRAIN_Y_MAX = -TERRAIN_HALF, TERRAIN_HALF
 DEM_GRID = 256
 ELEV_SCALE = 50.0  # m — peak-to-peak relief after normalization
 
-x_grid, y_grid, H = load_senns_dem(
+x_grid, y_grid, H = load_senss_dem(
     TERRAIN_X_MIN,
     TERRAIN_X_MAX,
     TERRAIN_Y_MIN,

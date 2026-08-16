@@ -81,33 +81,33 @@ from examples.rocket.senss._dem import (
     add_dem_terrain,
     dem_center_norm,
     dem_info_markdown,
-    load_senns_dem,
+    load_senss_dem,
     terrain_param_getter,
 )
-from examples.rocket.senss.hop_lidar_overlay import add_body_fixed_lidar_overlay
+from examples.rocket.senss._hop_lidar_overlay import add_body_fixed_lidar_overlay
 from openscvx import Problem
 from openscvx.plotting.viser import add_animation_controls, add_glideslope_cone
 
 # ── Physical parameters (notebook cell 16 / cell 33) ──────────────────────────
-G0  = 9.806    # m/s²
-ISP = 330.0    # s
-M_WET = 100_000.0   # kg
-M_DRY =  85_000.0   # kg
+G0 = 9.806  # m/s²
+ISP = 330.0  # s
+M_WET = 100_000.0  # kg
+M_DRY = 85_000.0  # kg
 
 # Hop geometry: launch (former touchdown) → apex (former descent IC) → nearby land
-R_I_LAUNCH = np.array([-10.0, -125.0, -260.0])   # m — start on pad
-R_I_APEX   = np.array([200.0, -200.0, 250.0])    # m — mid-hop waypoint
-R_I_LAND   = np.array([50.0, 200.0, -260.0])   # m — nearby land pad (same elevation)
+R_I_LAUNCH = np.array([-10.0, -125.0, -260.0])  # m — start on pad
+R_I_APEX = np.array([200.0, -200.0, 250.0])  # m — mid-hop waypoint
+R_I_LAND = np.array([50.0, 200.0, -260.0])  # m — nearby land pad (same elevation)
 
 # Launch IC: upright, small upward liftoff
 Q_LAUNCH = np.array([0.0, 0.0, 0.0, 1.0])
-V_LAUNCH = np.array([0.0, 0.0, 0.5])   # m/s
+V_LAUNCH = np.array([0.0, 0.0, 0.5])  # m/s
 W_LAUNCH = np.zeros(3)
 
 # Terminal conditions (soft touchdown at land pad)
-V_I_FINAL = np.array([0.0, 0.0, -0.5])       # m/s
-Q_FINAL   = np.array([0.0, 0.0, 0.0, 1.0])   # upright
-W_FINAL   = np.zeros(3)
+V_I_FINAL = np.array([0.0, 0.0, -0.5])  # m/s
+Q_FINAL = np.array([0.0, 0.0, 0.0, 1.0])  # upright
+W_FINAL = np.zeros(3)
 
 LOS_DEPTH_BELOW_TOUCHDOWN_M = 50.0  # m — LoS target sits below land pad (z only)
 R_I_LOS_LAND = R_I_LAND - np.array([0.0, 0.0, LOS_DEPTH_BELOW_TOUCHDOWN_M])
@@ -117,50 +117,51 @@ def _height_above_pad(pos_m: np.ndarray) -> np.ndarray:
     """Height above the shared pad z-level (m); launch and land share elevation."""
     return np.asarray(pos_m)[:, 2] - R_I_LAUNCH[2]
 
+
 # Thrust limits (N)
-T_MAX     = 1_900_000.0 * 3.0        # 3-engine
-T_MIN     = 1_900_000.0 * 0.4 * 3.0
-T_MAX_AFT = 1_900_000.0              # 1-engine aft phase
+T_MAX = 1_900_000.0 * 3.0  # 3-engine
+T_MIN = 1_900_000.0 * 0.4 * 3.0
+T_MAX_AFT = 1_900_000.0  # 1-engine aft phase
 T_MIN_AFT = 1_900_000.0 * 0.4
 
 # Hard control angle limits (deg)
-DELTA_ENGINE_MAX_DEG    = 60.0
+DELTA_ENGINE_MAX_DEG = 60.0
 DELTA_BORESIGHT_MAX_DEG = 0.0
 
 # State constraint limits
-THETA_MAX_DEG   = 10.0              # max tilt from vertical
-W_B_MAX_RAD_S   = np.pi/2          # max angular rate
-GS_MAX_DEG      = 90.0 - 35.0      # glideslope cone half-angle from horizontal = 55°
+THETA_MAX_DEG = 10.0  # max tilt from vertical
+W_B_MAX_RAD_S = np.pi / 2  # max angular rate
+GS_MAX_DEG = 90.0 - 35.0  # glideslope cone half-angle from horizontal = 55°
 
 # cSTC trigger thresholds (notebook cell 16)
-ALT_TRIGGER_H1_M = 100.0   # h < 100 m  → tight gimbal / tilt / glideslope
-ALT_TRIGGER_H2_M = 200.0   # h < 200 m  → LOS boresight cone
-ALT_DONE_M       = 2.0     # h > 2 m    → finalizer (disable cone near touchdown)
-SPD_STC_TRIG     = 35.0    # m/s        → speed trigger for single/multi-engine
-THETA_STC_TRIG   = 60.0    # deg        → tilt trigger for single/multi-engine
+ALT_TRIGGER_H1_M = 100.0  # h < 100 m  → tight gimbal / tilt / glideslope
+ALT_TRIGGER_H2_M = 200.0  # h < 200 m  → LOS boresight cone
+ALT_DONE_M = 2.0  # h > 2 m    → finalizer (disable cone near touchdown)
+SPD_STC_TRIG = 35.0  # m/s        → speed trigger for single/multi-engine
+THETA_STC_TRIG = 60.0  # deg        → tilt trigger for single/multi-engine
 
 # Trigger alpha-tightening factors (notebook cell 16/33)
-_ALPHA_ALT_LOS   = 1.1
-_ALPHA_T_MIN     = 1.02
+_ALPHA_ALT_LOS = 1.1
+_ALPHA_T_MIN = 1.02
 
 # cSTC constraint alpha-scaling factors (notebook cell 16)
-_ALPHA_SPD   = 0.95
+_ALPHA_SPD = 0.95
 _ALPHA_OMEGA = 0.99
 _ALPHA_THETA = 0.92
-_ALPHA_GS    = 0.92
-_ALPHA_LOS   = 0.98
+_ALPHA_GS = 0.92
+_ALPHA_LOS = 0.98
 
 # cSTC tight constraint values (alpha applied)
-DELTA_STC_DEG   = 1.0
-THETA_STC_DEG   = 5.0 * _ALPHA_THETA        # ≈ 4.6°
-OMEGA_STC_RAD_S = 2.5 * np.pi/180 * _ALPHA_OMEGA
-V_STC_CONS      = 20.0 * _ALPHA_SPD         # ≈ 19 m/s
-GS_STC_DEG      = (90.0 - 5.0) * _ALPHA_GS  # ≈ 78.2°
-LOS_STC_DEG     = 5.0 * _ALPHA_LOS          # ≈ 4.9°
+DELTA_STC_DEG = 1.0
+THETA_STC_DEG = 5.0 * _ALPHA_THETA  # ≈ 4.6°
+OMEGA_STC_RAD_S = 2.5 * np.pi / 180 * _ALPHA_OMEGA
+V_STC_CONS = 20.0 * _ALPHA_SPD  # ≈ 19 m/s
+GS_STC_DEG = (90.0 - 5.0) * _ALPHA_GS  # ≈ 78.2°
+LOS_STC_DEG = 5.0 * _ALPHA_LOS  # ≈ 4.9°
 
 # Inertia (diagonal, kg·m²)
-J_B_DIAG     = np.array([60.0,   60.0,   1.5])
-J_B_INV_DIAG = np.array([1/60.0, 1/60.0, 1/1.5])
+J_B_DIAG = np.array([60.0, 60.0, 1.5])
+J_B_INV_DIAG = np.array([1 / 60.0, 1 / 60.0, 1 / 1.5])
 
 # Gravity (m/s²)
 G_I = np.array([0.0, 0.0, -G0])
@@ -169,7 +170,7 @@ G_I = np.array([0.0, 0.0, -G0])
 ALPHA_M = 1.0 / (ISP * G0)
 
 # Lever arm (m) — engine to CM
-R_CM = np.array([ 0.0,  0.0, -14.0])
+R_CM = np.array([0.0, 0.0, -14.0])
 
 # ── STC penalty weights ───────────────────────────────────────────────────────
 # Applied *inside* the CTCS argument; because CTCS squares the argument the
@@ -180,141 +181,141 @@ R_CM = np.array([ 0.0,  0.0, -14.0])
 # constraint-violation weight (``lam_vc``, ramped by the AugmentedLagrangian
 # autotuner) plays the role of the notebook's ``w_con_dyn``.
 W_GIMBAL = 60.0
-W_TILT   = 120.0
-W_OMEGA  = 60.0
-W_SPD    = 120.0
-W_GS     = 250.0
-W_LOS    = 400.0
-W_THR    = 400.0
+W_TILT = 120.0
+W_OMEGA = 60.0
+W_SPD = 120.0
+W_GS = 250.0
+W_LOS = 400.0
+W_THR = 400.0
 
 # ── Scaling ───────────────────────────────────────────────────────────────────
-R_SCALE = max(
-    np.linalg.norm(R_I_APEX),
-    np.linalg.norm(R_I_LAUNCH),
-    np.linalg.norm(R_I_LAND),
-) / 2.5
+R_SCALE = (
+    max(
+        np.linalg.norm(R_I_APEX),
+        np.linalg.norm(R_I_LAUNCH),
+        np.linalg.norm(R_I_LAND),
+    )
+    / 2.5
+)
 M_SCALE = M_WET
 
 _alpha_m_s = ALPHA_M * R_SCALE
-_g_I_s     = G_I / R_SCALE
-_r_cm_s    = R_CM / R_SCALE
-_J_B_s     = J_B_DIAG     / R_SCALE**2
+_g_I_s = G_I / R_SCALE
+_r_cm_s = R_CM / R_SCALE
+_J_B_s = J_B_DIAG / R_SCALE**2
 _J_B_inv_s = J_B_INV_DIAG * R_SCALE**2
 
-_T_max_s     = T_MAX     / (M_SCALE * R_SCALE)
-_T_min_s     = T_MIN     / (M_SCALE * R_SCALE)
+_T_max_s = T_MAX / (M_SCALE * R_SCALE)
+_T_min_s = T_MIN / (M_SCALE * R_SCALE)
 _T_max_aft_s = T_MAX_AFT / (M_SCALE * R_SCALE)
 _T_min_aft_s = T_MIN_AFT / (M_SCALE * R_SCALE)
 
 _r_launch_s = R_I_LAUNCH / R_SCALE
-_r_apex_s   = R_I_APEX / R_SCALE
-_r_land_s   = R_I_LAND / R_SCALE
-_r_gs_land_s    = R_I_LAND / R_SCALE
-_r_los_land_s   = R_I_LOS_LAND / R_SCALE
+_r_apex_s = R_I_APEX / R_SCALE
+_r_land_s = R_I_LAND / R_SCALE
+_r_gs_land_s = R_I_LAND / R_SCALE
+_r_los_land_s = R_I_LOS_LAND / R_SCALE
 _v_launch_s = V_LAUNCH / R_SCALE
-_v_final_s  = V_I_FINAL / R_SCALE
-_m_wet_s   = M_WET / M_SCALE   # 1.0
-_m_dry_s   = M_DRY / M_SCALE   # 0.85
+_v_final_s = V_I_FINAL / R_SCALE
+_m_wet_s = M_WET / M_SCALE  # 1.0
+_m_dry_s = M_DRY / M_SCALE  # 0.85
 
-_v_stc_s   = V_STC_CONS / R_SCALE
+_v_stc_s = V_STC_CONS / R_SCALE
+
 
 # ── Precomputed constraint thresholds ─────────────────────────────────────────
 def _tilt_sq_bound(theta_deg: float) -> float:
     """Squared quaternion tilt bound: ||[q_x, q_y]||² ≤ (1-cos θ)/2."""
-    return (1.0 - np.cos(np.pi/180 * theta_deg)) / 2.0
+    return (1.0 - np.cos(np.pi / 180 * theta_deg)) / 2.0
 
 
-_tilt_sq_max    = _tilt_sq_bound(THETA_MAX_DEG)
-_tilt_sq_stc    = _tilt_sq_bound(THETA_STC_DEG)    # tight tilt (≈4.6°)
-_tilt_sq_trig   = _tilt_sq_bound(THETA_STC_TRIG)   # tilt trigger (60° → 0.25)
-_tan_gs_max     = np.tan(np.pi/180 * GS_MAX_DEG)
-_tan_gs_stc     = np.tan(np.pi/180 * GS_STC_DEG)
-_cos_psi_stc    = np.cos(np.pi/180 * LOS_STC_DEG)
-_delta_stc_rad  = np.pi/180 * DELTA_STC_DEG
-_omega_sq_stc   = OMEGA_STC_RAD_S**2
+_tilt_sq_max = _tilt_sq_bound(THETA_MAX_DEG)
+_tilt_sq_stc = _tilt_sq_bound(THETA_STC_DEG)  # tight tilt (≈4.6°)
+_tilt_sq_trig = _tilt_sq_bound(THETA_STC_TRIG)  # tilt trigger (60° → 0.25)
+_tan_gs_max = np.tan(np.pi / 180 * GS_MAX_DEG)
+_tan_gs_stc = np.tan(np.pi / 180 * GS_STC_DEG)
+_cos_psi_stc = np.cos(np.pi / 180 * LOS_STC_DEG)
+_delta_stc_rad = np.pi / 180 * DELTA_STC_DEG
+_omega_sq_stc = OMEGA_STC_RAD_S**2
 
 # Scaled altitude / speed trigger thresholds
-_alt_h1_s     = ALT_TRIGGER_H1_M / R_SCALE
-_alt_h2a_s    = _ALPHA_ALT_LOS * ALT_TRIGGER_H2_M / R_SCALE
-_alt_done_s   = ALT_DONE_M / R_SCALE
-_spd_trig_s   = SPD_STC_TRIG / R_SCALE
+_alt_h1_s = ALT_TRIGGER_H1_M / R_SCALE
+_alt_h2a_s = _ALPHA_ALT_LOS * ALT_TRIGGER_H2_M / R_SCALE
+_alt_done_s = ALT_DONE_M / R_SCALE
+_spd_trig_s = SPD_STC_TRIG / R_SCALE
 
 # ── Discretization ────────────────────────────────────────────────────────────
 N = 60
-K_APEX = N // 2   # 30 — ascent [0, K_APEX], descent [K_APEX, N-1]
+K_APEX = N // 2  # 30 — ascent [0, K_APEX], descent [K_APEX, N-1]
 
 # ── States ────────────────────────────────────────────────────────────────────
 mass = ox.State("mass", shape=(1,))
 mass.max = [_m_wet_s]
 mass.min = [_m_dry_s]
 mass.initial = [_m_wet_s]
-mass.final   = [ox.Maximize(_m_dry_s)]   # fuel-optimal objective
+mass.final = [ox.Maximize(_m_dry_s)]  # fuel-optimal objective
 
 position = ox.State("position", shape=(3,))
-position.max = [ 2.5,  2.0,  2.5]
-position.min = [-2.5, -2.0, -2.0]   # z ≥ pad level (scaled)
+position.max = [2.5, 2.0, 2.5]
+position.min = [-2.5, -2.0, -2.0]  # z ≥ pad level (scaled)
 position.initial = [float(_r_launch_s[0]), float(_r_launch_s[1]), float(_r_launch_s[2])]
-position.final   = [float(_r_land_s[0]), float(_r_land_s[1]), float(_r_land_s[2])]
+position.final = [float(_r_land_s[0]), float(_r_land_s[1]), float(_r_land_s[2])]
 
 velocity = ox.State("velocity", shape=(3,))
 # _v_box = 150.0 / R_SCALE
-velocity.max = [ 2.0,  2.0,  2.0]
+velocity.max = [2.0, 2.0, 2.0]
 velocity.min = [-2.0, -2.0, -2.0]
 velocity.initial = [float(_v_launch_s[0]), float(_v_launch_s[1]), float(_v_launch_s[2])]
-velocity.final   = [float(_v_final_s[0]), float(_v_final_s[1]), float(_v_final_s[2])]
+velocity.final = [float(_v_final_s[0]), float(_v_final_s[1]), float(_v_final_s[2])]
 
 attitude = ox.State("attitude", shape=(4,))
-attitude.max = [ 1.0,  1.0,  1.0,  1.0]
+attitude.max = [1.0, 1.0, 1.0, 1.0]
 attitude.min = [-1.0, -1.0, -1.0, -1.0]
 attitude.initial = list(Q_LAUNCH)
-attitude.final   = list(Q_FINAL)
+attitude.final = list(Q_FINAL)
 
 angular_velocity = ox.State("angular_velocity", shape=(3,))
-angular_velocity.max = [ W_B_MAX_RAD_S,  W_B_MAX_RAD_S,  W_B_MAX_RAD_S]
+angular_velocity.max = [W_B_MAX_RAD_S, W_B_MAX_RAD_S, W_B_MAX_RAD_S]
 angular_velocity.min = [-W_B_MAX_RAD_S, -W_B_MAX_RAD_S, -W_B_MAX_RAD_S]
 angular_velocity.initial = [1e-8, 0.0, 0.0]
-angular_velocity.final   = [0.0, 0.0, 0.0]
+angular_velocity.final = [0.0, 0.0, 0.0]
 
 # ── Controls: [T, δ_e, φ_e, δ_b, φ_b] ────────────────────────────────────────
 thrust_mag = ox.Control("thrust_mag", shape=(1,))
-thrust_mag.max   = [_T_max_s]
-thrust_mag.min   = [_T_min_aft_s]   # always at least single-engine minimum
+thrust_mag.max = [_T_max_s]
+thrust_mag.min = [_T_min_aft_s]  # always at least single-engine minimum
 thrust_mag.guess = np.full((N, 1), float((_T_max_s + _T_min_aft_s) / 2))
 
 gimbal_elev = ox.Control("gimbal_elev", shape=(1,))
-gimbal_elev.max   = [ np.radians(DELTA_ENGINE_MAX_DEG)]
-gimbal_elev.min   = [-np.radians(DELTA_ENGINE_MAX_DEG)]
+gimbal_elev.max = [np.radians(DELTA_ENGINE_MAX_DEG)]
+gimbal_elev.min = [-np.radians(DELTA_ENGINE_MAX_DEG)]
 gimbal_elev.guess = np.zeros((N, 1))
 
 gimbal_az = ox.Control("gimbal_az", shape=(1,))
-gimbal_az.max   = [ np.pi]
-gimbal_az.min   = [-np.pi]
+gimbal_az.max = [np.pi]
+gimbal_az.min = [-np.pi]
 gimbal_az.guess = np.zeros((N, 1))
 
 los_elev = ox.Control("los_elev", shape=(1,))
-los_elev.max   = [ np.radians(DELTA_BORESIGHT_MAX_DEG)]
-los_elev.min   = [-np.radians(DELTA_BORESIGHT_MAX_DEG)]
+los_elev.max = [np.radians(DELTA_BORESIGHT_MAX_DEG)]
+los_elev.min = [-np.radians(DELTA_BORESIGHT_MAX_DEG)]
 los_elev.guess = np.full((N, 1), np.radians(DELTA_BORESIGHT_MAX_DEG) * 0.5)
 
 los_az = ox.Control("los_az", shape=(1,))
-los_az.max   = [ np.radians(DELTA_BORESIGHT_MAX_DEG)]
-los_az.min   = [-np.radians(DELTA_BORESIGHT_MAX_DEG)]
+los_az.max = [np.radians(DELTA_BORESIGHT_MAX_DEG)]
+los_az.min = [-np.radians(DELTA_BORESIGHT_MAX_DEG)]
 los_az.guess = np.zeros((N, 1))
 
 # Piecewise-linear position guess: launch → apex → land
 _tau_asc = np.linspace(0.0, 1.0, K_APEX + 1)
 _tau_des = np.linspace(0.0, 1.0, N - K_APEX)
 _pos_guess = np.zeros((N, 3))
-_pos_guess[: K_APEX + 1] = (
-    (1.0 - _tau_asc)[:, None] * _r_launch_s + _tau_asc[:, None] * _r_apex_s
-)
-_pos_guess[K_APEX:] = (
-    (1.0 - _tau_des)[:, None] * _r_apex_s + _tau_des[:, None] * _r_land_s
-)
+_pos_guess[: K_APEX + 1] = (1.0 - _tau_asc)[:, None] * _r_launch_s + _tau_asc[:, None] * _r_apex_s
+_pos_guess[K_APEX:] = (1.0 - _tau_des)[:, None] * _r_apex_s + _tau_des[:, None] * _r_land_s
 position.guess = _pos_guess
 
 # ── State & Control ───────────────────────────────────────────────────────────
-states   = [mass, position, velocity, attitude, angular_velocity]
+states = [mass, position, velocity, attitude, angular_velocity]
 controls = [thrust_mag, gimbal_elev, gimbal_az, los_elev, los_az]
 
 # ── Quaternion kinematics ─────────────────────────────────────────────────────
@@ -324,31 +325,31 @@ q1, q2, q3, q4 = attitude[0], attitude[1], attitude[2], attitude[3]
 # CBI: inertial→body DCM  (CBI.T is body→inertial)
 CBI = ox.Block(
     [
-        [q4**2 + q1**2 - q2**2 - q3**2, 2*(q1*q2 - q4*q3), 2*(q4*q2 + q1*q3)],
-        [2*(q4*q3 + q1*q2), q4**2 - q1**2 + q2**2 - q3**2, 2*(q2*q3 - q4*q1)],
-        [2*(q1*q3 - q4*q2), 2*(q4*q1 + q2*q3), q4**2 - q1**2 - q2**2 + q3**2],
+        [q4**2 + q1**2 - q2**2 - q3**2, 2 * (q1 * q2 - q4 * q3), 2 * (q4 * q2 + q1 * q3)],
+        [2 * (q4 * q3 + q1 * q2), q4**2 - q1**2 + q2**2 - q3**2, 2 * (q2 * q3 - q4 * q1)],
+        [2 * (q1 * q3 - q4 * q2), 2 * (q4 * q1 + q2 * q3), q4**2 - q1**2 - q2**2 + q3**2],
     ]
 ).T
 
 w1, w2, w3 = angular_velocity[0], angular_velocity[1], angular_velocity[2]
-q1_dot = 0.5 * (w1*q4 - w2*q3 + w3*q2)
-q2_dot = 0.5 * (w1*q3 - w3*q1 + w2*q4)
-q3_dot = 0.5 * (w2*q1 - w1*q2 + w3*q4)
-q4_dot = -0.5 * (w1*q1 + w2*q2 + w3*q3)
+q1_dot = 0.5 * (w1 * q4 - w2 * q3 + w3 * q2)
+q2_dot = 0.5 * (w1 * q3 - w3 * q1 + w2 * q4)
+q3_dot = 0.5 * (w2 * q1 - w1 * q2 + w3 * q4)
+q4_dot = -0.5 * (w1 * q1 + w2 * q2 + w3 * q3)
 attitude_dot = ox.Concat(q1_dot, q2_dot, q3_dot, q4_dot)
 
 
 def cross(a, b):
     """Symbolic 3-D cross product."""
     return ox.Concat(
-        a[1]*b[2] - a[2]*b[1],
-        a[2]*b[0] - a[0]*b[2],
-        a[0]*b[1] - a[1]*b[0],
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
     )
 
 
 # ── Thrust vector in body frame (polar parameterisation) ──────────────────────
-T  = thrust_mag[0]
+T = thrust_mag[0]
 de = gimbal_elev[0]
 pe = gimbal_az[0]
 T_B = ox.Concat(
@@ -363,29 +364,29 @@ T_B = ox.Concat(
 
 # ── Inertia tensors (diagonal, scaled) ────────────────────────────────────────
 # Mass-varying model: J_eff = J_s × m_s  →  ω̇ = J_inv_s @ (τ/m_s − ω × J_s @ ω)
-J_B_ox     = ox.Diag(ox.Concat(float(_J_B_s[0]),     float(_J_B_s[1]),     float(_J_B_s[2])))
+J_B_ox = ox.Diag(ox.Concat(float(_J_B_s[0]), float(_J_B_s[1]), float(_J_B_s[2])))
 J_B_inv_ox = ox.Diag(ox.Concat(float(_J_B_inv_s[0]), float(_J_B_inv_s[1]), float(_J_B_inv_s[2])))
-r_cm_ox    = ox.Concat(float(_r_cm_s[0]), float(_r_cm_s[1]), float(_r_cm_s[2]))
-g_I_ox     = ox.Concat(float(_g_I_s[0]),  float(_g_I_s[1]),  float(_g_I_s[2]))
+r_cm_ox = ox.Concat(float(_r_cm_s[0]), float(_r_cm_s[1]), float(_r_cm_s[2]))
+g_I_ox = ox.Concat(float(_g_I_s[0]), float(_g_I_s[1]), float(_g_I_s[2]))
 
 torque = cross(r_cm_ox, T_B)
-gyro   = cross(angular_velocity, J_B_ox @ angular_velocity)
+gyro = cross(angular_velocity, J_B_ox @ angular_velocity)
 
 # ── Dynamics (all in scaled units) ────────────────────────────────────────────
 dynamics = {
-    "mass":             -_alpha_m_s * T,
-    "position":          velocity,
-    "velocity":          CBI.T @ T_B / mass[0] + g_I_ox,
-    "attitude":          attitude_dot,
-    "angular_velocity":  J_B_inv_ox @ (torque / mass[0] - gyro),
+    "mass": -_alpha_m_s * T,
+    "position": velocity,
+    "velocity": CBI.T @ T_B / mass[0] + g_I_ox,
+    "attitude": attitude_dot,
+    "angular_velocity": J_B_inv_ox @ (torque / mass[0] - gyro),
 }
 
 # ── Shared sub-expressions for constraints ────────────────────────────────────
 # Tilt: ||[q_x, q_y]||²  (matches notebook's ||[x[8], x[9]]||² in [w,x,y,z] ordering)
-tilt_sq   = attitude[0]**2 + attitude[1]**2
-speed     = ox.linalg.Norm(velocity)
-omega_sq  = ox.linalg.Norm(angular_velocity)**2
-z_alt     = position[2] - float(_r_land_s[2])   # height above shared pad z
+tilt_sq = attitude[0] ** 2 + attitude[1] ** 2
+speed = ox.linalg.Norm(velocity)
+omega_sq = ox.linalg.Norm(angular_velocity) ** 2
+z_alt = position[2] - float(_r_land_s[2])  # height above shared pad z
 
 # Position relative to land glideslope apex (landing pad only)
 pos_rel_x = position[0] - float(_r_gs_land_s[0])
@@ -407,10 +408,8 @@ los_B = ox.Concat(
     ox.Sin(db) * ox.Sin(pb),
     ox.Cos(db),
 )
-los_I = CBI.T @ los_B   # unit-norm boresight in inertial frame
-r_dot_los = (pos_los_x * los_I[0]
-             + pos_los_y * los_I[1]
-             + pos_los_z * los_I[2])
+los_I = CBI.T @ los_B  # unit-norm boresight in inertial frame
+r_dot_los = pos_los_x * los_I[0] + pos_los_y * los_I[1] + pos_los_z * los_I[2]
 
 
 # ── State-triggered-constraint helper ─────────────────────────────────────────
@@ -436,49 +435,48 @@ def stc(*factors, weight: float = 1.0, penalty="huber", over=None):
 
 
 # ── Trigger indicators (relu, > 0 when active) ────────────────────────────────
-T_alt100 = relu(_alt_h1_s  - z_alt)            # h < 100 m
-T_alt220 = relu(_alt_h2a_s - z_alt)            # h < 220 m (LOS, alpha)
-T_altgt2 = relu(z_alt - _alt_done_s)           # h >   2 m (finalizer)
-T_vlt35  = relu(_spd_trig_s - speed)           # ||v|| < 35 m/s
-T_vgt35  = relu(speed - _spd_trig_s)           # ||v|| > 35 m/s
-T_tlt60  = relu(_tilt_sq_trig - tilt_sq)       # tilt < 60°
-T_tgt60  = relu(tilt_sq - _tilt_sq_trig)       # tilt > 60°
+T_alt100 = relu(_alt_h1_s - z_alt)  # h < 100 m
+T_alt220 = relu(_alt_h2a_s - z_alt)  # h < 220 m (LOS, alpha)
+T_altgt2 = relu(z_alt - _alt_done_s)  # h >   2 m (finalizer)
+T_vlt35 = relu(_spd_trig_s - speed)  # ||v|| < 35 m/s
+T_vgt35 = relu(speed - _spd_trig_s)  # ||v|| > 35 m/s
+T_tlt60 = relu(_tilt_sq_trig - tilt_sq)  # tilt < 60°
+T_tgt60 = relu(tilt_sq - _tilt_sq_trig)  # tilt > 60°
 
 # ── Constraint violations (relu, > 0 when violated) ───────────────────────────
-C_gimbal_p = relu( de - _delta_stc_rad)                 # δ_e ≤ +1°
-C_gimbal_n = relu(-de - _delta_stc_rad)                 # δ_e ≥ −1°
-C_gs_land  = relu(r_xy_land * _tan_gs_stc - pos_rel_z)  # tight GS (land pad)
-C_omega    = relu(omega_sq - _omega_sq_stc)             # tight angular rate
-C_tilt     = relu(tilt_sq - _tilt_sq_stc)               # tight tilt
-C_spd      = relu(speed - _v_stc_s)                     # tight speed
+C_gimbal_p = relu(de - _delta_stc_rad)  # δ_e ≤ +1°
+C_gimbal_n = relu(-de - _delta_stc_rad)  # δ_e ≥ −1°
+C_gs_land = relu(r_xy_land * _tan_gs_stc - pos_rel_z)  # tight GS (land pad)
+C_omega = relu(omega_sq - _omega_sq_stc)  # tight angular rate
+C_tilt = relu(tilt_sq - _tilt_sq_stc)  # tight tilt
+C_spd = relu(speed - _v_stc_s)  # tight speed
 C_los_land = relu(r_los_land * _cos_psi_stc - r_dot_los)  # LOS toward land
-C_Tmin_f   = relu(_T_min_aft_s - T)                     # single-engine min
-C_Tmax_f   = relu(T - _T_max_aft_s)                     # single-engine max
-C_Tmin_i   = relu(_ALPHA_T_MIN * _T_min_s - T)          # three-engine min
-C_Tmax_i   = relu(T - _T_max_s)                         # three-engine max
+C_Tmin_f = relu(_T_min_aft_s - T)  # single-engine min
+C_Tmax_f = relu(T - _T_max_aft_s)  # single-engine max
+C_Tmin_i = relu(_ALPHA_T_MIN * _T_min_s - T)  # three-engine min
+C_Tmax_i = relu(T - _T_max_s)  # three-engine max
 
 # ── Constraints ───────────────────────────────────────────────────────────────
 constraints = []
 
 # Boundary conditions (convex equality constraints)
-constraints.append((position         == _r_launch_s).convex().at([0]))
-constraints.append((attitude         == Q_LAUNCH).convex().at([0]))
-constraints.append((velocity         == _v_launch_s).convex().at([0]))
+constraints.append((position == _r_launch_s).convex().at([0]))
+constraints.append((attitude == Q_LAUNCH).convex().at([0]))
+constraints.append((velocity == _v_launch_s).convex().at([0]))
 constraints.append((angular_velocity == W_LAUNCH).convex().at([0]))
-constraints.append((position[2]         == _r_apex_s[2]).convex().at([K_APEX]))  # position only
-constraints.append((position         == _r_land_s).convex().at([N - 1]))
-constraints.append((velocity         == _v_final_s).convex().at([N - 1]))
-constraints.append((attitude         == Q_FINAL).convex().at([N - 1]))
+constraints.append((position[2] == _r_apex_s[2]).convex().at([K_APEX]))  # position only
+constraints.append((position == _r_land_s).convex().at([N - 1]))
+constraints.append((velocity == _v_final_s).convex().at([N - 1]))
+constraints.append((attitude == Q_FINAL).convex().at([N - 1]))
 constraints.append((angular_velocity == W_FINAL).convex().at([N - 1]))
 
 # ── Always-on CTCS ────────────────────────────────────────────────────────────
-constraints.append(ox.ctcs(tilt_sq - _tilt_sq_max <= 0, idx=1))          # tilt ≤ THETA_MAX_DEG
+constraints.append(ox.ctcs(tilt_sq - _tilt_sq_max <= 0, idx=1))  # tilt ≤ THETA_MAX_DEG
 constraints.append(ox.ctcs(omega_sq - W_B_MAX_RAD_S**2 <= 0, penalty="huber", idx=0))
 constraints.append(ox.ctcs(_m_dry_s - mass[0] <= 0, penalty="huber", idx=0))
 # Wide land glideslope on descent nodes only (ascent is unconstrained by GS/LoS)
 constraints.append(
-    ox.ctcs(r_xy_land * _tan_gs_max - pos_rel_z <= 0, penalty="huber")
-    .over((K_APEX, N - 1))
+    ox.ctcs(r_xy_land * _tan_gs_max - pos_rel_z <= 0, penalty="huber").over((K_APEX, N - 1))
 )
 
 # ── Non-geometric altitude STCs (both legs) ───────────────────────────────────
@@ -486,7 +484,7 @@ constraints.append(stc(T_alt100, C_gimbal_p, weight=W_GIMBAL))
 constraints.append(stc(T_alt100, C_gimbal_n, weight=W_GIMBAL))
 constraints.append(stc(T_alt100, C_tilt, weight=W_TILT))
 constraints.append(stc(T_alt100, C_omega, weight=W_OMEGA))
-constraints.append(stc(T_alt100, C_spd,   weight=W_SPD))
+constraints.append(stc(T_alt100, C_spd, weight=W_SPD))
 
 # ── Land-pad geometric STCs (descent phase only) ──────────────────────────────
 constraints.append(stc(T_alt100, T_altgt2, C_gs_land, weight=W_GS, over=(K_APEX, N - 1)))
@@ -502,7 +500,7 @@ constraints.append(stc(T_tgt60, C_Tmax_i, weight=W_THR))
 constraints.append(stc(T_tgt60, C_Tmin_i, weight=W_THR))
 
 # ── Time (free final time with per-segment dilation) ─────────────────────────
-_t_f_guess = 42.0   # 2 × descent-only guess
+_t_f_guess = 42.0  # 2 × descent-only guess
 
 # Velocity from finite differences of the position guess (avoids ||v||=0 nodes,
 # which NaN the CTCS Jacobian through ox.linalg.Norm(velocity)).
@@ -516,7 +514,7 @@ time = ox.Time(
     initial=0.0,
     final=ox.Free(_t_f_guess),
     min=0.0,
-    max=1.5 * _t_f_guess,   # 63.0 — 2 × descent-only max
+    max=1.5 * _t_f_guess,  # 63.0 — 2 × descent-only max
     # uniform_time_grid=True,
 )
 
@@ -529,13 +527,12 @@ problem = Problem(
     constraints=constraints,
     time=time,
     float_dtype="float64",
-    licq_max = 1e-6,
+    licq_max=1e-6,
     algorithm={
         # "lam_vc": 4e0,
         "lam_prox": 4e-1,
         "lam_vc": 4e0,
         "lam_cost": 1e-6,
-
         "k_max": 800,
         "autotuner": ox.ConstantProximalWeight(),
         # "autotuner": ox.AdaptiveProximalWeight(),
@@ -558,11 +555,11 @@ problem.settings.prp.rtol = 1e-12
 # ── Viser display parameters ──────────────────────────────────────────────────
 # cSTC uses ENU inertial frame (x, y horizontal; z = altitude). Viser is Z-up,
 # so positions map directly without any axis permutation.
-SCENE_SCALE = 10.0          # 1 viser unit = 10 m
+SCENE_SCALE = 10.0  # 1 viser unit = 10 m
 PLUME_SCALE = 8.0
 ATTITUDE_AXES_LENGTH = 2.0
 VIEWCONE_SCALE = 4.0
-CAMERA_FOV_DEG = 76.0       # vertical field of view (adjust in Viser GUI)
+CAMERA_FOV_DEG = 76.0  # vertical field of view (adjust in Viser GUI)
 _VISER_UP_AXIS = (0.0, 0.0, 1.0)
 GS_HALFANGLE_DEG = 90.0 - GS_MAX_DEG
 GS_STC_HALFANGLE_DEG = 90.0 - GS_STC_DEG
@@ -662,7 +659,7 @@ def launch_viser_servers(result) -> None:
         attitude_axes_length=ATTITUDE_AXES_LENGTH,
         show_viewcone=False,
         trail_point_size=0.08,
-        show_grid=False,   # DEM terrain replaces the flat ground grid
+        show_grid=False,  # DEM terrain replaces the flat ground grid
         dark_mode=True,
         scene_scale=1.0,
         controls="manual",
@@ -682,7 +679,7 @@ def launch_viser_servers(result) -> None:
         pos_vis=np.asarray(result.trajectory["position"], dtype=np.float64),
         attitude_wxyz=np.asarray(result.trajectory["attitude"], dtype=np.float64),
         scene_scale=SCENE_SCALE,
-        dem_norm=load_senns_dem(DEM_PLACEMENT.grid),
+        dem_norm=load_senss_dem(DEM_PLACEMENT.grid),
         dem_center_norm=dem_center_norm(DEM_PLACEMENT.grid),
         get_terrain_params=get_terrain_params,
         terrain_half_extent_m=DEM_PLACEMENT.half_extent_m,
@@ -771,7 +768,7 @@ def launch_viser_servers(result) -> None:
             pos_vis=np.asarray(result.trajectory["position"], dtype=np.float64),
             attitude_wxyz=np.asarray(result.trajectory["attitude"], dtype=np.float64),
             scene_scale=SCENE_SCALE,
-            dem_norm=load_senns_dem(DEM_PLACEMENT.grid),
+            dem_norm=load_senss_dem(DEM_PLACEMENT.grid),
             dem_center_norm=dem_center_norm(DEM_PLACEMENT.grid),
             get_terrain_params=add_terrain(server, ambient=0.45),
             terrain_half_extent_m=DEM_PLACEMENT.half_extent_m,
@@ -811,9 +808,7 @@ def export_trajectory_rpy_csv(
     rpy = quat_xyzw_to_rpy(np.asarray(traj["attitude"], dtype=np.float64), degrees=degrees)
     pos = np.stack([pos_model[:, 1], -pos_model[:, 0], pos_model[:, 2]], axis=-1)
 
-    return write_trajectory_rpy_csv(
-        path, np.asarray(traj["time"], dtype=np.float64), pos, rpy
-    )
+    return write_trajectory_rpy_csv(path, np.asarray(traj["time"], dtype=np.float64), pos, rpy)
 
 
 def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc_hop") -> tuple:
@@ -844,7 +839,7 @@ def plot_cstc_results(result, *, show: bool = True, save_prefix: str = "cstc_hop
 
 
 if __name__ == "__main__":
-    problem.settings.dev.debug = True   # bypass JAX export (see repo issue)
+    problem.settings.dev.debug = True  # bypass JAX export (see repo issue)
     problem.initialize()
     result = problem.solve()
     result = problem.post_process()

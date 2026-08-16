@@ -56,14 +56,14 @@ from examples.rocket.senss._dem import (
     add_dem_terrain,
     dem_center_norm,
     dem_info_markdown,
-    load_senns_dem,
+    load_senss_dem,
 )
 from openscvx import Problem
 
 # ── USER CONFIG ───────────────────────────────────────────────────────────────
-FINAL_X: float = 0.0    # model-X horizontal coordinate of landing target
-FINAL_Y: float = 0.0    # model-Y horizontal coordinate of landing target
-ELEV_SCALE: float = 6.0 # DEM vertical exaggeration (model units)
+FINAL_X: float = 0.0  # model-X horizontal coordinate of landing target
+FINAL_Y: float = 0.0  # model-Y horizontal coordinate of landing target
+ELEV_SCALE: float = 6.0  # DEM vertical exaggeration (model units)
 Z_OFFSET: float = -3.0  # DEM vertical shift in model units (fixed)
 
 # ── Scene / DEM constants ─────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ DEM_SHADING = DemShading(azimuth_deg=0.0, elevation_deg=5.0, strength=2.5, ambie
 
 def _dem_altitude_at(model_x: float, model_y: float, elev_scale: float, z_offset: float) -> float:
     """Model altitude (world-z) at horizontal position (model_x, model_y) on the DEM surface."""
-    dem = load_senns_dem(DEM_GRID)
+    dem = load_senss_dem(DEM_GRID)
     half = TERRAIN_HALF_EXTENT
     fi = (model_y + half) / (2.0 * half) * (DEM_GRID - 1)
     fj = (model_x + half) / (2.0 * half) * (DEM_GRID - 1)
@@ -184,26 +184,26 @@ thrust.guess = np.linspace(
 q1, q2, q3, q4 = attitude[0], attitude[1], attitude[2], attitude[3]
 CBI = ox.Block(
     [
-        [q4**2 + q1**2 - q2**2 - q3**2, 2*(q1*q2 - q4*q3), 2*(q4*q2 + q1*q3)],
-        [2*(q4*q3 + q1*q2), q4**2 - q1**2 + q2**2 - q3**2, 2*(q2*q3 - q4*q1)],
-        [2*(q1*q3 - q4*q2), 2*(q4*q1 + q2*q3), q4**2 - q1**2 - q2**2 + q3**2],
+        [q4**2 + q1**2 - q2**2 - q3**2, 2 * (q1 * q2 - q4 * q3), 2 * (q4 * q2 + q1 * q3)],
+        [2 * (q4 * q3 + q1 * q2), q4**2 - q1**2 + q2**2 - q3**2, 2 * (q2 * q3 - q4 * q1)],
+        [2 * (q1 * q3 - q4 * q2), 2 * (q4 * q1 + q2 * q3), q4**2 - q1**2 - q2**2 + q3**2],
     ]
 ).T
 
 w1, w2, w3 = angular_velocity[0], angular_velocity[1], angular_velocity[2]
 attitude_dot = ox.Concat(
-    0.5 * (w1*q4 - w2*q3 + w3*q2),
-    0.5 * (w1*q3 - w3*q1 + w2*q4),
-    0.5 * (w2*q1 - w1*q2 + w3*q4),
-    -0.5 * (w1*q1 + w2*q2 + w3*q3),
+    0.5 * (w1 * q4 - w2 * q3 + w3 * q2),
+    0.5 * (w1 * q3 - w3 * q1 + w2 * q4),
+    0.5 * (w2 * q1 - w1 * q2 + w3 * q4),
+    -0.5 * (w1 * q1 + w2 * q2 + w3 * q3),
 )
 
 
 def _cross(a, b):
     return ox.Concat(
-        a[1]*b[2] - a[2]*b[1],
-        a[2]*b[0] - a[0]*b[2],
-        a[0]*b[1] - a[1]*b[0],
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
     )
 
 
@@ -214,8 +214,10 @@ dynamics = {
     "position": velocity,
     "velocity": CBI.T @ (thrust + A_aero) / mass[0] + ox.Concat(0.0, 0.0, -gI),
     "attitude": attitude_dot,
-    "angular_velocity": J_inv_mat @ (
-        _cross(r_arm, thrust) + _cross(r_cp, A_aero)
+    "angular_velocity": J_inv_mat
+    @ (
+        _cross(r_arm, thrust)
+        + _cross(r_cp, A_aero)
         - _cross(angular_velocity, J_mat @ angular_velocity)
     ),
 }
@@ -254,8 +256,8 @@ constraint_exprs.append(ox.ctcs(0.1 * ox.linalg.Norm(velocity) ** 2 - v_max**2 <
 # is the world-z component of the rotated body-x axis.
 constraint_exprs.append(
     ox.ctcs(
-        1.0 * ox.Cos(ox.Constant(np.array(theta_max * np.pi / 180.0)))
-        + 2.0 * (q4*q2 - q1*q3) <= 0
+        1.0 * ox.Cos(ox.Constant(np.array(theta_max * np.pi / 180.0))) + 2.0 * (q4 * q2 - q1 * q3)
+        <= 0
     )
 )
 constraint_exprs.append(ox.ctcs(1.0 * ox.linalg.Norm(angular_velocity) ** 2 - w_max**2 <= 0))
@@ -330,9 +332,7 @@ def prepare_rocket_results_for_viser(results) -> None:
 
 def add_terrain(server: viser.ViserServer) -> None:
     """Overlay the DEM patch and a landing-target summary onto ``server``."""
-    add_dem_terrain(
-        server, placement=DEM_PLACEMENT, shading=DEM_SHADING, scene_scale=SCENE_SCALE
-    )
+    add_dem_terrain(server, placement=DEM_PLACEMENT, shading=DEM_SHADING, scene_scale=SCENE_SCALE)
     with server.gui.add_folder("Info"):
         server.gui.add_markdown(
             f"**Landing target**  \n"
@@ -370,9 +370,7 @@ if __name__ == "__main__":
 
     # SCP iteration animation and static snapshot servers
     scp_server = create_scp_animated_plotting_server(result, frame_duration_ms=50.0)
-    snapshot_server = create_snapshot_plotting_server(
-        result, initial_n_snapshots=5, show_grid=True
-    )
+    snapshot_server = create_snapshot_plotting_server(result, initial_n_snapshots=5, show_grid=True)
 
     # Overlay DEM terrain onto the trajectory server.
     # create_animated_plotting_server returns a ViserServer when controls="gui" (the default).

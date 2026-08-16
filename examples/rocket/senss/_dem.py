@@ -1,7 +1,7 @@
 """SENNS lunar DEM terrain patch for the rocket viser scenes.
 
 The rocket examples in this directory land on a heightfield sampled from
-``senns_dem.png`` (3938x3938, 16-bit) rather than a flat ground plane.  This
+``senss_dem.png`` (3938x3938, 16-bit) rather than a flat ground plane.  This
 module owns everything about that patch: loading and normalizing the PNG,
 placing it in the world, shading it, and exposing the two GUI folders that let
 you slide the patch under the trajectory until the landing site lines up.
@@ -31,8 +31,8 @@ import numpy as np
 import trimesh
 import viser
 
-DEM_PATH = os.path.join(os.path.dirname(__file__), "senns_dem.png")
-NATIVE_GRID = 3938  # native resolution of senns_dem.png; larger grids oversample
+DEM_PATH = os.path.join(os.path.dirname(__file__), "senss_dem.png")
+NATIVE_GRID = 3938  # native resolution of senss_dem.png; larger grids oversample
 
 #: Base albedo of the terrain before shading (matte lunar grey).
 GREY_BASE = np.array([148, 150, 152], dtype=np.float32) / 255.0
@@ -75,7 +75,7 @@ class DemShading:
 
 
 @lru_cache(maxsize=4)
-def load_senns_dem(grid: int = 2048) -> np.ndarray:
+def load_senss_dem(grid: int = 2048) -> np.ndarray:
     """Normalized ``(grid, grid)`` DEM heights in ``[0, 1]``.
 
     Normalization uses the *full-resolution* min/max so the relief is
@@ -94,7 +94,7 @@ def load_senns_dem(grid: int = 2048) -> np.ndarray:
 def dem_center_norm(grid: int = 2048) -> float:
     """Normalized height of the DEM's center pixel — the patch's pin point."""
     c = (grid - 1) // 2
-    return float(load_senns_dem(grid)[c, c])
+    return float(load_senss_dem(grid)[c, c])
 
 
 @lru_cache(maxsize=4)
@@ -134,7 +134,7 @@ def terrain_vertices(placement: DemPlacement, *, scene_scale: float) -> np.ndarr
     XX_m = cos_p * XX_loc - sin_p * YY_loc + float(ox_m)
     YY_m = sin_p * XX_loc + cos_p * YY_loc + float(oy_m)
 
-    dem = load_senns_dem(grid)
+    dem = load_senss_dem(grid)
     relief_m = (dem - dem_center_norm(grid)) * placement.base_relief_m * float(sz)
     ZZ_m = float(oz_m) + relief_m
 
@@ -161,7 +161,7 @@ def terrain_vertex_normals(placement: DemPlacement) -> np.ndarray:
 
     cell_x = 2.0 * placement.half_extent_m * float(sx) / (grid - 1)
     cell_y = 2.0 * placement.half_extent_m * float(sy) / (grid - 1)
-    ZZ = load_senns_dem(grid) * placement.base_relief_m * float(sz)
+    ZZ = load_senss_dem(grid) * placement.base_relief_m * float(sz)
     nx = -mx * np.gradient(ZZ, cell_x, axis=1).astype(np.float32).ravel()
     ny = -my * np.gradient(ZZ, cell_y, axis=0).astype(np.float32).ravel()
     nz = np.ones(grid * grid, dtype=np.float32)
@@ -336,7 +336,7 @@ def terrain_param_getter(
 ) -> Callable[[], dict]:
     """Adapt :func:`add_dem_terrain`'s placement getter to a plain-dict getter.
 
-    ``hop_lidar_overlay.add_body_fixed_lidar_overlay`` samples the terrain by
+    ``_hop_lidar_overlay.add_body_fixed_lidar_overlay`` samples the terrain by
     the same origin / scale / yaw / mirror parameters :func:`terrain_vertices`
     meshes it with, but takes them as a dict so it stays independent of this
     module's dataclass.

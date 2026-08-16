@@ -18,9 +18,10 @@ import pytest
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
 
 # Shared helper modules, not examples: package markers, the private per-family
-# helpers (``examples/_maze.py``, ``examples/drone/_plotting.py``, ...), and the
-# shared plotting tier (``plotting.py``, ``plotting_viser.py``). Matched by
-# filename, so a helper is excluded by how it is named rather than by hand.
+# helpers (``examples/_maze.py``, ``examples/drone/_plotting.py``, ...), helper
+# packages (``examples/car/racing/_tracks/``, ...), and the shared plotting tier
+# (``plotting.py``, ``plotting_viser.py``). Matched by naming convention — an
+# underscore prefix on any path component — rather than by hand.
 IGNORED_FILES = ["__init__.py", "_*.py", "plotting*.py"]
 
 # Examples excluded from CI (e.g. exceeds runner memory)
@@ -81,6 +82,9 @@ TIMING_BOUNDS = {
 def _excluded(rel_path: Path) -> bool:
     """Return True if ``rel_path`` (relative to examples/) should not be tested."""
     if any(fnmatch(rel_path.name, pat) for pat in IGNORED_FILES):
+        return True
+    # Underscore-prefixed directories hold support code, not examples
+    if any(part.startswith("_") for part in rel_path.parts[:-1]):
         return True
     # Realtime examples require special event loop handling
     if "realtime" in rel_path.parts:
