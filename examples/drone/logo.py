@@ -233,6 +233,7 @@ dynamics = {
     "time": 1.0,
 }
 
+
 def angle_to_target(x_):
     """Compute the angle between boresight vector and vector to target (for analysis/plotting)."""
     pos = x_[:3]

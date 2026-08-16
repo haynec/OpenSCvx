@@ -39,9 +39,7 @@ from examples.plotting_viser import AnimatedServerHandle
 # frame_idx -> (camera_position, camera_wxyz, camera_look_at | None)
 # Pass ``look_at=None`` for nadir / boresight-locked FPV poses where setting
 # look-at would fight ``wxyz`` (gimbal lock when looking along world ±up).
-CameraPoseFn = Callable[
-    [int], tuple[np.ndarray, np.ndarray, np.ndarray | None]
-]
+CameraPoseFn = Callable[[int], tuple[np.ndarray, np.ndarray, np.ndarray | None]]
 
 
 def open_viser_client_for_render(

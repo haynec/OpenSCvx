@@ -758,8 +758,11 @@ def load_rows(path: Path) -> list[TimingRow]:
         reader = csv.DictReader(f)
         rows = []
         for raw in reader:
+
             def _f(key, default="nan"):
-                return float(raw[key]) if key in raw and raw[key] not in ("", None) else float(default)
+                return (
+                    float(raw[key]) if key in raw and raw[key] not in ("", None) else float(default)
+                )
 
             rows.append(
                 TimingRow(
@@ -1244,9 +1247,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.study in ("all", "nodes"):
         rows.extend(run_nodes_study(npg_list, k_max=k_nodes, n_trials=n_trials))
     if args.study in ("all", "los_vectorization"):
-        rows.extend(
-            run_los_vectorization_study(target_counts, k_max=k_los, n_trials=n_trials)
-        )
+        rows.extend(run_los_vectorization_study(target_counts, k_max=k_los, n_trials=n_trials))
     if args.study in ("all", "nodal_vs_ctcs"):
         rows.extend(run_nodal_vs_ctcs_study(npg_nodal, k_max=k_nodal, n_trials=n_trials))
 

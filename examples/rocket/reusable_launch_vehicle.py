@@ -208,7 +208,7 @@ problem = ox.Problem(
     constraints=constraints,
     N=n,
     algorithm={
-        "autotuner": ox.AugmentedLagrangian(eta_lambda=1E2),
+        "autotuner": ox.AugmentedLagrangian(eta_lambda=1e2),
         "lam_vc": 2e0,
         "lam_prox": 5e-1,
         "lam_cost": 9e-1,

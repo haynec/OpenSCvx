@@ -61,7 +61,9 @@ from openscvx.solvers.cvxpy_ptr_solver import CVXPyPTRSolver
 _orig_create_variables = CVXPyPTRSolver.create_variables
 
 
-def _create_variables_dense(self, *args, dynamics_sparsity=None, constraint_sparsity=None, **kwargs):
+def _create_variables_dense(
+    self, *args, dynamics_sparsity=None, constraint_sparsity=None, **kwargs
+):
     return _orig_create_variables(
         self,
         *args,
@@ -154,9 +156,7 @@ def _pointing_attitudes(positions: np.ndarray) -> np.ndarray:
     return attitudes
 
 
-def _great_circle_yz(
-    n_nodes: int, radius: float, sweep_rad: float = 2.0 * np.pi
-) -> np.ndarray:
+def _great_circle_yz(n_nodes: int, radius: float, sweep_rad: float = 2.0 * np.pi) -> np.ndarray:
     """Great-circle path on the yz-plane starting at +y, sweeping about +x."""
     theta = np.linspace(0.0, sweep_rad, n_nodes)
     return np.stack(
@@ -644,9 +644,7 @@ if __name__ == "__main__":
     )
 
     def update_diameter(frame_idx: int) -> None:
-        diameter.points = np.array(
-            [[pos1_traj[frame_idx], pos2_traj[frame_idx]]], dtype=np.float32
-        )
+        diameter.points = np.array([[pos1_traj[frame_idx], pos2_traj[frame_idx]]], dtype=np.float32)
 
     handle.update_callbacks.append(update_diameter)
 
