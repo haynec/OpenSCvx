@@ -1,7 +1,7 @@
 """LaTeX visitors for math expressions.
 
-Visitors: Sin, Cos, Tan, Asin, Acos, Atan, Atan2, Square, Sqrt, Exp, Log, Abs,
-          Max, Min, PositivePart, Huber, SmoothReLU, LogSumExp, Linterp,
+Visitors: Sin, Cos, Tan, Tanh, Asin, Acos, Atan, Atan2, Square, Sqrt, Exp, Log,
+          Abs, Max, Min, PositivePart, Huber, SmoothReLU, LogSumExp, Linterp,
           Cinterp, Bilerp
 
 Renders the scalar math AST nodes to LaTeX math strings. The elementary functions
@@ -34,6 +34,7 @@ from openscvx.symbolic.expr.math import (
     Sqrt,
     Square,
     Tan,
+    Tanh,
 )
 from openscvx.symbolic.lowerers.latex._lowerer import _PRECEDENCE, wrap
 from openscvx.symbolic.lowerers.latex._registry import visitor
@@ -60,6 +61,12 @@ def _visit_cos(lowerer, node: Cos):
 def _visit_tan(lowerer, node: Tan):
     """Render tangent as ``\\tan(a)``."""
     return _call(r"\tan", lowerer.lower(node.operand))
+
+
+@visitor(Tanh)
+def _visit_tanh(lowerer, node: Tanh):
+    """Render hyperbolic tangent as ``\\tanh(a)``."""
+    return _call(r"\tanh", lowerer.lower(node.operand))
 
 
 @visitor(Asin)
