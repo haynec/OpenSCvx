@@ -1,6 +1,6 @@
 """Race car receding-horizon MPC (OpenSCvx formulation).
 
-Mirrors the closed-loop simulation from ``examples/race_cars/main.py`` which
+Mirrors the closed-loop simulation from the acados ``race_cars/main.py`` demo, which
 uses acados SQP in a receding-horizon loop.
 
 The spatial bicycle model is the same as ``race_car_openscvx.py`` (Kloeser et
@@ -41,14 +41,12 @@ jax.config.update("jax_enable_x64", True)
 import numpy as np
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(os.path.dirname(current_dir))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
 if project_root not in sys.path:
     sys.path.append(project_root)
-sys.path.insert(0, current_dir)
-
-from tracks.readDataFcn import getTrack
 
 import openscvx as ox
+from examples.car.racing._tracks.readDataFcn import getTrack
 
 # ── Track data ─────────────────────────────────────────────────────────────────
 sref_data, _, _, _, kapparef_data = getTrack("LMS_Track.txt")
@@ -315,9 +313,9 @@ def plot_mpc_results(
     """
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
-    from time2spatial import transformProj2Orig
 
-    from examples.race_cars._plotting import acceleration_figure, stack_height, track_figure
+    from examples.car.racing._plotting import acceleration_figure, stack_height, track_figure
+    from examples.car.racing._time2spatial import transformProj2Orig
 
     # Convert closed-loop trajectory to Cartesian
     cart_x, cart_y, _, _ = transformProj2Orig(
@@ -514,7 +512,7 @@ if __name__ == "__main__":
     if os.environ.get("OPENSCVX_NO_PLOT") is None:
         plot_mpc_results(simX, simU, t_sim, horizon_snapshots)
 
-        from examples.race_cars._viser import (
+        from examples.car.racing._viser import (
             create_race_car_chase_viser_server,
             create_race_car_viser_server,
         )

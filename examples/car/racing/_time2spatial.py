@@ -31,7 +31,8 @@
 # author: Daniel Kloeser
 
 import numpy as np
-from tracks.readDataFcn import getTrack
+
+from examples.car.racing._tracks.readDataFcn import getTrack
 
 
 def transformProj2Orig(si, ni, alpha, v, filename="LMS_Track.txt"):

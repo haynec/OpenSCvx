@@ -1,29 +1,34 @@
-"""Race car minimum-lap-time trajectory optimization (OpenSCvx formulation).
+"""Race car minimum-lap-time optimization, pure-combustion ablation.
 
-Ports the acados NMPC benchmark from:
-  Kloeser et al., "NMPC for Racing Using a Singularity-Free Path-Parametric
-  Model with Obstacle Avoidance", IFAC World Congress, Berlin, 2020.
-  https://www.youtube.com/watch?v=1JDBQXVrZbo
+The same car, track, and lap structure as ``race_car_hybrid.py`` with the
+hybrid power unit removed: no battery state, no recovery accounting, no
+deploy/harvest controls. The full Kloeser drive envelope (Cm1 - Cm2·v)·D
+goes through the throttle alone, so D = -1 is full-strength friction braking
+— physically the "unrestricted ICE" car of the hybrid example's three-car
+comparison, which strictly dominates the hybrid because its braking and
+drive are unmetered.
 
-The spatial (path-parametric) bicycle model uses arc length s as the
-independent variable of the *state*, while physical time t is the time axis
-of the ODE.  The OCP seeks the minimum time required to complete one lap of
-the LMS track (s: 0 → pathlength ≈ 8.71 m).
+!!! note "Twin example"
+    ``race_car_hybrid.py`` is the full hybrid version; the files differ
+    only in the power unit. Everything that shapes the *driving* is
+    retained:
+
+    * LMS kart track uniformly scaled 4x (power-limited straights,
+      genuine braking zones),
+    * friction-ellipse tyre model  a_lat² + a_long² ≤ A_MAX²,
+    * flying-lap periodicity on the driving states (n, α, v, D, δ),
+    * the trail-braking initial guess.
+
+The point of the ablation is numerical, not physical: the hybrid variant
+carries two extra states (E, R) and two extra controls (deploy, regen) that
+exist purely for energy strategy. Removing them shrinks the subproblem and
+the Jacobians, so this file is the reference for how much of the hybrid
+example's solve time and convergence behaviour is paid for the energy
+management rather than the racing. Lap time should land near the
+unrestricted-ICE car of ``race_car_hybrid.py`` (same envelope, same grip).
 
 State vector  x = [s, n, α, v, D, δ]
-  s     arc-length progress along track centreline [m]
-  n     lateral deviation from centreline [m]
-  α     heading error w.r.t. track tangent [rad]
-  v     longitudinal speed [m/s]
-  D     normalised throttle input [-1, 1]
-  δ     steering angle [rad]
-
 Control vector  u = [Ḋ, δ̇]
-  Ḋ     throttle rate [1/s]
-  δ̇     steering rate [rad/s]
-
-Curvature κ(s) is read from the track file and interpolated with a PCHIP
-cubic spline via ox.Cinterp, which is JAX-differentiable.
 
 Objective: free final time T, minimise T subject to s(T) = pathlength.
 """
@@ -40,26 +45,24 @@ jax.config.update("jax_enable_x64", True)
 import numpy as np
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(os.path.dirname(current_dir))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-# Track loader lives alongside this file
-sys.path.insert(0, current_dir)
-
-from tracks.readDataFcn import getTrack
 
 import openscvx as ox
+from examples.car.racing._tracks.readDataFcn import getTrack
 from openscvx.plotting import plot_controls, plot_states
 
 # ── Track data ─────────────────────────────────────────────────────────────────
-sref_data, _, _, _, kapparef_data = getTrack("LMS_Track.txt")
-pathlength = float(sref_data[-1])  # ≈ 8.71 m
+# LMS kart track scaled 4x: long enough that the car becomes power-limited on
+# the straights and must genuinely brake for the corners.
+TRACK_FILE = "LMS_Track_x4.txt"
+sref_data, _, _, _, kapparef_data = getTrack(TRACK_FILE)
+pathlength = float(sref_data[-1])  # ≈ 34.84 m
 
 # Pad slightly beyond [0, pathlength] so Cinterp never extrapolates at the
 # boundary nodes when s is at exactly 0 or pathlength.
-# Extend by 2.5 m on the low side to cover the s ∈ [-2, 0] warm-up region
-# (the track is straight there so kappa ≈ 0 — we clamp with the boundary value).
 _pad_lo, _pad_hi = 2.5, 0.5
 s_interp = np.concatenate([[sref_data[0] - _pad_lo], sref_data, [pathlength + _pad_hi]])
 kappa_interp = np.concatenate([[kapparef_data[0]], kapparef_data, [kapparef_data[-1]]])
@@ -72,13 +75,41 @@ Cm1 = 0.28  # drive-force coefficient 1 [N]
 Cm2 = 0.05  # drive-force coefficient 2 [N·s/m]
 Cr0 = 0.011  # rolling-resistance constant [N]
 Cr2 = 0.006  # rolling-resistance quadratic [N·s²/m²]
+A_MAX = 4.0  # tyre grip limit — friction-ellipse radius [m/s²]
 
 # ── Discretisation ─────────────────────────────────────────────────────────────
 N = 80  # shooting nodes
-T_guess = 6.0  # initial guess for lap time [s]
+T_guess = 20.0  # initial guess for lap time [s]
+
+# Tie the start-line state to the finish-line state (n, α, v, D, δ). The start
+# line *is* the finish line on a flying lap, so without this the free boundary
+# is a loophole: an unconstrained v(0) lets the optimizer cross the line at a
+# speed the car could never regain.
+PERIODIC_LAP = True
+
+# ── Trail-braking throttle guess ───────────────────────────────────────────────
+# SCP anchors near its guess, so rather than a flat throttle the guess encodes
+# how a lap is driven: brake hardest at turn-in, then feed the throttle back in
+# through the corner ("trail braking"). Corners are the contiguous stretches of
+# the guess arc-length grid where the track curvature exceeds KAPPA_CORNER;
+# through each one the throttle ramps linearly from full braking at entry to
+# full throttle at exit, and the straights run flat out.
+
+KAPPA_CORNER = 0.5  # curvature magnitude above which a node counts as cornering [1/m]
+
+
+def trail_brake_throttle(s_nodes: np.ndarray) -> np.ndarray:
+    """Trail-braking throttle profile D(s) ∈ [-1, 1] on the guess grid ``s_nodes``."""
+    kappa_nodes = np.interp(s_nodes, s_interp, kappa_interp)
+    corner_nodes = np.flatnonzero(np.abs(kappa_nodes) > KAPPA_CORNER)
+    D = np.ones_like(s_nodes)
+    for corner in np.split(corner_nodes, np.flatnonzero(np.diff(corner_nodes) > 1) + 1):
+        D[corner] = np.linspace(-1.0, 1.0, corner.size)
+    return D
+
 
 # ── States ─────────────────────────────────────────────────────────────────────
-S_INIT = 0.0  # matches acados model.x0[0]: 2 m warm-up before the start line
+S_INIT = 0.0
 
 s = ox.State("s", shape=(1,))
 s.min = [S_INIT - 0.1]
@@ -97,31 +128,32 @@ n.guess = np.zeros((N, 1))
 alpha = ox.State("alpha", shape=(1,))
 alpha.min = [-np.pi / 2]
 alpha.max = [np.pi / 2]
-alpha.initial = [0.0]
+alpha.initial = [ox.Free(0.0)]  # flying lap: heading unconstrained at the line
 alpha.final = [ox.Free(0.0)]
 alpha.guess = np.zeros((N, 1))
 
 v = ox.State("v", shape=(1,))
 v.min = [0.0]
-v.max = [6.0]  # generous upper bound; typical racing speed ~ 1–3 m/s
+v.max = [6.0]
 v.initial = [ox.Free(0.0)]
 v.final = [ox.Free(0.0)]
-# Trapezoidal speed guess: ramp up then hold
-_tau = np.linspace(0.0, 1.0, N)
-_v_profile = np.where(_tau < 0.2, _tau / 0.2 * 1.5, 1.5)
-v.guess = _v_profile.reshape(-1, 1)
+# Flat guess at racing speed — this is a flying lap, not a standing start.
+v.guess = 2.0 * np.ones((N, 1))
+
+# Throttle / friction brake: the whole envelope, no combustion/electric split.
+D_trail = trail_brake_throttle(s.guess[:, 0])
 
 D_throt = ox.State("D", shape=(1,))
 D_throt.min = [-1.0]
 D_throt.max = [1.0]
-D_throt.initial = [0.0]
+D_throt.initial = [ox.Free(1.0)]  # flying lap: cross the line on the throttle
 D_throt.final = [ox.Free(0.0)]
-D_throt.guess = 0.5 * np.ones((N, 1))
+D_throt.guess = D_trail.reshape(-1, 1)
 
 delta = ox.State("delta", shape=(1,))
 delta.min = [-0.40]
 delta.max = [0.40]
-delta.initial = [0.0]
+delta.initial = [ox.Free(0.0)] if PERIODIC_LAP else [0.0]
 delta.final = [ox.Free(0.0)]
 delta.guess = np.zeros((N, 1))
 
@@ -129,7 +161,10 @@ delta.guess = np.zeros((N, 1))
 derD = ox.Control("derD", shape=(1,), parameterization="ZOH")
 derD.min = [-10.0]
 derD.max = [10.0]
-derD.guess = np.zeros((N, 1))
+# Throttle rate consistent with the trail-braking profile (Ḋ = derD).
+derD.guess = np.clip(
+    np.diff(D_trail, append=D_trail[-1]) * (N - 1) / T_guess, derD.min, derD.max
+).reshape(-1, 1)
 
 derDelta = ox.Control("derDelta", shape=(1,), parameterization="ZOH")
 derDelta.min = [-2.0]
@@ -141,7 +176,7 @@ time = ox.Time(
     initial=0.0,
     final=ox.Minimize(T_guess),
     min=0.0,
-    max=10.0,
+    max=60.0,
     guess=np.linspace(0.0, T_guess, N).reshape(-1, 1),
 )
 
@@ -149,8 +184,7 @@ time = ox.Time(
 # Curvature κ(s) via PCHIP spline (smooth, monotone-preserving between knots)
 kappa = ox.Cinterp(s[0], s_interp, kappa_interp, method="pchip")
 
-# Longitudinal tyre force [N]
-#   Fxd = (Cm1 - Cm2·v)·D - Cr2·v² - Cr0·tanh(5v)
+# Longitudinal tyre force [N]: the full drive envelope through one throttle.
 Fxd = (
     (ox.Constant(Cm1) - ox.Constant(Cm2) * v[0]) * D_throt[0]
     - ox.Constant(Cr2) * v[0] ** 2
@@ -178,10 +212,7 @@ controls = [derD, derDelta]
 
 constraints: list = []
 
-# Continuous-time (CTCS) box constraints. Lane keeping is the exception: the
-# lateral deviation n is bounded at the nodes by n.min / n.max alone, so the
-# track edge is the one limit this example does not enforce between them.
-# (race_car_mpc.py shows the CTCS spelling of the same lane constraint.)
+# Path constraints on all states except the free lateral deviation n.
 for state in [s, alpha, v, D_throt, delta]:
     constraints.extend(
         [
@@ -190,24 +221,18 @@ for state in [s, alpha, v, D_throt, delta]:
         ]
     )
 
-# Nonlinear acceleration constraints (prevent tyre saturation)
-#   a_lat  = C2·v²·δ + Fxd·sin(C1·δ) / m  ∈ [-4, 4] m/s²
-#   a_long = Fxd / m                        ∈ [-4, 4] m/s²
+# Flying-lap periodicity: convex cross-node equalities pin each driving state
+# at the start line to its value at the flag.
+if PERIODIC_LAP:
+    constraints.extend((x.at(0) == x.at(N - 1)).convex() for x in [n, alpha, v, D_throt, delta])
+
+# Friction ellipse: lateral and longitudinal grip share one tyre.
 a_lat = ox.Constant(C2) * v[0] ** 2 * delta[0] + Fxd * ox.Sin(
     ox.Constant(C1) * delta[0]
 ) / ox.Constant(m)
 a_long = Fxd / ox.Constant(m)
 
-A_MAX = 4.0  # [m/s²]
-
-constraints.extend(
-    [
-        ox.ctcs(a_lat <= A_MAX, penalty="huber"),
-        ox.ctcs(-A_MAX <= a_lat, penalty="huber"),
-        ox.ctcs(a_long <= A_MAX, penalty="huber"),
-        ox.ctcs(-A_MAX <= a_long, penalty="huber"),
-    ]
-)
+constraints.append(ox.ctcs(a_lat**2 + a_long**2 <= A_MAX**2, penalty="huber"))
 
 # ── Problem ────────────────────────────────────────────────────────────────────
 problem = ox.Problem(
@@ -220,7 +245,15 @@ problem = ox.Problem(
     float_dtype="float64",
     licq_max=1e-12,
     algorithm={
-        "lam_cost": 1e-1,
+        # lam_prox from a cold-solve sweep on this problem: at 1e-1 a single
+        # solve reaches the anchored optimum (no warm-start continuation
+        # needed, unlike the hybrid twin at 3e-1). Beware loosening it
+        # further: the lane is a soft (huber) CTCS penalty, so looser anchors
+        # (~1e-2) still report convergence while the propagated trajectory
+        # cuts corners — validate a retune against the lane violation, not
+        # just the lap time.
+        "lam_prox": 1e-1,
+        "lam_cost": 3e0,
         "lam_vc": 1e2,
         "autotuner": ox.AugmentedLagrangian(eta_lambda=1e0),
     },
@@ -234,15 +267,15 @@ problem.settings.prp.rtol = 1e-10
 
 
 def plot_race_results(results) -> None:
-    """Two Plotly figures mirroring the acados benchmark plots.
+    """Track projection coloured by throttle, plus the g-g diagram.
 
     All signals come from ``results.trajectory`` (dense single-shot propagation
     from post_process), not from the sparse optimisation nodes.
     """
     import plotly.graph_objects as go
-    from time2spatial import transformProj2Orig
 
-    from examples.race_cars._plotting import acceleration_figure, track_figure
+    from examples.car.racing._plotting import gg_figure, track_figure
+    from examples.car.racing._time2spatial import transformProj2Orig
 
     traj = results.trajectory
     t = results.t_full  # (n_times,)  dense time vector
@@ -253,85 +286,46 @@ def plot_race_results(results) -> None:
     v_sol = traj["v"][:, 0]
     D_sol = traj["D"][:, 0]
     delta_sol = traj["delta"][:, 0]
-    # ── Plot 1: track projection coloured by speed ────────────────────────────
+
     # Trim warm-up region (s < 0) to match the acados plotting convention.
     lap_start = np.searchsorted(s_sol, 0.0)
-    s_sol = s_sol[lap_start:]
-    n_sol = n_sol[lap_start:]
-    alpha_sol = alpha_sol[lap_start:]
-    v_sol = v_sol[lap_start:]
-    D_sol = D_sol[lap_start:]
-    delta_sol = delta_sol[lap_start:]
-    t = t[lap_start:]
+    sl = slice(lap_start, None)
+    s_sol, n_sol, alpha_sol, v_sol = s_sol[sl], n_sol[sl], alpha_sol[sl], v_sol[sl]
+    D_sol, delta_sol, t = D_sol[sl], delta_sol[sl], t[sl]
 
-    # Convert path-parametric (s, n) → Cartesian (x, y) via track geometry
-    cart_x, cart_y, _, _ = transformProj2Orig(s_sol, n_sol, alpha_sol, v_sol, "LMS_Track.txt")
+    # ── Plot 1: track projection coloured by throttle/braking ─────────────────
+    cart_x, cart_y, _, _ = transformProj2Orig(s_sol, n_sol, alpha_sol, v_sol, TRACK_FILE)
 
-    fig2 = track_figure(
-        "LMS_Track.txt",
+    fig1 = track_figure(
+        TRACK_FILE,
         n.max[0],
-        title=f"OpenSCvx — track projection  (T = {t[-1]:.2f} s)",
-        distance_marker_step=1.0,
+        title=f"OpenSCvx — pure-ICE minimum-time lap  (T = {t[-1]:.2f} s)",
+        distance_marker_step=4.0,
     )
-
-    # ── Multishot segments ────────────────────────────────────────────────────
-    # Each SCP shooting interval is integrated independently; plotting them as
-    # individual thin lines reveals inter-segment defects (gaps = linearisation
-    # error still present at this iteration).
-    ms = results.multishot_propagation()
-    if ms is not None:
-        first_ms_seg = True
-        for seg_idx in range(ms.n_segments):
-            seg_states = ms.segment_states(seg_idx)  # (n_substeps, n_x)
-            # columns follow Problem state order: [s, n, alpha, v, D, delta, ...]
-            seg_s = seg_states[:, 0]
-            seg_n = seg_states[:, 1]
-            seg_alpha = seg_states[:, 2]
-            seg_v = seg_states[:, 3]
-            mx, my, _, _ = transformProj2Orig(seg_s, seg_n, seg_alpha, seg_v, "LMS_Track.txt")
-            fig2.add_trace(
-                go.Scatter(
-                    x=mx,
-                    y=my,
-                    mode="lines",
-                    line=dict(color="rgba(100,100,100,0.35)", width=1),
-                    name="multishot segments" if first_ms_seg else None,
-                    showlegend=first_ms_seg,
-                    legendgroup="multishot",
-                )
-            )
-            first_ms_seg = False
-
-    # Single-shot propagation coloured by speed (on top)
-    fig2.add_trace(
+    fig1.add_trace(
         go.Scatter(
             x=cart_x,
             y=cart_y,
             mode="markers",
             marker=dict(
-                color=v_sol,
-                colorscale="Rainbow",
+                color=D_sol,
+                colorscale="RdBu_r",
+                cmid=0.0,
                 size=4,
-                colorbar=dict(title="v [m/s]"),
+                colorbar=dict(title="throttle D<br>drive > 0 > brake"),
                 showscale=True,
             ),
             name="single-shot (post_process)",
         )
     )
-    fig2.show()
+    fig1.show()
 
-    # ── Plot 2: lateral & longitudinal acceleration vs bounds ──────────────────
+    # ── Plot 2: g-g diagram against the friction ellipse ──────────────────────
     Fxd_sol = (Cm1 - Cm2 * v_sol) * D_sol - Cr2 * v_sol**2 - Cr0 * np.tanh(5.0 * v_sol)
     a_lat_sol = C2 * v_sol**2 * delta_sol + Fxd_sol * np.sin(C1 * delta_sol) / m
     a_long_sol = Fxd_sol / m
 
-    acceleration_figure(
-        t,
-        a_lat_sol,
-        a_long_sol,
-        a_max=A_MAX,
-        title="OpenSCvx — lateral & longitudinal acceleration",
-    ).show()
+    gg_figure(a_lat_sol, a_long_sol, v_sol, a_max=A_MAX).show()
 
 
 if __name__ == "__main__":
@@ -340,31 +334,36 @@ if __name__ == "__main__":
     results = problem.post_process()
 
     nodes = results.nodes
-    print("\n=== Race Car Results ===")
-    print(f"  Lap time     : {nodes['time'][-1, 0]:.3f} s")
-    print(f"  Final s      : {nodes['s'][-1, 0]:.4f} m  (target {pathlength:.4f} m)")
-    print(f"  Max speed    : {nodes['v'].max():.3f} m/s")
-    print(f"  Converged    : {results.converged}")
+    print("\n=== Pure-ICE Race Car Results ===")
+    print(f"  Lap time  : {nodes['time'][-1, 0]:.3f} s")
+    print(f"  Final s   : {nodes['s'][-1, 0]:.4f} m  (target {pathlength:.4f} m)")
+    print(f"  Max speed : {nodes['v'].max():.3f} m/s")
+    print(f"  Converged : {results.converged}")
 
     if os.environ.get("OPENSCVX_NO_PLOT") is None:
         plot_states(results).show()
         plot_controls(results).show()
         plot_race_results(results)
 
-        from examples.race_cars._viser import (
+        from examples.car.racing._viser import (
             create_race_car_chase_viser_server,
-            create_race_car_viser_server,
+            create_race_car_comparison_viser_server,
         )
 
-        overview_server = create_race_car_viser_server(
-            results,
-            track_file="LMS_Track.txt",
+        overview_server = create_race_car_comparison_viser_server(
+            [results],
+            labels=["pure ICE"],
+            colors=[(220, 35, 45)],
+            track_file=TRACK_FILE,
             lane_width=n.max[0],
+            distance_marker_step=None,  # clean look — set "auto" to bring markers back
         )
         chase_server = create_race_car_chase_viser_server(
             results,
-            track_file="LMS_Track.txt",
+            track_file=TRACK_FILE,
             lane_width=n.max[0],
+            distance_marker_step=None,
+            title="Pure ICE",
         )
-        print("Overview camera and chase camera are on separate Viser ports (two browser tabs).")
+        print("Track overview and chase camera are on separate Viser ports.")
         chase_server.sleep_forever()

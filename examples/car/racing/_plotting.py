@@ -13,7 +13,7 @@ library deliberately ships domain-generic primitives instead (see
 ``docs/UsersGuide/05_visualization.md``).
 
 The two ``*_panel`` builders return the ``{"figure", "update", "aspect"}``
-dicts that :func:`examples.race_cars._viser.create_race_car_comparison_viser_server`
+dicts that :func:`examples.car.racing._viser.create_race_car_comparison_viser_server`
 accepts as ``plot_panels``. They import nothing from that module, so the
 dependency between the 2D figures and the 3D scene runs one way.
 """
@@ -23,7 +23,7 @@ from __future__ import annotations
 import numpy as np
 import plotly.graph_objects as go
 
-from examples.race_cars.tracks.readDataFcn import getTrack
+from examples.car.racing._tracks.readDataFcn import getTrack
 
 # Figure heights. Equal-aspect figures need the extra room; a plain signal
 # against time does not, and a stack of them grows by a band per row until it
@@ -67,7 +67,7 @@ def track_figure(
 
     ``distance_marker_step`` spaces the "x m" arc-length labels along the
     centreline in metres, mirroring the argument of the same name on
-    :func:`examples.race_cars._viser._add_lms_track_scene`; ``None`` hides them.
+    :func:`examples.car.racing._viser._add_lms_track_scene`; ``None`` hides them.
     """
     sref, xref, yref, psiref, _ = getTrack(track_file)
 

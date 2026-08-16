@@ -16,8 +16,6 @@ Plotly side of the same examples lives in ``_plotting.py``.
 
 from __future__ import annotations
 
-import os
-import sys
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -25,14 +23,8 @@ import numpy as np
 if TYPE_CHECKING:
     import viser
 
-# The vendored acados helper imports ``tracks.readDataFcn`` as a top-level
-# module, so this directory has to be importable before it is.
-_current_dir = os.path.dirname(os.path.abspath(__file__))
-if _current_dir not in sys.path:
-    sys.path.insert(0, _current_dir)
-
-from examples.race_cars.time2spatial import transformProj2Orig
-from examples.race_cars.tracks.readDataFcn import getTrack
+from examples.car.racing._time2spatial import transformProj2Orig
+from examples.car.racing._tracks.readDataFcn import getTrack
 
 # Body sits slightly above the asphalt strip (m).
 CAR_RIDE_HEIGHT = 0.012

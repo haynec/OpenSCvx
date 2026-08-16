@@ -48,14 +48,12 @@ import jax.numpy as jnp
 import numpy as np
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(os.path.dirname(current_dir))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
 if project_root not in sys.path:
     sys.path.append(project_root)
-sys.path.insert(0, current_dir)
-
-from tracks.readDataFcn import getTrack
 
 import openscvx as ox
+from examples.car.racing._tracks.readDataFcn import getTrack
 
 # ── Roster ─────────────────────────────────────────────────────────────────────
 AGENTS = [
@@ -691,9 +689,9 @@ def plot_race(log: RaceLog) -> None:
     the field — is visible directly.
     """
     import plotly.graph_objects as go
-    from time2spatial import transformProj2Orig
 
-    from examples.race_cars._plotting import TRACE_HEIGHT, track_figure
+    from examples.car.racing._plotting import TRACE_HEIGHT, track_figure
+    from examples.car.racing._time2spatial import transformProj2Orig
 
     css = [f"rgb{spec['color']}" for spec in AGENTS]
     laps_x = log.dense_x[:, :, COL["s"]] / pathlength  # (K, Td) race distance in laps
@@ -772,7 +770,7 @@ def build_viser_panels(log: RaceLog) -> list[dict]:
     ``_plotting``; what this example contributes is *which* telemetry the
     sidebar shows — no battery here, the cars carry no hybrid system.
     """
-    from examples.race_cars._plotting import gg_panel, stripline_panel
+    from examples.car.racing._plotting import gg_panel, stripline_panel
 
     css = [f"rgb{spec['color']}" for spec in AGENTS]
     end = [crossing_index(log.dense_x[i, :, COL["s"]]) for i in range(K)]
@@ -967,7 +965,7 @@ if __name__ == "__main__":
     if os.environ.get("OPENSCVX_NO_PLOT") is None:
         plot_race(log)
 
-        from examples.race_cars._viser import create_race_car_comparison_viser_server
+        from examples.car.racing._viser import create_race_car_comparison_viser_server
 
         # Trim each car's dense log at its own flag crossing so the replay
         # parks it at the line and the finishing gaps stay visible.

@@ -80,16 +80,13 @@ jax.config.update("jax_enable_x64", True)
 import numpy as np
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.dirname(os.path.dirname(current_dir))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
 if project_root not in sys.path:
     sys.path.append(project_root)
 
-# Track loader lives alongside this file
-sys.path.insert(0, current_dir)
-
-from tracks.readDataFcn import getTrack
 
 import openscvx as ox
+from examples.car.racing._tracks.readDataFcn import getTrack
 from openscvx.plotting import plot_controls, plot_states
 
 # ── Track data ─────────────────────────────────────────────────────────────────
@@ -408,9 +405,9 @@ def plot_race_results(results) -> None:
     from post_process), not from the sparse optimisation nodes.
     """
     import plotly.graph_objects as go
-    from time2spatial import transformProj2Orig
 
-    from examples.race_cars._plotting import TRACE_HEIGHT, gg_figure, track_figure
+    from examples.car.racing._plotting import TRACE_HEIGHT, gg_figure, track_figure
+    from examples.car.racing._time2spatial import transformProj2Orig
 
     traj = results.trajectory
     t = results.t_full  # (n_times,)  dense time vector
@@ -550,7 +547,7 @@ if __name__ == "__main__":
         plot_controls(hybrid).show()
         plot_race_results(hybrid)
 
-        from examples.race_cars._viser import (
+        from examples.car.racing._viser import (
             create_race_car_chase_viser_server,
             create_race_car_comparison_viser_server,
         )
