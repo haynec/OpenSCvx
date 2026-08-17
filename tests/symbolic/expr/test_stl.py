@@ -1018,3 +1018,25 @@ def test_until_repr():
     _, p1, p2 = _make_predicates()
     r = repr(Until(p1, p2, (0, 5)))
     assert "Until" in r
+
+
+# =============================================================================
+# Citation Tests
+# =============================================================================
+
+
+def test_stl_operators_cite_gmsr():
+    _, p1, p2 = _make_predicates()
+    for node in (Or(p1, p2), And(p1, p2), Not(p1), Always(p1)):
+        entries = node.citation()
+        assert len(entries) == 1
+        assert "uzun2024gmsr" in entries[0]
+
+
+def test_stljax_operators_cite_stljax():
+    from openscvx.symbolic.expr import stljax
+
+    _, p1, p2 = _make_predicates()
+    entries = stljax.Or(p1, p2).citation()
+    assert len(entries) == 1
+    assert "kapoor2025stlcg" in entries[0]

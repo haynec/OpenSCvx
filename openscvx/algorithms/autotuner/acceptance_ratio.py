@@ -88,6 +88,29 @@ class AcceptanceRatioAutotuner(AutotuningBase):
         Column("adaptive_state", "Adaptive", 16, "{}", color_adaptive_state, Verbosity.FULL),
     ]
 
+    def citation(self) -> List[str]:
+        """Return BibTeX citations for the SCvx acceptance-ratio update rule."""
+        return [
+            r"""@inproceedings{mao2016scvx,
+  title={Successive convexification of non-convex optimal control problems and its
+    convergence properties},
+  author={Mao, Yuanqi and Szmuk, Michael and A{\c{c}}{\i}kme{\c{s}}e, Beh{\c{c}}et},
+  booktitle={2016 IEEE 55th Conference on Decision and Control (CDC)},
+  pages={3636--3641},
+  year={2016},
+  publisher={IEEE}
+}""",
+            r"""@misc{mao2019scvx,
+  title={Successive Convexification: A Superlinearly Convergent Algorithm for
+    Non-convex Optimal Control Problems},
+  author={Mao, Yuanqi and Szmuk, Michael and Xu, Xiangru and A{\c{c}}{\i}kme{\c{s}}e, Beh{\c{c}}et},
+  year={2019},
+  eprint={1804.06539},
+  archivePrefix={arXiv},
+  primaryClass={math.OC}
+}""",
+        ]
+
     def _update_multipliers(
         self,
         state: "AlgorithmState",

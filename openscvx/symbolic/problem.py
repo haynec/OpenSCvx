@@ -117,3 +117,42 @@ class SymbolicProblem:
         2. Propagation dynamics have been set up
         """
         return self.constraints.is_categorized and self.dynamics_prop is not None
+
+    def citations(self) -> Dict[str, List[str]]:
+        """Collect BibTeX citations from every expression node in the problem.
+
+        Walks the dynamics, constraint, and propagation expression graphs and
+        gathers :meth:`~openscvx.symbolic.expr.expr.Expr.citation` from each
+        node, so :meth:`openscvx.Problem.citation` can credit the published
+        methods a problem actually uses (e.g. GMSR STL operators, jaxlie-backed
+        Lie-group maps). Works at either lifecycle stage: unsorted constraints
+        are scanned before preprocessing, categorized ones after.
+
+        Returns:
+            Mapping from node class name to the deduplicated BibTeX entries
+            cited by nodes of that name, containing only names that cite
+            anything. Same-named classes (e.g. the GMSR and stljax ``Or``)
+            share a key; their entries are merged.
+        """
+        from openscvx.symbolic.expr import walk
+
+        roots: List["Expr"] = [self.dynamics]
+        for optional in (self.dynamics_discrete, self.dynamics_prop):
+            if optional is not None:
+                roots.append(optional)
+        if self.algebraic_prop:
+            roots.extend(self.algebraic_prop.values())
+        c = self.constraints
+        roots.extend(
+            [*c.unsorted, *c.ctcs, *c.nodal, *c.nodal_convex, *c.cross_node, *c.cross_node_convex]
+        )
+
+        cited: Dict[str, List[str]] = {}
+        for root in roots:
+            for node in walk(root):
+                entries = node.citation()
+                if not entries:
+                    continue
+                bucket = cited.setdefault(type(node).__name__, [])
+                bucket.extend(e for e in entries if e not in bucket)
+        return cited

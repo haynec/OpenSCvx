@@ -12,11 +12,12 @@ Note:
     SE3 tangent parameterization, so no reordering is needed during lowering.
 """
 
-from typing import Tuple, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 
 from ..expr import Expr, to_expr
+from ._citations import JAXLIE_CITATION
 
 
 class SE3Exp(Expr):
@@ -80,6 +81,10 @@ class SE3Exp(Expr):
 
     def children(self):
         return [self.twist]
+
+    def citation(self) -> List[str]:
+        """Return the BibTeX citation for jaxlie, which backs this map's lowering."""
+        return [JAXLIE_CITATION]
 
     def canonicalize(self) -> "Expr":
         twist = self.twist.canonicalize()
@@ -149,6 +154,10 @@ class SE3Log(Expr):
 
     def children(self):
         return [self.transform]
+
+    def citation(self) -> List[str]:
+        """Return the BibTeX citation for jaxlie, which backs this map's lowering."""
+        return [JAXLIE_CITATION]
 
     def canonicalize(self) -> "Expr":
         transform = self.transform.canonicalize()

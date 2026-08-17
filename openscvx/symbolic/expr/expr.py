@@ -67,7 +67,7 @@ import functools
 import hashlib
 import struct
 import threading
-from typing import TYPE_CHECKING, Callable, List, Tuple, Union
+from typing import TYPE_CHECKING, Callable, Iterator, List, Tuple, Union
 
 if TYPE_CHECKING:
     from .linalg import Transpose
@@ -357,6 +357,20 @@ class Expr:
         """
         return []
 
+    def citation(self) -> List[str]:
+        """Return BibTeX citations for the published method behind this node.
+
+        Most nodes are plain arithmetic and cite nothing. Nodes that implement
+        a published formulation or defer to an external library (e.g. the GMSR
+        STL operators, the jaxlie-backed Lie-group maps) override this so that
+        :meth:`openscvx.Problem.citation` can credit the methods a problem
+        actually uses by scanning its expression trees.
+
+        Returns:
+            List of BibTeX citation strings. Empty for uncited nodes.
+        """
+        return []
+
     def canonicalize(self) -> "Expr":
         """
         Return a canonical (simplified) form of this expression.
@@ -629,6 +643,32 @@ def traverse(expr: Expr, visit: Callable[[Expr], None]):
     visit(expr)
     for child in expr.children():
         traverse(child, visit)
+
+
+def walk(expr: Expr) -> Iterator[Expr]:
+    """Yield ``expr`` and every node reachable through ``children()``, each once.
+
+    The counterpart of :func:`ast.walk` for symbolic expressions: a pre-order
+    traversal of the expression graph. Unlike :func:`traverse`, each distinct
+    node is visited a single time — canonicalization preserves sharing, so an
+    expression is generally a DAG, and revisiting shared subexpressions can be
+    exponentially wasteful.
+
+    Args:
+        expr: Root expression to traverse.
+
+    Yields:
+        Each distinct node in the expression graph, parents before children.
+    """
+    seen = set()
+    stack = [expr]
+    while stack:
+        node = stack.pop()
+        if id(node) in seen:
+            continue
+        seen.add(id(node))
+        yield node
+        stack.extend(node.children())
 
 
 class Constant(Leaf):
