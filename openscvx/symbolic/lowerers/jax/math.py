@@ -1,6 +1,6 @@
 """JAX visitors for math expressions.
 
-Visitors: Sin, Cos, Tan, Asin, Acos, Atan, Atan2, Square, Sqrt, Exp, Log, Abs,
+Visitors: Sin, Cos, Tan, Tanh, Asin, Acos, Atan, Atan2, Square, Sqrt, Exp, Log, Abs,
           Max, Min, PositivePart, Huber, SmoothReLU, LogSumExp, Linterp, Cinterp,
           Bilerp
 
@@ -42,6 +42,7 @@ from openscvx.symbolic.expr.math import (
     Sqrt,
     Square,
     Tan,
+    Tanh,
 )
 from openscvx.symbolic.lowerers.jax._registry import visitor  # noqa: F401
 
@@ -65,6 +66,13 @@ def _visit_tan(lowerer, node: Tan):
     """Lower tangent function to JAX function."""
     fO = lowerer.lower(node.operand)
     return lambda x, u, node, params: jnp.tan(fO(x, u, node, params))
+
+
+@visitor(Tanh)
+def _visit_tanh(lowerer, node: Tanh):
+    """Lower hyperbolic tangent function to JAX function."""
+    fO = lowerer.lower(node.operand)
+    return lambda x, u, node, params: jnp.tanh(fO(x, u, node, params))
 
 
 @visitor(Asin)

@@ -9,6 +9,7 @@ exactly as running the file standalone would) and validates that it converges.
 
 import importlib.util
 import sys
+from fnmatch import fnmatch
 from pathlib import Path
 
 import jax
@@ -16,7 +17,12 @@ import pytest
 
 EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
 
-IGNORED_FILES = ["__init__.py", "plotting.py", "_viser_embed_export.py"]
+# Shared helper modules, not examples: package markers, the private per-family
+# helpers (``examples/_maze.py``, ``examples/drone/_plotting.py``, ...), helper
+# packages (``examples/car/racing/_tracks/``, ...), and the shared plotting tier
+# (``plotting.py``, ``plotting_viser.py``). Matched by naming convention — an
+# underscore prefix on any path component — rather than by hand.
+IGNORED_FILES = ["__init__.py", "_*.py", "plotting*.py"]
 
 # Examples excluded from CI (e.g. exceeds runner memory)
 EXCLUDED_EXAMPLES = {
@@ -24,7 +30,7 @@ EXCLUDED_EXAMPLES = {
     "arm/7_dof_arm_collision.py",
     "drone/logo.py",
     "drone/openscvx_logo.py",
-    "drone/obstacle_avoidance_vmap.py",
+    "double_integrator/obstacle_avoidance_vmap.py",
     "mjx/triple_cartpole_game.py",
     "rocket/ascent_launch_vehicle.py",
 }
@@ -75,7 +81,10 @@ TIMING_BOUNDS = {
 
 def _excluded(rel_path: Path) -> bool:
     """Return True if ``rel_path`` (relative to examples/) should not be tested."""
-    if rel_path.name in IGNORED_FILES:
+    if any(fnmatch(rel_path.name, pat) for pat in IGNORED_FILES):
+        return True
+    # Underscore-prefixed directories hold support code, not examples
+    if any(part.startswith("_") for part in rel_path.parts[:-1]):
         return True
     # Realtime examples require special event loop handling
     if "realtime" in rel_path.parts:

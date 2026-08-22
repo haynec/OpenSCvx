@@ -46,6 +46,7 @@ from openscvx.plotting.viser import (
     add_glideslope_cone,
     compute_velocity_colors,
     create_server,
+    model_vec_to_viser_xyz,
 )
 
 # ── Problem dimensions ──────────────────────────────────────────────────────
@@ -245,21 +246,8 @@ problem = Problem(
 problem.settings.prp.dt = 0.02
 
 
-# ── Viser coordinate helpers ─────────────────────────────────────────────────
-# The model uses position = [altitude, lat_y, lat_z].
-# Viser convention follows the realtime PDG example: model (a, b, c) → Viser (c, b, a).
-# Altitude (position[0]) therefore maps to the Viser z-axis.
-
-
-def model_to_viser(pts: np.ndarray) -> np.ndarray:
-    """Remap ``(*, 3)`` model-frame positions to Viser XYZ.
-
-    Model [altitude, lat_y, lat_z] → Viser [lat_z, lat_y, altitude].
-    """
-    pts = np.asarray(pts, dtype=np.float64)
-    return np.stack([pts[..., 2], pts[..., 1], pts[..., 0]], axis=-1)
-
-
+# The model uses position = [altitude, lat_y, lat_z]; the library remap sends
+# model (a, b, c) → Viser (c, b, a), so altitude lands on the Viser z-axis.
 def quat_xyzw_to_wxyz(q: np.ndarray) -> np.ndarray:
     """Convert ``(*, 4)`` quaternion from [q1,q2,q3,q4=w] to Viser [w,x,y,z]."""
     q = np.asarray(q, dtype=np.float64)
@@ -298,7 +286,7 @@ def create_pdg_batched_viser_server(
     pos_model = x_full[:, :, 1:4]  # (B, T, 3)
     vel_model = x_full[:, :, 4:7]  # (B, T, 3)
 
-    pos_viser = model_to_viser(pos_model)  # (B, T, 3)  Viser frame
+    pos_viser = model_vec_to_viser_xyz(pos_model)  # (B, T, 3)  Viser frame
 
     # Create server — frame camera around all trajectory points.
     server = create_server(pos_viser.reshape(-1, 3))
@@ -334,7 +322,7 @@ def create_pdg_batched_viser_server(
             colors=color,
             line_width=1.0,
         )
-        ic_viser = model_to_viser(ic_batch[b : b + 1])[0]
+        ic_viser = model_vec_to_viser_xyz(ic_batch[b : b + 1])[0]
         server.scene.add_icosphere(
             f"/traces/{b}/start",
             radius=0.10,

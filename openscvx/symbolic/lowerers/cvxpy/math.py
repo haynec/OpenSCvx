@@ -1,6 +1,6 @@
 """CVXPy visitors for math expressions.
 
-Visitors: Sin, Cos, Tan, Exp, Log, Abs, PositivePart, Square, Huber,
+Visitors: Sin, Cos, Tan, Tanh, Exp, Log, Abs, PositivePart, Square, Huber,
           SmoothReLU, Sqrt, Max, Min, LogSumExp, Linterp, Cinterp, Bilerp
 
 Lowers the scalar math AST nodes to CVXPy expressions, but only the subset with a
@@ -33,6 +33,7 @@ from openscvx.symbolic.expr.math import (
     Sqrt,
     Square,
     Tan,
+    Tanh,
 )
 from openscvx.symbolic.lowerers.cvxpy._registry import visitor  # noqa: F401
 
@@ -104,6 +105,16 @@ def _visit_tan(lowerer, node: Tan) -> cp.Expression:
     """
     raise NotImplementedError(
         "Trigonometric functions like Tan are not DCP-compliant in CVXPy. "
+        "Consider using piecewise-linear approximations or handle these constraints "
+        "in the dynamics (JAX) layer instead."
+    )
+
+
+@visitor(Tanh)
+def _visit_tanh(lowerer, node: Tanh) -> cp.Expression:
+    """Raise NotImplementedError for hyperbolic tangent function."""
+    raise NotImplementedError(
+        "Hyperbolic functions like Tanh are not DCP-compliant in CVXPy. "
         "Consider using piecewise-linear approximations or handle these constraints "
         "in the dynamics (JAX) layer instead."
     )

@@ -1,4 +1,10 @@
-"""Publication-style plotting helpers (white theme, Latin Modern, PDF export)."""
+"""Publication-style plotting helpers (Latin Modern, fixed geometry, PDF export).
+
+Two publication styles share the same fonts, LaTeX labels, and fixed panel
+geometry and differ only in palette: ``"publication"`` is white, for print, and
+``"publication_dark"`` is the dark twin, for slides and for figures shown next
+to a viser scene. PDF export is print-oriented and stays white in both.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +17,7 @@ import plotly.graph_objects as go
 
 from openscvx.algorithms import OptimizationResults
 
-PlotStyle = Literal["dark", "publication"]
+PlotStyle = Literal["dark", "publication", "publication_dark"]
 VarSpec = str | tuple[str, int]
 
 _LM_PLOTLY_FAMILY = "Latin Modern Roman"
@@ -37,6 +43,15 @@ _PUBLICATION_COLORS = {
     "nodes_prior": "#CC6677",
     "bounds": "#CC3311",
     "impulses": "#EE7733",
+}
+
+# Dark surround for ``style="publication_dark"``. The background matches the
+# viser canvas (#101113) closely enough that a figure placed beside a 3D scene
+# reads as one image; the trace colors above are unchanged and stay legible on it.
+_PUBLICATION_DARK_COLORS = {
+    "background": "#111111",
+    "grid": "#2c2e33",
+    "foreground": "#e0e0e0",
 }
 
 # Fixed publication geometry: each subplot panel is the same size in px and inches.
@@ -250,35 +265,54 @@ def apply_publication_plotly_layout(
     n_rows: int = 1,
     n_cols: int = 1,
     extra_legend_width: int = 0,
+    dark: bool = False,
+    width: int | None = None,
+    height: int | None = None,
 ) -> None:
-    """Apply white theme, Latin Modern fonts, LaTeX-friendly defaults, and fixed size."""
-    width, height = publication_grid_size(
+    """Apply Latin Modern fonts, LaTeX-friendly defaults, and fixed size to a figure.
+
+    Args:
+        fig: Figure to restyle in place.
+        n_rows: Rows in the subplot grid, used to size the figure.
+        n_cols: Columns in the subplot grid, used to size the figure.
+        extra_legend_width: Pixels to add for a legend outside the panels.
+        dark: Use the dark palette (:func:`publication_dark_colors`) instead of white.
+        width: Overrides the grid-derived width, in pixels. Pass it for figures
+            whose aspect ratio is set by the data rather than by the panel grid,
+            such as an equal-axis planar trajectory.
+        height: Overrides the grid-derived height, in pixels.
+    """
+    grid_width, grid_height = publication_grid_size(
         n_rows,
         n_cols,
         extra_legend_width=extra_legend_width,
     )
+    dark_colors = publication_dark_colors()
+    background = dark_colors["background"] if dark else "white"
+    grid_color = dark_colors["grid"] if dark else "rgba(0,0,0,0.08)"
+    zeroline_color = dark_colors["grid"] if dark else "rgba(0,0,0,0.15)"
+    font = {**LM_PLOTLY_FONT, "color": dark_colors["foreground"]} if dark else LM_PLOTLY_FONT
+    tick_font = (
+        {**LM_PLOTLY_TICK_FONT, "color": dark_colors["foreground"]} if dark else LM_PLOTLY_TICK_FONT
+    )
+
     fig.update_layout(
-        template="plotly_white",
-        paper_bgcolor="white",
-        plot_bgcolor="white",
-        font=LM_PLOTLY_FONT,
+        template="plotly_dark" if dark else "plotly_white",
+        paper_bgcolor=background,
+        plot_bgcolor=background,
+        font=font,
         autosize=False,
-        width=width,
-        height=height,
+        width=grid_width if width is None else width,
+        height=grid_height if height is None else height,
         margin=_PUBLICATION_MARGIN,
     )
-    fig.update_xaxes(
-        title_font=LM_PLOTLY_FONT,
-        tickfont=LM_PLOTLY_TICK_FONT,
-        gridcolor="rgba(0,0,0,0.08)",
-        zerolinecolor="rgba(0,0,0,0.15)",
-    )
-    fig.update_yaxes(
-        title_font=LM_PLOTLY_FONT,
-        tickfont=LM_PLOTLY_TICK_FONT,
-        gridcolor="rgba(0,0,0,0.08)",
-        zerolinecolor="rgba(0,0,0,0.15)",
-    )
+    for update_axes in (fig.update_xaxes, fig.update_yaxes):
+        update_axes(
+            title_font=font,
+            tickfont=tick_font,
+            gridcolor=grid_color,
+            zerolinecolor=zeroline_color,
+        )
 
 
 def show_plotly_with_latin_modern(fig: go.Figure) -> None:
@@ -298,7 +332,18 @@ def show_plotly_with_latin_modern(fig: go.Figure) -> None:
 
 
 def publication_trace_colors() -> dict[str, str]:
+    """Trace colors (trajectory, nodes, bounds, impulses) shared by both publication styles."""
     return dict(_PUBLICATION_COLORS)
+
+
+def publication_dark_colors() -> dict[str, str]:
+    """Surround colors (``background``, ``grid``, ``foreground``) for ``"publication_dark"``.
+
+    Figures assembled by hand — matplotlib PDF exports especially — should read
+    the palette from here rather than respell the hex values, so a dark figure
+    matches one produced by ``style="publication_dark"``.
+    """
+    return dict(_PUBLICATION_DARK_COLORS)
 
 
 class PublicationFigure:
@@ -326,7 +371,14 @@ def _resolve_pdf_path(path: str | Path | None, default_name: str) -> Path:
     return out
 
 
-def _apply_lm_to_matplotlib_axis(ax, lm_fp) -> None:
+def apply_latin_modern_to_axis(ax, lm_fp) -> None:
+    """Restyle a matplotlib axis' ticks, labels, and title in Latin Modern.
+
+    Matplotlib applies a font at draw time per artist, so text created before
+    the font was chosen keeps the default; call this once an axis is fully
+    populated. ``lm_fp`` is a :func:`latin_modern_fontproperties` result, and
+    ``None`` (font not installed) leaves the axis untouched.
+    """
     if lm_fp is None:
         return
     for lbl in ax.get_xticklabels() + ax.get_yticklabels():
@@ -463,7 +515,7 @@ def save_timeseries_pdf(
 
         ax.set_xlabel(_TIME_LABEL, fontproperties=lm_fp)
         ax.set_ylabel(ylabel, fontproperties=lm_fp)
-        _apply_lm_to_matplotlib_axis(ax, lm_fp)
+        apply_latin_modern_to_axis(ax, lm_fp)
 
         if idx == 0:
             leg = ax.legend(loc="best", frameon=False, fontsize=8, prop=lm_fp)
@@ -603,7 +655,7 @@ def save_scp_iterations_pdf(
                 )
         if row == total_rows - 1:
             ax.set_xlabel(_TIME_LABEL, fontproperties=lm_fp)
-        _apply_lm_to_matplotlib_axis(ax, lm_fp)
+        apply_latin_modern_to_axis(ax, lm_fp)
 
     for control_idx, control in enumerate(expanded_controls):
         row = n_state_rows + (control_idx // n_control_cols)
@@ -626,7 +678,7 @@ def save_scp_iterations_pdf(
                 )
         if row == total_rows - 1:
             ax.set_xlabel(_TIME_LABEL, fontproperties=lm_fp)
-        _apply_lm_to_matplotlib_axis(ax, lm_fp)
+        apply_latin_modern_to_axis(ax, lm_fp)
 
     used = n_states + n_controls
     for idx in range(used, total_rows * max_cols):

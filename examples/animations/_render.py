@@ -25,7 +25,9 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import threading
 import time
+import webbrowser
 from pathlib import Path
 from typing import Callable
 
@@ -34,8 +36,109 @@ import viser
 
 from examples.plotting_viser import AnimatedServerHandle
 
-# frame_idx -> (camera_position, camera_wxyz, camera_look_at)
-CameraPoseFn = Callable[[int], tuple[np.ndarray, np.ndarray, np.ndarray]]
+# frame_idx -> (camera_position, camera_wxyz, camera_look_at | None)
+# Pass ``look_at=None`` for nadir / boresight-locked FPV poses where setting
+# look-at would fight ``wxyz`` (gimbal lock when looking along world ±up).
+CameraPoseFn = Callable[[int], tuple[np.ndarray, np.ndarray, np.ndarray | None]]
+
+
+def open_viser_client_for_render(
+    url: str,
+    *,
+    width: int = 1280,
+    height: int = 720,
+    settle_s: float = 8.0,
+) -> None:
+    """Open a headless Chromium (playwright) or system browser on ``url``.
+
+    ``client.get_render`` requires a connected viser client. Prefer playwright
+    when installed so offline exports don't need a manual tab.
+    """
+
+    def _playwright_connect() -> bool:
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            return False
+
+        # Probe launch *before* claiming success — a missing chromium install
+        # used to leave the render hung waiting for a client forever.
+        try:
+            with sync_playwright() as p:
+                browser = None
+                for kwargs in (
+                    dict(
+                        channel="chrome",
+                        headless=True,
+                        args=["--ignore-gpu-blocklist", "--enable-webgl"],
+                    ),
+                    dict(
+                        channel="chromium",
+                        headless=True,
+                        args=["--ignore-gpu-blocklist", "--enable-webgl"],
+                    ),
+                    dict(
+                        headless=True,
+                        args=["--ignore-gpu-blocklist", "--enable-webgl"],
+                    ),
+                ):
+                    try:
+                        browser = p.chromium.launch(**kwargs)
+                        break
+                    except Exception:
+                        continue
+                if browser is None:
+                    return False
+                browser.close()
+        except Exception:
+            return False
+
+        def _run() -> None:
+            with sync_playwright() as p:
+                browser = None
+                for kwargs in (
+                    dict(
+                        channel="chrome",
+                        headless=True,
+                        args=["--ignore-gpu-blocklist", "--enable-webgl"],
+                    ),
+                    dict(
+                        channel="chromium",
+                        headless=True,
+                        args=["--ignore-gpu-blocklist", "--enable-webgl"],
+                    ),
+                    dict(
+                        headless=True,
+                        args=["--ignore-gpu-blocklist", "--enable-webgl"],
+                    ),
+                ):
+                    try:
+                        browser = p.chromium.launch(**kwargs)
+                        break
+                    except Exception:
+                        continue
+                if browser is None:
+                    return
+                page = browser.new_page(
+                    viewport={"width": width + 64, "height": height + 64},
+                    device_scale_factor=1,
+                )
+                page.goto(url, wait_until="networkidle")
+                time.sleep(settle_s)
+                while True:
+                    time.sleep(1.0)
+
+        threading.Thread(target=_run, daemon=True).start()
+        return True
+
+    if _playwright_connect():
+        print(f"[render] Chromium connecting to {url}")
+        return
+    print(f"[render] opening {url} in the system browser")
+    try:
+        webbrowser.open(url, new=2)
+    except Exception as exc:  # pragma: no cover
+        print(f"[render] could not auto-open browser ({exc}); open the URL manually")
 
 
 def wait_for_client(
@@ -114,7 +217,9 @@ def render_animation_to_video(
             ``create_animated_plotting_server(..., controls="manual")``.
         output_path: Destination mp4 file. Parent dirs are created.
         camera_pose_fn: ``frame_idx -> (position, wxyz, look_at)``. Called once
-            per rendered frame to position the camera.
+            per rendered frame to position the camera. ``look_at`` may be
+            ``None`` to leave orientation entirely to ``wxyz`` (needed for
+            nadir FPV where a world-up look-at is gimbal-locked).
         width: Output video width in pixels.
         height: Output video height in pixels.
         fps: Output video frame rate.
@@ -163,8 +268,10 @@ def render_animation_to_video(
     if client is None:
         client = wait_for_client(handle.server)
 
+    render_fov_rad: float | None = None
     if fov_deg is not None:
-        client.camera.fov = np.radians(fov_deg)
+        render_fov_rad = float(np.radians(fov_deg))
+        client.camera.fov = render_fov_rad
 
     n = handle.n_frames
     if end_frame is None:
@@ -175,6 +282,9 @@ def render_animation_to_video(
             f"No frames to render: start_frame={start_frame}, "
             f"end_frame={end_frame}, n_frames={n}, stride={stride}"
         )
+
+    # Give a large mesh a moment to finish uploading after websocket connect.
+    time.sleep(2.0)
 
     cmd = [
         ffmpeg,
@@ -217,12 +327,24 @@ def render_animation_to_video(
             with client.atomic():
                 client.camera.position = pos
                 client.camera.wxyz = wxyz
-                client.camera.look_at = look_at
+                if look_at is not None:
+                    client.camera.look_at = look_at
+                if render_fov_rad is not None:
+                    client.camera.fov = render_fov_rad
             if settle_s > 0:
                 time.sleep(settle_s)
             # PNG transport is lossless RGBA. JPEG would introduce a second
             # compression pass on top of h.264 and visibly hurts quality.
-            img = client.get_render(height=height, width=width, transport_format="png")
+            # Pass pose/fov into get_render so the offscreen capture camera
+            # matches exactly (avoids a frame of stale client camera state).
+            img = client.get_render(
+                height=height,
+                width=width,
+                transport_format="png",
+                position=np.asarray(pos, dtype=np.float64),
+                wxyz=np.asarray(wxyz, dtype=np.float64),
+                fov=float(client.camera.fov),
+            )
             if img.ndim != 3 or img.shape[0] != height or img.shape[1] != width:
                 raise RuntimeError(
                     f"Unexpected get_render shape {img.shape}; "

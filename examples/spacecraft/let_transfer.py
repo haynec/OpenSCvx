@@ -215,30 +215,6 @@ def _set_projection_speed_colorbar_kms(fig) -> None:
             marker.colorbar.title = "‖velocity‖ (km/s)"
 
 
-def _create_viser_server_compat(ox_viser, pos: np.ndarray, show_grid: bool, port: int):
-    """Create a viser server across both create_server() API variants.
-
-    Some branches expose create_server(..., port=...), while others do not.
-    For the latter, use viser's `_VISER_PORT_OVERRIDE` env hook so we can still
-    bind to the requested port without changing the plotting module.
-    """
-    try:
-        return ox_viser.create_server(pos, show_grid=show_grid, port=port)
-    except TypeError as exc:
-        if "unexpected keyword argument 'port'" not in str(exc):
-            raise
-
-        previous_port_override = os.environ.get("_VISER_PORT_OVERRIDE")
-        os.environ["_VISER_PORT_OVERRIDE"] = str(port)
-        try:
-            return ox_viser.create_server(pos, show_grid=show_grid)
-        finally:
-            if previous_port_override is None:
-                os.environ.pop("_VISER_PORT_OVERRIDE", None)
-            else:
-                os.environ["_VISER_PORT_OVERRIDE"] = previous_port_override
-
-
 def _server_local_url(server, fallback_port: int) -> str:
     """Build a localhost URL from a viser server handle, with fallback."""
     try:
@@ -275,9 +251,7 @@ def _create_let_viser_server(
         moon_radius_vis = (float(moon_radius) / scale) * VISER_VISUAL_SCALE
 
         colors = ox_viser.compute_velocity_colors(vel, fallback_length=pos.shape[0])
-        server = _create_viser_server_compat(
-            ox_viser=ox_viser, pos=pos_vis, show_grid=True, port=port
-        )
+        server = ox_viser.create_server(pos_vis, show_grid=True, port=port)
 
         ox_viser.add_circular_orbit(
             server,
@@ -335,10 +309,10 @@ def _create_let_viser_server(
                 np.array([190, 150, 255], dtype=np.uint8), (guess_pos_vis.shape[0], 3)
             ).copy()
             ox_viser.add_ghost_trajectory(
-                server, guess_pos_vis, guess_colors, opacity=0.08, point_size=0.20
+                server, guess_pos_vis, guess_colors, opacity=0.08, name="/ghost_guess"
             )
 
-        ox_viser.add_ghost_trajectory(server, pos_vis, colors, opacity=0.25, point_size=0.25)
+        ox_viser.add_ghost_trajectory(server, pos_vis, colors, opacity=0.25, line_width=3.0)
         _, update_trail = ox_viser.add_animated_trail(server, pos_vis, colors, point_size=0.45)
         _, update_marker = ox_viser.add_position_marker(
             server, pos_vis, radius=spacecraft_radius, color=(255, 160, 90)
@@ -454,9 +428,7 @@ def _create_let_viser_server_inertial(
         sun_vis = np.zeros(3, dtype=np.float64)
 
         colors = ox_viser.compute_velocity_colors(vel_rot, fallback_length=pos_vis.shape[0])
-        server = _create_viser_server_compat(
-            ox_viser=ox_viser, pos=pos_vis, show_grid=True, port=port
-        )
+        server = ox_viser.create_server(pos_vis, show_grid=True, port=port)
 
         sun_radius = max(0.04 * VISER_VISUAL_SCALE, 0.2)
         earth_radius = max(0.0018 * VISER_VISUAL_SCALE, 0.035)
@@ -494,14 +466,14 @@ def _create_let_viser_server_inertial(
             np.array([90, 140, 255], dtype=np.uint8), (earth_orbit_vis.shape[0], 3)
         ).copy()
         ox_viser.add_ghost_trajectory(
-            server, earth_orbit_vis, earth_orbit_colors, opacity=0.14, point_size=0.20
+            server, earth_orbit_vis, earth_orbit_colors, opacity=0.14, name="/ghost_earth_orbit"
         )
 
         moon_orbit_colors = np.broadcast_to(
             np.array([175, 175, 175], dtype=np.uint8), (moon_vis.shape[0], 3)
         ).copy()
         ox_viser.add_ghost_trajectory(
-            server, moon_vis, moon_orbit_colors, opacity=0.04, point_size=0.10
+            server, moon_vis, moon_orbit_colors, opacity=0.04, name="/ghost_moon_orbit"
         )
 
         if guess_trajectory is not None:
@@ -523,10 +495,10 @@ def _create_let_viser_server_inertial(
                 np.array([180, 145, 250], dtype=np.uint8), (guess_vis.shape[0], 3)
             ).copy()
             ox_viser.add_ghost_trajectory(
-                server, guess_vis, guess_colors, opacity=0.07, point_size=0.20
+                server, guess_vis, guess_colors, opacity=0.07, name="/ghost_guess"
             )
 
-        ox_viser.add_ghost_trajectory(server, pos_vis, colors, opacity=0.16, point_size=0.12)
+        ox_viser.add_ghost_trajectory(server, pos_vis, colors, opacity=0.16, line_width=3.0)
         _, update_trail = ox_viser.add_animated_trail(server, pos_vis, colors, point_size=0.18)
         _, update_marker = ox_viser.add_position_marker(
             server, pos_vis, radius=spacecraft_radius, color=(255, 160, 90)

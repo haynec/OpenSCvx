@@ -274,8 +274,8 @@ For fully interactive 3D visualization with animated playback, gates, and thrust
 
 ## Further Reading
 
-- [Complete Drone Racing Example](../Examples/drone/dr_double_integrator.md)
 - [Full 6-DOF Drone Racing](../Examples/drone/drone_racing.md) — adds attitude dynamics
+- [Double-Integrator Racing MPC](../Examples/mpc/double_integrator_drone_racing.md) — the same simplified model raced in closed loop
 - [API Reference: Constraints](../Reference/symbolic/expr/constraint.md)
 - [Obstacle Avoidance: 6-DOF Dynamics, Parameters, and Vmap](03_obstacle_avoidance_vmap.md)
 - [Viewpoint Constraints: Custom Functions and Perception](04_viewpoint_constraints.md)

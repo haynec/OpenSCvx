@@ -45,6 +45,7 @@ from openscvx.symbolic.expr import (
     Sub,
     Sum,
     Tan,
+    Tanh,
     Time,
     Transpose,
     Variable,
@@ -309,6 +310,11 @@ def test_trig_functions():
     assert lower(Sin(x)) == r"\sin\left( x \right)"
     assert lower(Cos(x)) == r"\cos\left( x \right)"
     assert lower(Tan(x)) == r"\tan\left( x \right)"
+
+
+def test_hyperbolic_functions():
+    x = _sliced_state("x", 1)
+    assert lower(Tanh(x)) == r"\tanh\left( x \right)"
 
 
 def test_inverse_trig_functions():

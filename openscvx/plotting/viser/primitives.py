@@ -309,6 +309,8 @@ def add_glideslope_cone(
     opacity: float = 0.2,
     wireframe: bool = False,
     n_segments: int = 32,
+    *,
+    name: str = "/constraints/glideslope_cone",
 ) -> viser.MeshHandle:
     """Add a glideslope/approach constraint cone to the scene.
 
@@ -330,6 +332,9 @@ def add_glideslope_cone(
         opacity: Opacity (0-1)
         wireframe: If True, render as wireframe
         n_segments: Number of segments for cone smoothness
+        name: Scene path for this cone. Pass a distinct name per cone when a
+            scene shows more than one (e.g. a wide approach cone and a tight
+            terminal cone).
 
     Returns:
         Mesh handle for the cone
@@ -339,7 +344,7 @@ def add_glideslope_cone(
     vertices, faces = _generate_cone_mesh(apex, height, glideslope_angle_deg, n_segments, axis=axis)
 
     handle = server.scene.add_mesh_simple(
-        "/constraints/glideslope_cone",
+        name,
         vertices=vertices,
         faces=faces,
         color=color,
@@ -355,21 +360,34 @@ def add_ghost_trajectory(
     pos: np.ndarray,
     colors: np.ndarray,
     opacity: float = 0.3,
-    point_size: float = 0.05,
-) -> None:
+    line_width: float = 2.0,
+    *,
+    name: str = "/ghost_traj",
+) -> viser.LineSegmentsHandle:
     """Add a faint ghost trajectory showing the full path.
+
+    The path is drawn as a polyline: consecutive positions are joined by line
+    segments, each shaded by the dimmed colors of its endpoints. Lines read as a
+    continuous path at any camera distance, where a point cloud of the same
+    samples breaks up (and does not render at all in some browsers).
 
     Args:
         server: ViserServer instance
         pos: Position array of shape (N, 3)
         colors: RGB color array of shape (N, 3)
         opacity: Opacity factor (0-1) applied to colors
-        point_size: Size of trajectory points
+        line_width: Width of the path in pixels
+        name: Scene path for this trajectory. Pass a distinct name per vehicle
+            when more than one shares a server.
+
+    Returns:
+        Line segments handle for the path
     """
-    ghost_colors = (colors * opacity).astype(np.uint8)
-    server.scene.add_point_cloud(
-        "/ghost_traj",
-        points=pos,
-        colors=ghost_colors,
-        point_size=point_size,
+    pos = np.asarray(pos)
+    ghost_colors = (np.asarray(colors) * opacity).astype(np.uint8)
+    return server.scene.add_line_segments(
+        name,
+        points=np.stack([pos[:-1], pos[1:]], axis=1),
+        colors=np.stack([ghost_colors[:-1], ghost_colors[1:]], axis=1),
+        line_width=line_width,
     )

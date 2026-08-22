@@ -233,59 +233,6 @@ dynamics = {
     "time": 1.0,
 }
 
-# -----------------------------------------------------------------------------
-# Plotting patch: full_subject_traj_time for moving target
-# -----------------------------------------------------------------------------
-
-import examples.plotting
-
-
-def patched_full_subject_traj_time(results, params):
-    t_full = results.t_full
-    t_nodes = (
-        results.nodes["time"].flatten()
-        if "time" in results.nodes
-        else np.linspace(0, total_time, n)
-    )
-
-    subs_traj = []
-    subs_traj_node = []
-    subs_traj_sen = []
-    subs_traj_sen_node = []
-
-    if "moving_subject" in results.plotting_data and "get_kp_pose" in results.plotting_data:
-        custom_get_kp_pose = results.plotting_data["get_kp_pose"]
-
-        target_positions_full = []
-        target_positions_nodes = []
-        for i in range(len(t_full)):
-            t_normalized = t_full[i] / total_time
-            target_positions_full.append(np.asarray(custom_get_kp_pose(t_normalized)))
-        for i in range(len(t_nodes)):
-            t_normalized = t_nodes[i] / total_time
-            target_positions_nodes.append(np.asarray(custom_get_kp_pose(t_normalized)))
-
-        subs_traj.append(np.array(target_positions_full))
-        subs_traj_node.append(np.array(target_positions_nodes))
-    elif "init_poses" in results.plotting_data:
-        init_poses = results.plotting_data["init_poses"]
-        n_full = len(t_full)
-        n_nodes = len(t_nodes)
-        for pose in init_poses:
-            pose_full = np.repeat(pose[:, np.newaxis], n_full, axis=1).T
-            pose_node = np.repeat(pose[:, np.newaxis], n_nodes, axis=1).T
-            subs_traj.append(pose_full)
-            subs_traj_node.append(pose_node)
-    else:
-        raise ValueError("No valid method to get keypoint poses.")
-
-    subs_traj_sen = []
-    subs_traj_sen_node = []
-    return subs_traj, subs_traj_sen, subs_traj_node, subs_traj_sen_node
-
-
-examples.plotting.full_subject_traj_time = patched_full_subject_traj_time
-
 
 def angle_to_target(x_):
     """Compute the angle between boresight vector and vector to target (for analysis/plotting)."""

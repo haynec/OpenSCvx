@@ -49,8 +49,10 @@ from openscvx.plotting.viser import (
     compute_velocity_colors,
     create_server,
     extract_propagation_positions,
+    normalize_wxyz,
+    place_body_frame,
+    place_viewcone,
 )
-from openscvx.plotting.viser.animated import _normalize_wxyz, place_body_frame, place_viewcone
 
 # =============================================================================
 # Manual-stepping handle (for offline rendering)
@@ -110,6 +112,8 @@ def create_animated_plotting_server(
     viewcone_scale: float = 10.0,
     viewcone_ring_only: bool = False,
     target_radius: float = 1.0,
+    waypoint_positions: list[np.ndarray] | None = None,
+    waypoint_colors: list[tuple[int, int, int]] | None = None,
     show_control_plot: str | None = None,
     show_control_norm_plot: str | None = None,
     trail_point_size: float = 0.15,
@@ -147,6 +151,7 @@ def create_animated_plotting_server(
             - alpha_x, alpha_y: Sensor cone half-angle parameters (optional)
             - norm_type: Norm type for viewcone constraint (optional, default 2)
             - init_poses: List of viewplanning target positions (optional)
+            - waypoint_positions: Static task waypoints (optional)
             - obstacles_centers, obstacles_radii, obstacles_axes: Ellipsoid obstacles (optional)
         loop_animation: If True, loop animation when it reaches the end
         position_key: Key for position data in trajectory dict (default: "position")
@@ -169,6 +174,9 @@ def create_animated_plotting_server(
         viewcone_scale: Size/depth of viewcone mesh
         viewcone_ring_only: If True, render viewcone as a base-ring outline only
         target_radius: Radius of target marker spheres
+        waypoint_positions: Static task waypoints (e.g. zigzag nodes). Falls back to
+            ``results["waypoint_positions"]`` when omitted.
+        waypoint_colors: Per-waypoint RGB colors for ``waypoint_positions``.
         show_control_plot: If provided with a control name, displays component plot
             showing each control component vs time with animated markers
         show_control_norm_plot: If provided with a control name, displays norm plot
@@ -546,6 +554,22 @@ def create_animated_plotting_server(
         for _, update in target_results:
             if update is not None:
                 update_callbacks.append(update)
+
+    waypoints = (
+        waypoint_positions if waypoint_positions is not None else results.get("waypoint_positions")
+    )
+    if waypoints is not None:
+        scaled_waypoints = [np.asarray(p, dtype=np.float64) / scene_scale for p in waypoints]
+        wp_colors = (
+            list(waypoint_colors) if waypoint_colors is not None else results.get("waypoint_colors")
+        )
+        add_target_markers(
+            server,
+            scaled_waypoints,
+            radius=target_radius / scene_scale,
+            colors=wp_colors,
+            show_trails=False,
+        )
 
     # Add "logo" moving subject (single moving target + optional drone->target vector)
     if moving_subject and get_kp_pose is not None and total_time is not None:
@@ -1047,9 +1071,9 @@ def create_snapshot_plotting_server(
     scene_scale: float = 1.0,
     initial_n_snapshots: int = 5,
     max_n_snapshots: int | None = None,
-    background_color: tuple[int, int, int] = (255, 255, 255),
+    background_color: tuple[int, int, int] | None = None,
     show_grid: bool = False,
-    ghost_point_size: float = 0.08,
+    ghost_line_width: float = 2.0,
     ghost_opacity: float = 0.35,
     folder_name: str = "Snapshots",
     show_targets: bool = True,
@@ -1057,6 +1081,7 @@ def create_snapshot_plotting_server(
     snapshot_builder: Callable[[viser.ViserServer, int, int], list] | None = None,
     vehicle_mesh: tuple[np.ndarray, np.ndarray] | None = None,
     vehicle_mesh_color: tuple[int, int, int] = (200, 200, 210),
+    dark_mode: bool = False,
 ) -> viser.ViserServer:
     """Create a static multi-pose visualization with GUI-controlled snapshot count.
 
@@ -1098,10 +1123,11 @@ def create_snapshot_plotting_server(
         initial_n_snapshots: Initial snapshot count (overridden by
             ``results["initial_n_snapshots"]`` when set).
         max_n_snapshots: Upper bound for the GUI slider (defaults to frame count).
-        background_color: RGB canvas background (default white).
+        background_color: RGB canvas background. Defaults to black when
+            ``dark_mode`` is True and white when False.
         show_grid: Whether to draw the ground grid.
-        ghost_point_size: Point size for the ghost trajectory.
-        ghost_opacity: Opacity multiplier on velocity-colored ghost points (1.0 matches the
+        ghost_line_width: Width of the ghost trajectory path, in pixels.
+        ghost_opacity: Opacity multiplier on the velocity-colored ghost path (1.0 matches the
             animated trail brightness).
         folder_name: viser GUI folder name for the snapshot slider.
         show_targets: Draw moving/static target markers and per-snapshot target spheres.
@@ -1109,6 +1135,7 @@ def create_snapshot_plotting_server(
             Uses ``compute_boresight_intersection_trail`` when available (same as the animated
             ``/boresight_intersection_trail``); otherwise falls back to ``traced_path_on_plane``.
             A GUI slider adjusts point size live.
+        dark_mode: Whether to use the viser dark GUI theme (default False).
 
     Returns:
         ViserServer instance.
@@ -1186,7 +1213,10 @@ def create_snapshot_plotting_server(
 
     colors = compute_velocity_colors(vel, fallback_length=n_frames)
 
-    server = create_server(pos, dark_mode=False, show_grid=show_grid)
+    if background_color is None:
+        background_color = (0, 0, 0) if dark_mode else (255, 255, 255)
+
+    server = create_server(pos, dark_mode=dark_mode, show_grid=show_grid)
     _set_scene_background(server, background_color)
 
     if "vertices" in results:
@@ -1215,7 +1245,7 @@ def create_snapshot_plotting_server(
             radii=[np.full(3, 1.0 / float(obs_radius) / scene_scale)],
         )
 
-    add_ghost_trajectory(server, pos, colors, opacity=ghost_opacity, point_size=ghost_point_size)
+    add_ghost_trajectory(server, pos, colors, opacity=ghost_opacity, line_width=ghost_line_width)
 
     traj_time = np.asarray(results.trajectory["time"]).flatten()
     relative_vector = results.get("relative_vector", False)
@@ -1358,7 +1388,7 @@ def create_snapshot_plotting_server(
                     faces=mesh_faces,
                     color=vehicle_mesh_color,
                     position=tuple(float(x) for x in pos[frame_idx]),
-                    wxyz=tuple(float(x) for x in _normalize_wxyz(attitude[frame_idx])),
+                    wxyz=tuple(float(x) for x in normalize_wxyz(attitude[frame_idx])),
                 )
                 snapshot_state["handles"].append(mesh_handle)
 
@@ -1600,7 +1630,7 @@ def create_pdg_animated_plotting_server(
     glideslope_height: float | None = None,
     marker_radius: float = 0.3,
     trail_point_size: float = 0.15,
-    ghost_point_size: float = 0.05,
+    ghost_line_width: float = 2.0,
     scene_scale: float = 100.0,
 ) -> viser.ViserServer:
     """Create an animated visualization for Powered Descent Guidance problems.
@@ -1633,7 +1663,7 @@ def create_pdg_animated_plotting_server(
             If None, uses 10% of the initial altitude.
         marker_radius: Radius of position marker (in scaled scene units).
         trail_point_size: Size of trail points.
-        ghost_point_size: Size of ghost trajectory points.
+        ghost_line_width: Width of the ghost trajectory path, in pixels.
         scene_scale: Divide all positions by this factor. Default 100.0 brings
             km-scale trajectories into a ~10-20m range for viser.
 
@@ -1674,7 +1704,7 @@ def create_pdg_animated_plotting_server(
         )
 
     if show_ghost_trajectory:
-        add_ghost_trajectory(server, pos, colors, point_size=ghost_point_size)
+        add_ghost_trajectory(server, pos, colors, line_width=ghost_line_width)
 
     # Add animated elements
     update_callbacks = []
@@ -1842,38 +1872,6 @@ def build_scp_step_results(step_result: dict, solve_time_ms: float) -> dict:
     }
 
 
-def compute_velocity_colors_realtime(vel: np.ndarray, cmap) -> np.ndarray:
-    """Compute RGB colors based on velocity magnitude (pyplot-free version).
-
-    This version accepts a pre-loaded colormap to avoid importing matplotlib.pyplot,
-    which can cause issues with viser's web visualization in real-time examples.
-
-    Args:
-        vel: Velocity array of shape (N, 3)
-        cmap: Pre-loaded matplotlib colormap (e.g., matplotlib.colormaps["viridis"])
-
-    Returns:
-        Array of RGB colors with shape (N, 3), dtype uint8, values in [0, 255]
-
-    Example:
-        >>> import matplotlib
-        >>> _viridis = matplotlib.colormaps["viridis"]  # Load at module level
-        >>> colors = compute_velocity_colors_realtime(velocities, _viridis)
-    """
-    vel_norms = np.linalg.norm(vel, axis=1)
-    vel_range = vel_norms.max() - vel_norms.min()
-    if vel_range < 1e-8:
-        vel_normalized = np.zeros_like(vel_norms)
-    else:
-        vel_normalized = (vel_norms - vel_norms.min()) / vel_range
-
-    colors = np.array(
-        [[int(c * 255) for c in cmap(v)[:3]] for v in vel_normalized],
-        dtype=np.uint8,
-    )
-    return colors
-
-
 def _as_3d(points: np.ndarray) -> np.ndarray:
     """Ensure points are shape (..., 3) by appending z=0 when needed."""
     points = np.asarray(points, dtype=np.float64)
@@ -1946,7 +1944,7 @@ def create_hohmann_transfer_server(
     )
 
     # Static ghost + animated trail + marker
-    add_ghost_trajectory(server, pos_3d, colors, opacity=0.25, point_size=transfer_point_size)
+    add_ghost_trajectory(server, pos_3d, colors, opacity=0.25)
     _, update_trail = add_animated_trail(server, pos_3d, colors, point_size=transfer_point_size)
     _, update_marker = add_position_marker(server, pos_3d, radius=marker_radius)
 

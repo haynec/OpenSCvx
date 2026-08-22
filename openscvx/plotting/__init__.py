@@ -21,6 +21,13 @@ everything for you.
         plot_vector_norm(results, "thrust", bounds=(rho_min, rho_max)).show()
         plot_projections_2d(results, velocity_var_name="velocity").show()
 
+**Publication styling**:
+    ``plot_states``, ``plot_controls``, and ``plot_scp_iterations`` accept
+    ``style="publication"`` (white) or ``style="publication_dark"``. Figures you
+    assemble yourself get the same look from ``apply_publication_plotly_layout``
+    for Plotly and ``apply_latin_modern_to_axis`` for matplotlib, with the
+    palettes from ``publication_trace_colors`` / ``publication_dark_colors``.
+
 **3D Visualization** (viser-based):
     The ``viser`` submodule provides composable primitives for building
     interactive 3D visualizations. See ``openscvx.plotting.viser`` for details::
@@ -71,7 +78,11 @@ from .publication import (
     PlotStyle,
     PublicationFigure,
     VarSpec,
+    apply_latin_modern_to_axis,
+    apply_publication_plotly_layout,
     latin_modern_fontproperties,
+    publication_dark_colors,
+    publication_trace_colors,
     show_plotly_with_latin_modern,
 )
 from .scp_iteration import plot_scp_convergence_histories, plot_scp_iterations
@@ -95,6 +106,10 @@ __all__ = [
     "LM_PLOTLY_TICK_FONT",
     "latin_modern_fontproperties",
     "show_plotly_with_latin_modern",
+    "apply_publication_plotly_layout",
+    "apply_latin_modern_to_axis",
+    "publication_trace_colors",
+    "publication_dark_colors",
     # 3D visualization submodule (viser)
     "viser",
 ]

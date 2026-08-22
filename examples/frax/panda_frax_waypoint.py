@@ -253,7 +253,7 @@ def visualize(
 
     add_target_markers(server, ee_targets, radius=0.012, colors=target_colors)
 
-    add_ghost_trajectory(server, ee_pos, ee_colors, point_size=0.005)
+    add_ghost_trajectory(server, ee_pos, ee_colors)
     _, update_trail = add_animated_trail(server, ee_pos, ee_colors, point_size=0.008)
     _, update_marker = add_position_marker(server, ee_pos, radius=0.012)
 

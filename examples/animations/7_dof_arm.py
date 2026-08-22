@@ -141,7 +141,7 @@ if __name__ == "__main__":
 
     # Ghost EE trajectory + animated trail
     ee_colors = compute_velocity_colors(np.asarray(results.trajectory.get("velocity")))
-    add_ghost_trajectory(server, ee_pos, ee_colors, point_size=0.005)
+    add_ghost_trajectory(server, ee_pos, ee_colors)
     _, update_trail = add_animated_trail(server, ee_pos, ee_colors, point_size=0.008)
 
     # Animated EE position marker

@@ -2543,6 +2543,46 @@ def test_tan_with_expression():
     assert jnp.allclose(result, expected)
 
 
+# --- Tanh: JAX Lowering ---
+
+
+def test_tanh_constant():
+    """Test Tanh with constant values."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import Constant, Tanh
+    from openscvx.symbolic.lower import lower_to_jax
+
+    values = np.array([0.0, 1.0, -1.0, 2.5])
+    expr = Tanh(Constant(values))
+
+    fn = lower_to_jax(expr)
+    result = fn(None, None, None, None)
+
+    expected = jnp.tanh(values)
+    assert jnp.allclose(result, expected, atol=1e-6)
+
+
+def test_tanh_state():
+    """Test Tanh with state variables."""
+    import jax.numpy as jnp
+
+    from openscvx.symbolic.expr import State, Tanh
+    from openscvx.symbolic.lower import lower_to_jax
+
+    x = jnp.array([0.0, 0.5, -0.5, 1.5])
+
+    state = State("s", (4,))
+    state._slice = slice(0, 4)
+    expr = Tanh(state)
+
+    fn = lower_to_jax(expr)
+    result = fn(x, None, None, None)
+
+    expected = jnp.tanh(x)
+    assert jnp.allclose(result, expected)
+
+
 def test_tan_identity():
     """Test that tan(x) = sin(x) / cos(x)."""
     import jax.numpy as jnp
