@@ -1559,28 +1559,74 @@ def test_nonconvex_nodal_equality_accepted():
     assert len(result.nodal_convex) == 0
 
 
-def test_ctcs_equality_rejected():
-    """Test that CTCS constraints with equality are rejected."""
+def test_ctcs_equality_with_one_sided_penalty_rejected():
+    """An equality CTCS with a one-sided penalty is rejected.
+
+    squared_relu / huber / smooth_relu all compose PositivePart, so they cannot
+    detect an equality residual that is negative.
+    """
     n_nodes = 10
     position = State("pos", shape=(3,))
 
-    # Create a CTCS constraint with equality (not valid for CTCS)
-    ctcs_equality = (position == np.zeros(3)).over((0, 10))
-
-    # Verify the inner constraint is an Equality
+    ctcs_equality = (position == np.zeros(3)).over((0, 10))  # default squared_relu
     assert isinstance(ctcs_equality.constraint, Equality)
 
-    # Should raise a helpful error
     constraint_set = ConstraintSet(unsorted=[ctcs_equality])
     with pytest.raises(ValueError) as exc_info:
         separate_constraints(constraint_set, n_nodes=n_nodes)
 
-    # Check error message is helpful: it names the cause and the alternative,
-    # without enumerating penalty names (penalties may be user-defined)
     msg = str(exc_info.value)
-    assert "CTCS constraints cannot be equality" in msg
-    assert "violation of an inequality" in msg
-    assert ".convex()" in msg
+    assert "CTCS equality constraints require penalty in" in msg
+    assert "'squared_relu'" in msg
+    assert "two-sided" in msg
+
+
+@pytest.mark.parametrize("penalty", ["square", "huber_eq"])
+def test_ctcs_equality_with_two_sided_penalty_accepted(penalty):
+    """h(x, u) = 0 is enforceable in continuous time with a two-sided penalty."""
+    n_nodes = 10
+    position = State("pos", shape=(3,))
+
+    ctcs_equality = (position == np.zeros(3)).over((0, 10), penalty=penalty)
+    assert isinstance(ctcs_equality.constraint, Equality)
+
+    constraint_set = ConstraintSet(unsorted=[ctcs_equality])
+    result = separate_constraints(constraint_set, n_nodes=n_nodes)
+
+    assert len(result.ctcs) == 1
+    assert len(result.nodal) == 0
+    assert result.ctcs[0].nodes == (0, 10)
+
+
+@pytest.mark.parametrize("penalty", ["square", "huber_eq"])
+def test_ctcs_inequality_with_two_sided_penalty_rejected(penalty):
+    """A two-sided penalty on an inequality penalizes strict satisfaction."""
+    n_nodes = 10
+    position = State("pos", shape=(3,))
+
+    ctcs_inequality = (position <= np.ones(3)).over((0, 10), penalty=penalty)
+
+    constraint_set = ConstraintSet(unsorted=[ctcs_inequality])
+    with pytest.raises(ValueError) as exc_info:
+        separate_constraints(constraint_set, n_nodes=n_nodes)
+
+    assert "CTCS inequality constraints require a one-sided penalty" in str(exc_info.value)
+
+
+def test_ctcs_equality_with_callable_penalty_accepted():
+    """A callable penalty's sidedness is undecidable, so it passes unchecked.
+
+    Interop with the callable penalties added in #581: ``ox.Square`` builds a
+    two-sided penalty, but the guard cannot know that, so it defers to the
+    caller rather than guessing.
+    """
+    from openscvx.symbolic.expr.math import Square
+
+    position = State("pos", shape=(3,))
+    ctcs_equality = (position == np.zeros(3)).over((0, 10), penalty=Square)
+
+    result = separate_constraints(ConstraintSet(unsorted=[ctcs_equality]), n_nodes=10)
+    assert len(result.ctcs) == 1
 
 
 def test_nonconvex_inequality_still_accepted():

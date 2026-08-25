@@ -72,7 +72,8 @@ class Constraint(Expr):
         self.lhs = lhs
         self.rhs = rhs
         self.is_convex = False
-        self.slack_weight : Optional[float] = None # None implies hard constraint, otherwise soft constraint with slack weight
+        # None implies a hard constraint; otherwise soft, with this slack weight.
+        self.slack_weight: Optional[float] = None
 
     def children(self) -> List["Expr"]:
         return [self.lhs, self.rhs]
@@ -87,7 +88,7 @@ class Constraint(Expr):
         canon_diff = diff.canonicalize()
         new_constraint = type(self)(canon_diff, Constant(np.array(0)))
         new_constraint.is_convex = self.is_convex  # Preserve convex flag
-        new_constraint.slack_weight = self.slack_weight # Preserve slack weight
+        new_constraint.slack_weight = self.slack_weight  # Preserve slack weight
         return new_constraint
 
     def check_shape(self) -> Tuple[int, ...]:
@@ -167,16 +168,16 @@ class Constraint(Expr):
         self.is_convex = True
         return self
 
-    def slack(self, weight: float = 1.0)-> "Constraint":
-        """ Allow the convex constraint to be violated, penalized by a slack weight.
-        
+    def slack(self, weight: float = 1.0) -> "Constraint":
+        """Allow the convex constraint to be violated, penalized by a slack weight.
+
         Args:
             weight: The slack weight to apply to the constraint.
-        
+
         Returns:
             Self with slack weight set to the given value (enables method chaining)
         """
-        
+
         self.slack_weight = weight
         return self
 
@@ -214,14 +215,16 @@ class Inequality(Constraint):
     def __repr__(self) -> str:
         return f"{self.lhs!r} <= {self.rhs!r}"
 
+
 class MatrixInequality(Constraint):
     """Matrix inequality: lhs ≽ rhs  (lhs - rhs is PSD).
     Created by >> and << operators on matrix Expr objects.
     Always convex — do not call .convex() separately.
     """
+
     def __init__(self, lhs: Expr, rhs: Expr):
         super().__init__(lhs, rhs)
-        self.is_convex = True   # override: PSD is always convex
+        self.is_convex = True  # override: PSD is always convex
 
     def check_shape(self):
         L = self.lhs.check_shape()
@@ -435,11 +438,11 @@ class NodalConstraint(Expr):
         return self
 
     def slack(self, weight: float = 1.0) -> "NodalConstraint":
-        """ Allow the convex constraint to be violated, penalized by a slack weight.
-        
+        """Allow the convex constraint to be violated, penalized by a slack weight.
+
         Args:
             weight: The slack weight to apply to the constraint.
-        
+
         Returns:
             Self with slack weight set to the given value (enables method chaining)
         """
@@ -661,6 +664,9 @@ class CTCS(Expr):
     - **squared_relu**: Square(PositivePart(lhs)) - smooth, differentiable (default)
     - **huber**: Huber(PositivePart(lhs)) - less sensitive to outliers than squared
     - **smooth_relu**: SmoothReLU(lhs) - smooth approximation of ReLU
+    - **square**: Square(lhs) - TWO-SIDED quadratic penalty for EQUALITY constraints
+      (h = 0). Penalizes both signs of the residual. Required for equality CTCS;
+      invalid for inequality CTCS.
 
     A penalty may also be written as a callable that receives the constraint
     residual ``r`` (the canonical left-hand side, satisfying ``r <= 0``) as a
@@ -674,7 +680,10 @@ class CTCS(Expr):
 
     Attributes:
         constraint: The wrapped Constraint (typically Inequality) to enforce continuously
-        penalty: Penalty function name ('squared_relu', 'huber', or 'smooth_relu')
+        penalty: Penalty function name ('squared_relu', 'huber', 'smooth_relu',
+            'square', or 'huber_eq'). 'square' and 'huber_eq' are two-sided and
+            valid only for equality constraints; the rest are one-sided and
+            valid only for inequality constraints.
             or a callable ``Expr -> Expr`` applied to the constraint residual
         nodes: Optional (start, end) tuple specifying the interval for enforcement,
             or None to enforce over the entire trajectory
@@ -712,6 +721,10 @@ class CTCS(Expr):
                 (velocity <= 100).over((0, 10), idx=1),   # Group 1 (separate state)
                 (altitude <= 1000).over((0, 10), idx=0)   # Also group 0
             ]
+
+        Equality path constraint (continuous-time h = 0):
+
+            constraints = [ox.ctcs(residual == 0.0, penalty="square", idx=3)]
     """
 
     def __init__(
@@ -731,6 +744,9 @@ class CTCS(Expr):
                 - 'squared_relu': Square(PositivePart(lhs)) - default, smooth, differentiable
                 - 'huber': Huber(PositivePart(lhs)) - robust to outliers
                 - 'smooth_relu': SmoothReLU(lhs) - smooth ReLU approximation
+                - 'square': Square(lhs) - TWO-SIDED quadratic penalty for EQUALITY constraints
+                Note: Square ⟺ Equality; ReLU-family ⟺ Inequality
+                - 'huber_eq': Two-sided Huber for EQUALITY constraints h = 0.
 
                 Alternatively a callable ``Expr -> Expr`` that receives the
                 constraint residual and returns the penalty expression, e.g.
@@ -978,6 +994,20 @@ class CTCS(Expr):
             from openscvx.symbolic.expr.math import SmoothReLU
 
             penalty = SmoothReLU(lhs)
+        elif self.penalty == "square":
+            from openscvx.symbolic.expr.math import Square
+
+            penalty = Square(lhs)
+        elif self.penalty == "huber_eq":
+            # Two-sided Huber for EQUALITY constraints h = 0.
+            # Valid alternative to Eq. (7)'s p_j(z) = z²:  Huber is symmetric,
+            # nonnegative, zero only at z = 0 (Eq. 2c/2d), and C¹ (Remark 4).
+            # [P1] §3.2, p.6 explicitly permits "other continuously differentiable
+            # exterior penalty functions".
+            # Unlike "huber", there is NO PositivePart — both signs are penalized.
+            from openscvx.symbolic.expr.math import Huber
+
+            penalty = Huber(lhs)
         else:
             raise ValueError(f"Unknown penalty {self.penalty!r}")
 
@@ -999,7 +1029,10 @@ def ctcs(
 
     Args:
         constraint: The Constraint to enforce continuously
-        penalty: Penalty function name ('squared_relu', 'huber', or 'smooth_relu'),
+        penalty: Penalty function type ('squared_relu', 'huber', 'smooth_relu',
+            'square', or 'huber_eq'). 'square' and 'huber_eq' are two-sided and
+            valid only for equality constraints; the rest are one-sided and
+            valid only for inequality constraints.
             or a callable ``Expr -> Expr`` receiving the constraint residual.
             Defaults to 'squared_relu'.
         nodes: Optional (start, end) tuple of node indices for enforcement interval.

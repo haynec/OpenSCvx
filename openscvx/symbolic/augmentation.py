@@ -68,6 +68,7 @@ from openscvx.symbolic.expr import (
     Equality,
     Expr,
     Index,
+    Inequality,
     NodalConstraint,
 )
 from openscvx.symbolic.expr.control import Control
@@ -215,18 +216,29 @@ def separate_constraints(constraint_set: ConstraintSet, n_nodes: int) -> Constra
                     "Cross-node constraints should be specified as bare Constraint objects. "
                     f"Constraint: {c.constraint}"
                 )
-            # Validate that CTCS constraints are not equality constraints: the
-            # augmented state integrates a one-sided violation penalty, which
-            # only certifies satisfaction of an inequality
-            if isinstance(c.constraint, Equality):
-                raise ValueError(
-                    f"CTCS constraints cannot be equality constraints. "
-                    f"A CTCS penalty measures violation of an inequality (how far the "
-                    f"residual is above zero), so it cannot detect an equality being "
-                    f"missed from below. "
-                    f"For equality constraints, use nodal constraints with .convex() instead.\n"
-                    f"Constraint: {c.constraint}"
-                )
+            # Pair the constraint's sense with the penalty's sidedness. A
+            # one-sided penalty (PositivePart-composed) cannot see an equality
+            # missed from below; a two-sided one would penalize an inequality
+            # that is strictly satisfied. Named penalties are checked here;
+            # a callable's sidedness is undecidable, so it passes through.
+            _EQ_PENALTIES = ("square", "huber_eq")
+            if isinstance(c.penalty, str):
+                if isinstance(c.constraint, Equality) and c.penalty not in _EQ_PENALTIES:
+                    raise ValueError(
+                        f"CTCS equality constraints require penalty in {_EQ_PENALTIES} "
+                        f"(a two-sided penalty), or a callable that builds one. "
+                        f"Penalty {c.penalty!r} is one-sided and would only penalize "
+                        f"positive violations.\n"
+                        f"Constraint: {c.constraint}"
+                    )
+                if isinstance(c.constraint, Inequality) and c.penalty in _EQ_PENALTIES:
+                    raise ValueError(
+                        f"CTCS inequality constraints require a one-sided penalty; "
+                        f"{c.penalty!r} is two-sided and would penalize the constraint "
+                        f"being strictly satisfied.\n"
+                        f"Constraint: {c.constraint}"
+                    )
+
             # Normalize None to full horizon
             c.nodes = c.nodes or (0, n_nodes)
             constraint_set.ctcs.append(c)
