@@ -1244,6 +1244,7 @@ def test_se3_exp_log_roundtrip():
 # =============================================================================
 
 
+@pytest.mark.lie
 def test_jaxlie_backed_maps_cite_jaxlie():
     from openscvx.symbolic.expr import SE3Exp, SE3Log, SO3Exp, SO3Log
 

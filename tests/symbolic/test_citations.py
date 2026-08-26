@@ -8,6 +8,7 @@ lowering, no solves.
 """
 
 import numpy as np
+import pytest
 
 from openscvx.symbolic.constraint_set import ConstraintSet
 from openscvx.symbolic.expr import Constant, Control, State, stl, stljax
@@ -59,6 +60,7 @@ def test_collects_cited_nodes_from_constraints():
     assert any("uzun2024gmsr" in entry for entry in cited["Or"])
 
 
+@pytest.mark.lie
 def test_collects_cited_nodes_from_dynamics():
     from openscvx.symbolic.expr import SO3Exp
 
