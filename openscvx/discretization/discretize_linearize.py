@@ -129,7 +129,7 @@ class VectorizeDiscretizeLinearize(Discretizer):
             u_next: np.ndarray,
             params: dict,
         ) -> jnp.ndarray:
-            beta = tau * N * foh_mask
+            beta = tau * (N - 1) * foh_mask
 
             x = x.reshape(N - 1, n_x)
             u = u_cur + beta * (u_next - u_cur)
@@ -360,7 +360,7 @@ class DiscretizeLinearizeVectorize(Discretizer):
             node: int,
             params: dict,
         ) -> jnp.ndarray:
-            beta = tau * N * foh_mask
+            beta = tau * (N - 1) * foh_mask
 
             u = u_cur + beta * (u_next - u_cur)
             F = single_state_dot(x, u, node, params)

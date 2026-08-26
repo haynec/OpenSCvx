@@ -236,8 +236,8 @@ def _dVdt(
     # Unflatten V
     V = V.reshape(-1, i4)
 
-    # Per-control interpolation weights: beta_i = tau*N for FOH, 0 for ZOH
-    beta = tau * N * foh_mask
+    # Per-control interpolation weights: beta_i = tau*(N-1) for FOH, 0 for ZOH.
+    beta = tau * (N - 1) * foh_mask
     alpha = 1 - beta
 
     # Interpolate the control input

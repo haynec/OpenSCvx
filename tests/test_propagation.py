@@ -43,13 +43,13 @@ def _attach_sim_u_and_n_controls(p, n_controls: int):
     p.sim.u = SimpleNamespace(foh_mask=None)
 
 
-@pytest.mark.parametrize("dis_type,beta_expected", [("ZOH", 0.0), ("FOH", 1.0)])
+@pytest.mark.parametrize("dis_type,beta_expected", [("ZOH", 0.0), ("FOH", 0.8)])
 def test_prop_aug_dy_linear(dis_type, beta_expected):
     """
     prop_aug_dy should compute:
       u = u_cur + beta*(u_next - u_cur)
       return state_dot(x_batch, u).squeeze()
-    for both ZOH (beta=0) and FOH (beta=(tau-tau_init)*N).
+    for both ZOH (beta=0) and FOH (beta=(tau-tau_init)*(N-1)).
     Time-dilation is already included in state_dot symbolically.
     """
     tau = 0.2
@@ -64,7 +64,7 @@ def test_prop_aug_dy_linear(dis_type, beta_expected):
     # Per-control foh_mask: same hold on both components (scalar beta per column)
     foh_scalar = 0.0 if dis_type == "ZOH" else 1.0
     foh_mask = np.array([foh_scalar, foh_scalar], dtype=float)
-    beta = (tau - tau_init) * N * foh_scalar
+    beta = (tau - tau_init) * (N - 1) * foh_scalar
     assert pytest.approx(beta) == beta_expected
 
     # manually compute expected
@@ -98,7 +98,7 @@ def test_prop_aug_dy_mixed_foh_zoh_per_control():
     u_cur = np.array([[0.0, 3.0]])
     u_next = np.array([[2.0, 5.0]])
     foh_mask = np.array([1.0, 0.0], dtype=float)
-    beta0 = (tau - tau_init) * N * 1.0
+    beta0 = (tau - tau_init) * (N - 1) * 1.0
     beta1 = 0.0
     u_expected = u_cur + np.array([[beta0 * (2.0 - 0.0), beta1 * (5.0 - 3.0)]])
     expected = u_expected[:, 1] * (x + u_expected[:, 0])

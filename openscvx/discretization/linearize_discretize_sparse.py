@@ -182,7 +182,7 @@ def _dVdt_sparse(
     V = V.reshape(-1, aug_dim)
 
     # Per-control interpolation weights
-    beta = tau * N * foh_mask
+    beta = tau * (N - 1) * foh_mask
     alpha = 1 - beta
 
     u = u_cur + beta * (u_next - u_cur)

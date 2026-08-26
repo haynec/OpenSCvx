@@ -19,13 +19,25 @@ import pytest
 from tests.brachistochrone_analytical import compare_trajectory_to_analytical
 
 _BRACHISTOCHRONE_ALGORITHM = {
-    "autotuner": "ConstantProximalWeight",
-    "lam_prox": 1e0,
-    "lam_cost": 6e-1,
-    "ep_tr": 1e-5,
-    "ep_vb": 1e-5,
-    "ep_vc": 1e-9,
+    "lam_prox": 1e-1,
+    "lam_cost": 1e0,
+    "lam_vc": 1e2,
+    "k_max": 100,
 }
+
+
+def _brachistochrone_algorithm(**overrides):
+    algorithm = dict(_BRACHISTOCHRONE_ALGORITHM)
+    algorithm.update(overrides)
+    return algorithm
+
+
+_BRACHISTOCHRONE_CONSTANT_ALGORITHM = _brachistochrone_algorithm(
+    autotuner="ConstantProximalWeight",
+    ep_tr=1e-5,
+    ep_vb=1e-5,
+    ep_vc=1e-9,
+)
 
 
 def _make_brachistochrone_problem(solver):
@@ -48,7 +60,7 @@ def _make_brachistochrone_problem(solver):
         constraints=constraint_exprs,
         N=n,
         float_dtype="float64",
-        algorithm=_BRACHISTOCHRONE_ALGORITHM,
+        algorithm=_BRACHISTOCHRONE_CONSTANT_ALGORITHM,
         solver=solver,
     )
 
@@ -266,7 +278,7 @@ def test_monolithic():
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
+        algorithm=_brachistochrone_algorithm(),
     )
 
     problem.settings.prp.dt = 0.01
@@ -386,7 +398,7 @@ def test_backend(backend, constraint_type, with_parameters):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
+        algorithm=_brachistochrone_algorithm(),
         solver={"backend": backend},
         # QPAX / Moreau consume the global JAX dtype, so float32 caps the
         # QP's condition number aggressively. The CVXPy backend goes
@@ -683,7 +695,7 @@ def test_constraint_types(constraint_type):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
+        algorithm=_brachistochrone_algorithm(),
     )
 
     problem.settings.prp.dt = 0.01
@@ -823,7 +835,7 @@ def test_autotuning(autotuner_spec):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm={"autotuner": autotuner, "lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
+        algorithm=_brachistochrone_algorithm(autotuner=autotuner),
     )
 
     problem.settings.prp.dt = 0.01
@@ -965,7 +977,7 @@ def test_cross_nodal(test_case):
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0, "k_max": 50},
+        algorithm=_brachistochrone_algorithm(),
     )
 
     problem.settings.prp.dt = 0.01
@@ -1097,14 +1109,11 @@ def test_parameters():
         constraints=constraint_exprs,
         N=n,
         licq_max=1e-8,
-        algorithm={
-            "autotuner": ox.ConstantProximalWeight(),
-            "lam_prox": 1e-1,
-            "lam_cost": 6e-2,
-            "lam_vc": 1e0,
-            "ep_tr": 1e-5,
-            "ep_vc": 1e-8,
-        },
+        algorithm=_brachistochrone_algorithm(
+            autotuner=ox.ConstantProximalWeight(),
+            ep_tr=1e-5,
+            ep_vc=1e-8,
+        ),
     )
 
     problem.solver.solver_args = {"abstol": 1e-6, "reltol": 1e-9, "warm_start": False}
@@ -1300,7 +1309,7 @@ def test_propagation():
         dynamics_prop=dynamics_prop_extra,  # Only extra states
         states_prop=states_prop_extra,  # Only extra states
         algebraic_prop=algebraic_prop,  # Algebraic outputs
-        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
+        algorithm=_brachistochrone_algorithm(),
     )
 
     problem.settings.prp.dt = 0.01
@@ -1697,7 +1706,7 @@ def test_byof(byof_mode):
         N=n,
         licq_max=1e-8,
         byof=byof,
-        algorithm={"lam_prox": 1e0, "lam_cost": 1e-1, "lam_vc": 1e0},
+        algorithm=_brachistochrone_algorithm(),
     )
 
     problem.settings.prp.dt = 0.01
