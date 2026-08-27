@@ -6,11 +6,12 @@ group, enabling axis-angle to rotation matrix conversions and vice versa.
 Requires jaxlie: pip install openscvx[lie]
 """
 
-from typing import Tuple, Union
+from typing import List, Tuple, Union
 
 import numpy as np
 
 from ..expr import Expr, to_expr
+from ._citations import JAXLIE_CITATION
 
 
 class SO3Exp(Expr):
@@ -57,6 +58,10 @@ class SO3Exp(Expr):
 
     def children(self):
         return [self.omega]
+
+    def citation(self) -> List[str]:
+        """Return the BibTeX citation for jaxlie, which backs this map's lowering."""
+        return [JAXLIE_CITATION]
 
     def canonicalize(self) -> "Expr":
         omega = self.omega.canonicalize()
@@ -115,6 +120,10 @@ class SO3Log(Expr):
 
     def children(self):
         return [self.rotation]
+
+    def citation(self) -> List[str]:
+        """Return the BibTeX citation for jaxlie, which backs this map's lowering."""
+        return [JAXLIE_CITATION]
 
     def canonicalize(self) -> "Expr":
         rotation = self.rotation.canonicalize()

@@ -1237,3 +1237,29 @@ def test_se3_exp_log_roundtrip():
     twist_recovered = log_fn(None, None, None, None)
 
     assert jnp.allclose(twist_recovered, twist_val, atol=1e-10)
+
+
+# =============================================================================
+# Citation Tests
+# =============================================================================
+
+
+@pytest.mark.lie
+def test_jaxlie_backed_maps_cite_jaxlie():
+    from openscvx.symbolic.expr import SE3Exp, SE3Log, SO3Exp, SO3Log
+
+    nodes = [
+        SO3Exp(Constant(np.zeros(3))),
+        SO3Log(Constant(np.eye(3))),
+        SE3Exp(Constant(np.zeros(6))),
+        SE3Log(Constant(np.eye(4))),
+    ]
+    for node in nodes:
+        entries = node.citation()
+        assert len(entries) == 1
+        assert "yi2021iros" in entries[0]
+
+
+def test_plain_jax_adjoints_cite_nothing():
+    node = Adjoint(Constant(np.zeros(6)), Constant(np.zeros(6)))
+    assert node.citation() == []

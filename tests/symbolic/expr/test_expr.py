@@ -3,7 +3,7 @@
 This module tests the fundamental AST infrastructure of the symbolic expression
 system, including:
 - to_expr() conversion function
-- traverse() tree traversal function
+- traverse() and walk() tree traversal functions
 - Tree structure and pretty printing
 - Base Expr/Leaf behavior
 
@@ -23,6 +23,7 @@ from openscvx.symbolic.expr import (
     Variable,
     to_expr,
     traverse,
+    walk,
 )
 from openscvx.symbolic.preprocessing import validate_shapes
 
@@ -100,6 +101,44 @@ def test_traverse_visits_all_nodes_in_preorder():
 
     # preorder: Add → a → Mul → b → c
     assert visited == ["Add", "Constant", "Mul", "Constant", "Constant"]
+
+
+# =============================================================================
+# walk() Function Tests
+# =============================================================================
+
+
+def test_walk_yields_every_node_parents_first():
+    a, b, c = Constant(1), Constant(2), Constant(3)
+    expr = Add(a, Mul(b, c))
+
+    visited = list(walk(expr))
+
+    assert visited[0] is expr
+    assert {id(n) for n in visited} == {id(n) for n in (expr, a, b, c, expr.children()[1])}
+
+
+def test_walk_visits_shared_subexpressions_once():
+    # (x + 1) * (x + 1) with a genuinely shared child, as canonicalization produces
+    x = State("x", shape=(2,))
+    shared = Add(x, Constant(1))
+    expr = Mul(shared, shared)
+
+    visited = list(walk(expr))
+
+    assert sum(1 for n in visited if n is shared) == 1
+    assert len(visited) == 4  # Mul, Add, State, Constant
+
+
+# =============================================================================
+# Expr.citation() Default Tests
+# =============================================================================
+
+
+def test_citation_defaults_to_empty():
+    x = State("x", shape=(2,))
+    assert x.citation() == []
+    assert (x + 1).citation() == []
 
 
 # =============================================================================

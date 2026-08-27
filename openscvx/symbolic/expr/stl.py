@@ -57,7 +57,7 @@ See also:
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -303,6 +303,21 @@ class STLExpr(Expr):
     #   [open]   TimeInterval lowering itself (gating on the model's
     #            explicit `time` state). Currently raises
     #            NotImplementedError at .over() time.
+
+    def citation(self) -> List[str]:
+        """Return the BibTeX citation for the GMSR robustness formulation."""
+        return [
+            r"""@misc{uzun2024gmsr,
+  title={Optimization with Temporal and Logical Specifications via Generalized
+    Mean-based Smooth Robustness Measures},
+  author={Uzun, Samet and Elango, Purnanand and Garoche, Pierre-Lo{\"i}c and
+    A{\c{c}}{\i}kme{\c{s}}e, Beh{\c{c}}et},
+  year={2024},
+  eprint={2405.10996},
+  archivePrefix={arXiv},
+  primaryClass={math.OC}
+}"""
+        ]
 
     def over(
         self,

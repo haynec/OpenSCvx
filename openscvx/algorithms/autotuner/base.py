@@ -257,3 +257,16 @@ class AutotuningBase(ABC):
             the autotuner's decision; the SCP loop records that into history
             and maps it to a printable label.
         """
+
+    def citation(self) -> List[str]:
+        """Return BibTeX citations for the published update rule this autotuner implements.
+
+        Autotuners implementing a published scheme override this so that
+        :meth:`openscvx.Problem.citation` can credit it alongside the
+        algorithm, solver, and discretization references. Unpublished
+        heuristics keep the default.
+
+        Returns:
+            List of BibTeX citation strings. Empty for uncited autotuners.
+        """
+        return []

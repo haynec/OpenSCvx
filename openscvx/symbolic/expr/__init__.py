@@ -23,7 +23,7 @@ Module Organization:
 
     Core Expressions (expr.py):
         Base classes and utilities including `Expr`, `Leaf`, `Parameter`, `Constant`,
-        and helper functions `to_expr` and `traverse`.
+        and helper functions `to_expr`, `traverse`, and `walk`.
 
     Arithmetic Operations (arithmetic.py):
         Fundamental arithmetic operations including `Add`, `Sub`, `Mul`, `Div`,
@@ -110,6 +110,7 @@ from .expr import (
     NodeReference,
     to_expr,
     traverse,
+    walk,
 )
 
 # Lie algebra operations
@@ -182,6 +183,7 @@ __all__ = [
     "Parameter",
     "to_expr",
     "traverse",
+    "walk",
     "transitive_closure",
     "discrete_sparsity",
     "Add",

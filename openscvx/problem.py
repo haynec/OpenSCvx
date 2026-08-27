@@ -2299,9 +2299,11 @@ class Problem:
     def citation(self) -> str:
         """Return BibTeX citations for all components used in this problem.
 
-        Aggregates citations from the algorithm and other components (discretization,
-        convex solver, etc.) Each section is prefixed with a comment indicating which component the
-        citation is for.
+        Aggregates citations from the algorithm, its autotuner, the convex
+        solver, the discretization, and every symbolic node in the problem's
+        expression graphs (e.g. GMSR STL operators, jaxlie-backed Lie-group
+        maps). Each section is prefixed with a comment indicating which
+        component the citation is for.
 
         Returns:
             Formatted string containing all BibTeX citations with comments.
@@ -2324,6 +2326,14 @@ class Problem:
             citations = "\n".join(algo_citations)
             sections.append(f"{header}\n\n{citations}")
 
+        # Autotuner citations
+        tuner_citations = self._algorithm.autotuner.citation()
+        if tuner_citations:
+            tuner_name = type(self._algorithm.autotuner).__name__
+            header = f"% Autotuner: {tuner_name}"
+            citations = "\n".join(tuner_citations)
+            sections.append(f"{header}\n\n{citations}")
+
         # Solver citations
         solver_citations = self._solver.citation()
         if solver_citations:
@@ -2338,6 +2348,21 @@ class Problem:
             dis_name = type(self._discretizer).__name__
             header = f"% Discretization: {dis_name}"
             citations = "\n".join(dis_citations)
+            sections.append(f"{header}\n\n{citations}")
+
+        # Symbolic-node citations, gathered by walking the expression graphs.
+        # Distinct node classes can share a reference (every GMSR operator
+        # cites the same paper), so entries are deduplicated across classes.
+        node_citations = self.symbolic.citations()
+        if node_citations:
+            names = ", ".join(sorted(node_citations))
+            header = f"% Symbolic Operators: {names}"
+            entries: list[str] = []
+            for name in sorted(node_citations):
+                for entry in node_citations[name]:
+                    if entry not in entries:
+                        entries.append(entry)
+            citations = "\n".join(entries)
             sections.append(f"{header}\n\n{citations}")
 
         sections.append(r"% --- END AUTO-GENERATED CITATIONS")

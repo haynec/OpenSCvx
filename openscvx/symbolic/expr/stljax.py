@@ -9,7 +9,7 @@ STL operators accept Constraint objects (predicates) and extract robustness
 expressions which are lowered to STLJax during compilation.
 """
 
-from typing import TYPE_CHECKING, Callable, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Callable, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -52,6 +52,22 @@ class STLJaxExpr(Expr):
         This is a base class. Use concrete subclasses like Or, And,
         Eventually, Always, or Until for actual STL specifications.
     """
+
+    def citation(self) -> List[str]:
+        """Return the BibTeX citation the stljax library asks its users to cite."""
+        return [
+            r"""@article{kapoor2025stlcg,
+  title={{STLCG++}: A Masking Approach for Differentiable Signal Temporal Logic
+    Specification},
+  author={Kapoor, Parv and Mizuta, Kazuki and Kang, Eunsuk and Leung, Karen},
+  journal={IEEE Robotics and Automation Letters},
+  volume={10},
+  number={9},
+  pages={9240--9247},
+  year={2025},
+  doi={10.1109/LRA.2025.3588389}
+}"""
+        ]
 
     def over(
         self,

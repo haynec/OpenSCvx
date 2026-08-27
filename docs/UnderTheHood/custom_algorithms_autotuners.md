@@ -120,6 +120,11 @@ To add columns to the iteration table, set the class attribute `COLUMNS` to a
 list of `openscvx.utils.printing.Column` specs; the algorithm concatenates
 them into its own table via `get_columns`.
 
+If the update rule comes from a published scheme, override `citation()` to
+return its BibTeX entries — `Problem.citation()` prints them in a dedicated
+autotuner section. The default is an empty list, right for unpublished
+heuristics.
+
 ## A custom algorithm
 
 An `Algorithm` owns the SCP iteration end to end: it *builds* the JAX-pure
