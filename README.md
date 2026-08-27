@@ -9,7 +9,7 @@
     <a href="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/release.yml"><img src="https://github.com/OpenSCvx/OpenSCvx/actions/workflows/release.yml/badge.svg?event=release"/></a>
 </p>
 <p align="center">
-    <a href="https://arxiv.org/abs/2608.21631"><img src="http://img.shields.io/badge/arXiv-2410.22596-B31B1B.svg"/></a>
+    <a href="https://arxiv.org/abs/2608.21631"><img src="http://img.shields.io/badge/arXiv-2608.21631-B31B1B.svg"/></a>
     <a href="https://www.apache.org/licenses/LICENSE-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"/></a>
 </p>
 
